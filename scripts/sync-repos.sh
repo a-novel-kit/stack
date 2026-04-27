@@ -32,6 +32,15 @@ DIR_KIT="kit"
 ORG_APP="a-novel"
 DIR_APP="app"
 
+# Detect this workspace's own remote so we never re-clone ourselves into kit/
+# (the stack repo hosts these scripts AND is part of the a-novel-kit org, so
+# without this it would otherwise show up as kit/stack — a duplicate of the
+# directory the script is already running from).
+SELF_REMOTE_URL=""
+if git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    SELF_REMOTE_URL="$(git -C "${ROOT_DIR}" remote get-url origin 2>/dev/null || true)"
+fi
+
 # Per-run accumulators for the end summary. Populated by sync_repo and
 # update_existing_repo at the parent-shell level (subshells are kept inside
 # update_existing_repo only and cannot mutate these).
@@ -207,6 +216,12 @@ sync_repo() {
     local target="${target_parent}/${name}"
     local label
     label="$(basename "${target_parent}")/${name}"
+
+    # Don't re-clone the workspace into itself.
+    if [ -n "${SELF_REMOTE_URL}" ] && [ "${ssh_url}" = "${SELF_REMOTE_URL}" ]; then
+        log_info "${STYLE_BOLD}${name}${STYLE_RESET} ${STYLE_DIM}skipped — this workspace's own repo${STYLE_RESET}"
+        return 0
+    fi
 
     if [ -d "${target}/.git" ]; then
         update_existing_repo "${name}" "${default_branch}" "${target}" "${label}"
