@@ -14,7 +14,7 @@
 # - Git LFS smudging is disabled (GIT_LFS_SKIP_SMUDGE=1) — handle LFS later, per
 #   repo, when actually needed.
 #
-# Usage: scripts/sync-repos.sh
+# Usage: scripts/sync-repos.sh [-a <org/repo>]... [-i <org/repo>]... [-h|--help]
 
 set -e
 
@@ -31,6 +31,134 @@ ORG_KIT="a-novel-kit"
 DIR_KIT="kit"
 ORG_APP="a-novel"
 DIR_APP="app"
+
+# Filter lists populated by -a / -i. Stored as bare strings of the form
+# "org/repo". When ALLOW_LIST is non-empty it acts as a strict allow list;
+# IGNORE_LIST is always a deny list and wins over any allow list entry.
+ALLOW_LIST=()
+IGNORE_LIST=()
+
+# All "org/repo" names actually returned by `gh repo list` across both orgs.
+# Used after the run to warn about -a / -i targets that didn't match anything.
+DISCOVERED_FULL_NAMES=()
+
+usage() {
+    local prog
+    prog="$(basename "$0")"
+    cat <<EOF
+Usage: ${prog} [OPTIONS]
+
+Discover and sync every repository under the a-novel and a-novel-kit GitHub
+organizations into the local workspace:
+
+  a-novel       ->  app/<repo>
+  a-novel-kit   ->  kit/<repo>
+
+Missing repositories are cloned via SSH. Existing repositories have their
+default branch fast-forwarded; the user's current branch and any uncommitted
+work are preserved. Diverged default branches are skipped, never force-
+overwritten. Git LFS smudging is disabled by default (GIT_LFS_SKIP_SMUDGE=1).
+
+Options:
+  -a <org/repo>   Add a repository to the explicit allow list. May be repeated.
+                  When at least one -a is given, only repositories in the
+                  allow list are synced. When no -a is given, every discovered
+                  repository is synced (subject to -i exclusions).
+
+  -i <org/repo>   Add a repository to the ignore list. May be repeated.
+                  Ignored repositories are never synced. -i wins over -a — a
+                  repo named in both lists is ignored, and a warning is
+                  printed.
+
+  -h, --help      Show this help and exit.
+
+Repositories are identified by their GitHub <org>/<repo> path (for example
+"a-novel-kit/golib"), not by their local directory path. Targets that do not
+match any repository discovered in either org produce a warning.
+
+Environment:
+  NO_COLOR        If set, disable colored output.
+  FORCE_COLOR     If set, force colored output even when stdout is not a TTY.
+  GIT_LFS_SKIP_SMUDGE
+                  Forced to 1 by this script for both clone and fetch.
+
+Examples:
+  # Sync everything (default).
+  ${prog}
+
+  # Only sync golib and the json-keys service.
+  ${prog} -a a-novel-kit/golib -a a-novel/service-json-keys
+
+  # Sync everything except the workflows repo.
+  ${prog} -i a-novel-kit/workflows
+
+  # Combined: sync the kit but skip assets.
+  ${prog} -a a-novel-kit/golib -a a-novel-kit/jwt -i a-novel-kit/assets
+EOF
+}
+
+# True iff "$1" looks like "org/repo" (no slashes elsewhere, no dots leading).
+# Permissive enough for any realistic GitHub name.
+__valid_full_name() {
+    [[ "$1" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+}
+
+# __list_contains <needle> <item>...
+__list_contains() {
+    local needle="$1"
+    shift
+    local item
+    for item in "$@"; do
+        [ "$item" = "$needle" ] && return 0
+    done
+    return 1
+}
+
+# Parse CLI options.
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -a)
+            if [ $# -lt 2 ]; then
+                printf "error: -a requires an argument (an <org>/<repo> path)\n" >&2
+                exit 2
+            fi
+            if ! __valid_full_name "$2"; then
+                printf "error: -a argument '%s' is not in <org>/<repo> form\n" "$2" >&2
+                exit 2
+            fi
+            ALLOW_LIST+=("$2")
+            shift 2
+            ;;
+        -i)
+            if [ $# -lt 2 ]; then
+                printf "error: -i requires an argument (an <org>/<repo> path)\n" >&2
+                exit 2
+            fi
+            if ! __valid_full_name "$2"; then
+                printf "error: -i argument '%s' is not in <org>/<repo> form\n" "$2" >&2
+                exit 2
+            fi
+            IGNORE_LIST+=("$2")
+            shift 2
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            printf "error: unknown option '%s' (run with --help)\n" "$1" >&2
+            exit 2
+            ;;
+        *)
+            printf "error: unexpected positional argument '%s' (run with --help)\n" "$1" >&2
+            exit 2
+            ;;
+    esac
+done
 
 # Detect this workspace's own remote so we never re-clone ourselves into kit/
 # (the stack repo hosts these scripts AND is part of the a-novel-kit org, so
@@ -210,16 +338,33 @@ update_existing_repo() {
     esac
 }
 
-# sync_repo <name> <ssh_url> <default_branch> <target_parent> <archived>
+# sync_repo <org> <name> <ssh_url> <default_branch> <target_parent> <archived>
 sync_repo() {
-    local name="$1" ssh_url="$2" default_branch="$3" target_parent="$4" archived="$5"
+    local org="$1" name="$2" ssh_url="$3" default_branch="$4" target_parent="$5" archived="$6"
+    local full_name="${org}/${name}"
     local target="${target_parent}/${name}"
     local label
     label="$(basename "${target_parent}")/${name}"
 
+    DISCOVERED_FULL_NAMES+=("${full_name}")
+
     # Don't re-clone the workspace into itself.
     if [ -n "${SELF_REMOTE_URL}" ] && [ "${ssh_url}" = "${SELF_REMOTE_URL}" ]; then
         log_info "${STYLE_BOLD}${name}${STYLE_RESET} ${STYLE_DIM}skipped — this workspace's own repo${STYLE_RESET}"
+        return 0
+    fi
+
+    # Apply ignore list (always wins over allow list).
+    if [ "${#IGNORE_LIST[@]}" -gt 0 ] && __list_contains "${full_name}" "${IGNORE_LIST[@]}"; then
+        log_info "${STYLE_BOLD}${name}${STYLE_RESET} ${STYLE_DIM}ignored via -i${STYLE_RESET}"
+        if [ "${#ALLOW_LIST[@]}" -gt 0 ] && __list_contains "${full_name}" "${ALLOW_LIST[@]}"; then
+            log_warn "${full_name}: present in both -a and -i; -i wins"
+        fi
+        return 0
+    fi
+
+    # Apply allow list when one was specified.
+    if [ "${#ALLOW_LIST[@]}" -gt 0 ] && ! __list_contains "${full_name}" "${ALLOW_LIST[@]}"; then
         return 0
     fi
 
@@ -250,10 +395,28 @@ sync_org() {
 
     while IFS=$'\t' read -r name ssh_url default_branch archived; do
         [ -z "${name}" ] && continue
-        sync_repo "${name}" "${ssh_url}" "${default_branch}" "${ROOT_DIR}/${target_dir}" "${archived}"
+        sync_repo "${org}" "${name}" "${ssh_url}" "${default_branch}" "${ROOT_DIR}/${target_dir}" "${archived}"
     done <<EOF
 ${repos}
 EOF
+}
+
+# warn_unmatched_filters
+#   After both orgs have been listed, complain about any -a / -i target that
+#   doesn't correspond to a real discovered repo. Catches typos like
+#   "a-novel/uikit-foo" before they silently become a no-op.
+warn_unmatched_filters() {
+    local f
+    for f in "${ALLOW_LIST[@]}"; do
+        if ! __list_contains "${f}" "${DISCOVERED_FULL_NAMES[@]}"; then
+            log_warn "no repository matched -a ${f}"
+        fi
+    done
+    for f in "${IGNORE_LIST[@]}"; do
+        if ! __list_contains "${f}" "${DISCOVERED_FULL_NAMES[@]}"; then
+            log_warn "no repository matched -i ${f}"
+        fi
+    done
 }
 
 print_summary() {
@@ -284,9 +447,17 @@ print_summary() {
 banner "Repository Sync"
 log_dim "Discovering and syncing repositories under ${ORG_APP} and ${ORG_KIT}."
 log_dim "GIT_LFS_SKIP_SMUDGE=1 — LFS blobs will not be downloaded."
+if [ "${#ALLOW_LIST[@]}" -gt 0 ]; then
+    log_dim "Allow list (-a): ${ALLOW_LIST[*]}"
+fi
+if [ "${#IGNORE_LIST[@]}" -gt 0 ]; then
+    log_dim "Ignore list (-i): ${IGNORE_LIST[*]}"
+fi
 
 sync_org "${ORG_KIT}" "${DIR_KIT}"
 sync_org "${ORG_APP}" "${DIR_APP}"
+
+warn_unmatched_filters
 
 print_summary
 
