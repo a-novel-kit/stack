@@ -1,0 +1,6 @@
+.idea
+
+app/
+kit/
+
+.claude/*.local.*
