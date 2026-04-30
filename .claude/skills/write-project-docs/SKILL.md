@@ -33,6 +33,97 @@ Separate concerns:
 
 ---
 
+## Editorial Principles
+
+These come before the templates. The templates implement them; if a generated file looks
+right but violates a principle, the principle wins.
+
+### 1. Audience-first — name the reader before writing the section
+
+Every section in `README.md` and `CONTRIBUTING.md` answers a question that a specific
+reader is holding. Three readers exist:
+
+| Reader                | What they want                                     | File              |
+| --------------------- | -------------------------------------------------- | ----------------- |
+| **Operator**          | "How do I run this service?"                       | `README.md`       |
+| **Client integrator** | "How do I call this service from another service?" | `README.md`       |
+| **Contributor**       | "How do I work on this codebase locally?"          | `CONTRIBUTING.md` |
+
+A section that doesn't answer one of those questions doesn't belong. A section that
+answers the same question for the same reader twice (in two files, or in two places in
+one file) gets cut to one location and linked.
+
+`README.md` serves operators and integrators only. `CONTRIBUTING.md` serves contributors
+only. **Never duplicate** content across them — link instead. If the JS client install
+snippet is in `README.md`, `CONTRIBUTING.md` says "see the README" rather than copying it.
+
+### 2. Lead with the role, not the runbook
+
+The first text after the badges in `README.md` is **what the service does and why it
+exists** — one to three short paragraphs. Not "what stack it's built on", not "how to
+deploy it", not the table of contents. A reader who cannot tell what the service does
+from the first paragraph will not find that out by scrolling further.
+
+A good role section answers:
+
+- What does this service own? (the noun: "signing keys", "narrative state", "user
+  identities")
+- Who does it serve? (the verb: "lets other services sign tokens", "stores the in-progress
+  story", "authenticates users")
+- What is the surface? (REST? gRPC? both? public? internal?)
+
+If the answer is "I don't know" for any of those, find out before drafting — the role
+section _is_ the doc.
+
+### 3. Verify every factual claim against the source
+
+A README that says "AES-GCM" when the code uses NaCl secretbox is worse than a README
+that says nothing about encryption. Before describing any of:
+
+- Cryptographic primitives (algorithm names, modes, key sizes)
+- Configuration field names and shapes (YAML keys, env var names)
+- API surface (RPC names, REST paths, status codes)
+- Lifecycle states (active / expired / deleted)
+- File paths referenced in prose
+
+…open the source and confirm. The doc commit must reflect the code at the same SHA. When
+the code changes one of these things, the doc update belongs in the same change, not a
+follow-up.
+
+### 4. Show the canonical, link or table the variants
+
+When a service has several deployment shapes (REST × gRPC × standalone × split = four
+combinations), do not paste four near-identical compose blocks in sequence. The reader
+who wants the simplest path is forced to scan past three blocks they will not use, and
+the duplication turns any future update into a four-place edit.
+
+Pick one canonical block — usually the simplest dev path — show it inline, then list the
+other shapes in a table or collapse them under a `<details>` block, with one example of
+the production-shape variant inside. The principle generalizes: any time two blocks
+differ by one line, the second belongs in a diff, table, or collapsible block, not in line.
+
+### 5. Reference, don't enumerate
+
+Comprehensive lists of fields, methods, env vars, etc. are reference material. They go in
+a dedicated section (or in generated reference docs like the OpenAPI viewer or godoc),
+**after** the canonical example, never interleaved with prose. Readers who need the
+reference jump to it; readers who don't are not forced to scroll past it to find the next
+thing they came for.
+
+For client packages, the README example shows the **minimum viable call** — install,
+construct, one real operation. That is enough to unblock someone. The full surface is what
+intellisense, `pkg.go.dev`, or the published API reference is for.
+
+### 6. Edit in place; preserve unknown content
+
+In update mode, treat existing custom sections (architecture diagrams, team notes,
+release call-outs that are not in the template) as data, not noise. Read the whole file,
+identify the section the user is changing, edit only that section. A "rewrite" instruction
+from the user is the only override — and even then, surface anything that looks like
+deliberate custom content before discarding it.
+
+---
+
 ## Phase 1: Collect Required Inputs
 
 Before scaffolding a new file, ask the user for the inputs below. When running in **update**
@@ -167,48 +258,96 @@ with the inputs from Phase 1 before writing the file. Do not leave `{{…}}` in 
 
 ![Coverage graph](https://codecov.io/gh/{{repo-path}}/graphs/sunburst.svg) <!-- TODO(project-docs): if this repo requires a tokenized Codecov sunburst, append `?token=<codecov-graph-token>` to the image URL above -->
 
-## Usage
+## What it does
 
-<!-- Include the sub-sections below only when the corresponding capability flag is set. -->
+<!-- Mandatory role section per Editorial Principle 2. One to three short paragraphs that
+     answer:
+       - what does this service own (the entity, the noun)
+       - who does it serve and how (the verb)
+       - what's the surface (REST? gRPC? both? public? internal?)
+     Then, if relevant, a one-line note on related concepts (e.g. "Authentication and
+     identity live in service-authentication; this service only manages signing keys").
+-->
 
-### Docker
+## Running it
 
-<!-- If has-grpc: include the gRPC compose block(s). -->
-<!-- If has-rest: include the REST compose block(s). -->
-<!-- If has-standalone: include both the standalone and split-image variants for each protocol. -->
+The minimal local setup is one Postgres image plus one service image. Pin both to the
+same release tag (current: `vX.Y.Z`). <!-- TODO(project-docs): replace vX.Y.Z with the current image tag -->
 
-Above are the minimal required configuration to run the service locally. Configuration is
-done through environment variables. Below is a list of available configurations:
+<!-- ONE canonical compose block. The simplest dev-mode shape (typically standalone-rest
+     or standalone-grpc). Do NOT paste a second compose block here for a different
+     deployment shape. -->
 
-**Required variables**
+For the other deployment shapes:
+
+| Shape | Use when | Image |
+| ----- | -------- | ----- |
+
+<!-- One row per shape this service ships (standalone-rest, standalone-grpc, split-rest,
+     split-grpc, etc.). Each cell is a single line — no compose YAML inline. -->
+
+<details>
+<summary>Production (split images) example</summary>
+
+<!-- ONE compose block showing the split-image, migrations-as-separate-service shape.
+     Inside <details> so dev readers don't pay the scroll cost. -->
+
+</details>
+
+> Standalone images run migrations on startup. Convenient for dev, not recommended for
+> production — use the split images plus the dedicated `migrations` image instead.
+
+### Configuration
+
+Configuration is driven by environment variables.
+
+**Required**
 
 | Name | Description | Images |
 | ---- | ----------- | ------ |
 
 <!-- One row per required env var. -->
 
-**Optional variables**
+**Optional — REST**
 
-<!-- Group by concern: REST API, Logs & Tracing, etc. One table per group. -->
+<!-- Only when has-rest. One table per concern. -->
 
-<!-- If has-js-client: include the JS/npm usage section. -->
-<!-- If has-go-client: include the Go module usage section. -->
+**Optional — Logs and tracing**
+
+<!-- OTel + GCP project ID + app name. -->
+
+<!-- If has-js-client: include the JS/npm usage section. Minimum-viable call only. -->
+<!-- If has-go-client: include the Go module usage section. Minimum-viable call only. -->
 ```
 
-**README section guidance:**
+**README structure (top to bottom):**
 
-- The nine entries in the catalog (two socials + three repo metrics + four CI/coverage,
-  counting the Codecov sunburst) always appear in the order shown. Deviating breaks the
-  visual rhythm across services.
-- The `<hr />` literal (not `---`) separates the social badges from the repo metrics — this
-  matches the existing Agora convention.
-- Docker compose examples must pin images by tag (e.g., `:v2.2.6`), never `:latest`. When
-  scaffolding, ask the user for the current release version or write a
+1. **Title + badge block.** Mechanical; the catalog below specifies exact URLs.
+2. **What it does.** Mandatory. One-to-three paragraph role section per Editorial
+   Principle 2. Comes before _anything_ about deployment.
+3. **Running it.** Operator section. One canonical compose block, table or `<details>`
+   for variants per Principle 4. Production-shape variant under details if it exists.
+4. **Configuration.** Reference tables for env vars. Required first, optional grouped by
+   concern. Lives in its own subsection after the canonical compose, never interleaved
+   (Principle 5).
+5. **Using the client packages.** Integrator section. One minimum-viable example per
+   client (Go, JS, etc.). Link to API reference; do not enumerate the full surface.
+
+**Mechanical rules:**
+
+- The nine entries in the badge catalog (two socials + three repo metrics + four
+  CI/coverage, counting the Codecov sunburst) always appear in the order shown. Deviating
+  breaks the visual rhythm across services.
+- The `<hr />` literal (not `---`) separates the social badges from the repo metrics —
+  this matches the existing Agora convention.
+- Docker compose examples must pin images by tag (e.g., `:v2.2.6`), never `:latest`.
+  When scaffolding, ask the user for the current release version or write a
   `<!-- TODO(project-docs): current image tag (see GitHub releases) -->` placeholder.
 - The config-vars tables use `<br/>` to stack multiple image names in a single cell —
   keeps the table narrow.
-- Client usage snippets should demonstrate the **minimum viable call** (ping + one real
-  operation), not every available method. Readers will find the rest in the API reference.
+- The role section ("What it does") must name the entity, the consumers, and the
+  surfaces (REST/gRPC, public/internal). If you cannot fill in those three, stop and
+  collect them — see Principle 2.
 
 ### 4.2 SECURITY.md template
 
@@ -263,73 +402,40 @@ pull request.
 
 ### 4.3 CONTRIBUTING.md template
 
-````markdown
+```markdown
 # Contributing to {{project-slug}}
 
-Welcome to the {{project-display-name}} for the A-Novel platform. This guide will help you understand the codebase, set
-up your development environment, and contribute effectively.
-
-Before reading this guide, if you haven't already, please check the
-[generic contribution guidelines](https://github.com/{{org-contributing-url}}) that are relevant
-to your scope.
+For platform-wide setup, prerequisites, and the standard `make` targets, see the
+[generic contribution guidelines](https://github.com/{{org-contributing-url}}). This file
+documents what is specific to {{project-display-name}}.
 
 ---
 
-## Quick Start
+## Quick local interactions
 
-### Prerequisites
-
-The following must be installed on your system.
-
-- [Go](https://go.dev/doc/install)
-- [Node.js](https://nodejs.org/en/download)
-  - [pnpm](https://pnpm.io/installation)
-- [Podman](https://podman.io/docs/installation)
-- (optional) [Direnv](https://direnv.net/)
-- Make
-  - `sudo apt-get install build-essential` (apt)
-  - `sudo pacman -S make` (arch)
-  - `brew install make` (macOS)
-  - [Make for Windows](https://gnuwin32.sourceforge.net/packages/make.htm)
-
-### Bootstrap
-
-Install the dependencies:
-
-```bash
-make install
-```
-
-### Common Commands
-
-| Command         | Description                      |
-| --------------- | -------------------------------- |
-| `make run`      | Start all services locally       |
-| `make test`     | Run all tests                    |
-| `make lint`     | Run all linters                  |
-| `make format`   | Format all code                  |
-| `make build`    | Build Docker images locally      |
-| `make generate` | Generate mocks and protobuf code |
-
-### Interacting with the Service
-
-<!-- If has-rest: include REST interaction snippets (curl). -->
-<!-- If has-grpc: include gRPC interaction snippets (grpcurl). -->
+<!-- A handful of curl / grpcurl examples that hit the live service after `make run`.
+     This is the pragmatic on-ramp for a contributor who already has the service running.
+     Do NOT include compose blocks, env-var tables, or client install instructions —
+     those live in the README. -->
 
 ---
 
-## Project-Specific Guidelines
+## Service-specific concepts
 
-> This section contains patterns specific to this {{project-display-name}}.
+<!-- The bespoke section. The exact subsections vary per service. Common patterns:
 
-<!-- TODO(project-docs): document the project-specific patterns — typical sections:
-     - domain concepts (what the service owns / produces)
-     - lifecycle of the primary entity (states, transitions)
-     - key configuration files and what they control
-     - scheduled jobs / cron
-     - gRPC services table (if has-grpc)
-     - REST API overview (if has-rest)
-     - client packages (if has-go-client / has-js-client)
+       - Domain invariants that aren't obvious from the code (e.g., main-vs-legacy key
+         semantics, transaction scoping rules, view refresh requirements).
+       - Cryptographic flows (algorithm name verified against the source, where the key
+         comes from, what gets sealed and where).
+       - Config schemas the contributor will actually edit. Field names taken from the
+         code at the same SHA, not from memory or other docs.
+       - Scheduled-job semantics if the service has them.
+       - Surface table (gRPC services / REST endpoints) as quick orientation, not a full
+         API spec — link to the proto file or OpenAPI doc for that.
+
+     Each subsection has a clear "what would surprise a contributor here" hook. If you
+     can't articulate that hook, the subsection is filler and should be cut.
 -->
 
 ---
@@ -341,17 +447,63 @@ If you have questions or run into issues:
 - Open an issue at https://github.com/{{repo-path}}/issues
 - Check existing issues for similar problems
 - Include relevant logs and environment details
-````
+```
 
-**CONTRIBUTING section guidance:**
+**Note on the template body that used to live here:** earlier versions of this skill
+generated a Prerequisites list, a `make install` block, and a Common Commands table
+inside CONTRIBUTING. Those were moved out — they belong in the org-wide contribution
+guide that the intro paragraph already links to. Duplicating them per repo creates a
+second source of truth that drifts. If you are working on a repo that still has them,
+remove them as part of the next CONTRIBUTING edit.
 
-- The **Quick Start** and **Questions** sections are identical across all Agora services.
-  Do not customize them per project — that creates drift.
-- The **Interacting with the Service** section varies only by protocol (REST vs. gRPC).
-  Use the capability flags to include/exclude snippets.
-- The **Project-Specific Guidelines** section is bespoke. The template leaves a TODO
-  comment listing common sub-sections (domain concepts, lifecycle, config, etc.) — the
-  user fills these in based on the project. Do not invent content.
+<!-- The template above intentionally has gaps. Phase 5 (update mode) is the common case
+     for CONTRIBUTING — a real CONTRIBUTING.md is mostly the bespoke "service-specific
+     concepts" section, which cannot be templated. The skill's job in update mode is to
+     enforce the structure (audience, no duplicated content, no platform-wide setup), not
+     to generate the bespoke content. -->
+
+**CONTRIBUTING structure and audience:**
+
+CONTRIBUTING serves contributors only — people who will edit this codebase. It does **not**
+serve operators (they read the README) or integrators (they also read the README). A
+section that an operator or integrator would want is in the wrong file.
+
+Concretely, this means:
+
+- The "What it does" / role description belongs in the README, not here. Contributors are
+  expected to have read the README first.
+- Client install snippets, deployment compose blocks, and the env-var reference tables
+  belong in the README. CONTRIBUTING refers to them with a link.
+- Platform-wide setup (prerequisites, generic `make` commands, lint/test/format) belongs
+  in the org-level contribution guide that the intro paragraph already links to. When
+  that link exists, **omit Prerequisites and Common Commands from CONTRIBUTING entirely**
+  — they create a second source of truth that drifts from the org guide.
+
+**What CONTRIBUTING should contain:**
+
+1. **Intro paragraph + link to the org-wide contribution guide.** One short paragraph.
+2. **Quick local interactions.** A handful of curl / grpcurl examples that hit the live
+   service after `make run`. This is the pragmatic on-ramp for a contributor who has the
+   service running and wants to poke at it.
+3. **Service-specific concepts.** The bespoke section. Examples of what belongs here:
+   - Domain invariants that aren't obvious from the code (e.g., main-vs-legacy key
+     semantics, transaction scoping rules, materialized-view refresh requirements).
+   - Cryptographic flows (which algorithm, where the key comes from, what gets sealed).
+   - Config schemas the contributor will actually edit, with field names taken from the
+     code. Subject to Editorial Principle 3 — verify field names against the source.
+   - Scheduled-job semantics if the service has them.
+   - Surface table (gRPC services / REST endpoints) as a quick orientation, not a full
+     API spec — link to the proto file or OpenAPI doc for that.
+4. **Questions.** Identical across services. Where to file issues, how to ask.
+
+What does NOT belong:
+
+- Architecture diagrams of generic Go layering (DAO → service → handler) — that's in the
+  `write-go-code` skill, not in per-project docs.
+- Code examples for the published client packages — that's README integrator content.
+- Prerequisites and `make` command tables — those live in the org-wide contributing
+  guide.
+- Restating the role of the service — that's the README.
 
 ---
 
@@ -444,6 +596,14 @@ Agora service:
   publicly visible once the repo is public.
 - **Do not invent version numbers or email addresses** to fill placeholders. Use the TODO
   comment pattern.
+- **Do not describe code from memory.** Algorithm names, env var names, config field
+  shapes, RPC names, REST paths, lifecycle states — every factual claim about the
+  codebase gets verified against the source at the same SHA as the doc commit. A
+  README that says "AES-GCM" when the code uses NaCl secretbox is worse than a README
+  that does not mention encryption at all. See Editorial Principle 3.
+- **Do not duplicate content across README and CONTRIBUTING.** If a fact lives in one,
+  the other links to it. Common offenders: client install snippets, env-var tables,
+  service role description. Pick one home; link from the other. See Editorial Principle 1.
 
 ---
 

@@ -27,16 +27,21 @@ before changing it.
 Run these in order after changing any SQL file:
 
 ```
-make format   # applies Go module tidy and golangci-lint auto-fixes (also re-embeds SQL)
+make format   # runs format-go + format-proto + format-node — the last one is what formats SQL
 make lint     # catches any Go-level issues introduced by the SQL change
 ```
 
-SQL files are plain text embedded into Go — the Go toolchain does not format them
-independently. After editing a `.sql` file, rebuild with `make format` to ensure the embedding
-is up to date and any auto-fixable lint issues are resolved.
+**Run the bare `make format`, not `make format-go`.** SQL files are formatted by Prettier
+(via `prettier-plugin-sql`), which lives behind `make format-node` (`pnpm format`). The Go-only
+`make format-go` target does not touch SQL — running just that after a SQL edit will leave
+indentation, comment, and whitespace drift in place. CI's `lint-node` stage runs
+`prettier --check`, which will fail on the unformatted file even when Go lint is clean. If you
+edited any `.sql` file, you must run the full `make format` (or at minimum `make format-node`)
+before pushing.
 
-Then invoke the **`write-go-tests` skill** to verify (or update) the DAO test for the changed
-query. SQL changes often affect query results in ways that existing test fixtures will surface.
+After formatting and linting, invoke the **`write-go-tests` skill** to verify (or update) the
+DAO test for the changed query. SQL changes often affect query results in ways that existing
+test fixtures will surface.
 
 ---
 

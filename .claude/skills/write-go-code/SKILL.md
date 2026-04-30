@@ -117,16 +117,21 @@ The package name is what callers write in imports; keep it unambiguous and colli
 File names encode both the layer context and what they do. Always look at existing files first and
 follow the established pattern for that service exactly.
 
-| Layer              | Pattern                             | Example                                   |
-| ------------------ | ----------------------------------- | ----------------------------------------- |
-| DAO                | `pg.<entity>.<operation>.go`        | `pg.user.go`, `pg.userSearch.go`          |
-| DAO SQL            | `pg.<entity>.<operation>.sql`       | `pg.userSearch.sql`                       |
-| Services           | `<entity><Operation>.go`            | `userSearch.go`, `orderCreate.go`         |
-| Handlers           | `<protocol>.<entity><Operation>.go` | `rest.userList.go`, `grpc.orderCreate.go` |
-| Config             | `<subject>.config.go`               | `app.config.go`, `users.config.go`        |
-| Config defaults    | `<subject>.config.default.go`       | `app.config.default.go`                   |
-| Shared layer types | `common.go`                         | errors and types shared across a layer    |
-| Tests              | `<same_name>_test.go`               | `pg.userSearch_test.go`                   |
+| Layer              | Pattern                             | Example                                    |
+| ------------------ | ----------------------------------- | ------------------------------------------ |
+| DAO                | `pg.<entity>.<operation>.go`        | `pg.user.go`, `pg.userSearch.go`           |
+| DAO SQL            | `pg.<entity>.<operation>.sql`       | `pg.userSearch.sql`                        |
+| Services           | `<entity><Operation>.go`            | `userSearch.go`, `orderCreate.go`          |
+| Handlers           | `<protocol>.<entity><Operation>.go` | `rest.userList.go`, `grpc.orderCreate.go`  |
+| Config             | `<subject>.config.go`               | `app.config.go`, `users.config.go`         |
+| Config defaults    | `<subject>.config.default.go`       | `app.config.default.go`                    |
+| Lib                | `<subject>.go` (camelCase)          | `masterKeyContext.go`, `masterKeyCrypt.go` |
+| Shared layer types | `common.go`                         | errors and types shared across a layer     |
+| Tests              | `<same_name>_test.go`               | `pg.userSearch_test.go`                    |
+
+**Lib files** follow the same camelCase convention as services and handlers — never snake_case
+(`master_key_context.go` is wrong) and never word-run-together (`masterkey_crypt.go` is wrong).
+The whole codebase uses camelCase for multi-word filenames; lib is not an exception.
 
 **Protocol naming in handlers:** always use `rest` (not `http`). This is the canonical spelling
 in both file names and code. Existing files using `http` are legacy — rename them when touched.
@@ -580,6 +585,29 @@ server.GracefulStop()
 Always `New<TypeName>(dep1, dep2, ...) *<TypeName>`. Never return an interface from a constructor
 unless the concrete type is truly an implementation detail hidden by design.
 
+**Always use composite-literal form**, never `new(T)`:
+
+```go
+// WRONG — drifts from non-empty constructors and forces a second style on readers.
+func NewPgUserSelect() *PgUserSelect {
+    return new(PgUserSelect)
+}
+
+// CORRECT — same shape whether the struct is empty or has fields.
+func NewPgUserSelect() *PgUserSelect {
+    return &PgUserSelect{}
+}
+
+func NewUserSearch(repo UserSearchRepository) *UserSearch {
+    return &UserSearch{repository: repo}
+}
+```
+
+Both `new(T)` and `&T{}` produce the same result, but mixing them creates two visual styles for
+the same operation. Pick `&T{}` because it generalizes: empty and field-initialized constructors
+read identically. Treat any `new(T)` you encounter in this codebase as a target for cleanup when
+the file is already in scope.
+
 ---
 
 ## Error Handling
@@ -588,6 +616,12 @@ unless the concrete type is truly an implementation detail hidden by design.
   appear mid-sentence; `errors.New("user not found")` not `errors.New("User not found.")`.
 - **Sentinel errors** for expected domain conditions: `var ErrUserNotFound = errors.New("user not found")`.
   Define them in the same file as the type that produces them, or in `common.go` if shared.
+- **One vocabulary per concept.** When several errors describe the same thing, use the same noun
+  in every message. If the entity is `Jwk`, every error message uses `"jwk not found"` — not
+  `"key not found"` in one file and `"jwk not found"` in another. Pick the term used in the
+  type/struct name and propagate it through every layer (DAO sentinel, service sentinel,
+  user-facing gRPC `status.Error` message, REST response). Drift in error wording across files
+  is one of the easiest sources of low-level entropy and one of the hardest to dashboard around.
 - **Wrap errors with context**: `fmt.Errorf("search users: %w", err)`. The message chain should
   let a developer trace the call path by reading it alone.
 - **Never discard errors.** If an error truly can be ignored, explain why with a comment.

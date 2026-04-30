@@ -53,6 +53,62 @@ suffix:
 | `grpc.orderCreate.go`     | `grpc.orderCreate_test.go` |
 | `userSearch.go` (service) | `userSearch_test.go`       |
 
+**Underscore, not dot.** The Go toolchain only excludes files ending in `_test.go` (with an
+underscore) from production builds. A file named `something.test.go` (with a dot) is **compiled
+into the production binary** — the `.test.` part is just text in the filename, not a build-tag
+signal. If you find a file with that shape carrying test-only globals, it has leaked from the
+test surface into the shipped binary and must be moved (see "Cross-package test fixtures" below).
+
+---
+
+## Cross-Package Test Fixtures
+
+Some test fixtures need to be shared across packages — for example, a Postgres preset reused by
+both `dao_test` and `handlers_test`. Because Go's `_test.go` rule is per-package (a `_test.go`
+file in package X cannot be imported from a `_test.go` file in package Y), these shared fixtures
+have to live in regular `.go` files. The risk: regular `.go` files are compiled into production
+binaries.
+
+**Always isolate cross-package fixtures into a dedicated subpackage.** Name the directory and
+package after the layer plus the suffix `test`, mirroring Go stdlib conventions like
+`net/http/httptest` and `testing/iotest`:
+
+| Layer       | Subpackage path                   | Package name   |
+| ----------- | --------------------------------- | -------------- |
+| `config/`   | `internal/config/configtest/`     | `configtest`   |
+| `lib/`      | `internal/lib/libtest/`           | `libtest`      |
+| `services/` | `internal/services/servicestest/` | `servicestest` |
+
+```go
+// internal/config/configtest/postgres.go
+package configtest
+
+// PostgresPreset is the PostgreSQL configuration used in integration tests.
+var PostgresPreset = postgrespresets.NewDefault(pgdriver.WithDSN(env.PostgresDsn))
+```
+
+Test files import it as `configtest`:
+
+```go
+import (
+    "github.com/a-novel/service-json-keys/v2/internal/config/configtest"
+)
+
+postgres.NewContext(ctx, configtest.PostgresPreset)
+```
+
+**Never:**
+
+- Define test fixtures in the production package (e.g., `internal/config/postgres.config.go`)
+  guarded only by a `Test` prefix on the variable. The variable is exported and compiled in,
+  and a future change can wire it into a production code path without a single review flag.
+- Use `.test.go` (with a dot) as a substitute for `_test.go`. As covered above, the dot is not
+  recognized by the Go toolchain — the file is compiled into the production binary.
+- Reuse the bare name `testutils` for multiple fixture subpackages in the same project. Two
+  imports of `testutils` from different paths force aliasing at every call site, which is the
+  same kind of low-level entropy this skill exists to prevent. Use the layer-prefixed name
+  (`configtest`, `libtest`) so each fixture subpackage has a unique, descriptive name.
+
 ---
 
 ## Test Function Naming
