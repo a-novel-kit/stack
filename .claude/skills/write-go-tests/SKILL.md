@@ -73,11 +73,11 @@ binaries.
 package after the layer plus the suffix `test`, mirroring Go stdlib conventions like
 `net/http/httptest` and `testing/iotest`:
 
-| Layer        | Subpackage path                  | Package name |
-| ------------ | -------------------------------- | ------------ |
-| `config/`    | `internal/config/configtest/`    | `configtest` |
-| `lib/`       | `internal/lib/libtest/`          | `libtest`    |
-| `services/`  | `internal/services/servicestest/` | `servicestest` |
+| Layer       | Subpackage path                   | Package name   |
+| ----------- | --------------------------------- | -------------- |
+| `config/`   | `internal/config/configtest/`     | `configtest`   |
+| `lib/`      | `internal/lib/libtest/`           | `libtest`      |
+| `services/` | `internal/services/servicestest/` | `servicestest` |
 
 ```go
 // internal/config/configtest/postgres.go

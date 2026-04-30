@@ -43,11 +43,11 @@ right but violates a principle, the principle wins.
 Every section in `README.md` and `CONTRIBUTING.md` answers a question that a specific
 reader is holding. Three readers exist:
 
-| Reader | What they want | File |
-|--------|----------------|------|
-| **Operator** | "How do I run this service?" | `README.md` |
-| **Client integrator** | "How do I call this service from another service?" | `README.md` |
-| **Contributor** | "How do I work on this codebase locally?" | `CONTRIBUTING.md` |
+| Reader                | What they want                                     | File              |
+| --------------------- | -------------------------------------------------- | ----------------- |
+| **Operator**          | "How do I run this service?"                       | `README.md`       |
+| **Client integrator** | "How do I call this service from another service?" | `README.md`       |
+| **Contributor**       | "How do I work on this codebase locally?"          | `CONTRIBUTING.md` |
 
 A section that doesn't answer one of those questions doesn't belong. A section that
 answers the same question for the same reader twice (in two files, or in two places in
@@ -73,7 +73,7 @@ A good role section answers:
 - What is the surface? (REST? gRPC? both? public? internal?)
 
 If the answer is "I don't know" for any of those, find out before drafting — the role
-section *is* the doc.
+section _is_ the doc.
 
 ### 3. Verify every factual claim against the source
 
@@ -272,7 +272,7 @@ with the inputs from Phase 1 before writing the file. Do not leave `{{…}}` in 
 ## Running it
 
 The minimal local setup is one Postgres image plus one service image. Pin both to the
-same release tag (current: `<!-- TODO(project-docs): current image tag -->`).
+same release tag (current: `vX.Y.Z`). <!-- TODO(project-docs): replace vX.Y.Z with the current image tag -->
 
 <!-- ONE canonical compose block. The simplest dev-mode shape (typically standalone-rest
      or standalone-grpc). Do NOT paste a second compose block here for a different
@@ -282,6 +282,7 @@ For the other deployment shapes:
 
 | Shape | Use when | Image |
 | ----- | -------- | ----- |
+
 <!-- One row per shape this service ships (standalone-rest, standalone-grpc, split-rest,
      split-grpc, etc.). Each cell is a single line — no compose YAML inline. -->
 
@@ -304,6 +305,7 @@ Configuration is driven by environment variables.
 
 | Name | Description | Images |
 | ---- | ----------- | ------ |
+
 <!-- One row per required env var. -->
 
 **Optional — REST**
@@ -322,7 +324,7 @@ Configuration is driven by environment variables.
 
 1. **Title + badge block.** Mechanical; the catalog below specifies exact URLs.
 2. **What it does.** Mandatory. One-to-three paragraph role section per Editorial
-   Principle 2. Comes before *anything* about deployment.
+   Principle 2. Comes before _anything_ about deployment.
 3. **Running it.** Operator section. One canonical compose block, table or `<details>`
    for variants per Principle 4. Production-shape variant under details if it exists.
 4. **Configuration.** Reference tables for env vars. Required first, optional grouped by
@@ -400,7 +402,7 @@ pull request.
 
 ### 4.3 CONTRIBUTING.md template
 
-````markdown
+```markdown
 # Contributing to {{project-slug}}
 
 For platform-wide setup, prerequisites, and the standard `make` targets, see the
@@ -445,7 +447,7 @@ If you have questions or run into issues:
 - Open an issue at https://github.com/{{repo-path}}/issues
 - Check existing issues for similar problems
 - Include relevant logs and environment details
-````
+```
 
 **Note on the template body that used to live here:** earlier versions of this skill
 generated a Prerequisites list, a `make install` block, and a Common Commands table

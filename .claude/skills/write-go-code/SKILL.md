@@ -117,17 +117,17 @@ The package name is what callers write in imports; keep it unambiguous and colli
 File names encode both the layer context and what they do. Always look at existing files first and
 follow the established pattern for that service exactly.
 
-| Layer              | Pattern                             | Example                                   |
-| ------------------ | ----------------------------------- | ----------------------------------------- |
-| DAO                | `pg.<entity>.<operation>.go`        | `pg.user.go`, `pg.userSearch.go`          |
-| DAO SQL            | `pg.<entity>.<operation>.sql`       | `pg.userSearch.sql`                       |
-| Services           | `<entity><Operation>.go`            | `userSearch.go`, `orderCreate.go`         |
-| Handlers           | `<protocol>.<entity><Operation>.go` | `rest.userList.go`, `grpc.orderCreate.go` |
-| Config             | `<subject>.config.go`               | `app.config.go`, `users.config.go`        |
-| Config defaults    | `<subject>.config.default.go`       | `app.config.default.go`                   |
+| Layer              | Pattern                             | Example                                    |
+| ------------------ | ----------------------------------- | ------------------------------------------ |
+| DAO                | `pg.<entity>.<operation>.go`        | `pg.user.go`, `pg.userSearch.go`           |
+| DAO SQL            | `pg.<entity>.<operation>.sql`       | `pg.userSearch.sql`                        |
+| Services           | `<entity><Operation>.go`            | `userSearch.go`, `orderCreate.go`          |
+| Handlers           | `<protocol>.<entity><Operation>.go` | `rest.userList.go`, `grpc.orderCreate.go`  |
+| Config             | `<subject>.config.go`               | `app.config.go`, `users.config.go`         |
+| Config defaults    | `<subject>.config.default.go`       | `app.config.default.go`                    |
 | Lib                | `<subject>.go` (camelCase)          | `masterKeyContext.go`, `masterKeyCrypt.go` |
-| Shared layer types | `common.go`                         | errors and types shared across a layer    |
-| Tests              | `<same_name>_test.go`               | `pg.userSearch_test.go`                   |
+| Shared layer types | `common.go`                         | errors and types shared across a layer     |
+| Tests              | `<same_name>_test.go`               | `pg.userSearch_test.go`                    |
 
 **Lib files** follow the same camelCase convention as services and handlers — never snake_case
 (`master_key_context.go` is wrong) and never word-run-together (`masterkey_crypt.go` is wrong).
