@@ -20,9 +20,13 @@ the budget runs out, stop and escalate.
 
 ---
 
-## CI Job Map (this repo)
+## CI Job Map (typical Agora service repo)
 
-The `main` workflow runs on every push to any branch. Jobs and their fix targets:
+The `main` workflow on Agora service repos under `a-novel/service-*` runs on every push
+to any branch. The job set varies by repo — the table below captures the common surface
+across those services. For the actual jobs on the current checkout, run `gh pr checks
+<n>` (or read `.github/workflows/main.yaml`) and intersect with the rows below; jobs
+that aren't listed here are either repo-specific or downstream of a base table entry.
 
 | CI Job                        | What it checks                             | Local equivalent                         | Typical failure                                                              |
 | ----------------------------- | ------------------------------------------ | ---------------------------------------- | ---------------------------------------------------------------------------- |

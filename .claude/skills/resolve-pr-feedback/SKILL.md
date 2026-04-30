@@ -175,9 +175,8 @@ gh pr checks <number>
 CI failures are feedback too. When a CI failure overlaps with a reviewer's concern (same
 lint rule, same missing test, same typo), fold the fix into the thread response so the
 reviewer can see it addressed in one place. For isolated CI failures — or anything that
-needs flake-vs-real classification — hand off to `monitor-ci` when that skill is on
-master (pending, tracked in #533). Until then, summarize the failing checks to the user
-and ask how they want to proceed.
+needs flake-vs-real classification — hand off to `monitor-ci`. Summarize the failing
+checks in your status report and use `monitor-ci` to investigate and drive next steps.
 
 ### 1.5 Report the survey
 
@@ -486,12 +485,12 @@ overall direction).
 
 ## Hand-offs
 
-- **From `open-pull-request`** _(skill pending, tracked in #533)_ — once that skill is
-  on master, the push-and-open flow hands off here when reviewers comment. Until then,
-  enter directly via user request on any already-open PR.
-- **To `monitor-ci`** _(skill pending, tracked in #533)_ — for failing checks that need
-  flake-vs-real classification or a retry loop. When CI agrees with a reviewer (same
-  root cause), fold the fix into the thread response rather than pushing twice.
+- **From `open-pull-request`** — once a PR is open and reviewers start commenting, the
+  push-and-open flow hands off here to assess CI, review threads, and reviewer status,
+  then work through the feedback.
+- **To `monitor-ci`** — for failing checks that need flake-vs-real classification or a
+  retry loop. When CI agrees with a reviewer (same root cause), fold the fix into the
+  thread response rather than pushing twice.
 - **To `git-conventions`** — every review-driven commit. No exceptions.
 - **To the layer-specific skills** — `write-go-code`, `write-go-tests`, `write-openapi`,
   `write-js-package`, etc. Phase 4 writes code; those skills govern _how_.
