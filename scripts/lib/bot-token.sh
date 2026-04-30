@@ -18,20 +18,31 @@ __BOT_TOKEN_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 . "${__BOT_TOKEN_LIB_DIR}/style.sh"
 
+# bots.conf uses associative arrays (bash 4+). Guard explicitly so older bash
+# (e.g. macOS /bin/bash 3.2) gets a clear message instead of "declare: -A:
+# invalid option".
+if [ -z "${BASH_VERSION:-}" ] || [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
+	log_error "bot-token.sh requires bash 4+ (associative arrays in bots.conf)"
+	log_dim  "      macOS ships bash 3.2 at /bin/bash; install a newer bash via Homebrew"
+	return 2
+fi
+
 # Source bots.conf through tr so CRLF line endings (introduced by editors that
 # default to Windows newlines) don't break the sourced declarations at runtime.
 # .gitattributes normalizes on commit, but the working-tree file is what bash
 # actually reads.
 eval "$(tr -d '\r' < "${__BOT_TOKEN_LIB_DIR}/bots.conf")"
 
-for __bot_dep in openssl curl jq; do
-	if ! command -v "$__bot_dep" >/dev/null 2>&1; then
-		log_error "bot-token.sh: missing required tool '$__bot_dep' (need: openssl, curl, jq)"
-		unset __bot_dep
+__bot_require_cmd() {
+	if ! command -v "$1" >/dev/null 2>&1; then
+		log_error "bot-token.sh: required command not found: $1"
 		return 1
 	fi
-done
-unset __bot_dep
+}
+
+__bot_require_cmd openssl || return $?
+__bot_require_cmd curl    || return $?
+__bot_require_cmd jq      || return $?
 
 __bot_repo_root() {
 	# Repo root is two levels above scripts/lib/, regardless of caller cwd.
