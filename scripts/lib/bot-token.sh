@@ -15,8 +15,23 @@
 ANOVEL_BOT_TOKEN_LOADED=1
 
 __BOT_TOKEN_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "${__BOT_TOKEN_LIB_DIR}/bots.conf"
+
 . "${__BOT_TOKEN_LIB_DIR}/style.sh"
+
+# Source bots.conf through tr so CRLF line endings (introduced by editors that
+# default to Windows newlines) don't break the sourced declarations at runtime.
+# .gitattributes normalizes on commit, but the working-tree file is what bash
+# actually reads.
+eval "$(tr -d '\r' < "${__BOT_TOKEN_LIB_DIR}/bots.conf")"
+
+for __bot_dep in openssl curl jq; do
+	if ! command -v "$__bot_dep" >/dev/null 2>&1; then
+		log_error "bot-token.sh: missing required tool '$__bot_dep' (need: openssl, curl, jq)"
+		unset __bot_dep
+		return 1
+	fi
+done
+unset __bot_dep
 
 __bot_repo_root() {
 	# Repo root is two levels above scripts/lib/, regardless of caller cwd.
@@ -54,6 +69,16 @@ bot_token() {
 		return 2
 	fi
 
+	# Non-blocking permission warning: a .pem with group/other access lets any
+	# local user mint installation tokens. stat -c is GNU, -f %Lp is BSD.
+	local mode
+	mode=$(stat -c %a "$pem" 2>/dev/null || stat -f %Lp "$pem" 2>/dev/null)
+	case "$mode" in
+		"")  ;;
+		*00) ;;
+		*)   log_warn "bot_token: $pem mode is $mode; recommend: chmod 600 '$pem'" ;;
+	esac
+
 	local now header payload signature jwt response token
 	now=$(date +%s)
 	header=$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | __bot_b64url)
@@ -65,7 +90,7 @@ bot_token() {
 		| __bot_b64url)
 	jwt="${header}.${payload}.${signature}"
 
-	response=$(curl -sS -X POST \
+	response=$(curl -sS --max-time 30 -X POST \
 		-H "Authorization: Bearer ${jwt}" \
 		-H "Accept: application/vnd.github+json" \
 		-H "X-GitHub-Api-Version: 2022-11-28" \

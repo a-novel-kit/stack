@@ -6,4 +6,4 @@ kit/
 .claude/*.local.*
 
 node_modules
-.secrets
+/.secrets/
