@@ -662,8 +662,29 @@ return otel.ReportSuccess(span, &user), nil
     `"dao.PgJwkSearch"` for `PgJwkSearch`.
   - **Services**: no prefix to strip. `"services.JwkSearch"` for `JwkSearch`.
   - **Sub-spans** (private methods): append in parentheses: `"rest.JwkGet(parseID)"`, `"grpc.Status(reportPostgres)"`.
-- Do **not** call `otel.ReportError` on sentinel errors returned as expected conditions
-  (e.g., not-found results). Only report genuine failures.
+- Do **not** call `otel.ReportError` on sentinel errors returned as expected conditions.
+  Just `return nil, ErrXxx`; the span stays successful. The handler maps the sentinel to the
+  right HTTP/gRPC status downstream.
+
+  This applies to **every** sentinel — validation failures, not-found, expired, wrong password,
+  signature mismatch, claim mismatch, replay-detection, role-mismatch — including
+  security-relevant ones. The protective clause caught the bad input; the application held; the
+  request did exactly what it was supposed to do. That is not a failure of the service, and
+  recording it as one pollutes the error signal:
+  - Trace error rate must mean "the service is broken", not "a user typed the wrong password".
+    If every wrong-password / not-found / expired-code marks its span as errored, the
+    error-rate panel says "20% failure" when nothing is actually broken, and the "is something
+    genuinely wrong" signal gets buried under benign client mistakes and external probing.
+  - Pen tests, scanners, and broken clients hit security sentinels constantly. Most are noise.
+    Marking each one as a span failure trains on-call to dismiss the entire error channel.
+  - Mass anomalies (a spike of `ErrInvalidSignature`) are a dashboard-configuration problem —
+    a counter, an audit log line, or a dedicated trace event — not a per-event flag on
+    `span.status`. Don't couple the two.
+
+  The same rule covers `otel.ReportError(span, errors.Join(err, ErrXxx))` and
+  `otel.ReportError(span, fmt.Errorf("%w: ...", ErrXxx))` — the wrapping doesn't change the
+  classification. If the returned error is a sentinel-bearing expected outcome, don't report it.
+
 - **Span attribute naming**: use a `<entity>.<field>` scheme that describes the data, not the Go
   variable that holds it. For attributes describing a key: `"key.id"`, `"key.usage"`,
   `"key.created_at"`, `"key.expires_at"`, `"key.private"`. Never use `"request.Jwk.*"` or
