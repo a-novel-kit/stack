@@ -499,7 +499,7 @@ Concretely, this means:
 What does NOT belong:
 
 - Architecture diagrams of generic Go layering (DAO → service → handler) — that's in the
-  `write-go-code` skill, not in per-project docs.
+  `write-go-service` skill, not in per-project docs.
 - Code examples for the published client packages — that's README integrator content.
 - Prerequisites and `make` command tables — those live in the org-wide contributing
   guide.

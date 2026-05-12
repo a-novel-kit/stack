@@ -492,7 +492,7 @@ overall direction).
   retry loop. When CI agrees with a reviewer (same root cause), fold the fix into the
   thread response rather than pushing twice.
 - **To `git-conventions`** — every review-driven commit. No exceptions.
-- **To the layer-specific skills** — `write-go-code`, `write-go-tests`, `write-openapi`,
+- **To the layer-specific skills** — `write-go`, `write-go-service` (or `write-go-kit` for a-novel-kit repos), `write-go-tests`, `write-openapi`,
   `write-js-package`, etc. Phase 4 writes code; those skills govern _how_.
 
 ---

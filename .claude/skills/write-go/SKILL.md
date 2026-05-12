@@ -174,32 +174,38 @@ errors.Join(err, ErrUserNotFound)` — so callers keep both identities.
 ### Reporting errors on spans / telemetry — the layer-relative rule
 
 When a function instruments itself with a span (or any other per-operation telemetry), reporting
-follows one rule: **each layer records, on its own span, every error it raises or propagates; an
-error may be left off a span only by the layer that actually _discards_ it** — handles it, turns
-it into a result, stops it travelling further. "Expected" is a judgment the discarding layer
-makes (a handler mapping a sentinel to a 4xx / a gRPC code), not a property the error value
-carries, and never something a lower layer guesses on a caller's behalf.
+follows one rule: **every layer that has a span records, on its own span, every error it sees —
+whether it raises it, propagates it, or maps it to a transport response.** The forbidden moves
+are: _suppressing_ reporting based on the error's _identity_ at a propagating layer, and `return
+nil, ErrXxx` bare from a layer that has a span. "Expected" is never a property the error value
+carries, and never something one layer guesses on a caller's behalf.
 
 - A layer that _raises_ an error (a DAO hitting `sql.ErrNoRows`, a validator producing
   `ErrInvalidRequest`, a service detecting a mismatch) → `otel.ReportError(span, err)`.
 - A layer that _receives_ an error and returns it upward → still `otel.ReportError`. Returning
-  upward is _propagating_, not discarding; wrapping it (`errors.Join`, `fmt.Errorf("...: %w",
-err)`) changes nothing.
-- The layer that maps the error to a transport status and stops it → its span reflects the
-  _handled_ outcome; it does not re-report.
+  upward is _propagating_; wrapping it (`errors.Join`, `fmt.Errorf("...: %w", err)`) changes
+  nothing.
+- The handler that maps the error to a transport response → still reports. `golib/httpf.HandleError`
+  calls `otel.ReportError` unconditionally before writing the HTTP status, so the REST handler span
+  records the error whatever status it maps to; the gRPC manual mapping should do the same by hand
+  (`_ = otel.ReportError(span, err)` before `status.Error(...)`). The handler span shows which
+  error a request ended on — that is the point of having it.
 - **Anti-pattern**: a helper that suppresses reporting based on the error's _identity_ at a layer
-  that still propagates it (a `reportUnexpected(span, err)` keyed on a list of "known" sentinels).
-  It couples the layer to an error registry and silently drops real signal. The layer-local
-  question is "did I resolve this, or pass it on?" — that needs no registry.
+  that still propagates or surfaces it (a `reportUnexpected(span, err)` keyed on a list of "known"
+  sentinels). It couples the layer to an error registry and silently drops real signal. The
+  layer-local question is just "did I see this error?" — if yes, report it.
 
-OpenTelemetry spans are independent — a child span ending `Error` does not taint the parent — so
-the DAO span can honestly say "no row" while the handler span honestly says "handled → 4xx", and
-neither lies. The project helpers `otel.ReportError` / `otel.ReportSuccess` /
-`otel.ReportSuccessNoContent` live in `golib/otel`; `ReportError` only sets `RecordError` +
-`SetStatus(Error)` — it does **not** end the span (a `defer span.End()` does), and returning a
-sentinel with no `Report*` call leaves the span `Unset`, which backends correctly treat as
-"completed, not a failure". `write-go-service` covers span naming and the span-per-operation
-rule.
+Spans are independent — a child span ending `Error` does not taint the parent. So the DAO span,
+the service span, _and_ the handler span all say "no row" for a 404, while the "is the service
+broken" view is built on the **HTTP status code** (recorded by the otel HTTP instrumentation) and
+counts the 404 as a 404, not a 500 — span status answers "did an error occur in processing", which
+is `true` even for a deliberate 404, and that is fine. For bulk-anomaly visibility on a specific
+security sentinel, use a counter / audit log / dedicated event — not `span.status`. The helpers
+`otel.ReportError` / `otel.ReportSuccess` / `otel.ReportSuccessNoContent` live in `golib/otel`;
+`ReportError` only sets `RecordError` + `SetStatus(Error)` — it does **not** end the span (a
+`defer span.End()` does), and returning a sentinel with no `Report*` call leaves the span `Unset`,
+which backends treat as "completed, not a failure". `write-go-service` covers span naming and the
+span-per-operation rule.
 
 ---
 
@@ -262,9 +268,9 @@ loops when you encounter them — they are dead code on this minimum version.
 - **A new dependency added without asking.** Explicit developer approval, every time.
 - **Logging / tracing secret material.** Identifiers only — never the secret.
 - **Multiple `time.Now()` for timestamps that should share one instant.** Capture once, reuse.
-- **Suppressing span reporting for an error you still propagate.** Report it; only the discarding
-  layer omits it. No identity-keyed `reportUnexpected` helpers; no bare `return nil, ErrXxx` from
-  a layer that has a span.
+- **Suppressing span reporting for an error.** Every span'd layer reports every error it sees —
+  raised, propagated, or mapped to a transport status. No identity-keyed `reportUnexpected`
+  helpers; no bare `return nil, ErrXxx` from a layer that has a span.
 - **`new(T)` in a constructor.** Use `&T{}`.
 - **snake_case or run-together multi-word file names.** camelCase.
 - **Discarding an error without `_ =` and a why-comment.**

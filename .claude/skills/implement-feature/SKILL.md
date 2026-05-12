@@ -158,7 +158,7 @@ cannot compile without that branch's changes.
   | ----------------------------------------- | -------------------- |
   | Schema / SQL                              | `write-sql`          |
   | Proto                                     | `write-proto`        |
-  | DAO, services, handlers, lib, cmd, pkg/go | `write-go-code`      |
+  | DAO, services, handlers, lib, cmd, pkg/go | `write-go-service`   |
   | Tests (Go, all layers)                    | `write-go-tests`     |
   | OpenAPI / docs                            | `write-openapi`      |
   | pkg/js (JS/TS client + tests)             | `write-js-package`   |

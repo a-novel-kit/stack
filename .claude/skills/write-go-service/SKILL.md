@@ -89,8 +89,8 @@ prefix is fixed — match the existing files exactly:
 
 | Layer / role       | Pattern                             | Example                                    |
 | ------------------ | ----------------------------------- | ------------------------------------------ |
-| DAO                | `pg.<entity>.<operation>.go`        | `pg.user.go`, `pg.userSearch.go`           |
-| DAO SQL            | `pg.<entity>.<operation>.sql`       | `pg.userSearch.sql`                        |
+| DAO                | `pg.<entity>[<Operation>].go`       | `pg.user.go` (model), `pg.userSearch.go`   |
+| DAO SQL            | `pg.<entity><Operation>.sql`        | `pg.userSearch.sql`                        |
 | Services           | `<entity><Operation>.go`            | `userSearch.go`, `orderCreate.go`          |
 | Handlers           | `<protocol>.<entity><Operation>.go` | `rest.userList.go`, `grpc.orderCreate.go`  |
 | Config             | `<subject>.config.go`               | `app.config.go`, `users.config.go`         |
@@ -358,8 +358,11 @@ func NewRestUserList(service RestUserListService, logger logging.Log) *RestUserL
 
 - **REST is public-facing.** Never leak internal error detail. Map each expected sentinel to a
   status with the project's error-mapping helper (`httpf.HandleError` + `httpf.ErrMap`); the
-  helper's fallback covers unmapped errors as 500. The handler span is the layer that _discards_
-  the error → it does not separately `otel.ReportError` a mapped sentinel.
+  helper's fallback covers unmapped errors as 500. `httpf.HandleError` already calls
+  `otel.ReportError` on the error for you (the handler span records which error the request ended
+  on, whatever status it maps to) — so you do **not** add a separate `otel.ReportError` on a path
+  that goes through `httpf.HandleError`. On the gRPC side, where you do the mapping by hand, call
+  `_ = otel.ReportError(span, err)` yourself before `status.Error(...)` to get the same effect.
 - Conventional short names `w` / `r`. JSON in via `json.NewDecoder(r.Body)` or `gorilla/schema` for
   query params; out via the project's `httpf.SendJSON`.
 - Handler type names carry the `Rest` prefix (`RestUserList`); the service interface mirrors it
@@ -422,8 +425,8 @@ Configuration structs + loading from env vars or YAML. No logic beyond parsing a
 - **Dynamic config with defaults** (ports, timeouts, DSNs) → env vars via the `internal/config/env/`
   helper package.
 - Group related fields into named structs; nest for sub-domains (`App.Rest`, `App.Grpc`, `App.Main`).
-- Provide a `*Default` value/function (in `*.config.default.go`) assembling the full tree from env
-  - YAML — this is what `cmd/` reads at startup.
+- Provide a `*Default` value/function (in `*.config.default.go`) that assembles the full config
+  tree from env vars and YAML — this is what `cmd/` reads at startup.
 - Env var names: `<SERVICE_ENV_PREFIX>_<FIELD_NAME>`, screaming snake case. Test-only presets do
   **not** belong here — they go in a dedicated `internal/config/configtest/` package (see
   `write-go-tests`).
@@ -538,17 +541,25 @@ service layers:
   secret it detected) → `otel.ReportError`. It raised it.
 - **Service** that receives an error from a DAO/sub-service and returns it upward → still
   `otel.ReportError`. Returning upward is _propagating_, not discarding; wrapping it changes nothing.
-- **Handler** that maps the sentinel to a 4xx (`httpf.HandleError`) or a `codes.*` → that's where
-  the error is _discarded_; the handler span reflects the handled outcome, not an error.
-- **Anti-pattern**: a `reportUnexpected(span, err)` keyed on a list of "known" sentinels, used at a
-  layer that still propagates the error. It couples the layer to an error registry and drops real
-  signal. Don't.
+- **Handler** that maps the error to a transport response → it reports too. `httpf.HandleError`
+  calls `otel.ReportError` unconditionally before writing the HTTP status, so the REST handler
+  span records the error whatever status it maps to; on the gRPC side, do the same by hand
+  (`_ = otel.ReportError(span, err)` before `status.Error(...)`). The handler span thus shows
+  which error each request ended on — useful, not noise. The handler is the _boundary_, not a
+  layer that makes the error vanish.
+- **Anti-pattern**: a `reportUnexpected(span, err)` keyed on a list of "known" sentinels, used at
+  _any_ layer that still propagates or surfaces the error. It couples the layer to an error
+  registry and drops real signal. The forbidden moves are: suppressing reporting based on the
+  error's identity, and `return nil, ErrXxx` bare from a layer that has a span. Every span'd layer
+  reports.
 
-Request-level "is the service broken" dashboards stay clean because the _handler_ span is where
-expected errors get discarded — not because every layer pre-emptively suppresses them. Spans are
-independent, so the DAO span can say "no row" while the handler span says "handled → 4xx" and
-neither lies. For bulk-anomaly visibility on a security sentinel, use a counter / audit log /
-dedicated event — not `span.status`.
+The "is the service broken" view is built on the **HTTP status code** (the otel HTTP
+instrumentation records it) — not on span status. Span status answers "did an error occur in
+processing", which is `true` even for a deliberate 404, and that is fine: spans are independent,
+so the DAO span says "no row", the service span says "no row", the handler span says "no row → 404",
+and the dashboard counts the 404 as a 404, not as a 500. For bulk-anomaly visibility on a specific
+security sentinel (a spike of `ErrInvalidSignature`), use a counter / audit log / dedicated event
+— not `span.status`.
 
 **Span attributes** use a semantic `<entity>.<field>` scheme describing the _data_, not the Go
 variable holding it: `"key.id"`, `"key.usage"`, `"key.expires_at"` — never `"request.Jwk.*"` or

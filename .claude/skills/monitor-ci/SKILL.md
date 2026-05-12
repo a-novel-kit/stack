@@ -208,7 +208,7 @@ the PR author at merge time if the branch uses squash-merge.
    - New test for behaviour the code doesn't yet implement → fix the code
    - Existing test that used to pass → fix the new code that broke it
    - Test assertion out of date vs. new intended behaviour → fix the test
-   - Follow `write-go-code` / `write-go-tests` for the actual fix
+   - Follow `write-go-service` / `write-go-tests` for the actual fix
 
 3. Re-run until green locally, then commit. `monitor-ci` always runs on an
    already-pushed branch, so `git-conventions`' "never amend a pushed commit" rule
