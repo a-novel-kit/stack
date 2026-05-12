@@ -4,8 +4,8 @@ description: >
   Conventions for Go work in the a-novel-kit organization — the shared-library repos under
   `kit/` (`golib`, `jwt`, …). Load this skill whenever writing, reviewing, or refactoring Go in
   one of those repos, or when deciding whether something belongs in `golib` at all, or when a
-  `golib` sub-package looks ready to graduate into its own package. Covers: the golib-stays-
-  minimal mission and the "should this go in golib?" balance; the (stricter) dependency bar for
+  `golib` sub-package looks ready to graduate into its own package. Covers: the "golib stays
+  minimal" mission and the "should this go in golib?" balance; the (stricter) dependency bar for
   kit repos; the structure of `golib` and its sub-packages; the graduate-to-its-own-repo decision
   and the public/community-package obligations that follow it (broad API, docs site, codecov,
   semver discipline, the `a-novel-kit/.github` org defaults); and kit-flavoured test conventions.
@@ -167,12 +167,16 @@ the released tag before merging).
 
 Match the repo's existing setup; the standard shape:
 
-- **Makefile targets** — `make test` (gotestsum via `gotestsum.mod`), `make lint`
-  (`golangci-lint` via `golangci-lint.mod`, plus `buf lint` if there's proto, plus `pnpm lint` for
-  the prettier/docs tooling), `make generate` (`go generate`; `buf generate` if proto), `make
-format` (`go mod tidy`, `golangci-lint --fix`, `buf format` if proto, `pnpm format`). `write-go`
-  already says: run `make format` and `make lint` after every edit; `make generate` when generated
-  inputs changed.
+- **Makefile targets** — match the repo's existing set:
+  - `make test` — gotestsum via `gotestsum.mod`.
+  - `make lint` — `golangci-lint` via `golangci-lint.mod` (+ `buf lint` if there's proto, +
+    `pnpm lint` for the prettier/docs tooling).
+  - `make generate` — `go generate` (+ `buf generate` if proto).
+  - `make format` — `go mod tidy`, `golangci-lint --fix` (+ `buf format` if proto), `pnpm format`.
+
+  `write-go` already says: run `make format` and `make lint` after every edit; `make generate`
+  when generated inputs changed.
+
 - **Tool dependencies are pinned in `*.mod` side files** — `golangci-lint.mod`, `gotestsum.mod` —
   kept out of the main `go.mod`, invoked via `go tool -modfile=<name>.mod <tool>`. Don't move tool
   deps into `go.mod`.
