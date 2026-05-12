@@ -30,8 +30,9 @@ footer) and `implement-feature` (the layered-branch workflow these cross-repo pl
 
 ## How things are versioned
 
-- **Each repo is git-tag semver.** A release is a tag `vX.Y.Z` pushed to `master`; the next
-  version is read from the conventional-commit history since the last tag (`fix:` → patch,
+- **Each repo is git-tag semver.** A release is a `vX.Y.Z` git tag created on a `master` commit
+  and pushed; the next version is read from the conventional-commit history since the last tag
+  (`fix:` → patch,
   `feat:` → minor, a `BREAKING CHANGE:` footer or `!` → major — see `git-conventions`). The tag
   push triggers the `release` workflow (`a-novel-kit/workflows/publish-actions/auto-release`),
   which cuts the GitHub Release and, for service repos, builds and publishes the Docker images /
@@ -74,10 +75,13 @@ go mod tidy
 
 ## The merge order — dependency first, always
 
-A pseudo-version is a pointer to a commit on a branch. Once that branch merges and is deleted, the
-pseudo-version still resolves (the commit lives on in `master`'s history), but a PR that _merges_
-with a pseudo-version pin bakes a non-release into production — unreproducible from tags, invisible
-to Renovate, and a landmine for the next person. So:
+A pseudo-version is a pointer to a commit on a branch. Whether that exact commit still exists on
+`master` after the branch merges depends on the merge strategy — a merge commit keeps it; a
+squash- or rebase-merge does not, and once the branch is deleted GitHub serves the orphaned commit
+only for a while. Either way, a PR that _merges_ with a pseudo-version pin bakes a non-release into
+production — unreproducible from tags, invisible to Renovate, and a landmine once the source commit
+is gone. **A pseudo-version pin is only ever safe during in-flight development, never at merge
+time.** So:
 
 **Hard rule: the dependency PR merges and releases before the consumer PR merges; the consumer
 re-pins to the released tag first.**
