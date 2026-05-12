@@ -153,8 +153,8 @@ not on step 1.
 When a change spans repos:
 
 - [ ] Identify the dependency direction (who imports/consumes whom) and order the work bottom-up.
-- [ ] On the consumer branch, pin to the dependency's **commit SHA** (`go get @<sha>` + `go mod
-    tidy`) while developing — never a `replace`, never `@branch`.
+- [ ] On the consumer branch, pin to the dependency's **commit SHA** while developing
+      (`go get module@<sha>`, then `go mod tidy`) — never a `replace`, never `@branch`.
 - [ ] Is this a breaking change to a shared contract? → stage it (add → deprecate → migrate →
       remove); the current PR is the _additive_ step only.
 - [ ] Write the merge order in the PR description and/or `TaskCreate`.
