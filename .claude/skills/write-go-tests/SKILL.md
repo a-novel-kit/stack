@@ -1,17 +1,23 @@
 ---
 name: write-go-tests
 description: >
-  Write, review, and maintain Go tests for Agora backend services. Use this skill whenever writing
-  or modifying test files — new tests, regression coverage, mock wiring, or updating tests after a
-  refactor. Applies to all layers (dao, services, handlers, lib) and exported packages (pkg/go).
-  Does NOT apply to JS/TS tests.
+  Test conventions for ALL Go code in the a-novel and a-novel-kit organizations — file/function
+  naming, the table-driven structure, mockery usage, assertions, parallelism, cross-package
+  fixtures, helpers, and coverage. Load this skill whenever writing or modifying a Go test file
+  (new tests, regression coverage, mock wiring, or updating tests after a refactor) in a backend
+  service OR a shared library. Pairs with `write-go` (base Go conventions); the layer-specific
+  test patterns for clean-architecture services (the Postgres transactional harness for DAO
+  tests, REST/gRPC handler test shapes, …) live in `write-go-service`. Does NOT apply to JS/TS
+  tests.
 ---
 
-# Go Test Writing Skill
+# Go Test Conventions
 
-This skill governs how to write Go tests in Agora backend services. Tests define behavior, document
-contracts, and guard against regressions. They must be clear, isolated, and exhaustive for the
-paths they cover.
+This skill governs how to write Go tests across every a-novel / a-novel-kit repository — backend
+services and shared libraries alike. Tests define behavior, document contracts, and guard against
+regressions; they must be clear, isolated, and exhaustive for the paths they cover. Load it
+alongside `write-go` (base Go conventions) and the repo-kind skill — `write-go-service` or
+`write-go-kit`.
 
 **Before writing any test**, read the existing tests in the same package. Patterns are consistent
 by design — follow them exactly. Read the production code being tested too; do not guess at
@@ -27,17 +33,19 @@ the codebase. Stale or failing tests must be fixed, not deleted.
 
 ---
 
-## After Every Edit
+## After every edit
 
-Run only the targets that cover what you changed:
+Run the narrowest test target that exercises the code you changed:
 
 ```
-make test-unit   # internal/ — dao, services, handlers, lib
-make test-pkg    # pkg/go — exported Go client
+make test-unit   # services: internal/ — dao, services, handlers, lib
+make test-pkg    # services: pkg/go — exported Go client
+make test        # libraries (golib, jwt, …); also the full pre-commit run on services
 ```
 
-Never run `make test` (the full suite) during incremental work — it is reserved for the final
-commit. Run the narrowest target that exercises the changed code.
+On services, never run the full `make test` during incremental work — `make test-unit` /
+`make test-pkg` are faster and targeted; reserve `make test` for the final commit. Libraries
+typically expose only `make test`.
 
 ---
 
@@ -303,198 +311,14 @@ lifetime to the test, so in-flight operations are cancelled when the test ends.
 
 ---
 
-## Layer-Specific Guidance
+## Layer-specific test patterns
 
-### DAO Tests
-
-DAO tests run against a real PostgreSQL database inside an isolated transaction. The transaction
-is automatically rolled back after each sub-test, so cases cannot interfere with each other.
-
-```go
-func TestPgJwkSelect(t *testing.T) {
-    t.Parallel()
-
-    // Fixed timestamps relative to now — deterministic and easy to read.
-    hourAgo := time.Now().Add(-time.Hour).UTC().Round(time.Second)
-    hourLater := time.Now().Add(time.Hour).UTC().Round(time.Second)
-
-    testCases := []struct{ ... }{ ... }
-
-    repository := dao.NewPgJwkSelect()  // constructed once, outside the loop
-
-    for _, testCase := range testCases {
-        t.Run(testCase.name, func(t *testing.T) {
-            t.Parallel()
-
-            postgres.RunIsolatedTransactionalTest(
-                t,
-                testutils.PostgresPresetTest,
-                migrations.Migrations,
-                func(ctx context.Context, t *testing.T) {
-                    t.Helper()
-
-                    db, err := postgres.GetContext(ctx)
-                    require.NoError(t, err)
-
-                    if len(testCase.fixtures) > 0 {
-                        _, err = db.NewInsert().Model(&testCase.fixtures).Exec(ctx)
-                        require.NoError(t, err)
-                    }
-
-                    // If the query reads a materialized view, refresh it after inserting fixtures.
-                    _, err = db.NewRaw("REFRESH MATERIALIZED VIEW active_keys;").Exec(ctx)
-                    require.NoError(t, err)
-
-                    key, err := repository.Exec(ctx, testCase.request)
-                    require.ErrorIs(t, err, testCase.expectErr)
-                    require.Equal(t, testCase.expect, key)
-                },
-            )
-        })
-    }
-}
-```
-
-Key rules:
-
-- Always call `t.Parallel()` at the top of the outer test function, just like any other test.
-- Construct the repository once outside the table loop: `repository := dao.NewPgJwkSelect()`.
-- Insert fixtures using bun's `NewInsert().Model(...)` directly on the transaction-bound DB.
-- If the operation depends on a materialized view, refresh it manually after inserting fixtures —
-  PostgreSQL does not refresh materialized views automatically within a transaction.
-- Test cases that verify filtering or ordering must include enough fixtures to make the assertion
-  meaningful. A test named `"FilterUsage"` should have at least one row for the target usage and
-  one for a different usage.
-- Use fixed UUIDs (`uuid.MustParse("00000000-0000-0000-0000-000000000001")`) and fixed timestamps
-  relative to `time.Now()` (e.g., `hourAgo`, `hourLater`) so the test data is deterministic and
-  easy to read.
-- Do not use mocks in DAO tests. The whole point of DAO tests is to exercise the real database
-  interaction.
-
-### Services Tests
-
-Service tests use mocks for all DAO and sub-service dependencies. No database access.
-
-```go
-repositorySelect := servicesmocks.NewMockJwkSelectRepository(t)
-serviceExtract := servicesmocks.NewMockJwkSelectServiceExtract(t)
-
-if testCase.repositorySelectMock != nil {
-    repositorySelect.EXPECT().
-        Exec(mock.Anything, &dao.JwkSelectRequest{ID: testCase.request.ID}).
-        Return(testCase.repositorySelectMock.resp, testCase.repositorySelectMock.err)
-}
-
-service := services.NewJwkSelect(repositorySelect, serviceExtract)
-
-res, err := service.Exec(ctx, testCase.request)
-require.ErrorIs(t, err, testCase.expectErr)
-require.Equal(t, testCase.expect, res)
-
-repositorySelect.AssertExpectations(t)
-serviceExtract.AssertExpectations(t)
-```
-
-- Test every service dependency independently: one mock for each interface the service depends on.
-- For services that iterate over a collection (e.g., calling extract for each DAO result), define
-  the mock expectations as a slice, set each with `.Once()`, and assert that all were consumed.
-- When a mock argument cannot be fully specified in advance (e.g., a generated UUID or encrypted
-  key), use `mock.MatchedBy(func(r *dao.SomeRequest) bool { ... })` with a validation function
-  that calls `t.Error` (not `require`) and returns a bool.
-- For services that return a collection, add a `"Success/Empty"` case with `expect: []*services.Jwk{}`
-  (non-nil empty slice). Services that use `make([]*T, len(entities))` always return a non-nil slice
-  — a nil `expect` would diverge from the real return value and mask a regression.
-
-### REST Handler Tests
-
-REST handler tests use `net/http/httptest` — no real server required.
-
-```go
-handler := handlers.NewRestJwkGet(service, config.LoggerDev)
-w := httptest.NewRecorder()
-
-handler.ServeHTTP(w, testCase.request)
-
-res := w.Result()
-require.Equal(t, testCase.expectStatus, res.StatusCode)
-
-if testCase.expectResponse != nil {
-    data, err := io.ReadAll(res.Body)
-    require.NoError(t, errors.Join(err, res.Body.Close()))
-
-    var jsonRes any
-    require.NoError(t, json.Unmarshal(data, &jsonRes))
-    require.Equal(t, testCase.expectResponse, jsonRes)
-}
-```
-
-- Build requests with `httptest.NewRequestWithContext(t.Context(), method, url, body)`.
-- Use the **correct HTTP method** that matches the route registration (`http.MethodGet` for GET
-  routes, etc.). The handler's `ServeHTTP` may not check the method, but the test should still
-  reflect the real contract to avoid misleading readers.
-- Use the **actual registered path** for the URL (e.g., `"/healthcheck"` not `"/"`).
-- Use `any` (not a typed struct) as the expected response type — this avoids import coupling and
-  matches JSON numbers as `float64`, which is what `json.Unmarshal` into `any` produces.
-- Always test: the success path, each mapped error sentinel (e.g., 404), and the generic fallback
-  (500). Test invalid input (e.g., unparseable ID) if the handler parses input before calling the
-  service.
-- Assert the response body for every success case, including empty collection responses. Use
-  `expectResponse: []any{}` (not nil) for empty list results — Go encodes a nil slice as `null`
-  and a non-nil empty slice as `[]`, which are distinct API contracts. Leaving the body unchecked
-  allows a nil-vs-empty regression to pass silently.
-- Do not assert on the response body for error cases — only the status code matters.
-
-### gRPC Handler Tests
-
-gRPC tests call the method directly and extract the gRPC status code from the returned error.
-
-```go
-handler := handlers.NewGrpcJwkGet(service)
-
-res, err := handler.JwkGet(t.Context(), testCase.request)
-resSt, ok := status.FromError(err)
-require.True(t, ok, resSt.Code().String())
-require.Equal(
-    t,
-    testCase.expectStatus, resSt.Code(),
-    "expected status code %s, got %s (%v)", testCase.expectStatus, resSt.Code(), err,
-)
-require.Equal(t, testCase.expect, res)
-```
-
-- Always check `status.FromError` — even a nil error produces a valid status (`codes.OK`).
-- Set `expectStatus: codes.OK` explicitly on success cases; do not leave it zero-valued.
-- Set `expect` (the response) to nil for all error cases — the handler returns nil on error by
-  convention.
-- Always test: the success path, each mapped error sentinel (e.g., `codes.NotFound`), and the
-  generic fallback (`codes.Internal`). Test invalid input (e.g., `"Error/InvalidID"` with a
-  non-UUID string) if the handler parses input before calling the service.
-- For gRPC list handlers, add a `"Success/Empty"` case. Handlers use `lo.Map` which always
-  returns a non-nil empty slice, so `expect` must set the repeated field explicitly:
-  `expect: &protogen.JwkListResponse{Keys: []*protogen.Jwk{}}`. Using `&protogen.JwkListResponse{}`
-  (nil Keys) would fail because `nil != []*protogen.Jwk{}`.
-
-### lib Tests
-
-`lib/` tests are pure unit tests — no mocks, no external dependencies, no database. Test edge
-cases thoroughly: invalid inputs, boundary conditions, and error paths.
-
-When a `lib` function uses a context value (e.g., a master key), set up the context in the outer
-test function before the table loop so it is shared across cases:
-
-```go
-ctxReal, err := lib.NewMasterKeyContext(t.Context(), masterKey)
-require.NoError(t, err)
-```
-
-### pkg/go Tests
-
-`pkg/go` tests are end-to-end integration tests that connect to a running service. They are run
-with `make test-pkg`, not `make test-unit`. They test the exported client API, not individual
-handlers or services.
-
-These tests require the full service stack to be running. Do not try to mock anything at this
-layer — the point is to test the real integration path.
+How DAO tests run against a real Postgres in a rolled-back transaction, how service tests wire
+layered mocks, how REST and gRPC handler tests are structured, how `lib` and `pkg/go` tests
+differ — that is all clean-architecture-service detail and lives in **`write-go-service`**. Load
+that skill when writing tests inside an `a-novel` service. Shared libraries under `a-novel-kit`
+have no such layers: see **`write-go-kit`** for their coverage expectations and `Example_xxx`
+doc-test conventions.
 
 ---
 
