@@ -240,7 +240,7 @@ func (r *PgUserSelect) Exec(ctx context.Context, request *UserSelectRequest) (*U
     var user User
     if err = db.NewRaw(userSelectQuery, request.ID).Scan(ctx, &user); err != nil {
         if errors.Is(err, sql.ErrNoRows) {
-            return nil, ErrUserSelectNotFound
+            err = errors.Join(err, ErrUserSelectNotFound)
         }
         return nil, otel.ReportError(span, fmt.Errorf("execute query: %w", err))
     }
@@ -257,11 +257,14 @@ func NewPgUserSelect() *PgUserSelect {
   package-level (not inside a function). Never inline SQL as a raw string. Use the
   **`write-sql` skill** for all `.sql` file work — parameterization syntax, return patterns,
   formatting, and the read-vs-write target rules (`active_keys` vs `keys`).
-- **Errors:** map database sentinel errors (e.g., `sql.ErrNoRows`) to domain sentinel errors.
-  Do not call `otel.ReportError` on sentinel errors you intentionally surface — those are
-  expected conditions, not failures.
-- **Telemetry:** use `otel.ReportError(span, err)` on failure paths and `otel.ReportSuccess(span, value)`
-  on the happy path. See the Telemetry section for the full pattern.
+- **Errors:** map database sentinel errors (e.g., `sql.ErrNoRows`) to domain sentinel errors by
+  *joining* the sentinel onto the underlying error (`err = errors.Join(err, ErrXxxNotFound)`),
+  then report it on the span like any other failure — including the not-found case. A missing
+  row *is* a real outcome the DAO encountered; whether it's benign is the caller's judgment
+  (ultimately the handler's, by discarding the error), not the DAO's. See the Telemetry section.
+- **Telemetry:** use `otel.ReportError(span, err)` on every failure path — including
+  not-found / unique-violation / etc. — and `otel.ReportSuccess(span, value)` on the happy path.
+  See the Telemetry section for the full rule.
 - **Entity types:** define the bun model struct in a dedicated `pg.<entity>.go` file, separate
   from the operations that use it.
 
@@ -662,28 +665,34 @@ return otel.ReportSuccess(span, &user), nil
     `"dao.PgJwkSearch"` for `PgJwkSearch`.
   - **Services**: no prefix to strip. `"services.JwkSearch"` for `JwkSearch`.
   - **Sub-spans** (private methods): append in parentheses: `"rest.JwkGet(parseID)"`, `"grpc.Status(reportPostgres)"`.
-- Do **not** call `otel.ReportError` on sentinel errors returned as expected conditions.
-  Just `return nil, ErrXxx`; the span stays successful. The handler maps the sentinel to the
-  right HTTP/gRPC status downstream.
+- **Span reporting is layer-relative, not error-relative.** Every layer reports — on *its* span —
+  every error it raises *or propagates*. An error may be left off a span only by the layer that
+  actually **discards** it: handles it, turns it into a result, stops it propagating. "This is an
+  expected client outcome" is a judgment the discarding layer makes — it is not a property the
+  error value carries, and never something a lower layer guesses on a caller's behalf.
+  - **DAO** hits `sql.ErrNoRows`, a unique violation, etc. → `otel.ReportError`. It ran a query
+    and got a real outcome it didn't fully resolve; that's reportable from where it sits. (Join
+    the domain sentinel onto the error first so callers keep `errors.Is` identity.)
+  - **Service** produces a sentinel itself — validation failure, claim/source mismatch, a wrong
+    password it detected — → `otel.ReportError`. It raised it.
+  - **Service** receives an error from a DAO or sub-service and returns it upward → still
+    `otel.ReportError`. Returning an error upward is *propagating*, not discarding. Wrapping it
+    (`errors.Join(err, ErrXxx)`, `fmt.Errorf("...: %w", err)`) doesn't change that.
+  - **Handler** maps the sentinel to a 4xx/4xx-equivalent via the project's error-mapping helper
+    → that helper owns the handler span's status; the error is *discarded* here, so the handler
+    does not re-report it. This is the one place "expected" legitimately takes effect.
+  - **Anti-pattern:** a helper that suppresses span reporting based on the error's *identity* at
+    a layer that still propagates it — e.g. a `reportUnexpected(span, err)` that skips reporting
+    for a list of "known" sentinels. It couples the layer to a registry of error values and
+    silently drops real signal. The layer-local question is "did I resolve this, or pass it on?"
+    — that needs no registry.
 
-  This applies to **every** sentinel — validation failures, not-found, expired, wrong password,
-  signature mismatch, claim mismatch, replay-detection, role-mismatch — including
-  security-relevant ones. The protective clause caught the bad input; the application held; the
-  request did exactly what it was supposed to do. That is not a failure of the service, and
-  recording it as one pollutes the error signal:
-  - Trace error rate must mean "the service is broken", not "a user typed the wrong password".
-    If every wrong-password / not-found / expired-code marks its span as errored, the
-    error-rate panel says "20% failure" when nothing is actually broken, and the "is something
-    genuinely wrong" signal gets buried under benign client mistakes and external probing.
-  - Pen tests, scanners, and broken clients hit security sentinels constantly. Most are noise.
-    Marking each one as a span failure trains on-call to dismiss the entire error channel.
-  - Mass anomalies (a spike of `ErrInvalidSignature`) are a dashboard-configuration problem —
-    a counter, an audit log line, or a dedicated trace event — not a per-event flag on
-    `span.status`. Don't couple the two.
-
-  The same rule covers `otel.ReportError(span, errors.Join(err, ErrXxx))` and
-  `otel.ReportError(span, fmt.Errorf("%w: ...", ErrXxx))` — the wrapping doesn't change the
-  classification. If the returned error is a sentinel-bearing expected outcome, don't report it.
+  Request-level "is the service broken" dashboards stay clean because the *root / handler* span
+  is where expected errors get discarded — not because every layer pre-emptively suppresses them.
+  OTEL spans are independent: a child span being `Error` does not taint the parent, so the DAO
+  span can honestly say "no row" while the handler span honestly says "handled → 4xx", and
+  neither lies. For bulk-anomaly visibility on a security sentinel (a spike of
+  `ErrInvalidSignature`), use a counter / audit log / dedicated event — not `span.status`.
 
 - **Span attribute naming**: use a `<entity>.<field>` scheme that describes the data, not the Go
   variable that holds it. For attributes describing a key: `"key.id"`, `"key.usage"`,
@@ -782,8 +791,11 @@ When this service or any Agora service handles key material:
   `make generate` after adding or changing interfaces. Never write mocks by hand.
 - **`http` in new file or type names.** Use `rest` everywhere. Rename legacy `http.*` files and
   `Http`-prefixed types when they come in scope.
-- **Calling `otel.ReportError` on expected conditions.** Only report genuine failures, not
-  sentinel errors that represent normal domain outcomes (e.g., not-found).
+- **Suppressing span reporting for an error you still propagate.** Every layer reports — on its
+  own span — every error it raises or passes upward; only the layer that *discards* an error (the
+  handler mapping it to a status) leaves it off its span. Don't add `reportUnexpected`-style
+  helpers that skip reporting based on the error's identity, and don't `return nil, ErrXxx` bare
+  from a DAO/service — wrap-and-report it. See Telemetry.
 - **`context.Context` stored in a struct.** Always pass it as a method argument.
 - **New packages without asking.** Always get explicit developer approval before adding to `go.mod`.
 - **Returning raw error details in REST responses.** Always map to a generic HTTP status text.
