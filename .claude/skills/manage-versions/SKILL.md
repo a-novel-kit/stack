@@ -133,13 +133,20 @@ The output of that grep:
 - Seeds the **consumer-migration list** in step 2 below, which has to be tracked explicitly so
   no consumer gets forgotten and silently fails at step 3 (removal).
 - Surfaces the occasional case where the "shared" symbol turns out to have **zero in-org
-  consumers** — in which case the additive-then-deprecate dance is pointless and the symbol can
-  often just be removed directly, or where it has **one** consumer (which `write-go-kit` flags
-  as below the kit-inclusion bar, suggesting inlining rather than rename-and-keep).
-  Knowing this lets you pick the right shape; it does not stop you from making the change.
+  consumers** — and lets you decide what that means for _this particular symbol_. For internal /
+  not-yet-public helpers (a fresh `golib` sub-package that no service has imported yet, a
+  service's private `pkg/go` symbol), zero consumers usually means the additive-then-deprecate
+  dance is over-engineering and the symbol can be removed directly. For a **graduated /
+  community-facing package** (`a-novel-kit/jwt` and any future graduate — see `write-go-kit`'s
+  graduation rules), the workspace grep does **not** see external pkg.go.dev consumers, so the
+  staged removal still applies even at zero in-org hits; the discipline is the public API contract,
+  not the consumer count. Similarly, one in-org consumer in `golib` may signal that the helper
+  belongs inlined into the consumer instead of staying in `golib` (`write-go-kit`'s
+  "should this go in golib?" bar), but that's a `golib`-specific rule — graduated packages stay
+  staged regardless.
 
-Concrete grep commands from the workspace root (`/home/kushuh/git-projects/a-novel`), tailored to
-the symbol kind:
+Concrete grep commands from the workspace root (the directory holding `app/` and `kit/`), tailored
+to the symbol kind:
 
 ```bash
 # A Go function / type / constant — name only, captures all import paths.
