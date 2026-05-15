@@ -116,13 +116,66 @@ entries:
 A breaking change to anything other repos depend on — a `golib` / graduated-package public symbol,
 a service's `pkg/go` API, a proto message, a REST endpoint, a DB schema another reader relies on —
 is **never** done in a single PR that flips old → new. It's staged across releases so there is
-always a window where both old and new work:
+always a window where both old and new work.
+
+### Step 0 — Grep the whole workspace for consumers _first_
+
+Breaking changes are fine when the change is genuinely needed — a better API, a security fix that
+required a signature change, an obsolete helper a newer dependency now covers. The discipline this
+skill enforces is **knowing the blast radius before you start**, so the consumer-migration step
+isn't a scramble.
+
+**Before** writing the additive PR, enumerate every consumer of the symbol you're about to change.
+The output of that grep:
+
+- Tells you the **blast radius** — one consumer is a different change than ten, but the survey
+  itself is the same work either way.
+- Seeds the **consumer-migration list** in step 2 below, which has to be tracked explicitly so
+  no consumer gets forgotten and silently fails at step 3 (removal).
+- Surfaces the occasional case where the "shared" symbol turns out to have **zero in-org
+  consumers** — in which case the additive-then-deprecate dance is pointless and the symbol can
+  often just be removed directly, or where it has **one** consumer (which `write-go-kit` flags
+  as below the kit-inclusion bar, suggesting inlining rather than rename-and-keep).
+  Knowing this lets you pick the right shape; it does not stop you from making the change.
+
+Concrete grep commands from the workspace root (`/home/kushuh/git-projects/a-novel`), tailored to
+the symbol kind:
+
+```bash
+# A Go function / type / constant — name only, captures all import paths.
+grep -rn "SymbolName" app/ kit/ --include='*.go'
+
+# A proto message or RPC.
+grep -rn "MessageName" app/ kit/ --include='*.proto' --include='*.go'
+
+# A REST endpoint path or query parameter.
+grep -rn 'apiPath' app/ kit/
+
+# A renamed type — survey BOTH old and new names so consumer files using either show up.
+grep -rn "HttpConfig\|HTTPConfig" app/ kit/ --include='*.go'
+
+# A field on an exported struct (don't forget composite-literal usage).
+grep -rn "\.FieldName\|FieldName:" app/ kit/ --include='*.go'
+```
+
+Search both `app/` (services) and `kit/` (other shared libraries) — a graduated-package change
+can rip through `jwt` consumers as easily as service consumers. Capture the file list as a checklist
+in the dependency PR's description, under a heading like "Consumer migration follow-ups", so it
+travels with the PR through review.
+
+Skipping this step has a specific failure mode: the dependency PR merges and releases, then someone
+discovers a consumer that wasn't on the radar weeks later — usually when it suddenly fails to
+compile after the removal step. Catch it now, not then.
+
+### The staged path itself
 
 1. **Add the new path, non-breaking.** New function / field / endpoint / column alongside the old.
    The old path keeps working unchanged. Release this (a `feat:`, _not_ a breaking change — nothing
    broke yet). Mark the old path `// Deprecated: use NewThing` so consumers and pkg.go.dev see it.
-2. **Migrate every consumer to the new path.** One PR per consumer, each re-pinning to the release
-   from step 1 (per the merge-order rule), each releasing once green. Track the consumer list.
+2. **Migrate every consumer to the new path.** One PR per consumer (drawn from the step-0 list),
+   each re-pinning to the release from step 1 (per the merge-order rule), each releasing once
+   green. Tick consumers off the list as their PRs land — when the list is empty, you know you're
+   safe for step 3.
 3. **Remove the old path.** Once _every_ consumer is off it, a follow-up PR in the dependency deletes
    the old symbol/field/endpoint/column. _This_ is the breaking change — now safe, because nothing
    uses the old path anymore. Release it (a major bump for a graduated package / `pkg/go`; for a
@@ -161,6 +214,9 @@ When a change spans repos:
       (`go get module@<sha>`, then `go mod tidy`) — never a `replace`, never `@branch`.
 - [ ] Is this a breaking change to a shared contract? → stage it (add → deprecate → migrate →
       remove); the current PR is the _additive_ step only.
+- [ ] For any breaking change to a public symbol, **`grep -rn` the whole workspace** (`app/` _and_
+      `kit/`) for consumers before writing the dependency PR. Paste the file list into the PR
+      description under "Consumer migration follow-ups" so it travels with the PR through review.
 - [ ] Write the merge order in the PR description and/or `TaskCreate`.
 - [ ] Merge the dependency PR → wait for its release tag → re-pin the consumer to the released
       version (`chore(deps): bump … to vX.Y.Z`, `go mod tidy`) → confirm CI green → merge the
@@ -189,3 +245,8 @@ When a change spans repos:
   let it. The manual re-pin is only for an in-flight cross-repo change.
 - **Forgetting the chain.** If the consumer is itself a dependency, the same dance continues one
   level up. Write the whole order down.
+- **Skipping the workspace-wide consumer grep before introducing the breaking change.** The
+  staged-removal dance only works if every consumer migrates between steps 1 and 3. Discovering a
+  forgotten consumer after step 3 has shipped means a broken build (or worse, a runtime hole) for
+  someone downstream. Grep `app/` and `kit/` for the symbol _before_ writing the additive PR and
+  paste the file list into the PR body.
