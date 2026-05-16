@@ -168,6 +168,30 @@ gh pr view --json number,state,url 2>/dev/null
 
 ## Phase 5: Create the PR
 
+### 5.0 Use the operator's user token — never the bot token
+
+`gh pr create` (and every `gh pr edit` / `gh pr ready` in this skill) must run with the
+plain `gh` credential, i.e. the operator's **user token**. The opened PR is authored by
+the operator, so the `auto-assign-author` workflow can assign them and `CODEOWNERS`
+routing works.
+
+Never wrap PR creation/editing in the bot-token helper:
+
+```bash
+# WRONG — do not open or edit a PR as the app bot
+bot_gh a-novel pr create ...
+GH_TOKEN="$(bot_token a-novel)" gh pr create ...
+
+# RIGHT — plain gh, operator's user token
+gh pr create ...
+```
+
+The `scripts/lib/bot-token.sh` helper (`bot_gh <org> ...` / `bot_token <org>`) is
+**reserved for commenting** — top-level PR/issue comments and review-thread replies in
+`resolve-pr-feedback`. Opening, editing, or readying a PR is never a bot action. If a
+`gh` call here fails with an auth/permission error, surface it to the user; do not fall
+back to the bot token to get past it.
+
 ### 5.1 Choose the base branch
 
 - Default: `master`
@@ -274,16 +298,34 @@ close and re-open a PR to change its code; that loses review comments and CI his
 
 ---
 
-## Phase 7: Hand-Off to monitor-ci
+## Phase 7: Hand-Off to monitor-ci (mandatory — gates task completion)
 
-After `gh pr create` or `git push` succeeds, CI starts. Hand off to the `monitor-ci` skill
-to watch the run, classify any failures, and apply fixes. Do not merge — merges are a
-developer decision unless explicitly delegated.
+After `gh pr create` or `git push` succeeds, CI starts. **Opening the PR does not
+finish the task.** You must invoke `monitor-ci` and follow it through to a terminal
+state. The task is complete only once you have reported one of:
+
+- **CI green** — every gating check `completed` + `success`, reported to the user, OR
+- **A blocked/escalated state** — `monitor-ci`'s retry budget exhausted or an escalate
+  condition hit, with the failing job(s), root-cause hypothesis, and what was tried
+  surfaced to the user (per `monitor-ci` Phase 4).
+
+Never end the turn at "PR opened, CI running" and consider the work done — that leaves
+the result unverified. Carry the CI watch to a reported conclusion before closing out.
+
+While CI runs you are not idle: use the wait windows to perform a **self-review** of the
+branch's diff (see `monitor-ci` Phase 1.2). Surface anything the self-review turns up
+alongside the CI result.
+
+Do not merge — merges are a developer decision unless explicitly delegated.
 
 ---
 
 ## Common Mistakes
 
+- **Opening or editing a PR with the bot token.** `bot_gh`/`bot_token` is for comments
+  only. PR create/edit/ready always run as the operator's user token (Phase 5.0).
+- **Treating "PR opened" as task-done.** The task is not finished until `monitor-ci`
+  reports CI green or an escalated/blocked state (Phase 7).
 - **Pushing before local tests pass.** CI is not a debugger. Run tests locally first.
 - **Opening a PR from master.** Branch first, then PR.
 - **Closing and re-creating a PR to "fix" the title.** Use `gh pr edit --title` instead.

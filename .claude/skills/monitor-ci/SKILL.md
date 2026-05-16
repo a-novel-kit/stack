@@ -97,6 +97,32 @@ sleep 90
 Run that with `run_in_background=true`, then on the next turn issue `gh pr checks` (or the
 `gh run list` command above) to get the updated state. Repeat until the run is `completed`.
 
+#### Use the wait window for a self-review
+
+CI waits are dead time otherwise — spend them reviewing your own work, so issues are
+caught (and ideally fixed) before a reviewer sees them rather than after. While a
+background wait is in flight, read the branch's own diff and check it critically:
+
+```bash
+git diff master...HEAD          # or the stacked parent branch
+```
+
+Look for: leftover debug/print statements, commented-out code, TODOs that should be
+resolved, missing or thin test coverage for the changed lines, error paths that don't
+report (see the every-span'd-layer rule), naming/layering drift from the relevant
+`write-*` skill, and anything the PR body claims that the diff doesn't actually do.
+
+- If you find a clear defect, fix it like any CI finding (Phase 3): local-verify, new
+  follow-up commit, push — the push starts a fresh run, so the self-review and the CI
+  loop converge rather than compete.
+- If you find something arguable (a design trade-off, a deferred concern), don't
+  silently rewrite it — note it and surface it with the final CI report so the user
+  decides.
+
+Do the self-review once per branch (not on every poll); re-review only the new diff
+after a fix commit. This is a review of the change, not a re-audit of the whole repo —
+keep it scoped to `git diff`.
+
 Rule of thumb for sleep durations:
 
 - First check after push: `30s` — short jobs (lint, generated-go) complete by then
@@ -341,6 +367,11 @@ confidence-building.
 - If this was a push to an open PR → surface the all-green state and stop. Merging is a
   developer decision unless explicitly delegated.
 - Never merge autonomously. Never add `--auto-merge` flags without an explicit instruction.
+
+This green report is the **terminal state that completes the task** when CI was reached
+via `open-pull-request` Phase 7 — do not consider that task done until you have reported
+it (or, per Phase 4, reported an escalated/blocked state instead). Include in the report
+anything the Phase 1.2 self-review surfaced that you did not fix yourself.
 
 ---
 
