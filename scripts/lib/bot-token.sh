@@ -117,8 +117,30 @@ bot_token() {
 	printf '%s' "$token"
 }
 
+# __bot_gh_deny refuses any gh subcommand that AUTHORS a PR/issue or changes
+# its state. The bot account is comment-only: PR creation/edits must run with
+# the operator's user token so CI triggers and auto-assign-author / CODEOWNERS
+# work (see .claude/skills/open-pull-request/SKILL.md §5.0). A doc rule alone
+# did not hold — this makes the misuse mechanically impossible regardless of
+# which skill context the caller is in.
+__bot_gh_deny() {
+	case "${1:-} ${2:-}" in
+	"pr create" | "pr edit" | "pr ready" | "pr merge" | "pr close" | \
+		"pr reopen" | "pr review" | "pr lock" | "pr unlock" | \
+		"issue create" | "issue edit" | "issue close" | "issue reopen" | \
+		"issue transfer" | "issue pin" | "issue lock" | "issue unlock")
+		log_error "bot_gh: '$1 $2' is not allowed — the bot account is comment-only."
+		log_dim "      Run it with the operator user token instead: plain \`gh $1 $2 …\`"
+		log_dim "      (see .claude/skills/open-pull-request/SKILL.md §5.0)."
+		return 3
+		;;
+	esac
+}
+
 # bot_gh <org> <gh args...>
 # Runs `gh` with GH_TOKEN set to a fresh installation token for <org>.
+# Reserved for COMMENTS only (top-level PR/issue comments, review-thread
+# replies). PR/issue authoring & state changes are denied — see __bot_gh_deny.
 bot_gh() {
 	local org="${1:-}"
 	if [ -z "$org" ]; then
@@ -126,6 +148,8 @@ bot_gh() {
 		return 2
 	fi
 	shift
+
+	__bot_gh_deny "$@" || return $?
 
 	local token
 	token=$(bot_token "$org") || return $?
