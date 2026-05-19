@@ -388,11 +388,13 @@ func preflight(ctx context.Context, verb ui.Verb, targets []detect.Target, canPr
 	}
 
 	if !canPrompt {
+		// No TTY to prompt — "clean" is the automatic choice so CI / piped
+		// runs self-heal: tear the stale (scoped) env down and continue.
 		fmt.Fprintln(os.Stderr, ui.EnvNote(
-			"Tearing down the stale environment (scoped to this project only) and "+
-				"aborting. Re-run `a-novel "+verb.Base+"` once it is clear."))
+			"No prompt available — cleaning the stale environment "+
+				"(scoped to this project only) and continuing."))
 		clean()
-		return exitAborted
+		return -1
 	}
 
 	fmt.Fprint(os.Stderr, ui.EnvPrompt("Clean it and continue, or abort? [c]lean / [a]bort: "))
