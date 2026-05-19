@@ -158,10 +158,23 @@ func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, 
 	return runEnv, nil
 }
 
+// ANSI SGR used by formatEnvBlock. build cannot import the ui/lipgloss layer
+// (import cycle: ui → build), so the palette is inlined as raw 256-colour
+// escapes. They survive runner.SanitizeLine (SGR is kept) and are rendered by
+// the viewport; on a non-TTY they are harmless and match the rest of the
+// report, which is already coloured.
+const (
+	envHdr = "\x1b[1;38;5;172m" // gold, bold — the header
+	envKey = "\x1b[38;5;37m"    // accent — variable names
+	envEq  = "\x1b[38;5;66m"    // muted — the " = " separator
+	envRst = "\x1b[0m"
+)
+
 // formatEnvBlock renders the env vars the CLI injected as an aligned,
-// key-sorted list — one `KEY = value` per line under a header — instead of
-// one unreadable space-joined blob. Local-only generic creds, so values are
-// shown verbatim (you need the real DSN/URL to curl against the run).
+// key-sorted, lightly-coloured list — one `KEY = value` per line under a
+// header — instead of one unreadable space-joined blob. Local-only generic
+// creds, so values are shown verbatim (you need the real DSN/URL to curl
+// against the run).
 func formatEnvBlock(kv []string) string {
 	type pair struct{ k, v string }
 	pairs := make([]pair, 0, len(kv))
@@ -175,9 +188,11 @@ func formatEnvBlock(kv []string) string {
 	}
 	sort.Slice(pairs, func(i, j int) bool { return pairs[i].k < pairs[j].k })
 	var b strings.Builder
-	b.WriteString("── env ──\n")
+	b.WriteString(envHdr + "── env ──" + envRst + "\n")
 	for _, p := range pairs {
-		_, _ = fmt.Fprintf(&b, "   %-*s = %s\n", maxK, p.k, p.v)
+		pad := strings.Repeat(" ", maxK-len(p.k))
+		_, _ = fmt.Fprintf(&b, "   %s%s%s %s=%s %s\n",
+			envKey, p.k, envRst, envEq+pad, envRst, p.v)
 	}
 	return b.String()
 }
