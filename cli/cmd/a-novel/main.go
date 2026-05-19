@@ -278,6 +278,33 @@ func runRun(args []string) int {
 
 	interactive := term.IsTerminal(os.Stdout.Fd())
 
+	// Selection. With a TTY (and not -y), reuse build/test's exact picker so
+	// you choose which entrypoints to launch — without this, `run` launched
+	// every target at once (including fast-exiting ones like migrations,
+	// which self-exit and tear the whole dashboard down on sight). -y / no
+	// TTY keeps the old "run everything" behaviour for CI.
+	if interactive && !opts.yes {
+		picked, perr := tea.NewProgram(
+			ui.NewSelect(version.String(), verb, targets), tea.WithAltScreen()).Run()
+		if perr != nil {
+			fmt.Fprintf(os.Stderr, "a-novel run: ui error: %v\n", perr)
+			return exitFailure
+		}
+		sm, ok := picked.(ui.Model)
+		if !ok {
+			fmt.Fprintf(os.Stderr, "a-novel run: unexpected model type %T\n", picked)
+			return exitFailure
+		}
+		if sm.Aborted() {
+			return exitOK // user backed out of the picker — nothing started
+		}
+		if sel := sm.Selected(); len(sel) > 0 {
+			targets = sel
+		} else {
+			return exitOK // nothing chosen
+		}
+	}
+
 	// Reuse vs recreate. --recreate forces recreate (skips only this prompt).
 	// Otherwise, if an env is already up and we can prompt, ask (default
 	// reuse); non-interactive defaults to reuse.

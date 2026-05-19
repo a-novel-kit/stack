@@ -43,7 +43,10 @@ func NewRun(version string, r *runner.Runner, cancel func()) RunModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(colBrand)
-	return RunModel{version: version, run: r, cancel: cancel, spinner: sp}
+	// Seed the process list so the very first frame already shows every
+	// target (Pending), instead of an empty box that only fills on the first
+	// spinner tick — that one-frame jump read as a flicker.
+	return RunModel{version: version, run: r, cancel: cancel, spinner: sp, procs: r.Snapshot()}
 }
 
 func (m RunModel) Init() tea.Cmd {
@@ -69,6 +72,9 @@ func (m RunModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.vp.Width, m.vp.Height = msg.Width, h
 		}
+		// Fill the log pane on the resize frame too, so it isn't blank until
+		// the first tick.
+		m.refreshViewport()
 		return m, nil
 
 	case spinner.TickMsg:

@@ -25,18 +25,30 @@ const rootUsage = "a-novel <command> [flags]"
 const helpHint = "Run `a-novel <command> --help` (or `a-novel help <command>`) " +
 	"for a command's flags and examples."
 
-// runFlags is the flag set shared verbatim by `build` and `test`.
-var runFlags = []flagDoc{
-	{"-C, --dir <path>", "Directory to scan (default: current directory)"},
-	{"-t, --type <kinds>", "Comma-separated kind filter: go,pnpm,podman (default: all)"},
-	{"-j, --jobs <n>", "Max targets run in parallel, interactive only (default: CPU count)"},
-	{"-T, --timeout <dur>", "Per-target deadline, e.g. 10m / 30s / 0 to disable (default: 10m)"},
-	{"-y, --yes", "Skip the menu; run everything non-interactively & sequentially (CI-safe)"},
-	{"--no-cover", "test only: skip coverage (it is collected & reported by default)"},
-	{"--recreate", "run only: rebuild the compose env instead of reusing an existing one"},
-	{"--dry-run", "List detected targets (and their envs) and exit without running"},
-	{"-h, --help", "Show this command's help"},
-}
+// Flag docs are composed per command from these fragments — each command
+// advertises only the flags it actually honours, so `run --help` never lists
+// the test-only --no-cover and `build`/`test` never list the run-only
+// --recreate (the "wrong flag in help" bug).
+var (
+	flagDir      = flagDoc{"-C, --dir <path>", "Directory to scan (default: current directory)"}
+	flagType     = flagDoc{"-t, --type <kinds>", "Comma-separated kind filter: go,pnpm,podman (default: all)"}
+	flagJobs     = flagDoc{"-j, --jobs <n>", "Max targets run in parallel, interactive only (default: CPU count)"}
+	flagTimeout  = flagDoc{"-T, --timeout <dur>", "Per-target deadline, e.g. 10m / 30s / 0 to disable (default: 10m)"}
+	flagYes      = flagDoc{"-y, --yes", "Skip the menu; run everything non-interactively & sequentially (CI-safe)"}
+	flagNoCover  = flagDoc{"--no-cover", "Skip coverage (it is collected & reported by default)"}
+	flagRecreate = flagDoc{"--recreate", "Rebuild the compose env instead of reusing an existing one"}
+	flagDryRun   = flagDoc{"--dry-run", "List detected targets (and their envs) and exit without running"}
+	flagHelp     = flagDoc{"-h, --help", "Show this command's help"}
+)
+
+// buildFlags / testFlags / runCmdFlags are the exact, honoured flag sets.
+// `run` deliberately omits -j/-T/-y/--no-cover: run targets are long-lived
+// (no per-target timeout or parallel pool) and selection is its own step.
+var (
+	buildFlags  = []flagDoc{flagDir, flagType, flagJobs, flagTimeout, flagYes, flagDryRun, flagHelp}
+	testFlags   = []flagDoc{flagDir, flagType, flagJobs, flagTimeout, flagYes, flagNoCover, flagDryRun, flagHelp}
+	runCmdFlags = []flagDoc{flagDir, flagType, flagRecreate, flagDryRun, flagHelp}
+)
 
 // commandDocs is the single source of truth for the command set; its order is
 // the order shown on the generic help screen.
@@ -51,7 +63,7 @@ var commandDocs = []commandDoc{
 			"menu (everything selected by default). Selected targets build in a bounded " +
 			"parallel pool and a pass/fail report is printed. With -y or no TTY it runs " +
 			"sequentially and non-interactively.",
-		flags: runFlags,
+		flags: buildFlags,
 		examples: []string{
 			"a-novel build                 # interactive build menu",
 			"a-novel build -t go,podman    # only Go + Podman targets",
@@ -70,7 +82,7 @@ var commandDocs = []commandDoc{
 			"podman-compose.<id>.test.yaml env has it brought up (host ports allocated " +
 			"in Go, healthy-waited) around the run and torn down after — parallel-safe, " +
 			"so independent envs run concurrently.",
-		flags: runFlags,
+		flags: testFlags,
 		examples: []string{
 			"a-novel test                  # interactive test menu",
 			"a-novel test -t go            # only Go test targets",
@@ -90,7 +102,7 @@ var commandDocs = []commandDoc{
 			"tab to scroll a process's log). Quitting, or any process failing, " +
 			"tears the whole environment down — no phantom runners. An already-up " +
 			"env is reused by default; --recreate (or the prompt) rebuilds it.",
-		flags: runFlags,
+		flags: runCmdFlags,
 		examples: []string{
 			"a-novel run                   # interactive run menu + dashboard",
 			"a-novel run -t go             # only Go entrypoints",

@@ -82,6 +82,12 @@ type Model struct {
 
 	width   int
 	aborted bool // true if the user ctrl+c'd mid-run
+
+	// selectOnly makes the model a pure target picker: `enter` records the
+	// selection and quits instead of starting the build pool. `run` uses this
+	// so it shares build/test's exact selection UI, then hands the chosen
+	// targets to its own long-lived dashboard.
+	selectOnly bool
 }
 
 // New builds a Model from discovered targets. Every target starts selected —
@@ -122,6 +128,20 @@ func New(ctx context.Context, version string, verb Verb, targets []detect.Target
 	m.rows = m.buildRows()
 	return m
 }
+
+// NewSelect builds a target picker that reuses build/test's exact selection
+// UI, then quits on `enter` returning the chosen targets via [Model.Selected].
+// It carries no run state (no ctx/jobs/timeout) — `run` drives the actual
+// processes itself.
+func NewSelect(version string, verb Verb, targets []detect.Target) Model {
+	m := New(context.Background(), version, verb, targets, 1, 0)
+	m.selectOnly = true
+	return m
+}
+
+// Selected is the targets the user confirmed in select-only mode (empty if
+// aborted or nothing was picked). Pair with [Model.Aborted].
+func (m Model) Selected() []detect.Target { return m.queue }
 
 // buildRows flattens the sorted targets into displayable rows, inserting a
 // group heading whenever the kind changes.
@@ -321,6 +341,10 @@ func (m Model) handleSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.queue) == 0 {
 			return m, nil // nothing selected — ignore, keep choosing
 		}
+		if m.selectOnly {
+			// Picker mode: hand the selection back to the caller (run).
+			return m, tea.Quit
+		}
 		m.phase = phaseRun
 		m.nextIdx = 0
 		m.running = map[string]time.Time{}
@@ -472,7 +496,8 @@ func (m Model) viewSelect() string {
 	b.WriteString(styleGold.Render(fmt.Sprintf("%d of %d selected", m.selectedCount(), len(m.targets))))
 	b.WriteString("\n")
 	b.WriteString(styleHelp.Render(
-		"↑/↓ move · space toggle · g toggle group · a toggle all · enter build · q quit"))
+		"↑/↓ move · space toggle · g toggle group · a toggle all · enter " +
+			m.verb.Base + " · q quit"))
 	b.WriteString("\n")
 	return b.String()
 }
