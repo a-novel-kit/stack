@@ -121,8 +121,36 @@ func composeProject(rel, id string) string {
 	return "anovel-test-" + strings.Trim(slug, "-")
 }
 
+// hostPortVar matches a `${NAME}:1234` host→container port mapping in a
+// compose file. The `:digits` after the brace is what distinguishes a ports
+// entry from environment (`KEY: "${NAME}"`) or volumes (`${NAME}:/path`).
+var hostPortVar = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}:\d`)
+
+// composePorts returns the distinct env-var names bound on the host side of a
+// ports: mapping in the compose file — the ports the host test consumes.
+func composePorts(file string) []string {
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var ports []string
+	for _, m := range hostPortVar.FindAllStringSubmatch(string(raw), -1) {
+		if !seen[m[1]] {
+			seen[m[1]] = true
+			ports = append(ports, m[1])
+		}
+	}
+	return ports
+}
+
 func (f envFile) toEnv(rel string) *ComposeEnv {
-	return &ComposeEnv{File: f.file, Project: composeProject(rel, f.id), ID: f.id}
+	return &ComposeEnv{
+		File:    f.file,
+		Project: composeProject(rel, f.id),
+		ID:      f.id,
+		Ports:   composePorts(f.file),
+	}
 }
 
 // goTests emits the Go test target(s) for a module at dir.

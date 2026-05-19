@@ -86,6 +86,12 @@ type ComposeEnv struct {
 	Project string
 	// ID is the parsed identifier, e.g. "go.internal" or "pnpm".
 	ID string
+	// Ports are the env-var names the compose file binds on the HOST side of
+	// a `ports:` mapping (e.g. POSTGRES_PORT, GRPC_PORT) — exactly the ports
+	// the host test process talks to. The runner allocates a free TCP port
+	// for each so parallel targets never collide, replacing setup-env.sh's
+	// node/get-port-please randomisation.
+	Ports []string
 }
 
 // ID is a stable, unique key for a target (used as a selection-map key and to

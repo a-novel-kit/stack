@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,18 +49,34 @@ func Run(ctx context.Context, t detect.Target) Result {
 	// the environment reads as part of the same story.
 	var buf bytes.Buffer
 
-	// Resolve scripts/setup-env.sh for this target and, if present, source it
-	// once: it assigns RANDOM host ports (get-port-please) and derives the
-	// URLs/DSN from them. The captured environment is reused for BOTH compose
-	// and the test process, so the env binds and the test connects to the
-	// same ports — and because each Run sources it independently, parallel
-	// targets get disjoint ports for free. No per-repo special-casing: the
-	// json-keys master key is just another captured var.
+	// Allocate a free TCP port (Go, no node) for every host-side port var the
+	// compose file declares — exactly the ports the host test talks to.
+	// Pre-exporting them means setup-env.sh's `${PORT:=$(node …)}` skips the
+	// node call (assign-if-unset) while still deriving the URLs/DSN; each Run
+	// allocates independently, so parallel targets never collide.
 	runEnv := os.Environ()
+	if t.Env != nil && len(t.Env.Ports) > 0 {
+		portEnv, err := allocPorts(t.Env.Ports)
+		if err != nil {
+			return Result{
+				Target:   t,
+				ExitErr:  fmt.Errorf("port allocation failed: %w", err),
+				Output:   strings.TrimRight(buf.String(), "\n"),
+				Duration: time.Since(start),
+			}
+		}
+		fmt.Fprintf(&buf, "── ports ── %s\n", strings.Join(portEnv, "  "))
+		runEnv = append(runEnv, portEnv...)
+	}
+
+	// Resolve scripts/setup-env.sh and, if present, source it for the
+	// remaining (service-specific / derived) vars. It sees the ports we just
+	// set, so node is never invoked. The captured environment is reused for
+	// BOTH compose and the test process.
 	if root := repoRoot(t); root != "" {
 		if se := filepath.Join(root, "scripts", "setup-env.sh"); isFile(se) {
 			fmt.Fprintf(&buf, "── setup-env: %s ──\n", rel(root, se))
-			env, err := sourceEnv(ctx, se, root, &buf)
+			env, err := sourceEnv(ctx, se, root, runEnv, &buf)
 			if err != nil {
 				return Result{
 					Target:   t,
@@ -69,6 +86,10 @@ func Run(ctx context.Context, t detect.Target) Result {
 				}
 			}
 			runEnv = env
+		} else if t.Env != nil {
+			// No setup-env.sh: derive the connection vars ourselves from the
+			// allocated ports by the fixed *_PORT naming rule.
+			runEnv = append(runEnv, derivedURLs(t.Env.Ports, runEnv)...)
 		}
 	}
 
@@ -133,13 +154,68 @@ func rel(base, p string) string {
 	return p
 }
 
+// allocPorts binds an ephemeral TCP port for each var name, closes it, and
+// returns "NAME=port" entries. Same close-then-reuse window as
+// get-port-please, but pure Go (no node). Distinct binds within one call
+// never alias because each listener holds a different port until closed.
+func allocPorts(names []string) ([]string, error) {
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		l, err := net.Listen("tcp", "localhost:0")
+		if err != nil {
+			return nil, err
+		}
+		addr, ok := l.Addr().(*net.TCPAddr)
+		_ = l.Close()
+		if !ok {
+			return nil, fmt.Errorf("unexpected listener address type %T", l.Addr())
+		}
+		out = append(out, fmt.Sprintf("%s=%d", n, addr.Port))
+	}
+	return out, nil
+}
+
+// derivedURLs builds the host connection vars from the allocated ports by the
+// fixed `<X>_PORT` rule — used only when there is no setup-env.sh to do it:
+// POSTGRES_PORT→POSTGRES_DSN, GRPC_PORT→GRPC_URL (host:port),
+// any other X_PORT→X_URL (http://localhost:port).
+func derivedURLs(names []string, env []string) []string {
+	get := func(k string) string {
+		for _, kv := range env {
+			if v, ok := strings.CutPrefix(kv, k+"="); ok {
+				return v
+			}
+		}
+		return ""
+	}
+	var out []string
+	for _, n := range names {
+		base, ok := strings.CutSuffix(n, "_PORT")
+		if !ok {
+			continue
+		}
+		p := get(n)
+		switch base {
+		case "POSTGRES":
+			out = append(out, "POSTGRES_DSN=postgres://postgres:postgres@localhost:"+p+"/postgres?sslmode=disable")
+		case "GRPC":
+			out = append(out, "GRPC_URL=localhost:"+p)
+		default:
+			out = append(out, base+"_URL=http://localhost:"+p)
+		}
+	}
+	return out
+}
+
 // sourceEnv runs setup-env.sh in bash and returns the resulting environment.
 // `set -a` exports every assignment; setup-env's own prints are redirected to
 // stderr (captured into log) so only the NUL-delimited `env` reaches stdout.
-func sourceEnv(ctx context.Context, script, dir string, log *bytes.Buffer) ([]string, error) {
+// baseEnv (including the pre-allocated ports) is the script's starting env, so
+// its `${PORT:=$(node …)}` assignments are already satisfied.
+func sourceEnv(ctx context.Context, script, dir string, baseEnv []string, log *bytes.Buffer) ([]string, error) {
 	cmd := exec.CommandContext(ctx, "bash", "-c", `set -a; . "$1" 1>&2; env -0`, "bash", script)
 	cmd.Dir = dir
-	cmd.Env = os.Environ()
+	cmd.Env = baseEnv
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = log
