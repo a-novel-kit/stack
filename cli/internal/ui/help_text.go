@@ -32,7 +32,7 @@ var runFlags = []flagDoc{
 	{"-j, --jobs <n>", "Max targets run in parallel, interactive only (default: CPU count)"},
 	{"-T, --timeout <dur>", "Per-target deadline, e.g. 10m / 30s / 0 to disable (default: 10m)"},
 	{"-y, --yes", "Skip the menu; run everything non-interactively & sequentially (CI-safe)"},
-	{"-c, --coverage", "test only: go test -cover (excl. mocks/test/protogen) + coverage report"},
+	{"--no-cover", "test only: skip coverage (it is collected & reported by default)"},
 	{"--dry-run", "List detected targets (and their envs) and exit without running"},
 	{"-h, --help", "Show this command's help"},
 }

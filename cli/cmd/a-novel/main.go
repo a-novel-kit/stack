@@ -111,14 +111,14 @@ type buildOpts struct {
 	help     bool
 	jobs     int           // max parallel builds (interactive only); 0 = NumCPU
 	timeout  time.Duration // per-target deadline; 0 = none, default 10m
-	coverage bool          // `test` only: add `go test -cover` + a coverage report section
+	coverage bool          // `test` only: coverage on by default; --no-cover disables
 }
 
 // parseBuildArgs hand-parses the small, fixed `build` flag set. A bespoke
 // parser (vs the stdlib flag package) keeps the short/long pairs — -C/--dir,
 // -t/--type, -y/--yes — first-class without flag's awkward dual registration.
 func parseBuildArgs(args []string) (buildOpts, error) {
-	opts := buildOpts{dir: ".", timeout: 10 * time.Minute}
+	opts := buildOpts{dir: ".", timeout: 10 * time.Minute, coverage: true}
 
 	// next consumes the value for a flag, supporting both "--flag val" and
 	// "--flag=val" forms.
@@ -165,8 +165,8 @@ func parseBuildArgs(args []string) (buildOpts, error) {
 			}
 		case "-y", "--yes":
 			opts.yes = true
-		case "-c", "--coverage":
-			opts.coverage = true
+		case "--no-cover":
+			opts.coverage = false
 		case "-j", "--jobs":
 			v, err := takeVal()
 			if err != nil {
