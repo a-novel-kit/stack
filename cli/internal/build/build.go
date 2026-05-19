@@ -98,14 +98,17 @@ func Run(ctx context.Context, t detect.Target) Result {
 	res := func() Result {
 		if t.Env != nil {
 			fmt.Fprintf(&buf, "── env up: %s ──\n", t.Env.ID)
-			// --podman-build-args mirrors scripts/test.sh: docker manifest
-			// format + quiet, required for podman to build the env images.
+			// Mirror scripts/test.sh exactly: --podman-build-args for docker
+			// manifest format, `up -d --build` WITHOUT --wait (the external
+			// podman-compose provider does not support --wait), then poll
+			// container health ourselves. down uses --volume (singular), as
+			// the scripts do, for the same provider compatibility.
+			downArgs := []string{"down", "--volume"}
 			if err := compose(ctx, &buf, runEnv, t.Env,
 				[]string{"--podman-build-args=--format docker -q"},
-				"up", "-d", "--build", "--wait"); err != nil {
-				// A half-up env left running is worse than a clean failure.
+				"up", "-d", "--build"); err != nil {
 				fmt.Fprint(&buf, "── env down ──\n")
-				_ = compose(context.WithoutCancel(ctx), &buf, runEnv, t.Env, nil, "down", "--volumes")
+				_ = compose(context.WithoutCancel(ctx), &buf, runEnv, t.Env, nil, downArgs...)
 				return Result{Target: t, ExitErr: fmt.Errorf(
 					"environment %s failed to start: %w", t.Env.ID, err)}
 			}
@@ -113,8 +116,15 @@ func Run(ctx context.Context, t detect.Target) Result {
 			// context so cleanup itself is never cancelled.
 			defer func() {
 				fmt.Fprint(&buf, "── env down ──\n")
-				_ = compose(context.WithoutCancel(ctx), &buf, runEnv, t.Env, nil, "down", "--volumes")
+				_ = compose(context.WithoutCancel(ctx), &buf, runEnv, t.Env, nil, downArgs...)
 			}()
+			// Wait for the env's containers to become healthy (or running with
+			// no healthcheck) before running the tests against it.
+			fmt.Fprint(&buf, "── env wait ──\n")
+			if err := waitHealthy(ctx, &buf, runEnv, t.Env, 120*time.Second); err != nil {
+				return Result{Target: t, ExitErr: fmt.Errorf(
+					"environment %s not ready: %w", t.Env.ID, err)}
+			}
 			fmt.Fprintf(&buf, "── %s ──\n", t.Name)
 		}
 
@@ -242,6 +252,75 @@ func compose(ctx context.Context, buf *bytes.Buffer, env []string, e *detect.Com
 	cmd.Stdout = buf
 	cmd.Stderr = buf
 	return cmd.Run()
+}
+
+// podmanOut runs `podman <args...>` and returns trimmed stdout, folding
+// stderr into the error — used for the inspect/ps polling that backs
+// waitHealthy (parsed, so it must not share the report buffer).
+func podmanOut(ctx context.Context, env []string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "podman", args...)
+	cmd.Env = env
+	var out, errb bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &errb
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(errb.String()))
+	}
+	return strings.TrimSpace(out.String()), nil
+}
+
+// waitHealthy polls the env's containers until every one is ready, replacing
+// `compose up --wait` (unsupported by the external podman-compose provider).
+// A container is ready when it is running with a healthy (or absent)
+// healthcheck, or has exited 0 (a one-shot init/migration). A non-zero exit
+// fails fast; otherwise it polls until timeout.
+func waitHealthy(ctx context.Context, log *bytes.Buffer, env []string, e *detect.ComposeEnv, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	prefix := e.Project + "_"
+	var last string
+	for {
+		ids, err := podmanOut(ctx, env, "ps", "-a", "--filter", "name="+prefix, "--format", "{{.ID}}")
+		if err != nil {
+			return fmt.Errorf("listing containers: %w", err)
+		}
+		idList := strings.Fields(ids)
+		ready := len(idList) > 0
+		var states []string
+		for _, id := range idList {
+			out, ierr := podmanOut(ctx, env, "inspect", id, "--format",
+				"{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}")
+			parts := strings.Split(out, "|")
+			if ierr != nil || len(parts) < 4 {
+				ready = false
+				continue
+			}
+			name, st, health, code := parts[0], parts[1], parts[2], parts[3]
+			states = append(states, fmt.Sprintf("%s=%s/%s", name, st, health))
+			switch {
+			case st == "exited" && code == "0":
+				// one-shot completed successfully
+			case st == "running" && (health == "-" || health == "healthy"):
+				// long-lived service ready
+			case st == "exited":
+				return fmt.Errorf("container %s exited with code %s", name, code)
+			default:
+				ready = false
+			}
+		}
+		last = strings.Join(states, "  ")
+		if ready {
+			fmt.Fprintf(log, "ready: %s\n", last)
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out after %s; last state: %s", timeout, last)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
 }
 
 // Summary aggregates a set of results for the report screen.
