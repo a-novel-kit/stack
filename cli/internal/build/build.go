@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -135,7 +136,7 @@ func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, 
 		runEnv = append(runEnv, def...)
 		added = append(added, def...)
 		if len(added) > 0 {
-			_, _ = fmt.Fprintf(out, "── env ── %s\n", strings.Join(added, "  "))
+			_, _ = io.WriteString(out, formatEnvBlock(added))
 		}
 	}
 
@@ -155,6 +156,30 @@ func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, 
 		}
 	}
 	return runEnv, nil
+}
+
+// formatEnvBlock renders the env vars the CLI injected as an aligned,
+// key-sorted list — one `KEY = value` per line under a header — instead of
+// one unreadable space-joined blob. Local-only generic creds, so values are
+// shown verbatim (you need the real DSN/URL to curl against the run).
+func formatEnvBlock(kv []string) string {
+	type pair struct{ k, v string }
+	pairs := make([]pair, 0, len(kv))
+	maxK := 0
+	for _, e := range kv {
+		k, v, _ := strings.Cut(e, "=")
+		pairs = append(pairs, pair{k, v})
+		if len(k) > maxK {
+			maxK = len(k)
+		}
+	}
+	sort.Slice(pairs, func(i, j int) bool { return pairs[i].k < pairs[j].k })
+	var b strings.Builder
+	b.WriteString("── env ──\n")
+	for _, p := range pairs {
+		_, _ = fmt.Fprintf(&b, "   %-*s = %s\n", maxK, p.k, p.v)
+	}
+	return b.String()
 }
 
 // Run executes t.Cmd with t.Args in t.Dir, capturing combined output. It
