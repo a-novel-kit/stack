@@ -49,11 +49,11 @@ func Run(ctx context.Context, t detect.Target) Result {
 	// the environment reads as part of the same story.
 	var buf bytes.Buffer
 
-	// Allocate a free TCP port (Go, no node) for every host-side port var the
-	// compose file declares — exactly the ports the host test talks to.
-	// Pre-exporting them means setup-env.sh's `${PORT:=$(node …)}` skips the
-	// node call (assign-if-unset) while still deriving the URLs/DSN; each Run
-	// allocates independently, so parallel targets never collide.
+	// The CLI is the authority for the test env's ports AND their derived
+	// connection vars (URLs/DSN) — setup-env.sh is no longer required to do
+	// either. For every host-side port var the compose file declares, allocate
+	// a free TCP port in Go (no node) and derive its companion var by the
+	// fixed <X>_PORT rule. Each Run allocates independently → parallel-safe.
 	runEnv := os.Environ()
 	if t.Env != nil && len(t.Env.Ports) > 0 {
 		portEnv, err := allocPorts(t.Env.Ports)
@@ -65,14 +65,18 @@ func Run(ctx context.Context, t detect.Target) Result {
 				Duration: time.Since(start),
 			}
 		}
-		fmt.Fprintf(&buf, "── ports ── %s\n", strings.Join(portEnv, "  "))
 		runEnv = append(runEnv, portEnv...)
+		derived := derivedURLs(t.Env.Ports, runEnv)
+		runEnv = append(runEnv, derived...)
+		fmt.Fprintf(&buf, "── ports ── %s\n", strings.Join(append(portEnv, derived...), "  "))
 	}
 
-	// Resolve scripts/setup-env.sh and, if present, source it for the
-	// remaining (service-specific / derived) vars. It sees the ports we just
-	// set, so node is never invoked. The captured environment is reused for
-	// BOTH compose and the test process.
+	// Source scripts/setup-env.sh only for whatever else it still defines
+	// (service-specific constants like APP_MASTER_KEY). It sees the ports +
+	// URLs we already set, so its `${VAR:=…}` lines are inert (no node) and
+	// cannot override them. The captured environment is reused for BOTH
+	// compose and the test process. If there is no setup-env.sh, the ports +
+	// derived vars above are already complete.
 	if root := repoRoot(t); root != "" {
 		if se := filepath.Join(root, "scripts", "setup-env.sh"); isFile(se) {
 			fmt.Fprintf(&buf, "── setup-env: %s ──\n", rel(root, se))
@@ -86,10 +90,6 @@ func Run(ctx context.Context, t detect.Target) Result {
 				}
 			}
 			runEnv = env
-		} else if t.Env != nil {
-			// No setup-env.sh: derive the connection vars ourselves from the
-			// allocated ports by the fixed *_PORT naming rule.
-			runEnv = append(runEnv, derivedURLs(t.Env.Ports, runEnv)...)
 		}
 	}
 
