@@ -8,7 +8,6 @@ package runner
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -155,6 +154,34 @@ type Runner struct {
 	// recreate forces a scoped teardown of any pre-existing env before up
 	// (vs. reusing it).
 	recreate bool
+
+	// Console context: the working dir + env a quick interactive command
+	// (curl, etc.) should see, so it talks to the SAME ports/URLs the run
+	// allocated. Captured once from the first prepared group.
+	consoleMu   sync.Mutex
+	consoleOnce sync.Once
+	consoleDir  string
+	consoleEnv  []string
+}
+
+// setConsole records the dir/env a console command should run with. Called
+// once, with the first group that has a prepared env (so curl sees the
+// allocated REST_URL/ports); a no-env target falls back to its own dir.
+func (r *Runner) setConsole(dir string, env []string) {
+	r.consoleOnce.Do(func() {
+		r.consoleMu.Lock()
+		r.consoleDir, r.consoleEnv = dir, env
+		r.consoleMu.Unlock()
+	})
+}
+
+// Console returns the dir and env for an interactive command (curl, …). The
+// env may be nil (inherit the process environment); the dir may be "" (inherit
+// the current working directory).
+func (r *Runner) Console() (string, []string) {
+	r.consoleMu.Lock()
+	defer r.consoleMu.Unlock()
+	return r.consoleDir, r.consoleEnv
 }
 
 // New builds a Runner over the selected targets. recreate=true tears any
@@ -257,6 +284,9 @@ func (r *Runner) Run(parent context.Context) {
 			continue
 		}
 		ups = append(ups, *g.env)
+		// First prepared env wins the console context: a curl typed in the
+		// console then sees this group's allocated REST_URL/ports.
+		r.setConsole(g.ps[0].Target.Dir, g.prep)
 		for _, p := range g.ps {
 			r.launch(ctx, p, g.prep, fail)
 		}
@@ -265,6 +295,9 @@ func (r *Runner) Run(parent context.Context) {
 		if ctx.Err() != nil {
 			break
 		}
+		// Fallback only if no env group set it: inherit the process env,
+		// run from the target's dir.
+		r.setConsole(p.Target.Dir, nil)
 		r.launch(ctx, p, nil, fail)
 	}
 
@@ -322,11 +355,15 @@ func (r *Runner) launch(ctx context.Context, p *Proc, env []string, fail func(*P
 			// We killed it during teardown — expected, not a failure.
 			p.set(Exited)
 		case err != nil:
+			// Non-zero / abnormal exit is a real failure: tear the run down.
 			fail(p, err)
 		default:
-			// A long-lived target exiting 0 on its own is still unexpected
-			// for `run`; treat it as a failure so the whole run tears down.
-			fail(p, errors.New("process exited unexpectedly"))
+			// Clean exit 0. One-shot targets (migrations, rotate-keys) do
+			// this by design — it is a success, NOT an error, and must not
+			// cascade-teardown the still-running servers. Long-lived servers
+			// rarely exit 0 on their own, but when they do it is still a
+			// clean stop, not a failure to surface.
+			p.set(Exited)
 		}
 	}()
 }
