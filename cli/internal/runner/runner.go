@@ -58,8 +58,11 @@ type Proc struct {
 	started time.Time
 	ended   time.Time
 	exitErr error
-	buf     bytes.Buffer
-	last    string
+
+	lines   []string // bounded ring of sanitized, completed lines
+	partial []byte   // bytes after the last '\n' — not yet a line
+	last    string   // most recent non-empty line (dashboard tail)
+	seq     uint64   // bumps on every content change → render-on-change
 }
 
 // ProcView is an immutable snapshot for the UI.
@@ -70,6 +73,9 @@ type ProcView struct {
 	ExitErr error
 	Last    string
 	Output  string
+	// Seq changes iff Output changed since the last snapshot, so the UI can
+	// skip re-feeding (and re-wrapping) the viewport when nothing is new.
+	Seq uint64
 }
 
 func (p *Proc) view() ProcView {
@@ -83,24 +89,62 @@ func (p *Proc) view() ProcView {
 	if !p.started.IsZero() {
 		el = end.Sub(p.started)
 	}
+	out := strings.Join(p.lines, "\n")
+	if len(p.partial) > 0 {
+		ps := sanitizeLine(string(p.partial))
+		if out != "" {
+			out += "\n"
+		}
+		out += ps
+	}
 	return ProcView{
 		Target: p.Target, Status: p.status, Elapsed: el,
-		ExitErr: p.exitErr, Last: p.last, Output: p.buf.String(),
+		ExitErr: p.exitErr, Last: p.last, Output: out, Seq: p.seq,
 	}
 }
 
 func (p *Proc) set(s Status) { p.mu.Lock(); p.status = s; p.mu.Unlock() }
 
-// Write implements io.Writer: appends to the full buffer and tracks the most
-// recent line for the dashboard.
+// Write implements io.Writer: splits incoming bytes into newline-terminated
+// lines, sanitizes each (SGR kept, everything else stripped — see output.go),
+// and appends to a bounded ring. The most recent non-empty line is tracked
+// for the dashboard tail, and seq is bumped so the UI re-renders only on
+// actual change.
 func (p *Proc) Write(b []byte) (int, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.buf.Write(b)
-	if ln := lastLine(p.buf.Bytes()); ln != "" {
-		p.last = ln
+	n := len(b)
+	p.partial = append(p.partial, b...)
+	for {
+		i := bytes.IndexByte(p.partial, '\n')
+		if i < 0 {
+			// No newline yet. Flush an over-long tail so a stream that never
+			// emits '\n' can't grow memory without bound.
+			if len(p.partial) > maxPartial {
+				p.appendLine(string(p.partial))
+				p.partial = p.partial[:0]
+			}
+			break
+		}
+		line := string(p.partial[:i])
+		p.partial = append(p.partial[:0], p.partial[i+1:]...)
+		p.appendLine(line)
 	}
-	return len(b), nil
+	p.seq++
+	return n, nil
+}
+
+// appendLine sanitizes one raw line and pushes it onto the bounded ring,
+// dropping the oldest line past maxLines. Caller holds p.mu.
+func (p *Proc) appendLine(raw string) {
+	ln := sanitizeLine(raw)
+	p.lines = append(p.lines, ln)
+	if len(p.lines) > maxLines {
+		p.lines = p.lines[len(p.lines)-maxLines:]
+	}
+	if t := strings.TrimSpace(ln); t != "" {
+		p.last = t
+	}
 }
 
 // Runner drives a set of run targets.
@@ -295,13 +339,4 @@ func groupWriter(ps []*Proc) io.Writer {
 		ws[i] = p
 	}
 	return io.MultiWriter(ws...)
-}
-
-// lastLine returns the last non-empty line in b, trimmed.
-func lastLine(b []byte) string {
-	s := strings.TrimRight(string(b), "\n")
-	if i := strings.LastIndexByte(s, '\n'); i >= 0 {
-		s = s[i+1:]
-	}
-	return strings.TrimSpace(s)
 }

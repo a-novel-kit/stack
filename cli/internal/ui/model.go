@@ -283,6 +283,10 @@ const (
 	keyEsc   = "esc"
 	keyQ     = "q"
 	keyEnter = "enter"
+	keyUp    = "up"
+	keyDown  = "down"
+	keyLeft  = "left"
+	keyRight = "right"
 )
 
 // isAbortKey reports whether k is one of the "get me out" keys.
