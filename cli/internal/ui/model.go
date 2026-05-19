@@ -630,6 +630,10 @@ func (m Model) viewReport() string {
 	b.WriteString(indentBlock(section("results", colGold, cw)) + "\n\n")
 	b.WriteString(indentBlock(resultsTable(ordered)) + "\n")
 
+	if cv := CoverageView(ordered, cw); cv != "" {
+		b.WriteString("\n" + indentBlock(cv) + "\n")
+	}
+
 	if s.Failed > 0 {
 		b.WriteString("\n" + indentBlock(section("failures", colCrit, cw)) + "\n\n")
 		b.WriteString(indentBlock(para(

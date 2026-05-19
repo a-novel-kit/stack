@@ -61,6 +61,11 @@ func RenderTextReport(results []build.Result, aborted bool, elapsed time.Duratio
 	b.WriteString(resultsTable(results))
 	b.WriteString("\n")
 
+	// Self-gating: empty unless `go test -cover` produced coverage lines.
+	if cv := CoverageView(results, w); cv != "" {
+		b.WriteString("\n" + cv)
+	}
+
 	if s.Failed > 0 {
 		b.WriteString("\n" + section("failures", colCrit, w) + "\n\n")
 		b.WriteString(para(

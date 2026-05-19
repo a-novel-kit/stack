@@ -11,8 +11,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -37,6 +39,10 @@ const (
 
 // cmdHelp is the help subcommand name (also the bare/empty-command default).
 const cmdHelp = "help"
+
+// cmdTest is the test subcommand name, which also happens to be the `go test`
+// subcommand token — one constant for both readings.
+const cmdTest = "test"
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -70,7 +76,7 @@ func run(args []string) int {
 			return exitOK
 		}
 		return runCapability(args, ui.VerbBuild, detect.Detect)
-	case "test":
+	case cmdTest:
 		if wantsHelp(args) {
 			fmt.Println(ui.CommandHelpView(version.String(), cmd))
 			return exitOK
@@ -98,13 +104,14 @@ func wantsHelp(args []string) bool {
 
 // buildOpts is the parsed `build` invocation.
 type buildOpts struct {
-	dir     string
-	types   map[detect.Kind]bool // nil means "all kinds"
-	yes     bool
-	dryRun  bool
-	help    bool
-	jobs    int           // max parallel builds (interactive only); 0 = NumCPU
-	timeout time.Duration // per-target deadline; 0 = none, default 10m
+	dir      string
+	types    map[detect.Kind]bool // nil means "all kinds"
+	yes      bool
+	dryRun   bool
+	help     bool
+	jobs     int           // max parallel builds (interactive only); 0 = NumCPU
+	timeout  time.Duration // per-target deadline; 0 = none, default 10m
+	coverage bool          // `test` only: add `go test -cover` + a coverage report section
 }
 
 // parseBuildArgs hand-parses the small, fixed `build` flag set. A bespoke
@@ -158,6 +165,8 @@ func parseBuildArgs(args []string) (buildOpts, error) {
 			}
 		case "-y", "--yes":
 			opts.yes = true
+		case "-c", "--coverage":
+			opts.coverage = true
 		case "-j", "--jobs":
 			v, err := takeVal()
 			if err != nil {
@@ -244,6 +253,9 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 	}
 	if opts.types != nil {
 		targets = filterTypes(targets, opts.types)
+	}
+	if opts.coverage && verb.Base == ui.VerbTest.Base {
+		targets = withCoverage(targets)
 	}
 
 	// Nothing to do is an error, not a silent success: a caller (or CI) that
@@ -429,4 +441,67 @@ func filterTypes(targets []detect.Target, types map[detect.Kind]bool) []detect.T
 		}
 	}
 	return out
+}
+
+// covExclude matches package import paths that must not count toward coverage:
+// generated mocks, test-support trees, and generated protobuf code — the same
+// exclusions the hand-written test.sh applied (grep -v /mocks /test /protogen).
+var covExclude = regexp.MustCompile(`/(mocks|test|protogen)(/|$)`)
+
+// withCoverage rewrites every Go test target for coverage mode: it expands the
+// `./…` selector via `go list`, drops the excluded folders, and runs
+// `go test -cover` over the explicit, filtered package list — so the reported
+// percentages are not diluted by mocks/test/protogen. If `go list` fails it
+// falls back to `-cover` over the original selector (better some coverage than
+// none). pnpm targets are untouched — coverage there is the script's concern.
+func withCoverage(targets []detect.Target) []detect.Target {
+	for i := range targets {
+		t := &targets[i]
+		if t.Kind != detect.KindGo || len(t.Args) == 0 || t.Args[0] != cmdTest {
+			continue
+		}
+		sel := pkgAllSelector(t.Args)
+		pkgs := goListFiltered(t.Dir, sel)
+
+		var args []string
+		if len(pkgs) > 0 {
+			args = append([]string{cmdTest, "-cover", "-count=1"}, pkgs...)
+		} else {
+			// Fallback: keep the original flags/selector, just add -cover.
+			args = append([]string{cmdTest, "-cover"}, t.Args[1:]...)
+		}
+		t.Args = args
+		t.Detail = "go test -cover (" + strconv.Itoa(len(pkgs)) + " pkg, excl. mocks/test/protogen)"
+	}
+	return targets
+}
+
+// pkgAllSelector returns the package pattern from a `go test … <sel>` arg list
+// (the last "./…"-looking arg), defaulting to "./...".
+func pkgAllSelector(args []string) string {
+	for i := len(args) - 1; i >= 0; i-- {
+		if strings.HasPrefix(args[i], "./") {
+			return args[i]
+		}
+	}
+	return "./..."
+}
+
+// goListFiltered runs `go list <sel>` in dir and returns the package import
+// paths that do not match covExclude.
+func goListFiltered(dir, sel string) []string {
+	cmd := exec.Command("go", "list", sel)
+	cmd.Dir = dir
+	cmd.Env = os.Environ()
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+	var pkgs []string
+	for _, p := range strings.Fields(string(out)) {
+		if !covExclude.MatchString(p) {
+			pkgs = append(pkgs, p)
+		}
+	}
+	return pkgs
 }
