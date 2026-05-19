@@ -1,0 +1,87 @@
+# Adapted from the a-novel service config (service-json-keys/.golangci.yaml).
+# Pruned for a CLI rather than a clean-architecture service:
+#   - dropped DB / web / proto / logging linters (sqlclosecheck, rowserrcheck,
+#     protogetter, spancheck, zerologlint, …) — no such code here;
+#   - dropped forbidigo: a CLI's job IS to write to stdout via fmt.Print*;
+#   - dropped err113: fmt.Errorf for user-facing arg errors is idiomatic here;
+#   - dropped gosec: this tool deliberately execs detected build commands with
+#     variable args (G204) — that is the feature, not a vulnerability;
+#   - dropped mnd/lll/nlreturn/wsl: layout constants and prose lines are
+#     intrinsic to a lipgloss TUI and not worth the churn.
+# The formatter stack (gci/gofmt/gofumpt) and the correctness core
+# (staticcheck, govet, errcheck, errorlint, unused, …) are kept as-is.
+version: "2"
+
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/a-novel-kit)
+        - prefix(github.com/a-novel)
+        - localmodule
+
+linters:
+  default: none
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - copyloopvar
+    - decorder
+    - dogsled
+    - dupword
+    - durationcheck
+    - embeddedstructfieldcheck
+    - errcheck
+    - errname
+    - errorlint
+    - exptostd
+    - forcetypeassert
+    - gocheckcompilerdirectives
+    - goconst
+    - gocritic
+    - goprintffuncname
+    - govet
+    - grouper
+    - importas
+    - inamedparam
+    - ineffassign
+    - intrange
+    - makezero
+    - mirror
+    - misspell
+    - nakedret
+    - nilerr
+    - nilnesserr
+    - nolintlint
+    - nonamedreturns
+    - perfsprint
+    - prealloc
+    - predeclared
+    - reassign
+    # recvcheck intentionally omitted: a Bubble Tea model is a value type
+    # (Update/View take/return it by value per tea.Model) yet needs a few
+    # pointer mutators (toggle*, dispatch). The mix is the framework pattern,
+    # not a bug.
+    - staticcheck
+    - testableexamples
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - wastedassign
+    - whitespace
+
+  exclusions:
+    rules:
+      - path: (.+)_test.go
+        linters:
+          - forcetypeassert
+          - goconst
+          - gocritic

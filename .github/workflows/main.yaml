@@ -8,6 +8,17 @@ on:
       - "**"
 
 jobs:
+  lint-go:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # Go module lives under cli/, not the repo root — working-directory is
+      # honoured by the shared action (a-novel-kit/workflows#140).
+      - uses: a-novel-kit/workflows/go-actions/lint-go@master
+        with:
+          working-directory: cli
+
   lint-node:
     runs-on: ubuntu-latest
     permissions:
