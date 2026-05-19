@@ -35,6 +35,10 @@ const (
 	KindPodman Kind = "podman"
 )
 
+// buildArg is the "build" token shared by the go/podman subcommands and the
+// canonical pnpm script name — one constant so it reads identically everywhere.
+const buildArg = "build"
+
 // Target is a single selectable, runnable build unit.
 type Target struct {
 	Kind Kind
@@ -174,7 +178,7 @@ func detectGo(dir, rel string) []Target {
 		Dir:    dir,
 		Detail: "go build ./...",
 		Cmd:    "go",
-		Args:   []string{"build", "./..."},
+		Args:   []string{buildArg, "./..."},
 	}}
 }
 
@@ -207,7 +211,7 @@ func detectPnpm(dir, rel string) []Target {
 	for name := range pkg.Scripts {
 		// "build", "build:rest", "build:types" … but not "prebuild" or
 		// "rebuild" — the script must start the build.
-		if name == "build" || strings.HasPrefix(name, "build:") {
+		if name == buildArg || strings.HasPrefix(name, buildArg+":") {
 			scripts = append(scripts, name)
 		}
 	}
@@ -254,7 +258,7 @@ func goModulePath(modPath string) string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
@@ -286,11 +290,11 @@ func stripMajorSuffix(modulePath string) string {
 
 // truncate shortens s to max runes, appending an ellipsis when cut. Used to
 // keep one-line details from wrapping the menu.
-func truncate(s string, max int) string {
+func truncate(s string, maxLen int) string {
 	s = strings.TrimSpace(s)
 	r := []rune(s)
-	if len(r) <= max {
+	if len(r) <= maxLen {
 		return s
 	}
-	return string(r[:max-1]) + "…"
+	return string(r[:maxLen-1]) + "…"
 }

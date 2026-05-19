@@ -30,11 +30,15 @@ func termWidth() int {
 	return 100
 }
 
-// indentBlock left-pads every non-empty line of a multi-line block by n
-// spaces, so a flush-left table or panel sits under the same gutter as the
+// gutter is the left margin (in spaces) every screen block sits under in the
+// TUI. Centralised so indentBlock and the width math (cw = w - gutter) agree.
+const gutter = 2
+
+// indentBlock left-pads every non-empty line of a multi-line block by the
+// gutter, so a flush-left table or panel sits under the same margin as the
 // surrounding TUI text without distorting its internal alignment.
-func indentBlock(s string, n int) string {
-	pad := strings.Repeat(" ", n)
+func indentBlock(s string) string {
+	pad := strings.Repeat(" ", gutter)
 	lines := strings.Split(s, "\n")
 	for i, ln := range lines {
 		if ln != "" {

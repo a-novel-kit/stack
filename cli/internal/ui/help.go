@@ -37,15 +37,15 @@ func HelpView(version string) string {
 
 	b.WriteString(styleGroup.Render("COMMANDS") + "\n")
 	for _, c := range commands {
-		b.WriteString(fmt.Sprintf("  %s  %s\n",
-			styleBrand.Render(pad(c.name, 10)), styleMuted.Render(c.desc)))
+		fmt.Fprintf(&b, "  %s  %s\n",
+			styleBrand.Render(pad(c.name, 10)), styleMuted.Render(c.desc))
 	}
 	b.WriteString("\n")
 
 	b.WriteString(styleGroup.Render("BUILD FLAGS") + "\n")
 	for _, f := range buildFlags {
-		b.WriteString(fmt.Sprintf("  %s  %s\n",
-			styleAccent.Render(pad(f.name, 20)), styleMuted.Render(f.desc)))
+		fmt.Fprintf(&b, "  %s  %s\n",
+			styleAccent.Render(pad(f.name, 20)), styleMuted.Render(f.desc))
 	}
 	b.WriteString("\n")
 

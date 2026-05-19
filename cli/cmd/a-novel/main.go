@@ -46,9 +46,8 @@ func run(args []string) int {
 
 	switch cmd {
 	case "", "help":
-		if cmd == "" && hasHelpFlag(args) {
-			// `a-novel -h` with no subcommand → help, not an error.
-		}
+		// No subcommand (or an explicit "help") prints help — this also covers
+		// `a-novel -h`, whose leading "-" leaves cmd empty.
 		fmt.Println(ui.HelpView(version.String()))
 		return exitOK
 	case "version":
@@ -61,15 +60,6 @@ func run(args []string) int {
 		fmt.Println(ui.HelpView(version.String()))
 		return exitUsage
 	}
-}
-
-func hasHelpFlag(args []string) bool {
-	for _, a := range args {
-		if a == "-h" || a == "--help" {
-			return true
-		}
-	}
-	return false
 }
 
 // buildOpts is the parsed `build` invocation.
@@ -221,7 +211,11 @@ func runBuild(args []string) int {
 		return exitFailure
 	}
 
-	m := final.(ui.Model)
+	m, ok := final.(ui.Model)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "a-novel build: unexpected model type %T\n", final)
+		return exitFailure
+	}
 	results := m.Results()
 
 	// The in-TUI report only shows a tail; this is the single, full-log copy

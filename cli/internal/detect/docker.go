@@ -53,7 +53,7 @@ func detectPodman(dir, rel string) []Target {
 			Cmd:    "podman",
 			// Mirrors scripts/build.sh exactly: docker-format manifest so the
 			// image is consumable by podman-compose without a registry push.
-			Args: []string{"build", "--format", "docker", "-f", dockerfileRel, "-t", tag, "."},
+			Args: []string{buildArg, "--format", "docker", "-f", dockerfileRel, "-t", tag, "."},
 		})
 	}
 	return targets

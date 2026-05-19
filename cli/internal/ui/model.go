@@ -207,6 +207,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// Key names as Bubble Tea's KeyMsg.String() reports them — named so the
+// literals are not repeated across the three phase handlers.
+const (
+	keyCtrlC = "ctrl+c"
+	keyEsc   = "esc"
+	keyQ     = "q"
+	keyEnter = "enter"
+)
+
+// isAbortKey reports whether k is one of the "get me out" keys.
+func isAbortKey(k string) bool {
+	return k == keyCtrlC || k == keyEsc || k == keyQ
+}
+
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.phase {
 	case phaseSelect:
@@ -214,13 +228,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case phaseRun:
 		// The only interaction during a run is to bail out. Results gathered
 		// so far are preserved and surfaced by the caller.
-		if k := msg.String(); k == "ctrl+c" || k == "esc" || k == "q" {
+		if isAbortKey(msg.String()) {
 			m.aborted = true
 			return m, tea.Quit
 		}
 		return m, nil
 	case phaseReport:
-		if k := msg.String(); k == "ctrl+c" || k == "esc" || k == "q" || k == "enter" {
+		if k := msg.String(); isAbortKey(k) || k == keyEnter {
 			return m, tea.Quit
 		}
 		return m, nil
@@ -230,7 +244,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "ctrl+c", "esc", "q":
+	case keyCtrlC, keyEsc, keyQ:
 		m.aborted = true
 		return m, tea.Quit
 
@@ -375,11 +389,11 @@ func (m Model) viewSelect() string {
 		if r.kind == rowGroup {
 			box := m.groupCheckbox(r.group)
 			n := m.groupCount(r.group)
-			b.WriteString(fmt.Sprintf("%s%s %s %s\n",
+			fmt.Fprintf(&b, "%s%s %s %s\n",
 				cursor, box,
 				styleGroup.Render(kindLabel(r.group)),
 				styleMuted.Render(fmt.Sprintf("(%d)", n)),
-			))
+			)
 			continue
 		}
 
@@ -402,8 +416,8 @@ func (m Model) viewSelect() string {
 		// cursor is 2 cols wide ("  " or "▸ "); the extra 2 spaces nest the
 		// target one level under its group heading. The detail line is indented
 		// to sit directly beneath the name (2+2+box+space = 6).
-		b.WriteString(fmt.Sprintf("%s  %s %s %s\n", cursor, box, name, styleMuted.Render(loc)))
-		b.WriteString(fmt.Sprintf("      %s\n", styleMuted.Render(t.Detail)))
+		fmt.Fprintf(&b, "%s  %s %s %s\n", cursor, box, name, styleMuted.Render(loc))
+		fmt.Fprintf(&b, "      %s\n", styleMuted.Render(t.Detail))
 	}
 
 	b.WriteString("\n")
@@ -420,14 +434,14 @@ func (m Model) viewSelect() string {
 // target in the kind is selected, empty when none are, and a half-filled
 // "partial" glyph (gold, to read as "mixed — look here") when only some are.
 func (m Model) groupCheckbox(k detect.Kind) string {
-	all, any, seen := true, false, false
+	all, anySel, seen := true, false, false
 	for _, t := range m.targets {
 		if t.Kind != k {
 			continue
 		}
 		seen = true
 		if m.selected[t.ID()] {
-			any = true
+			anySel = true
 		} else {
 			all = false
 		}
@@ -435,7 +449,7 @@ func (m Model) groupCheckbox(k detect.Kind) string {
 	switch {
 	case seen && all:
 		return styleSel.Render(glyphChecked)
-	case any:
+	case anySel:
 		return styleGold.Render(glyphPartial)
 	default:
 		return styleMuted.Render(glyphUnchecked)
@@ -478,13 +492,13 @@ func (m Model) viewRun() string {
 			continue
 		}
 		elapsed := styleMuted.Render("(" + time.Since(start).Round(1e7).String() + ")")
-		b.WriteString(fmt.Sprintf("  %s building %s %s %s %s\n",
+		fmt.Fprintf(&b, "  %s building %s %s %s %s\n",
 			m.spinner.View(),
 			kindTag(t.Kind),
 			t.Name, // in-flight: default colour, outcome not yet known
 			styleMuted.Render(t.RelDir),
 			elapsed,
-		))
+		)
 	}
 
 	b.WriteString("\n")
@@ -528,7 +542,7 @@ func (m Model) viewReport() string {
 	if w <= 0 {
 		w = termWidth()
 	}
-	cw := w - 2
+	cw := w - gutter
 
 	// A failed build is the one thing that must grab the eye immediately, so
 	// the headline uses the critical colour; the per-failure panels stay the
@@ -544,7 +558,7 @@ func (m Model) viewReport() string {
 		lead = "Interrupted — results below are partial."
 	}
 	b.WriteString("  " + headline + "\n")
-	b.WriteString(indentBlock(para(lead, cw), 2) + "\n\n")
+	b.WriteString(indentBlock(para(lead, cw)) + "\n\n")
 
 	var failColor lipgloss.TerminalColor = colMuted
 	if s.Failed > 0 {
@@ -558,28 +572,28 @@ func (m Model) viewReport() string {
 		pill("failed", strconv.Itoa(s.Failed), failColor),
 		pill("total", strconv.Itoa(s.Total), colGold),
 		pill("took", s.Duration.Round(1e7).String(), colAccent),
-	), 2) + "\n\n")
+	)) + "\n\n")
 
-	b.WriteString(indentBlock(section("results", colGold, cw), 2) + "\n\n")
-	b.WriteString(indentBlock(resultsTable(ordered), 2) + "\n")
+	b.WriteString(indentBlock(section("results", colGold, cw)) + "\n\n")
+	b.WriteString(indentBlock(resultsTable(ordered)) + "\n")
 
 	if s.Failed > 0 {
-		b.WriteString("\n" + indentBlock(section("failures", colCrit, cw), 2) + "\n\n")
+		b.WriteString("\n" + indentBlock(section("failures", colCrit, cw)) + "\n\n")
 		b.WriteString(indentBlock(para(
 			"Last lines of each failed build — the full, untruncated logs print to "+
-				"scrollback when you quit.", cw), 2) + "\n")
+				"scrollback when you quit.", cw)) + "\n")
 		for _, res := range ordered {
 			if res.Success {
 				continue
 			}
 			// tail > 0 → preview; the authoritative full log is printed by
 			// RenderTextReport after the TUI tears down.
-			b.WriteString("\n" + indentBlock(failurePanel(res, 20, cw), 2) + "\n")
+			b.WriteString("\n" + indentBlock(failurePanel(res, 20, cw)) + "\n")
 		}
 	}
 
 	b.WriteString("\n")
-	b.WriteString(indentBlock(rule(cw), 2) + "\n")
+	b.WriteString(indentBlock(rule(cw)) + "\n")
 	b.WriteString(styleHelp.Render("  q quit"))
 	b.WriteString("\n")
 	return b.String()
