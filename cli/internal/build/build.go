@@ -365,6 +365,59 @@ func podmanOut(ctx context.Context, env []string, args ...string) (string, error
 	return strings.TrimSpace(out.String()), nil
 }
 
+// Conflict is a compose project that already has containers on the host —
+// almost always the leftover of a previously aborted run that would collide
+// with a target's env (deterministic project names mean the same env reuses
+// the same project).
+type Conflict struct {
+	Env        detect.ComposeEnv
+	Containers []string
+}
+
+// EnvConflicts returns the distinct env projects among targets that already
+// have containers (running or not). It is a fail-safe preflight: running on
+// top of a half-up env from an aborted command is the bug we want to catch.
+func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
+	seen := map[string]bool{}
+	var envs []detect.ComposeEnv
+	for _, t := range targets {
+		if t.Env == nil || seen[t.Env.Project] {
+			continue
+		}
+		seen[t.Env.Project] = true
+		envs = append(envs, *t.Env)
+	}
+	if len(envs) == 0 {
+		return nil
+	}
+	out, err := podmanOut(ctx, os.Environ(), "ps", "-a", "--format", "{{.Names}}")
+	if err != nil {
+		return nil
+	}
+	names := strings.Fields(out)
+	var conflicts []Conflict
+	for _, e := range envs {
+		prefix := e.Project + "_"
+		var hit []string
+		for _, n := range names {
+			if strings.HasPrefix(n, prefix) {
+				hit = append(hit, n)
+			}
+		}
+		if len(hit) > 0 {
+			conflicts = append(conflicts, Conflict{Env: e, Containers: hit})
+		}
+	}
+	return conflicts
+}
+
+// TearDown removes ONE compose project's containers and volumes — scoped to
+// that env via `-p <project> -f <file>`, never a global podman wipe.
+func TearDown(ctx context.Context, e detect.ComposeEnv) error {
+	var buf bytes.Buffer
+	return compose(ctx, &buf, os.Environ(), &e, nil, "down", "--volume")
+}
+
 // waitHealthy polls the env's containers until every one is ready, replacing
 // `compose up --wait` (unsupported by the external podman-compose provider).
 // A container is ready when it is running with a healthy (or absent)

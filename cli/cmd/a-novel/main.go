@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -279,6 +280,12 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 	// The TUI needs a real terminal. Without one (CI, pipes), or with -y,
 	// fall back to the non-interactive runner — same builds, plain report.
 	interactive := !opts.yes && term.IsTerminal(os.Stdout.Fd())
+
+	// Fail-safe: never run on top of a test env left up by an aborted run.
+	if code := preflight(ctx, verb, targets, interactive && term.IsTerminal(os.Stdin.Fd())); code >= 0 {
+		return code
+	}
+
 	if !interactive {
 		return runNonInteractive(ctx, verb, targets, opts.timeout)
 	}
@@ -357,6 +364,52 @@ func runNonInteractive(ctx context.Context, verb ui.Verb, targets []detect.Targe
 
 	fmt.Print(ui.RenderTextReport(results, aborted, time.Since(start), verb))
 	return exitCodeFor(results, aborted)
+}
+
+// preflight is the fail-safe against running on top of a test env left up by
+// an aborted command. It returns -1 to proceed, or an exit code to return.
+// "Clean" and "abort" both tear down ONLY the conflicting projects (scoped
+// `compose down --volume`, never a global podman wipe); clean continues,
+// abort stops. Non-interactive can't ask, so it self-cleans and aborts.
+func preflight(ctx context.Context, verb ui.Verb, targets []detect.Target, canPrompt bool) int {
+	conflicts := build.EnvConflicts(ctx, targets)
+	if len(conflicts) == 0 {
+		return -1
+	}
+
+	fmt.Fprintf(os.Stderr,
+		"a-novel %s: an existing test environment was found (likely a leftover "+
+			"from an aborted run):\n", verb.Base)
+	for _, c := range conflicts {
+		fmt.Fprintf(os.Stderr, "  %s — %s\n", c.Env.ID, strings.Join(c.Containers, ", "))
+	}
+
+	clean := func() {
+		for _, c := range conflicts {
+			fmt.Fprintf(os.Stderr, "  cleaning %s …\n", c.Env.ID)
+			// Detached ctx: teardown must complete even if the run is aborting.
+			_ = build.TearDown(context.WithoutCancel(ctx), c.Env)
+		}
+	}
+
+	if !canPrompt {
+		fmt.Fprintf(os.Stderr,
+			"Tearing down the stale environment (scoped to this project only) and "+
+				"aborting. Re-run `a-novel %s` once it is clear.\n", verb.Base)
+		clean()
+		return exitAborted
+	}
+
+	fmt.Fprint(os.Stderr, "Clean it and continue, or abort? [c]lean / [a]bort: ")
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "c", "clean":
+		clean()
+		return -1 // proceed with a clean slate
+	default:
+		clean() // abort still cleans its own env, as requested
+		return exitAborted
+	}
 }
 
 func exitCodeFor(results []build.Result, aborted bool) int {
