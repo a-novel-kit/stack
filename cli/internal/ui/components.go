@@ -30,6 +30,17 @@ func termWidth() int {
 	return 100
 }
 
+// relLabel renders a target's directory for display: the scan root ("." from
+// filepath.Rel) reads as "(root)" everywhere it is shown — selection list,
+// dry-run table, and failure-panel titles — so a root failure is never the
+// cryptic "[.]".
+func relLabel(rel string) string {
+	if rel == "." {
+		return "(root)"
+	}
+	return rel
+}
+
 // gutter is the left margin (in spaces) every screen block sits under in the
 // TUI. Centralised so indentBlock and the width math (cw = w - gutter) agree.
 const gutter = 2
@@ -215,10 +226,7 @@ func targetsTable(targets []detect.Target) string {
 		Headers("KIND", "TARGET", "COMMAND")
 
 	for _, tg := range targets {
-		loc := tg.RelDir
-		if loc == "." {
-			loc = "(root)"
-		}
+		loc := relLabel(tg.RelDir)
 		kind := lipgloss.NewStyle().Foreground(kindColor(tg.Kind)).Bold(true).
 			Render(strings.ToUpper(string(tg.Kind)))
 		// TARGET cell is two lines: the name (default terminal colour — a dry
@@ -300,6 +308,6 @@ func failurePanel(r build.Result, tail, width int) string {
 		b.WriteString(out)
 	}
 
-	title := glyphFail + " " + r.Target.Name + "  [" + r.Target.RelDir + "]"
+	title := glyphFail + " " + r.Target.Name + "  [" + relLabel(r.Target.RelDir) + "]"
 	return panel(title, colErr, b.String(), width)
 }

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/term"
@@ -188,8 +189,16 @@ func runBuild(args []string) int {
 	}
 
 	// SIGINT cancels in-flight subprocesses cleanly in both modes.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Wrap with a cancel that fires on every return path. Quitting the TUI
+	// with q/esc tears down the program but not the build goroutines; cancel()
+	// here propagates into exec.CommandContext so no subprocess outlives the
+	// CLI (Copilot review, #36). On a clean finish builds are already done, so
+	// this is a no-op.
+	ctx, cancel := context.WithCancel(sigCtx)
+	defer cancel()
 
 	// The TUI needs a real terminal. Without one (CI, pipes), or with -y,
 	// fall back to the non-interactive runner — same builds, plain report.
@@ -221,7 +230,7 @@ func runBuild(args []string) int {
 	// The in-TUI report only shows a tail; this is the single, full-log copy
 	// that survives in scrollback.
 	if len(results) > 0 {
-		fmt.Print(ui.RenderTextReport(results, m.Aborted()))
+		fmt.Print(ui.RenderTextReport(results, m.Aborted(), m.Elapsed()))
 	}
 	return exitCodeFor(results, m.Aborted())
 }
@@ -235,6 +244,7 @@ func runNonInteractive(ctx context.Context, targets []detect.Target) int {
 
 	results := make([]build.Result, 0, len(targets))
 	aborted := false
+	start := time.Now()
 	for i, t := range targets {
 		if ctx.Err() != nil {
 			aborted = true
@@ -251,7 +261,7 @@ func runNonInteractive(ctx context.Context, targets []detect.Target) int {
 		}
 	}
 
-	fmt.Print(ui.RenderTextReport(results, aborted))
+	fmt.Print(ui.RenderTextReport(results, aborted, time.Since(start)))
 	return exitCodeFor(results, aborted)
 }
 

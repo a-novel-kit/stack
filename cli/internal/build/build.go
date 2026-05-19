@@ -62,18 +62,24 @@ func Run(ctx context.Context, t detect.Target) Result {
 
 // Summary aggregates a set of results for the report screen.
 type Summary struct {
-	Total    int
-	Passed   int
-	Failed   int
-	Duration time.Duration
+	Total  int
+	Passed int
+	Failed int
+
+	// CumulativeDuration is the sum of every target's own build time. Under
+	// the interactive parallel runner this exceeds wall-clock time (overlapping
+	// builds are counted in full each), so it is NOT what the report shows as
+	// "took" — that is real elapsed time, tracked by the runner and passed in
+	// separately. CumulativeDuration is kept as the total work performed.
+	CumulativeDuration time.Duration
 }
 
-// Summarize folds results into counts and total wall-clock-ish time (the sum
-// of per-target durations, since the runner is sequential).
+// Summarize folds results into counts and cumulative per-target build time.
+// Wall-clock elapsed is the runner's responsibility, not derivable here.
 func Summarize(results []Result) Summary {
 	s := Summary{Total: len(results)}
 	for _, r := range results {
-		s.Duration += r.Duration
+		s.CumulativeDuration += r.Duration
 		if r.Success {
 			s.Passed++
 		} else {

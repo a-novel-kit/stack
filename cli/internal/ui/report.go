@@ -3,6 +3,7 @@ package ui
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -18,7 +19,10 @@ import (
 //
 // Unlike the TUI views it never truncates failure output — this is the copy a
 // user pastes into an issue or scrolls back through.
-func RenderTextReport(results []build.Result, aborted bool) string {
+// elapsed is the real wall-clock run time tracked by the runner; it is shown
+// as "took". Summary.CumulativeDuration is deliberately NOT used here — under
+// parallelism it overstates how long the user actually waited.
+func RenderTextReport(results []build.Result, aborted bool, elapsed time.Duration) string {
 	s := build.Summarize(results)
 	w := termWidth()
 
@@ -49,7 +53,7 @@ func RenderTextReport(results []build.Result, aborted bool) string {
 		pill("passed", strconv.Itoa(s.Passed), colOK),
 		pill("failed", strconv.Itoa(s.Failed), failColor),
 		pill("total", strconv.Itoa(s.Total), colGold),
-		pill("took", s.Duration.Round(1e7).String(), colAccent),
+		pill("took", elapsed.Round(1e7).String(), colAccent),
 	))
 	b.WriteString("\n\n")
 

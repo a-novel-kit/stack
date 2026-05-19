@@ -69,6 +69,13 @@ type Model struct {
 	nextIdx int
 	running map[string]time.Time
 
+	// Wall-clock run timing: runStart is stamped when the first build is
+	// dispatched; runElapsed is frozen when the last one finishes. The report
+	// shows runElapsed as "took" — under parallelism the sum of per-target
+	// durations would badly overstate how long the user actually waited.
+	runStart   time.Time
+	runElapsed time.Duration
+
 	width   int
 	aborted bool // true if the user ctrl+c'd mid-run
 }
@@ -130,6 +137,19 @@ func (m Model) buildRows() []row {
 // report is deterministic regardless of which parallel build finished first.
 func (m Model) Results() []build.Result { return m.orderedResults() }
 func (m Model) Aborted() bool           { return m.aborted }
+
+// Elapsed is the real wall-clock run time: frozen when the run completed, or
+// measured to now if it was aborted mid-flight. Zero if no build ever started.
+func (m Model) Elapsed() time.Duration {
+	switch {
+	case m.runElapsed > 0:
+		return m.runElapsed
+	case !m.runStart.IsZero():
+		return time.Since(m.runStart)
+	default:
+		return 0
+	}
+}
 
 // orderedResults sorts a copy of the completion-ordered results back into the
 // queue order the user saw at selection time.
@@ -196,6 +216,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Backfill the freed slot, then check for overall completion.
 		cmd := m.dispatch()
 		if len(m.results) == len(m.queue) {
+			m.runElapsed = time.Since(m.runStart)
 			m.phase = phaseReport
 			return m, nil
 		}
@@ -275,6 +296,7 @@ func (m Model) handleSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.phase = phaseRun
 		m.nextIdx = 0
 		m.running = map[string]time.Time{}
+		m.runStart = time.Now()
 		// Fill the pool up to maxPar; the spinner tick drives the live timers.
 		return m, tea.Batch(m.spinner.Tick, m.dispatch())
 	}
@@ -409,10 +431,7 @@ func (m Model) viewSelect() string {
 			box = styleMuted.Render(box)
 			name = styleMuted.Render(t.Name)
 		}
-		loc := t.RelDir
-		if loc == "." {
-			loc = "(root)"
-		}
+		loc := relLabel(t.RelDir)
 		// cursor is 2 cols wide ("  " or "▸ "); the extra 2 spaces nest the
 		// target one level under its group heading. The detail line is indented
 		// to sit directly beneath the name (2+2+box+space = 6).
@@ -571,7 +590,7 @@ func (m Model) viewReport() string {
 		pill("passed", strconv.Itoa(s.Passed), colOK),
 		pill("failed", strconv.Itoa(s.Failed), failColor),
 		pill("total", strconv.Itoa(s.Total), colGold),
-		pill("took", s.Duration.Round(1e7).String(), colAccent),
+		pill("took", m.Elapsed().Round(1e7).String(), colAccent),
 	)) + "\n\n")
 
 	b.WriteString(indentBlock(section("results", colGold, cw)) + "\n\n")
