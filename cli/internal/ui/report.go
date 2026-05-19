@@ -22,21 +22,21 @@ import (
 // elapsed is the real wall-clock run time tracked by the runner; it is shown
 // as "took". Summary.CumulativeDuration is deliberately NOT used here — under
 // parallelism it overstates how long the user actually waited.
-func RenderTextReport(results []build.Result, aborted bool, elapsed time.Duration) string {
+func RenderTextReport(results []build.Result, aborted bool, elapsed time.Duration, verb Verb) string {
 	s := build.Summarize(results)
 	w := termWidth()
 
 	var b strings.Builder
 	b.WriteString("\n")
 
-	headline := styleOK.Render("✓ BUILD PASSED")
-	lead := "Every selected target built successfully."
+	headline := styleOK.Render("✓ " + verb.Upper + " PASSED")
+	lead := "Every selected target passed."
 	switch {
 	case aborted:
-		headline = styleWarn.Render("! BUILD ABORTED")
+		headline = styleWarn.Render("! " + verb.Upper + " ABORTED")
 		lead = "Interrupted before every target finished — results below are partial."
 	case s.Failed > 0:
-		headline = styleCrit.Render("✗ BUILD FAILED")
+		headline = styleCrit.Render("✗ " + verb.Upper + " FAILED")
 		lead = "One or more targets failed. The summary is below; full output for each " +
 			"failure follows so nothing is lost to scrollback."
 	}

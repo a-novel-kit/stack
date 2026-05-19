@@ -55,7 +55,9 @@ func run(args []string) int {
 		fmt.Println(version.String())
 		return exitOK
 	case "build":
-		return runBuild(args)
+		return runCapability(args, ui.VerbBuild, detect.Detect)
+	case "test":
+		return runCapability(args, ui.VerbTest, detect.DetectTests)
 	default:
 		fmt.Fprintf(os.Stderr, "a-novel: unknown command %q\n\n", cmd)
 		fmt.Println(ui.HelpView(version.String()))
@@ -156,10 +158,13 @@ func parseTypes(v string) map[detect.Kind]bool {
 	return set
 }
 
-func runBuild(args []string) int {
+// runCapability is the shared body of `build` and `test`: identical flags,
+// discovery, selection UI and reporting — only the verb and the discovery
+// function differ.
+func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.Target, error)) int {
 	opts, err := parseBuildArgs(args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "a-novel build: %v\n\n", err)
+		fmt.Fprintf(os.Stderr, "a-novel %s: %v\n\n", verb.Base, err)
 		fmt.Println(ui.HelpView(version.String()))
 		return exitUsage
 	}
@@ -168,9 +173,9 @@ func runBuild(args []string) int {
 		return exitOK
 	}
 
-	targets, err := detect.Detect(opts.dir)
+	targets, err := detectFn(opts.dir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "a-novel build: scan failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "a-novel %s: scan failed: %v\n", verb.Base, err)
 		return exitFailure
 	}
 	if opts.types != nil {
@@ -179,12 +184,12 @@ func runBuild(args []string) int {
 
 	if len(targets) == 0 {
 		fmt.Println(ui.Banner(version.String()))
-		fmt.Println("\nNo build targets found under " + opts.dir + ".")
+		fmt.Printf("\nNo %s targets found under %s.\n", verb.Base, opts.dir)
 		return exitOK
 	}
 
 	if opts.dryRun {
-		fmt.Print(ui.DryRunView(version.String(), targets))
+		fmt.Print(ui.DryRunView(version.String(), verb, targets))
 		return exitOK
 	}
 
@@ -204,7 +209,7 @@ func runBuild(args []string) int {
 	// fall back to the non-interactive runner — same builds, plain report.
 	interactive := !opts.yes && term.IsTerminal(os.Stdout.Fd())
 	if !interactive {
-		return runNonInteractive(ctx, targets)
+		return runNonInteractive(ctx, verb, targets)
 	}
 
 	// Run the whole interactive flow in the alternate screen buffer. On quit
@@ -213,16 +218,16 @@ func runBuild(args []string) int {
 	// we print below to the normal buffer. Without alt-screen, Bubble Tea
 	// leaves its final frame on screen and we'd print the report a second
 	// time underneath it (the "results appear twice" bug).
-	model := ui.New(ctx, version.String(), targets, opts.jobs)
+	model := ui.New(ctx, version.String(), verb, targets, opts.jobs)
 	final, err := tea.NewProgram(model, tea.WithAltScreen()).Run()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "a-novel build: ui error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "a-novel %s: ui error: %v\n", verb.Base, err)
 		return exitFailure
 	}
 
 	m, ok := final.(ui.Model)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "a-novel build: unexpected model type %T\n", final)
+		fmt.Fprintf(os.Stderr, "a-novel %s: unexpected model type %T\n", verb.Base, final)
 		return exitFailure
 	}
 	results := m.Results()
@@ -230,15 +235,15 @@ func runBuild(args []string) int {
 	// The in-TUI report only shows a tail; this is the single, full-log copy
 	// that survives in scrollback.
 	if len(results) > 0 {
-		fmt.Print(ui.RenderTextReport(results, m.Aborted(), m.Elapsed()))
+		fmt.Print(ui.RenderTextReport(results, m.Aborted(), m.Elapsed(), verb))
 	}
 	return exitCodeFor(results, m.Aborted())
 }
 
-// runNonInteractive builds every target in order, streaming a terse progress
+// runNonInteractive runs every target sequentially, streaming a terse progress
 // line per target, then prints the full text report. Used for -y and for any
 // non-TTY context.
-func runNonInteractive(ctx context.Context, targets []detect.Target) int {
+func runNonInteractive(ctx context.Context, verb ui.Verb, targets []detect.Target) int {
 	fmt.Println(ui.Banner(version.String()))
 	fmt.Println()
 
@@ -251,7 +256,7 @@ func runNonInteractive(ctx context.Context, targets []detect.Target) int {
 			break
 		}
 		kind := strings.ToUpper(string(t.Kind))
-		fmt.Printf("[%d/%d] building %-6s %s (%s)\n", i+1, len(targets), kind, t.Name, t.RelDir)
+		fmt.Printf("[%d/%d] %s %-6s %s (%s)\n", i+1, len(targets), verb.Ing, kind, t.Name, t.RelDir)
 		res := build.Run(ctx, t)
 		results = append(results, res)
 		if res.Success {
@@ -261,7 +266,7 @@ func runNonInteractive(ctx context.Context, targets []detect.Target) int {
 		}
 	}
 
-	fmt.Print(ui.RenderTextReport(results, aborted, time.Since(start)))
+	fmt.Print(ui.RenderTextReport(results, aborted, time.Since(start), verb))
 	return exitCodeFor(results, aborted)
 }
 

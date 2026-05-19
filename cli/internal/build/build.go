@@ -6,6 +6,7 @@ package build
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 	"time"
@@ -39,25 +40,54 @@ type Result struct {
 func Run(ctx context.Context, t detect.Target) Result {
 	start := time.Now()
 
-	cmd := exec.CommandContext(ctx, t.Cmd, t.Args...)
-	cmd.Dir = t.Dir
-
 	// One buffer for both streams so the report preserves the interleaving the
-	// user would have seen in a terminal — splitting them reorders errors
-	// relative to the output that explains them.
+	// user would have seen in a terminal. compose up/down output is captured
+	// into the same buffer, fenced with ── headers, so a failure to stand up
+	// the environment reads as part of the same story.
 	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
 
-	err := cmd.Run()
+	// Inner closure so the deferred env-down runs (and appends its output)
+	// before we snapshot buf into res.Output below.
+	res := func() Result {
+		if t.Env != nil {
+			fmt.Fprintf(&buf, "── env up: %s ──\n", t.Env.ID)
+			if err := compose(ctx, &buf, t.Env, "up", "-d", "--build", "--wait"); err != nil {
+				// A half-up env left running is worse than a clean failure.
+				fmt.Fprint(&buf, "── env down ──\n")
+				_ = compose(context.WithoutCancel(ctx), &buf, t.Env, "down", "--volumes")
+				return Result{Target: t, ExitErr: fmt.Errorf(
+					"environment %s failed to start: %w", t.Env.ID, err)}
+			}
+			// down always runs, even on ctx cancellation mid-test — detach the
+			// context so cleanup itself is never cancelled.
+			defer func() {
+				fmt.Fprint(&buf, "── env down ──\n")
+				_ = compose(context.WithoutCancel(ctx), &buf, t.Env, "down", "--volumes")
+			}()
+			fmt.Fprintf(&buf, "── %s ──\n", t.Name)
+		}
 
-	return Result{
-		Target:   t,
-		Success:  err == nil,
-		ExitErr:  err,
-		Output:   strings.TrimRight(buf.String(), "\n"),
-		Duration: time.Since(start),
-	}
+		cmd := exec.CommandContext(ctx, t.Cmd, t.Args...)
+		cmd.Dir = t.Dir
+		cmd.Stdout = &buf
+		cmd.Stderr = &buf
+		err := cmd.Run()
+		return Result{Target: t, Success: err == nil, ExitErr: err}
+	}()
+
+	res.Output = strings.TrimRight(buf.String(), "\n")
+	res.Duration = time.Since(start)
+	return res
+}
+
+// compose runs `podman compose -p <project> -f <file> <args...>`, streaming
+// combined output into buf. It returns the process error (nil on success).
+func compose(ctx context.Context, buf *bytes.Buffer, env *detect.ComposeEnv, args ...string) error {
+	full := append([]string{"compose", "-p", env.Project, "-f", env.File}, args...)
+	cmd := exec.CommandContext(ctx, "podman", full...)
+	cmd.Stdout = buf
+	cmd.Stderr = buf
+	return cmd.Run()
 }
 
 // Summary aggregates a set of results for the report screen.

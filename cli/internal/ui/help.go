@@ -13,6 +13,7 @@ type flagDoc struct{ name, desc string }
 
 var commands = []command{
 	{"build", "Detect and build Go modules, pnpm scripts, and Podman images"},
+	{"test", "Detect and run Go / pnpm tests, spinning up any podman-compose env"},
 	{"version", "Print the CLI version"},
 	{"help", "Show this help"},
 }
@@ -20,9 +21,9 @@ var commands = []command{
 var buildFlags = []flagDoc{
 	{"-C, --dir <path>", "Directory to scan (default: current directory)"},
 	{"-t, --type <kinds>", "Comma-separated filter: go,pnpm,podman (default: all)"},
-	{"-j, --jobs <n>", "Max parallel builds, interactive only (default: CPU count)"},
-	{"-y, --yes", "Skip the menu; build everything non-interactively (sequential)"},
-	{"--dry-run", "List detected targets and exit without building"},
+	{"-j, --jobs <n>", "Max parallel targets, interactive only (default: CPU count)"},
+	{"-y, --yes", "Skip the menu; run everything non-interactively (sequential)"},
+	{"--dry-run", "List detected targets and exit without running"},
 	{"-h, --help", "Show this help"},
 }
 
@@ -42,7 +43,7 @@ func HelpView(version string) string {
 	}
 	b.WriteString("\n")
 
-	b.WriteString(styleGroup.Render("BUILD FLAGS") + "\n")
+	b.WriteString(styleGroup.Render("FLAGS (build & test)") + "\n")
 	for _, f := range buildFlags {
 		fmt.Fprintf(&b, "  %s  %s\n",
 			styleAccent.Render(pad(f.name, 20)), styleMuted.Render(f.desc))
@@ -54,10 +55,10 @@ func HelpView(version string) string {
 	// embedded newlines makes it pad every line to the block width, which
 	// shifts later lines off the left margin.
 	examples := []string{
-		"  a-novel build                 # interactive menu, all selected",
-		"  a-novel build -t go,podman    # only Go + Podman targets",
-		"  a-novel build -j 4            # cap parallelism at 4 builds",
-		"  a-novel build -y              # build everything, no prompt",
+		"  a-novel build                 # interactive build menu",
+		"  a-novel test                  # interactive test menu (spins up envs)",
+		"  a-novel test -t go            # only Go test targets",
+		"  a-novel test -y               # run all tests, no prompt (CI-safe)",
 		"  a-novel build --dry-run       # just show what would build",
 	}
 	for _, ex := range examples {

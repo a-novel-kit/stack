@@ -30,6 +30,19 @@ func termWidth() int {
 	return 100
 }
 
+// Verb parameterises the screens shared by `build` and `test` so the same
+// model/report/dry-run render the right wording for each.
+type Verb struct {
+	Base  string // "build" / "test"
+	Ing   string // "building" / "testing"
+	Upper string // "BUILD" / "TEST"
+}
+
+var (
+	VerbBuild = Verb{Base: "build", Ing: "building", Upper: "BUILD"}
+	VerbTest  = Verb{Base: "test", Ing: "testing", Upper: "TEST"}
+)
+
 // relLabel renders a target's directory for display: the scan root ("." from
 // filepath.Rel) reads as "(root)" everywhere it is shown — selection list,
 // dry-run table, and failure-panel titles — so a root failure is never the
@@ -235,6 +248,12 @@ func targetsTable(targets []detect.Target) string {
 		target := tg.Name + "\n" + styleMuted.Render("↳ "+loc)
 		cmd := lipgloss.NewStyle().Foreground(colMuted).
 			Render(tg.Cmd + " " + strings.Join(tg.Args, " "))
+		// When the target needs a podman-compose env, show it under the
+		// command — for `test` this is the decisive extra fact.
+		if tg.Env != nil {
+			cmd += "\n" + lipgloss.NewStyle().Foreground(colAccent).
+				Render("↳ env "+tg.Env.ID)
+		}
 		t.Row(kind, target, cmd)
 	}
 	return t.Render()

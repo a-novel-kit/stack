@@ -50,6 +50,7 @@ type buildDoneMsg struct{ res build.Result }
 type Model struct {
 	ctx     context.Context
 	version string
+	verb    Verb // build / test — drives all user-facing wording
 
 	targets  []detect.Target
 	selected map[string]bool // keyed by detect.Target.ID()
@@ -86,7 +87,7 @@ type Model struct {
 // jobs is the maximum number of builds to run concurrently once the user
 // confirms; jobs <= 0 means runtime.NumCPU(). Parallelism is interactive-only;
 // the non-interactive path stays strictly sequential by design.
-func New(ctx context.Context, version string, targets []detect.Target, jobs int) Model {
+func New(ctx context.Context, version string, verb Verb, targets []detect.Target, jobs int) Model {
 	if jobs <= 0 {
 		jobs = runtime.NumCPU()
 	}
@@ -105,6 +106,7 @@ func New(ctx context.Context, version string, targets []detect.Target, jobs int)
 	m := Model{
 		ctx:      ctx,
 		version:  version,
+		verb:     verb,
 		targets:  targets,
 		selected: selected,
 		spinner:  sp,
@@ -399,8 +401,8 @@ func (m Model) viewSelect() string {
 	}
 	b.WriteString(section("select targets", colGold, w) + "\n")
 	b.WriteString(para(
-		"Everything is selected by default. Toggle what to build, then press "+
-			"enter. Group headings toggle the whole kind.", w) + "\n\n")
+		"Everything is selected by default. Toggle what to "+m.verb.Base+
+			", then press enter. Group headings toggle the whole kind.", w) + "\n\n")
 
 	for i, r := range m.rows {
 		cursor := "  "
@@ -492,11 +494,11 @@ func (m Model) viewRun() string {
 	if w <= 0 {
 		w = termWidth()
 	}
-	b.WriteString(section("building", colGold, w) + "\n")
+	b.WriteString(section(m.verb.Ing, colGold, w) + "\n")
 	b.WriteString(para(fmt.Sprintf(
-		"Up to %d build(s) run at once; each finishes independently. Output is "+
+		"Up to %d %s(s) run at once; each finishes independently. Output is "+
 			"captured per target and shown in the report. Press q to abort.",
-		m.maxPar), w) + "\n\n")
+		m.maxPar, m.verb.Base), w) + "\n\n")
 
 	for _, res := range m.results {
 		b.WriteString("  " + statusLine(res) + "\n")
@@ -511,11 +513,12 @@ func (m Model) viewRun() string {
 			continue
 		}
 		elapsed := styleMuted.Render("(" + time.Since(start).Round(1e7).String() + ")")
-		fmt.Fprintf(&b, "  %s building %s %s %s %s\n",
+		fmt.Fprintf(&b, "  %s %s %s %s %s %s\n",
 			m.spinner.View(),
+			m.verb.Ing,
 			kindTag(t.Kind),
 			t.Name, // in-flight: default colour, outcome not yet known
-			styleMuted.Render(t.RelDir),
+			styleMuted.Render(relLabel(t.RelDir)),
 			elapsed,
 		)
 	}
@@ -566,14 +569,14 @@ func (m Model) viewReport() string {
 	// A failed build is the one thing that must grab the eye immediately, so
 	// the headline uses the critical colour; the per-failure panels stay the
 	// calmer error orange.
-	headline := styleOK.Render("✓ BUILD PASSED")
-	lead := "Every selected target built successfully."
+	headline := styleOK.Render("✓ " + m.verb.Upper + " PASSED")
+	lead := "Every selected target passed."
 	if s.Failed > 0 {
-		headline = styleCrit.Render("✗ BUILD FAILED")
+		headline = styleCrit.Render("✗ " + m.verb.Upper + " FAILED")
 		lead = "One or more targets failed — see the panels below; full logs print on quit."
 	}
 	if m.aborted {
-		headline = styleWarn.Render("! BUILD ABORTED")
+		headline = styleWarn.Render("! " + m.verb.Upper + " ABORTED")
 		lead = "Interrupted — results below are partial."
 	}
 	b.WriteString("  " + headline + "\n")

@@ -39,6 +39,14 @@ const (
 // canonical pnpm script name — one constant so it reads identically everywhere.
 const buildArg = "build"
 
+// pkgAll is the Go "all packages under here" selector, shared by the build and
+// test target builders.
+const pkgAll = "./..."
+
+// testArg is the "test" token shared by `go test`, the canonical pnpm script
+// name, and the env-id environment — one constant, like buildArg.
+const testArg = "test"
+
 // Target is a single selectable, runnable build unit.
 type Target struct {
 	Kind Kind
@@ -62,6 +70,22 @@ type Target struct {
 	// Cmd and Args are the exact process to spawn, executed with Dir as CWD.
 	Cmd  string
 	Args []string
+
+	// Env, when non-nil, is a podman-compose environment that must be up
+	// before the command runs and torn down after. Only test targets set it.
+	Env *ComposeEnv
+}
+
+// ComposeEnv is a podman-compose test environment discovered from a
+// builds/podman-compose.<id>.test.yaml file.
+type ComposeEnv struct {
+	// File is the absolute path to the compose YAML.
+	File string
+	// Project is the `podman compose -p` project name — unique per env file
+	// so parallel test targets never collide on container/network names.
+	Project string
+	// ID is the parsed identifier, e.g. "go.internal" or "pnpm".
+	ID string
 }
 
 // ID is a stable, unique key for a target (used as a selection-map key and to
@@ -176,9 +200,9 @@ func detectGo(dir, rel string) []Target {
 		Name:   name,
 		RelDir: rel,
 		Dir:    dir,
-		Detail: "go build ./...",
+		Detail: "go build " + pkgAll,
 		Cmd:    "go",
-		Args:   []string{buildArg, "./..."},
+		Args:   []string{buildArg, pkgAll},
 	}}
 }
 
@@ -225,7 +249,7 @@ func detectPnpm(dir, rel string) []Target {
 			RelDir: rel,
 			Dir:    dir,
 			Detail: truncate(pkg.Scripts[s], 70),
-			Cmd:    "pnpm",
+			Cmd:    string(KindPnpm),
 			Args:   []string{"run", s},
 		})
 	}
