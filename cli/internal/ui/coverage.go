@@ -118,7 +118,7 @@ func CoverageView(results []build.Result, width int) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(section("coverage", colGold, width) + "\n\n")
+	b.WriteString(section("coverage", colGold, width) + "\n")
 
 	if len(goEntries) > 0 {
 		sort.Slice(goEntries, func(i, j int) bool { return goEntries[i].pkg < goEntries[j].pkg })
@@ -126,23 +126,27 @@ func CoverageView(results []build.Result, width int) string {
 		for _, e := range goEntries {
 			sum += e.pct
 		}
+		b.WriteString("\n" + covHeading("Go") + "\n")
 		for _, e := range goEntries {
 			fmt.Fprintf(&b, "  %s  %s\n", covPct(e.pct), styleMuted.Render(e.pkg))
 		}
-		fmt.Fprintf(&b, "\n  %s\n", styleGold.Render(fmt.Sprintf(
-			"go: mean %.1f%% across %d package(s)", sum/float64(len(goEntries)), len(goEntries))))
+		fmt.Fprintf(&b, "  %s\n", styleMuted.Render(fmt.Sprintf(
+			"mean %.1f%% across %d package(s)", sum/float64(len(goEntries)), len(goEntries))))
 	}
 
-	for i, n := range node {
-		if i > 0 || len(goEntries) > 0 {
-			b.WriteString("\n")
-		}
-		b.WriteString("  " + styleGold.Render("pnpm: "+n.name) + "\n")
+	for _, n := range node {
+		b.WriteString("\n" + covHeading("pnpm · "+n.name) + "\n")
 		for _, line := range strings.Split(n.block, "\n") {
 			b.WriteString("  " + styleMuted.Render(line) + "\n")
 		}
 	}
 	return b.String()
+}
+
+// covHeading is a sub-section title within the COVERAGE block — the same
+// "▌ title" idiom as panel titles, so Go and pnpm are each clearly announced.
+func covHeading(s string) string {
+	return lipgloss.NewStyle().Foreground(colGold).Bold(true).Render("▌ " + s)
 }
 
 // covPct colours a coverage figure by the usual green/amber/red bands so a
