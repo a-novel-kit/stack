@@ -453,25 +453,33 @@ var covExclude = regexp.MustCompile(`/(mocks|test|protogen)(/|$)`)
 // `go test -cover` over the explicit, filtered package list — so the reported
 // percentages are not diluted by mocks/test/protogen. If `go list` fails it
 // falls back to `-cover` over the original selector (better some coverage than
-// none). pnpm targets are untouched — coverage there is the script's concern.
+// none). pnpm test targets get `-- --coverage` appended, forwarding
+// --coverage to the underlying vitest (its v8 text reporter then prints a
+// coverage table the report extracts verbatim).
 func withCoverage(targets []detect.Target) []detect.Target {
 	for i := range targets {
 		t := &targets[i]
-		if t.Kind != detect.KindGo || len(t.Args) == 0 || t.Args[0] != cmdTest {
+		if len(t.Args) == 0 {
 			continue
 		}
-		sel := pkgAllSelector(t.Args)
-		pkgs := goListFiltered(t.Dir, sel)
-
-		var args []string
-		if len(pkgs) > 0 {
-			args = append([]string{cmdTest, "-cover", "-count=1"}, pkgs...)
-		} else {
-			// Fallback: keep the original flags/selector, just add -cover.
-			args = append([]string{cmdTest, "-cover"}, t.Args[1:]...)
+		switch {
+		case t.Kind == detect.KindGo && t.Args[0] == cmdTest:
+			sel := pkgAllSelector(t.Args)
+			pkgs := goListFiltered(t.Dir, sel)
+			if len(pkgs) > 0 {
+				t.Args = append([]string{cmdTest, "-cover", "-count=1"}, pkgs...)
+				t.Detail = "go test -cover (" + strconv.Itoa(len(pkgs)) +
+					" pkg, excl. mocks/test/protogen)"
+			} else {
+				// Fallback: keep the original flags/selector, just add -cover.
+				t.Args = append([]string{cmdTest, "-cover"}, t.Args[1:]...)
+				t.Detail = "go test -cover " + sel
+			}
+		case t.Kind == detect.KindPnpm:
+			// `pnpm run <script> -- --coverage` → vitest --coverage.
+			t.Args = append(append([]string{}, t.Args...), "--", "--coverage")
+			t.Detail += "  ·  --coverage"
 		}
-		t.Args = args
-		t.Detail = "go test -cover (" + strconv.Itoa(len(pkgs)) + " pkg, excl. mocks/test/protogen)"
 	}
 	return targets
 }
