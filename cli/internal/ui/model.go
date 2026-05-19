@@ -1,0 +1,586 @@
+// Package ui is the Bubble Tea front-end for `a-novel build`: a branded,
+// keyboard-driven flow of three phases — select targets, run them, read the
+// report. lipgloss handles all presentation; this file owns the state machine.
+package ui
+
+import (
+	"context"
+	"fmt"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/a-novel-kit/stack/cli/internal/build"
+	"github.com/a-novel-kit/stack/cli/internal/detect"
+)
+
+type phase int
+
+const (
+	phaseSelect phase = iota
+	phaseRun
+	phaseReport
+)
+
+// rowKind distinguishes a group heading (toggles the whole kind) from an
+// individual target line.
+type rowKind int
+
+const (
+	rowGroup rowKind = iota
+	rowTarget
+)
+
+type row struct {
+	kind   rowKind
+	group  detect.Kind // valid when kind == rowGroup
+	target int         // index into Model.targets when kind == rowTarget
+}
+
+// buildDoneMsg is delivered when one target's subprocess has finished.
+type buildDoneMsg struct{ res build.Result }
+
+// Model is the root Bubble Tea model. Construct it with [New].
+type Model struct {
+	ctx     context.Context
+	version string
+
+	targets  []detect.Target
+	selected map[string]bool // keyed by detect.Target.ID()
+	rows     []row
+	cursor   int
+
+	phase phase
+
+	spinner spinner.Model
+	queue   []detect.Target // resolved selection, dispatch order
+	results []build.Result  // completion order (as each finishes)
+
+	// Parallel run state. maxPar bounds how many builds run at once;
+	// nextIdx is the next queue entry to dispatch; running maps an in-flight
+	// target's ID to when it started (for its live timer).
+	maxPar  int
+	nextIdx int
+	running map[string]time.Time
+
+	width   int
+	aborted bool // true if the user ctrl+c'd mid-run
+}
+
+// New builds a Model from discovered targets. Every target starts selected —
+// the common case is "build everything", and opting out is one keystroke.
+//
+// jobs is the maximum number of builds to run concurrently once the user
+// confirms; jobs <= 0 means runtime.NumCPU(). Parallelism is interactive-only;
+// the non-interactive path stays strictly sequential by design.
+func New(ctx context.Context, version string, targets []detect.Target, jobs int) Model {
+	if jobs <= 0 {
+		jobs = runtime.NumCPU()
+	}
+	if jobs < 1 {
+		jobs = 1
+	}
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = lipgloss.NewStyle().Foreground(colBrand)
+
+	selected := make(map[string]bool, len(targets))
+	for _, t := range targets {
+		selected[t.ID()] = true
+	}
+
+	m := Model{
+		ctx:      ctx,
+		version:  version,
+		targets:  targets,
+		selected: selected,
+		spinner:  sp,
+		phase:    phaseSelect,
+		maxPar:   jobs,
+		running:  map[string]time.Time{},
+	}
+	m.rows = m.buildRows()
+	return m
+}
+
+// buildRows flattens the sorted targets into displayable rows, inserting a
+// group heading whenever the kind changes.
+func (m Model) buildRows() []row {
+	var rows []row
+	var last detect.Kind = ""
+	for i, t := range m.targets {
+		if t.Kind != last {
+			rows = append(rows, row{kind: rowGroup, group: t.Kind})
+			last = t.Kind
+		}
+		rows = append(rows, row{kind: rowTarget, target: i})
+	}
+	return rows
+}
+
+// Results / Aborted expose terminal state so the caller can print an
+// authoritative plain-text report (with full logs) after the TUI tears down.
+// Results are returned in queue (dispatch) order, not completion order, so the
+// report is deterministic regardless of which parallel build finished first.
+func (m Model) Results() []build.Result { return m.orderedResults() }
+func (m Model) Aborted() bool           { return m.aborted }
+
+// orderedResults sorts a copy of the completion-ordered results back into the
+// queue order the user saw at selection time.
+func (m Model) orderedResults() []build.Result {
+	pos := make(map[string]int, len(m.queue))
+	for i, t := range m.queue {
+		pos[t.ID()] = i
+	}
+	out := append([]build.Result(nil), m.results...)
+	sort.SliceStable(out, func(i, j int) bool {
+		return pos[out[i].Target.ID()] < pos[out[j].Target.ID()]
+	})
+	return out
+}
+
+func (m Model) Init() tea.Cmd { return nil }
+
+// buildCmd runs one target off the Bubble Tea event loop. Each runs in its own
+// goroutine (Bubble Tea spawns a goroutine per Cmd), so several of these in a
+// tea.Batch execute in parallel; output is captured per-result so the
+// interleaving on disk never reaches the screen.
+func (m Model) buildCmd(t detect.Target) tea.Cmd {
+	ctx := m.ctx
+	return func() tea.Msg {
+		return buildDoneMsg{res: build.Run(ctx, t)}
+	}
+}
+
+// dispatch starts as many queued targets as spare capacity allows (keeping
+// len(running) <= maxPar) and returns their commands batched. It mutates the
+// receiver, so call it via pointer on a model about to be returned from
+// Update. Returns nil when nothing new could start.
+func (m *Model) dispatch() tea.Cmd {
+	var cmds []tea.Cmd
+	for len(m.running) < m.maxPar && m.nextIdx < len(m.queue) {
+		t := m.queue[m.nextIdx]
+		m.nextIdx++
+		m.running[t.ID()] = time.Now()
+		cmds = append(cmds, m.buildCmd(t))
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		return m, nil
+
+	case spinner.TickMsg:
+		if m.phase == phaseRun {
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+
+	case buildDoneMsg:
+		m.results = append(m.results, msg.res)
+		delete(m.running, msg.res.Target.ID())
+		// Backfill the freed slot, then check for overall completion.
+		cmd := m.dispatch()
+		if len(m.results) == len(m.queue) {
+			m.phase = phaseReport
+			return m, nil
+		}
+		return m, cmd
+
+	case tea.KeyMsg:
+		return m.handleKey(msg)
+	}
+	return m, nil
+}
+
+func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch m.phase {
+	case phaseSelect:
+		return m.handleSelectKey(msg)
+	case phaseRun:
+		// The only interaction during a run is to bail out. Results gathered
+		// so far are preserved and surfaced by the caller.
+		if k := msg.String(); k == "ctrl+c" || k == "esc" || k == "q" {
+			m.aborted = true
+			return m, tea.Quit
+		}
+		return m, nil
+	case phaseReport:
+		if k := msg.String(); k == "ctrl+c" || k == "esc" || k == "q" || k == "enter" {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m Model) handleSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "esc", "q":
+		m.aborted = true
+		return m, tea.Quit
+
+	case "up", "k":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "down", "j":
+		if m.cursor < len(m.rows)-1 {
+			m.cursor++
+		}
+
+	case " ", "x":
+		m.toggleAt(m.cursor)
+
+	case "g":
+		// Toggle the entire group the cursor currently sits in.
+		m.toggleGroup(m.rows[m.cursor].groupOf(m))
+
+	case "a":
+		m.toggleAll()
+
+	case "enter":
+		m.queue = m.selectedTargets()
+		if len(m.queue) == 0 {
+			return m, nil // nothing selected — ignore, keep choosing
+		}
+		m.phase = phaseRun
+		m.nextIdx = 0
+		m.running = map[string]time.Time{}
+		// Fill the pool up to maxPar; the spinner tick drives the live timers.
+		return m, tea.Batch(m.spinner.Tick, m.dispatch())
+	}
+	return m, nil
+}
+
+// groupOf returns the kind a row belongs to (its own kind for a heading, its
+// target's kind for a target line).
+func (r row) groupOf(m Model) detect.Kind {
+	if r.kind == rowGroup {
+		return r.group
+	}
+	return m.targets[r.target].Kind
+}
+
+func (m *Model) toggleAt(idx int) {
+	r := m.rows[idx]
+	if r.kind == rowGroup {
+		m.toggleGroup(r.group)
+		return
+	}
+	id := m.targets[r.target].ID()
+	m.selected[id] = !m.selected[id]
+}
+
+// toggleGroup flips a whole kind: if every target in it is already selected it
+// clears them, otherwise it selects them all (so the key is "ensure on, then
+// off" — predictable regardless of mixed state).
+func (m *Model) toggleGroup(k detect.Kind) {
+	allOn := true
+	for _, t := range m.targets {
+		if t.Kind == k && !m.selected[t.ID()] {
+			allOn = false
+			break
+		}
+	}
+	for _, t := range m.targets {
+		if t.Kind == k {
+			m.selected[t.ID()] = !allOn
+		}
+	}
+}
+
+func (m *Model) toggleAll() {
+	allOn := true
+	for _, t := range m.targets {
+		if !m.selected[t.ID()] {
+			allOn = false
+			break
+		}
+	}
+	for _, t := range m.targets {
+		m.selected[t.ID()] = !allOn
+	}
+}
+
+func (m Model) selectedCount() int {
+	n := 0
+	for _, t := range m.targets {
+		if m.selected[t.ID()] {
+			n++
+		}
+	}
+	return n
+}
+
+// selectedTargets returns the chosen targets in display order.
+func (m Model) selectedTargets() []detect.Target {
+	var out []detect.Target
+	for _, t := range m.targets {
+		if m.selected[t.ID()] {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func (m Model) View() string {
+	var b strings.Builder
+	b.WriteString(Banner(m.version))
+	b.WriteString("\n\n")
+
+	switch m.phase {
+	case phaseSelect:
+		b.WriteString(m.viewSelect())
+	case phaseRun:
+		b.WriteString(m.viewRun())
+	case phaseReport:
+		b.WriteString(m.viewReport())
+	}
+	return b.String()
+}
+
+func (m Model) viewSelect() string {
+	var b strings.Builder
+
+	w := m.width
+	if w <= 0 {
+		w = termWidth()
+	}
+	b.WriteString(section("select targets", colGold, w) + "\n")
+	b.WriteString(para(
+		"Everything is selected by default. Toggle what to build, then press "+
+			"enter. Group headings toggle the whole kind.", w) + "\n\n")
+
+	for i, r := range m.rows {
+		cursor := "  "
+		if i == m.cursor {
+			cursor = styleSel.Render(glyphCursor) + " "
+		}
+
+		if r.kind == rowGroup {
+			box := m.groupCheckbox(r.group)
+			n := m.groupCount(r.group)
+			b.WriteString(fmt.Sprintf("%s%s %s %s\n",
+				cursor, box,
+				styleGroup.Render(kindLabel(r.group)),
+				styleMuted.Render(fmt.Sprintf("(%d)", n)),
+			))
+			continue
+		}
+
+		t := m.targets[r.target]
+		box := glyphUnchecked
+		// No build outcome yet at selection time, so the name uses the default
+		// terminal colour (bold when selected, dim when not) — never a kind
+		// colour, and never green/red which would falsely imply a result.
+		name := lipgloss.NewStyle().Bold(true).Render(t.Name)
+		if m.selected[t.ID()] {
+			box = styleSel.Render(glyphChecked)
+		} else {
+			box = styleMuted.Render(box)
+			name = styleMuted.Render(t.Name)
+		}
+		loc := t.RelDir
+		if loc == "." {
+			loc = "(root)"
+		}
+		// cursor is 2 cols wide ("  " or "▸ "); the extra 2 spaces nest the
+		// target one level under its group heading. The detail line is indented
+		// to sit directly beneath the name (2+2+box+space = 6).
+		b.WriteString(fmt.Sprintf("%s  %s %s %s\n", cursor, box, name, styleMuted.Render(loc)))
+		b.WriteString(fmt.Sprintf("      %s\n", styleMuted.Render(t.Detail)))
+	}
+
+	b.WriteString("\n")
+	b.WriteString(rule(w) + "\n")
+	b.WriteString(styleGold.Render(fmt.Sprintf("%d of %d selected", m.selectedCount(), len(m.targets))))
+	b.WriteString("\n")
+	b.WriteString(styleHelp.Render(
+		"↑/↓ move · space toggle · g toggle group · a toggle all · enter build · q quit"))
+	b.WriteString("\n")
+	return b.String()
+}
+
+// groupCheckbox renders a heading's tri-state checkbox: filled when every
+// target in the kind is selected, empty when none are, and a half-filled
+// "partial" glyph (gold, to read as "mixed — look here") when only some are.
+func (m Model) groupCheckbox(k detect.Kind) string {
+	all, any, seen := true, false, false
+	for _, t := range m.targets {
+		if t.Kind != k {
+			continue
+		}
+		seen = true
+		if m.selected[t.ID()] {
+			any = true
+		} else {
+			all = false
+		}
+	}
+	switch {
+	case seen && all:
+		return styleSel.Render(glyphChecked)
+	case any:
+		return styleGold.Render(glyphPartial)
+	default:
+		return styleMuted.Render(glyphUnchecked)
+	}
+}
+
+func (m Model) groupCount(k detect.Kind) int {
+	n := 0
+	for _, t := range m.targets {
+		if t.Kind == k {
+			n++
+		}
+	}
+	return n
+}
+
+func (m Model) viewRun() string {
+	var b strings.Builder
+
+	w := m.width
+	if w <= 0 {
+		w = termWidth()
+	}
+	b.WriteString(section("building", colGold, w) + "\n")
+	b.WriteString(para(fmt.Sprintf(
+		"Up to %d build(s) run at once; each finishes independently. Output is "+
+			"captured per target and shown in the report. Press q to abort.",
+		m.maxPar), w) + "\n\n")
+
+	for _, res := range m.results {
+		b.WriteString("  " + statusLine(res) + "\n")
+	}
+
+	// In-flight targets, in queue order so the list is stable as builds come
+	// and go. Each carries its own live timer (time since it started); the
+	// trailing position keeps the spinner/name columns from shifting.
+	for _, t := range m.queue {
+		start, ok := m.running[t.ID()]
+		if !ok {
+			continue
+		}
+		elapsed := styleMuted.Render("(" + time.Since(start).Round(1e7).String() + ")")
+		b.WriteString(fmt.Sprintf("  %s building %s %s %s %s\n",
+			m.spinner.View(),
+			kindTag(t.Kind),
+			t.Name, // in-flight: default colour, outcome not yet known
+			styleMuted.Render(t.RelDir),
+			elapsed,
+		))
+	}
+
+	b.WriteString("\n")
+	b.WriteString(styleGold.Render(fmt.Sprintf(
+		"%d / %d complete · %d running",
+		len(m.results), len(m.queue), len(m.running))))
+	b.WriteString("\n")
+	b.WriteString(styleHelp.Render("q abort"))
+	b.WriteString("\n")
+	return b.String()
+}
+
+// statusLine is the one-line completed-target result in the live run view.
+// The kind tag precedes the name and the duration trails the line (matching
+// the in-flight timer's position), so finished rows read
+// "✓ GO     service-json-keys (root) (1.98s)" with no shifting left column.
+func statusLine(r build.Result) string {
+	mark := styleOK.Render(glyphOK)
+	if !r.Success {
+		mark = styleErr.Render(glyphFail)
+	}
+	return fmt.Sprintf("%s %s %s %s %s",
+		mark,
+		kindTag(r.Target.Kind),
+		targetName(r.Target.Name, r.Success),
+		styleMuted.Render(r.Target.RelDir),
+		styleMuted.Render("("+r.Duration.Round(1e7).String()+")"),
+	)
+}
+
+func (m Model) viewReport() string {
+	var b strings.Builder
+	// Queue order, not the order parallel builds happened to finish, so the
+	// report is identical run to run.
+	ordered := m.orderedResults()
+	s := build.Summarize(ordered)
+
+	// Width budget: terminal width minus the 2-space gutter every block sits
+	// under (fall back to the static default before the first WindowSizeMsg).
+	w := m.width
+	if w <= 0 {
+		w = termWidth()
+	}
+	cw := w - 2
+
+	// A failed build is the one thing that must grab the eye immediately, so
+	// the headline uses the critical colour; the per-failure panels stay the
+	// calmer error orange.
+	headline := styleOK.Render("✓ BUILD PASSED")
+	lead := "Every selected target built successfully."
+	if s.Failed > 0 {
+		headline = styleCrit.Render("✗ BUILD FAILED")
+		lead = "One or more targets failed — see the panels below; full logs print on quit."
+	}
+	if m.aborted {
+		headline = styleWarn.Render("! BUILD ABORTED")
+		lead = "Interrupted — results below are partial."
+	}
+	b.WriteString("  " + headline + "\n")
+	b.WriteString(indentBlock(para(lead, cw), 2) + "\n\n")
+
+	var failColor lipgloss.TerminalColor = colMuted
+	if s.Failed > 0 {
+		failColor = colCrit
+	}
+	// indentBlock, not "  "+: the pill row is 3 lines tall, so a string
+	// prefix would only shift the top border and leave the box body at
+	// column 0 (the misalignment bug).
+	b.WriteString(indentBlock(pillRow(
+		pill("passed", strconv.Itoa(s.Passed), colOK),
+		pill("failed", strconv.Itoa(s.Failed), failColor),
+		pill("total", strconv.Itoa(s.Total), colGold),
+		pill("took", s.Duration.Round(1e7).String(), colAccent),
+	), 2) + "\n\n")
+
+	b.WriteString(indentBlock(section("results", colGold, cw), 2) + "\n\n")
+	b.WriteString(indentBlock(resultsTable(ordered), 2) + "\n")
+
+	if s.Failed > 0 {
+		b.WriteString("\n" + indentBlock(section("failures", colCrit, cw), 2) + "\n\n")
+		b.WriteString(indentBlock(para(
+			"Last lines of each failed build — the full, untruncated logs print to "+
+				"scrollback when you quit.", cw), 2) + "\n")
+		for _, res := range ordered {
+			if res.Success {
+				continue
+			}
+			// tail > 0 → preview; the authoritative full log is printed by
+			// RenderTextReport after the TUI tears down.
+			b.WriteString("\n" + indentBlock(failurePanel(res, 20, cw), 2) + "\n")
+		}
+	}
+
+	b.WriteString("\n")
+	b.WriteString(indentBlock(rule(cw), 2) + "\n")
+	b.WriteString(styleHelp.Render("  q quit"))
+	b.WriteString("\n")
+	return b.String()
+}
