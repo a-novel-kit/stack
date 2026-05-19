@@ -47,6 +47,21 @@ const pkgAll = "./..."
 // name, and the env-id environment — one constant, like buildArg.
 const testArg = "test"
 
+// ciSuffix marks a pnpm script as CI-only (e.g. "test:ci", "build:ci"): it is
+// tailored for the GitHub pipeline (pnpm i, doc/build prep, …), not for a
+// local developer run, so discovery skips it.
+const ciSuffix = ":ci"
+
+// pnpmScript reports whether a package.json script name is a discoverable
+// "<kind>" target: it is "<kind>" or "<kind>:<x>", but never the CI-only
+// "<kind>:ci" variant.
+func pnpmScript(name, kind string) bool {
+	if strings.HasSuffix(name, ciSuffix) {
+		return false
+	}
+	return name == kind || strings.HasPrefix(name, kind+":")
+}
+
 // Target is a single selectable, runnable build unit.
 type Target struct {
 	Kind Kind
@@ -262,9 +277,9 @@ func detectPnpm(dir, rel string) []Target {
 
 	scripts := make([]string, 0, len(pkg.Scripts))
 	for name := range pkg.Scripts {
-		// "build", "build:rest", "build:types" … but not "prebuild" or
-		// "rebuild" — the script must start the build.
-		if name == buildArg || strings.HasPrefix(name, buildArg+":") {
+		// "build", "build:rest", … but not "prebuild"/"rebuild" (must start
+		// the build) and not "build:ci" (CI-only).
+		if pnpmScript(name, buildArg) {
 			scripts = append(scripts, name)
 		}
 	}

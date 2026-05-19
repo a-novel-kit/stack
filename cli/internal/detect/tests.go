@@ -221,7 +221,7 @@ func pnpmTests(dir, rel string, envs []envFile) []Target {
 
 	scripts := make([]string, 0, len(pkg.Scripts))
 	for name := range pkg.Scripts {
-		if name == testArg || strings.HasPrefix(name, testArg+":") {
+		if pnpmScript(name, testArg) {
 			scripts = append(scripts, name)
 		}
 	}
