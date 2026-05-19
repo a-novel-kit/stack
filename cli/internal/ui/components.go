@@ -48,6 +48,10 @@ var (
 		Base: "test", Ing: "testing", Upper: "TEST",
 		Looks: "a go.mod (Go tests) or a package.json with test* scripts (pnpm)",
 	}
+	VerbRun = Verb{
+		Base: "run", Ing: "running", Upper: "RUN",
+		Looks: "a Go `package main` (cmd/…) or a package.json with run* scripts",
+	}
 )
 
 // relLabel renders a target's directory for display: the scan root ("." from

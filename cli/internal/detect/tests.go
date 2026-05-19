@@ -112,12 +112,19 @@ func composeEnvs(dir string) []envFile {
 var nonProjectChar = regexp.MustCompile(`[^a-z0-9]+`)
 
 func composeProject(rel, id string) string {
+	return composeProjectP("anovel-test-", rel, id)
+}
+
+// composeProjectP is composeProject with a caller-chosen prefix, so `run`
+// projects (anovel-run-…) never collide with `test` projects (anovel-test-…)
+// even for the same repo/env.
+func composeProjectP(prefix, rel, id string) string {
 	loc := rel
 	if loc == "." {
 		loc = "root"
 	}
 	slug := nonProjectChar.ReplaceAllString(strings.ToLower(loc+"-"+id), "-")
-	return "anovel-test-" + strings.Trim(slug, "-")
+	return prefix + strings.Trim(slug, "-")
 }
 
 // hostPortVar matches a `${NAME}:1234` host→container port mapping. The
@@ -248,7 +255,7 @@ func pnpmTests(dir, rel string, envs []envFile) []Target {
 			Dir:    dir,
 			Detail: truncate(pkg.Scripts[s], 60),
 			Cmd:    string(KindPnpm),
-			Args:   []string{"run", s},
+			Args:   []string{runArg, s},
 		}
 		// "test" ↔ pnpm (no path); "test:rest" ↔ pnpm.rest.
 		want := strings.TrimPrefix(s, testArg+":")

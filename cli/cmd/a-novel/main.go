@@ -25,6 +25,7 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/build"
 	"github.com/a-novel-kit/stack/cli/internal/detect"
+	"github.com/a-novel-kit/stack/cli/internal/runner"
 	"github.com/a-novel-kit/stack/cli/internal/ui"
 	"github.com/a-novel-kit/stack/cli/internal/version"
 )
@@ -82,6 +83,12 @@ func run(args []string) int {
 			return exitOK
 		}
 		return runCapability(args, ui.VerbTest, detect.DetectTests)
+	case "run":
+		if wantsHelp(args) {
+			fmt.Println(ui.CommandHelpView(version.String(), cmd))
+			return exitOK
+		}
+		return runRun(args)
 	default:
 		fmt.Fprintf(os.Stderr, "a-novel: unknown command %q\n\n", cmd)
 		fmt.Println(ui.HelpView(version.String()))
@@ -112,6 +119,7 @@ type buildOpts struct {
 	jobs     int           // max parallel builds (interactive only); 0 = NumCPU
 	timeout  time.Duration // per-target deadline; 0 = none, default 10m
 	coverage bool          // `test` only: coverage on by default; --no-cover disables
+	recreate bool          // `run` only: recreate the env instead of reusing an existing one
 }
 
 // parseBuildArgs hand-parses the small, fixed `build` flag set. A bespoke
@@ -167,6 +175,8 @@ func parseBuildArgs(args []string) (buildOpts, error) {
 			opts.yes = true
 		case "--no-cover":
 			opts.coverage = false
+		case "--recreate":
+			opts.recreate = true
 		case "-j", "--jobs":
 			v, err := takeVal()
 			if err != nil {
@@ -212,6 +222,137 @@ func parseTypes(v string) map[detect.Kind]bool {
 		}
 	}
 	return set
+}
+
+// runRun is the `run` capability: long-lived entrypoints under a shared
+// compose env, a live dashboard, and a guaranteed full teardown on exit or
+// failure. It does not reuse runCapability — run's model (persistent
+// processes, no completion report) diverges from build/test.
+func runRun(args []string) int {
+	verb := ui.VerbRun
+	opts, err := parseBuildArgs(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "a-novel run: %v\n\n", err)
+		fmt.Println(ui.CommandHelpView(version.String(), verb.Base))
+		return exitUsage
+	}
+	if opts.help {
+		fmt.Println(ui.CommandHelpView(version.String(), verb.Base))
+		return exitOK
+	}
+
+	absDir, _ := filepath.Abs(opts.dir)
+	if info, statErr := os.Stat(opts.dir); statErr != nil || !info.IsDir() {
+		fmt.Fprintf(os.Stderr, "a-novel run: cannot scan %q: not an accessible directory\n", absDir)
+		return exitUsage
+	}
+	if guardErr := detect.RepoGuard(opts.dir); guardErr != nil {
+		fmt.Fprintf(os.Stderr, "a-novel run: %v\n", guardErr)
+		return exitUsage
+	}
+
+	targets, err := detect.DetectRun(opts.dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "a-novel run: scan failed: %v\n", err)
+		return exitFailure
+	}
+	if opts.types != nil {
+		targets = filterTypes(targets, opts.types)
+	}
+	if len(targets) == 0 {
+		fmt.Fprintf(os.Stderr,
+			"a-novel run: no run targets%s found under %s\n  Looked for %s.\n",
+			typeScope(opts), absDir, verb.Looks)
+		return exitUsage
+	}
+
+	if opts.dryRun {
+		fmt.Print(ui.DryRunView(version.String(), verb, targets))
+		return exitOK
+	}
+
+	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	ctx, cancel := context.WithCancel(sigCtx)
+	defer cancel()
+
+	interactive := term.IsTerminal(os.Stdout.Fd())
+
+	// Reuse vs recreate. --recreate forces recreate (skips only this prompt).
+	// Otherwise, if an env is already up and we can prompt, ask (default
+	// reuse); non-interactive defaults to reuse.
+	recreate := opts.recreate
+	if !recreate {
+		if conflicts := build.EnvConflicts(ctx, targets); len(conflicts) > 0 {
+			fmt.Fprintln(os.Stderr, ui.EnvConflictView(verb, conflicts))
+			if interactive && term.IsTerminal(os.Stdin.Fd()) {
+				fmt.Fprint(os.Stderr, ui.EnvPrompt(
+					"Reuse this environment, or recreate it? [u]se (default) / [r]ecreate: "))
+				line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+				if s := strings.ToLower(strings.TrimSpace(line)); s == "r" || s == "recreate" {
+					recreate = true
+				}
+			} else {
+				fmt.Fprintln(os.Stderr, ui.EnvNote(
+					"Reusing the existing environment (pass --recreate to rebuild it)."))
+			}
+		}
+	}
+
+	start := time.Now()
+	r := runner.New(targets, recreate)
+	go r.Run(ctx)
+
+	if interactive {
+		final, perr := tea.NewProgram(
+			ui.NewRun(version.String(), r, cancel), tea.WithAltScreen()).Run()
+		if perr != nil {
+			fmt.Fprintf(os.Stderr, "a-novel run: ui error: %v\n", perr)
+			cancel()
+			<-r.Done()
+			return exitFailure
+		}
+		_ = final
+	} else {
+		// No TTY: run until signal / first failure, then teardown completes.
+		<-r.Done()
+	}
+
+	results, aborted := procResults(r.Snapshot())
+	fmt.Print(ui.RenderTextReport(results, aborted, time.Since(start), verb))
+	return exitCodeFor(results, aborted)
+}
+
+// typeScope renders the " matching --type" suffix for the no-targets message.
+func typeScope(o buildOpts) string {
+	if o.types != nil {
+		return " matching --type"
+	}
+	return ""
+}
+
+// procResults turns the runner snapshot into report results. A Failed proc is
+// a failure (its output is the error to show); everything else stopped because
+// the user quit (aborted) or it was torn down with the rest.
+func procResults(snap []runner.ProcView) ([]build.Result, bool) {
+	results := make([]build.Result, 0, len(snap))
+	anyFail := false
+	for _, p := range snap {
+		failed := p.Status == runner.Failed
+		anyFail = anyFail || failed
+		out := strings.TrimRight(p.Output, "\n")
+		if p.ExitErr != nil {
+			out = strings.TrimRight(p.ExitErr.Error()+"\n\n"+out, "\n")
+		}
+		results = append(results, build.Result{
+			Target:   p.Target,
+			Success:  !failed,
+			ExitErr:  p.ExitErr,
+			Output:   out,
+			Duration: p.Elapsed,
+		})
+	}
+	return results, !anyFail // no failure ⇒ a clean user-initiated stop
 }
 
 // runCapability is the shared body of `build` and `test`: identical flags,

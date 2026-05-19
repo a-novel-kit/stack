@@ -33,6 +33,7 @@ var runFlags = []flagDoc{
 	{"-T, --timeout <dur>", "Per-target deadline, e.g. 10m / 30s / 0 to disable (default: 10m)"},
 	{"-y, --yes", "Skip the menu; run everything non-interactively & sequentially (CI-safe)"},
 	{"--no-cover", "test only: skip coverage (it is collected & reported by default)"},
+	{"--recreate", "run only: rebuild the compose env instead of reusing an existing one"},
 	{"--dry-run", "List detected targets (and their envs) and exit without running"},
 	{"-h, --help", "Show this command's help"},
 }
@@ -75,6 +76,26 @@ var commandDocs = []commandDoc{
 			"a-novel test -t go            # only Go test targets",
 			"a-novel test -y               # run all tests, no prompt (CI-safe)",
 			"a-novel test --dry-run        # show targets + their envs, run nothing",
+		},
+	},
+	{
+		name:    "run",
+		summary: "Run Go entrypoints / pnpm run* scripts under a live dashboard",
+		usage:   "a-novel run [flags]",
+		long: "Discovers Go `package main` entrypoints (cmd/…) and pnpm " +
+			"\"run\"/\"run:*\" scripts, brings each one's compose env up once " +
+			"(builds/podman-compose.<id>.yaml, else the plain builds/" +
+			"podman-compose.yaml), then launches the selected targets as " +
+			"long-lived processes behind a live status dashboard (↑/↓ to select, " +
+			"tab to scroll a process's log). Quitting, or any process failing, " +
+			"tears the whole environment down — no phantom runners. An already-up " +
+			"env is reused by default; --recreate (or the prompt) rebuilds it.",
+		flags: runFlags,
+		examples: []string{
+			"a-novel run                   # interactive run menu + dashboard",
+			"a-novel run -t go             # only Go entrypoints",
+			"a-novel run --recreate        # rebuild the env instead of reusing it",
+			"a-novel run --dry-run         # show entrypoints + their envs",
 		},
 	},
 	{

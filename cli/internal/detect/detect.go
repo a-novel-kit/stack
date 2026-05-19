@@ -47,6 +47,10 @@ const pkgAll = "./..."
 // name, and the env-id environment — one constant, like buildArg.
 const testArg = "test"
 
+// runArg is the "run" token: the pnpm `pnpm run <script>` subcommand, the
+// canonical "run"/"run:*" script name, and the run env id — one constant.
+const runArg = "run"
+
 // ciSuffix marks a pnpm script as CI-only (e.g. "test:ci", "build:ci"): it is
 // tailored for the GitHub pipeline (pnpm i, doc/build prep, …), not for a
 // local developer run, so discovery skips it.
@@ -70,6 +74,12 @@ type Target struct {
 	// name (go), the script name "build:rest" (pnpm), or "rest.Dockerfile"
 	// (podman). It is NOT unique on its own — pair it with RelDir.
 	Name string
+
+	// Service is the owning repo/module short name (e.g. "service-json-keys").
+	// Set for `run` targets so the UI can disambiguate identically-named
+	// entrypoints across services (a "rest" exists in every service). Empty
+	// for build/test where Name+RelDir already suffice.
+	Service string
 
 	// RelDir is the target's directory relative to the scan root ("." for the
 	// root itself). Used for display grouping and de-duplication.
@@ -299,7 +309,7 @@ func detectPnpm(dir, rel string) []Target {
 			Dir:    dir,
 			Detail: truncate(pkg.Scripts[s], 70),
 			Cmd:    string(KindPnpm),
-			Args:   []string{"run", s},
+			Args:   []string{runArg, s},
 		})
 	}
 	return targets

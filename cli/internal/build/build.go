@@ -106,6 +106,57 @@ func (w *tailWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// PrepareEnv builds the process environment for a target: os.Environ() plus,
+// when the target has a compose env, Go-allocated host ports, their derived
+// URLs/DSN, standard local test creds for referenced vars, and finally
+// whatever scripts/setup-env.sh still defines (service constants). It is the
+// single source of env truth shared by `build`/`test` (Run) and `run`. The
+// `── env ──` / `── setup-env ──` progress is written to out.
+func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, error) {
+	runEnv := os.Environ()
+	if t.Env != nil {
+		var added []string
+		if len(t.Env.Ports) > 0 {
+			portEnv, err := allocPorts(t.Env.Ports)
+			if err != nil {
+				return nil, fmt.Errorf("port allocation failed: %w", err)
+			}
+			runEnv = append(runEnv, portEnv...)
+			derived := derivedURLs(t.Env.Ports, runEnv)
+			runEnv = append(runEnv, derived...)
+			added = append(added, portEnv...)
+			added = append(added, derived...)
+		}
+		// Standard local test values for known vars the compose file
+		// references (e.g. an internal-only postgres' POSTGRES_PASSWORD/USER/
+		// DB) that are not produced by a host port. Local-only, so a fixed
+		// generic credential set is fine.
+		def := testDefaults(t.Env.Refs, runEnv)
+		runEnv = append(runEnv, def...)
+		added = append(added, def...)
+		if len(added) > 0 {
+			_, _ = fmt.Fprintf(out, "── env ── %s\n", strings.Join(added, "  "))
+		}
+	}
+
+	// Source scripts/setup-env.sh only for whatever else it still defines
+	// (service-specific constants like APP_MASTER_KEY). It sees the ports +
+	// URLs we already set, so its `${VAR:=…}` lines are inert (no node) and
+	// cannot override them. If there is no setup-env.sh, the ports + derived
+	// vars above are already complete.
+	if root := repoRoot(t); root != "" {
+		if se := filepath.Join(root, "scripts", "setup-env.sh"); isFile(se) {
+			_, _ = fmt.Fprintf(out, "── setup-env: %s ──\n", rel(root, se))
+			env, err := sourceEnv(ctx, se, root, runEnv, out)
+			if err != nil {
+				return nil, fmt.Errorf("setup-env.sh failed: %w", err)
+			}
+			runEnv = env
+		}
+	}
+	return runEnv, nil
+}
+
 // Run executes t.Cmd with t.Args in t.Dir, capturing combined output. It
 // blocks until the process exits or ctx is cancelled. timeout > 0 bounds the
 // whole target (env up + command); env teardown still runs on a detached
@@ -134,61 +185,13 @@ func Run(ctx context.Context, t detect.Target, timeout time.Duration, live *Live
 	// the "most recent line" the TUI shows under the running target.
 	out := io.MultiWriter(&buf, &tailWriter{id: t.ID(), live: live})
 
-	// The CLI is the authority for the test env's ports AND their derived
-	// connection vars (URLs/DSN) — setup-env.sh is no longer required to do
-	// either. For every host-side port var the compose file declares, allocate
-	// a free TCP port in Go (no node) and derive its companion var by the
-	// fixed <X>_PORT rule. Each Run allocates independently → parallel-safe.
-	runEnv := os.Environ()
-	if t.Env != nil {
-		var added []string
-		if len(t.Env.Ports) > 0 {
-			portEnv, err := allocPorts(t.Env.Ports)
-			if err != nil {
-				return Result{
-					Target:   t,
-					ExitErr:  fmt.Errorf("port allocation failed: %w", err),
-					Output:   strings.TrimRight(buf.String(), "\n"),
-					Duration: time.Since(start),
-				}
-			}
-			runEnv = append(runEnv, portEnv...)
-			derived := derivedURLs(t.Env.Ports, runEnv)
-			runEnv = append(runEnv, derived...)
-			added = append(added, portEnv...)
-			added = append(added, derived...)
-		}
-		// Standard local test values for known vars the compose file
-		// references (e.g. an internal-only postgres' POSTGRES_PASSWORD/USER/
-		// DB) that are not produced by a host port. Local-only, so a fixed
-		// generic credential set is fine.
-		def := testDefaults(t.Env.Refs, runEnv)
-		runEnv = append(runEnv, def...)
-		added = append(added, def...)
-		if len(added) > 0 {
-			_, _ = fmt.Fprintf(out, "── env ── %s\n", strings.Join(added, "  "))
-		}
-	}
-
-	// Source scripts/setup-env.sh only for whatever else it still defines
-	// (service-specific constants like APP_MASTER_KEY). It sees the ports +
-	// URLs we already set, so its `${VAR:=…}` lines are inert (no node) and
-	// cannot override them. The captured environment is reused for BOTH
-	// compose and the test process. If there is no setup-env.sh, the ports +
-	// derived vars above are already complete.
-	if root := repoRoot(t); root != "" {
-		if se := filepath.Join(root, "scripts", "setup-env.sh"); isFile(se) {
-			_, _ = fmt.Fprintf(out, "── setup-env: %s ──\n", rel(root, se))
-			env, err := sourceEnv(ctx, se, root, runEnv, out)
-			if err != nil {
-				return Result{
-					Target:   t,
-					ExitErr:  fmt.Errorf("setup-env.sh failed: %w", err),
-					Output:   strings.TrimRight(buf.String(), "\n"),
-					Duration: time.Since(start),
-				}
-			}
-			runEnv = env
+	runEnv, perr := PrepareEnv(ctx, t, out)
+	if perr != nil {
+		return Result{
+			Target:   t,
+			ExitErr:  perr,
+			Output:   strings.TrimRight(buf.String(), "\n"),
+			Duration: time.Since(start),
 		}
 	}
 
@@ -488,6 +491,22 @@ func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
 func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	var buf bytes.Buffer
 	return compose(ctx, &buf, os.Environ(), &e, nil, "down", "--volume")
+}
+
+// EnvUp brings a compose env up (build, detached) using the given env, then
+// waits for it to become healthy — the `run` counterpart of the env handling
+// Run does inline. Mirrors scripts/test.sh (no --wait on the external
+// podman-compose provider). Progress streams to out.
+func EnvUp(ctx context.Context, env []string, e *detect.ComposeEnv, out io.Writer) error {
+	if err := compose(ctx, out, env, e,
+		[]string{"--podman-build-args=--format docker -q"},
+		"up", "-d", "--build"); err != nil {
+		return fmt.Errorf("environment %s failed to start: %w", e.ID, err)
+	}
+	if err := waitHealthy(ctx, out, env, e, 120*time.Second); err != nil {
+		return fmt.Errorf("environment %s not ready: %w", e.ID, err)
+	}
+	return nil
 }
 
 // waitHealthy polls the env's containers until every one is ready, replacing
