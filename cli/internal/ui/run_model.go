@@ -301,7 +301,14 @@ func (m RunModel) runConsole(line string) tea.Cmd {
 		if err != nil && s == "" {
 			s = err.Error()
 		}
-		return consoleResultMsg{out: s}
+		// Sanitize EXACTLY like process logs: a command that emits \r
+		// progress or cursor moves (curl -v, anything coloured) otherwise
+		// breaks out of the console column and corrupts the log to its left.
+		lines := strings.Split(s, "\n")
+		for i, ln := range lines {
+			lines[i] = runner.SanitizeLine(ln)
+		}
+		return consoleResultMsg{out: strings.Join(lines, "\n")}
 	}
 }
 

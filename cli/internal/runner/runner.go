@@ -95,7 +95,7 @@ func (p *Proc) view() ProcView {
 	}
 	out := strings.Join(p.lines, "\n")
 	if len(p.partial) > 0 {
-		ps := sanitizeLine(string(p.partial))
+		ps := SanitizeLine(string(p.partial))
 		if out != "" {
 			out += "\n"
 		}
@@ -141,7 +141,7 @@ func (p *Proc) Write(b []byte) (int, error) {
 // appendLine sanitizes one raw line and pushes it onto the bounded ring,
 // dropping the oldest line past maxLines. Caller holds p.mu.
 func (p *Proc) appendLine(raw string) {
-	ln := sanitizeLine(raw)
+	ln := SanitizeLine(raw)
 	p.lines = append(p.lines, ln)
 	if len(p.lines) > maxLines {
 		p.lines = p.lines[len(p.lines)-maxLines:]

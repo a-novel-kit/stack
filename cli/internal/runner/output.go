@@ -33,10 +33,12 @@ var (
 	ctlRe = regexp.MustCompile("[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f\x7f]")
 )
 
-// sanitizeLine makes one raw output line safe to place inside a lipgloss /
+// SanitizeLine makes one raw output line safe to place inside a lipgloss /
 // viewport region: carriage-return progress collapsed to its final state,
 // non-SGR escapes removed, stray control bytes removed. Colour survives.
-func sanitizeLine(s string) string {
+// Exported so the UI can run console-command output through the exact same
+// containment (raw \r / cursor moves were bleeding into the log column).
+func SanitizeLine(s string) string {
 	// CR progress (spinners, percentage bars) overwrites the line in a real
 	// terminal; keep only the segment after the last CR so it does not
 	// accumulate as dozens of stale frames.
