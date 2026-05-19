@@ -32,6 +32,9 @@ const (
 	exitAborted = 130 // user interrupted before completing a run (128+SIGINT)
 )
 
+// cmdHelp is the help subcommand name (also the bare/empty-command default).
+const cmdHelp = "help"
+
 func main() {
 	os.Exit(run(os.Args[1:]))
 }
@@ -46,23 +49,48 @@ func run(args []string) int {
 	}
 
 	switch cmd {
-	case "", "help":
-		// No subcommand (or an explicit "help") prints help — this also covers
-		// `a-novel -h`, whose leading "-" leaves cmd empty.
-		fmt.Println(ui.HelpView(version.String()))
+	case "", cmdHelp:
+		// `a-novel help <command>` → that command's help; otherwise (no
+		// subcommand, bare `help`, or `a-novel -h`) the generic command list.
+		if cmd == cmdHelp && len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+			fmt.Println(ui.CommandHelpView(version.String(), args[0]))
+		} else {
+			fmt.Println(ui.HelpView(version.String()))
+		}
 		return exitOK
 	case "version":
 		fmt.Println(version.String())
 		return exitOK
 	case "build":
+		if wantsHelp(args) {
+			fmt.Println(ui.CommandHelpView(version.String(), cmd))
+			return exitOK
+		}
 		return runCapability(args, ui.VerbBuild, detect.Detect)
 	case "test":
+		if wantsHelp(args) {
+			fmt.Println(ui.CommandHelpView(version.String(), cmd))
+			return exitOK
+		}
 		return runCapability(args, ui.VerbTest, detect.DetectTests)
 	default:
 		fmt.Fprintf(os.Stderr, "a-novel: unknown command %q\n\n", cmd)
 		fmt.Println(ui.HelpView(version.String()))
 		return exitUsage
 	}
+}
+
+// wantsHelp reports whether a build/test invocation is a request for that
+// command's help. Help is always the -h/--help flag (the universal CLI
+// convention); the bare word form is intentionally NOT accepted — use
+// `a-novel help <command>` for the command-style entry point.
+func wantsHelp(args []string) bool {
+	for _, a := range args {
+		if a == "-h" || a == "--help" {
+			return true
+		}
+	}
+	return false
 }
 
 // buildOpts is the parsed `build` invocation.
@@ -165,11 +193,11 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 	opts, err := parseBuildArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "a-novel %s: %v\n\n", verb.Base, err)
-		fmt.Println(ui.HelpView(version.String()))
+		fmt.Println(ui.CommandHelpView(version.String(), verb.Base))
 		return exitUsage
 	}
 	if opts.help {
-		fmt.Println(ui.HelpView(version.String()))
+		fmt.Println(ui.CommandHelpView(version.String(), verb.Base))
 		return exitOK
 	}
 

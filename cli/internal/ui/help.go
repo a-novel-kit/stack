@@ -5,64 +5,65 @@ import (
 	"strings"
 )
 
-// command documents one subcommand for the help screen.
-type command struct{ name, desc string }
-
-// flagDoc documents one `build` flag for the help screen.
-type flagDoc struct{ name, desc string }
-
-var commands = []command{
-	{"build", "Detect and build Go modules, pnpm scripts, and Podman images"},
-	{"test", "Detect and run Go / pnpm tests, spinning up any podman-compose env"},
-	{"version", "Print the CLI version"},
-	{"help", "Show this help"},
-}
-
-var buildFlags = []flagDoc{
-	{"-C, --dir <path>", "Directory to scan (default: current directory)"},
-	{"-t, --type <kinds>", "Comma-separated filter: go,pnpm,podman (default: all)"},
-	{"-j, --jobs <n>", "Max parallel targets, interactive only (default: CPU count)"},
-	{"-y, --yes", "Skip the menu; run everything non-interactively (sequential)"},
-	{"--dry-run", "List detected targets and exit without running"},
-	{"-h, --help", "Show this help"},
-}
-
-// HelpView renders the branded help screen: banner, usage, commands, flags.
+// HelpView is the generic help: banner, usage, and the command list only.
+// Per-command flags/examples are intentionally NOT here — they live behind
+// `a-novel <command> --help` (see CommandHelpView).
 func HelpView(version string) string {
 	var b strings.Builder
 	b.WriteString(Banner(version))
 	b.WriteString("\n\n")
 
 	b.WriteString(styleGroup.Render("USAGE") + "\n")
-	b.WriteString("  a-novel <command> [flags]\n\n")
+	b.WriteString("  " + rootUsage + "\n\n")
 
 	b.WriteString(styleGroup.Render("COMMANDS") + "\n")
-	for _, c := range commands {
+	for _, c := range commandDocs {
 		fmt.Fprintf(&b, "  %s  %s\n",
-			styleBrand.Render(pad(c.name, 10)), styleMuted.Render(c.desc))
+			styleBrand.Render(pad(c.name, 10)), styleMuted.Render(c.summary))
 	}
 	b.WriteString("\n")
+	b.WriteString(styleMuted.Render(helpHint) + "\n")
+	return b.String()
+}
 
-	b.WriteString(styleGroup.Render("FLAGS (build & test)") + "\n")
-	for _, f := range buildFlags {
-		fmt.Fprintf(&b, "  %s  %s\n",
-			styleAccent.Render(pad(f.name, 20)), styleMuted.Render(f.desc))
+// CommandHelpView is the per-command help: banner, that command's usage, a
+// description, and only the flags/examples that apply to it. An unknown name
+// falls back to the generic screen (the caller has already validated in most
+// paths; this keeps it safe regardless).
+func CommandHelpView(version, name string) string {
+	c, ok := lookupCommand(name)
+	if !ok {
+		return HelpView(version)
 	}
-	b.WriteString("\n")
 
-	b.WriteString(styleGroup.Render("EXAMPLES") + "\n")
-	// Each line is rendered on its own: handing lipgloss a string with
-	// embedded newlines makes it pad every line to the block width, which
-	// shifts later lines off the left margin.
-	examples := []string{
-		"  a-novel build                 # interactive build menu",
-		"  a-novel test                  # interactive test menu (spins up envs)",
-		"  a-novel test -t go            # only Go test targets",
-		"  a-novel test -y               # run all tests, no prompt (CI-safe)",
-		"  a-novel build --dry-run       # just show what would build",
+	var b strings.Builder
+	b.WriteString(Banner(version))
+	b.WriteString("\n\n")
+
+	b.WriteString(styleGroup.Render("USAGE") + "\n")
+	b.WriteString("  " + c.usage + "\n\n")
+
+	if c.long != "" {
+		b.WriteString(para(c.long, termWidth()) + "\n\n")
 	}
-	for _, ex := range examples {
-		b.WriteString(styleMuted.Render(ex) + "\n")
+
+	if len(c.flags) > 0 {
+		b.WriteString(styleGroup.Render("FLAGS") + "\n")
+		for _, f := range c.flags {
+			fmt.Fprintf(&b, "  %s  %s\n",
+				styleAccent.Render(pad(f.name, 20)), styleMuted.Render(f.desc))
+		}
+		b.WriteString("\n")
+	}
+
+	if len(c.examples) > 0 {
+		b.WriteString(styleGroup.Render("EXAMPLES") + "\n")
+		// Each line is rendered on its own: handing lipgloss a string with
+		// embedded newlines makes it pad every line to the block width, which
+		// shifts later lines off the left margin.
+		for _, ex := range c.examples {
+			b.WriteString(styleMuted.Render("  "+ex) + "\n")
+		}
 	}
 	return b.String()
 }
