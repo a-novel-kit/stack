@@ -36,11 +36,18 @@ type Verb struct {
 	Base  string // "build" / "test"
 	Ing   string // "building" / "testing"
 	Upper string // "BUILD" / "TEST"
+	Looks string // what discovery scans for — used in the "nothing found" error
 }
 
 var (
-	VerbBuild = Verb{Base: "build", Ing: "building", Upper: "BUILD"}
-	VerbTest  = Verb{Base: "test", Ing: "testing", Upper: "TEST"}
+	VerbBuild = Verb{
+		Base: "build", Ing: "building", Upper: "BUILD",
+		Looks: "a go.mod (Go), a package.json with build* scripts (pnpm), or builds/*.Dockerfile (Podman)",
+	}
+	VerbTest = Verb{
+		Base: "test", Ing: "testing", Upper: "TEST",
+		Looks: "a go.mod (Go tests) or a package.json with test* scripts (pnpm)",
+	}
 )
 
 // relLabel renders a target's directory for display: the scan root ("." from

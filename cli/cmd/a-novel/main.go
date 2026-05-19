@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -206,6 +207,15 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 		return exitOK
 	}
 
+	// The scan directory must exist and be a directory — fail clearly rather
+	// than silently finding nothing in a path that isn't there.
+	absDir, _ := filepath.Abs(opts.dir)
+	if info, statErr := os.Stat(opts.dir); statErr != nil || !info.IsDir() {
+		fmt.Fprintf(os.Stderr, "a-novel %s: cannot scan %q: not an accessible directory\n",
+			verb.Base, absDir)
+		return exitUsage
+	}
+
 	targets, err := detectFn(opts.dir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "a-novel %s: scan failed: %v\n", verb.Base, err)
@@ -215,10 +225,18 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 		targets = filterTypes(targets, opts.types)
 	}
 
+	// Nothing to do is an error, not a silent success: a caller (or CI) that
+	// expected targets here needs to know none were found and why.
 	if len(targets) == 0 {
-		fmt.Println(ui.Banner(version.String()))
-		fmt.Printf("\nNo %s targets found under %s.\n", verb.Base, opts.dir)
-		return exitOK
+		scope := ""
+		if opts.types != nil {
+			scope = " matching --type"
+		}
+		fmt.Fprintf(os.Stderr,
+			"a-novel %s: no %s targets%s found under %s\n", verb.Base, verb.Base, scope, absDir)
+		fmt.Fprintf(os.Stderr,
+			"  Looked for %s.\n  Run from a project root, or pass --dir <path>.\n", verb.Looks)
+		return exitUsage
 	}
 
 	if opts.dryRun {
