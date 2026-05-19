@@ -76,3 +76,19 @@ func pad(s string, w int) string {
 	}
 	return s + strings.Repeat(" ", w-len(s))
 }
+
+// clip truncates s to at most maxLen runes, appending an ellipsis when cut.
+// Used for the single-line live log tail so it never wraps the run view.
+func clip(s string, maxLen int) string {
+	if maxLen < 1 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= maxLen {
+		return s
+	}
+	if maxLen == 1 {
+		return "…"
+	}
+	return string(r[:maxLen-1]) + "…"
+}

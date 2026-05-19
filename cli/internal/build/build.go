@@ -8,11 +8,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -39,12 +42,77 @@ type Result struct {
 	Duration time.Duration
 }
 
+// LiveLog holds the most recent output line per target, written concurrently
+// by the parallel runners and read by the TUI each spinner tick so devs get a
+// brief idea of progress and can spot a stalled command early. A nil *LiveLog
+// is a valid no-op (non-interactive path).
+type LiveLog struct {
+	mu sync.Mutex
+	m  map[string]string
+}
+
+func NewLiveLog() *LiveLog { return &LiveLog{m: map[string]string{}} }
+
+func (l *LiveLog) set(id, line string) {
+	if l == nil || line == "" {
+		return
+	}
+	l.mu.Lock()
+	l.m[id] = line
+	l.mu.Unlock()
+}
+
+// Line returns the latest captured output line for target id ("" if none).
+func (l *LiveLog) Line(id string) string {
+	if l == nil {
+		return ""
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.m[id]
+}
+
+var ansiSeq = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+
+// cleanLine reduces a raw output chunk to one readable line: text after the
+// last carriage return (collapses \r progress redraws), ANSI stripped, trimmed.
+func cleanLine(s string) string {
+	if i := strings.LastIndexByte(s, '\r'); i >= 0 {
+		s = s[i+1:]
+	}
+	return strings.TrimSpace(ansiSeq.ReplaceAllString(s, ""))
+}
+
+// tailWriter records the most recent (completed or in-progress) output line
+// into a LiveLog under the target's id. Composed via io.MultiWriter alongside
+// the capture buffer, so it never swallows output.
+type tailWriter struct {
+	id   string
+	live *LiveLog
+	rest []byte
+}
+
+func (w *tailWriter) Write(p []byte) (int, error) {
+	w.rest = append(w.rest, p...)
+	for {
+		i := bytes.IndexByte(w.rest, '\n')
+		if i < 0 {
+			break
+		}
+		w.live.set(w.id, cleanLine(string(w.rest[:i])))
+		w.rest = w.rest[i+1:]
+	}
+	w.live.set(w.id, cleanLine(string(w.rest)))
+	return len(p), nil
+}
+
 // Run executes t.Cmd with t.Args in t.Dir, capturing combined output. It
 // blocks until the process exits or ctx is cancelled. timeout > 0 bounds the
 // whole target (env up + command); env teardown still runs on a detached
-// context so a timed-out target is always cleaned up. It never panics and
-// never returns a partially-zero Result — every field is meaningful.
-func Run(ctx context.Context, t detect.Target, timeout time.Duration) Result {
+// context so a timed-out target is always cleaned up. live (may be nil)
+// receives the most recent output line for the live TUI tail. It never panics
+// and never returns a partially-zero Result — every field is meaningful.
+func Run(ctx context.Context, t detect.Target, timeout time.Duration, live *LiveLog) Result {
 	start := time.Now()
 
 	// Per-target deadline. Cancellation propagates into exec.CommandContext
@@ -61,6 +129,10 @@ func Run(ctx context.Context, t detect.Target, timeout time.Duration) Result {
 	// into the same buffer, fenced with ── headers, so a failure to stand up
 	// the environment reads as part of the same story.
 	var buf bytes.Buffer
+	// Everything that flows to the report buffer also tees to the live tail,
+	// so env-up progress, setup-env, and the command's own output all feed
+	// the "most recent line" the TUI shows under the running target.
+	out := io.MultiWriter(&buf, &tailWriter{id: t.ID(), live: live})
 
 	// The CLI is the authority for the test env's ports AND their derived
 	// connection vars (URLs/DSN) — setup-env.sh is no longer required to do
@@ -94,7 +166,7 @@ func Run(ctx context.Context, t detect.Target, timeout time.Duration) Result {
 		runEnv = append(runEnv, def...)
 		added = append(added, def...)
 		if len(added) > 0 {
-			fmt.Fprintf(&buf, "── env ── %s\n", strings.Join(added, "  "))
+			_, _ = fmt.Fprintf(out, "── env ── %s\n", strings.Join(added, "  "))
 		}
 	}
 
@@ -106,8 +178,8 @@ func Run(ctx context.Context, t detect.Target, timeout time.Duration) Result {
 	// derived vars above are already complete.
 	if root := repoRoot(t); root != "" {
 		if se := filepath.Join(root, "scripts", "setup-env.sh"); isFile(se) {
-			fmt.Fprintf(&buf, "── setup-env: %s ──\n", rel(root, se))
-			env, err := sourceEnv(ctx, se, root, runEnv, &buf)
+			_, _ = fmt.Fprintf(out, "── setup-env: %s ──\n", rel(root, se))
+			env, err := sourceEnv(ctx, se, root, runEnv, out)
 			if err != nil {
 				return Result{
 					Target:   t,
@@ -124,42 +196,42 @@ func Run(ctx context.Context, t detect.Target, timeout time.Duration) Result {
 	// before we snapshot buf into res.Output below.
 	res := func() Result {
 		if t.Env != nil {
-			fmt.Fprintf(&buf, "── env up: %s ──\n", t.Env.ID)
+			_, _ = fmt.Fprintf(out, "── env up: %s ──\n", t.Env.ID)
 			// Mirror scripts/test.sh exactly: --podman-build-args for docker
 			// manifest format, `up -d --build` WITHOUT --wait (the external
 			// podman-compose provider does not support --wait), then poll
 			// container health ourselves. down uses --volume (singular), as
 			// the scripts do, for the same provider compatibility.
 			downArgs := []string{"down", "--volume"}
-			if err := compose(ctx, &buf, runEnv, t.Env,
+			if err := compose(ctx, out, runEnv, t.Env,
 				[]string{"--podman-build-args=--format docker -q"},
 				"up", "-d", "--build"); err != nil {
-				fmt.Fprint(&buf, "── env down ──\n")
-				_ = compose(context.WithoutCancel(ctx), &buf, runEnv, t.Env, nil, downArgs...)
+				_, _ = fmt.Fprint(out, "── env down ──\n")
+				_ = compose(context.WithoutCancel(ctx), out, runEnv, t.Env, nil, downArgs...)
 				return Result{Target: t, ExitErr: fmt.Errorf(
 					"environment %s failed to start: %w", t.Env.ID, err)}
 			}
 			// down always runs, even on ctx cancellation mid-test — detach the
 			// context so cleanup itself is never cancelled.
 			defer func() {
-				fmt.Fprint(&buf, "── env down ──\n")
-				_ = compose(context.WithoutCancel(ctx), &buf, runEnv, t.Env, nil, downArgs...)
+				_, _ = fmt.Fprint(out, "── env down ──\n")
+				_ = compose(context.WithoutCancel(ctx), out, runEnv, t.Env, nil, downArgs...)
 			}()
 			// Wait for the env's containers to become healthy (or running with
 			// no healthcheck) before running the tests against it.
-			fmt.Fprint(&buf, "── env wait ──\n")
-			if err := waitHealthy(ctx, &buf, runEnv, t.Env, 120*time.Second); err != nil {
+			_, _ = fmt.Fprint(out, "── env wait ──\n")
+			if err := waitHealthy(ctx, out, runEnv, t.Env, 120*time.Second); err != nil {
 				return Result{Target: t, ExitErr: fmt.Errorf(
 					"environment %s not ready: %w", t.Env.ID, err)}
 			}
-			fmt.Fprintf(&buf, "── %s ──\n", t.Name)
+			_, _ = fmt.Fprintf(out, "── %s ──\n", t.Name)
 		}
 
 		cmd := exec.Command(t.Cmd, t.Args...)
 		cmd.Dir = t.Dir
 		cmd.Env = runEnv
-		cmd.Stdout = &buf
-		cmd.Stderr = &buf
+		cmd.Stdout = out
+		cmd.Stderr = out
 		// Own process group so a timeout/abort kills the whole tree
 		// (pnpm → sh → node, go test → compiled bins), not just the direct
 		// child — otherwise Wait blocks on a grandchild's inherited pipe and
@@ -186,7 +258,7 @@ func Run(ctx context.Context, t detect.Target, timeout time.Duration) Result {
 	// the report's failure panel shows "$ cmd …" + error + whatever output
 	// was produced before the deadline.
 	if timeout > 0 && errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		fmt.Fprintf(&buf, "\n── TIMED OUT after %s ──\n$ %s %s\n",
+		_, _ = fmt.Fprintf(out, "\n── TIMED OUT after %s ──\n$ %s %s\n",
 			timeout, t.Cmd, strings.Join(t.Args, " "))
 		res.Success = false
 		res.ExitErr = fmt.Errorf("timed out after %s (override with --timeout)", timeout)
@@ -318,7 +390,7 @@ func derivedURLs(names []string, env []string) []string {
 // stderr (captured into log) so only the NUL-delimited `env` reaches stdout.
 // baseEnv (including the pre-allocated ports) is the script's starting env, so
 // its `${PORT:=$(node …)}` assignments are already satisfied.
-func sourceEnv(ctx context.Context, script, dir string, baseEnv []string, log *bytes.Buffer) ([]string, error) {
+func sourceEnv(ctx context.Context, script, dir string, baseEnv []string, log io.Writer) ([]string, error) {
 	cmd := exec.CommandContext(ctx, "bash", "-c", `set -a; . "$1" 1>&2; env -0`, "bash", script)
 	cmd.Dir = dir
 	cmd.Env = baseEnv
@@ -339,7 +411,7 @@ func sourceEnv(ctx context.Context, script, dir string, baseEnv []string, log *b
 
 // compose runs `podman compose [global...] -p <project> -f <file> <args...>`
 // with the given environment, streaming combined output into buf.
-func compose(ctx context.Context, buf *bytes.Buffer, env []string, e *detect.ComposeEnv, global []string, args ...string) error {
+func compose(ctx context.Context, buf io.Writer, env []string, e *detect.ComposeEnv, global []string, args ...string) error {
 	full := append([]string{"compose"}, global...)
 	full = append(full, "-p", e.Project, "-f", e.File)
 	full = append(full, args...)
@@ -423,7 +495,7 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 // A container is ready when it is running with a healthy (or absent)
 // healthcheck, or has exited 0 (a one-shot init/migration). A non-zero exit
 // fails fast; otherwise it polls until timeout.
-func waitHealthy(ctx context.Context, log *bytes.Buffer, env []string, e *detect.ComposeEnv, timeout time.Duration) error {
+func waitHealthy(ctx context.Context, log io.Writer, env []string, e *detect.ComposeEnv, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	prefix := e.Project + "_"
 	var last string
@@ -458,7 +530,7 @@ func waitHealthy(ctx context.Context, log *bytes.Buffer, env []string, e *detect
 		}
 		last = strings.Join(states, "  ")
 		if ready {
-			fmt.Fprintf(log, "ready: %s\n", last)
+			_, _ = fmt.Fprintf(log, "ready: %s\n", last)
 			return nil
 		}
 		if time.Now().After(deadline) {

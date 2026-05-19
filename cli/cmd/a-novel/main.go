@@ -335,7 +335,7 @@ func runNonInteractive(ctx context.Context, verb ui.Verb, targets []detect.Targe
 		}
 		kind := strings.ToUpper(string(t.Kind))
 		fmt.Printf("[%d/%d] %s %-6s %s (%s)\n", i+1, len(targets), verb.Ing, kind, t.Name, t.RelDir)
-		res := build.Run(ctx, t, timeout)
+		res := build.Run(ctx, t, timeout, nil) // non-interactive: no live tail
 		results = append(results, res)
 		if res.Success {
 			fmt.Printf("      ok   %-6s %s\n", kind, t.Name)

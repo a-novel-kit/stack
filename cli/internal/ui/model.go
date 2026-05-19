@@ -68,7 +68,8 @@ type Model struct {
 	// nextIdx is the next queue entry to dispatch; running maps an in-flight
 	// target's ID to when it started (for its live timer).
 	maxPar  int
-	timeout time.Duration // per-target deadline (0 = none)
+	timeout time.Duration  // per-target deadline (0 = none)
+	live    *build.LiveLog // shared latest-line tail (pointer; survives value copies)
 	nextIdx int
 	running map[string]time.Time
 
@@ -115,6 +116,7 @@ func New(ctx context.Context, version string, verb Verb, targets []detect.Target
 		phase:    phaseSelect,
 		maxPar:   jobs,
 		timeout:  timeout,
+		live:     build.NewLiveLog(),
 		running:  map[string]time.Time{},
 	}
 	m.rows = m.buildRows()
@@ -198,8 +200,9 @@ func (m Model) Init() tea.Cmd { return nil }
 func (m Model) buildCmd(t detect.Target) tea.Cmd {
 	ctx := m.ctx
 	timeout := m.timeout
+	live := m.live
 	return func() tea.Msg {
-		return buildDoneMsg{res: build.Run(ctx, t, timeout)}
+		return buildDoneMsg{res: build.Run(ctx, t, timeout, live)}
 	}
 }
 
@@ -544,6 +547,11 @@ func (m Model) viewRun() string {
 			styleMuted.Render(relLabel(t.RelDir)),
 			elapsed,
 		)
+		// Most recent output line, dimmed under the target — a brief sense of
+		// what each command is doing so a stalled one is obvious early.
+		if last := m.live.Line(t.ID()); last != "" {
+			fmt.Fprintf(&b, "    %s\n", styleMuted.Render(clip(last, w-6)))
+		}
 	}
 
 	b.WriteString("\n")
