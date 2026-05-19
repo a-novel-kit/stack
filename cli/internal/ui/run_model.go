@@ -3,11 +3,10 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/a-novel-kit/stack/cli/internal/runner"
@@ -24,7 +23,6 @@ type RunModel struct {
 	run     *runner.Runner
 	cancel  func() // cancels the runner (triggers full teardown)
 
-	spinner spinner.Model
 	vp      viewport.Model
 	vpReady bool
 
@@ -46,22 +44,35 @@ type RunModel struct {
 
 type runDoneMsg struct{}
 
+// tickMsg drives a slow poll of the runner snapshot. It is deliberately NOT
+// an animated spinner: an animating glyph changes View() every frame, and
+// Bubble Tea's renderer only suppresses a repaint when the frame is
+// byte-identical. A non-animated frame means the screen is rewritten ONLY
+// when log content or status actually changes — no idle flicker (the WSL /
+// ConPTY flicker is just frequent full-frame rewrites).
+type tickMsg struct{}
+
+// pollInterval is the snapshot cadence — fast enough to feel live, slow
+// enough that an unchanged frame is genuinely idle.
+const pollInterval = 150 * time.Millisecond
+
+func tick() tea.Cmd {
+	return tea.Tick(pollInterval, func(time.Time) tea.Msg { return tickMsg{} })
+}
+
 // NewRun builds the dashboard. cancel must cancel the context the runner was
 // started with, so q triggers a full scoped teardown.
 func NewRun(version string, r *runner.Runner, cancel func()) RunModel {
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(colBrand)
 	// Seed the process list so the first frame already shows every tab
 	// (Pending) instead of an empty box that fills on the first tick.
 	return RunModel{
-		version: version, run: r, cancel: cancel, spinner: sp,
+		version: version, run: r, cancel: cancel,
 		procs: r.Snapshot(), shownSel: -1,
 	}
 }
 
 func (m RunModel) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, m.waitDone())
+	return tea.Batch(tick(), m.waitDone())
 }
 
 func (m RunModel) waitDone() tea.Cmd {
@@ -86,15 +97,13 @@ func (m RunModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshViewport(true) // geometry changed → force a re-feed
 		return m, nil
 
-	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
+	case tickMsg:
 		m.procs = m.run.Snapshot()
 		if m.sel >= len(m.procs) {
 			m.sel = max(0, len(m.procs)-1)
 		}
 		m.refreshViewport(false) // only re-feeds if the active tab changed
-		return m, cmd
+		return m, tick()         // reschedule the next poll
 
 	case runDoneMsg:
 		m.finished = true
@@ -221,7 +230,10 @@ func (m RunModel) View() string {
 		w = termWidth()
 	}
 
-	head := "run · " + m.spinner.View() + " live"
+	// Static (non-animated) header: it changes only on a real state
+	// transition, so an idle frame is byte-identical and the renderer skips
+	// the repaint entirely — the core anti-flicker invariant.
+	head := "run · live"
 	if m.stopping {
 		head = "run · tearing down…"
 	}
