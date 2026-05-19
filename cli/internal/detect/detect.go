@@ -107,6 +107,11 @@ type ComposeEnv struct {
 	// for each so parallel targets never collide, replacing setup-env.sh's
 	// node/get-port-please randomisation.
 	Ports []string
+	// Refs is every ${VAR} the compose file interpolates (host-exposed or
+	// not). The runner fills known test defaults (POSTGRES_USER/PASSWORD/DB/
+	// HOST) for any it references, so an internal-only postgres — which has
+	// no host port and thus no entry in Ports — still gets credentials.
+	Refs []string
 }
 
 // ID is a stable, unique key for a target (used as a selection-map key and to

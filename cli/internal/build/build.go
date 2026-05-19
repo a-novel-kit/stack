@@ -68,20 +68,34 @@ func Run(ctx context.Context, t detect.Target, timeout time.Duration) Result {
 	// a free TCP port in Go (no node) and derive its companion var by the
 	// fixed <X>_PORT rule. Each Run allocates independently → parallel-safe.
 	runEnv := os.Environ()
-	if t.Env != nil && len(t.Env.Ports) > 0 {
-		portEnv, err := allocPorts(t.Env.Ports)
-		if err != nil {
-			return Result{
-				Target:   t,
-				ExitErr:  fmt.Errorf("port allocation failed: %w", err),
-				Output:   strings.TrimRight(buf.String(), "\n"),
-				Duration: time.Since(start),
+	if t.Env != nil {
+		var added []string
+		if len(t.Env.Ports) > 0 {
+			portEnv, err := allocPorts(t.Env.Ports)
+			if err != nil {
+				return Result{
+					Target:   t,
+					ExitErr:  fmt.Errorf("port allocation failed: %w", err),
+					Output:   strings.TrimRight(buf.String(), "\n"),
+					Duration: time.Since(start),
+				}
 			}
+			runEnv = append(runEnv, portEnv...)
+			derived := derivedURLs(t.Env.Ports, runEnv)
+			runEnv = append(runEnv, derived...)
+			added = append(added, portEnv...)
+			added = append(added, derived...)
 		}
-		runEnv = append(runEnv, portEnv...)
-		derived := derivedURLs(t.Env.Ports, runEnv)
-		runEnv = append(runEnv, derived...)
-		fmt.Fprintf(&buf, "── ports ── %s\n", strings.Join(append(portEnv, derived...), "  "))
+		// Standard local test values for known vars the compose file
+		// references (e.g. an internal-only postgres' POSTGRES_PASSWORD/USER/
+		// DB) that are not produced by a host port. Local-only, so a fixed
+		// generic credential set is fine.
+		def := testDefaults(t.Env.Refs, runEnv)
+		runEnv = append(runEnv, def...)
+		added = append(added, def...)
+		if len(added) > 0 {
+			fmt.Fprintf(&buf, "── env ── %s\n", strings.Join(added, "  "))
+		}
 	}
 
 	// Source scripts/setup-env.sh only for whatever else it still defines
@@ -226,36 +240,70 @@ func allocPorts(names []string) ([]string, error) {
 	return out, nil
 }
 
-// derivedURLs builds the host connection vars from the allocated ports by the
-// fixed `<X>_PORT` rule. POSTGRES is special: the compose postgres service
-// interpolates ${POSTGRES_PASSWORD}/${POSTGRES_USER}/${POSTGRES_DB} and the
-// official image refuses to start without a password — so the full standard
-// test credentials are emitted (host/user/pass/db + the matching DSN), not
-// just the DSN. GRPC→host:port, any other X_PORT→http URL.
-func derivedURLs(names []string, env []string) []string {
-	get := func(k string) string {
-		for _, kv := range env {
-			if v, ok := strings.CutPrefix(kv, k+"="); ok {
-				return v
-			}
+// stdTestEnv is the standard local test value for known compose vars. We are
+// local-only, so a fixed generic credential set is fine. Applied for any of
+// these the compose file references but that no host port produced — this is
+// what lets an internal-only postgres (no host port) still get credentials.
+// pgStd is the standard local postgres user/password/db name for tests.
+const pgStd = "postgres"
+
+var stdTestEnv = map[string]string{
+	"POSTGRES_HOST":     "localhost",
+	"POSTGRES_USER":     pgStd,
+	"POSTGRES_PASSWORD": pgStd,
+	"POSTGRES_DB":       pgStd,
+}
+
+// has reports whether env already defines key.
+func has(env []string, key string) bool {
+	for _, kv := range env {
+		if strings.HasPrefix(kv, key+"=") {
+			return true
 		}
-		return ""
 	}
+	return false
+}
+
+// envVal returns env's value for key, or "".
+func envVal(env []string, key string) string {
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, key+"="); ok {
+			return v
+		}
+	}
+	return ""
+}
+
+// testDefaults fills stdTestEnv values for every known var the compose file
+// references that is not already set (by a port, a derived URL, or the
+// inherited environment) — credential provisioning driven by what the compose
+// needs, independent of host-port exposure.
+func testDefaults(refs, env []string) []string {
+	var out []string
+	for _, r := range refs {
+		if v, known := stdTestEnv[r]; known && !has(env, r) {
+			out = append(out, r+"="+v)
+		}
+	}
+	return out
+}
+
+// derivedURLs builds the host connection vars from the allocated ports by the
+// fixed `<X>_PORT` rule: POSTGRES_PORT→POSTGRES_DSN (standard local creds +
+// the allocated port), GRPC_PORT→GRPC_URL (host:port), any other
+// X_PORT→X_URL (http://localhost:port). Credentials themselves come from
+// testDefaults, not here, so internal-only services are covered too.
+func derivedURLs(names []string, env []string) []string {
 	var out []string
 	for _, n := range names {
 		base, ok := strings.CutSuffix(n, "_PORT")
 		if !ok {
 			continue
 		}
-		p := get(n)
+		p := envVal(env, n)
 		switch base {
 		case "POSTGRES":
-			out = append(out,
-				"POSTGRES_HOST=localhost",
-				"POSTGRES_USER=postgres",
-				"POSTGRES_PASSWORD=postgres",
-				"POSTGRES_DB=postgres",
-				"POSTGRES_DSN=postgres://postgres:postgres@localhost:"+p+"/postgres?sslmode=disable")
+			out = append(out, "POSTGRES_DSN=postgres://"+pgStd+":"+pgStd+"@localhost:"+p+"/"+pgStd+"?sslmode=disable")
 		case "GRPC":
 			out = append(out, "GRPC_URL=localhost:"+p)
 		default:
