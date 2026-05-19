@@ -114,10 +114,15 @@ func parseBuildArgs(args []string) (buildOpts, error) {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		name, inlineVal, hasInline := a, "", false
-		if strings.HasPrefix(a, "--") {
+		switch {
+		case strings.HasPrefix(a, "--"):
+			// --flag=value
 			if eq := strings.IndexByte(a, '='); eq >= 0 {
 				name, inlineVal, hasInline = a[:eq], a[eq+1:], true
 			}
+		case len(a) > 2 && a[0] == '-' && strings.ContainsRune("Ctj", rune(a[1])):
+			// attached short-flag value: -j1, -tgo, -C/path
+			name, inlineVal, hasInline = a[:2], a[2:], true
 		}
 
 		takeVal := func() (string, error) {
