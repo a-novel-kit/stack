@@ -23,8 +23,11 @@ var jobBasenames = map[string]struct{}{
 }
 
 // detectPodman emits one target per *.Dockerfile in dir/builds/. The build
-// context is dir (the repo/service root), and the image tag is derived from
-// the nearest go.mod's module path plus the Dockerfile name.
+// context is dir, and the image tag is derived from the go.mod located in dir
+// itself (the same directory as builds/) plus the Dockerfile name. By
+// a-novel convention builds/ always sits at the module root next to go.mod, so
+// this is intentionally a same-directory lookup, not a walk up the tree; when
+// no sibling go.mod exists registryBase falls back to a localhost/ prefix.
 func detectPodman(dir, rel string) []Target {
 	buildsDir := filepath.Join(dir, "builds")
 	entries, err := os.ReadDir(buildsDir)
