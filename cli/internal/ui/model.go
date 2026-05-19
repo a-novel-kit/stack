@@ -366,6 +366,37 @@ func (r row) groupOf(m Model) detect.Kind {
 	return m.targets[r.target].Kind
 }
 
+// deps returns the IDs of targets t requires. By a-novel convention every
+// schema-touching Go entrypoint (rest / grpc / rotate-keys — i.e. a Go main
+// that is NOT migrations) needs its module's `migrations` step to have run
+// first (mirrors runner.isInit), so selecting one auto-selects migrations.
+func (m Model) deps(t detect.Target) []string {
+	if m.verb.Base != VerbRun.Base || t.Kind != detect.KindGo || t.Name == "migrations" {
+		return nil
+	}
+	var ids []string
+	for _, o := range m.targets {
+		if o.Kind == detect.KindGo && o.Name == "migrations" && o.RelDir == t.RelDir {
+			ids = append(ids, o.ID())
+		}
+	}
+	return ids
+}
+
+// applyDeps is the selection closure: anything selected drags its
+// dependencies on too. Idempotent and cheap — run after every toggle so a
+// dependency can never be left unselected under a selected dependant (the
+// "always auto-select dependencies" rule).
+func (m *Model) applyDeps() {
+	for _, t := range m.targets {
+		if m.selected[t.ID()] {
+			for _, d := range m.deps(t) {
+				m.selected[d] = true
+			}
+		}
+	}
+}
+
 func (m *Model) toggleAt(idx int) {
 	r := m.rows[idx]
 	if r.kind == rowGroup {
@@ -374,6 +405,7 @@ func (m *Model) toggleAt(idx int) {
 	}
 	id := m.targets[r.target].ID()
 	m.selected[id] = !m.selected[id]
+	m.applyDeps()
 }
 
 // toggleGroup flips a whole kind: if every target in it is already selected it
@@ -392,6 +424,7 @@ func (m *Model) toggleGroup(k detect.Kind) {
 			m.selected[t.ID()] = !allOn
 		}
 	}
+	m.applyDeps()
 }
 
 func (m *Model) toggleAll() {
@@ -405,6 +438,7 @@ func (m *Model) toggleAll() {
 	for _, t := range m.targets {
 		m.selected[t.ID()] = !allOn
 	}
+	m.applyDeps()
 }
 
 func (m Model) selectedCount() int {
