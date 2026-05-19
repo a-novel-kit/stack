@@ -337,3 +337,33 @@ func failurePanel(r build.Result, tail, width int) string {
 	title := glyphFail + " " + r.Target.Name + "  [" + relLabel(r.Target.RelDir) + "]"
 	return panel(title, colErr, b.String(), width)
 }
+
+// EnvConflictView renders the leftover-environment warning shown by the
+// preflight: a critical titled section, a short explanation, and the stale
+// envs with their containers nested beneath — styled to match the report
+// rather than plain stderr text.
+func EnvConflictView(verb Verb, conflicts []build.Conflict) string {
+	w := termWidth()
+	var b strings.Builder
+	b.WriteString(section("environment conflict", colCrit, w) + "\n\n")
+	b.WriteString(para(
+		"An existing "+verb.Base+" environment was found — almost certainly the "+
+			"leftover of a previously aborted run. Running on top of it would be "+
+			"unreliable, so it must be cleared first.", w) + "\n\n")
+	for _, c := range conflicts {
+		b.WriteString("  " + styleErr.Render(glyphFail+" "+c.Env.ID) + "\n")
+		for _, name := range c.Containers {
+			b.WriteString("    " + styleMuted.Render("↳ "+name) + "\n")
+		}
+	}
+	return b.String()
+}
+
+// EnvStep is a dim, indented progress line for the cleanup actions.
+func EnvStep(s string) string { return styleMuted.Render("  " + s) }
+
+// EnvNote is a one-line caution notice (non-interactive abort message).
+func EnvNote(s string) string { return styleWarn.Render(s) }
+
+// EnvPrompt is the styled inline clean/abort question (no trailing newline).
+func EnvPrompt(s string) string { return styleGold.Render(s) }

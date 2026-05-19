@@ -377,30 +377,25 @@ func preflight(ctx context.Context, verb ui.Verb, targets []detect.Target, canPr
 		return -1
 	}
 
-	fmt.Fprintf(os.Stderr,
-		"a-novel %s: an existing test environment was found (likely a leftover "+
-			"from an aborted run):\n", verb.Base)
-	for _, c := range conflicts {
-		fmt.Fprintf(os.Stderr, "  %s — %s\n", c.Env.ID, strings.Join(c.Containers, ", "))
-	}
+	fmt.Fprintln(os.Stderr, ui.EnvConflictView(verb, conflicts))
 
 	clean := func() {
 		for _, c := range conflicts {
-			fmt.Fprintf(os.Stderr, "  cleaning %s …\n", c.Env.ID)
+			fmt.Fprintln(os.Stderr, ui.EnvStep("cleaning "+c.Env.ID+" …"))
 			// Detached ctx: teardown must complete even if the run is aborting.
 			_ = build.TearDown(context.WithoutCancel(ctx), c.Env)
 		}
 	}
 
 	if !canPrompt {
-		fmt.Fprintf(os.Stderr,
+		fmt.Fprintln(os.Stderr, ui.EnvNote(
 			"Tearing down the stale environment (scoped to this project only) and "+
-				"aborting. Re-run `a-novel %s` once it is clear.\n", verb.Base)
+				"aborting. Re-run `a-novel "+verb.Base+"` once it is clear."))
 		clean()
 		return exitAborted
 	}
 
-	fmt.Fprint(os.Stderr, "Clean it and continue, or abort? [c]lean / [a]bort: ")
+	fmt.Fprint(os.Stderr, ui.EnvPrompt("Clean it and continue, or abort? [c]lean / [a]bort: "))
 	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 	switch strings.ToLower(strings.TrimSpace(line)) {
 	case "c", "clean":
