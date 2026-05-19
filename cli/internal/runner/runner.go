@@ -62,6 +62,11 @@ type Proc struct {
 	partial []byte   // bytes after the last '\n' — not yet a line
 	last    string   // most recent non-empty line (dashboard tail)
 	seq     uint64   // bumps on every content change → render-on-change
+
+	// term is closed exactly once when the process reaches a terminal state
+	// (or failed to start). It lets the runner gate dependent targets on an
+	// init step (migrations) finishing.
+	term chan struct{}
 }
 
 // ProcView is an immutable snapshot for the UI.
@@ -189,7 +194,9 @@ func (r *Runner) Console() (string, []string) {
 func New(targets []detect.Target, recreate bool) *Runner {
 	r := &Runner{done: make(chan struct{}), recreate: recreate}
 	for _, t := range targets {
-		r.procs = append(r.procs, &Proc{Target: t, status: Pending})
+		r.procs = append(r.procs, &Proc{
+			Target: t, status: Pending, term: make(chan struct{}),
+		})
 	}
 	return r
 }
@@ -287,18 +294,13 @@ func (r *Runner) Run(parent context.Context) {
 		// First prepared env wins the console context: a curl typed in the
 		// console then sees this group's allocated REST_URL/ports.
 		r.setConsole(g.ps[0].Target.Dir, g.prep)
-		for _, p := range g.ps {
-			r.launch(ctx, p, g.prep, fail)
-		}
+		r.launchGroup(ctx, g.ps, g.prep, fail)
 	}
-	for _, p := range noEnv {
-		if ctx.Err() != nil {
-			break
-		}
+	if len(noEnv) > 0 && ctx.Err() == nil {
 		// Fallback only if no env group set it: inherit the process env,
 		// run from the target's dir.
-		r.setConsole(p.Target.Dir, nil)
-		r.launch(ctx, p, nil, fail)
+		r.setConsole(noEnv[0].Target.Dir, nil)
+		r.launchGroup(ctx, noEnv, nil, fail)
 	}
 
 	<-ctx.Done() // user quit (parent cancelled) or a target failed
@@ -310,6 +312,47 @@ func (r *Runner) Run(parent context.Context) {
 		_ = build.TearDown(clean, e)
 	}
 	r.once.Do(func() { close(r.done) })
+}
+
+// isInit reports whether a target is a schema/init step that dependent
+// targets must wait for. By a-novel convention that is the `migrations`
+// Go entrypoint (cmd/migrations): rotate-keys / rest / grpc all need the
+// schema it creates, so launching them in parallel raced it and failed with
+// `relation "active_keys" does not exist`.
+func isInit(t detect.Target) bool {
+	return t.Kind == detect.KindGo && t.Name == "migrations"
+}
+
+// launchGroup launches a set of co-located procs with an init barrier: every
+// init target (migrations) is run to completion FIRST, in order, then the
+// rest start concurrently. If an init fails it cancels the run (via fail), so
+// the loop stops before launching the dependents.
+func (r *Runner) launchGroup(ctx context.Context, ps []*Proc, env []string, fail func(*Proc, error)) {
+	var inits, rest []*Proc
+	for _, p := range ps {
+		if isInit(p.Target) {
+			inits = append(inits, p)
+		} else {
+			rest = append(rest, p)
+		}
+	}
+	for _, p := range inits {
+		if ctx.Err() != nil {
+			return
+		}
+		r.launch(ctx, p, env, fail)
+		select {
+		case <-p.term: // migrations finished (Exited) or failed (ctx cancelled)
+		case <-ctx.Done():
+			return
+		}
+	}
+	for _, p := range rest {
+		if ctx.Err() != nil {
+			return
+		}
+		r.launch(ctx, p, env, fail)
+	}
 }
 
 // launch starts one process in its own group and watches it. A non-zero exit
@@ -330,6 +373,7 @@ func (r *Runner) launch(ctx context.Context, p *Proc, env []string, fail func(*P
 
 	if err := cmd.Start(); err != nil {
 		fail(p, fmt.Errorf("failed to start: %w", err))
+		close(p.term) // never started → unblock any init barrier waiting on it
 		return
 	}
 	p.set(Running)
@@ -350,6 +394,7 @@ func (r *Runner) launch(ctx context.Context, p *Proc, env []string, fail func(*P
 		p.mu.Lock()
 		p.ended = time.Now()
 		p.mu.Unlock()
+		defer close(p.term) // terminal state reached → release init barrier
 		switch {
 		case ctx.Err() != nil:
 			// We killed it during teardown — expected, not a failure.
