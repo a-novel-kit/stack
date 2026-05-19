@@ -5,6 +5,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 	"sort"
@@ -67,6 +68,7 @@ type Model struct {
 	// nextIdx is the next queue entry to dispatch; running maps an in-flight
 	// target's ID to when it started (for its live timer).
 	maxPar  int
+	timeout time.Duration // per-target deadline (0 = none)
 	nextIdx int
 	running map[string]time.Time
 
@@ -87,7 +89,7 @@ type Model struct {
 // jobs is the maximum number of builds to run concurrently once the user
 // confirms; jobs <= 0 means runtime.NumCPU(). Parallelism is interactive-only;
 // the non-interactive path stays strictly sequential by design.
-func New(ctx context.Context, version string, verb Verb, targets []detect.Target, jobs int) Model {
+func New(ctx context.Context, version string, verb Verb, targets []detect.Target, jobs int, timeout time.Duration) Model {
 	if jobs <= 0 {
 		jobs = runtime.NumCPU()
 	}
@@ -112,6 +114,7 @@ func New(ctx context.Context, version string, verb Verb, targets []detect.Target
 		spinner:  sp,
 		phase:    phaseSelect,
 		maxPar:   jobs,
+		timeout:  timeout,
 		running:  map[string]time.Time{},
 	}
 	m.rows = m.buildRows()
@@ -154,13 +157,32 @@ func (m Model) Elapsed() time.Duration {
 }
 
 // orderedResults sorts a copy of the completion-ordered results back into the
-// queue order the user saw at selection time.
+// queue order the user saw at selection time. When the run was aborted, every
+// queued target that never produced a result (in-flight when killed, or never
+// started) is surfaced as a failed result — an abort leaves no work silently
+// unaccounted for; its in-flight output was lost with the killed goroutine, so
+// it reads as a failure with no captured output.
 func (m Model) orderedResults() []build.Result {
 	pos := make(map[string]int, len(m.queue))
 	for i, t := range m.queue {
 		pos[t.ID()] = i
 	}
 	out := append([]build.Result(nil), m.results...)
+	if m.aborted {
+		done := make(map[string]bool, len(m.results))
+		for _, r := range m.results {
+			done[r.Target.ID()] = true
+		}
+		for _, t := range m.queue {
+			if !done[t.ID()] {
+				out = append(out, build.Result{
+					Target:  t,
+					Success: false,
+					ExitErr: errors.New("aborted before completion"),
+				})
+			}
+		}
+	}
 	sort.SliceStable(out, func(i, j int) bool {
 		return pos[out[i].Target.ID()] < pos[out[j].Target.ID()]
 	})
@@ -175,8 +197,9 @@ func (m Model) Init() tea.Cmd { return nil }
 // interleaving on disk never reaches the screen.
 func (m Model) buildCmd(t detect.Target) tea.Cmd {
 	ctx := m.ctx
+	timeout := m.timeout
 	return func() tea.Msg {
-		return buildDoneMsg{res: build.Run(ctx, t)}
+		return buildDoneMsg{res: build.Run(ctx, t, timeout)}
 	}
 }
 

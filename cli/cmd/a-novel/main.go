@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -96,19 +97,20 @@ func wantsHelp(args []string) bool {
 
 // buildOpts is the parsed `build` invocation.
 type buildOpts struct {
-	dir    string
-	types  map[detect.Kind]bool // nil means "all kinds"
-	yes    bool
-	dryRun bool
-	help   bool
-	jobs   int // max parallel builds (interactive only); 0 = NumCPU
+	dir     string
+	types   map[detect.Kind]bool // nil means "all kinds"
+	yes     bool
+	dryRun  bool
+	help    bool
+	jobs    int           // max parallel builds (interactive only); 0 = NumCPU
+	timeout time.Duration // per-target deadline; 0 = none, default 10m
 }
 
 // parseBuildArgs hand-parses the small, fixed `build` flag set. A bespoke
 // parser (vs the stdlib flag package) keeps the short/long pairs — -C/--dir,
 // -t/--type, -y/--yes — first-class without flag's awkward dual registration.
 func parseBuildArgs(args []string) (buildOpts, error) {
-	opts := buildOpts{dir: "."}
+	opts := buildOpts{dir: ".", timeout: 10 * time.Minute}
 
 	// next consumes the value for a flag, supporting both "--flag val" and
 	// "--flag=val" forms.
@@ -121,7 +123,7 @@ func parseBuildArgs(args []string) (buildOpts, error) {
 			if eq := strings.IndexByte(a, '='); eq >= 0 {
 				name, inlineVal, hasInline = a[:eq], a[eq+1:], true
 			}
-		case len(a) > 2 && a[0] == '-' && strings.ContainsRune("Ctj", rune(a[1])):
+		case len(a) > 2 && a[0] == '-' && strings.ContainsRune("CtjT", rune(a[1])):
 			// attached short-flag value: -j1, -tgo, -C/path
 			name, inlineVal, hasInline = a[:2], a[2:], true
 		}
@@ -165,6 +167,16 @@ func parseBuildArgs(args []string) (buildOpts, error) {
 				return opts, fmt.Errorf("--jobs: want a positive integer, got %q", v)
 			}
 			opts.jobs = n
+		case "-T", "--timeout":
+			v, err := takeVal()
+			if err != nil {
+				return opts, err
+			}
+			d, convErr := time.ParseDuration(v)
+			if convErr != nil || d < 0 {
+				return opts, fmt.Errorf("--timeout: want a duration like 10m / 30s / 0, got %q", v)
+			}
+			opts.timeout = d
 		case "--dry-run":
 			opts.dryRun = true
 		case "-h", "--help":
@@ -268,7 +280,7 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 	// fall back to the non-interactive runner — same builds, plain report.
 	interactive := !opts.yes && term.IsTerminal(os.Stdout.Fd())
 	if !interactive {
-		return runNonInteractive(ctx, verb, targets)
+		return runNonInteractive(ctx, verb, targets, opts.timeout)
 	}
 
 	// Run the whole interactive flow in the alternate screen buffer. On quit
@@ -277,7 +289,7 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 	// we print below to the normal buffer. Without alt-screen, Bubble Tea
 	// leaves its final frame on screen and we'd print the report a second
 	// time underneath it (the "results appear twice" bug).
-	model := ui.New(ctx, version.String(), verb, targets, opts.jobs)
+	model := ui.New(ctx, version.String(), verb, targets, opts.jobs, opts.timeout)
 	final, err := tea.NewProgram(model, tea.WithAltScreen()).Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "a-novel %s: ui error: %v\n", verb.Base, err)
@@ -302,7 +314,7 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 // runNonInteractive runs every target sequentially, streaming a terse progress
 // line per target, then prints the full text report. Used for -y and for any
 // non-TTY context.
-func runNonInteractive(ctx context.Context, verb ui.Verb, targets []detect.Target) int {
+func runNonInteractive(ctx context.Context, verb ui.Verb, targets []detect.Target, timeout time.Duration) int {
 	fmt.Println(ui.Banner(version.String()))
 	fmt.Println()
 
@@ -316,12 +328,30 @@ func runNonInteractive(ctx context.Context, verb ui.Verb, targets []detect.Targe
 		}
 		kind := strings.ToUpper(string(t.Kind))
 		fmt.Printf("[%d/%d] %s %-6s %s (%s)\n", i+1, len(targets), verb.Ing, kind, t.Name, t.RelDir)
-		res := build.Run(ctx, t)
+		res := build.Run(ctx, t, timeout)
 		results = append(results, res)
 		if res.Success {
 			fmt.Printf("      ok   %-6s %s\n", kind, t.Name)
 		} else {
 			fmt.Printf("      FAIL %-6s %s\n", kind, t.Name)
+		}
+	}
+
+	// On abort the remaining targets never ran: surface them as failures so
+	// the report accounts for every selected target, not just the ones that
+	// finished before the interruption.
+	if aborted {
+		done := make(map[string]bool, len(results))
+		for _, r := range results {
+			done[r.Target.ID()] = true
+		}
+		for _, t := range targets {
+			if !done[t.ID()] {
+				results = append(results, build.Result{
+					Target: t, Success: false,
+					ExitErr: errors.New("aborted before completion"),
+				})
+			}
 		}
 	}
 

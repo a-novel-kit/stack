@@ -6,12 +6,14 @@ package build
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/a-novel-kit/stack/cli/internal/detect"
@@ -38,10 +40,21 @@ type Result struct {
 }
 
 // Run executes t.Cmd with t.Args in t.Dir, capturing combined output. It
-// blocks until the process exits or ctx is cancelled. It never panics and
+// blocks until the process exits or ctx is cancelled. timeout > 0 bounds the
+// whole target (env up + command); env teardown still runs on a detached
+// context so a timed-out target is always cleaned up. It never panics and
 // never returns a partially-zero Result — every field is meaningful.
-func Run(ctx context.Context, t detect.Target) Result {
+func Run(ctx context.Context, t detect.Target, timeout time.Duration) Result {
 	start := time.Now()
+
+	// Per-target deadline. Cancellation propagates into exec.CommandContext
+	// (kills the test/compose-up process); the deferred env-down below uses
+	// context.WithoutCancel(ctx) so it survives this deadline.
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
 
 	// One buffer for both streams so the report preserves the interleaving the
 	// user would have seen in a terminal. compose up/down output is captured
@@ -128,14 +141,42 @@ func Run(ctx context.Context, t detect.Target) Result {
 			fmt.Fprintf(&buf, "── %s ──\n", t.Name)
 		}
 
-		cmd := exec.CommandContext(ctx, t.Cmd, t.Args...)
+		cmd := exec.Command(t.Cmd, t.Args...)
 		cmd.Dir = t.Dir
 		cmd.Env = runEnv
 		cmd.Stdout = &buf
 		cmd.Stderr = &buf
-		err := cmd.Run()
+		// Own process group so a timeout/abort kills the whole tree
+		// (pnpm → sh → node, go test → compiled bins), not just the direct
+		// child — otherwise Wait blocks on a grandchild's inherited pipe and
+		// the deadline is reported but never enforced.
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		if err := cmd.Start(); err != nil {
+			return Result{Target: t, ExitErr: err}
+		}
+		done := make(chan struct{})
+		go func() {
+			select {
+			case <-ctx.Done():
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			case <-done:
+			}
+		}()
+		err := cmd.Wait()
+		close(done)
 		return Result{Target: t, Success: err == nil, ExitErr: err}
 	}()
+
+	// A timed-out target is a failure presented like any other: the command
+	// is logged into the captured output and the error states the timeout, so
+	// the report's failure panel shows "$ cmd …" + error + whatever output
+	// was produced before the deadline.
+	if timeout > 0 && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		fmt.Fprintf(&buf, "\n── TIMED OUT after %s ──\n$ %s %s\n",
+			timeout, t.Cmd, strings.Join(t.Args, " "))
+		res.Success = false
+		res.ExitErr = fmt.Errorf("timed out after %s (override with --timeout)", timeout)
+	}
 
 	res.Output = strings.TrimRight(buf.String(), "\n")
 	res.Duration = time.Since(start)
