@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/a-novel-kit/stack/cli/internal/runner"
 )
@@ -198,7 +199,15 @@ func (m *RunModel) refreshViewport(force bool) {
 	}
 	atBottom := m.vp.AtBottom()
 	m.vp.Height = m.logHeight()
-	m.vp.SetContent(strings.TrimRight(p.Output, "\n"))
+	// Hard-wrap every line to the viewport width so NO line's visible width
+	// exceeds the terminal — an over-wide line wraps terminal-side, desyncs
+	// Bubble Tea's renderer, and full-repaints every tick (the flicker).
+	// ANSI-aware: SGR colour is preserved across the wrap.
+	w := m.vp.Width
+	if w < 1 {
+		w = 1
+	}
+	m.vp.SetContent(ansi.Hardwrap(strings.TrimRight(p.Output, "\n"), w, true))
 	if atBottom || m.sel != m.shownSel {
 		m.vp.GotoBottom()
 	}
@@ -225,12 +234,16 @@ func (m RunModel) View() string {
 
 	if m.vpReady && len(m.procs) > 0 {
 		sp := m.procs[m.sel]
-		title := "▌ " + runName(sp.Target.Service, sp.Target.Name) +
+		// Components are pre-styled (nested SGR); don't re-wrap the whole
+		// string in another style — just compose and ANSI-truncate to w so
+		// the title line can never exceed the terminal width.
+		title := styleGold.Render("▌ ") +
+			runName(sp.Target.Service, sp.Target.Name) +
 			"  " + styleMuted.Render(runStatusWord(sp.Status))
 		if m.logFocus {
 			title += "  " + styleMuted.Render("(scrolling — tab to leave)")
 		}
-		b.WriteString(styleGold.Render(title) + "\n")
+		b.WriteString(ansi.Truncate(title, w, "…") + "\n")
 		b.WriteString(m.vp.View() + "\n")
 	}
 
@@ -241,7 +254,7 @@ func (m RunModel) View() string {
 	if m.finished {
 		keys = "q quit"
 	}
-	b.WriteString("\n" + styleHelp.Render(keys))
+	b.WriteString("\n" + ansi.Truncate(styleHelp.Render(keys), w, "…"))
 	return b.String()
 }
 
@@ -259,7 +272,10 @@ func (m RunModel) tabBar(w int) string {
 			parts = append(parts, styleMuted.Render(" "+label))
 		}
 	}
-	return clip(strings.Join(parts, styleMuted.Render(" · ")), w)
+	// ANSI-aware truncate: counts VISIBLE width (not escape bytes) so the bar
+	// is bounded to the terminal and never sliced through an escape sequence
+	// (rune-count clip did exactly that — the original flicker).
+	return ansi.Truncate(strings.Join(parts, styleMuted.Render(" · ")), w, "…")
 }
 
 // runName is the service-qualified process name, so identically-named
