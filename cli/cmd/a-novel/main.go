@@ -216,6 +216,14 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 		return exitUsage
 	}
 
+	// Fail fast (no filesystem walk) when not inside an a-novel / a-novel-kit
+	// git repository — this is what makes an invalid directory error almost
+	// instantly instead of triggering a deep scan.
+	if guardErr := detect.RepoGuard(opts.dir); guardErr != nil {
+		fmt.Fprintf(os.Stderr, "a-novel %s: %v\n", verb.Base, guardErr)
+		return exitUsage
+	}
+
 	targets, err := detectFn(opts.dir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "a-novel %s: scan failed: %v\n", verb.Base, err)

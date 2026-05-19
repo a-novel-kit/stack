@@ -28,6 +28,7 @@ func DetectTests(root string) ([]Target, error) {
 		return nil, err
 	}
 
+	ignored := gitIgnoredDirs(absRoot)
 	var targets []Target
 
 	walkErr := filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
@@ -40,10 +41,8 @@ func DetectTests(root string) ([]Target, error) {
 		if !d.IsDir() {
 			return nil
 		}
-		if path != absRoot {
-			if _, pruned := prunedDirs[d.Name()]; pruned {
-				return filepath.SkipDir
-			}
+		if skipDir(absRoot, path, d.Name(), ignored) {
+			return filepath.SkipDir
 		}
 
 		rel, _ := filepath.Rel(absRoot, path)

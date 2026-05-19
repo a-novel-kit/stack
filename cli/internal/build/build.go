@@ -186,9 +186,11 @@ func allocPorts(names []string) ([]string, error) {
 }
 
 // derivedURLs builds the host connection vars from the allocated ports by the
-// fixed `<X>_PORT` rule — used only when there is no setup-env.sh to do it:
-// POSTGRES_PORT→POSTGRES_DSN, GRPC_PORT→GRPC_URL (host:port),
-// any other X_PORT→X_URL (http://localhost:port).
+// fixed `<X>_PORT` rule. POSTGRES is special: the compose postgres service
+// interpolates ${POSTGRES_PASSWORD}/${POSTGRES_USER}/${POSTGRES_DB} and the
+// official image refuses to start without a password — so the full standard
+// test credentials are emitted (host/user/pass/db + the matching DSN), not
+// just the DSN. GRPC→host:port, any other X_PORT→http URL.
 func derivedURLs(names []string, env []string) []string {
 	get := func(k string) string {
 		for _, kv := range env {
@@ -207,7 +209,12 @@ func derivedURLs(names []string, env []string) []string {
 		p := get(n)
 		switch base {
 		case "POSTGRES":
-			out = append(out, "POSTGRES_DSN=postgres://postgres:postgres@localhost:"+p+"/postgres?sslmode=disable")
+			out = append(out,
+				"POSTGRES_HOST=localhost",
+				"POSTGRES_USER=postgres",
+				"POSTGRES_PASSWORD=postgres",
+				"POSTGRES_DB=postgres",
+				"POSTGRES_DSN=postgres://postgres:postgres@localhost:"+p+"/postgres?sslmode=disable")
 		case "GRPC":
 			out = append(out, "GRPC_URL=localhost:"+p)
 		default:

@@ -100,19 +100,46 @@ func (t Target) ID() string {
 	return string(t.Kind) + "\x00" + t.RelDir + "\x00" + t.Name
 }
 
-// prunedDirs are directory names never descended into: dependency caches,
-// VCS metadata, build output, and editor/secret scratch dirs. Pruning here is
-// what keeps a full-stack scan fast.
+// prunedDirs are non-hidden directory names never descended into: dependency
+// caches and build output. Hidden dirs (anything starting with ".") are
+// pruned unconditionally by skipDir, so .git/.idea/.cache/etc. need no entry.
 var prunedDirs = map[string]struct{}{
 	"node_modules": {},
-	".git":         {},
 	"vendor":       {},
 	"dist":         {},
-	".idea":        {},
-	".secrets":     {},
-	".svelte-kit":  {},
-	".turbo":       {},
-	".next":        {},
+}
+
+// maxScanDepth bounds recursion depth below the scan root. Real layouts nest
+// targets a handful of levels (e.g. app/<repo>/pkg/js/test/rest); this cap is
+// generous for that yet stops an accidental run from $HOME or / from walking
+// the whole filesystem and appearing to hang.
+const maxScanDepth = 10
+
+// skipDir reports whether the walk should not descend into path. It prunes
+// git-ignored directories (so a scan from the stack root never recurses the
+// gitignored app/ and kit/ checkouts), the known-noise names, every hidden
+// directory, and anything past maxScanDepth — the root itself is never
+// skipped. This is what keeps a scan from an invalid or workspace directory
+// fast and bounded instead of frozen.
+func skipDir(absRoot, path, name string, ignored map[string]struct{}) bool {
+	if path == absRoot {
+		return false
+	}
+	if _, isIgnored := ignored[path]; isIgnored {
+		return true
+	}
+	if _, pruned := prunedDirs[name]; pruned {
+		return true
+	}
+	if strings.HasPrefix(name, ".") {
+		return true
+	}
+	if rel, err := filepath.Rel(absRoot, path); err == nil {
+		if strings.Count(rel, string(filepath.Separator)) >= maxScanDepth {
+			return true
+		}
+	}
+	return false
 }
 
 // Detect walks root and returns every build target found, sorted for stable
@@ -123,6 +150,7 @@ func Detect(root string) ([]Target, error) {
 		return nil, err
 	}
 
+	ignored := gitIgnoredDirs(absRoot)
 	var targets []Target
 
 	walkErr := filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
@@ -139,13 +167,8 @@ func Detect(root string) ([]Target, error) {
 			return nil
 		}
 
-		// Always descend into the root itself; prune known-noise dirs anywhere
-		// below it (but never prune the root even if it is itself named e.g.
-		// "dist").
-		if path != absRoot {
-			if _, pruned := prunedDirs[d.Name()]; pruned {
-				return filepath.SkipDir
-			}
+		if skipDir(absRoot, path, d.Name(), ignored) {
+			return filepath.SkipDir
 		}
 
 		rel, _ := filepath.Rel(absRoot, path)
