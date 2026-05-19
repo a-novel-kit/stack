@@ -16,13 +16,14 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/runner"
 )
 
-// focus is which pane keystrokes drive. tab cycles tabs → log → console
-// (console skipped when the terminal is too narrow to show it).
+// focus is which pane keystrokes drive. There are only two: the log view
+// (scrolling is always on; ←/→ and 1-9 still switch the process tab) and the
+// console. tab toggles directly between them (console skipped when the
+// terminal is too narrow to show it).
 type focusZone int
 
 const (
-	focusTabs    focusZone = iota // ←/→/1-9 switch the active process tab
-	focusLog                      // ↑/↓/pgup scroll the active process log
+	focusLogs    focusZone = iota // scroll the log; ←/→ · 1-9 switch tab
 	focusConsole                  // type a quick command (curl, …)
 )
 
@@ -198,7 +199,7 @@ func (m RunModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.focus == focusConsole {
 		switch k {
 		case keyEsc:
-			m.focus = focusTabs
+			m.focus = focusLogs
 			m.ti.Blur()
 			return m, nil
 		case "tab":
@@ -218,31 +219,25 @@ func (m RunModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// focusLogs: scrolling is ALWAYS on. ←/h/shift+tab and →/l switch the
+	// process tab; 1-9 jump to one; everything else (↑/↓, pgup/pgdn, home/
+	// end, k/j, …) scrolls the active log.
 	switch k {
 	case keyQ:
 		return m.quitOrTeardown()
 	case "tab":
 		return m.cycleFocus()
-	}
-
-	// ←/h/shift+tab and →/l always switch tabs; ↑↓/kj switch tabs unless the
-	// log is focused, where they scroll it instead.
-	prev := k == keyLeft || k == "h" || k == "shift+tab"
-	next := k == keyRight || k == "l"
-	if m.focus != focusLog {
-		prev = prev || k == keyUp || k == "k"
-		next = next || k == keyDown || k == "j"
-	}
-	switch {
-	case prev && m.sel > 0:
-		m.sel--
-		m.refreshLog(true)
+	case keyLeft, "h", "shift+tab":
+		if m.sel > 0 {
+			m.sel--
+			m.refreshLog(true)
+		}
 		return m, nil
-	case next && m.sel < len(m.procs)-1:
-		m.sel++
-		m.refreshLog(true)
-		return m, nil
-	case prev || next:
+	case keyRight, "l":
+		if m.sel < len(m.procs)-1 {
+			m.sel++
+			m.refreshLog(true)
+		}
 		return m, nil
 	}
 	if len(k) == 1 && k[0] >= '1' && k[0] <= '9' {
@@ -252,7 +247,7 @@ func (m RunModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.focus == focusLog && m.vpReady {
+	if m.vpReady {
 		var cmd tea.Cmd
 		m.vp, cmd = m.vp.Update(msg)
 		return m, cmd
@@ -272,23 +267,19 @@ func (m RunModel) quitOrTeardown() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// cycleFocus advances tabs → log → console → tabs, skipping console when the
-// terminal is too narrow to show it.
+// cycleFocus toggles between the log view and the console. When the console
+// is hidden (narrow terminal) it is a no-op — there is nowhere else to go.
 func (m RunModel) cycleFocus() (tea.Model, tea.Cmd) {
-	switch m.focus {
-	case focusTabs:
-		m.focus = focusLog
-	case focusLog:
-		if m.geom().consoleOn {
-			m.focus = focusConsole
-			return m, m.ti.Focus()
-		}
-		m.focus = focusTabs
-	case focusConsole:
-		m.focus = focusTabs
+	if m.focus == focusConsole {
+		m.focus = focusLogs
 		m.ti.Blur()
+		return m, nil
 	}
-	return m, nil
+	if m.geom().consoleOn {
+		m.focus = focusConsole
+		return m, m.ti.Focus()
+	}
+	return m, nil // console hidden — stay on logs
 }
 
 // runConsole executes one quick command with the RUN's dir/env, so a curl
@@ -418,9 +409,6 @@ func (m RunModel) leftColumn(w, bodyH int) []string {
 		title := styleGold.Render("▌ ") +
 			runName(sp.Target.Service, sp.Target.Name) +
 			"  " + styleMuted.Render(runStatusWord(sp.Status))
-		if m.focus == focusLog {
-			title += "  " + styleMuted.Render("(scrolling)")
-		}
 		lines = append(lines, ansi.Truncate(title, w, "…"))
 		lines = append(lines, strings.Split(m.vp.View(), "\n")...)
 	}
@@ -450,22 +438,20 @@ func fitLines(lines []string, n int) []string {
 	return lines
 }
 
+// footer keeps the full, focus-appropriate instructions on screen for the
+// whole life of the TUI — it never collapses to just "quit". Run state
+// (live / tearing down / stopped) is conveyed by the header instead, so the
+// keys you can still press stay visible until the result screen replaces the
+// TUI entirely.
 func (m RunModel) footer(consoleOn bool) string {
-	if m.finished {
-		return "q quit"
+	if m.focus == focusConsole {
+		return "type a command · enter run · esc/tab → logs · ctrl+c quit (teardown)"
 	}
-	switch m.focus {
-	case focusConsole:
-		return "type a command · enter run · esc leave console · tab next pane · ctrl+c quit (teardown)"
-	case focusLog:
-		return "↑/↓ pgup/pgdn scroll · tab next pane · q quit (teardown)"
-	default:
-		hint := "←/→ tabs · 1-9 jump · tab next pane · q quit (teardown)"
-		if consoleOn {
-			hint = "←/→ tabs · 1-9 jump · tab → log → console · q quit (teardown)"
-		}
-		return hint
+	hint := "↑/↓ pgup/pgdn scroll · ←/→ tabs · 1-9 jump · q quit (teardown)"
+	if consoleOn {
+		hint = "↑/↓ scroll · ←/→ tabs · 1-9 jump · tab → console · q quit (teardown)"
 	}
+	return hint
 }
 
 // tabBar renders one fixed row of tabs (status glyph + service-qualified

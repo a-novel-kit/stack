@@ -283,8 +283,6 @@ const (
 	keyEsc   = "esc"
 	keyQ     = "q"
 	keyEnter = "enter"
-	keyUp    = "up"
-	keyDown  = "down"
 	keyLeft  = "left"
 	keyRight = "right"
 )
