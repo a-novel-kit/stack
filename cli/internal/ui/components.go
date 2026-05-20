@@ -277,6 +277,12 @@ func resultsTable(results []build.Result) string {
 	// reads first (matches the live build list ordering).
 	t := baseTable().Headers("", "KIND", "TARGET", "TIME")
 
+	// In a multi-service run (global mode), the TARGET column would otherwise
+	// be ambiguous — `rest` appears for every service. Prepend the service
+	// name so the row reads `service-json-keys/rest`. Single-service runs
+	// keep the bare name (the header already carries the service).
+	multi := distinctServices(results) > 1
+
 	for _, r := range results {
 		badge := styleOK.Render(glyphOK)
 		if !r.Success {
@@ -284,12 +290,28 @@ func resultsTable(results []build.Result) string {
 		}
 		kind := lipgloss.NewStyle().Foreground(kindColor(r.Target.Kind)).Bold(true).
 			Render(strings.ToUpper(string(r.Target.Kind)))
-		name := targetName(r.Target.Name, r.Success)
+		label := r.Target.Name
+		if multi && r.Target.Service != "" {
+			label = r.Target.Service + "/" + r.Target.Name
+		}
+		name := targetName(label, r.Success)
 		dur := lipgloss.NewStyle().Foreground(colMuted).
 			Render(r.Duration.Round(1e7).String())
 		t.Row(badge, kind, name, dur)
 	}
 	return t.Render()
+}
+
+// distinctServices counts the unique non-empty Service values across results
+// — the signal that the run spans more than one repo (global mode).
+func distinctServices(results []build.Result) int {
+	seen := map[string]bool{}
+	for _, r := range results {
+		if r.Target.Service != "" {
+			seen[r.Target.Service] = true
+		}
+	}
+	return len(seen)
 }
 
 // cleanOutput normalises captured subprocess output for display in a fixed
