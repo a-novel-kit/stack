@@ -57,6 +57,31 @@ const testArg = "test"
 // canonical "run"/"run:*" script name, and the run env id — one constant.
 const runArg = "run"
 
+// InitOrder is the priority list of one-shot init Go entrypoints by Name.
+// Anything in this list, when selected, must run to completion BEFORE the
+// long-lived service targets — and IN this order (init seeds, migrations
+// applies schema, rotate-keys refreshes JWKs). Shared between detect (mode
+// filter), runner (launch barrier) and main (mode resolution) so the policy
+// lives in one place.
+var InitOrder = []string{"init", "migrations", "rotate-keys"}
+
+// IsInit reports whether t is one of the InitOrder entrypoints (a Go
+// `cmd/<name>` main). It is the same predicate used everywhere — the
+// container-mode picker keeps these alongside KindContainer targets, the
+// runner barriers on them, the picker auto-pull (migrations only) pulls
+// them.
+func IsInit(t Target) bool {
+	if t.Kind != KindGo {
+		return false
+	}
+	for _, n := range InitOrder {
+		if t.Name == n {
+			return true
+		}
+	}
+	return false
+}
+
 // ciSuffix marks a pnpm script as CI-only (e.g. "test:ci", "build:ci"): it is
 // tailored for the GitHub pipeline (pnpm i, doc/build prep, …), not for a
 // local developer run, so discovery skips it.

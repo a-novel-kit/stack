@@ -503,34 +503,18 @@ func formatCrossShareBlock(kv []string) string {
 	return b.String()
 }
 
-// initOrder lists the schema/init Go entrypoints that, when selected, must
-// run to completion BEFORE the rest of their service's targets — in the
-// order they appear here. Hardcoded by a-novel convention (the same
-// entrypoints exist across service repos):
-//
-//   - `init`         — one-off provisioning (when present)
-//   - `migrations`   — DB schema; everything that touches the DB needs it
-//   - `rotate-keys`  — refreshes JWK material; opt-in but should precede the
-//     long-lived server if the user selected it
-//
-// Container mode is unaffected — the standalone image embeds these steps and
-// compose's `depends_on` handles its own ordering.
-var initOrder = []string{"init", "migrations", "rotate-keys"}
-
-func initRank(t detect.Target) (int, bool) {
-	if t.Kind != detect.KindGo {
-		return 0, false
-	}
-	for i, n := range initOrder {
+// initRank returns the position of a target's name in detect.InitOrder.
+// Non-init targets get len(InitOrder) so they sort last — callers should
+// already have filtered them out via detect.IsInit, but a stable fallback
+// keeps the sort total.
+func initRank(t detect.Target) int {
+	for i, n := range detect.InitOrder {
 		if t.Name == n {
-			return i, true
+			return i
 		}
 	}
-	return 0, false
+	return len(detect.InitOrder)
 }
-
-// isInit reports whether a target is one of the init-barrier entrypoints.
-func isInit(t detect.Target) bool { _, ok := initRank(t); return ok }
 
 // launchGroup launches a set of co-located procs with an init barrier: every
 // init target runs to completion FIRST, in initOrder order, then the rest
@@ -539,7 +523,7 @@ func isInit(t detect.Target) bool { _, ok := initRank(t); return ok }
 func (r *Runner) launchGroup(ctx context.Context, ps []*Proc, env []string, fail func(*Proc, error)) {
 	var inits, rest []*Proc
 	for _, p := range ps {
-		if isInit(p.Target) {
+		if detect.IsInit(p.Target) {
 			inits = append(inits, p)
 		} else {
 			rest = append(rest, p)
@@ -548,9 +532,7 @@ func (r *Runner) launchGroup(ctx context.Context, ps []*Proc, env []string, fail
 	// Sort inits by initOrder so init → migrations → rotate-keys, regardless
 	// of selection / detection order.
 	sort.SliceStable(inits, func(i, j int) bool {
-		ri, _ := initRank(inits[i].Target)
-		rj, _ := initRank(inits[j].Target)
-		return ri < rj
+		return initRank(inits[i].Target) < initRank(inits[j].Target)
 	})
 	for _, p := range inits {
 		if ctx.Err() != nil {

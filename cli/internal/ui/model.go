@@ -419,12 +419,16 @@ func (m Model) handleSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// deps returns the IDs of targets t requires. By a-novel convention every
-// schema-touching Go entrypoint (rest / grpc / rotate-keys — i.e. a Go main
-// that is NOT migrations) needs its module's `migrations` step to have run
-// first (mirrors runner.isInit), so selecting one auto-selects migrations.
+// deps returns the IDs of targets t requires. Every schema-touching target
+// in the same module needs migrations to have run first — that's true in
+// LIVE mode (Go rest/grpc/rotate-keys talking to the DB) and equally in
+// CONTAINER mode (the compose service we're about to start expects an
+// applied schema). migrations itself doesn't pull anything.
 func (m Model) deps(t detect.Target) []string {
-	if m.verb.Base != VerbRun.Base || t.Kind != detect.KindGo || t.Name == "migrations" {
+	if m.verb.Base != VerbRun.Base {
+		return nil
+	}
+	if t.Kind == detect.KindGo && t.Name == "migrations" {
 		return nil
 	}
 	var ids []string

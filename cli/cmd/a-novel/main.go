@@ -440,16 +440,27 @@ func promptRunMode(version string, defaultContainer bool) (string, error) {
 	return m.Chosen(), nil
 }
 
-// filterRunMode keeps only the targets the active mode launches: container
-// mode keeps Kind == KindContainer; live mode keeps everything else (Go
-// `cmd/*` mains + pnpm `run*` scripts). The two sets are disjoint by Kind,
-// so each mode sees exactly its own picker.
+// filterRunMode keeps only the targets the active mode launches. LIVE mode
+// shows Go `cmd/*` mains + pnpm `run*` (no compose targets). CONTAINER mode
+// shows compose-service targets AND the init Go entrypoints
+// (init/migrations/rotate-keys) — those have no compose service, so they
+// stay as local `go run` and the init barrier still runs them BEFORE the
+// container targets start. Without that exception, container mode would
+// silently drop migrations and any compose service that needs an applied
+// schema would fail to start.
 func filterRunMode(targets []detect.Target, containerMode bool) []detect.Target {
 	out := make([]detect.Target, 0, len(targets))
 	for _, t := range targets {
 		isContainer := t.Kind == detect.KindContainer
-		if containerMode == isContainer {
-			out = append(out, t)
+		switch {
+		case containerMode:
+			if isContainer || detect.IsInit(t) {
+				out = append(out, t)
+			}
+		default:
+			if !isContainer {
+				out = append(out, t)
+			}
 		}
 	}
 	return out
