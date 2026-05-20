@@ -120,6 +120,7 @@ type buildOpts struct {
 	timeout  time.Duration // per-target deadline; 0 = none, default 10m
 	coverage bool          // `test` only: coverage on by default; --no-cover disables
 	recreate bool          // `run` only: recreate the env instead of reusing an existing one
+	runMode  string        // `run` only: "docker" / "local" / "" (per-mode default)
 }
 
 // parseBuildArgs hand-parses the small, fixed `build` flag set. A bespoke
@@ -177,6 +178,10 @@ func parseBuildArgs(args []string) (buildOpts, error) {
 			opts.coverage = false
 		case "--recreate":
 			opts.recreate = true
+		case "--docker":
+			opts.runMode = "docker"
+		case "--local":
+			opts.runMode = "local"
 		case "-j", "--jobs":
 			v, err := takeVal()
 			if err != nil {
@@ -326,8 +331,27 @@ func runRun(args []string) int {
 		}
 	}
 
+	// Resolve effective dockerised mode. Default: per-repo runs dockerise the
+	// target (the standalone image you'd actually ship), global runs default
+	// to local exec (turning N services into N concurrent containers is
+	// usually not what you want at the stack root). Override with
+	// --docker / --local. Per-target it still falls back to local when there
+	// is no compose service for that target (migrations / rotate-keys / init).
+	distinctSvc := map[string]bool{}
+	for _, t := range targets {
+		distinctSvc[t.Service] = true
+	}
+	isGlobal := len(distinctSvc) > 1
+	dockerized := !isGlobal
+	switch opts.runMode {
+	case "docker":
+		dockerized = true
+	case "local":
+		dockerized = false
+	}
+
 	start := time.Now()
-	r := runner.New(targets, recreate)
+	r := runner.New(targets, recreate, dockerized)
 	go r.Run(ctx)
 
 	if interactive {

@@ -160,6 +160,52 @@ func composeParse(file string) ([]string, []string) {
 	return distinct(hostPortVar, src), distinct(anyVar, src)
 }
 
+// profilesHeadRe matches a compose service heading at the canonical 2-space
+// indent: e.g. `  service-json-keys-rest:`.
+var profilesHeadRe = regexp.MustCompile(`^  ([a-zA-Z0-9_-]+):\s*(?:#.*)?$`)
+
+// profilesLineRe matches the inline-list profile line this codebase uses:
+// `    profiles: ["rest"]`. Multi-line YAML profile lists are not supported
+// (none in this codebase).
+var profilesLineRe = regexp.MustCompile(`^    profiles:\s*\[(.+?)\]\s*(?:#.*)?$`)
+
+// profilesItemRe extracts individual profile names from the inline list,
+// tolerating bare, double- and single-quoted forms.
+var profilesItemRe = regexp.MustCompile(`"([^"]+)"|'([^']+)'|([A-Za-z0-9_-]+)`)
+
+// composeProfiles returns a profile-name → compose-service-name map for the
+// inline-list `profiles: ["x"]` form. Used to map a run-target name to the
+// compose service that would run it in dockerised mode.
+func composeProfiles(file string) map[string]string {
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	var svc string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if m := profilesHeadRe.FindStringSubmatch(line); m != nil {
+			svc = m[1]
+			continue
+		}
+		if m := profilesLineRe.FindStringSubmatch(line); m != nil && svc != "" {
+			for _, it := range profilesItemRe.FindAllStringSubmatch(m[1], -1) {
+				p := it[1]
+				if p == "" {
+					p = it[2]
+				}
+				if p == "" {
+					p = it[3]
+				}
+				if p != "" {
+					out[p] = svc
+				}
+			}
+		}
+	}
+	return out
+}
+
 func (f envFile) toEnv(rel string) *ComposeEnv {
 	ports, refs := composeParse(f.file)
 	return &ComposeEnv{

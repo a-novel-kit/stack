@@ -37,6 +37,8 @@ var (
 	flagYes      = flagDoc{"-y, --yes", "Skip the menu; run everything non-interactively & sequentially (CI-safe)"}
 	flagNoCover  = flagDoc{"--no-cover", "Skip coverage (it is collected & reported by default)"}
 	flagRecreate = flagDoc{"--recreate", "Rebuild the compose env instead of reusing an existing one"}
+	flagDocker   = flagDoc{"--docker", "Run each target as its compose service (default per-repo; targets without a compose service stay local)"}
+	flagLocal    = flagDoc{"--local", "Run each target as a local exec (go run/pnpm run) — default in global mode"}
 	flagDryRun   = flagDoc{"--dry-run", "List detected targets (and their envs) and exit without running"}
 	flagHelp     = flagDoc{"-h, --help", "Show this command's help"}
 )
@@ -47,7 +49,7 @@ var (
 var (
 	buildFlags  = []flagDoc{flagDir, flagType, flagJobs, flagTimeout, flagYes, flagDryRun, flagHelp}
 	testFlags   = []flagDoc{flagDir, flagType, flagJobs, flagTimeout, flagYes, flagNoCover, flagDryRun, flagHelp}
-	runCmdFlags = []flagDoc{flagDir, flagType, flagRecreate, flagDryRun, flagHelp}
+	runCmdFlags = []flagDoc{flagDir, flagType, flagDocker, flagLocal, flagRecreate, flagDryRun, flagHelp}
 )
 
 // commandDocs is the single source of truth for the command set; its order is

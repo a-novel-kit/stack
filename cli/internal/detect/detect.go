@@ -99,6 +99,14 @@ type Target struct {
 	// Env, when non-nil, is a podman-compose environment that must be up
 	// before the command runs and torn down after. Only test targets set it.
 	Env *ComposeEnv
+
+	// ComposeService is the compose service name that would run this target
+	// dockerised — populated by `run` detection when the target's name
+	// matches a profile in its env's compose file (e.g. "rest" →
+	// "service-json-keys-rest"). Empty means dockerised mode cannot run this
+	// target (one-shots like migrations / rotate-keys / init have no compose
+	// service); the runner falls back to local exec for those.
+	ComposeService string
 }
 
 // ComposeEnv is a podman-compose test environment discovered from a
@@ -122,6 +130,11 @@ type ComposeEnv struct {
 	// HOST) for any it references, so an internal-only postgres — which has
 	// no host port and thus no entry in Ports — still gets credentials.
 	Refs []string
+	// Profiles maps a compose `profiles: ["x"]` value to the service name
+	// that carries it (e.g. "rest" → "service-json-keys-rest"). `run` uses
+	// this to know which compose service to bring up when a target is
+	// requested in dockerised mode (`podman compose --profile x up <svc>`).
+	Profiles map[string]string
 }
 
 // ID is a stable, unique key for a target (used as a selection-map key and to

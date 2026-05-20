@@ -170,17 +170,30 @@ func goRun(absRoot, dir string) []Target {
 		service = filepath.Base(modRoot)
 	}
 	modRel, _ := filepath.Rel(absRoot, modRoot)
+	env := runEnvFor(modRoot, modRel)
+	name := filepath.Base(dir)
 	return []Target{{
-		Kind:    KindGo,
-		Name:    filepath.Base(dir),
-		Service: service,
-		RelDir:  modRel,
-		Dir:     modRoot,
-		Detail:  "go run " + pkg,
-		Cmd:     "go",
-		Args:    []string{runArg, pkg},
-		Env:     runEnvFor(modRoot, modRel),
+		Kind:           KindGo,
+		Name:           name,
+		Service:        service,
+		RelDir:         modRel,
+		Dir:            modRoot,
+		Detail:         "go run " + pkg,
+		Cmd:            "go",
+		Args:           []string{runArg, pkg},
+		Env:            env,
+		ComposeService: composeServiceFor(env, name),
 	}}
+}
+
+// composeServiceFor looks up the compose service that would run a target's
+// profile, if any. Returns "" when the env has no compose file or no service
+// carries this profile (one-shots like migrations / rotate-keys / init).
+func composeServiceFor(env *ComposeEnv, profile string) string {
+	if env == nil {
+		return ""
+	}
+	return env.Profiles[profile]
 }
 
 // pnpmRun emits a target per "run"/"run:*" script in dir's package.json.
@@ -209,18 +222,20 @@ func pnpmRun(dir, rel string) []Target {
 	}
 	sort.Strings(names)
 
+	env := runEnvFor(dir, rel)
 	targets := make([]Target, 0, len(names))
 	for _, s := range names {
 		targets = append(targets, Target{
-			Kind:    KindPnpm,
-			Name:    s,
-			Service: service,
-			RelDir:  rel,
-			Dir:     dir,
-			Detail:  truncate(pkg.Scripts[s], 60),
-			Cmd:     string(KindPnpm),
-			Args:    []string{runArg, s},
-			Env:     runEnvFor(dir, rel),
+			Kind:           KindPnpm,
+			Name:           s,
+			Service:        service,
+			RelDir:         rel,
+			Dir:            dir,
+			Detail:         truncate(pkg.Scripts[s], 60),
+			Cmd:            string(KindPnpm),
+			Args:           []string{runArg, s},
+			Env:            env,
+			ComposeService: composeServiceFor(env, s),
 		})
 	}
 	return targets
@@ -257,11 +272,12 @@ func runEnvFor(repoRoot, rel string) *ComposeEnv {
 			file := filepath.Join(buildsDir, name)
 			ports, refs := composeParse(file)
 			return &ComposeEnv{
-				File:    file,
-				Project: composeProjectP("anovel-run-", rel, m[1]),
-				ID:      m[1],
-				Ports:   ports,
-				Refs:    refs,
+				File:     file,
+				Project:  composeProjectP("anovel-run-", rel, m[1]),
+				ID:       m[1],
+				Ports:    ports,
+				Refs:     refs,
+				Profiles: composeProfiles(file),
 			}
 		}
 	}
@@ -270,10 +286,11 @@ func runEnvFor(repoRoot, rel string) *ComposeEnv {
 	}
 	ports, refs := composeParse(fallback)
 	return &ComposeEnv{
-		File:    fallback,
-		Project: composeProjectP("anovel-run-", rel, runArg),
-		ID:      runArg,
-		Ports:   ports,
-		Refs:    refs,
+		File:     fallback,
+		Project:  composeProjectP("anovel-run-", rel, runArg),
+		ID:       runArg,
+		Ports:    ports,
+		Refs:     refs,
+		Profiles: composeProfiles(fallback),
 	}
 }
