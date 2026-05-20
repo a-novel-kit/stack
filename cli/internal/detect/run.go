@@ -224,14 +224,27 @@ func containerTargets(absRoot, walkRoot string) []Target {
 	for _, p := range profiles {
 		svc := env.Profiles[p]
 		out = append(out, Target{
-			Kind:           KindContainer,
-			Name:           p,
-			Service:        service,
-			RelDir:         rel,
-			Dir:            walkRoot,
-			Detail:         "podman compose --profile " + p + " up " + svc,
-			Cmd:            "podman",
-			Args:           []string{"compose", "-p", env.Project, "-f", env.File, "--profile", p, "up", "--build", svc},
+			Kind:    KindContainer,
+			Name:    p,
+			Service: service,
+			RelDir:  rel,
+			Dir:     walkRoot,
+			Detail:  "podman compose --profile " + p + " up " + svc,
+			Cmd:     "podman",
+			// --force-recreate: replace any leftover container with the same
+			//   name (otherwise compose errors `container name … already in
+			//   use / use --replace`).
+			// --no-deps: env-up already brought up postgres / mailer / sibling
+			//   services we chose to keep; don't let `up` re-resolve and
+			//   restart them (and risk pulling in a sibling we explicitly
+			//   skipped in global mode).
+			// --remove-orphans: clean stale containers the current compose no
+			//   longer declares so they don't keep the network busy.
+			Args: []string{
+				"compose", "-p", env.Project, "-f", env.File,
+				"--profile", p,
+				"up", "--build", "--force-recreate", "--no-deps", "--remove-orphans", svc,
+			},
 			Env:            env,
 			ComposeService: svc,
 		})

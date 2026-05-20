@@ -303,7 +303,12 @@ func (r *Runner) Run(parent context.Context) {
 
 		if r.recreate {
 			_, _ = fmt.Fprintf(writer, "── env recreate: %s ──\n", g.env.ID)
-			_ = build.TearDown(context.WithoutCancel(ctx), *g.env)
+			// Surface a failing recreate-teardown into the log: a silent
+			// failure would leave leftover containers and turn the next
+			// `compose up` into "name already in use" cascade.
+			if err := build.TearDown(context.WithoutCancel(ctx), *g.env); err != nil {
+				_, _ = fmt.Fprintf(writer, "── env recreate: teardown errored (continuing): %v ──\n", err)
+			}
 		}
 		// Skip compose services that duplicate a sibling already running
 		// from its own repo (auth's bundled `service-json-keys` /

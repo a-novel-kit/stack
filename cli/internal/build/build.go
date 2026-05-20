@@ -619,11 +619,17 @@ func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
 	return conflicts
 }
 
-// TearDown removes ONE compose project's containers and volumes — scoped to
-// that env via `-p <project> -f <file>`, never a global podman wipe.
+// TearDown removes ONE compose project's containers, volumes AND orphans —
+// scoped to that env via `-p <project> -f <file>`, never a global podman
+// wipe. `-t 2` keeps the SIGTERM grace short (2s) so a previous run that is
+// already stuck stopping does not hold the network / container names
+// hostage; --remove-orphans cleans up containers the current compose no
+// longer declares (e.g. after a profile change), which is what otherwise
+// triggers `container name … already in use / use --replace`.
 func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	var buf bytes.Buffer
-	return compose(ctx, &buf, os.Environ(), &e, nil, "down", "--volume")
+	return compose(ctx, &buf, os.Environ(), &e, nil,
+		"down", "--volume", "--remove-orphans", "-t", "2")
 }
 
 // EnvUp brings a compose env up (build, detached) using the given env, then
@@ -636,8 +642,12 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 // global mode to skip services that duplicate a sibling already running from
 // its own repo.
 func EnvUp(ctx context.Context, env []string, e *detect.ComposeEnv, out io.Writer, services ...string) error {
-	args := make([]string, 0, 3+len(services))
-	args = append(args, "up", "-d", "--build")
+	// --remove-orphans: a leftover container from a prior project run that
+	// the current compose no longer declares (or that we are now skipping
+	// via the sibling-skip / profile machinery) must not hold the name; it
+	// is the trigger for the "container name … already in use" cascade.
+	args := make([]string, 0, 4+len(services))
+	args = append(args, "up", "-d", "--build", "--remove-orphans")
 	args = append(args, services...)
 	if err := compose(ctx, out, env, e,
 		[]string{"--podman-build-args=--format docker -q"},
