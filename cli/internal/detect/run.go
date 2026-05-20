@@ -278,6 +278,7 @@ func runEnvFor(repoRoot, rel string) *ComposeEnv {
 				Ports:    ports,
 				Refs:     refs,
 				Profiles: composeProfiles(file),
+				Services: composeServices(file),
 			}
 		}
 	}
@@ -292,5 +293,6 @@ func runEnvFor(repoRoot, rel string) *ComposeEnv {
 		Ports:    ports,
 		Refs:     refs,
 		Profiles: composeProfiles(fallback),
+		Services: composeServices(fallback),
 	}
 }

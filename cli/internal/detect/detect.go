@@ -135,6 +135,11 @@ type ComposeEnv struct {
 	// this to know which compose service to bring up when a target is
 	// requested in dockerised mode (`podman compose --profile x up <svc>`).
 	Profiles map[string]string
+	// Services lists every compose service declared under `services:`, in
+	// source order. The runner uses it to compute the set of services to
+	// bring up at env-up time — in global mode it skips any sibling service
+	// that is also being run from its own repo (avoiding duplicates).
+	Services []string
 }
 
 // ID is a stable, unique key for a target (used as a selection-map key and to

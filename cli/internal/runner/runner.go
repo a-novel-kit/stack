@@ -309,8 +309,20 @@ func (r *Runner) Run(parent context.Context) {
 			_, _ = fmt.Fprintf(writer, "── env recreate: %s ──\n", g.env.ID)
 			_ = build.TearDown(context.WithoutCancel(ctx), *g.env)
 		}
-		_, _ = fmt.Fprintf(writer, "── env up: %s ──\n", g.env.ID)
-		if err := build.EnvUp(ctx, g.prep, g.env, writer); err != nil {
+		// Skip compose services that duplicate a sibling already running
+		// from its own repo (auth's bundled `service-json-keys` /
+		// `postgres-json-keys` when json-keys is also in scope). If skip is
+		// empty (single-repo or no overlap), EnvUp gets no positional
+		// services and falls back to "bring up everything profile-less" —
+		// the original behaviour.
+		upServices := upServicesFor(g, groups)
+		if len(upServices) > 0 && len(upServices) < len(g.env.Services) {
+			_, _ = fmt.Fprintf(writer, "── env up: %s · %d/%d services (siblings skipped) ──\n",
+				g.env.ID, len(upServices), len(g.env.Services))
+		} else {
+			_, _ = fmt.Fprintf(writer, "── env up: %s ──\n", g.env.ID)
+		}
+		if err := build.EnvUp(ctx, g.prep, g.env, writer, upServices...); err != nil {
 			for _, p := range g.ps {
 				fail(p, err)
 			}
@@ -394,6 +406,73 @@ func crossSharedEnv(groups map[string]*envGroup) map[string][]string {
 		sort.Strings(out[k])
 	}
 	return out
+}
+
+// upServicesFor returns the compose services env-up should bring up for g.
+// Starts from g.env.Services minus profile-guarded ones (those activate via
+// `--profile`, not by default), and further drops any service whose name
+// duplicates a sibling running from its own repo:
+//
+//   - service-<tail>      e.g. auth's `service-json-keys` (pinned image)
+//     when json-keys is in scope from its own repo
+//   - <tail>              same, written without the `service-` prefix
+//   - postgres-<tail>     the bundled postgres of that skipped service
+//
+// `<tail>` is each sibling Service stripped of its leading "service-". If
+// the result equals the full input list it returns nil so EnvUp falls back
+// to its default "all profile-less" behaviour — only acts when there is
+// something to skip.
+func upServicesFor(g *envGroup, all map[string]*envGroup) []string {
+	if g == nil || g.env == nil || len(g.env.Services) == 0 {
+		return nil
+	}
+	// Collect sibling tails (other groups' owning services).
+	mySvc := ""
+	if len(g.ps) > 0 {
+		mySvc = g.ps[0].Target.Service
+	}
+	var tails []string
+	for _, og := range all {
+		if og == g || og.failed || len(og.ps) == 0 {
+			continue
+		}
+		s := og.ps[0].Target.Service
+		if s == "" || s == mySvc {
+			continue
+		}
+		tails = append(tails, strings.TrimPrefix(s, "service-"))
+	}
+	// Skip set: compose names that match a sibling shape.
+	skip := map[string]bool{}
+	for _, t := range tails {
+		skip[t] = true
+		skip["service-"+t] = true
+		skip["postgres-"+t] = true
+	}
+	profiled := map[string]bool{}
+	for _, svc := range g.env.Profiles {
+		profiled[svc] = true
+	}
+	// Walk Services once: build the would-be default (profile-less) list AND
+	// the post-skip list. Only return the post-skip list when it actually
+	// dropped something; otherwise return nil so EnvUp uses its default path
+	// (which is identical to defaultList, just resolved by compose itself).
+	keep := make([]string, 0, len(g.env.Services))
+	defaulted := 0
+	for _, svc := range g.env.Services {
+		if profiled[svc] {
+			continue
+		}
+		defaulted++
+		if skip[svc] {
+			continue
+		}
+		keep = append(keep, svc)
+	}
+	if len(keep) == defaulted {
+		return nil
+	}
+	return keep
 }
 
 // formatCrossShareBlock renders the cross-shared vars the same way build's

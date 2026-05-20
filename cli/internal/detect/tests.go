@@ -173,6 +173,37 @@ var profilesLineRe = regexp.MustCompile(`^    profiles:\s*\[(.+?)\]\s*(?:#.*)?$`
 // tolerating bare, double- and single-quoted forms.
 var profilesItemRe = regexp.MustCompile(`"([^"]+)"|'([^']+)'|([A-Za-z0-9_-]+)`)
 
+// composeTopLevelRe matches a top-level YAML key at column 0
+// (e.g. `services:`, `volumes:`, `networks:`). Used to enter/leave the
+// services block in the lightweight YAML scan.
+var composeTopLevelRe = regexp.MustCompile(`^[a-zA-Z_]+:\s*(?:#.*)?$`)
+
+// composeServices lists every service name declared under `services:` in a
+// compose file, in source order. Used to drive the "skip duplicates" logic
+// in global-mode env-up (a service repo's compose may declare a containerised
+// sibling that is also running from its own repo).
+func composeServices(file string) []string {
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	inServices := false
+	for _, line := range strings.Split(string(raw), "\n") {
+		if composeTopLevelRe.MatchString(line) {
+			inServices = strings.HasPrefix(line, "services:")
+			continue
+		}
+		if !inServices {
+			continue
+		}
+		if m := profilesHeadRe.FindStringSubmatch(line); m != nil {
+			out = append(out, m[1])
+		}
+	}
+	return out
+}
+
 // composeProfiles returns a profile-name → compose-service-name map for the
 // inline-list `profiles: ["x"]` form. Used to map a run-target name to the
 // compose service that would run it in dockerised mode.

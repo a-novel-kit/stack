@@ -165,11 +165,71 @@ func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, 
 		}
 	}
 
+	// Un-prefix the operator's `<SERVICE_X>_*` vars into this service's own
+	// env. From the X service's OWN perspective the value is the local name
+	// (`APP_MASTER_KEY`), not the cross-service alias (`SERVICE_X_APP_MASTER_KEY`):
+	// if the operator pre-exports `SERVICE_JSON_KEYS_APP_MASTER_KEY=hex` in
+	// their shell, the json-keys process should read it as `APP_MASTER_KEY=hex`.
+	// Applied AFTER setup-env so the operator's value wins over any default
+	// the script provided.
+	if prefix := servicePrefix(t.Service); prefix != "" {
+		runEnv = unprefixForOwner(runEnv, prefix)
+	}
+
 	// Compute the delta: any var that did not exist in the inherited env or
 	// whose value the CLI/setup-env changed. This is the set global mode
 	// re-exports to other services with an `<SERVICE>_` prefix.
 	delta := envDelta(runEnv, baseline)
 	return runEnv, delta, nil
+}
+
+// servicePrefix is the producer-namespace prefix under the AAA_XX
+// cross-service convention: "service-json-keys" → "SERVICE_JSON_KEYS_". Empty
+// service → empty prefix (no un-prefix work).
+func servicePrefix(svc string) string {
+	if svc == "" {
+		return ""
+	}
+	return strings.ToUpper(strings.ReplaceAll(svc, "-", "_")) + "_"
+}
+
+// unprefixForOwner mirrors a `<PREFIX><KEY>=value` entry as `<KEY>=value` —
+// the OWNER-side perspective. Operator-set values therefore reach the owning
+// service under its native variable name. Latest-value wins on duplicate
+// inputs; the un-prefixed entry replaces any earlier same-key entry so
+// owner-side reads honour the operator's intent.
+func unprefixForOwner(env []string, prefix string) []string {
+	val := make(map[string]string, len(env))
+	order := make([]string, 0, len(env))
+	for _, e := range env {
+		k, v, _ := strings.Cut(e, "=")
+		if _, ok := val[k]; !ok {
+			order = append(order, k)
+		}
+		val[k] = v
+	}
+	var added []string
+	for _, k := range order {
+		if !strings.HasPrefix(k, prefix) {
+			continue
+		}
+		unp := k[len(prefix):]
+		if unp == "" {
+			continue
+		}
+		if _, ok := val[unp]; !ok {
+			added = append(added, unp)
+		}
+		val[unp] = val[k]
+	}
+	out := make([]string, 0, len(order)+len(added))
+	for _, k := range order {
+		out = append(out, k+"="+val[k])
+	}
+	for _, k := range added {
+		out = append(out, k+"="+val[k])
+	}
+	return out
 }
 
 // envDelta returns the env entries in final that differ from baseline. Order
@@ -570,10 +630,18 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 // waits for it to become healthy — the `run` counterpart of the env handling
 // Run does inline. Mirrors scripts/test.sh (no --wait on the external
 // podman-compose provider). Progress streams to out.
-func EnvUp(ctx context.Context, env []string, e *detect.ComposeEnv, out io.Writer) error {
+//
+// services, when non-empty, is a positional list of compose service names to
+// bring up (instead of every profile-less service). The runner uses it in
+// global mode to skip services that duplicate a sibling already running from
+// its own repo.
+func EnvUp(ctx context.Context, env []string, e *detect.ComposeEnv, out io.Writer, services ...string) error {
+	args := make([]string, 0, 3+len(services))
+	args = append(args, "up", "-d", "--build")
+	args = append(args, services...)
 	if err := compose(ctx, out, env, e,
 		[]string{"--podman-build-args=--format docker -q"},
-		"up", "-d", "--build"); err != nil {
+		args...); err != nil {
 		return fmt.Errorf("environment %s failed to start: %w", e.ID, err)
 	}
 	if err := waitHealthy(ctx, out, env, e, 120*time.Second); err != nil {
