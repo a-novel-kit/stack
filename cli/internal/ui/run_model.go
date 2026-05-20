@@ -561,7 +561,10 @@ func (m RunModel) View() string {
 	}
 	g := m.geom()
 
-	head := "run · live"
+	// "running" not "live" — the dashboard is in steady state. "live" used
+	// to clash with the live/container MODE vocabulary, which is confusing
+	// when the actual mode is container.
+	head := "run · running"
 	if m.stopping {
 		head = "run · tearing down…"
 	}
