@@ -93,6 +93,11 @@ type Model struct {
 	// so it shares build/test's exact selection UI, then hands the chosen
 	// targets to its own long-lived dashboard.
 	selectOnly bool
+
+	// runModeLabel is the resolved run mode ("container" / "live"), surfaced
+	// in the SELECT TARGETS title so it is unambiguous which list the user
+	// is looking at. Empty for build/test pickers.
+	runModeLabel string
 }
 
 // New builds a Model from discovered targets. Every target starts selected —
@@ -166,10 +171,12 @@ func defaultOffInGlobal(verb Verb, multiService bool, t detect.Target) bool {
 // NewSelect builds a target picker that reuses build/test's exact selection
 // UI, then quits on `enter` returning the chosen targets via [Model.Selected].
 // It carries no run state (no ctx/jobs/timeout) — `run` drives the actual
-// processes itself.
-func NewSelect(version string, verb Verb, targets []detect.Target) Model {
+// processes itself. `runMode` ("container" / "live" / "") is displayed in
+// the picker title so the user can tell at a glance which list this is.
+func NewSelect(version string, verb Verb, runMode string, targets []detect.Target) Model {
 	m := New(context.Background(), version, verb, targets, 1, 0)
 	m.selectOnly = true
+	m.runModeLabel = runMode
 	return m
 }
 
@@ -338,6 +345,8 @@ const (
 	keyEnter = "enter"
 	keyLeft  = "left"
 	keyRight = "right"
+	keyUp    = "up"
+	keyDown  = "down"
 )
 
 // isAbortKey reports whether k is one of the "get me out" keys.
@@ -372,11 +381,11 @@ func (m Model) handleSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.aborted = true
 		return m, tea.Quit
 
-	case "up", "k":
+	case keyUp, "k":
 		if m.cursor > 0 {
 			m.cursor--
 		}
-	case "down", "j":
+	case keyDown, "j":
 		if m.cursor < len(m.rows)-1 {
 			m.cursor++
 		}
@@ -529,7 +538,11 @@ func (m Model) viewSelect() string {
 	if w <= 0 {
 		w = termWidth()
 	}
-	b.WriteString(section("select targets", colGold, w) + "\n")
+	title := "select targets"
+	if m.runModeLabel != "" {
+		title += " · " + m.runModeLabel
+	}
+	b.WriteString(section(title, colGold, w) + "\n")
 	b.WriteString(para(
 		"Everything is selected by default. Toggle what to "+m.verb.Base+
 			", then press enter. Group headings toggle the whole kind.", w) + "\n\n")
