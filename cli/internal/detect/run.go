@@ -67,6 +67,11 @@ func DetectRun(root string) ([]Target, error) {
 		if walkErr != nil {
 			return nil, walkErr
 		}
+		// One container target per profile-guarded compose service in this
+		// walk root's run env. Container targets are emitted alongside
+		// live targets; main.go filters by run mode before the picker so
+		// each mode sees only its own list.
+		targets = append(targets, containerTargets(absRoot, walkRoot)...)
 	}
 
 	sort.SliceStable(targets, func(i, j int) bool {
@@ -194,6 +199,44 @@ func composeServiceFor(env *ComposeEnv, profile string) string {
 		return ""
 	}
 	return env.Profiles[profile]
+}
+
+// containerTargets emits one KindContainer target per profile-guarded compose
+// service in walkRoot's run env. The Cmd/Args are pre-baked so the runner can
+// launch each target with the SAME exec path the live-mode targets use —
+// dispatch is by Target.Kind, not by a runner-side mode flag.
+func containerTargets(absRoot, walkRoot string) []Target {
+	rel, _ := filepath.Rel(absRoot, walkRoot)
+	env := runEnvFor(walkRoot, rel)
+	if env == nil || len(env.Profiles) == 0 {
+		return nil
+	}
+	service := goModuleName(filepath.Join(walkRoot, "go.mod"))
+	if service == "" {
+		service = filepath.Base(walkRoot)
+	}
+	profiles := make([]string, 0, len(env.Profiles))
+	for p := range env.Profiles {
+		profiles = append(profiles, p)
+	}
+	sort.Strings(profiles)
+	out := make([]Target, 0, len(profiles))
+	for _, p := range profiles {
+		svc := env.Profiles[p]
+		out = append(out, Target{
+			Kind:           KindContainer,
+			Name:           p,
+			Service:        service,
+			RelDir:         rel,
+			Dir:            walkRoot,
+			Detail:         "podman compose --profile " + p + " up " + svc,
+			Cmd:            "podman",
+			Args:           []string{"compose", "-p", env.Project, "-f", env.File, "--profile", p, "up", "--build", svc},
+			Env:            env,
+			ComposeService: svc,
+		})
+	}
+	return out
 }
 
 // pnpmRun emits a target per "run"/"run:*" script in dir's package.json.

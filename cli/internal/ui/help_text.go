@@ -30,17 +30,17 @@ const helpHint = "Run `a-novel <command> --help` (or `a-novel help <command>`) "
 // the test-only --no-cover and `build`/`test` never list the run-only
 // --recreate (the "wrong flag in help" bug).
 var (
-	flagDir      = flagDoc{"-C, --dir <path>", "Directory to scan (default: current directory)"}
-	flagType     = flagDoc{"-t, --type <kinds>", "Comma-separated kind filter: go,pnpm,podman (default: all)"}
-	flagJobs     = flagDoc{"-j, --jobs <n>", "Max targets run in parallel, interactive only (default: CPU count)"}
-	flagTimeout  = flagDoc{"-T, --timeout <dur>", "Per-target deadline, e.g. 10m / 30s / 0 to disable (default: 10m)"}
-	flagYes      = flagDoc{"-y, --yes", "Skip the menu; run everything non-interactively & sequentially (CI-safe)"}
-	flagNoCover  = flagDoc{"--no-cover", "Skip coverage (it is collected & reported by default)"}
-	flagRecreate = flagDoc{"--recreate", "Rebuild the compose env instead of reusing an existing one"}
-	flagDocker   = flagDoc{"--docker", "Run each target as its compose service (default per-repo; targets without a compose service stay local)"}
-	flagLocal    = flagDoc{"--local", "Run each target as a local exec (go run/pnpm run) — default in global mode"}
-	flagDryRun   = flagDoc{"--dry-run", "List detected targets (and their envs) and exit without running"}
-	flagHelp     = flagDoc{"-h, --help", "Show this command's help"}
+	flagDir       = flagDoc{"-C, --dir <path>", "Directory to scan (default: current directory)"}
+	flagType      = flagDoc{"-t, --type <kinds>", "Comma-separated kind filter: go,pnpm,podman (default: all)"}
+	flagJobs      = flagDoc{"-j, --jobs <n>", "Max targets run in parallel, interactive only (default: CPU count)"}
+	flagTimeout   = flagDoc{"-T, --timeout <dur>", "Per-target deadline, e.g. 10m / 30s / 0 to disable (default: 10m)"}
+	flagYes       = flagDoc{"-y, --yes", "Skip the menu; run everything non-interactively & sequentially (CI-safe)"}
+	flagNoCover   = flagDoc{"--no-cover", "Skip coverage (it is collected & reported by default)"}
+	flagRecreate  = flagDoc{"--recreate", "Rebuild the compose env instead of reusing an existing one"}
+	flagContainer = flagDoc{"--container", "Picker shows compose-service targets; each is launched via `podman compose --profile X up <svc>`. Default per-repo."}
+	flagLive      = flagDoc{"--live", "Picker shows Go `cmd/*` mains + pnpm `run*` scripts; each runs as a local exec (`go run`/`pnpm run`). Default in global mode."}
+	flagDryRun    = flagDoc{"--dry-run", "List detected targets (and their envs) and exit without running"}
+	flagHelp      = flagDoc{"-h, --help", "Show this command's help"}
 )
 
 // buildFlags / testFlags / runCmdFlags are the exact, honoured flag sets.
@@ -49,7 +49,7 @@ var (
 var (
 	buildFlags  = []flagDoc{flagDir, flagType, flagJobs, flagTimeout, flagYes, flagDryRun, flagHelp}
 	testFlags   = []flagDoc{flagDir, flagType, flagJobs, flagTimeout, flagYes, flagNoCover, flagDryRun, flagHelp}
-	runCmdFlags = []flagDoc{flagDir, flagType, flagDocker, flagLocal, flagRecreate, flagDryRun, flagHelp}
+	runCmdFlags = []flagDoc{flagDir, flagType, flagContainer, flagLive, flagRecreate, flagDryRun, flagHelp}
 )
 
 // commandDocs is the single source of truth for the command set; its order is
@@ -96,14 +96,18 @@ var commandDocs = []commandDoc{
 		name:    "run",
 		summary: "Run Go entrypoints / pnpm run* scripts under a live dashboard",
 		usage:   "a-novel run [flags]",
-		long: "Discovers Go `package main` entrypoints (cmd/…) and pnpm " +
-			"\"run\"/\"run:*\" scripts, brings each one's compose env up once " +
-			"(builds/podman-compose.<id>.yaml, else the plain builds/" +
-			"podman-compose.yaml), then launches the selected targets as " +
-			"long-lived processes behind a live status dashboard (↑/↓ to select, " +
-			"tab to scroll a process's log). Quitting, or any process failing, " +
-			"tears the whole environment down — no phantom runners. An already-up " +
-			"env is reused by default; --recreate (or the prompt) rebuilds it.",
+		long: "Two modes, two distinct target lists. LIVE: Go `cmd/*` mains + " +
+			"pnpm `run*` scripts, launched as local exec (`go run` / `pnpm run`) — " +
+			"the iterate-on-source path. CONTAINER: compose-service targets " +
+			"(profile-guarded entries in builds/podman-compose.yaml), launched " +
+			"via `podman compose --profile X up <svc>` — the standalone image " +
+			"you would actually ship. The runner always brings deps (postgres, " +
+			"mailserver, …) up via the compose env, then either runs your local " +
+			"exec (live) or starts the profiled container (container). Default: " +
+			"per-repo → container; global (stack root with multiple services) → " +
+			"live; override with --container / --live. Quitting, or any process " +
+			"failing, tears the whole environment down — no phantom runners. An " +
+			"already-up env is reused by default; --recreate rebuilds it.",
 		flags: runCmdFlags,
 		examples: []string{
 			"a-novel run                   # interactive run menu + dashboard",

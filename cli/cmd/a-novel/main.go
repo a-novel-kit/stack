@@ -109,6 +109,12 @@ func wantsHelp(args []string) bool {
 	return false
 }
 
+// Run-mode values for buildOpts.runMode (run only).
+const (
+	modeContainer = "container"
+	modeLive      = "live"
+)
+
 // buildOpts is the parsed `build` invocation.
 type buildOpts struct {
 	dir      string
@@ -120,7 +126,7 @@ type buildOpts struct {
 	timeout  time.Duration // per-target deadline; 0 = none, default 10m
 	coverage bool          // `test` only: coverage on by default; --no-cover disables
 	recreate bool          // `run` only: recreate the env instead of reusing an existing one
-	runMode  string        // `run` only: "docker" / "local" / "" (per-mode default)
+	runMode  string        // `run` only: modeContainer / modeLive / "" (per-mode default)
 }
 
 // parseBuildArgs hand-parses the small, fixed `build` flag set. A bespoke
@@ -178,10 +184,10 @@ func parseBuildArgs(args []string) (buildOpts, error) {
 			opts.coverage = false
 		case "--recreate":
 			opts.recreate = true
-		case "--docker":
-			opts.runMode = "docker"
-		case "--local":
-			opts.runMode = "local"
+		case "--container":
+			opts.runMode = modeContainer
+		case "--live":
+			opts.runMode = modeLive
 		case "-j", "--jobs":
 			v, err := takeVal()
 			if err != nil {
@@ -264,10 +270,34 @@ func runRun(args []string) int {
 	if opts.types != nil {
 		targets = filterTypes(targets, opts.types)
 	}
+
+	// Resolve effective run mode BEFORE the picker — the two modes show
+	// different target lists. LIVE = local `go run` / `pnpm run`;
+	// CONTAINER = compose-service targets brought up via `podman compose
+	// --profile X up <svc>`. Default: per-repo → container; global → live.
+	distinctSvc := map[string]bool{}
+	for _, t := range targets {
+		if t.Service != "" {
+			distinctSvc[t.Service] = true
+		}
+	}
+	isGlobal := len(distinctSvc) > 1
+	containerMode := !isGlobal
+	switch opts.runMode {
+	case modeContainer:
+		containerMode = true
+	case modeLive:
+		containerMode = false
+	}
+	targets = filterRunMode(targets, containerMode)
 	if len(targets) == 0 {
+		modeName := modeLive
+		if containerMode {
+			modeName = modeContainer
+		}
 		fmt.Fprintf(os.Stderr,
-			"a-novel run: no run targets%s found under %s\n  Looked for %s.\n",
-			typeScope(opts), absDir, verb.Looks)
+			"a-novel run: no %s targets%s under %s — try `a-novel run --%s`\n",
+			modeName, typeScope(opts), absDir, otherMode(modeName))
 		return exitUsage
 	}
 
@@ -331,27 +361,8 @@ func runRun(args []string) int {
 		}
 	}
 
-	// Resolve effective dockerised mode. Default: per-repo runs dockerise the
-	// target (the standalone image you'd actually ship), global runs default
-	// to local exec (turning N services into N concurrent containers is
-	// usually not what you want at the stack root). Override with
-	// --docker / --local. Per-target it still falls back to local when there
-	// is no compose service for that target (migrations / rotate-keys / init).
-	distinctSvc := map[string]bool{}
-	for _, t := range targets {
-		distinctSvc[t.Service] = true
-	}
-	isGlobal := len(distinctSvc) > 1
-	dockerized := !isGlobal
-	switch opts.runMode {
-	case "docker":
-		dockerized = true
-	case "local":
-		dockerized = false
-	}
-
 	start := time.Now()
-	r := runner.New(targets, recreate, dockerized)
+	r := runner.New(targets, recreate)
 	go r.Run(ctx)
 
 	if interactive {
@@ -375,6 +386,30 @@ func runRun(args []string) int {
 }
 
 // typeScope renders the " matching --type" suffix for the no-targets message.
+// filterRunMode keeps only the targets the active mode launches: container
+// mode keeps Kind == KindContainer; live mode keeps everything else (Go
+// `cmd/*` mains + pnpm `run*` scripts). The two sets are disjoint by Kind,
+// so each mode sees exactly its own picker.
+func filterRunMode(targets []detect.Target, containerMode bool) []detect.Target {
+	out := make([]detect.Target, 0, len(targets))
+	for _, t := range targets {
+		isContainer := t.Kind == detect.KindContainer
+		if containerMode == isContainer {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// otherMode returns the flag name that would flip the current mode — used
+// in the "no targets" error to suggest the inverse.
+func otherMode(current string) string {
+	if current == modeContainer {
+		return modeLive
+	}
+	return modeContainer
+}
+
 func typeScope(o buildOpts) string {
 	if o.types != nil {
 		return " matching --type"

@@ -160,11 +160,6 @@ type Runner struct {
 	// recreate forces a scoped teardown of any pre-existing env before up
 	// (vs. reusing it).
 	recreate bool
-	// dockerized: when true, each target that has a compose service runs as
-	// `podman compose --profile <target> up <svc>` instead of `go run`. A
-	// target without a compose service (migrations / rotate-keys / init) is
-	// still launched locally — there is no container to run for those.
-	dockerized bool
 
 	// Console context: the working dir + env a quick interactive command
 	// (curl, etc.) should see, so it talks to the SAME ports/URLs the run
@@ -196,12 +191,13 @@ func (r *Runner) Console() (string, []string) {
 }
 
 // New builds a Runner over the selected targets. recreate=true tears any
-// existing env down and rebuilds it; false reuses an already-up env.
-// dockerized=true routes each target with a compose service through
-// `podman compose --profile <t> up <svc>` (the standalone image) instead of
-// the local `go run` / `pnpm run`.
-func New(targets []detect.Target, recreate, dockerized bool) *Runner {
-	r := &Runner{done: make(chan struct{}), recreate: recreate, dockerized: dockerized}
+// existing env down and rebuilds it; false reuses an already-up env. Each
+// target's Cmd/Args dictates its launch: KindContainer targets carry a
+// pre-baked `podman compose --profile X up <svc>` command; live targets
+// carry `go run …`/`pnpm run …`. The runner is mode-agnostic — dispatch is
+// by target shape, not a runner flag.
+func New(targets []detect.Target, recreate bool) *Runner {
+	r := &Runner{done: make(chan struct{}), recreate: recreate}
 	for _, t := range targets {
 		r.procs = append(r.procs, &Proc{
 			Target: t, status: Pending, term: make(chan struct{}),
@@ -548,36 +544,19 @@ func (r *Runner) launchGroup(ctx context.Context, ps []*Proc, env []string, fail
 	}
 }
 
-// launchCmd resolves the command for a target under the runner's effective
-// mode: dockerised (compose up the profiled service) when r.dockerized AND
-// the target has a ComposeService, otherwise the target's own Cmd/Args
-// (local `go run` / `pnpm run`). Returns the command-name, args, and a
-// boolean indicating which path was chosen — used by callers to label the
-// proc log so the reader can tell at a glance whether it's a container or a
-// local exec.
-func (r *Runner) launchCmd(p *Proc) (string, []string, bool) {
-	if r.dockerized && p.Target.Env != nil && p.Target.ComposeService != "" {
-		e := p.Target.Env
-		return "podman", []string{
-			"compose", "-p", e.Project, "-f", e.File,
-			"--profile", p.Target.Name,
-			"up", "--build", p.Target.ComposeService,
-		}, true
-	}
-	return p.Target.Cmd, p.Target.Args, false
-}
-
 // launch starts one process in its own group and watches it. A non-zero exit
-// (or spawn failure) fails the whole run.
+// (or spawn failure) fails the whole run. Dispatch is by Target.Kind:
+// KindContainer targets ship a pre-baked `podman compose … up <svc>`
+// command; live targets ship `go run …` / `pnpm run …`. Either way the
+// runner just executes Target.Cmd/Args — no mode flag, no branching.
 func (r *Runner) launch(ctx context.Context, p *Proc, env []string, fail func(*Proc, error)) {
-	cmdName, cmdArgs, dockerised := r.launchCmd(p)
-	if dockerised {
+	if p.Target.Kind == detect.KindContainer {
 		// Header line so the proc log clearly says which path the runner
 		// took — invaluable for "did my code change get rebuilt?" debugging.
-		_, _ = fmt.Fprintf(p, "── %s ── docker · %s\n",
+		_, _ = fmt.Fprintf(p, "── %s ── container · %s\n",
 			p.Target.Name, p.Target.ComposeService)
 	}
-	cmd := exec.Command(cmdName, cmdArgs...)
+	cmd := exec.Command(p.Target.Cmd, p.Target.Args...)
 	cmd.Dir = p.Target.Dir
 	if env != nil {
 		cmd.Env = env

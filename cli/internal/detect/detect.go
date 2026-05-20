@@ -33,6 +33,12 @@ const (
 	KindGo     Kind = "go"
 	KindPnpm   Kind = "pnpm"
 	KindPodman Kind = "podman"
+	// KindContainer is a run-mode target: a compose service guarded by a
+	// profile that the runner brings up via `podman compose --profile X
+	// up <svc>`. Distinct from KindPodman (build's Dockerfile targets) so
+	// the two never collide in pickers / dispatch — KindContainer only
+	// appears via DetectRun in container mode.
+	KindContainer Kind = "container"
 )
 
 // buildArg is the "build" token shared by the go/podman subcommands and the
@@ -255,8 +261,10 @@ func kindOrder(k Kind) int {
 		return 1
 	case KindPodman:
 		return 2
-	default:
+	case KindContainer:
 		return 3
+	default:
+		return 4
 	}
 }
 
