@@ -39,9 +39,14 @@ const (
 )
 
 type row struct {
-	kind   rowKind
-	group  detect.Kind // valid when kind == rowGroup
-	target int         // index into Model.targets when kind == rowTarget
+	kind rowKind
+	// groupKey is the opaque group identifier this row belongs to. For
+	// kind-grouping (build/test) it is the Kind string ("go"/"pnpm"/...). For
+	// service-grouping (run, multi-service) it is the service name. Both
+	// rowGroup (heading) and rowTarget (member) carry it, so toggling /
+	// counting / labelling all key off the same value regardless of mode.
+	groupKey string
+	target   int // index into Model.targets when kind == rowTarget
 }
 
 // buildDoneMsg is delivered when one target's subprocess has finished.
@@ -143,17 +148,36 @@ func NewSelect(version string, verb Verb, targets []detect.Target) Model {
 // aborted or nothing was picked). Pair with [Model.Aborted].
 func (m Model) Selected() []detect.Target { return m.queue }
 
+// groupByService is the picker grouping mode for the run verb — multiple
+// services in scope (global run) means the user wants services as the
+// top-level grouping, not kinds. build/test keep kind-grouping.
+func (m Model) groupByService() bool {
+	return m.verb.Base == VerbRun.Base
+}
+
+// groupOfTarget returns the opaque group key for a target under the current
+// grouping mode (service name or Kind string).
+func (m Model) groupOfTarget(t detect.Target) string {
+	if m.groupByService() {
+		return t.Service
+	}
+	return string(t.Kind)
+}
+
 // buildRows flattens the sorted targets into displayable rows, inserting a
-// group heading whenever the kind changes.
+// group heading whenever the group key changes. The slice is already sorted
+// such that group members are consecutive (service-first sort for run,
+// kind-first for build/test — see detect's sort).
 func (m Model) buildRows() []row {
 	var rows []row
-	var last detect.Kind = ""
+	last := ""
 	for i, t := range m.targets {
-		if t.Kind != last {
-			rows = append(rows, row{kind: rowGroup, group: t.Kind})
-			last = t.Kind
+		key := m.groupOfTarget(t)
+		if key != last {
+			rows = append(rows, row{kind: rowGroup, groupKey: key})
+			last = key
 		}
-		rows = append(rows, row{kind: rowTarget, target: i})
+		rows = append(rows, row{kind: rowTarget, groupKey: key, target: i})
 	}
 	return rows
 }
@@ -333,7 +357,7 @@ func (m Model) handleSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "g":
 		// Toggle the entire group the cursor currently sits in.
-		m.toggleGroup(m.rows[m.cursor].groupOf(m))
+		m.toggleGroup(m.rows[m.cursor].groupKey)
 
 	case "a":
 		m.toggleAll()
@@ -355,15 +379,6 @@ func (m Model) handleSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.spinner.Tick, m.dispatch())
 	}
 	return m, nil
-}
-
-// groupOf returns the kind a row belongs to (its own kind for a heading, its
-// target's kind for a target line).
-func (r row) groupOf(m Model) detect.Kind {
-	if r.kind == rowGroup {
-		return r.group
-	}
-	return m.targets[r.target].Kind
 }
 
 // deps returns the IDs of targets t requires. By a-novel convention every
@@ -400,7 +415,7 @@ func (m *Model) applyDeps() {
 func (m *Model) toggleAt(idx int) {
 	r := m.rows[idx]
 	if r.kind == rowGroup {
-		m.toggleGroup(r.group)
+		m.toggleGroup(r.groupKey)
 		return
 	}
 	id := m.targets[r.target].ID()
@@ -408,19 +423,19 @@ func (m *Model) toggleAt(idx int) {
 	m.applyDeps()
 }
 
-// toggleGroup flips a whole kind: if every target in it is already selected it
-// clears them, otherwise it selects them all (so the key is "ensure on, then
-// off" — predictable regardless of mixed state).
-func (m *Model) toggleGroup(k detect.Kind) {
+// toggleGroup flips a whole group (kind or service): if every member is
+// already selected it clears them, otherwise it selects them all
+// ("ensure on, then off" — predictable regardless of mixed state).
+func (m *Model) toggleGroup(key string) {
 	allOn := true
 	for _, t := range m.targets {
-		if t.Kind == k && !m.selected[t.ID()] {
+		if m.groupOfTarget(t) == key && !m.selected[t.ID()] {
 			allOn = false
 			break
 		}
 	}
 	for _, t := range m.targets {
-		if t.Kind == k {
+		if m.groupOfTarget(t) == key {
 			m.selected[t.ID()] = !allOn
 		}
 	}
@@ -497,11 +512,11 @@ func (m Model) viewSelect() string {
 		}
 
 		if r.kind == rowGroup {
-			box := m.groupCheckbox(r.group)
-			n := m.groupCount(r.group)
+			box := m.groupCheckbox(r.groupKey)
+			n := m.groupCount(r.groupKey)
 			fmt.Fprintf(&b, "%s%s %s %s\n",
 				cursor, box,
-				styleGroup.Render(kindLabel(r.group)),
+				styleGroup.Render(m.groupLabel(r.groupKey)),
 				styleMuted.Render(fmt.Sprintf("(%d)", n)),
 			)
 			continue
@@ -539,12 +554,12 @@ func (m Model) viewSelect() string {
 }
 
 // groupCheckbox renders a heading's tri-state checkbox: filled when every
-// target in the kind is selected, empty when none are, and a half-filled
-// "partial" glyph (gold, to read as "mixed — look here") when only some are.
-func (m Model) groupCheckbox(k detect.Kind) string {
+// member of the group (kind or service) is selected, empty when none are,
+// and a half-filled "partial" glyph (gold, "mixed — look here") otherwise.
+func (m Model) groupCheckbox(key string) string {
 	all, anySel, seen := true, false, false
 	for _, t := range m.targets {
-		if t.Kind != k {
+		if m.groupOfTarget(t) != key {
 			continue
 		}
 		seen = true
@@ -564,14 +579,24 @@ func (m Model) groupCheckbox(k detect.Kind) string {
 	}
 }
 
-func (m Model) groupCount(k detect.Kind) int {
+func (m Model) groupCount(key string) int {
 	n := 0
 	for _, t := range m.targets {
-		if t.Kind == k {
+		if m.groupOfTarget(t) == key {
 			n++
 		}
 	}
 	return n
+}
+
+// groupLabel is the display name of a group key. For service-grouping (run)
+// it is the service name as-is; for kind-grouping (build/test) it is the
+// pretty Kind label (e.g. "Go modules").
+func (m Model) groupLabel(key string) string {
+	if m.groupByService() {
+		return key
+	}
+	return kindLabel(detect.Kind(key))
 }
 
 func (m Model) viewRun() string {
