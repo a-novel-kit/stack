@@ -112,9 +112,19 @@ func New(ctx context.Context, version string, verb Verb, targets []detect.Target
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(colBrand)
 
+	// Default selection: everything on, with a small set of hand-curated
+	// exceptions when running globally (multi-service in scope). The user
+	// confirmed `service-template` belongs in this set — it is the
+	// boilerplate / fixture service, not something you want included in a
+	// stack-root run unless explicitly asked. Easy to extend.
+	distinctSvc := map[string]bool{}
+	for _, t := range targets {
+		distinctSvc[t.Service] = true
+	}
+	multiService := len(distinctSvc) > 1
 	selected := make(map[string]bool, len(targets))
 	for _, t := range targets {
-		selected[t.ID()] = true
+		selected[t.ID()] = !defaultOffInGlobal(verb, multiService, t)
 	}
 
 	m := Model{
@@ -132,6 +142,25 @@ func New(ctx context.Context, version string, verb Verb, targets []detect.Target
 	}
 	m.rows = m.buildRows()
 	return m
+}
+
+// defaultOffByService is the hardcoded set of run-mode services that should
+// start UNSELECTED when the picker is opened in global mode. There will be
+// very few of these — the user explicitly confirmed `service-template`
+// belongs (it is boilerplate / fixture, not something you want in a
+// stack-root run unless you ask for it). Add new exceptions here.
+var defaultOffByService = map[string]bool{
+	"service-template": true,
+}
+
+// defaultOffInGlobal reports whether a target should be DESELECTED by default
+// — only fires for the run verb in multi-service (global) scope; single-repo
+// runs and build/test runs always start with everything selected.
+func defaultOffInGlobal(verb Verb, multiService bool, t detect.Target) bool {
+	if verb.Base != VerbRun.Base || !multiService {
+		return false
+	}
+	return defaultOffByService[t.Service]
 }
 
 // NewSelect builds a target picker that reuses build/test's exact selection
