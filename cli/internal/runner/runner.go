@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -222,12 +223,8 @@ func (r *Runner) Run(parent context.Context) {
 
 	// Group targets by their compose env (project) so a shared env is brought
 	// up exactly once and its allocated ports/creds are reused by every
-	// process that needs it.
-	type envGroup struct {
-		env  *detect.ComposeEnv
-		prep []string // PrepareEnv result, shared across the group
-		ps   []*Proc
-	}
+	// process that needs it. (envGroup is the package-level type below so the
+	// cross-share helpers can take a typed map.)
 	groups := map[string]*envGroup{}
 	var order []string
 	var noEnv []*Proc
@@ -257,7 +254,10 @@ func (r *Runner) Run(parent context.Context) {
 		cancel() // first failure tears everything down
 	}
 
-	// Bring each unique env up once, then launch its processes.
+	// Pass 1 — prepare every env up front (allocates ports / sources
+	// setup-env / collects the CLI-injected delta) WITHOUT bringing anything
+	// up yet. This is what lets a service see the other services' allocated
+	// values in its own env (global mode cross-wiring).
 	for _, key := range order {
 		g := groups[key]
 		if ctx.Err() != nil {
@@ -266,25 +266,43 @@ func (r *Runner) Run(parent context.Context) {
 		for _, p := range g.ps {
 			p.set(EnvUp)
 		}
-		writer := groupWriter(g.ps)
-
-		prep, err := build.PrepareEnv(ctx, g.ps[0].Target, writer)
+		prep, delta, err := build.PrepareEnv(ctx, g.ps[0].Target, groupWriter(g.ps))
 		if err != nil {
 			for _, p := range g.ps {
 				fail(p, err)
 			}
+			g.failed = true
 			continue
 		}
-		g.prep = prep
+		g.prep, g.delta = prep, delta
+	}
 
-		// Reuse vs recreate: a pre-existing env is reused by default; recreate
-		// tears it down first so code/image changes take effect.
+	// Cross-service wiring: a value owned by service AAA is consumed by BBB
+	// as `AAA_<VAR>` (the AAA_XX convention). Build per-group additions from
+	// every OTHER group's delta, prefixed with the producer's service name.
+	cross := crossSharedEnv(groups)
+
+	// Pass 2 — recreate / EnvUp / launch each group with its prep + the
+	// cross-shared additions from siblings.
+	for _, key := range order {
+		g := groups[key]
+		if g.failed || ctx.Err() != nil {
+			continue
+		}
+		writer := groupWriter(g.ps)
+		fullPrep := append([]string{}, g.prep...)
+		if extra := cross[key]; len(extra) > 0 {
+			fullPrep = append(fullPrep, extra...)
+			_, _ = io.WriteString(writer, formatCrossShareBlock(extra))
+		}
+		g.prep = fullPrep
+
 		if r.recreate {
 			_, _ = fmt.Fprintf(writer, "── env recreate: %s ──\n", g.env.ID)
 			_ = build.TearDown(context.WithoutCancel(ctx), *g.env)
 		}
 		_, _ = fmt.Fprintf(writer, "── env up: %s ──\n", g.env.ID)
-		if err := build.EnvUp(ctx, prep, g.env, writer); err != nil {
+		if err := build.EnvUp(ctx, g.prep, g.env, writer); err != nil {
 			for _, p := range g.ps {
 				fail(p, err)
 			}
@@ -312,6 +330,94 @@ func (r *Runner) Run(parent context.Context) {
 		_ = build.TearDown(clean, e)
 	}
 	r.once.Do(func() { close(r.done) })
+}
+
+// envGroup carries the runner's per-compose-env state. Lives at package
+// scope (vs. inside Run) so the cross-share helpers can take it by type.
+type envGroup struct {
+	env    *detect.ComposeEnv
+	prep   []string // full env: PrepareEnv result + cross-shared (post-share)
+	delta  []string // just what the CLI added (cross-shared to other svcs)
+	failed bool     // PrepareEnv error: skip EnvUp/launch entirely
+	ps     []*Proc
+}
+
+// servicePrefix is the producer-namespace prefix under the AAA_XX
+// cross-service env convention: "service-json-keys" → "SERVICE_JSON_KEYS_".
+// An empty service yields "" (no prefix, no sharing).
+func servicePrefix(svc string) string {
+	if svc == "" {
+		return ""
+	}
+	return strings.ToUpper(strings.ReplaceAll(svc, "-", "_")) + "_"
+}
+
+// crossSharedEnv computes the env additions each group should receive from
+// every OTHER group's delta. A producer's `VAR=value` becomes
+// `<PRODUCER_PREFIX>VAR=value` in every consumer's env. Already-prefixed
+// names pass through verbatim so a setup-env.sh value declared with the
+// final consumer-side name (e.g. SERVICE_JSON_KEYS_APP_MASTER_KEY) is
+// re-shared as-is.
+func crossSharedEnv(groups map[string]*envGroup) map[string][]string {
+	out := map[string][]string{}
+	for srcKey, src := range groups {
+		if src.failed || len(src.ps) == 0 {
+			continue
+		}
+		prefix := servicePrefix(src.ps[0].Target.Service)
+		if prefix == "" {
+			continue
+		}
+		for _, kv := range src.delta {
+			k, v, _ := strings.Cut(kv, "=")
+			ck := k
+			if !strings.HasPrefix(k, prefix) {
+				ck = prefix + k
+			}
+			for dstKey := range groups {
+				if dstKey == srcKey {
+					continue
+				}
+				out[dstKey] = append(out[dstKey], ck+"="+v)
+			}
+		}
+	}
+	for k := range out {
+		sort.Strings(out[k])
+	}
+	return out
+}
+
+// formatCrossShareBlock renders the cross-shared vars the same way build's
+// formatEnvBlock does the per-service env, but under a distinct heading so
+// the reader can tell "these came from a sibling service in global mode".
+func formatCrossShareBlock(kv []string) string {
+	type pair struct{ k, v string }
+	pairs := make([]pair, 0, len(kv))
+	maxK := 0
+	for _, e := range kv {
+		k, v, _ := strings.Cut(e, "=")
+		pairs = append(pairs, pair{k, v})
+		if len(k) > maxK {
+			maxK = len(k)
+		}
+	}
+	sort.Slice(pairs, func(i, j int) bool { return pairs[i].k < pairs[j].k })
+	var b strings.Builder
+	// SGR hardcoded inline — runner cannot import ui (cycle); SanitizeLine
+	// preserves SGR so this renders correctly in the viewport.
+	const (
+		hdr = "\x1b[1;38;5;165m" // brand pink — distinct from gold env block
+		key = "\x1b[38;5;37m"
+		eq  = "\x1b[38;5;66m"
+		rst = "\x1b[0m"
+	)
+	b.WriteString(hdr + "── cross-service env ──" + rst + "\n")
+	for _, p := range pairs {
+		pad := strings.Repeat(" ", maxK-len(p.k))
+		_, _ = fmt.Fprintf(&b, "   %s%s%s %s=%s %s\n", key, p.k, rst, eq+pad, rst, p.v)
+	}
+	return b.String()
 }
 
 // isInit reports whether a target is a schema/init step that dependent

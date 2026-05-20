@@ -113,14 +113,23 @@ func (w *tailWriter) Write(p []byte) (int, error) {
 // whatever scripts/setup-env.sh still defines (service constants). It is the
 // single source of env truth shared by `build`/`test` (Run) and `run`. The
 // `── env ──` / `── setup-env ──` progress is written to out.
-func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, error) {
+func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, []string, error) {
+	// Snapshot the inherited env so we can compute the CLI's full delta at
+	// the end — ports/URLs/DSN AND whatever setup-env.sh subsequently
+	// exported. The delta is what global-mode cross-shares between services.
+	baseline := make(map[string]string, len(os.Environ()))
+	for _, e := range os.Environ() {
+		k, v, _ := strings.Cut(e, "=")
+		baseline[k] = v
+	}
+
 	runEnv := os.Environ()
 	if t.Env != nil {
 		var added []string
 		if len(t.Env.Ports) > 0 {
 			portEnv, err := allocPorts(t.Env.Ports)
 			if err != nil {
-				return nil, fmt.Errorf("port allocation failed: %w", err)
+				return nil, nil, fmt.Errorf("port allocation failed: %w", err)
 			}
 			runEnv = append(runEnv, portEnv...)
 			derived := derivedURLs(t.Env.Ports, runEnv)
@@ -150,12 +159,36 @@ func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, 
 			_, _ = fmt.Fprintf(out, "── setup-env: %s ──\n", rel(root, se))
 			env, err := sourceEnv(ctx, se, root, runEnv, out)
 			if err != nil {
-				return nil, fmt.Errorf("setup-env.sh failed: %w", err)
+				return nil, nil, fmt.Errorf("setup-env.sh failed: %w", err)
 			}
 			runEnv = env
 		}
 	}
-	return runEnv, nil
+
+	// Compute the delta: any var that did not exist in the inherited env or
+	// whose value the CLI/setup-env changed. This is the set global mode
+	// re-exports to other services with an `<SERVICE>_` prefix.
+	delta := envDelta(runEnv, baseline)
+	return runEnv, delta, nil
+}
+
+// envDelta returns the env entries in final that differ from baseline. Order
+// follows final (so the most recent value of any duplicate key wins, matching
+// shell-export semantics).
+func envDelta(final []string, baseline map[string]string) []string {
+	seen := make(map[string]string, len(final))
+	for _, e := range final {
+		k, v, _ := strings.Cut(e, "=")
+		seen[k] = v
+	}
+	out := make([]string, 0, len(seen))
+	for k, v := range seen {
+		if bv, ok := baseline[k]; !ok || bv != v {
+			out = append(out, k+"="+v)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // ANSI SGR used by formatEnvBlock. build cannot import the ui/lipgloss layer
@@ -225,7 +258,7 @@ func Run(ctx context.Context, t detect.Target, timeout time.Duration, live *Live
 	// the "most recent line" the TUI shows under the running target.
 	out := io.MultiWriter(&buf, &tailWriter{id: t.ID(), live: live})
 
-	runEnv, perr := PrepareEnv(ctx, t, out)
+	runEnv, _, perr := PrepareEnv(ctx, t, out)
 	if perr != nil {
 		return Result{
 			Target:   t,
