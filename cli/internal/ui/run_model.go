@@ -349,10 +349,10 @@ func (m RunModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if globalMode {
 		switch k {
-		case "up", "k":
+		case keyUp, "k":
 			m.navService(-1)
 			return m, nil
-		case "down", "j":
+		case keyDown, "j":
 			m.navService(+1)
 			return m, nil
 		}

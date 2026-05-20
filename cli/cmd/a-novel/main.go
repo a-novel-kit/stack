@@ -274,7 +274,7 @@ func runRun(args []string) int {
 	// Resolve effective run mode BEFORE the picker — the two modes show
 	// different target lists. LIVE = local `go run` / `pnpm run`;
 	// CONTAINER = compose-service targets brought up via `podman compose
-	// --profile X up <svc>`. Default: per-repo → container; global → live.
+	// --profile X up <svc>`.
 	distinctSvc := map[string]bool{}
 	for _, t := range targets {
 		if t.Service != "" {
@@ -282,12 +282,29 @@ func runRun(args []string) int {
 		}
 	}
 	isGlobal := len(distinctSvc) > 1
+	interactive := term.IsTerminal(os.Stdout.Fd())
+
+	// Default: per-repo → container; global → live. With a TTY and no flag,
+	// the user picks at runtime (a small prompt before the targets picker)
+	// so the mode is an explicit choice instead of a silent default.
 	containerMode := !isGlobal
 	switch opts.runMode {
 	case modeContainer:
 		containerMode = true
 	case modeLive:
 		containerMode = false
+	default:
+		if interactive && !opts.yes && !opts.dryRun {
+			pre, err := promptRunMode(version.String(), containerMode)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "a-novel run: ui error: %v\n", err)
+				return exitFailure
+			}
+			if pre == "" {
+				return exitOK // user aborted the prompt
+			}
+			containerMode = pre == modeContainer
+		}
 	}
 	targets = filterRunMode(targets, containerMode)
 	if len(targets) == 0 {
@@ -311,16 +328,18 @@ func runRun(args []string) int {
 	ctx, cancel := context.WithCancel(sigCtx)
 	defer cancel()
 
-	interactive := term.IsTerminal(os.Stdout.Fd())
-
 	// Selection. With a TTY (and not -y), reuse build/test's exact picker so
 	// you choose which entrypoints to launch — without this, `run` launched
 	// every target at once (including fast-exiting ones like migrations,
 	// which self-exit and tear the whole dashboard down on sight). -y / no
 	// TTY keeps the old "run everything" behaviour for CI.
 	if interactive && !opts.yes {
+		modeLabel := modeLive
+		if containerMode {
+			modeLabel = modeContainer
+		}
 		picked, perr := tea.NewProgram(
-			ui.NewSelect(version.String(), verb, targets), tea.WithAltScreen()).Run()
+			ui.NewSelect(version.String(), verb, modeLabel, targets), tea.WithAltScreen()).Run()
 		if perr != nil {
 			fmt.Fprintf(os.Stderr, "a-novel run: ui error: %v\n", perr)
 			return exitFailure
@@ -386,6 +405,41 @@ func runRun(args []string) int {
 }
 
 // typeScope renders the " matching --type" suffix for the no-targets message.
+// promptRunMode runs the small mode-pick TUI before the targets picker.
+// defaultContainer drives the initial cursor (per-mode default for the
+// scope). Returns the chosen mode value, or "" if the user aborted.
+func promptRunMode(version string, defaultContainer bool) (string, error) {
+	def := modeLive
+	if defaultContainer {
+		def = modeContainer
+	}
+	options := []ui.ModeOption{
+		{
+			Value:  modeContainer,
+			Label:  "container",
+			Detail: "compose-service targets; each launched via `podman compose --profile X up <svc>`",
+		},
+		{
+			Value:  modeLive,
+			Label:  "live",
+			Detail: "Go `cmd/*` mains + pnpm `run*` scripts; each runs locally (go run / pnpm run)",
+		},
+	}
+	final, err := tea.NewProgram(
+		ui.NewModeSelect(version, def, options), tea.WithAltScreen()).Run()
+	if err != nil {
+		return "", err
+	}
+	m, ok := final.(ui.ModeSelectModel)
+	if !ok {
+		return "", fmt.Errorf("unexpected model type %T", final)
+	}
+	if m.Aborted() {
+		return "", nil
+	}
+	return m.Chosen(), nil
+}
+
 // filterRunMode keeps only the targets the active mode launches: container
 // mode keeps Kind == KindContainer; live mode keeps everything else (Go
 // `cmd/*` mains + pnpm `run*` scripts). The two sets are disjoint by Kind,
