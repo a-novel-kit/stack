@@ -503,18 +503,38 @@ func formatCrossShareBlock(kv []string) string {
 	return b.String()
 }
 
-// isInit reports whether a target is a schema/init step that dependent
-// targets must wait for. By a-novel convention that is the `migrations`
-// Go entrypoint (cmd/migrations): rotate-keys / rest / grpc all need the
-// schema it creates, so launching them in parallel raced it and failed with
-// `relation "active_keys" does not exist`.
-func isInit(t detect.Target) bool {
-	return t.Kind == detect.KindGo && t.Name == "migrations"
+// initOrder lists the schema/init Go entrypoints that, when selected, must
+// run to completion BEFORE the rest of their service's targets — in the
+// order they appear here. Hardcoded by a-novel convention (the same
+// entrypoints exist across service repos):
+//
+//   - `init`         — one-off provisioning (when present)
+//   - `migrations`   — DB schema; everything that touches the DB needs it
+//   - `rotate-keys`  — refreshes JWK material; opt-in but should precede the
+//     long-lived server if the user selected it
+//
+// Container mode is unaffected — the standalone image embeds these steps and
+// compose's `depends_on` handles its own ordering.
+var initOrder = []string{"init", "migrations", "rotate-keys"}
+
+func initRank(t detect.Target) (int, bool) {
+	if t.Kind != detect.KindGo {
+		return 0, false
+	}
+	for i, n := range initOrder {
+		if t.Name == n {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
+// isInit reports whether a target is one of the init-barrier entrypoints.
+func isInit(t detect.Target) bool { _, ok := initRank(t); return ok }
+
 // launchGroup launches a set of co-located procs with an init barrier: every
-// init target (migrations) is run to completion FIRST, in order, then the
-// rest start concurrently. If an init fails it cancels the run (via fail), so
+// init target runs to completion FIRST, in initOrder order, then the rest
+// start concurrently. If an init fails it cancels the run (via fail), so
 // the loop stops before launching the dependents.
 func (r *Runner) launchGroup(ctx context.Context, ps []*Proc, env []string, fail func(*Proc, error)) {
 	var inits, rest []*Proc
@@ -525,13 +545,20 @@ func (r *Runner) launchGroup(ctx context.Context, ps []*Proc, env []string, fail
 			rest = append(rest, p)
 		}
 	}
+	// Sort inits by initOrder so init → migrations → rotate-keys, regardless
+	// of selection / detection order.
+	sort.SliceStable(inits, func(i, j int) bool {
+		ri, _ := initRank(inits[i].Target)
+		rj, _ := initRank(inits[j].Target)
+		return ri < rj
+	})
 	for _, p := range inits {
 		if ctx.Err() != nil {
 			return
 		}
 		r.launch(ctx, p, env, fail)
 		select {
-		case <-p.term: // migrations finished (Exited) or failed (ctx cancelled)
+		case <-p.term: // init reached terminal state (or failure cancelled ctx)
 		case <-ctx.Done():
 			return
 		}
