@@ -26,42 +26,91 @@ func DetectRun(root string) ([]Target, error) {
 	if err != nil {
 		return nil, err
 	}
-	ignored := gitIgnoredDirs(absRoot)
-	var targets []Target
 
-	walkErr := filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			if d != nil && d.IsDir() {
+	// Global mode: when run from a stack root that contains `app/service-*`
+	// checkouts, fan out across every service repo instead of scanning the
+	// stack itself (which has no service entrypoints; the CLI is the
+	// orchestrator). Single-repo behaviour is unchanged.
+	walkRoots := []string{absRoot}
+	if rs := globalServiceRoots(absRoot); len(rs) > 0 {
+		walkRoots = rs
+	}
+
+	var targets []Target
+	for _, walkRoot := range walkRoots {
+		// Per-walk-root .gitignore (each service repo is independent).
+		ignored := gitIgnoredDirs(walkRoot)
+		walkErr := filepath.WalkDir(walkRoot, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				if d != nil && d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !d.IsDir() {
+				return nil
+			}
+			// skipDir uses walkRoot as its "root" so the walk depth/ignore
+			// semantics are per-repo, but filepath.Rel for `pnpmRun` and
+			// `goRun`'s moduleRootOf bound use the OUTER absRoot — that is
+			// how each service's modRel comes out as "app/service-X" instead
+			// of "." (which would collide across services in the compose
+			// project name).
+			if skipDir(walkRoot, path, d.Name(), ignored) {
 				return filepath.SkipDir
 			}
+			rel, _ := filepath.Rel(absRoot, path)
+			targets = append(targets, goRun(absRoot, path)...)
+			targets = append(targets, pnpmRun(path, rel)...)
 			return nil
+		})
+		if walkErr != nil {
+			return nil, walkErr
 		}
-		if !d.IsDir() {
-			return nil
-		}
-		if skipDir(absRoot, path, d.Name(), ignored) {
-			return filepath.SkipDir
-		}
-		rel, _ := filepath.Rel(absRoot, path)
-		targets = append(targets, goRun(absRoot, path)...)
-		targets = append(targets, pnpmRun(path, rel)...)
-		return nil
-	})
-	if walkErr != nil {
-		return nil, walkErr
 	}
 
 	sort.SliceStable(targets, func(i, j int) bool {
 		a, b := targets[i], targets[j]
-		if a.Kind != b.Kind {
-			return kindOrder(a.Kind) < kindOrder(b.Kind)
-		}
 		if a.Service != b.Service {
 			return a.Service < b.Service
+		}
+		if a.Kind != b.Kind {
+			return kindOrder(a.Kind) < kindOrder(b.Kind)
 		}
 		return a.Name < b.Name
 	})
 	return targets, nil
+}
+
+// globalServiceRoots auto-detects a stack-root scan: the directory contains
+// `app/service-*` subdirectories (each its own git repo). Returns those
+// service-repo paths, or nil if the root is not a stack. Platforms
+// (`platform-*`) and non-service dirs under app/ are ignored.
+func globalServiceRoots(absRoot string) []string {
+	appDir := filepath.Join(absRoot, "app")
+	info, err := os.Stat(appDir)
+	if err != nil || !info.IsDir() {
+		return nil
+	}
+	entries, err := os.ReadDir(appDir)
+	if err != nil {
+		return nil
+	}
+	var roots []string
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "service-") {
+			continue
+		}
+		svc := filepath.Join(appDir, e.Name())
+		// Must be its own git repo to count — guards against an unrelated
+		// `app/service-something/` directory that happens to share the name.
+		if _, err := os.Stat(filepath.Join(svc, ".git")); err != nil {
+			continue
+		}
+		roots = append(roots, svc)
+	}
+	sort.Strings(roots)
+	return roots
 }
 
 var packageMainRe = regexp.MustCompile(`(?m)^package\s+main\b`)
