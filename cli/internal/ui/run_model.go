@@ -568,6 +568,12 @@ func (m RunModel) View() string {
 	if m.finished {
 		head = "run · stopped"
 	}
+	// Per-repo (single-service) mode: there is no left nav to carry the
+	// service identity, so put it in the header. In global mode services
+	// live in the left nav and don't belong in the header.
+	if svcs := m.services(); len(svcs) == 1 {
+		head += " · " + svcs[0]
+	}
 
 	var b strings.Builder
 	b.WriteString(section(head, colGold, w) + "\n\n")
@@ -629,7 +635,7 @@ func (m RunModel) leftColumn(w, bodyH int, globalMode bool) []string {
 	if m.vpReady && len(m.procs) > 0 {
 		sp := m.procs[m.sel]
 		title := styleGold.Render("▌ ") +
-			runName(sp.Target.Service, sp.Target.Name) +
+			styleBrand.Render(sp.Target.Name) +
 			"  " + styleMuted.Render(runStatusWord(sp.Status))
 		lines = append(lines, ansi.Truncate(title, w, "…"))
 		lines = append(lines, strings.Split(m.vp.View(), "\n")...)
@@ -683,11 +689,12 @@ func (m RunModel) footer(g runGeom) string {
 	return hint
 }
 
-// tabBar renders one fixed row of tabs (status glyph + name), the active one
-// highlighted. In global mode the bar shows only the active service's
-// entrypoints (numbered 1..N within that service), because services are the
-// left nav's job; in single-service mode it shows every proc flat with
-// service-qualified names — the original behaviour.
+// tabBar renders one fixed row of tabs (status glyph + entrypoint name), the
+// active one highlighted. In global mode the bar shows only the active
+// service's entrypoints (services live in the left nav); in single-service
+// mode it shows every proc flat. Either way the LABEL is just the entrypoint
+// name — service identity is conveyed by the left nav (global) or the
+// header (per-repo), so the tab label stays compact.
 func (m RunModel) tabBar(w int, globalMode bool) string {
 	var indices []int
 	if globalMode {
@@ -701,10 +708,7 @@ func (m RunModel) tabBar(w int, globalMode bool) string {
 	var parts []string
 	for n, i := range indices {
 		p := m.procs[i]
-		nameStyled := runName(p.Target.Service, p.Target.Name)
-		if globalMode {
-			nameStyled = styleBrand.Render(p.Target.Name) // service is in the nav
-		}
+		nameStyled := styleBrand.Render(p.Target.Name)
 		label := fmt.Sprintf("%d %s %s", n+1, runStatus(p.Status), nameStyled)
 		if i == m.sel {
 			parts = append(parts, styleSel.Render("▌"+label))
@@ -713,15 +717,6 @@ func (m RunModel) tabBar(w int, globalMode bool) string {
 		}
 	}
 	return ansi.Truncate(strings.Join(parts, styleMuted.Render(" · ")), w, "…")
-}
-
-// runName is the service-qualified process name, so identically-named
-// entrypoints across services are unambiguous in the tab bar.
-func runName(service, name string) string {
-	if service == "" {
-		return styleBrand.Render(name)
-	}
-	return styleMuted.Render(service+"/") + styleBrand.Render(name)
 }
 
 func runStatus(s runner.Status) string {
