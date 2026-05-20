@@ -385,8 +385,12 @@ func runRun(args []string) int {
 	go r.Run(ctx)
 
 	if interactive {
+		modeLabel := modeLive
+		if containerMode {
+			modeLabel = modeContainer
+		}
 		final, perr := tea.NewProgram(
-			ui.NewRun(version.String(), r, cancel), tea.WithAltScreen()).Run()
+			ui.NewRun(version.String(), modeLabel, r, cancel), tea.WithAltScreen()).Run()
 		if perr != nil {
 			fmt.Fprintf(os.Stderr, "a-novel run: ui error: %v\n", perr)
 			cancel()

@@ -39,6 +39,7 @@ const consoleMinWidth = 100
 // the repaint — no flicker.
 type RunModel struct {
 	version string
+	runMode string // "container" / "live" — surfaced in the dashboard header
 	run     *runner.Runner
 	cancel  func() // cancels the runner (triggers full teardown)
 
@@ -83,8 +84,10 @@ func tick() tea.Cmd {
 }
 
 // NewRun builds the dashboard. cancel must cancel the context the runner was
-// started with, so q triggers a full scoped teardown.
-func NewRun(version string, r *runner.Runner, cancel func()) RunModel {
+// started with, so q triggers a full scoped teardown. runMode
+// ("container" / "live") is shown in the dashboard header so the active
+// mode is unambiguous at a glance.
+func NewRun(version, runMode string, r *runner.Runner, cancel func()) RunModel {
 	ti := textinput.New()
 	ti.Prompt = "❯ "
 	ti.Placeholder = "curl $SERVICE_JSON_KEYS_REST_URL/healthcheck …"
@@ -92,7 +95,7 @@ func NewRun(version string, r *runner.Runner, cancel func()) RunModel {
 	// reintroduce the exact flicker we just removed.
 	ti.Cursor.SetMode(cursor.CursorStatic)
 	return RunModel{
-		version: version, run: r, cancel: cancel,
+		version: version, runMode: runMode, run: r, cancel: cancel,
 		procs: r.Snapshot(), shownSel: -1, ti: ti,
 	}
 }
@@ -561,19 +564,18 @@ func (m RunModel) View() string {
 	}
 	g := m.geom()
 
-	// "running" not "live" — the dashboard is in steady state. "live" used
-	// to clash with the live/container MODE vocabulary, which is confusing
-	// when the actual mode is container.
-	head := "run · running"
+	// Header: mode is the primary segment (always visible) followed by the
+	// state when it's not the default running state. In per-repo
+	// (single-service) scope the service name trails — there is no left nav
+	// to carry it. Global mode keeps the header mode-only; services live in
+	// the left nav.
+	head := "run · " + m.runMode
 	if m.stopping {
-		head = "run · tearing down…"
+		head += " · tearing down…"
 	}
 	if m.finished {
-		head = "run · stopped"
+		head = "run · " + m.runMode + " · stopped"
 	}
-	// Per-repo (single-service) mode: there is no left nav to carry the
-	// service identity, so put it in the header. In global mode services
-	// live in the left nav and don't belong in the header.
 	if svcs := m.services(); len(svcs) == 1 {
 		head += " · " + svcs[0]
 	}
