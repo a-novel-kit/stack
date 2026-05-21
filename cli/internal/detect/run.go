@@ -2,6 +2,7 @@ package detect
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -223,30 +224,35 @@ func containerTargets(absRoot, walkRoot string) []Target {
 	out := make([]Target, 0, len(profiles))
 	for _, p := range profiles {
 		svc := env.Profiles[p]
+		// Two-step launch: detached `up` for the build/create/start phase,
+		// THEN `logs -f` to stream the container's own stdout/stderr.
+		// `compose up <svc>` in foreground (re-)attaches inconsistently
+		// across podman-compose versions — with --force-recreate it can
+		// drop the attachment for the freshly-created container, leaving
+		// the user with build output but no live logs. The detached up +
+		// separate logs follow is explicit and reliable; `exec` replaces
+		// bash with the logs process so ctx-cancel sends one signal, not
+		// two.
+		//
+		// --force-recreate / --no-deps as before. --remove-orphans NOT
+		// passed (its sweep semantics are too eager — see env-up note).
+		up := fmt.Sprintf(
+			"podman compose -p %q -f %q --profile %q up -d --build --force-recreate --no-deps %q",
+			env.Project, env.File, p, svc,
+		)
+		follow := fmt.Sprintf(
+			"podman compose -p %q -f %q logs -f %q",
+			env.Project, env.File, svc,
+		)
 		out = append(out, Target{
-			Kind:    KindContainer,
-			Name:    p,
-			Service: service,
-			RelDir:  rel,
-			Dir:     walkRoot,
-			Detail:  "podman compose --profile " + p + " up " + svc,
-			Cmd:     "podman",
-			// --force-recreate: replace any leftover container with the same
-			//   name (otherwise compose errors `container name … already in
-			//   use / use --replace`).
-			// --no-deps: env-up already brought up postgres / mailer / sibling
-			//   services we chose to keep; don't let `up` re-resolve and
-			//   restart them (and risk pulling in a sibling we explicitly
-			//   skipped in global mode).
-			// NB: --remove-orphans was tried here AND on env-up; both removed,
-			// because podman-compose's sweep is too eager when the positional
-			// services don't equal the full compose service list and was
-			// taking down postgres mid-up.
-			Args: []string{
-				"compose", "-p", env.Project, "-f", env.File,
-				"--profile", p,
-				"up", "--build", "--force-recreate", "--no-deps", svc,
-			},
+			Kind:           KindContainer,
+			Name:           p,
+			Service:        service,
+			RelDir:         rel,
+			Dir:            walkRoot,
+			Detail:         "podman compose --profile " + p + " up " + svc + " · logs -f",
+			Cmd:            "bash",
+			Args:           []string{"-c", up + " && exec " + follow},
 			Env:            env,
 			ComposeService: svc,
 		})
