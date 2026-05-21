@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -654,7 +655,9 @@ func EnvUp(ctx context.Context, env []string, e *detect.ComposeEnv, out io.Write
 		args...); err != nil {
 		return fmt.Errorf("environment %s failed to start: %w", e.ID, err)
 	}
-	if err := waitHealthy(ctx, out, env, e, 120*time.Second); err != nil {
+	// 180s: a fresh `--build` plus first-run postgres `initdb` can exceed
+	// the previous 120s on slower machines / cold caches.
+	if err := waitHealthy(ctx, out, env, e, 180*time.Second); err != nil {
 		return fmt.Errorf("environment %s not ready: %w", e.ID, err)
 	}
 	return nil
@@ -664,11 +667,14 @@ func EnvUp(ctx context.Context, env []string, e *detect.ComposeEnv, out io.Write
 // `compose up --wait` (unsupported by the external podman-compose provider).
 // A container is ready when it is running with a healthy (or absent)
 // healthcheck, or has exited 0 (a one-shot init/migration). A non-zero exit
-// fails fast; otherwise it polls until timeout.
+// fails fast; otherwise it polls until timeout — on timeout the offending
+// containers' tails are appended to the error so the user sees WHY they
+// never came up (the previous "timed out after Xs" message gave no clue).
 func waitHealthy(ctx context.Context, log io.Writer, env []string, e *detect.ComposeEnv, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	prefix := e.Project + "_"
 	var last string
+	var lastUnhealthy []string // ids of containers not yet ready at last check
 	for {
 		ids, err := podmanOut(ctx, env, "ps", "-a", "--filter", "name="+prefix, "--format", "{{.ID}}")
 		if err != nil {
@@ -677,12 +683,14 @@ func waitHealthy(ctx context.Context, log io.Writer, env []string, e *detect.Com
 		idList := strings.Fields(ids)
 		ready := len(idList) > 0
 		var states []string
+		var unhealthy []string
 		for _, id := range idList {
 			out, ierr := podmanOut(ctx, env, "inspect", id, "--format",
 				"{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}")
 			parts := strings.Split(out, "|")
 			if ierr != nil || len(parts) < 4 {
 				ready = false
+				unhealthy = append(unhealthy, id)
 				continue
 			}
 			name, st, health, code := parts[0], parts[1], parts[2], parts[3]
@@ -693,25 +701,47 @@ func waitHealthy(ctx context.Context, log io.Writer, env []string, e *detect.Com
 			case st == "running" && (health == "-" || health == "healthy"):
 				// long-lived service ready
 			case st == "exited":
-				return fmt.Errorf("container %s exited with code %s", name, code)
+				return fmt.Errorf("container %s exited with code %s:\n%s",
+					name, code, containerLogTail(ctx, env, id, 30))
 			default:
 				ready = false
+				unhealthy = append(unhealthy, id)
 			}
 		}
 		last = strings.Join(states, "  ")
+		lastUnhealthy = unhealthy
 		if ready {
 			_, _ = fmt.Fprintf(log, "ready: %s\n", last)
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out after %s; last state: %s", timeout, last)
+			var b strings.Builder
+			fmt.Fprintf(&b, "timed out after %s; last state: %s", timeout, last)
+			for _, id := range lastUnhealthy {
+				tail := containerLogTail(ctx, env, id, 20)
+				if tail != "" {
+					fmt.Fprintf(&b, "\n── tail %s ──\n%s", id[:12], tail)
+				}
+			}
+			return errors.New(b.String())
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(2 * time.Second):
+		case <-time.After(1500 * time.Millisecond):
 		}
 	}
+}
+
+// containerLogTail returns the last `lines` lines of a container's combined
+// stdout+stderr — small helper for waitHealthy's failure path so the user
+// sees postgres's own startup errors instead of just "timed out".
+func containerLogTail(ctx context.Context, env []string, id string, lines int) string {
+	out, err := podmanOut(ctx, env, "logs", "--tail", strconv.Itoa(lines), id)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimRight(out, "\n")
 }
 
 // Summary aggregates a set of results for the report screen.
