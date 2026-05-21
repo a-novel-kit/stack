@@ -225,25 +225,35 @@ func containerTargets(absRoot, walkRoot string) []Target {
 	for _, p := range profiles {
 		svc := env.Profiles[p]
 		// Three-step launch in one shell:
-		//   1. `compose up -d --build --force-recreate --no-deps <svc>` —
-		//      build / create / start in detached mode (build output flows
-		//      through bash's stdout into the proc log).
-		//   2. `compose ps -q <svc>` — resolve the new container's ID.
-		//      Avoids guessing name format (versions disagree on `_1` vs `-1`).
-		//   3. `exec podman logs -f <id>` — attach to the container's actual
-		//      stdout/stderr.
+		//   1. `compose --profile X up -d --build` — bring up everything
+		//      the profile activates (the target + still-needed deps).
+		//      No positional service name (some podman-compose versions
+		//      reject it: `unrecognized arguments: <svc>`). No
+		//      --force-recreate / --no-deps either — both were
+		//      version-fragile; --profile alone is the universal selector.
+		//   2. `podman ps -q --filter label=…` — resolve the freshly-
+		//      started container's ID via the compose-spec labels every
+		//      version sets. Goes through podman (not compose) so it is
+		//      not subject to compose-side CLI variance.
+		//   3. `exec podman logs -f <id>` — attach to the container's
+		//      actual stdout/stderr (compose-level streaming was the
+		//      source of the "build logs but no live logs" symptom).
 		//
-		// Why not `compose up` foreground OR `compose logs -f`? Both have
-		// version-dependent streaming/attach behaviour that left live logs
-		// silent under --force-recreate. `podman logs -f <id>` is the lowest-
-		// level streaming path and just works. `exec` replaces bash so the
-		// runner's ctx-cancel sends one signal, not two.
+		// `exec` replaces bash so the runner's ctx-cancel terminates one
+		// process. Single-quoted template values keep the shell literal —
+		// none of project / path / profile / service contain quotes.
 		shell := fmt.Sprintf(
-			"podman compose -p '%s' -f '%s' --profile '%s' up -d --build --force-recreate --no-deps '%s'"+
-				" && id=$(podman compose -p '%s' -f '%s' ps -q '%s')"+
-				" && exec podman logs -f \"$id\"",
-			env.Project, env.File, p, svc,
-			env.Project, env.File, svc,
+			"podman compose -p '%s' -f '%s' --profile '%s' up -d --build && { "+
+				// primary: docker-compose-style labels (used by recent
+				// podman-compose for compatibility)
+				"id=$(podman ps -q --filter label=com.docker.compose.project='%s' --filter label=com.docker.compose.service='%s'); "+
+				// fallback: old podman-compose's own label namespace
+				"[ -z \"$id\" ] && id=$(podman ps -q --filter label=io.podman.compose.project='%s' --filter label=io.podman.compose.service='%s'); "+
+				"exec podman logs -f \"$id\"; "+
+				"}",
+			env.Project, env.File, p,
+			env.Project, svc,
+			env.Project, svc,
 		)
 		out = append(out, Target{
 			Kind:           KindContainer,
