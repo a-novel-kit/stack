@@ -224,24 +224,25 @@ func containerTargets(absRoot, walkRoot string) []Target {
 	out := make([]Target, 0, len(profiles))
 	for _, p := range profiles {
 		svc := env.Profiles[p]
-		// Two-step launch: detached `up` for the build/create/start phase,
-		// THEN `logs -f` to stream the container's own stdout/stderr.
-		// `compose up <svc>` in foreground (re-)attaches inconsistently
-		// across podman-compose versions — with --force-recreate it can
-		// drop the attachment for the freshly-created container, leaving
-		// the user with build output but no live logs. The detached up +
-		// separate logs follow is explicit and reliable; `exec` replaces
-		// bash with the logs process so ctx-cancel sends one signal, not
-		// two.
+		// Three-step launch in one shell:
+		//   1. `compose up -d --build --force-recreate --no-deps <svc>` —
+		//      build / create / start in detached mode (build output flows
+		//      through bash's stdout into the proc log).
+		//   2. `compose ps -q <svc>` — resolve the new container's ID.
+		//      Avoids guessing name format (versions disagree on `_1` vs `-1`).
+		//   3. `exec podman logs -f <id>` — attach to the container's actual
+		//      stdout/stderr.
 		//
-		// --force-recreate / --no-deps as before. --remove-orphans NOT
-		// passed (its sweep semantics are too eager — see env-up note).
-		up := fmt.Sprintf(
-			"podman compose -p %q -f %q --profile %q up -d --build --force-recreate --no-deps %q",
+		// Why not `compose up` foreground OR `compose logs -f`? Both have
+		// version-dependent streaming/attach behaviour that left live logs
+		// silent under --force-recreate. `podman logs -f <id>` is the lowest-
+		// level streaming path and just works. `exec` replaces bash so the
+		// runner's ctx-cancel sends one signal, not two.
+		shell := fmt.Sprintf(
+			"podman compose -p '%s' -f '%s' --profile '%s' up -d --build --force-recreate --no-deps '%s'"+
+				" && id=$(podman compose -p '%s' -f '%s' ps -q '%s')"+
+				" && exec podman logs -f \"$id\"",
 			env.Project, env.File, p, svc,
-		)
-		follow := fmt.Sprintf(
-			"podman compose -p %q -f %q logs -f %q",
 			env.Project, env.File, svc,
 		)
 		out = append(out, Target{
@@ -250,9 +251,9 @@ func containerTargets(absRoot, walkRoot string) []Target {
 			Service:        service,
 			RelDir:         rel,
 			Dir:            walkRoot,
-			Detail:         "podman compose --profile " + p + " up " + svc + " · logs -f",
+			Detail:         "podman compose --profile " + p + " up " + svc + " · podman logs -f",
 			Cmd:            "bash",
-			Args:           []string{"-c", up + " && exec " + follow},
+			Args:           []string{"-c", shell},
 			Env:            env,
 			ComposeService: svc,
 		})
