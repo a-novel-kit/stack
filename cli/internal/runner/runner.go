@@ -140,9 +140,13 @@ func (p *Proc) Write(b []byte) (int, error) {
 }
 
 // appendLine sanitizes one raw line and pushes it onto the bounded ring,
-// dropping the oldest line past maxLines. Caller holds p.mu.
+// dropping the oldest line past maxLines. Known-benign compose probe noise
+// is filtered out entirely (see IsNoise). Caller holds p.mu.
 func (p *Proc) appendLine(raw string) {
 	ln := SanitizeLine(raw)
+	if IsNoise(ln) {
+		return
+	}
 	p.lines = append(p.lines, ln)
 	if len(p.lines) > maxLines {
 		p.lines = p.lines[len(p.lines)-maxLines:]

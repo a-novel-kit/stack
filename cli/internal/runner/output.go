@@ -54,3 +54,19 @@ func SanitizeLine(s string) string {
 	})
 	return ctlRe.ReplaceAllString(s, "")
 }
+
+// composeNoise is podman-compose's pre-create probe noise. With
+// --force-recreate, compose first inspects the existing container by name
+// to decide whether to remove it; if no container exists yet, podman emits
+// `Error: no container with name or ID "<n>" found: no such container`
+// (and the reversed-word variant). The probe always proceeds to create the
+// container successfully — this is INFORMATIONAL output with an
+// unfortunate Error prefix. Dropping it removes the only false-positive in
+// container-mode logs.
+var composeNoise = regexp.MustCompile(`^Error: no container with (?:name or ID|ID or name) "[^"]+" found: no such container\.?$`)
+
+// IsNoise reports whether a (sanitized) line is a known-benign compose probe
+// the runner should drop on its way into the proc buffer.
+func IsNoise(s string) bool {
+	return composeNoise.MatchString(strings.TrimSpace(s))
+}
