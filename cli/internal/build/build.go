@@ -643,12 +643,15 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 // global mode to skip services that duplicate a sibling already running from
 // its own repo.
 func EnvUp(ctx context.Context, env []string, e *detect.ComposeEnv, out io.Writer, services ...string) error {
-	// --remove-orphans: a leftover container from a prior project run that
-	// the current compose no longer declares (or that we are now skipping
-	// via the sibling-skip / profile machinery) must not hold the name; it
-	// is the trigger for the "container name … already in use" cascade.
-	args := make([]string, 0, 4+len(services))
-	args = append(args, "up", "-d", "--build", "--remove-orphans")
+	// NOTE: we do NOT pass --remove-orphans here. podman-compose's
+	// interpretation of "orphan" relative to a positional `up <svc>` is
+	// inconsistent across versions — it can sweep services that ARE in the
+	// compose file but not in the positional list, including (in the
+	// no-positional case) the very services it just created. TearDown owns
+	// orphan removal in its explicit cleanup; per-target container `up`
+	// uses --force-recreate to displace stale containers by name.
+	args := make([]string, 0, 3+len(services))
+	args = append(args, "up", "-d", "--build")
 	args = append(args, services...)
 	if err := compose(ctx, out, env, e,
 		[]string{"--podman-build-args=--format docker -q"},

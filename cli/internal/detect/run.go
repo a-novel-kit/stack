@@ -238,12 +238,14 @@ func containerTargets(absRoot, walkRoot string) []Target {
 			//   services we chose to keep; don't let `up` re-resolve and
 			//   restart them (and risk pulling in a sibling we explicitly
 			//   skipped in global mode).
-			// --remove-orphans: clean stale containers the current compose no
-			//   longer declares so they don't keep the network busy.
+			// NB: --remove-orphans was tried here AND on env-up; both removed,
+			// because podman-compose's sweep is too eager when the positional
+			// services don't equal the full compose service list and was
+			// taking down postgres mid-up.
 			Args: []string{
 				"compose", "-p", env.Project, "-f", env.File,
 				"--profile", p,
-				"up", "--build", "--force-recreate", "--no-deps", "--remove-orphans", svc,
+				"up", "--build", "--force-recreate", "--no-deps", svc,
 			},
 			Env:            env,
 			ComposeService: svc,
