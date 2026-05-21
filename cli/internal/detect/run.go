@@ -242,22 +242,31 @@ func containerTargets(absRoot, walkRoot string) []Target {
 		// `exec` replaces bash so the runner's ctx-cancel terminates one
 		// process. Single-quoted template values keep the shell literal —
 		// none of project / path / profile / service contain quotes.
+		// Resolve the target's container ID with a two-step fallback:
+		//   1. `compose ps -q <svc>` — works on versions that accept a
+		//      positional service on `ps` (most modern, including
+		//      docker-compose v2).
+		//   2. `podman ps -a --format '{{.ID}} {{.Names}}' | grep -F <svc>`
+		//      — universal: lists every container, picks the one whose
+		//      name CONTAINS the service identifier. Substring match is
+		//      provably exclusive across distinct services in the same
+		//      project (`service-json-keys-rest` is not a substring of
+		//      `postgres-json-keys`), so it cannot pick postgres for the
+		//      rest target.
+		// If both fail, exit 1 with a clear error rather than running
+		// `podman logs -f ""` (which defaults to the first / wrong
+		// container in some podman versions — the source of the
+		// "rest tab streams postgres" symptom).
 		shell := fmt.Sprintf(
-			"podman compose -p '%s' -f '%s' --profile '%s' up -d --build && { "+
-				// Resolve the freshly-started container by NAME. Compose
-				// container names follow `<project>{_or-}<service>{_or-}<index>`
-				// — universal across podman-compose versions (labels are
-				// not). `--filter name=` is substring-by-default, so passing
-				// both separator variants as two filters (OR semantics for
-				// the same filter key) covers `_` and `-` styles. `head -1`
-				// keeps the first match if there happen to be multiple
-				// indices (rare).
-				"id=$(podman ps -q --filter 'name=%s_%s' --filter 'name=%s-%s' | head -1); "+
-				"exec podman logs -f \"$id\"; "+
-				"}",
+			"podman compose -p '%s' -f '%s' --profile '%s' up -d --build || exit; "+
+				"id=$(podman compose -p '%s' -f '%s' ps -q '%s' 2>/dev/null | head -1); "+
+				"[ -z \"$id\" ] && id=$(podman ps -a --format '{{.ID}} {{.Names}}' | grep -F '%s' | head -1 | cut -d' ' -f1); "+
+				"[ -z \"$id\" ] && { echo \"Error: container for service '%s' not found\" >&2; exit 1; }; "+
+				"exec podman logs -f \"$id\"",
 			env.Project, env.File, p,
-			env.Project, svc,
-			env.Project, svc,
+			env.Project, env.File, svc,
+			svc,
+			svc,
 		)
 		out = append(out, Target{
 			Kind:           KindContainer,
