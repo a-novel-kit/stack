@@ -244,11 +244,15 @@ func containerTargets(absRoot, walkRoot string) []Target {
 		// none of project / path / profile / service contain quotes.
 		shell := fmt.Sprintf(
 			"podman compose -p '%s' -f '%s' --profile '%s' up -d --build && { "+
-				// primary: docker-compose-style labels (used by recent
-				// podman-compose for compatibility)
-				"id=$(podman ps -q --filter label=com.docker.compose.project='%s' --filter label=com.docker.compose.service='%s'); "+
-				// fallback: old podman-compose's own label namespace
-				"[ -z \"$id\" ] && id=$(podman ps -q --filter label=io.podman.compose.project='%s' --filter label=io.podman.compose.service='%s'); "+
+				// Resolve the freshly-started container by NAME. Compose
+				// container names follow `<project>{_or-}<service>{_or-}<index>`
+				// — universal across podman-compose versions (labels are
+				// not). `--filter name=` is substring-by-default, so passing
+				// both separator variants as two filters (OR semantics for
+				// the same filter key) covers `_` and `-` styles. `head -1`
+				// keeps the first match if there happen to be multiple
+				// indices (rare).
+				"id=$(podman ps -q --filter 'name=%s_%s' --filter 'name=%s-%s' | head -1); "+
 				"exec podman logs -f \"$id\"; "+
 				"}",
 			env.Project, env.File, p,
