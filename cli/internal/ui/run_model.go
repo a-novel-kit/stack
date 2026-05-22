@@ -1,14 +1,10 @@
 package ui
 
 import (
-	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/cursor"
-	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -16,27 +12,16 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/runner"
 )
 
-// focus is which pane keystrokes drive. There are only two: the log view
-// (scrolling is always on; ←/→ and 1-9 still switch the process tab) and the
-// console. tab toggles directly between them (console skipped when the
-// terminal is too narrow to show it).
-type focusZone int
+// globalMinWidth is the narrowest total width that still gets the vertical
+// service nav. Below this the nav is hidden and the log uses the full width.
+const globalMinWidth = 100
 
-const (
-	focusLogs    focusZone = iota // scroll the log; ←/→ · 1-9 switch tab
-	focusConsole                  // type a quick command (curl, …)
-)
-
-// consoleMinWidth is the narrowest total width that still gets a console
-// column. Below this the console is hidden and the log uses the full width
-// (the user asked for the log to fill the screen when there is no room).
-const consoleMinWidth = 100
-
-// RunModel is the live `run` dashboard: a full-width split — a tmux-style
-// tabbed log view on the left, and a single shared interactive console on the
-// right (curl & co. against the run's own ports). Every persistent element is
-// static, so an idle frame is byte-identical and Bubble Tea's renderer skips
-// the repaint — no flicker.
+// RunModel is the live `run` dashboard: a tmux-style tabbed log view plus, in
+// global scope, a left-side service nav. Spinning targets and monitoring
+// their output is the entire job — there is no interactive console; the user
+// asked for the tool to stay simple. Every persistent element is static, so
+// an idle frame is byte-identical and Bubble Tea's renderer skips the
+// repaint (no flicker).
 type RunModel struct {
 	version string
 	runMode string // "container" / "live" — surfaced in the dashboard header
@@ -44,20 +29,15 @@ type RunModel struct {
 	cancel  func() // cancels the runner (triggers full teardown)
 
 	vp      viewport.Model // active process log
-	cvp     viewport.Model // console output (shared, not per-tab)
-	ti      textinput.Model
 	vpReady bool
 
 	procs []runner.ProcView
-	sel   int       // active tab
-	focus focusZone // which pane has the keys
+	sel   int // active tab
 
 	// Render-on-change: the log viewport is only re-fed when the active tab's
 	// content sequence (or the selection) actually changed.
 	shownSel int
 	shownSeq uint64
-
-	cbuf []string // shared console scrollback (prompts + command output)
 
 	width, height int
 	stopping      bool // user asked to quit; waiting for teardown
@@ -66,9 +46,6 @@ type RunModel struct {
 }
 
 type runDoneMsg struct{}
-
-// consoleResultMsg carries the combined output of a finished console command.
-type consoleResultMsg struct{ out string }
 
 // tickMsg drives a slow poll of the runner snapshot. It is deliberately NOT
 // an animated spinner: an animating glyph changes View() every frame, and
@@ -88,15 +65,9 @@ func tick() tea.Cmd {
 // ("container" / "live") is shown in the dashboard header so the active
 // mode is unambiguous at a glance.
 func NewRun(version, runMode string, r *runner.Runner, cancel func()) RunModel {
-	ti := textinput.New()
-	ti.Prompt = "❯ "
-	ti.Placeholder = "curl $SERVICE_JSON_KEYS_REST_URL/healthcheck …"
-	// Static cursor: a blinking cursor would change View() every blink and
-	// reintroduce the exact flicker we just removed.
-	ti.Cursor.SetMode(cursor.CursorStatic)
 	return RunModel{
 		version: version, runMode: runMode, run: r, cancel: cancel,
-		procs: r.Snapshot(), shownSel: -1, ti: ti,
+		procs: r.Snapshot(), shownSel: -1,
 	}
 }
 
@@ -112,14 +83,14 @@ func (m RunModel) waitDone() tea.Cmd {
 	}
 }
 
-// runGeom is the resolved responsive layout. consoleOn is false on a narrow
-// terminal (console hidden, log column widens). globalMode is true when there
-// are ≥2 services to navigate between — a vertical service nav appears on the
-// far left and the top tab bar narrows to the active service's entrypoints.
+// runGeom is the resolved responsive layout. globalMode is true when there
+// are ≥2 services to navigate between — a vertical service nav appears on
+// the far left and the top tab bar narrows to the active service's
+// entrypoints. On narrow terminals it auto-disables.
 type runGeom struct {
-	consoleOn, globalMode bool
-	navW, leftW, consoleW int
-	bodyH                 int
+	globalMode  bool
+	navW, leftW int
+	bodyH       int
 }
 
 func (m RunModel) geom() runGeom {
@@ -132,12 +103,9 @@ func (m RunModel) geom() runGeom {
 	if bodyH < 3 {
 		bodyH = 3
 	}
-	// Global mode: ≥2 services in scope. The nav column fits the longest
-	// service name (capped) plus a tiny status glyph; we hide it on narrow
-	// terminals because it would crowd the log.
 	globalMode := false
 	navW := 0
-	if w >= consoleMinWidth {
+	if w >= globalMinWidth {
 		if svcs := m.services(); len(svcs) >= 2 {
 			maxLen := 0
 			for _, s := range svcs {
@@ -149,43 +117,22 @@ func (m RunModel) geom() runGeom {
 			globalMode = true
 		}
 	}
-	// Console: shown when the width still fits a reasonable log column.
-	consoleOn := false
-	consoleW := 0
-	if w >= consoleMinWidth {
-		consoleW = clamp(w/3, 34, 56)
-	}
-	// leftW = log column = remaining width after nav + console + dividers.
-	leftW := w - navW - consoleW
+	leftW := w - navW
 	if navW > 0 {
 		leftW -= 3 // " │ " divider between nav and log
 	}
-	if consoleW > 0 {
-		leftW -= 3 // " │ " divider between log and console
-	}
-	if leftW < 40 {
-		// Not enough room with the console; drop the console first.
-		consoleW = 0
-		leftW = w - navW
-		if navW > 0 {
-			leftW -= 3
-		}
-	}
 	if leftW < 40 && navW > 0 {
-		// Still tight — drop the nav too and fall back to single-service layout.
+		// Too tight for the nav too — fall back to single-column.
 		navW = 0
 		globalMode = false
 		leftW = w
 	}
-	if consoleW > 0 {
-		consoleOn = true
-	}
-	return runGeom{consoleOn: consoleOn, globalMode: globalMode, navW: navW, leftW: leftW, consoleW: consoleW, bodyH: bodyH}
+	return runGeom{globalMode: globalMode, navW: navW, leftW: leftW, bodyH: bodyH}
 }
 
 // services returns the unique service names across procs, in first-seen
-// order. The order is stable across ticks because procs is built from the
-// runner's selection-time slice.
+// order. Stable across ticks because procs is built from the runner's
+// selection-time slice.
 func (m RunModel) services() []string {
 	seen := map[string]bool{}
 	var out []string
@@ -260,10 +207,6 @@ func (m RunModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshLog(false)
 		return m, tick()
 
-	case consoleResultMsg:
-		m.appendConsole(msg.out)
-		return m, nil
-
 	case runDoneMsg:
 		m.finished = true
 		if m.stopping {
@@ -278,71 +221,26 @@ func (m RunModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// applyGeom (re)sizes the viewports/input to the current layout. Called on
+// applyGeom (re)sizes the log viewport to the current layout. Called on
 // resize; safe to call repeatedly.
 func (m *RunModel) applyGeom() {
 	g := m.geom()
 	logH := max(g.bodyH-3, 1) // tab bar + gap + title above the log
 	if !m.vpReady {
 		m.vp = viewport.New(g.leftW, logH)
-		m.cvp = viewport.New(max(g.consoleW, 1), max(g.bodyH-2, 1))
 		m.vpReady = true
 	} else {
 		m.vp.Width, m.vp.Height = g.leftW, logH
-		m.cvp.Width, m.cvp.Height = max(g.consoleW, 1), max(g.bodyH-2, 1)
-	}
-	if g.consoleOn {
-		m.ti.Width = g.consoleW - 3
 	}
 	m.refreshLog(true)
-	m.refreshConsole()
 }
 
 func (m RunModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 
-	// ctrl+c is the only ALWAYS-global key: q is a typeable character, so it
-	// must not quit while the console is focused.
-	if k == "ctrl+c" {
-		return m.quitOrTeardown()
-	}
-
-	if m.focus == focusConsole {
-		switch k {
-		case keyEsc:
-			m.focus = focusLogs
-			m.ti.Blur()
-			return m, nil
-		case "tab":
-			return m.cycleFocus()
-		case keyEnter:
-			line := strings.TrimSpace(m.ti.Value())
-			if line == "" {
-				return m, nil
-			}
-			m.appendConsole(styleGold.Render("❯ ") + line)
-			m.ti.Reset()
-			return m, m.runConsole(line)
-		default:
-			var cmd tea.Cmd
-			m.ti, cmd = m.ti.Update(msg)
-			return m, cmd
-		}
-	}
-
-	// focusLogs key dispatch differs between single-service and global modes.
-	// Single: ←/→ + 1-9 = tab nav, everything else (↑/↓, pgup/pgdn, k/j…)
-	// scrolls (the prior "scroll always on" rule). Global (left nav active):
-	// ↑/↓ switch service, ←/→ switch in-service entrypoint, 1-9 jump to an
-	// in-service entrypoint, pgup/pgdn/home/end scroll. The two axes need
-	// distinct keys; pgup/pgdn becomes the scroll path.
-	globalMode := m.geom().globalMode
-
 	switch k {
-	case keyQ:
+	case "ctrl+c", keyQ:
 		return m.quitOrTeardown()
-	case "tab":
-		return m.cycleFocus()
 	case keyLeft, "h", "shift+tab":
 		m.navEntry(-1)
 		return m, nil
@@ -350,7 +248,7 @@ func (m RunModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.navEntry(+1)
 		return m, nil
 	}
-	if globalMode {
+	if m.geom().globalMode {
 		switch k {
 		case keyUp, "k":
 			m.navService(-1)
@@ -361,10 +259,10 @@ func (m RunModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	if len(k) == 1 && k[0] >= '1' && k[0] <= '9' {
-		// 1-9 = jump to the Nth entrypoint of the current service in global
-		// mode, or the Nth flat proc otherwise.
+		// 1-9 jumps to the Nth entrypoint of the current service (global) or
+		// the Nth flat proc (per-repo).
 		n := int(k[0] - '1')
-		if globalMode {
+		if m.geom().globalMode {
 			ix := m.serviceProcs(m.currentService())
 			if n < len(ix) {
 				m.sel = ix[n]
@@ -376,6 +274,8 @@ func (m RunModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	// Everything else (↑/↓ in per-repo, pgup/pgdn / home/end / k/j in global,
+	// space/etc.) scrolls the log viewport.
 	if m.vpReady {
 		var cmd tea.Cmd
 		m.vp, cmd = m.vp.Update(msg)
@@ -388,9 +288,8 @@ func (m RunModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // in global mode, or among all procs flat in single-service mode. Edges are
 // hard stops — no wraparound.
 func (m *RunModel) navEntry(delta int) {
-	g := m.geom()
 	var indices []int
-	if g.globalMode {
+	if m.geom().globalMode {
 		indices = m.serviceProcs(m.currentService())
 	} else {
 		indices = make([]int, len(m.procs))
@@ -453,74 +352,6 @@ func (m RunModel) quitOrTeardown() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// cycleFocus toggles between the log view and the console. When the console
-// is hidden (narrow terminal) it is a no-op — there is nowhere else to go.
-func (m RunModel) cycleFocus() (tea.Model, tea.Cmd) {
-	if m.focus == focusConsole {
-		m.focus = focusLogs
-		m.ti.Blur()
-		return m, nil
-	}
-	if m.geom().consoleOn {
-		m.focus = focusConsole
-		return m, m.ti.Focus()
-	}
-	return m, nil // console hidden — stay on logs
-}
-
-// runConsole executes one quick command with the RUN's dir/env, so a curl
-// hits the same ports the run allocated. Combined output, 30s ceiling.
-func (m RunModel) runConsole(line string) tea.Cmd {
-	dir, env := m.run.Console()
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		c := exec.CommandContext(ctx, "bash", "-lc", line)
-		if dir != "" {
-			c.Dir = dir
-		}
-		if env != nil {
-			c.Env = env
-		}
-		out, err := c.CombinedOutput()
-		s := strings.TrimRight(string(out), "\n")
-		if err != nil && s == "" {
-			s = err.Error()
-		}
-		// Sanitize EXACTLY like process logs: a command that emits \r
-		// progress or cursor moves (curl -v, anything coloured) otherwise
-		// breaks out of the console column and corrupts the log to its left.
-		lines := strings.Split(s, "\n")
-		for i, ln := range lines {
-			lines[i] = runner.SanitizeLine(ln)
-		}
-		return consoleResultMsg{out: strings.Join(lines, "\n")}
-	}
-}
-
-// appendConsole pushes lines onto the shared console scrollback (bounded) and
-// re-feeds the console viewport, tail-following.
-func (m *RunModel) appendConsole(s string) {
-	m.cbuf = append(m.cbuf, strings.Split(s, "\n")...)
-	const maxConsole = 2000
-	if len(m.cbuf) > maxConsole {
-		m.cbuf = m.cbuf[len(m.cbuf)-maxConsole:]
-	}
-	m.refreshConsole()
-	m.cvp.GotoBottom()
-}
-
-func (m *RunModel) refreshConsole() {
-	if !m.vpReady {
-		return
-	}
-	w := m.cvp.Width
-	if w < 1 {
-		w = 1
-	}
-	m.cvp.SetContent(ansi.Hardwrap(strings.Join(m.cbuf, "\n"), w, true))
-}
-
 // refreshLog re-feeds the active tab's log, only when something changed (or
 // force). Tail-follows unless the user scrolled up.
 func (m *RunModel) refreshLog(force bool) {
@@ -547,8 +378,8 @@ func (m *RunModel) refreshLog(force bool) {
 }
 
 // padTo ANSI-aware-truncates s to w and right-pads with spaces to exactly w
-// visible columns — so columns align and no line can overflow (overflow wraps
-// terminal-side and desyncs the renderer = flicker).
+// visible columns — so columns align and no line can overflow (overflow
+// wraps terminal-side and desyncs the renderer = flicker).
 func padTo(s string, w int) string {
 	s = ansi.Truncate(s, w, "")
 	if gap := w - ansi.StringWidth(s); gap > 0 {
@@ -564,11 +395,6 @@ func (m RunModel) View() string {
 	}
 	g := m.geom()
 
-	// Header: mode is the primary segment (always visible) followed by the
-	// state when it's not the default running state. In per-repo
-	// (single-service) scope the service name trails — there is no left nav
-	// to carry it. Global mode keeps the header mode-only; services live in
-	// the left nav.
 	head := "run · " + m.runMode
 	if m.stopping {
 		head += " · tearing down…"
@@ -585,12 +411,9 @@ func (m RunModel) View() string {
 
 	left := m.leftColumn(g.leftW, g.bodyH, g.globalMode)
 	div := styleMuted.Render(" │ ")
-	var navLines, rightLines []string
+	var navLines []string
 	if g.globalMode {
 		navLines = m.navColumn(g.navW, g.bodyH)
-	}
-	if g.consoleOn {
-		rightLines = m.rightColumn(g.consoleW, g.bodyH)
 	}
 	for i := range g.bodyH {
 		line := ""
@@ -598,9 +421,6 @@ func (m RunModel) View() string {
 			line = padTo(navLines[i], g.navW) + div
 		}
 		line += padTo(left[i], g.leftW)
-		if g.consoleOn {
-			line += div + padTo(rightLines[i], g.consoleW)
-		}
 		b.WriteString(line + "\n")
 	}
 
@@ -648,18 +468,6 @@ func (m RunModel) leftColumn(w, bodyH int, globalMode bool) []string {
 	return fitLines(lines, bodyH)
 }
 
-// rightColumn returns exactly bodyH lines: console title, output, input.
-func (m RunModel) rightColumn(w, bodyH int) []string {
-	title := "console"
-	if m.focus == focusConsole {
-		title = "console (live)"
-	}
-	lines := []string{section(title, colGold, w)}
-	lines = append(lines, strings.Split(m.cvp.View(), "\n")...)
-	lines = fitLines(lines, bodyH-1)
-	return append(lines, ansi.Truncate(m.ti.View(), w, ""))
-}
-
 // fitLines forces a slice to exactly n lines: truncate the excess, pad short.
 func fitLines(lines []string, n int) []string {
 	if len(lines) > n {
@@ -671,35 +479,21 @@ func fitLines(lines []string, n int) []string {
 	return lines
 }
 
-// footer keeps the full, focus-appropriate instructions on screen for the
-// whole life of the TUI — it never collapses to just "quit". Run state
-// (live / tearing down / stopped) is conveyed by the header instead, so the
-// keys you can still press stay visible until the result screen replaces the
-// TUI entirely.
+// footer keeps the full instructions on screen for the whole life of the TUI
+// — it never collapses to just "quit". Run state is conveyed by the header.
 func (m RunModel) footer(g runGeom) string {
-	if m.focus == focusConsole {
-		return "type a command · enter run · esc/tab → logs · ctrl+c quit (teardown)"
-	}
 	if g.globalMode {
-		hint := "↑/↓ services · ←/→ entrypoints · 1-9 jump · pgup/pgdn scroll · q quit (teardown)"
-		if g.consoleOn {
-			hint += " · tab → console"
-		}
-		return hint
+		return "↑/↓ services · ←/→ entrypoints · 1-9 jump · pgup/pgdn scroll · q quit (teardown)"
 	}
-	hint := "↑/↓ pgup/pgdn scroll · ←/→ tabs · 1-9 jump · q quit (teardown)"
-	if g.consoleOn {
-		hint = "↑/↓ scroll · ←/→ tabs · 1-9 jump · tab → console · q quit (teardown)"
-	}
-	return hint
+	return "↑/↓ pgup/pgdn scroll · ←/→ tabs · 1-9 jump · q quit (teardown)"
 }
 
 // tabBar renders one fixed row of tabs (status glyph + entrypoint name), the
 // active one highlighted. In global mode the bar shows only the active
-// service's entrypoints (services live in the left nav); in single-service
-// mode it shows every proc flat. Either way the LABEL is just the entrypoint
-// name — service identity is conveyed by the left nav (global) or the
-// header (per-repo), so the tab label stays compact.
+// service's entrypoints (services live in the left nav); in per-repo mode it
+// shows every proc flat. Either way the label is just the entrypoint name —
+// service identity is conveyed by the left nav (global) or the header
+// (per-repo).
 func (m RunModel) tabBar(w int, globalMode bool) string {
 	var indices []int
 	if globalMode {
