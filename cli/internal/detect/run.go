@@ -242,29 +242,37 @@ func containerTargets(absRoot, walkRoot string) []Target {
 		// `exec` replaces bash so the runner's ctx-cancel terminates one
 		// process. Single-quoted template values keep the shell literal —
 		// none of project / path / profile / service contain quotes.
-		// Resolve the target's container ID with a two-step fallback:
-		//   1. `compose ps -q <svc>` — works on versions that accept a
-		//      positional service on `ps` (most modern, including
-		//      docker-compose v2).
-		//   2. `podman ps -a --format '{{.ID}} {{.Names}}' | grep -F <svc>`
-		//      — universal: lists every container, picks the one whose
-		//      name CONTAINS the service identifier. Substring match is
-		//      provably exclusive across distinct services in the same
-		//      project (`service-json-keys-rest` is not a substring of
-		//      `postgres-json-keys`), so it cannot pick postgres for the
-		//      rest target.
-		// If both fail, exit 1 with a clear error rather than running
-		// `podman logs -f ""` (which defaults to the first / wrong
-		// container in some podman versions — the source of the
-		// "rest tab streams postgres" symptom).
+		// Four-step shell:
+		//   1. `compose --profile X up -d --build > /dev/null` — bring up
+		//      the profiled service (build / create / start). stdout is
+		//      discarded because compose's `up` chatters about EVERY
+		//      profile-less service it touches (postgres rebuild check,
+		//      etc.); we only want the TARGET's logs in this tab. Errors
+		//      still flow on stderr.
+		//   2. Resolve the container ID — compose ps for versions that
+		//      support a positional `ps`, falling back to `podman ps`
+		//      grep-by-name (universal, substring-exclusive across
+		//      sibling services).
+		//   3. `podman start "$id"` — workaround for podman-compose
+		//      versions where `--profile X up -d` creates the container
+		//      but doesn't start it. No-op when already running.
+		//   4. `exec podman logs -f` — direct streaming of the target's
+		//      stdout/stderr.
+		// Brief status lines on stderr keep the user oriented while the
+		// (suppressed) build is happening.
 		shell := fmt.Sprintf(
-			"podman compose -p '%s' -f '%s' --profile '%s' up -d --build || exit; "+
+			"echo '── %s · bringing up container…' >&2 && "+
+				"podman compose -p '%s' -f '%s' --profile '%s' up -d --build > /dev/null || exit; "+
 				"id=$(podman compose -p '%s' -f '%s' ps -q '%s' 2>/dev/null | head -1); "+
 				"[ -z \"$id\" ] && id=$(podman ps -a --format '{{.ID}} {{.Names}}' | grep -F '%s' | head -1 | cut -d' ' -f1); "+
 				"[ -z \"$id\" ] && { echo \"Error: container for service '%s' not found\" >&2; exit 1; }; "+
+				"podman start \"$id\" > /dev/null 2>&1; "+
+				"echo '── %s · streaming logs' >&2; "+
 				"exec podman logs -f \"$id\"",
+			svc,
 			env.Project, env.File, p,
 			env.Project, env.File, svc,
+			svc,
 			svc,
 			svc,
 		)
