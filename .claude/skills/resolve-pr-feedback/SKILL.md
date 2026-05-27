@@ -332,11 +332,12 @@ create new commits. (This is a hard rule from `git-conventions`.)
 
 After each logical change, before pushing:
 
-- Go internal changes → `make test-unit`
-- `pkg/go` changes → `make test-pkg`
-- `pkg/js` changes → `make test-pkg-js`
+- Go internal changes → `a-novel test --type=go -y` (or `make test-unit`)
+- `pkg/go` changes → `a-novel test --type=go -y` (auto-discovers; or `make test-pkg`)
+- `pkg/js` changes → `a-novel test --type=pnpm -y` (or `make test-pkg-js`)
 
-Never push a red tree.
+Prefer `a-novel` locally; `make` targets are CI's invocation. Full mapping
+in the `use-a-novel-cli` skill (auto-loaded). Never push a red tree.
 
 ### 4.3 Push
 

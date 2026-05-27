@@ -38,6 +38,10 @@ the codebase. Stale or failing tests must be fixed, not deleted.
 Run the narrowest test target that exercises the code you changed:
 
 ```
+a-novel test --type=go -y   # PREFERRED local — auto-discovers services' internal/ + pkg/go
+a-novel test -y             # add pnpm too (services with pkg/js)
+
+# Raw `make` targets — what CI invokes; load `use-a-novel-cli` skill for the full mapping:
 make test-unit   # services: internal/ — dao, services, handlers, lib
 make test-pkg    # services: pkg/go — exported Go client
 make test        # libraries (golib, jwt, …); also the full pre-commit run on services

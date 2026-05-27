@@ -96,7 +96,7 @@ callers and need extra care.
 Decompose the feature into **one branch per layer boundary**. A branch is the smallest unit that:
 
 - Compiles on its own
-- Passes `make test-unit` (or the appropriate test target)
+- Passes `a-novel test --type=go -y` (or `make test-unit` — CI's invocation; see `use-a-novel-cli` skill)
 - Is independently reviewable
 
 **Branch order** follows the dependency chain — always work bottom-up:

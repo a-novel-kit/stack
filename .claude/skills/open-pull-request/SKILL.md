@@ -71,6 +71,9 @@ Run the narrowest test target that covers the branch's layer — see `implement-
 the layer-to-target mapping. Typical:
 
 ```bash
+a-novel test --type=go -y       # preferred local — Go internal + pkg/go
+a-novel test --type=pnpm -y     # preferred local — pkg/js
+# Raw equivalents (CI uses these; load `use-a-novel-cli` skill for the full mapping):
 make test-unit      # Go internal layers
 make test-pkg       # pkg/go (needs running service)
 make test-pkg-js    # pkg/js
