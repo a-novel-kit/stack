@@ -461,6 +461,13 @@ var stdTestEnv = map[string]string{
 	"POSTGRES_USER":     pgStd,
 	"POSTGRES_PASSWORD": pgStd,
 	"POSTGRES_DB":       pgStd,
+	// 32-byte hex-encoded master key for at-rest encryption. Matches the
+	// fixed value every service's CI workflow uses (main.yaml /
+	// release.yaml) so locally-encrypted blobs interchange with CI. Local
+	// only — never a production secret. Without this, container-mode
+	// rotate-keys panics with "expected 32 bytes, got 0 bytes" because
+	// the compose file's `${APP_MASTER_KEY}` substitution resolves empty.
+	"APP_MASTER_KEY": "fec0681a2f57242211c559ca347721766f8a3acd8ed2e63b36b3768051c702ca",
 }
 
 // has reports whether env already defines key.
@@ -622,15 +629,42 @@ func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
 
 // TearDown removes ONE compose project's containers, volumes AND orphans —
 // scoped to that env via `-p <project> -f <file>`, never a global podman
-// wipe. `-t 2` keeps the SIGTERM grace short (2s) so a previous run that is
-// already stuck stopping does not hold the network / container names
-// hostage; --remove-orphans cleans up containers the current compose no
-// longer declares (e.g. after a profile change), which is what otherwise
-// triggers `container name … already in use / use --replace`.
+// wipe. --remove-orphans cleans up containers the current compose no longer
+// declares (e.g. after a profile change), which is what otherwise triggers
+// `container name … already in use / use --replace`.
+//
+// Two-pass teardown:
+//
+//  1. Graceful: `compose down -t 10`. 10s is generous for postgres'
+//     shutdown checkpoint (which can stretch past 2s once the DB has dirty
+//     buffers from migrations + key rotation), but still snappy on quit.
+//  2. Force fallback if pass 1 errored: podman pod rm -f + network rm -f
+//     scoped to this env. Order matters — removing the pod first frees
+//     its containers, which de-references the network so its rm can
+//     succeed. podman-compose 1.5.0 occasionally returns success while
+//     leaving a running container — that container holds its pod, which
+//     holds the network — and the next run then fails to claim the same
+//     project name. Errors at this stage are intentionally swallowed:
+//     the resources may already be gone (first pass partially succeeded),
+//     or may never have come up.
+//
+// Pod / network naming follows podman-compose's conventions:
+//   - Pod:     "pod_<project>"  (podman_compose.py resolve_pod_name, line 2087)
+//   - Network: "<project>_api"  (matches every current service's compose
+//     `networks: { api: }` declaration; if a future service uses a
+//     different network name we'll need to read e.Networks instead).
 func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	var buf bytes.Buffer
-	return compose(ctx, &buf, os.Environ(), &e, nil,
-		"down", "--volume", "--remove-orphans", "-t", "2")
+	err := compose(ctx, &buf, os.Environ(), &e, nil,
+		"down", "--volume", "--remove-orphans", "-t", "10")
+	if err == nil {
+		return nil
+	}
+	// Force-reclaim the pod and network so the env name is fully free
+	// before any subsequent run reuses it. Best-effort.
+	_ = exec.CommandContext(ctx, "podman", "pod", "rm", "-f", "pod_"+e.Project).Run()
+	_ = exec.CommandContext(ctx, "podman", "network", "rm", "-f", e.Project+"_api").Run()
+	return err
 }
 
 // EnvUp brings a compose env up (build, detached) using the given env, then

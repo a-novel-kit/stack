@@ -1,8 +1,14 @@
 // Command a-novel is the A-Novel storyverse build tool: a single, branded CLI
-// that replaces the per-repo bash scripts. This first iteration ships one
-// capability — `build` — which detects Go modules, pnpm build scripts and
-// Podman images under the working tree, lets you pick what to build through an
-// interactive menu, runs the selection, and prints a pass/fail report.
+// that replaces the per-repo bash scripts. As of the daemon redesign (see
+// spec.md / PLAN.md), it also fronts a long-lived background daemon that
+// supervises run targets — `a-novel core start` brings it up, and the
+// daemon-backed verbs (`ps`, `start`, `kill`, `logs`, `env`, `volume`, ...)
+// talk to it over a unix socket via connect-rpc.
+//
+// Dispatch is Cobra-based: every subcommand is a *cobra.Command attached to
+// the root. The existing `test` / `build` / `run` commands are wrapped via
+// internal/cli's LegacyHandlers so they keep working unchanged through the
+// transition; `run` is removed in phase 12 once parity is reached.
 package main
 
 import (
@@ -24,8 +30,8 @@ import (
 	"github.com/charmbracelet/x/term"
 
 	"github.com/a-novel-kit/stack/cli/internal/build"
+	anovelcli "github.com/a-novel-kit/stack/cli/internal/cli"
 	"github.com/a-novel-kit/stack/cli/internal/detect"
-	"github.com/a-novel-kit/stack/cli/internal/runner"
 	"github.com/a-novel-kit/stack/cli/internal/ui"
 	"github.com/a-novel-kit/stack/cli/internal/version"
 )
@@ -46,54 +52,49 @@ const cmdHelp = "help"
 const cmdTest = "test"
 
 func main() {
-	os.Exit(run(os.Args[1:]))
+	// Cobra dispatch for every command. The standalone test/build commands
+	// are wrapped so they call the existing implementations in this file
+	// (Cobra can't directly own them because they have their own flag
+	// parsing). The legacy `run` command is intentionally gone — the
+	// `a-novel run <verb>` namespace now belongs to the daemon-backed
+	// proxy commands.
+	root := anovelcli.NewRoot(anovelcli.LegacyHandlers{
+		Test:  legacyTest,
+		Build: legacyBuild,
+	})
+	if err := root.Execute(); err != nil {
+		// internal/cli's ExitError carries the legacy commands' explicit
+		// exit code through Cobra's error path so we preserve it here.
+		var exitErr *anovelcli.ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.Code)
+		}
+		// Cobra has already printed its own error (with SilenceUsage we
+		// don't dump usage on every failure — too noisy for the
+		// daemon-backed verbs that report their own errors).
+		os.Exit(exitFailure)
+	}
+	os.Exit(exitOK)
 }
 
-// run is main's testable core: it returns the process exit code instead of
-// calling os.Exit, so behaviour can be exercised without tearing down the test
-// binary.
-func run(args []string) int {
-	cmd := ""
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		cmd, args = args[0], args[1:]
+// legacyTest invokes the existing `test` capability path, including the
+// existing -h/--help interception. Wrapped this way so Cobra's command tree
+// (and its `--help` for the verb header) doesn't fight with the legacy
+// flag-parsing inside runCapability.
+func legacyTest(args []string) int {
+	if wantsHelp(args) {
+		fmt.Println(ui.CommandHelpView(version.String(), cmdTest))
+		return exitOK
 	}
+	return runCapability(args, ui.VerbTest, detect.DetectTests)
+}
 
-	switch cmd {
-	case "", cmdHelp:
-		// `a-novel help <command>` → that command's help; otherwise (no
-		// subcommand, bare `help`, or `a-novel -h`) the generic command list.
-		if cmd == cmdHelp && len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-			fmt.Println(ui.CommandHelpView(version.String(), args[0]))
-		} else {
-			fmt.Println(ui.HelpView(version.String()))
-		}
+func legacyBuild(args []string) int {
+	if wantsHelp(args) {
+		fmt.Println(ui.CommandHelpView(version.String(), "build"))
 		return exitOK
-	case "version":
-		fmt.Println(version.String())
-		return exitOK
-	case "build":
-		if wantsHelp(args) {
-			fmt.Println(ui.CommandHelpView(version.String(), cmd))
-			return exitOK
-		}
-		return runCapability(args, ui.VerbBuild, detect.Detect)
-	case cmdTest:
-		if wantsHelp(args) {
-			fmt.Println(ui.CommandHelpView(version.String(), cmd))
-			return exitOK
-		}
-		return runCapability(args, ui.VerbTest, detect.DetectTests)
-	case "run":
-		if wantsHelp(args) {
-			fmt.Println(ui.CommandHelpView(version.String(), cmd))
-			return exitOK
-		}
-		return runRun(args)
-	default:
-		fmt.Fprintf(os.Stderr, "a-novel: unknown command %q\n\n", cmd)
-		fmt.Println(ui.HelpView(version.String()))
-		return exitUsage
 	}
+	return runCapability(args, ui.VerbBuild, detect.Detect)
 }
 
 // wantsHelp reports whether a build/test invocation is a request for that
@@ -109,13 +110,10 @@ func wantsHelp(args []string) bool {
 	return false
 }
 
-// Run-mode values for buildOpts.runMode (run only).
-const (
-	modeContainer = "container"
-	modeLive      = "live"
-)
-
-// buildOpts is the parsed `build` invocation.
+// buildOpts is the parsed `build` / `test` invocation. Was shared with the
+// (now-removed) legacy `run` capability; the run-only fields and constants
+// were dropped in the daemon redesign — `a-novel run <verb>` is the new
+// surface and has its own flags.
 type buildOpts struct {
 	dir      string
 	types    map[detect.Kind]bool // nil means "all kinds"
@@ -125,8 +123,6 @@ type buildOpts struct {
 	jobs     int           // max parallel builds (interactive only); 0 = NumCPU
 	timeout  time.Duration // per-target deadline; 0 = none, default 10m
 	coverage bool          // `test` only: coverage on by default; --no-cover disables
-	recreate bool          // `run` only: recreate the env instead of reusing an existing one
-	runMode  string        // `run` only: modeContainer / modeLive / "" (per-mode default)
 }
 
 // parseBuildArgs hand-parses the small, fixed `build` flag set. A bespoke
@@ -182,12 +178,6 @@ func parseBuildArgs(args []string) (buildOpts, error) {
 			opts.yes = true
 		case "--no-cover":
 			opts.coverage = false
-		case "--recreate":
-			opts.recreate = true
-		case "--container":
-			opts.runMode = modeContainer
-		case "--live":
-			opts.runMode = modeLive
 		case "-j", "--jobs":
 			v, err := takeVal()
 			if err != nil {
@@ -235,279 +225,17 @@ func parseTypes(v string) map[detect.Kind]bool {
 	return set
 }
 
-// runRun is the `run` capability: long-lived entrypoints under a shared
-// compose env, a live dashboard, and a guaranteed full teardown on exit or
-// failure. It does not reuse runCapability — run's model (persistent
-// processes, no completion report) diverges from build/test.
-func runRun(args []string) int {
-	verb := ui.VerbRun
-	opts, err := parseBuildArgs(args)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "a-novel run: %v\n\n", err)
-		fmt.Println(ui.CommandHelpView(version.String(), verb.Base))
-		return exitUsage
-	}
-	if opts.help {
-		fmt.Println(ui.CommandHelpView(version.String(), verb.Base))
-		return exitOK
-	}
-
-	absDir, _ := filepath.Abs(opts.dir)
-	if info, statErr := os.Stat(opts.dir); statErr != nil || !info.IsDir() {
-		fmt.Fprintf(os.Stderr, "a-novel run: cannot scan %q: not an accessible directory\n", absDir)
-		return exitUsage
-	}
-	if guardErr := detect.RepoGuard(opts.dir); guardErr != nil {
-		fmt.Fprintf(os.Stderr, "a-novel run: %v\n", guardErr)
-		return exitUsage
-	}
-
-	targets, err := detect.DetectRun(opts.dir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "a-novel run: scan failed: %v\n", err)
-		return exitFailure
-	}
-	if opts.types != nil {
-		targets = filterTypes(targets, opts.types)
-	}
-
-	// Resolve effective run mode BEFORE the picker — the two modes show
-	// different target lists. LIVE = local `go run` / `pnpm run`;
-	// CONTAINER = compose-service targets brought up via `podman compose
-	// --profile X up <svc>`.
-	distinctSvc := map[string]bool{}
-	for _, t := range targets {
-		if t.Service != "" {
-			distinctSvc[t.Service] = true
-		}
-	}
-	isGlobal := len(distinctSvc) > 1
-	interactive := term.IsTerminal(os.Stdout.Fd())
-
-	// Default: per-repo → container; global → live. With a TTY and no flag,
-	// the user picks at runtime (a small prompt before the targets picker)
-	// so the mode is an explicit choice instead of a silent default.
-	containerMode := !isGlobal
-	switch opts.runMode {
-	case modeContainer:
-		containerMode = true
-	case modeLive:
-		containerMode = false
-	default:
-		if interactive && !opts.yes && !opts.dryRun {
-			pre, err := promptRunMode(version.String(), containerMode)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "a-novel run: ui error: %v\n", err)
-				return exitFailure
-			}
-			if pre == "" {
-				return exitOK // user aborted the prompt
-			}
-			containerMode = pre == modeContainer
-		}
-	}
-	targets = filterRunMode(targets, containerMode)
-	if len(targets) == 0 {
-		modeName := modeLive
-		if containerMode {
-			modeName = modeContainer
-		}
-		fmt.Fprintf(os.Stderr,
-			"a-novel run: no %s targets%s under %s — try `a-novel run --%s`\n",
-			modeName, typeScope(opts), absDir, otherMode(modeName))
-		return exitUsage
-	}
-
-	if opts.dryRun {
-		fmt.Print(ui.DryRunView(version.String(), verb, targets))
-		return exitOK
-	}
-
-	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	ctx, cancel := context.WithCancel(sigCtx)
-	defer cancel()
-
-	// Selection. With a TTY (and not -y), reuse build/test's exact picker so
-	// you choose which entrypoints to launch — without this, `run` launched
-	// every target at once (including fast-exiting ones like migrations,
-	// which self-exit and tear the whole dashboard down on sight). -y / no
-	// TTY keeps the old "run everything" behaviour for CI.
-	if interactive && !opts.yes {
-		modeLabel := modeLive
-		if containerMode {
-			modeLabel = modeContainer
-		}
-		picked, perr := tea.NewProgram(
-			ui.NewSelect(version.String(), verb, modeLabel, targets), tea.WithAltScreen()).Run()
-		if perr != nil {
-			fmt.Fprintf(os.Stderr, "a-novel run: ui error: %v\n", perr)
-			return exitFailure
-		}
-		sm, ok := picked.(ui.Model)
-		if !ok {
-			fmt.Fprintf(os.Stderr, "a-novel run: unexpected model type %T\n", picked)
-			return exitFailure
-		}
-		if sm.Aborted() {
-			return exitOK // user backed out of the picker — nothing started
-		}
-		if sel := sm.Selected(); len(sel) > 0 {
-			targets = sel
-		} else {
-			return exitOK // nothing chosen
-		}
-	}
-
-	// Reuse vs recreate. --recreate forces recreate (skips only this prompt).
-	// Otherwise, if an env is already up and we can prompt, ask (default
-	// reuse); non-interactive defaults to reuse.
-	recreate := opts.recreate
-	if !recreate {
-		if conflicts := build.EnvConflicts(ctx, targets); len(conflicts) > 0 {
-			fmt.Fprintln(os.Stderr, ui.EnvConflictView(verb, conflicts))
-			if interactive && term.IsTerminal(os.Stdin.Fd()) {
-				fmt.Fprint(os.Stderr, ui.EnvPrompt(
-					"Reuse this environment, or recreate it? [u]se (default) / [r]ecreate: "))
-				line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-				if s := strings.ToLower(strings.TrimSpace(line)); s == "r" || s == "recreate" {
-					recreate = true
-				}
-			} else {
-				fmt.Fprintln(os.Stderr, ui.EnvNote(
-					"Reusing the existing environment (pass --recreate to rebuild it)."))
-			}
-		}
-	}
-
-	start := time.Now()
-	r := runner.New(targets, recreate)
-	go r.Run(ctx)
-
-	if interactive {
-		modeLabel := modeLive
-		if containerMode {
-			modeLabel = modeContainer
-		}
-		final, perr := tea.NewProgram(
-			ui.NewRun(version.String(), modeLabel, r, cancel), tea.WithAltScreen()).Run()
-		if perr != nil {
-			fmt.Fprintf(os.Stderr, "a-novel run: ui error: %v\n", perr)
-			cancel()
-			<-r.Done()
-			return exitFailure
-		}
-		_ = final
-	} else {
-		// No TTY: run until signal / first failure, then teardown completes.
-		<-r.Done()
-	}
-
-	results, aborted := procResults(r.Snapshot())
-	fmt.Print(ui.RenderTextReport(results, aborted, time.Since(start), verb))
-	return exitCodeFor(results, aborted)
-}
-
-// typeScope renders the " matching --type" suffix for the no-targets message.
-// promptRunMode runs the small mode-pick TUI before the targets picker.
-// defaultContainer drives the initial cursor (per-mode default for the
-// scope). Returns the chosen mode value, or "" if the user aborted.
-func promptRunMode(version string, defaultContainer bool) (string, error) {
-	def := modeLive
-	if defaultContainer {
-		def = modeContainer
-	}
-	options := []ui.ModeOption{
-		{
-			Value:  modeContainer,
-			Label:  "container",
-			Detail: "compose-service targets; each launched via `podman compose --profile X up <svc>`",
-		},
-		{
-			Value:  modeLive,
-			Label:  "live",
-			Detail: "Go `cmd/*` mains + pnpm `run*` scripts; each runs locally (go run / pnpm run)",
-		},
-	}
-	final, err := tea.NewProgram(
-		ui.NewModeSelect(version, def, options), tea.WithAltScreen()).Run()
-	if err != nil {
-		return "", err
-	}
-	m, ok := final.(ui.ModeSelectModel)
-	if !ok {
-		return "", fmt.Errorf("unexpected model type %T", final)
-	}
-	if m.Aborted() {
-		return "", nil
-	}
-	return m.Chosen(), nil
-}
-
-// filterRunMode keeps only the targets the active mode launches. LIVE mode
-// shows Go `cmd/*` mains + pnpm `run*` (no compose targets). CONTAINER mode
-// shows compose-service targets AND the init Go entrypoints
-// (init/migrations/rotate-keys) — those have no compose service, so they
-// stay as local `go run` and the init barrier still runs them BEFORE the
-// container targets start. Without that exception, container mode would
-// silently drop migrations and any compose service that needs an applied
-// schema would fail to start.
-func filterRunMode(targets []detect.Target, containerMode bool) []detect.Target {
-	out := make([]detect.Target, 0, len(targets))
-	for _, t := range targets {
-		isContainer := t.Kind == detect.KindContainer
-		switch {
-		case containerMode:
-			if isContainer || detect.IsInit(t) {
-				out = append(out, t)
-			}
-		default:
-			if !isContainer {
-				out = append(out, t)
-			}
-		}
-	}
-	return out
-}
-
-// otherMode returns the flag name that would flip the current mode — used
-// in the "no targets" error to suggest the inverse.
-func otherMode(current string) string {
-	if current == modeContainer {
-		return modeLive
-	}
-	return modeContainer
-}
+// (Legacy `runRun` and its run-only helpers — promptRunMode, filterRunMode,
+// otherMode, procResults, and the modeContainer/modeLive constants — were
+// removed in the daemon redesign. The `a-novel run <verb>` surface now lives
+// in internal/cli, talks to the daemon via internal/client/rpc, and
+// supersedes every responsibility this function had.)
 
 func typeScope(o buildOpts) string {
 	if o.types != nil {
 		return " matching --type"
 	}
 	return ""
-}
-
-// procResults turns the runner snapshot into report results. A Failed proc is
-// a failure (its output is the error to show); everything else stopped because
-// the user quit (aborted) or it was torn down with the rest.
-func procResults(snap []runner.ProcView) ([]build.Result, bool) {
-	results := make([]build.Result, 0, len(snap))
-	anyFail := false
-	for _, p := range snap {
-		failed := p.Status == runner.Failed
-		anyFail = anyFail || failed
-		out := strings.TrimRight(p.Output, "\n")
-		if p.ExitErr != nil {
-			out = strings.TrimRight(p.ExitErr.Error()+"\n\n"+out, "\n")
-		}
-		results = append(results, build.Result{
-			Target:   p.Target,
-			Success:  !failed,
-			ExitErr:  p.ExitErr,
-			Output:   out,
-			Duration: p.Elapsed,
-		})
-	}
-	return results, !anyFail // no failure ⇒ a clean user-initiated stop
 }
 
 // runCapability is the shared body of `build` and `test`: identical flags,

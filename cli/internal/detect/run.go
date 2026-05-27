@@ -225,53 +225,42 @@ func containerTargets(absRoot, walkRoot string) []Target {
 	for _, p := range profiles {
 		svc := env.Profiles[p]
 		// Three-step launch in one shell:
-		//   1. `compose --profile X up -d --build` — bring up everything
-		//      the profile activates (the target + still-needed deps).
-		//      No positional service name (some podman-compose versions
-		//      reject it: `unrecognized arguments: <svc>`). No
-		//      --force-recreate / --no-deps either — both were
-		//      version-fragile; --profile alone is the universal selector.
-		//   2. `podman ps -q --filter label=…` — resolve the freshly-
-		//      started container's ID via the compose-spec labels every
-		//      version sets. Goes through podman (not compose) so it is
-		//      not subject to compose-side CLI variance.
-		//   3. `exec podman logs -f <id>` — attach to the container's
-		//      actual stdout/stderr (compose-level streaming was the
-		//      source of the "build logs but no live logs" symptom).
-		//
-		// `exec` replaces bash so the runner's ctx-cancel terminates one
-		// process. Single-quoted template values keep the shell literal —
-		// none of project / path / profile / service contain quotes.
-		// Four-step shell:
-		//   1. `compose --profile X up -d --build > /dev/null` — bring up
-		//      the profiled service (build / create / start). stdout is
-		//      discarded because compose's `up` chatters about EVERY
-		//      profile-less service it touches (postgres rebuild check,
-		//      etc.); we only want the TARGET's logs in this tab. Errors
-		//      still flow on stderr.
-		//   2. Resolve the container ID — compose ps for versions that
-		//      support a positional `ps`, falling back to `podman ps`
-		//      grep-by-name (universal, substring-exclusive across
-		//      sibling services).
-		//   3. `podman start "$id"` — workaround for podman-compose
-		//      versions where `--profile X up -d` creates the container
-		//      but doesn't start it. No-op when already running.
-		//   4. `exec podman logs -f` — direct streaming of the target's
-		//      stdout/stderr.
-		// Brief status lines on stderr keep the user oriented while the
-		// (suppressed) build is happening.
+		//   1. `compose --profile X up -d --build --no-deps > /dev/null`
+		//      — build + create + start the profile's container.
+		//      --no-deps is REQUIRED on podman-compose 1.5.0 (current
+		//      stable): without it, compose's `depends_on:
+		//      service_healthy` wait machinery is broken and the `up`
+		//      hangs forever even though the dependency is healthy
+		//      (verified empirically — the wait is silently a no-op
+		//      that never advances). Skipping the wait is safe because
+		//      the CLI's env-up has already brought every dependency up
+		//      via runner.waitHealthy before any target launches.
+		//      stdout is discarded — compose chatters about every
+		//      service it touches, but we only want the TARGET's logs.
+		//      stderr still flows so real errors surface.
+		//   2. Resolve the container ID via `podman ps` grep-by-name.
+		//      `compose ps -q SVC` would seem natural, but
+		//      podman-compose 1.5.0 rejects positional service args on
+		//      `ps` with `unrecognized arguments`. The podman-ps
+		//      grep-by-name path is universal across compose versions
+		//      and substring-exclusive across sibling services
+		//      (project prefix discriminates).
+		//   3. `exec podman logs -f <id>` — direct streaming of the
+		//      container's stdout/stderr. `exec` replaces bash so the
+		//      runner's ctx-cancel terminates one process.
+		// Single-quoted template values keep the shell literal — none
+		// of project / path / profile / service contain quotes.
+		// Brief status lines on stderr keep the user oriented while
+		// the (suppressed) build is happening.
 		shell := fmt.Sprintf(
 			"echo '── %s · bringing up container…' >&2 && "+
-				"podman compose -p '%s' -f '%s' --profile '%s' up -d --build > /dev/null || exit; "+
-				"id=$(podman compose -p '%s' -f '%s' ps -q '%s' 2>/dev/null | head -1); "+
-				"[ -z \"$id\" ] && id=$(podman ps -a --format '{{.ID}} {{.Names}}' | grep -F '%s' | head -1 | cut -d' ' -f1); "+
+				"podman compose -p '%s' -f '%s' --profile '%s' up -d --build --no-deps > /dev/null || exit; "+
+				"id=$(podman ps -a --format '{{.ID}} {{.Names}}' | grep -F '%s' | head -1 | cut -d' ' -f1); "+
 				"[ -z \"$id\" ] && { echo \"Error: container for service '%s' not found\" >&2; exit 1; }; "+
-				"podman start \"$id\" > /dev/null 2>&1; "+
 				"echo '── %s · streaming logs' >&2; "+
 				"exec podman logs -f \"$id\"",
 			svc,
 			env.Project, env.File, p,
-			env.Project, env.File, svc,
 			svc,
 			svc,
 			svc,
