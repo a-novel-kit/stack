@@ -25,7 +25,12 @@ func infraIDFor(stack, service, name string) string {
 // convertService converts a discovery.Service into the proto Service,
 // embedding its targets (with live state from the runner if present),
 // infra, and volumes.
-func (s *Server) convertService(svc *discovery.Service) *anovelv1.Service {
+//
+// infraStates is the per-stack live-state cache built once per
+// ListServices call by liveInfraStates — pass nil to fall back to a
+// fresh single-infra query per row (slow, used by code paths that
+// convert a single service in isolation).
+func (s *Server) convertService(svc *discovery.Service, infraStates map[string]runner.InfraState) *anovelv1.Service {
 	out := &anovelv1.Service{
 		Name:            svc.Name,
 		Stack:           svc.Stack,
@@ -35,7 +40,7 @@ func (s *Server) convertService(svc *discovery.Service) *anovelv1.Service {
 		out.Targets = append(out.Targets, s.convertTargetWithLive(t))
 	}
 	for _, in := range svc.Infra {
-		out.Infra = append(out.Infra, s.convertInfraWithLive(in))
+		out.Infra = append(out.Infra, s.convertInfraWithLive(in, infraStates))
 	}
 	for _, v := range svc.Volumes {
 		out.Volumes = append(out.Volumes, convertVolume(v))
@@ -47,21 +52,48 @@ func (s *Server) convertService(svc *discovery.Service) *anovelv1.Service {
 // podman container's live state (Phase + Health + ContainerID). Without
 // this, infra rows in `ps` show "idle" even when the container is up.
 //
-// Implementation note: queries podman per-infra (one `podman ps`
-// invocation each). For services with few infra entries this is fine;
-// if it becomes hot, batch via a single labeled query and cache.
-func (s *Server) convertInfraWithLive(in *discovery.Infra) *anovelv1.Infra {
+// Reads from the pre-built infraStates map when provided (one podman
+// call total for the whole ListServices RPC); falls back to a single
+// InfraStateOf call when the map is nil (slower per-call cost but
+// keeps single-service handlers honest).
+func (s *Server) convertInfraWithLive(in *discovery.Infra, infraStates map[string]runner.InfraState) *anovelv1.Infra {
 	out := convertInfra(in)
 	if s.runner == nil {
 		return out
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	if infraStates != nil {
+		if st, ok := infraStates[in.Service+"/"+in.Name]; ok {
+			out.Phase = st.Phase
+			out.Health = st.Health
+			out.ContainerId = st.ContainerID
+		}
+		return out
+	}
+	// Fallback path — single-shot query. Generous 3s timeout because
+	// rootless podman cold start can be ~1s and we'd rather be slow
+	// than report a misleading "idle".
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	phase, health, cid := s.runner.InfraStateOf(ctx, in.Stack, in.Service, in.Name)
 	out.Phase = phase
 	out.Health = health
 	out.ContainerId = cid
 	return out
+}
+
+// liveInfraStates returns one map of live container states for the
+// given stack, suitable to pass to convertService. Built via a single
+// batched podman call — see runner.InfraStatesOf.
+func (s *Server) liveInfraStates(stack string) map[string]runner.InfraState {
+	if s.runner == nil {
+		return nil
+	}
+	// 5s budget for the batched scan: one podman ps + one inspect
+	// per container. The TUI polls every 2s but the underlying RPC
+	// can afford the headroom; better to be slow than wrong.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return s.runner.InfraStatesOf(ctx, stack)
 }
 
 // convertTargetWithLive enriches a discovery.Target with the matching

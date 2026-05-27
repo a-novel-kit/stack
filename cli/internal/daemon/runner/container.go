@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -238,36 +239,108 @@ func (r *Runner) watchContainer(ctx context.Context, id, cid string) {
 	}
 }
 
-// InfraStateOf queries podman for the live state of the given infra
-// service's container — used by the server's `ps` / `service status`
-// renderers so infra rows show real running/healthy state instead of
-// the static "idle" default. Returns zero values if no container
-// matches (infra hasn't been brought up yet).
-func (r *Runner) InfraStateOf(ctx context.Context, stack, service, infraName string) (phase anovelv1.Phase, health anovelv1.Health, containerID string) {
-	// Two-step: find the container by label (we tag infra with
-	// anovel.stack + anovel.service but NOT anovel.target), then
-	// inspect. Falls back to name-based filter if no labeled
-	// match (defensive vs --podman-run-args edge cases).
+// InfraState is one row in the batched podman scan: container ID +
+// translated phase + translated health for a single (stack, service,
+// infraName) tuple.
+type InfraState struct {
+	ContainerID string
+	Phase       anovelv1.Phase
+	Health      anovelv1.Health
+}
+
+// InfraStatesOf returns the live state of every infra container in the
+// given stack, keyed by "<service>/<infraName>". One podman call total
+// regardless of how many services / infras the stack has — drastically
+// faster than the prior per-infra approach (each podman invocation has
+// ~1s cold-start overhead on rootless WSL2 podman, so N infras serial
+// = N seconds, often exceeding the TUI's 2s poll cadence).
+//
+// Health: deliberately NOT fetched here. podman ps --format json
+// doesn't expose Health.Status, and a per-container `podman inspect`
+// would double the call count. PHASE_RUNNING + HEALTH_UNSPECIFIED
+// renders correctly downstream (green ● in TUI, "running" in CLI ps).
+// Callers needing precise health for a single infra can fall back to
+// InfraStateOf (which does the inspect).
+//
+// Returns an empty map (not nil) on podman errors so callers can
+// uniformly check `if state, ok := m[key]` without nil-guarding.
+func (r *Runner) InfraStatesOf(ctx context.Context, stack string) map[string]InfraState {
+	out := make(map[string]InfraState)
 	cmd := exec.CommandContext(ctx, "podman", "ps", "-a",
 		"--filter", "label=anovel.stack="+stack,
-		"--filter", "label=anovel.service="+service,
-		"--filter", "name="+composeProjectName(stack, service)+"_"+infraName,
-		"--format", "{{.ID}}")
+		"--format", "json")
+	raw, err := cmd.Output()
+	if err != nil {
+		return out
+	}
+	var entries []struct {
+		ID     string            `json:"Id"`
+		Labels map[string]string `json:"Labels"`
+		State  string            `json:"State"`
+	}
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		return out
+	}
+	for _, e := range entries {
+		svc := e.Labels["anovel.service"]
+		// Skip target containers (those carry anovel.target); we only
+		// care about infra here (target state is tracked via the
+		// runner's own Instance records).
+		if _, isTarget := e.Labels["anovel.target"]; isTarget {
+			continue
+		}
+		// Compose service name lives in com.docker.compose.service
+		// (mirrored by io.podman.compose.service). That's the infra
+		// name we discover from the compose file.
+		infraName := e.Labels["com.docker.compose.service"]
+		if infraName == "" {
+			infraName = e.Labels["io.podman.compose.service"]
+		}
+		if svc == "" || infraName == "" {
+			continue
+		}
+		// Map lowercase JSON state directly: "running" → RUNNING,
+		// "exited"/"stopped" → TERMINATED, "created" → STARTING.
+		var p anovelv1.Phase
+		switch strings.ToLower(e.State) {
+		case "running", "paused":
+			p = anovelv1.Phase_PHASE_RUNNING
+		case "created", "configured":
+			p = anovelv1.Phase_PHASE_STARTING
+		case "exited", "stopped":
+			p = anovelv1.Phase_PHASE_TERMINATED
+		default:
+			p = anovelv1.Phase_PHASE_UNSPECIFIED
+		}
+		out[svc+"/"+infraName] = InfraState{ContainerID: e.ID, Phase: p, Health: anovelv1.Health_HEALTH_UNSPECIFIED}
+	}
+	return out
+}
+
+// containerHealthFromInspect returns the podman healthcheck status
+// ("healthy" / "unhealthy" / "starting" / "" for no healthcheck).
+// Used by the single-shot InfraStateOf fallback path; kept out of
+// the batched InfraStatesOf so refresh-cycle cost stays at one
+// podman call.
+func containerHealthFromInspect(ctx context.Context, cid string) string {
+	cmd := exec.CommandContext(ctx, "podman", "inspect", cid,
+		"--format", "{{if .State.Health}}{{.State.Health.Status}}{{end}}")
 	out, err := cmd.Output()
 	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// InfraStateOf is the legacy single-infra query — preserved for
+// callers that don't have the batched map yet. Internally now uses
+// InfraStatesOf for consistency.
+func (r *Runner) InfraStateOf(ctx context.Context, stack, service, infraName string) (phase anovelv1.Phase, health anovelv1.Health, containerID string) {
+	st, ok := r.InfraStatesOf(ctx, stack)[service+"/"+infraName]
+	if !ok {
 		return anovelv1.Phase_PHASE_UNSPECIFIED, anovelv1.Health_HEALTH_UNSPECIFIED, ""
 	}
-	cid := firstLine(string(out))
-	if cid == "" {
-		return anovelv1.Phase_PHASE_UNSPECIFIED, anovelv1.Health_HEALTH_UNSPECIFIED, ""
-	}
-	st, hl, _, err := podmanInspect(ctx, cid)
-	if err != nil {
-		return anovelv1.Phase_PHASE_UNSPECIFIED, anovelv1.Health_HEALTH_UNSPECIFIED, cid
-	}
-	// Reuse the runtime-state translator from adoption — same mapping.
-	p, h := translatePodmanStatus(st + " (" + hl + ")")
-	return p, h, cid
+	return st.Phase, st.Health, st.ContainerID
 }
 
 // podmanInspect parses just the fields we care about (status, health,

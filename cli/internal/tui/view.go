@@ -156,6 +156,14 @@ func (m *model) renderRight(width, height int) string {
 		return styleFrame.Width(width).Height(height).Render(styleDim.Render("(this service has no targets)"))
 	}
 	svc := m.services[m.selectedSvc]
+	// Infra row — visible whenever the selected service has any infra
+	// declared. Stays at the top so it's always in view; targets shift
+	// down by however many lines the row takes.
+	infraRow := renderInfraRow(svc, width-4)
+	infraHeight := 0
+	if infraRow != "" {
+		infraHeight = strings.Count(infraRow, "\n") + 2 // +1 trailing divider, +1 self
+	}
 	// Tabs row.
 	var tabs []string
 	for i, t := range svc.GetTargets() {
@@ -178,19 +186,80 @@ func (m *model) renderRight(width, height int) string {
 		header += " container=" + safeShort(t.GetContainerId(), 12)
 	}
 	headerStyled := styleHeader.Render(header)
-	// Log pane.
-	logsHeight := height - 5 // header + tab row + spacing
+	// Log pane — shrinks by infraHeight so the infra row never pushes
+	// log lines off the bottom.
+	logsHeight := height - 5 - infraHeight
 	if logsHeight < 4 {
 		logsHeight = 4
 	}
 	logsRendered := m.renderLogs(width-4, logsHeight)
-	body := lipgloss.JoinVertical(lipgloss.Left,
+	sections := []string{}
+	if infraRow != "" {
+		sections = append(sections, infraRow, "")
+	}
+	sections = append(sections,
 		tabRow,
 		strings.Repeat("─", width-4),
 		headerStyled,
 		logsRendered,
 	)
+	body := lipgloss.JoinVertical(lipgloss.Left, sections...)
 	return styleFrame.Width(width).Height(height).Render(body)
+}
+
+// renderInfraRow returns the always-visible infra status block for
+// the selected service, displayed above the target tabs. Single line
+// when it fits the available width; falls back to one entry per line
+// when it would overflow (the wrap-detection looks at byte length,
+// which is a close-enough proxy for visual width — ANSI codes don't
+// add cells and infra names are ASCII).
+func renderInfraRow(svc *anovelv1.Service, width int) string {
+	infras := svc.GetInfra()
+	if len(infras) == 0 {
+		return ""
+	}
+	label := styleHeader.Render("infra: ")
+	parts := make([]string, 0, len(infras))
+	for _, in := range infras {
+		parts = append(parts, fmt.Sprintf("%s %s %s", in.GetName(), infraDot(in), styleDim.Render(infraHealthLabel(in))))
+	}
+	oneLine := label + strings.Join(parts, "  ·  ")
+	// Visible-width estimate: strip the styleHeader/dim ANSI by
+	// estimating prefix + entries. ANSI escapes are invisible; we
+	// estimate using rune count of the raw text.
+	if visibleWidth(oneLine) <= width {
+		return oneLine
+	}
+	// Vertical fallback: one entry per line, indented under the label.
+	var b strings.Builder
+	b.WriteString(label + "\n")
+	for _, p := range parts {
+		b.WriteString("  " + p + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// visibleWidth approximates the on-screen width of s, ignoring ANSI
+// escape sequences (which don't take cells). Uses rune count of the
+// non-ANSI bytes — good enough for ASCII content + the few box-drawing
+// glyphs we use.
+func visibleWidth(s string) int {
+	n := 0
+	inAnsi := false
+	for _, r := range s {
+		if r == 0x1b {
+			inAnsi = true
+			continue
+		}
+		if inAnsi {
+			if r == 'm' {
+				inAnsi = false
+			}
+			continue
+		}
+		n++
+	}
+	return n
 }
 
 func (m *model) renderLogs(width, height int) string {
@@ -354,21 +423,82 @@ func countRunning(svc *anovelv1.Service) int {
 }
 
 // serviceStatusLine returns the indented status descriptor rendered
-// below the service name in the nav block. Keeps the dot + a short
-// human label colocated so a vertical scan tells you state at a
-// glance: green dot + "n/m running" for live, dim hollow + "idle" for
-// nothing started, red filled + "errored" for an attention-worthy
-// recent failure.
+// below the service name in the nav block. One dot summarizes overall
+// state (green ● live, dim ○ idle, red ● errored); counts cover both
+// targets and infra so the user always sees infra at a glance — per
+// the design goal that infra status is "visible at all times".
 func serviceStatusLine(svc *anovelv1.Service) string {
 	if serviceHasError(svc) {
 		return styleErr.Render("●") + " errored"
 	}
-	running := countRunning(svc)
-	total := len(svc.GetTargets())
-	if running > 0 {
-		return styleSuccess.Render("●") + fmt.Sprintf(" %d/%d running", running, total)
+	runningT := countRunning(svc)
+	totalT := len(svc.GetTargets())
+	healthyI, totalI := countInfraHealthy(svc)
+	dot := styleDim.Render("○")
+	if runningT > 0 || healthyI > 0 {
+		dot = styleSuccess.Render("●")
 	}
-	return styleDim.Render("○ idle")
+	if totalI == 0 {
+		return dot + fmt.Sprintf(" %d/%d targets", runningT, totalT)
+	}
+	return dot + fmt.Sprintf(" %d/%d targets · %d/%d infra", runningT, totalT, healthyI, totalI)
+}
+
+// countInfraHealthy returns (healthy, total) across a service's infra
+// entries. A "healthy" infra is one with PHASE_RUNNING AND either
+// HEALTH_HEALTHY or no healthcheck declared (HEALTH_UNSPECIFIED on a
+// running container = no probe, treat as up). Distinguishes from
+// "starting" (HEALTH_STARTING, probe failing) which is NOT healthy.
+func countInfraHealthy(svc *anovelv1.Service) (int, int) {
+	total := len(svc.GetInfra())
+	healthy := 0
+	for _, in := range svc.GetInfra() {
+		if in.GetPhase() != anovelv1.Phase_PHASE_RUNNING {
+			continue
+		}
+		h := in.GetHealth()
+		if h == anovelv1.Health_HEALTH_HEALTHY || h == anovelv1.Health_HEALTH_UNSPECIFIED {
+			healthy++
+		}
+	}
+	return healthy, total
+}
+
+// infraDot returns the colored status glyph for one infra entry,
+// matching the four-state model: green ● healthy, yellow ● starting,
+// red ● unhealthy, dim ○ down/terminated/idle.
+func infraDot(in *anovelv1.Infra) string {
+	if in.GetPhase() != anovelv1.Phase_PHASE_RUNNING {
+		return styleDim.Render("○")
+	}
+	switch in.GetHealth() {
+	case anovelv1.Health_HEALTH_HEALTHY, anovelv1.Health_HEALTH_UNSPECIFIED:
+		return styleSuccess.Render("●")
+	case anovelv1.Health_HEALTH_STARTING:
+		return styleWarn.Render("●")
+	case anovelv1.Health_HEALTH_UNHEALTHY:
+		return styleErr.Render("●")
+	}
+	return styleDim.Render("○")
+}
+
+// infraHealthLabel returns the short human descriptor that pairs
+// with infraDot ("healthy", "starting", "unhealthy", "down").
+func infraHealthLabel(in *anovelv1.Infra) string {
+	if in.GetPhase() != anovelv1.Phase_PHASE_RUNNING {
+		return "down"
+	}
+	switch in.GetHealth() {
+	case anovelv1.Health_HEALTH_HEALTHY:
+		return "healthy"
+	case anovelv1.Health_HEALTH_UNSPECIFIED:
+		return "running" // no probe declared
+	case anovelv1.Health_HEALTH_STARTING:
+		return "starting"
+	case anovelv1.Health_HEALTH_UNHEALTHY:
+		return "unhealthy"
+	}
+	return "unknown"
 }
 
 // computeNavWidth picks the sidebar width so the longest service name

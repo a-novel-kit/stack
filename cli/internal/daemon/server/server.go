@@ -266,9 +266,16 @@ func (s *Server) ListServices(_ context.Context, req *connect.Request[anovelv1.L
 	if req.Msg.GetStack() == "*" {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
+		// Build one infraStates cache per stack so each service in the
+		// stack reuses the same podman scan.
+		stackCaches := make(map[string]map[string]runner.InfraState, len(s.discovered))
 		for _, st := range s.discovered {
+			stackCaches[st.Name] = s.liveInfraStates(st.Name)
+		}
+		for _, st := range s.discovered {
+			cache := stackCaches[st.Name]
 			for _, svc := range st.Services {
-				out.Services = append(out.Services, s.convertService(svc))
+				out.Services = append(out.Services, s.convertService(svc, cache))
 			}
 		}
 		// Stable order: stack name, then service name.
@@ -284,8 +291,9 @@ func (s *Server) ListServices(_ context.Context, req *connect.Request[anovelv1.L
 	if err != nil {
 		return nil, err
 	}
+	cache := s.liveInfraStates(st.Name)
 	for _, svc := range st.Services {
-		out.Services = append(out.Services, s.convertService(svc))
+		out.Services = append(out.Services, s.convertService(svc, cache))
 	}
 	sort.Slice(out.Services, func(i, j int) bool {
 		return out.Services[i].GetName() < out.Services[j].GetName()
@@ -300,7 +308,7 @@ func (s *Server) DescribeService(_ context.Context, req *connect.Request[anovelv
 		return nil, err
 	}
 	return connect.NewResponse(&anovelv1.DescribeServiceResponse{
-		Service: s.convertService(svc),
+		Service: s.convertService(svc, s.liveInfraStates(svc.Stack)),
 	}), nil
 }
 
@@ -511,7 +519,7 @@ func (s *Server) StartInfra(ctx context.Context, req *connect.Request[anovelv1.S
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return connect.NewResponse(&anovelv1.StartInfraResponse{
-		Service: s.convertService(svc),
+		Service: s.convertService(svc, s.liveInfraStates(svc.Stack)),
 	}), nil
 }
 
@@ -530,7 +538,7 @@ func (s *Server) KillInfra(ctx context.Context, req *connect.Request[anovelv1.Ki
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return connect.NewResponse(&anovelv1.KillInfraResponse{
-		Service: s.convertService(svc),
+		Service: s.convertService(svc, s.liveInfraStates(svc.Stack)),
 	}), nil
 }
 
