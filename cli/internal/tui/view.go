@@ -68,8 +68,22 @@ func (m *model) renderMain() string {
 }
 
 func (m *model) renderNav(width, height int) string {
+	// Three "empty" states deserve different messages so the user can
+	// tell loading from a hard failure from a genuinely-empty stack:
+	//   - !m.loaded            → refresh hasn't completed (or always errors)
+	//   - m.err != nil         → last refresh failed; surface the reason
+	//   - len(m.services) == 0 → refresh succeeded, stack has no services
 	if len(m.services) == 0 {
-		return styleFrame.Width(width).Height(height).Render(styleDim.Render("(no services)"))
+		var msg string
+		switch {
+		case m.err != nil:
+			msg = "Error refreshing services:\n  " + truncate(m.err.Error(), width-4)
+		case !m.loaded:
+			msg = "Loading services..."
+		default:
+			msg = "(no services discovered)\nCheck that " + truncate("$A_NOVEL_STACKS app/ dirs exist", width-4)
+		}
+		return styleFrame.Width(width).Height(height).Render(styleDim.Render(msg))
 	}
 	var lines []string
 	lines = append(lines, styleHeader.Render("Services"))

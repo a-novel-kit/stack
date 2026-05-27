@@ -171,12 +171,19 @@ func discoverStack(st *Stack) {
 		})
 		return
 	}
-	// Sort for stable output.
+	// Sort for stable output. Skip the *-template scaffolds: they're
+	// design-time references that don't model a runnable service —
+	// listing them in `ps` or the TUI sidebar invites users to start
+	// them by accident and creates noise in the env namespace.
 	names := make([]string, 0, len(entries))
 	for _, e := range entries {
-		if e.IsDir() && strings.HasPrefix(e.Name(), "service-") {
-			names = append(names, e.Name())
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "service-") {
+			continue
 		}
+		if strings.HasSuffix(e.Name(), "-template") {
+			continue
+		}
+		names = append(names, e.Name())
 	}
 	sort.Strings(names)
 	for _, n := range names {

@@ -89,6 +89,12 @@ selector), runs the selection, and prints a pass/fail report.`,
 	// supervises" (which is under `run`).
 	root.AddCommand(newCoreCmd())
 
+	// `a-novel install` — the canonical reinstall path. Wraps the
+	// prepare-reinstall + go install + core start sequence so the
+	// running daemon is always replaced with one running the new
+	// binary, preserving live state across the upgrade.
+	root.AddCommand(newInstallCmd())
+
 	// Daemon-backed verbs, ALL under `run`. The namespace makes the
 	// daemon-touching surface visually distinct from the standalone
 	// capabilities, and replaces the now-removed legacy `a-novel run` so

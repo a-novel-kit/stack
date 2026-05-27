@@ -73,8 +73,12 @@ type model struct {
 	width    int
 	height   int
 	err      error
-	// Discovery — refreshed periodically.
+	// Discovery — refreshed periodically. `loaded` flips true on the
+	// first servicesMsg so the nav can distinguish "haven't refreshed
+	// yet" (loading…) from "refresh succeeded with zero results"
+	// (genuinely no services discovered).
 	services []*anovelv1.Service
+	loaded   bool
 	// Selection state.
 	selectedSvc    int // index into services
 	selectedTarget int // index into services[selectedSvc].Targets
@@ -103,6 +107,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case servicesMsg:
 		m.services = msg.services
+		m.loaded = true
+		// A successful refresh clears any prior transient error (e.g., a
+		// daemon-restart blip). Keeps the nav from showing a stale
+		// error after recovery.
+		m.err = nil
 		// Clamp selection.
 		if m.selectedSvc >= len(m.services) {
 			m.selectedSvc = 0
