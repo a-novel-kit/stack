@@ -305,26 +305,20 @@ func (m *model) tabCount() int {
 	return len(svc.GetTargets()) + len(svc.GetInfra())
 }
 
-// activeTabKind returns "target", "infra", or "" depending on which
-// section the selectedTab index falls into.
+// activeTabKind returns "infra", "target", or "" depending on which
+// section the selectedTab index falls into. Infras come FIRST in the
+// index so the right pane's two-row tab strip can render them on the
+// top row and target-row second — and ←/→ navigation walks the
+// concatenated sequence linearly.
 func (m *model) activeTabKind() string {
 	svc := m.activeService()
 	if svc == nil || m.selectedTab < 0 || m.selectedTab >= m.tabCount() {
 		return ""
 	}
-	if m.selectedTab < len(svc.GetTargets()) {
-		return "target"
+	if m.selectedTab < len(svc.GetInfra()) {
+		return "infra"
 	}
-	return "infra"
-}
-
-// activeTarget returns the selected target, or nil when the active
-// tab is an infra entry.
-func (m *model) activeTarget() *anovelv1.Target {
-	if m.activeTabKind() != "target" {
-		return nil
-	}
-	return m.services[m.selectedSvc].Targets[m.selectedTab]
+	return "target"
 }
 
 // activeInfra returns the selected infra entry, or nil when the
@@ -333,8 +327,17 @@ func (m *model) activeInfra() *anovelv1.Infra {
 	if m.activeTabKind() != "infra" {
 		return nil
 	}
+	return m.services[m.selectedSvc].GetInfra()[m.selectedTab]
+}
+
+// activeTarget returns the selected target, or nil when the active
+// tab is an infra entry.
+func (m *model) activeTarget() *anovelv1.Target {
+	if m.activeTabKind() != "target" {
+		return nil
+	}
 	svc := m.services[m.selectedSvc]
-	return svc.GetInfra()[m.selectedTab-len(svc.GetTargets())]
+	return svc.GetTargets()[m.selectedTab-len(svc.GetInfra())]
 }
 
 // activeLogID returns the ID format expected by StreamLogs for the

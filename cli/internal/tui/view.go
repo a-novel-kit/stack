@@ -137,12 +137,14 @@ func (m *model) renderNav(width, height int) string {
 		default:
 			nameLine = "  " + name
 		}
-		// Status line, indented under the name. Always shows the
-		// state dot + a short descriptor (idle / 3/5 running /
-		// errored). Indented by 4 so the dot aligns visually with
-		// the first letter of the name.
-		statusLine := "    " + serviceStatusLine(svc)
-		lines = append(lines, nameLine, statusLine)
+		// Two status lines per service — one for targets, one for
+		// infra — each on its own row so neither wraps when the nav
+		// is narrow. The dot per row summarizes that kind's
+		// running/total count. Indented by 4 so the dots align
+		// visually with the first letter of the name above.
+		targetLine := "    " + serviceTargetsLine(svc)
+		infraLine := "    " + serviceInfraLine(svc)
+		lines = append(lines, nameLine, targetLine, infraLine)
 		if i != len(m.services)-1 {
 			lines = append(lines, "")
 		}
@@ -156,44 +158,15 @@ func (m *model) renderRight(width, height int) string {
 	if svc == nil || m.tabCount() == 0 {
 		return styleFrame.Width(width).Height(height).Render(styleDim.Render("(this service has no targets or infra)"))
 	}
-	// Infra row — visible whenever the selected service has any infra
-	// declared. Stays at the top so it's always in view; targets shift
-	// down by however many lines the row takes.
-	infraRow := renderInfraRow(svc, width-4)
-	infraHeight := 0
-	if infraRow != "" {
-		infraHeight = strings.Count(infraRow, "\n") + 2 // +1 trailing divider, +1 self
-	}
-	// Tabs row — targets first, then infras with curly braces so the
-	// kind difference is unmistakable at a glance ([target] vs
-	// {infra}). Selected tab gets the bright styleSelected
-	// regardless of kind.
-	var tabs []string
-	for i, t := range svc.GetTargets() {
-		label := t.GetName()
-		if i == m.selectedTab {
-			tabs = append(tabs, styleSelected.Render("["+label+"]"))
-		} else {
-			tabs = append(tabs, styleDim.Render(" "+label+" "))
-		}
-	}
-	infraOffset := len(svc.GetTargets())
-	for i, in := range svc.GetInfra() {
-		label := in.GetName()
-		idx := infraOffset + i
-		// Curly brackets + a leading "·" separator after the targets
-		// (only on the FIRST infra) for an extra visual break.
-		marker := ""
-		if i == 0 && len(svc.GetTargets()) > 0 {
-			marker = styleDim.Render(" · ")
-		}
-		if idx == m.selectedTab {
-			tabs = append(tabs, marker+styleSelected.Render("{"+label+"}"))
-		} else {
-			tabs = append(tabs, marker+styleDim.Render(" "+label+" "))
-		}
-	}
-	tabRow := strings.Join(tabs, " ")
+	// Two selectable tab rows — infra on top, targets below. Each
+	// tab carries a leading colored status dot (no full-word
+	// labels). selectedTab walks the concatenated
+	// [infras..., targets...] sequence so ←/→ flows across both
+	// rows linearly. Either row is omitted entirely when its slice
+	// is empty so a service with only targets isn't shadowed by an
+	// empty infra line.
+	infraTabsRow := renderInfraTabs(svc, m.selectedTab)
+	targetTabsRow := renderTargetTabs(svc, m.selectedTab, len(svc.GetInfra()))
 	// Detail header — branches on kind. Targets keep the existing
 	// "name · mode · phase [pid] [container]" shape; infras get
 	// "name · infra · phase healthy container=xxx".
@@ -221,19 +194,27 @@ func (m *model) renderRight(width, height int) string {
 		}
 	}
 	headerStyled := styleHeader.Render(header)
-	// Log pane — shrinks by infraHeight so the infra row never pushes
-	// log lines off the bottom.
-	logsHeight := height - 5 - infraHeight
+	// Layout: [infra-row] [target-row] [divider] [header] [logs].
+	// Each absent row simply skipped from the JoinVertical input.
+	sections := []string{}
+	rowCount := 0
+	if infraTabsRow != "" {
+		sections = append(sections, infraTabsRow)
+		rowCount++
+	}
+	if targetTabsRow != "" {
+		sections = append(sections, targetTabsRow)
+		rowCount++
+	}
+	// Log pane shrinks by (rowCount-1) so adding the second tab row
+	// doesn't push log lines off the bottom (the original layout
+	// reserved space for 1 tab row).
+	logsHeight := height - 5 - (rowCount - 1)
 	if logsHeight < 4 {
 		logsHeight = 4
 	}
 	logsRendered := m.renderLogs(width-4, logsHeight)
-	sections := []string{}
-	if infraRow != "" {
-		sections = append(sections, infraRow, "")
-	}
 	sections = append(sections,
-		tabRow,
 		strings.Repeat("─", width-4),
 		headerStyled,
 		logsRendered,
@@ -242,60 +223,73 @@ func (m *model) renderRight(width, height int) string {
 	return styleFrame.Width(width).Height(height).Render(body)
 }
 
-// renderInfraRow returns the always-visible infra status block for
-// the selected service, displayed above the target tabs. Single line
-// when it fits the available width; falls back to one entry per line
-// when it would overflow (the wrap-detection looks at byte length,
-// which is a close-enough proxy for visual width — ANSI codes don't
-// add cells and infra names are ASCII).
-func renderInfraRow(svc *anovelv1.Service, width int) string {
+// renderInfraTabs renders the top tab row: one tab per infra
+// container, with a leading colored status dot and {curly} brackets.
+// Returns "" when the service has no infra. selectedTab is the
+// model's combined index — when it falls in [0, len(infras)), the
+// matching tab gets styleSelected.
+func renderInfraTabs(svc *anovelv1.Service, selectedTab int) string {
 	infras := svc.GetInfra()
 	if len(infras) == 0 {
 		return ""
 	}
-	label := styleHeader.Render("infra: ")
-	parts := make([]string, 0, len(infras))
-	for _, in := range infras {
-		parts = append(parts, fmt.Sprintf("%s %s %s", in.GetName(), infraDot(in), styleDim.Render(infraHealthLabel(in))))
+	tabs := make([]string, 0, len(infras))
+	for i, in := range infras {
+		dot := infraDot(in)
+		brackets := "{" + in.GetName() + "}"
+		if i == selectedTab {
+			tabs = append(tabs, dot+" "+styleSelected.Render(brackets))
+		} else {
+			tabs = append(tabs, dot+" "+styleDim.Render(brackets))
+		}
 	}
-	oneLine := label + strings.Join(parts, "  ·  ")
-	// Visible-width estimate: strip the styleHeader/dim ANSI by
-	// estimating prefix + entries. ANSI escapes are invisible; we
-	// estimate using rune count of the raw text.
-	if visibleWidth(oneLine) <= width {
-		return oneLine
-	}
-	// Vertical fallback: one entry per line, indented under the label.
-	var b strings.Builder
-	b.WriteString(label + "\n")
-	for _, p := range parts {
-		b.WriteString("  " + p + "\n")
-	}
-	return strings.TrimRight(b.String(), "\n")
+	return styleDim.Render("infra ") + strings.Join(tabs, "  ")
 }
 
-// visibleWidth approximates the on-screen width of s, ignoring ANSI
-// escape sequences (which don't take cells). Uses rune count of the
-// non-ANSI bytes — good enough for ASCII content + the few box-drawing
-// glyphs we use.
-func visibleWidth(s string) int {
-	n := 0
-	inAnsi := false
-	for _, r := range s {
-		if r == 0x1b {
-			inAnsi = true
-			continue
-		}
-		if inAnsi {
-			if r == 'm' {
-				inAnsi = false
-			}
-			continue
-		}
-		n++
+// renderTargetTabs renders the bottom tab row: one tab per target,
+// with a leading colored status dot and [square] brackets.
+// infraOffset shifts the visual selection index — when the combined
+// selectedTab falls in [infraOffset, infraOffset+len(targets)), the
+// matching target tab is selected.
+func renderTargetTabs(svc *anovelv1.Service, selectedTab, infraOffset int) string {
+	targets := svc.GetTargets()
+	if len(targets) == 0 {
+		return ""
 	}
-	return n
+	tabs := make([]string, 0, len(targets))
+	for i, t := range targets {
+		dot := targetStatusDot(t)
+		brackets := "[" + t.GetName() + "]"
+		if infraOffset+i == selectedTab {
+			tabs = append(tabs, dot+" "+styleSelected.Render(brackets))
+		} else {
+			tabs = append(tabs, dot+" "+styleDim.Render(brackets))
+		}
+	}
+	return styleDim.Render("target ") + strings.Join(tabs, "  ")
 }
+
+// targetStatusDot returns the colored status glyph for one target,
+// matching the four-state model used by infraDot: green ● running,
+// yellow ● starting, red ● errored (terminated with non-success),
+// dim ○ idle / terminated-cleanly.
+func targetStatusDot(t *anovelv1.Target) string {
+	switch t.GetPhase() {
+	case anovelv1.Phase_PHASE_RUNNING:
+		return styleSuccess.Render("●")
+	case anovelv1.Phase_PHASE_STARTING:
+		return styleWarn.Render("●")
+	case anovelv1.Phase_PHASE_TERMINATED:
+		switch t.GetExitReason() {
+		case anovelv1.ExitReason_EXIT_REASON_SUCCESS, anovelv1.ExitReason_EXIT_REASON_UNSPECIFIED:
+			return styleDim.Render("○")
+		default:
+			return styleErr.Render("●")
+		}
+	}
+	return styleDim.Render("○")
+}
+
 
 func (m *model) renderLogs(width, height int) string {
 	if len(m.logLines) == 0 {
@@ -461,26 +455,35 @@ func countRunning(svc *anovelv1.Service) int {
 	return n
 }
 
-// serviceStatusLine returns the indented status descriptor rendered
-// below the service name in the nav block. One dot summarizes overall
-// state (green ● live, dim ○ idle, red ● errored); counts cover both
-// targets and infra so the user always sees infra at a glance — per
-// the design goal that infra status is "visible at all times".
-func serviceStatusLine(svc *anovelv1.Service) string {
+// serviceTargetsLine is the per-service "X/Y targets" row in the nav
+// block. Green dot when any target is running, red when any has an
+// error exit, dim otherwise. Single line — no infra count here.
+func serviceTargetsLine(svc *anovelv1.Service) string {
 	if serviceHasError(svc) {
 		return styleErr.Render("●") + " errored"
 	}
-	runningT := countRunning(svc)
-	totalT := len(svc.GetTargets())
-	healthyI, totalI := countInfraHealthy(svc)
+	running := countRunning(svc)
+	total := len(svc.GetTargets())
 	dot := styleDim.Render("○")
-	if runningT > 0 || healthyI > 0 {
+	if running > 0 {
 		dot = styleSuccess.Render("●")
 	}
-	if totalI == 0 {
-		return dot + fmt.Sprintf(" %d/%d targets", runningT, totalT)
+	return dot + fmt.Sprintf(" %d/%d targets", running, total)
+}
+
+// serviceInfraLine is the per-service "X/Y infra" row in the nav
+// block. Always rendered (even when Y == 0) so the panel layout
+// stays rectangular and the user knows whether infra exists.
+func serviceInfraLine(svc *anovelv1.Service) string {
+	healthy, total := countInfraHealthy(svc)
+	if total == 0 {
+		return styleDim.Render("  (no infra)")
 	}
-	return dot + fmt.Sprintf(" %d/%d targets · %d/%d infra", runningT, totalT, healthyI, totalI)
+	dot := styleDim.Render("○")
+	if healthy > 0 {
+		dot = styleSuccess.Render("●")
+	}
+	return dot + fmt.Sprintf(" %d/%d infra", healthy, total)
 }
 
 // countInfraHealthy returns (healthy, total) across a service's infra
