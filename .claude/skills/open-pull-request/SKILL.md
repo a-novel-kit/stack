@@ -195,6 +195,12 @@ The `scripts/lib/bot-token.sh` helper (`bot_gh <org> ...` / `bot_token <org>`) i
 `gh` call here fails with an auth/permission error, surface it to the user; do not fall
 back to the bot token to get past it.
 
+This is enforced, not just documented: `bot_gh` refuses `pr create|edit|ready|merge|
+close|reopen|review|lock` and the `issue` equivalents (exit 3, before any token is
+minted) — only `pr comment` / `issue comment` (and reads) pass through. If you see that
+denial, you reached for the wrong token: rerun the command as plain `gh` (operator user
+token). Do not try to route around the guard.
+
 ### 5.1 Choose the base branch
 
 - Default: `master`
