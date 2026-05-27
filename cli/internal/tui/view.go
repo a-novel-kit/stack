@@ -46,7 +46,7 @@ func (m *model) View() string {
 // renderMain is the two-column layout: services nav left, target detail
 // + log viewer right. Bottom row is the footer hint.
 func (m *model) renderMain() string {
-	navWidth := 24
+	navWidth := computeNavWidth(m.services)
 	mainWidth := m.width - navWidth - 4 // borders
 	if mainWidth < 20 {
 		mainWidth = m.width
@@ -85,30 +85,39 @@ func (m *model) renderNav(width, height int) string {
 		}
 		return styleFrame.Width(width).Height(height).Render(styleDim.Render(msg))
 	}
+	// Vertical per-service block: one line for the name (full width so
+	// it doesn't wrap), one indented status line below it, blank line
+	// between blocks for breathing room. This trades vertical density
+	// for horizontal clarity — service names like
+	// "service-authentication" no longer collide with the right-side
+	// counts on a narrow nav.
 	var lines []string
 	lines = append(lines, styleHeader.Render("Services"))
+	lines = append(lines, "")
 	for i, svc := range m.services {
-		running := countRunning(svc)
-		total := len(svc.GetTargets())
-		dot := serviceDot(svc)
 		name := svc.GetName()
-		counts := fmt.Sprintf(" %d/%d", running, total)
-		// Inactive (nothing running) → dim the name + counts so the user
-		// can scan the panel and see at a glance which services have
-		// something live. Services with an errored target keep their
-		// normal weight because the dot is red and signals attention.
 		hasError := serviceHasError(svc)
-		if running == 0 && !hasError {
-			name = styleDim.Render(name)
-			counts = styleDim.Render(counts)
+		inactive := countRunning(svc) == 0 && !hasError
+		// Name line — selected wins over inactive dimming (selection
+		// is the more important signal).
+		var nameLine string
+		switch {
+		case i == m.selectedSvc:
+			nameLine = styleSelected.Render("▸ " + name)
+		case inactive:
+			nameLine = "  " + styleDim.Render(name)
+		default:
+			nameLine = "  " + name
 		}
-		label := dot + " " + name + counts
-		if i == m.selectedSvc {
-			label = styleSelected.Render("▸ ") + label
-		} else {
-			label = "  " + label
+		// Status line, indented under the name. Always shows the
+		// state dot + a short descriptor (idle / 3/5 running /
+		// errored). Indented by 4 so the dot aligns visually with
+		// the first letter of the name.
+		statusLine := "    " + serviceStatusLine(svc)
+		lines = append(lines, nameLine, statusLine)
+		if i != len(m.services)-1 {
+			lines = append(lines, "")
 		}
-		lines = append(lines, label)
 	}
 	content := strings.Join(lines, "\n")
 	return styleFrame.Width(width).Height(height).Render(styleNav.Render(content))
@@ -313,22 +322,48 @@ func countRunning(svc *anovelv1.Service) int {
 	return n
 }
 
-func serviceDot(svc *anovelv1.Service) string {
+// serviceStatusLine returns the indented status descriptor rendered
+// below the service name in the nav block. Keeps the dot + a short
+// human label colocated so a vertical scan tells you state at a
+// glance: green dot + "n/m running" for live, dim hollow + "idle" for
+// nothing started, red filled + "errored" for an attention-worthy
+// recent failure.
+func serviceStatusLine(svc *anovelv1.Service) string {
 	if serviceHasError(svc) {
-		return styleErr.Render("●")
+		return styleErr.Render("●") + " errored"
 	}
-	for _, t := range svc.GetTargets() {
-		if t.GetPhase() == anovelv1.Phase_PHASE_RUNNING {
-			return styleSuccess.Render("●")
+	running := countRunning(svc)
+	total := len(svc.GetTargets())
+	if running > 0 {
+		return styleSuccess.Render("●") + fmt.Sprintf(" %d/%d running", running, total)
+	}
+	return styleDim.Render("○ idle")
+}
+
+// computeNavWidth picks the sidebar width so the longest service name
+// fits on one line. Clamped to [24, 40]: 24 keeps the panel a
+// recognizable width even when nothing's discovered yet; 40 caps it so
+// a rogue super-long name doesn't squeeze the right pane.
+func computeNavWidth(svcs []*anovelv1.Service) int {
+	const minW, maxW = 24, 40
+	w := minW
+	for _, svc := range svcs {
+		// "▸ " prefix + name + 2 cols of right padding.
+		needed := 4 + len(svc.GetName())
+		if needed > w {
+			w = needed
 		}
 	}
-	return styleDim.Render("○")
+	if w > maxW {
+		w = maxW
+	}
+	return w
 }
 
 // serviceHasError reports whether any target in the service terminated
-// with a non-success exit. Used both by serviceDot (to flag the row red)
-// and the inactive-row dim logic (an errored row shouldn't dim — it
-// needs attention).
+// with a non-success exit. Used both by serviceStatusLine (to render
+// the red "● errored" line) and the inactive-row dim logic (an errored
+// row shouldn't dim — it needs attention).
 func serviceHasError(svc *anovelv1.Service) bool {
 	for _, t := range svc.GetTargets() {
 		if t.GetPhase() == anovelv1.Phase_PHASE_TERMINATED &&
