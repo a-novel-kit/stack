@@ -73,14 +73,19 @@ func runAction(busyText, successText, actionLabel string, do func() error) tea.C
 	)
 }
 
-// logsMsg carries log lines to the model. `replace=true` means
-// overwrite the buffer (snapshot); `append=true` means append (live
-// follow). Defaults to append-only when both flags are zero so older
-// callers stay correct.
+// logsMsg carries log lines from a follower goroutine into the
+// model. `gen` is the follower-generation tag — Update drops any
+// message whose gen doesn't match m.followGen, which handles the
+// cancel-then-start race where the prior follower's in-flight
+// messages would otherwise mix with the new follower's stream.
+//
+// Lines are always appended (the snapshot path was removed because
+// the server's follow=true mode delivers history-then-tail in one
+// stream; combining a snapshot with a follower made every historical
+// line appear twice).
 type logsMsg struct {
-	lines   []*anovelv1.LogLine
-	replace bool
-	append  bool
+	lines []*anovelv1.LogLine
+	gen   int
 }
 
 // tickMsg is the periodic refresh trigger.
@@ -117,53 +122,38 @@ func (m *model) followSelectedLogs() tea.Cmd {
 	if id == "" {
 		return nil
 	}
-	// Cancel any prior follower so two simultaneous streams don't fan
-	// into the same logLines buffer.
+	// Cancel the prior follower and bump the generation tag — any
+	// late messages still in flight from that follower will now have
+	// a stale gen and get dropped by Update on arrival.
 	if m.followCancel != nil {
 		m.followCancel()
 		m.followCancel = nil
 	}
-	// Snapshot tea.Cmd — runs synchronously on the bubble tea event
-	// loop, returns a logsMsg with the full current.log contents.
-	snapshot := func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		stream, err := m.c.StreamLogs(ctx, id, "", false, anovelv1.LogStream_LOG_STREAM_UNSPECIFIED)
+	m.followGen++
+	gen := m.followGen
+	if m.program == nil {
+		return nil
+	}
+	// Single follower stream — server's follow=true mode delivers
+	// history first then tails new lines, so a separate snapshot
+	// call would double-stream the history.
+	ctx, cancel := context.WithCancel(context.Background())
+	m.followCancel = cancel
+	go func() {
+		stream, err := m.c.StreamLogs(ctx, id, "", true /* follow */, anovelv1.LogStream_LOG_STREAM_UNSPECIFIED)
 		if err != nil {
-			return errMsg{err: err}
+			m.program.Send(errMsg{err: err})
+			return
 		}
 		defer func() { _ = stream.Close() }()
-		var lines []*anovelv1.LogLine
 		for stream.Receive() {
-			lines = append(lines, stream.Msg())
-			if len(lines) > 500 {
-				lines = lines[len(lines)-500:]
-			}
-		}
-		return logsMsg{lines: lines, replace: true}
-	}
-	// Background follower goroutine — pushes logsMsg{append: true} for
-	// each new line via the program's Send. Lives until ctx is
-	// cancelled (target switch / quit).
-	if m.program != nil {
-		ctx, cancel := context.WithCancel(context.Background())
-		m.followCancel = cancel
-		go func() {
-			stream, err := m.c.StreamLogs(ctx, id, "", true /* follow */, anovelv1.LogStream_LOG_STREAM_UNSPECIFIED)
-			if err != nil {
-				m.program.Send(errMsg{err: err})
+			if ctx.Err() != nil {
 				return
 			}
-			defer func() { _ = stream.Close() }()
-			for stream.Receive() {
-				if ctx.Err() != nil {
-					return
-				}
-				m.program.Send(logsMsg{lines: []*anovelv1.LogLine{stream.Msg()}, append: true})
-			}
-		}()
-	}
-	return snapshot
+			m.program.Send(logsMsg{lines: []*anovelv1.LogLine{stream.Msg()}, gen: gen})
+		}
+	}()
+	return nil
 }
 
 // runPaletteCommand dispatches a `:command` from the palette. Returns a

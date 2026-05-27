@@ -184,8 +184,8 @@ func renderPs(w io.Writer, services []*anovelv1.Service, asJSON bool) {
 		for _, t := range s.GetTargets() {
 			kindStr := targetKindShort(t.GetKind())
 			id := s.GetStack() + "/" + s.GetName() + "/" + t.GetName()
-			fmt.Fprintf(w, "  %-6s %-30s  %-10s  %s\n",
-				kindStr, t.GetName(), phaseLabel(t.GetPhase()), id)
+			fmt.Fprintf(w, "  %-6s %-30s  %-12s  %s\n",
+				kindStr, t.GetName(), targetStatusLabel(t), id)
 		}
 		for _, in := range s.GetInfra() {
 			label := phaseLabel(in.GetPhase())
@@ -201,6 +201,39 @@ func renderPs(w io.Writer, services []*anovelv1.Service, asJSON bool) {
 				"infra", in.GetName(), label, id)
 		}
 	}
+}
+
+// targetStatusLabel returns the user-facing status word for a target,
+// folding kind-aware terminal-state info into the label so a finished
+// one-shot reads as "ok" / "failed" rather than the bland
+// "terminated" that doesn't tell you whether it succeeded:
+//
+//	long-runner running       → "running"
+//	long-runner clean-exit    → "stopped"
+//	long-runner errored       → "crashed"
+//	one-shot running          → "running"
+//	one-shot exit success     → "ok"
+//	one-shot exit error       → "failed"
+//	never started             → "idle"
+func targetStatusLabel(t *anovelv1.Target) string {
+	if t.GetPhase() == anovelv1.Phase_PHASE_TERMINATED {
+		isOneShot := t.GetKind() == anovelv1.TargetKind_TARGET_KIND_ONE_SHOT
+		switch t.GetExitReason() {
+		case anovelv1.ExitReason_EXIT_REASON_SUCCESS:
+			if isOneShot {
+				return "ok"
+			}
+			return "stopped"
+		case anovelv1.ExitReason_EXIT_REASON_KILLED:
+			return "stopped"
+		case anovelv1.ExitReason_EXIT_REASON_CRASHED, anovelv1.ExitReason_EXIT_REASON_ERROR:
+			if isOneShot {
+				return "failed"
+			}
+			return "crashed"
+		}
+	}
+	return phaseLabel(t.GetPhase())
 }
 
 // phaseLabel renders a Phase enum as a short human-readable token. Phase 3

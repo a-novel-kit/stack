@@ -90,6 +90,10 @@ type model struct {
 	// Log streaming.
 	logLines     []*anovelv1.LogLine
 	followCancel context.CancelFunc // cancels the current follow goroutine on target switch
+	// followGen tags each follower-goroutine generation; messages
+	// from previous followers are dropped on arrival so the
+	// cancel-then-start race window can't mix streams.
+	followGen int
 	// Command palette.
 	cmdInput   string
 	topologyTx string // last GetTopology response (for viewTopology)
@@ -182,11 +186,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case logsMsg:
-		if msg.replace {
-			m.logLines = append(m.logLines[:0], msg.lines...)
-		} else {
-			m.logLines = append(m.logLines, msg.lines...)
+		// Drop messages from a stale follower generation — happens
+		// during the cancel-then-start race window on tab/service
+		// switches. Without this, the prior follower's last few
+		// lines would mix into the new tab's view.
+		if msg.gen != m.followGen {
+			return m, nil
 		}
+		m.logLines = append(m.logLines, msg.lines...)
 		// Bound to last 500 lines so the model doesn't grow unbounded.
 		if len(m.logLines) > 500 {
 			m.logLines = m.logLines[len(m.logLines)-500:]

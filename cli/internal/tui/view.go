@@ -269,21 +269,44 @@ func renderTargetTabs(svc *anovelv1.Service, selectedTab, infraOffset int) strin
 	return styleDim.Render("target ") + strings.Join(tabs, "  ")
 }
 
-// targetStatusDot returns the colored status glyph for one target,
-// matching the four-state model used by infraDot: green ● running,
-// yellow ● starting, red ● errored (terminated with non-success),
-// dim ○ idle / terminated-cleanly.
+// targetStatusDot returns the colored status glyph for one target.
+// Branches on TargetKind so one-shots reflect their LAST RUN outcome
+// (✓ success / ✗ failure) instead of falling back to a dim ○ that
+// would look indistinguishable from "never started":
+//
+//	long-runner running        → ● green
+//	long-runner starting       → ● yellow
+//	long-runner errored        → ● red    (terminated non-success)
+//	long-runner clean exit     → ○ dim    (killed deliberately)
+//	long-runner not started    → ○ dim
+//
+//	one-shot running           → ● yellow (in progress)
+//	one-shot completed (ok)    → ✓ green
+//	one-shot completed (fail)  → ✗ red
+//	one-shot not started       → ○ dim
 func targetStatusDot(t *anovelv1.Target) string {
+	isOneShot := t.GetKind() == anovelv1.TargetKind_TARGET_KIND_ONE_SHOT
 	switch t.GetPhase() {
 	case anovelv1.Phase_PHASE_RUNNING:
+		if isOneShot {
+			return styleWarn.Render("●")
+		}
 		return styleSuccess.Render("●")
 	case anovelv1.Phase_PHASE_STARTING:
 		return styleWarn.Render("●")
 	case anovelv1.Phase_PHASE_TERMINATED:
 		switch t.GetExitReason() {
-		case anovelv1.ExitReason_EXIT_REASON_SUCCESS, anovelv1.ExitReason_EXIT_REASON_UNSPECIFIED:
+		case anovelv1.ExitReason_EXIT_REASON_SUCCESS:
+			if isOneShot {
+				return styleSuccess.Render("✓")
+			}
+			return styleDim.Render("○")
+		case anovelv1.ExitReason_EXIT_REASON_UNSPECIFIED:
 			return styleDim.Render("○")
 		default:
+			if isOneShot {
+				return styleErr.Render("✗")
+			}
 			return styleErr.Render("●")
 		}
 	}

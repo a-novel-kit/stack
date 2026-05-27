@@ -119,22 +119,33 @@ func (r *Runner) watchGoExec(id string, logWriter *logs.Writer) {
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			// Distinguish "we killed it" from "it crashed on its own".
-			// Setpgid groups means SIGKILL/SIGTERM from our Kill path
-			// shows up as a signal exit; everything else is the
-			// process's own non-zero exit.
-			if exitErr.Exited() {
+			// Classify based on (a) how the process ended and
+			// (b) whether we asked for it. Going via `go run` —
+			// the parent process supervised here — means SIGTERM
+			// sent to the process group always shows up as a
+			// signal exit, even when the actual binary handled it
+			// cleanly and exited 0. The fix: treat any
+			// signal-exit during a daemon-initiated stop as
+			// SUCCESS — clean shutdown by request. CRASHED is
+			// reserved for signals received without us asking
+			// (e.g., OOMKiller, manual `pkill`).
+			r.mu.RLock()
+			wasStopping := inst.Phase == anovelv1.Phase_PHASE_STOPPING
+			r.mu.RUnlock()
+			switch {
+			case exitErr.Exited():
+				// Process exited with a non-zero status code on
+				// its own — a real error (panic, config issue,
+				// etc.). Surface as ERROR for both kinds.
 				reason = anovelv1.ExitReason_EXIT_REASON_ERROR
-			} else {
-				// Killed by signal.
-				r.mu.RLock()
-				wasStopping := inst.Phase == anovelv1.Phase_PHASE_STOPPING
-				r.mu.RUnlock()
-				if wasStopping {
-					reason = anovelv1.ExitReason_EXIT_REASON_KILLED
-				} else {
-					reason = anovelv1.ExitReason_EXIT_REASON_CRASHED
-				}
+			case wasStopping:
+				// We asked for the stop, the process is gone.
+				// Whether SIGTERM caught the binary mid-graceful
+				// or had to escalate to SIGKILL, the user-visible
+				// outcome is the same: "done".
+				reason = anovelv1.ExitReason_EXIT_REASON_SUCCESS
+			default:
+				reason = anovelv1.ExitReason_EXIT_REASON_CRASHED
 			}
 			msg = err.Error()
 		} else {
