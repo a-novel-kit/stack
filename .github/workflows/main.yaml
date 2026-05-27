@@ -8,8 +8,43 @@ on:
       - "**"
 
 jobs:
+  generated-go:
+    # Ensures `go generate ./...` in cli/ produces no diff against what's
+    # committed (proto bindings, mocks, etc.). Mirrors the per-service
+    # generated-go job; gates lint-go so we don't waste a lint run on stale
+    # generated code.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: "cli/go.mod"
+      - name: go generate
+        shell: bash
+        working-directory: cli
+        run: go generate ./...
+      - uses: a-novel-kit/workflows/generic-actions/check-changes@master
+        with:
+          fail_message: cli/ go generate definitions are not up-to-date, please run 'go generate ./...' inside cli/ and commit the changes
+
+  lint-proto:
+    # buf lint over the cli/proto contract. Catches schema-style violations
+    # (naming, field-number reuse, breaking-change patterns) before generated
+    # code drifts from intent.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: bufbuild/buf-action@v1
+        with:
+          input: cli
+
   lint-go:
     runs-on: ubuntu-latest
+    needs: [generated-go]
     permissions:
       contents: read
     steps:
