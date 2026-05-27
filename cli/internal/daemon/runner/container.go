@@ -332,6 +332,41 @@ func containerHealthFromInspect(ctx context.Context, cid string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// KillInfraContainer stops a single infra container by (stack,
+// service, infraName). Uses podman stop with a 10s grace; the
+// container survives in Exited state so the user can restart it
+// without losing its pod / network attachments. Returns an error if
+// no container matches (already down, or never up).
+func (r *Runner) KillInfraContainer(ctx context.Context, stack, service, infraName string) error {
+	st, ok := r.InfraStatesOf(ctx, stack)[service+"/"+infraName]
+	if !ok || st.ContainerID == "" {
+		return fmt.Errorf("no container for %s/%s/%s", stack, service, infraName)
+	}
+	cmd := exec.CommandContext(ctx, "podman", "stop", "--time", "10", st.ContainerID)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("podman stop %s: %w\n%s", st.ContainerID, err, string(out))
+	}
+	return nil
+}
+
+// RestartInfraContainer restarts a single infra container in place
+// (`podman restart`, which is stop+start without recreating). Faster
+// than KillInfra → StartInfra because it skips compose-up entirely
+// and preserves the container's existing volume bindings / labels.
+func (r *Runner) RestartInfraContainer(ctx context.Context, stack, service, infraName string) error {
+	st, ok := r.InfraStatesOf(ctx, stack)[service+"/"+infraName]
+	if !ok || st.ContainerID == "" {
+		return fmt.Errorf("no container for %s/%s/%s", stack, service, infraName)
+	}
+	cmd := exec.CommandContext(ctx, "podman", "restart", "--time", "10", st.ContainerID)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("podman restart %s: %w\n%s", st.ContainerID, err, string(out))
+	}
+	return nil
+}
+
 // InfraStateOf is the legacy single-infra query — preserved for
 // callers that don't have the batched map yet. Internally now uses
 // InfraStatesOf for consistency.

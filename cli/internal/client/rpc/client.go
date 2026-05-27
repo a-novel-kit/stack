@@ -205,6 +205,36 @@ func (c *Client) KillInfra(ctx context.Context, stack, service string, force boo
 	return resp.Msg, nil
 }
 
+// KillInfraContainer stops one infra container (by name) without
+// affecting the rest of the service. Used by the TUI for tab-level
+// infra lifecycle.
+func (c *Client) KillInfraContainer(ctx context.Context, stack, service, name string) (*anovelv1.KillInfraContainerResponse, error) {
+	resp, err := c.core.KillInfraContainer(ctx, connect.NewRequest(&anovelv1.KillInfraContainerRequest{
+		Stack:   stack,
+		Service: service,
+		Name:    name,
+	}))
+	if err != nil {
+		return nil, c.mapErr(err)
+	}
+	return resp.Msg, nil
+}
+
+// RestartInfraContainer issues `podman restart` for one infra
+// container — faster than kill+infra-start because it preserves
+// volume bindings.
+func (c *Client) RestartInfraContainer(ctx context.Context, stack, service, name string) (*anovelv1.RestartInfraContainerResponse, error) {
+	resp, err := c.core.RestartInfraContainer(ctx, connect.NewRequest(&anovelv1.RestartInfraContainerRequest{
+		Stack:   stack,
+		Service: service,
+		Name:    name,
+	}))
+	if err != nil {
+		return nil, c.mapErr(err)
+	}
+	return resp.Msg, nil
+}
+
 // StreamLogs returns a server-stream of log lines. Caller drains via
 // Receive()/Msg() and Close()s on done. `runID` of "" means
 // current.log; non-empty selects an archived run. `follow` keeps the

@@ -71,6 +71,12 @@ const (
 	CoreServiceStartInfraProcedure = "/anovel.v1.CoreService/StartInfra"
 	// CoreServiceKillInfraProcedure is the fully-qualified name of the CoreService's KillInfra RPC.
 	CoreServiceKillInfraProcedure = "/anovel.v1.CoreService/KillInfra"
+	// CoreServiceKillInfraContainerProcedure is the fully-qualified name of the CoreService's
+	// KillInfraContainer RPC.
+	CoreServiceKillInfraContainerProcedure = "/anovel.v1.CoreService/KillInfraContainer"
+	// CoreServiceRestartInfraContainerProcedure is the fully-qualified name of the CoreService's
+	// RestartInfraContainer RPC.
+	CoreServiceRestartInfraContainerProcedure = "/anovel.v1.CoreService/RestartInfraContainer"
 	// CoreServiceStreamLogsProcedure is the fully-qualified name of the CoreService's StreamLogs RPC.
 	CoreServiceStreamLogsProcedure = "/anovel.v1.CoreService/StreamLogs"
 	// CoreServiceListRunsProcedure is the fully-qualified name of the CoreService's ListRuns RPC.
@@ -113,6 +119,12 @@ type CoreServiceClient interface {
 	// Service infrastructure
 	StartInfra(context.Context, *connect.Request[v1.StartInfraRequest]) (*connect.Response[v1.StartInfraResponse], error)
 	KillInfra(context.Context, *connect.Request[v1.KillInfraRequest]) (*connect.Response[v1.KillInfraResponse], error)
+	// Per-infra container lifecycle. Lets the TUI treat infra entries
+	// like targets — kill / restart one container without tearing down
+	// the rest of the service's infra. The whole-service equivalents
+	// (StartInfra/KillInfra) remain for cold-start and full teardown.
+	KillInfraContainer(context.Context, *connect.Request[v1.KillInfraContainerRequest]) (*connect.Response[v1.KillInfraContainerResponse], error)
+	RestartInfraContainer(context.Context, *connect.Request[v1.RestartInfraContainerRequest]) (*connect.Response[v1.RestartInfraContainerResponse], error)
 	// Logs (streaming)
 	StreamLogs(context.Context, *connect.Request[v1.StreamLogsRequest]) (*connect.ServerStreamForClient[v1.LogLine], error)
 	ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error)
@@ -213,6 +225,18 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(coreServiceMethods.ByName("KillInfra")),
 			connect.WithClientOptions(opts...),
 		),
+		killInfraContainer: connect.NewClient[v1.KillInfraContainerRequest, v1.KillInfraContainerResponse](
+			httpClient,
+			baseURL+CoreServiceKillInfraContainerProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("KillInfraContainer")),
+			connect.WithClientOptions(opts...),
+		),
+		restartInfraContainer: connect.NewClient[v1.RestartInfraContainerRequest, v1.RestartInfraContainerResponse](
+			httpClient,
+			baseURL+CoreServiceRestartInfraContainerProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("RestartInfraContainer")),
+			connect.WithClientOptions(opts...),
+		),
 		streamLogs: connect.NewClient[v1.StreamLogsRequest, v1.LogLine](
 			httpClient,
 			baseURL+CoreServiceStreamLogsProcedure,
@@ -278,28 +302,30 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // coreServiceClient implements CoreServiceClient.
 type coreServiceClient struct {
-	ping             *connect.Client[v1.PingRequest, v1.PingResponse]
-	status           *connect.Client[v1.StatusRequest, v1.StatusResponse]
-	prepareReinstall *connect.Client[v1.PrepareReinstallRequest, v1.PrepareReinstallResponse]
-	listStacks       *connect.Client[v1.ListStacksRequest, v1.ListStacksResponse]
-	listServices     *connect.Client[v1.ListServicesRequest, v1.ListServicesResponse]
-	describeService  *connect.Client[v1.DescribeServiceRequest, v1.DescribeServiceResponse]
-	getTopology      *connect.Client[v1.GetTopologyRequest, v1.GetTopologyResponse]
-	startTarget      *connect.Client[v1.StartTargetRequest, v1.StartTargetResponse]
-	killTarget       *connect.Client[v1.KillTargetRequest, v1.KillTargetResponse]
-	restartTarget    *connect.Client[v1.RestartTargetRequest, v1.RestartTargetResponse]
-	startInfra       *connect.Client[v1.StartInfraRequest, v1.StartInfraResponse]
-	killInfra        *connect.Client[v1.KillInfraRequest, v1.KillInfraResponse]
-	streamLogs       *connect.Client[v1.StreamLogsRequest, v1.LogLine]
-	listRuns         *connect.Client[v1.ListRunsRequest, v1.ListRunsResponse]
-	getEnv           *connect.Client[v1.GetEnvRequest, v1.GetEnvResponse]
-	listVolumes      *connect.Client[v1.ListVolumesRequest, v1.ListVolumesResponse]
-	backupVolume     *connect.Client[v1.BackupVolumeRequest, v1.BackupVolumeResponse]
-	restoreVolume    *connect.Client[v1.RestoreVolumeRequest, v1.RestoreVolumeResponse]
-	clearVolume      *connect.Client[v1.ClearVolumeRequest, v1.ClearVolumeResponse]
-	exec             *connect.Client[v1.ExecRequest, v1.ExecOutput]
-	debug            *connect.Client[v1.DebugRequest, v1.DebugResponse]
-	watch            *connect.Client[v1.WatchRequest, v1.StateEvent]
+	ping                  *connect.Client[v1.PingRequest, v1.PingResponse]
+	status                *connect.Client[v1.StatusRequest, v1.StatusResponse]
+	prepareReinstall      *connect.Client[v1.PrepareReinstallRequest, v1.PrepareReinstallResponse]
+	listStacks            *connect.Client[v1.ListStacksRequest, v1.ListStacksResponse]
+	listServices          *connect.Client[v1.ListServicesRequest, v1.ListServicesResponse]
+	describeService       *connect.Client[v1.DescribeServiceRequest, v1.DescribeServiceResponse]
+	getTopology           *connect.Client[v1.GetTopologyRequest, v1.GetTopologyResponse]
+	startTarget           *connect.Client[v1.StartTargetRequest, v1.StartTargetResponse]
+	killTarget            *connect.Client[v1.KillTargetRequest, v1.KillTargetResponse]
+	restartTarget         *connect.Client[v1.RestartTargetRequest, v1.RestartTargetResponse]
+	startInfra            *connect.Client[v1.StartInfraRequest, v1.StartInfraResponse]
+	killInfra             *connect.Client[v1.KillInfraRequest, v1.KillInfraResponse]
+	killInfraContainer    *connect.Client[v1.KillInfraContainerRequest, v1.KillInfraContainerResponse]
+	restartInfraContainer *connect.Client[v1.RestartInfraContainerRequest, v1.RestartInfraContainerResponse]
+	streamLogs            *connect.Client[v1.StreamLogsRequest, v1.LogLine]
+	listRuns              *connect.Client[v1.ListRunsRequest, v1.ListRunsResponse]
+	getEnv                *connect.Client[v1.GetEnvRequest, v1.GetEnvResponse]
+	listVolumes           *connect.Client[v1.ListVolumesRequest, v1.ListVolumesResponse]
+	backupVolume          *connect.Client[v1.BackupVolumeRequest, v1.BackupVolumeResponse]
+	restoreVolume         *connect.Client[v1.RestoreVolumeRequest, v1.RestoreVolumeResponse]
+	clearVolume           *connect.Client[v1.ClearVolumeRequest, v1.ClearVolumeResponse]
+	exec                  *connect.Client[v1.ExecRequest, v1.ExecOutput]
+	debug                 *connect.Client[v1.DebugRequest, v1.DebugResponse]
+	watch                 *connect.Client[v1.WatchRequest, v1.StateEvent]
 }
 
 // Ping calls anovel.v1.CoreService.Ping.
@@ -360,6 +386,16 @@ func (c *coreServiceClient) StartInfra(ctx context.Context, req *connect.Request
 // KillInfra calls anovel.v1.CoreService.KillInfra.
 func (c *coreServiceClient) KillInfra(ctx context.Context, req *connect.Request[v1.KillInfraRequest]) (*connect.Response[v1.KillInfraResponse], error) {
 	return c.killInfra.CallUnary(ctx, req)
+}
+
+// KillInfraContainer calls anovel.v1.CoreService.KillInfraContainer.
+func (c *coreServiceClient) KillInfraContainer(ctx context.Context, req *connect.Request[v1.KillInfraContainerRequest]) (*connect.Response[v1.KillInfraContainerResponse], error) {
+	return c.killInfraContainer.CallUnary(ctx, req)
+}
+
+// RestartInfraContainer calls anovel.v1.CoreService.RestartInfraContainer.
+func (c *coreServiceClient) RestartInfraContainer(ctx context.Context, req *connect.Request[v1.RestartInfraContainerRequest]) (*connect.Response[v1.RestartInfraContainerResponse], error) {
+	return c.restartInfraContainer.CallUnary(ctx, req)
 }
 
 // StreamLogs calls anovel.v1.CoreService.StreamLogs.
@@ -430,6 +466,12 @@ type CoreServiceHandler interface {
 	// Service infrastructure
 	StartInfra(context.Context, *connect.Request[v1.StartInfraRequest]) (*connect.Response[v1.StartInfraResponse], error)
 	KillInfra(context.Context, *connect.Request[v1.KillInfraRequest]) (*connect.Response[v1.KillInfraResponse], error)
+	// Per-infra container lifecycle. Lets the TUI treat infra entries
+	// like targets — kill / restart one container without tearing down
+	// the rest of the service's infra. The whole-service equivalents
+	// (StartInfra/KillInfra) remain for cold-start and full teardown.
+	KillInfraContainer(context.Context, *connect.Request[v1.KillInfraContainerRequest]) (*connect.Response[v1.KillInfraContainerResponse], error)
+	RestartInfraContainer(context.Context, *connect.Request[v1.RestartInfraContainerRequest]) (*connect.Response[v1.RestartInfraContainerResponse], error)
 	// Logs (streaming)
 	StreamLogs(context.Context, *connect.Request[v1.StreamLogsRequest], *connect.ServerStream[v1.LogLine]) error
 	ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error)
@@ -526,6 +568,18 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(coreServiceMethods.ByName("KillInfra")),
 		connect.WithHandlerOptions(opts...),
 	)
+	coreServiceKillInfraContainerHandler := connect.NewUnaryHandler(
+		CoreServiceKillInfraContainerProcedure,
+		svc.KillInfraContainer,
+		connect.WithSchema(coreServiceMethods.ByName("KillInfraContainer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coreServiceRestartInfraContainerHandler := connect.NewUnaryHandler(
+		CoreServiceRestartInfraContainerProcedure,
+		svc.RestartInfraContainer,
+		connect.WithSchema(coreServiceMethods.ByName("RestartInfraContainer")),
+		connect.WithHandlerOptions(opts...),
+	)
 	coreServiceStreamLogsHandler := connect.NewServerStreamHandler(
 		CoreServiceStreamLogsProcedure,
 		svc.StreamLogs,
@@ -612,6 +666,10 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 			coreServiceStartInfraHandler.ServeHTTP(w, r)
 		case CoreServiceKillInfraProcedure:
 			coreServiceKillInfraHandler.ServeHTTP(w, r)
+		case CoreServiceKillInfraContainerProcedure:
+			coreServiceKillInfraContainerHandler.ServeHTTP(w, r)
+		case CoreServiceRestartInfraContainerProcedure:
+			coreServiceRestartInfraContainerHandler.ServeHTTP(w, r)
 		case CoreServiceStreamLogsProcedure:
 			coreServiceStreamLogsHandler.ServeHTTP(w, r)
 		case CoreServiceListRunsProcedure:
@@ -687,6 +745,14 @@ func (UnimplementedCoreServiceHandler) StartInfra(context.Context, *connect.Requ
 
 func (UnimplementedCoreServiceHandler) KillInfra(context.Context, *connect.Request[v1.KillInfraRequest]) (*connect.Response[v1.KillInfraResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.KillInfra is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) KillInfraContainer(context.Context, *connect.Request[v1.KillInfraContainerRequest]) (*connect.Response[v1.KillInfraContainerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.KillInfraContainer is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) RestartInfraContainer(context.Context, *connect.Request[v1.RestartInfraContainerRequest]) (*connect.Response[v1.RestartInfraContainerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.RestartInfraContainer is not implemented"))
 }
 
 func (UnimplementedCoreServiceHandler) StreamLogs(context.Context, *connect.Request[v1.StreamLogsRequest], *connect.ServerStream[v1.LogLine]) error {

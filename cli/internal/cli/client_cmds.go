@@ -77,14 +77,26 @@ parsed at daemon start (see 'a-novel core setup' for the bootstrap flow).`,
 func newPsCmd() *cobra.Command {
 	var ss stackScope
 	var service string
+	var kind string
 	var jsonOut bool
 	var watch bool
 	cmd := &cobra.Command{
 		Use:   "ps",
-		Short: "List services and their target states",
+		Short: "List services with their targets AND infra containers",
 		Long: `Show every service in the active stack with its targets' current phase,
 exit reason (if terminated), and mode (go-exec vs container). Infrastructure
-containers are listed alongside their owning service.
+containers are listed alongside their owning service — distinguished by
+the leading 'infra' kind column (vs '1shot' / 'longr' for targets).
+
+Filters:
+  --service=NAME    only this service
+  --kind=infra      only infra containers (suppress targets)
+  --kind=target     only targets (suppress infra)
+
+The canonical fully-qualified IDs for each row are emitted in --json
+mode so machine consumers don't have to reconstruct them:
+  target:  <stack>/<service>/<name>
+  infra:   <stack>/<service>/infra/<name>
 
 With --watch, streams state changes as they happen instead of a snapshot.
 With --json, emits one JSON object per service for machine consumption
@@ -92,6 +104,7 @@ With --json, emits one JSON object per service for machine consumption
 		Example: `  a-novel run ps
   a-novel run ps --stack=branch-foo
   a-novel run ps --service=service-json-keys --json
+  a-novel run ps --kind=infra
   a-novel run ps --watch`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
@@ -114,6 +127,20 @@ With --json, emits one JSON object per service for machine consumption
 				}
 				services = filtered
 			}
+			switch kind {
+			case "", "all":
+				// default — show both
+			case "target":
+				for _, s := range services {
+					s.Infra = nil
+				}
+			case "infra":
+				for _, s := range services {
+					s.Targets = nil
+				}
+			default:
+				return fmt.Errorf("--kind=%q: must be 'target', 'infra', or 'all'", kind)
+			}
 			if watch {
 				return errors.New("ps --watch: not yet implemented (scheduled for phase 3)")
 			}
@@ -123,6 +150,7 @@ With --json, emits one JSON object per service for machine consumption
 	}
 	ss.bindAll(cmd)
 	cmd.Flags().StringVar(&service, "service", "", "filter to one service")
+	cmd.Flags().StringVar(&kind, "kind", "", "filter by entity kind (target|infra|all; default all)")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON (machine-readable)")
 	cmd.Flags().BoolVar(&watch, "watch", false, "stream state changes instead of a snapshot")
 	return cmd
@@ -148,9 +176,18 @@ func renderPs(w io.Writer, services []*anovelv1.Service, asJSON bool) {
 			fmt.Fprintln(w)
 		}
 		fmt.Fprintf(w, "%s  (stack %s)\n", s.GetName(), s.GetStack())
+		// Targets first (the user's primary interaction surface),
+		// then infra. The 'kind' column ('1shot' / 'longr' / 'infra')
+		// + the trailing fully-qualified ID make the two
+		// distinguishable at a glance AND copy-pasteable into
+		// kill/restart/logs without manual reconstruction.
+		for _, t := range s.GetTargets() {
+			kindStr := targetKindShort(t.GetKind())
+			id := s.GetStack() + "/" + s.GetName() + "/" + t.GetName()
+			fmt.Fprintf(w, "  %-6s %-30s  %-10s  %s\n",
+				kindStr, t.GetName(), phaseLabel(t.GetPhase()), id)
+		}
 		for _, in := range s.GetInfra() {
-			// Live phase + health from the runner's InfraStateOf
-			// lookup (or "idle" if no container exists yet).
 			label := phaseLabel(in.GetPhase())
 			if h := in.GetHealth(); h == anovelv1.Health_HEALTH_HEALTHY {
 				label += " healthy"
@@ -159,11 +196,9 @@ func renderPs(w io.Writer, services []*anovelv1.Service, asJSON bool) {
 			} else if h == anovelv1.Health_HEALTH_STARTING {
 				label += " starting"
 			}
-			fmt.Fprintf(w, "  infra  %-30s  %s\n", in.GetName(), label)
-		}
-		for _, t := range s.GetTargets() {
-			kindStr := targetKindShort(t.GetKind())
-			fmt.Fprintf(w, "  %-6s %-30s  %s\n", kindStr, t.GetName(), phaseLabel(t.GetPhase()))
+			id := s.GetStack() + "/" + s.GetName() + "/infra/" + in.GetName()
+			fmt.Fprintf(w, "  %-6s %-30s  %-10s  %s\n",
+				"infra", in.GetName(), label, id)
 		}
 	}
 }
@@ -404,23 +439,36 @@ func newKillCmd() *cobra.Command {
 	var ss stackScope
 	var timeout time.Duration
 	cmd := &cobra.Command{
-		Use:   "kill <target>",
-		Short: "Stop a running target",
-		Long: `Send SIGTERM to the target and wait up to --timeout (default 10s) for it
-to exit before SIGKILL. Idempotent: killing an already-stopped target
-returns 0.`,
+		Use:   "kill <target-or-infra>",
+		Short: "Stop a running target or infra container",
+		Long: `Send SIGTERM to the entity and wait up to --timeout (default 10s) for it
+to exit before SIGKILL. Idempotent: killing an already-stopped entity
+returns 0.
+
+The argument can be a target ID ('service-X/grpc') or an infra ID
+('service-X/infra/postgres-X'). The 'infra' segment is the
+sentinel — target names colliding with that word would be
+disambiguated by the stack-prefixed form.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			c := rpc.New("")
-			id := resolveTargetID(args[0], ss.stack)
-			resp, err := c.KillTarget(ctx, id, timeout)
+			ref := parseEntityID(args[0], ss.stack)
+			if ref.IsInfra {
+				_, err := c.KillInfraContainer(ctx, ref.Stack, ref.Service, ref.Infra)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "stopped infra %s\n", ref.ID)
+				return nil
+			}
+			resp, err := c.KillTarget(ctx, ref.ID, timeout)
 			if err != nil {
 				return err
 			}
 			t := resp.GetTarget()
 			if t == nil || t.GetId() == "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "%s: not running (no-op)\n", id)
+				fmt.Fprintf(cmd.OutOrStdout(), "%s: not running (no-op)\n", ref.ID)
 				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "killed %s (phase=%s, exit=%s)\n",
@@ -437,24 +485,36 @@ func newRestartCmd() *cobra.Command {
 	var ss stackScope
 	var mode string
 	cmd := &cobra.Command{
-		Use:   "restart <target>",
-		Short: "Kill then start (optionally swapping mode)",
+		Use:   "restart <target-or-infra>",
+		Short: "Kill then start (optionally swapping mode for targets)",
 		Long: `Atomic kill-then-start. With --mode, swaps the target into the new mode
 in one step — useful for go-exec → container migration (or back) without
 the mutual-exclusion refusal you'd hit with a separate 'kill' + 'start'
-race.`,
+race.
+
+For an infra ID ('service-X/infra/postgres-X'), runs 'podman restart'
+on the container — faster than kill+infra-start because the container
+is reused. --mode is ignored for infra (infra is always containerized).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			c := rpc.New("")
-			id := resolveTargetID(args[0], ss.stack)
+			ref := parseEntityID(args[0], ss.stack)
+			if ref.IsInfra {
+				_, err := c.RestartInfraContainer(ctx, ref.Stack, ref.Service, ref.Infra)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "restarted infra %s\n", ref.ID)
+				return nil
+			}
 			m := anovelv1.Mode_MODE_UNSPECIFIED
 			if mode == "go-exec" {
 				m = anovelv1.Mode_MODE_GO_EXEC
 			} else if mode == "container" {
 				m = anovelv1.Mode_MODE_CONTAINER
 			}
-			resp, err := c.RestartTarget(ctx, id, m)
+			resp, err := c.RestartTarget(ctx, ref.ID, m)
 			if err != nil {
 				return err
 			}
@@ -480,6 +540,77 @@ func resolveTargetID(arg, stack string) string {
 		stack = "default"
 	}
 	return stack + "/" + arg
+}
+
+// entityRef is a parsed CLI argument identifying either a target or an
+// infra container. The "infra" segment is the literal sentinel that
+// distinguishes the two kinds — see parseEntityID. Helps the surface
+// commands (kill / restart / logs) dispatch to the right RPC without
+// relying on slash-count heuristics that would collide for a 3-segment
+// target ID vs 3-segment shorthand infra ID.
+type entityRef struct {
+	IsInfra bool
+	// For both kinds:
+	Stack   string
+	Service string
+	// Target-only.
+	Target string
+	// Infra-only.
+	Infra string
+	// ID returns the canonical full ID. Target form is
+	// "<stack>/<service>/<target>"; infra form is
+	// "<stack>/<service>/infra/<name>".
+	ID string
+}
+
+// parseEntityID classifies a CLI argument as a target or infra
+// reference and returns its canonical form. Recognized shapes:
+//
+//	<service>/<target>                      → target shorthand
+//	<stack>/<service>/<target>              → target canonical
+//	<service>/infra/<name>                  → infra shorthand
+//	<stack>/<service>/infra/<name>          → infra canonical
+//
+// The "infra" sentinel must appear as the SECOND-TO-LAST segment for
+// the entry to count as infra — every other slot containing "infra"
+// is a target name that happens to overlap (none of our cmd/<dir>s
+// are literally named "infra" today, but the resolver is defensive).
+func parseEntityID(arg, defaultStack string) entityRef {
+	if defaultStack == "" {
+		defaultStack = "default"
+	}
+	parts := strings.Split(arg, "/")
+	// Infra: 3 segments (svc/infra/name) or 4 (stack/svc/infra/name).
+	if len(parts) >= 3 && parts[len(parts)-2] == "infra" {
+		ref := entityRef{IsInfra: true, Infra: parts[len(parts)-1]}
+		if len(parts) == 4 {
+			ref.Stack = parts[0]
+			ref.Service = parts[1]
+		} else {
+			ref.Stack = defaultStack
+			ref.Service = parts[0]
+		}
+		ref.ID = ref.Stack + "/" + ref.Service + "/infra/" + ref.Infra
+		return ref
+	}
+	// Target.
+	ref := entityRef{}
+	if len(parts) == 3 {
+		ref.Stack = parts[0]
+		ref.Service = parts[1]
+		ref.Target = parts[2]
+	} else if len(parts) == 2 {
+		ref.Stack = defaultStack
+		ref.Service = parts[0]
+		ref.Target = parts[1]
+	} else {
+		// Unrecognized — treat as a bare name and let the daemon
+		// 404, with the message pointing at the right shape.
+		ref.Stack = defaultStack
+		ref.Target = arg
+	}
+	ref.ID = ref.Stack + "/" + ref.Service + "/" + ref.Target
+	return ref
 }
 
 // modeLabel / exitLabel are sibling renderers for the phaseLabel helper
@@ -523,25 +654,39 @@ func newLogsCmd() *cobra.Command {
 	var previous bool
 	var runID string
 	cmd := &cobra.Command{
-		Use:   "logs <target>",
-		Short: "Print or stream a target's logs",
-		Long: `Read the target's current log file (or an archived previous run with
+		Use:   "logs <target-or-infra>",
+		Short: "Print or stream logs for a target or infra container",
+		Long: `Read the entity's current log file (or an archived previous run with
 --previous / --run-id=<ts>). With --follow, streams new lines through
 the daemon as they arrive (multiple followers see the same stream).
 
---stream filters to stdout or stderr only. --tail limits to the last N
-lines (client-side; daemon streams full). --since accepts Go-style
-durations ('5m', '1h30m'). Past-run access (--previous / --run-id) is
-CLI-only — the TUI always shows the current/latest session.`,
+For an infra ID ('service-X/infra/postgres-X') the daemon streams
+'podman logs -f' for that container — both stdout and stderr are
+merged into the stream. --previous / --run-id and the --stream
+stdout/stderr filter are NOT supported for infra (podman owns the
+log files, not us); the daemon will surface an error if combined.
+
+--tail limits to the last N lines (client-side; daemon streams full).
+--since accepts Go-style durations ('5m', '1h30m'). Past-run access
+(--previous / --run-id) is CLI-only — the TUI always shows the
+current/latest session.`,
 		Example: `  a-novel run logs service-json-keys/rest
   a-novel run logs service-json-keys/rest --follow
+  a-novel run logs service-json-keys/infra/postgres-json-keys --follow
   a-novel run logs service-json-keys/rest --tail=100 --stream=stderr
   a-novel run logs service-json-keys/rest --previous`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			c := rpc.New("")
-			id := resolveTargetID(args[0], ss.stack)
+			ref := parseEntityID(args[0], ss.stack)
+			id := ref.ID
+			// Infra entries don't have run archives — podman owns the
+			// log files, not the daemon. Refuse --previous / --run-id
+			// up-front rather than letting the daemon return Unimplemented.
+			if ref.IsInfra && (previous || runID != "") {
+				return fmt.Errorf("--previous / --run-id are not supported for infra (podman owns its log file)")
+			}
 			// Resolve --previous to the most-recent archived run id.
 			if previous && runID == "" {
 				runs, err := c.ListRuns(ctx, id)

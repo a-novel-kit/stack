@@ -257,6 +257,28 @@ message KillInfraResponse {
   Service service = 1;
 }
 
+// Per-infra-container lifecycle. The (stack, service, name) tuple
+// addresses one row in Service.infra; the daemon resolves it to a
+// container ID via the same label-scan it uses for ps live state.
+
+message KillInfraContainerRequest {
+  string stack   = 1;
+  string service = 2;
+  string name    = 3; // e.g., "postgres-json-keys"
+}
+message KillInfraContainerResponse {
+  Infra infra = 1; // refreshed state after the stop
+}
+
+message RestartInfraContainerRequest {
+  string stack   = 1;
+  string service = 2;
+  string name    = 3;
+}
+message RestartInfraContainerResponse {
+  Infra infra = 1;
+}
+
 // =============================================================================
 // Logs
 // =============================================================================
@@ -395,6 +417,12 @@ service CoreService {
   // Service infrastructure
   rpc StartInfra(StartInfraRequest) returns (StartInfraResponse);
   rpc KillInfra(KillInfraRequest) returns (KillInfraResponse);
+  // Per-infra container lifecycle. Lets the TUI treat infra entries
+  // like targets — kill / restart one container without tearing down
+  // the rest of the service's infra. The whole-service equivalents
+  // (StartInfra/KillInfra) remain for cold-start and full teardown.
+  rpc KillInfraContainer(KillInfraContainerRequest) returns (KillInfraContainerResponse);
+  rpc RestartInfraContainer(RestartInfraContainerRequest) returns (RestartInfraContainerResponse);
 
   // Logs (streaming)
   rpc StreamLogs(StreamLogsRequest) returns (stream LogLine);

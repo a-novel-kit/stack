@@ -5,12 +5,16 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -542,6 +546,68 @@ func (s *Server) KillInfra(ctx context.Context, req *connect.Request[anovelv1.Ki
 	}), nil
 }
 
+// KillInfraContainer stops one infra container by (stack, service,
+// name) — leaves the rest of the service's infra (and any running
+// targets) untouched. Used by the TUI to manage infra entries like
+// any other tab.
+func (s *Server) KillInfraContainer(ctx context.Context, req *connect.Request[anovelv1.KillInfraContainerRequest]) (*connect.Response[anovelv1.KillInfraContainerResponse], error) {
+	stack := req.Msg.GetStack()
+	if stack == "" && len(s.discovered) > 0 {
+		stack = s.discovered[0].Name
+	}
+	svc, err := s.findService(stack, req.Msg.GetService())
+	if err != nil {
+		return nil, err
+	}
+	in := findInfra(svc, req.Msg.GetName())
+	if in == nil {
+		return nil, connect.NewError(connect.CodeNotFound,
+			fmt.Errorf("infra %q not declared in %s/%s", req.Msg.GetName(), stack, svc.Name))
+	}
+	if err := s.runner.KillInfraContainer(ctx, stack, svc.Name, in.Name); err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(&anovelv1.KillInfraContainerResponse{
+		Infra: s.convertInfraWithLive(in, s.liveInfraStates(svc.Stack)),
+	}), nil
+}
+
+// RestartInfraContainer restarts one infra container in place
+// (podman restart — stop+start without recreating, preserves
+// volume bindings).
+func (s *Server) RestartInfraContainer(ctx context.Context, req *connect.Request[anovelv1.RestartInfraContainerRequest]) (*connect.Response[anovelv1.RestartInfraContainerResponse], error) {
+	stack := req.Msg.GetStack()
+	if stack == "" && len(s.discovered) > 0 {
+		stack = s.discovered[0].Name
+	}
+	svc, err := s.findService(stack, req.Msg.GetService())
+	if err != nil {
+		return nil, err
+	}
+	in := findInfra(svc, req.Msg.GetName())
+	if in == nil {
+		return nil, connect.NewError(connect.CodeNotFound,
+			fmt.Errorf("infra %q not declared in %s/%s", req.Msg.GetName(), stack, svc.Name))
+	}
+	if err := s.runner.RestartInfraContainer(ctx, stack, svc.Name, in.Name); err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(&anovelv1.RestartInfraContainerResponse{
+		Infra: s.convertInfraWithLive(in, s.liveInfraStates(svc.Stack)),
+	}), nil
+}
+
+// findInfra returns the named infra in a discovery.Service, or nil
+// if not declared. Used by the per-infra lifecycle handlers.
+func findInfra(svc *discovery.Service, name string) *discovery.Infra {
+	for _, in := range svc.Infra {
+		if in.Name == name {
+			return in
+		}
+	}
+	return nil
+}
+
 // convertModeFromProto maps proto Mode → runner.Mode.
 func convertModeFromProto(m anovelv1.Mode) runner.Mode {
 	switch m {
@@ -563,6 +629,19 @@ func convertModeFromProto(m anovelv1.Mode) runner.Mode {
 // original timestamp + stream tag.
 func (s *Server) StreamLogs(ctx context.Context, req *connect.Request[anovelv1.StreamLogsRequest], stream *connect.ServerStream[anovelv1.LogLine]) error {
 	tid := req.Msg.GetTargetId()
+	// Infra log IDs use the format "<stack>/<service>/infra/<name>"
+	// so the client can stream a postgres / mailserver container's
+	// stdout via the same RPC. The infra branch reads from
+	// `podman logs -f <cid>` instead of the daemon-managed log
+	// files — infra containers belong to podman, not us.
+	if stack, service, name, ok := parseInfraLogID(tid); ok {
+		st, found := s.runner.InfraStatesOf(ctx, stack)[service+"/"+name]
+		if !found || st.ContainerID == "" {
+			return connect.NewError(connect.CodeFailedPrecondition,
+				fmt.Errorf("no container for %s/%s/%s — has infra-start been run?", stack, service, name))
+		}
+		return streamPodmanLogs(ctx, st.ContainerID, req.Msg.GetFollow(), stream)
+	}
 	tgt, _, err := s.findTargetByID(tid)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
@@ -869,4 +948,75 @@ func (s *Server) Watch(_ context.Context, _ *connect.Request[anovelv1.WatchReque
 // reference in the message tells the user when to expect the feature.
 func unimplemented(rpc, phase string) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New(rpc+" not yet implemented (scheduled for "+phase+")"))
+}
+
+// parseInfraLogID recognizes the infra-log ID format
+// "<stack>/<service>/infra/<name>" used by StreamLogs to address an
+// infra container's log stream. Returns (stack, service, name, true)
+// when the format matches, ("", "", "", false) otherwise.
+//
+// The "infra" sentinel segment is hardcoded — daemon-managed targets
+// can't legally be named "infra" since target IDs come from compose
+// service names (which don't start with that word in any of our
+// services).
+func parseInfraLogID(id string) (stack, service, name string, ok bool) {
+	parts := strings.Split(id, "/")
+	if len(parts) != 4 || parts[2] != "infra" {
+		return "", "", "", false
+	}
+	return parts[0], parts[1], parts[3], true
+}
+
+// streamPodmanLogs forwards `podman logs [-f] <cid>` output to a
+// client log stream. Both stdout and stderr from the container are
+// merged into a single pipe (treated as stdout in the proto) — most
+// service images write to stdout anyway, and untangling on a
+// per-line basis would require a multiplexer we don't yet need.
+//
+// Timestamps are stamped at line-read time (time.Now) rather than
+// trying to parse podman's optional --timestamps prefix — accurate
+// enough for the user-facing log viewer and avoids a parse step.
+func streamPodmanLogs(ctx context.Context, cid string, follow bool, stream *connect.ServerStream[anovelv1.LogLine]) error {
+	args := []string{"logs"}
+	if follow {
+		args = append(args, "-f")
+	}
+	args = append(args, cid)
+	cmd := exec.CommandContext(ctx, "podman", args...)
+	pipeR, pipeW := io.Pipe()
+	cmd.Stdout = pipeW
+	cmd.Stderr = pipeW
+	if err := cmd.Start(); err != nil {
+		return connect.NewError(connect.CodeInternal,
+			fmt.Errorf("start podman logs %s: %w", cid, err))
+	}
+	// Close the writer when the command exits so the scanner sees EOF.
+	go func() {
+		_ = cmd.Wait()
+		_ = pipeW.Close()
+	}()
+	defer func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+	}()
+	scanner := bufio.NewScanner(pipeR)
+	// Container logs can be long lines (panics, JSON dumps); bump
+	// the per-token cap so we don't bisect mid-line.
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		if err := stream.Send(&anovelv1.LogLine{
+			Ts:     timestamppb.Now(),
+			Stream: anovelv1.LogStream_LOG_STREAM_STDOUT,
+			Line:   scanner.Text(),
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -113,11 +113,10 @@ func tickEvery(d time.Duration) tea.Cmd {
 // m.followCancel so a target-switch cleanly cancels the previous
 // follower.
 func (m *model) followSelectedLogs() tea.Cmd {
-	t := m.activeTarget()
-	if t == nil {
+	id := m.activeLogID()
+	if id == "" {
 		return nil
 	}
-	id := t.GetId()
 	// Cancel any prior follower so two simultaneous streams don't fan
 	// into the same logLines buffer.
 	if m.followCancel != nil {
@@ -189,6 +188,15 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 	case "refresh":
 		return tea.Batch(refreshServicesCmd(m.c), m.followSelectedLogs())
 	case "start":
+		// :start only addresses targets — a single infra container
+		// can't be cold-started in isolation (it might have
+		// dependencies on other infra). Use :infra-start for the
+		// service-level bring-up; use :restart for a single
+		// already-existing infra container.
+		if m.activeTabKind() == "infra" {
+			return setStatusCmd(statusError,
+				":start only works on targets. For infra: use :infra-start (whole service) or :restart (this container)")
+		}
 		if t == nil {
 			return setStatusCmd(statusError, "no active target — select one with ←/→ first")
 		}
@@ -211,37 +219,73 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 			},
 		)
 	case "kill":
-		if t == nil {
-			return setStatusCmd(statusError, "no active target — select one with ←/→ first")
+		// Dispatch on active tab kind — targets call KillTarget,
+		// infra entries call KillInfraContainer (podman stop just
+		// that container, leaves the rest of the service's infra +
+		// any running targets alone).
+		switch m.activeTabKind() {
+		case "target":
+			label := "kill " + t.GetName()
+			return runAction(
+				"Killing "+t.GetName()+"...",
+				"Killed "+t.GetName(),
+				label,
+				func() error {
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					defer cancel()
+					_, err := m.c.KillTarget(ctx, t.GetId(), 10*time.Second)
+					return err
+				},
+			)
+		case "infra":
+			in := m.activeInfra()
+			label := "kill infra " + in.GetName()
+			return runAction(
+				"Stopping infra container "+in.GetName()+"...",
+				"Stopped infra "+in.GetName(),
+				label,
+				func() error {
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					defer cancel()
+					_, err := m.c.KillInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName())
+					return err
+				},
+			)
+		default:
+			return setStatusCmd(statusError, "no active tab — select one with ←/→ first")
 		}
-		label := "kill " + t.GetName()
-		return runAction(
-			"Killing "+t.GetName()+"...",
-			"Killed "+t.GetName(),
-			label,
-			func() error {
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer cancel()
-				_, err := m.c.KillTarget(ctx, t.GetId(), 10*time.Second)
-				return err
-			},
-		)
 	case "restart":
-		if t == nil {
-			return setStatusCmd(statusError, "no active target — select one with ←/→ first")
+		switch m.activeTabKind() {
+		case "target":
+			label := "restart " + t.GetName()
+			return runAction(
+				"Restarting "+t.GetName()+"...",
+				"Restarted "+t.GetName(),
+				label,
+				func() error {
+					ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+					defer cancel()
+					_, err := m.c.RestartTarget(ctx, t.GetId(), anovelv1.Mode_MODE_UNSPECIFIED)
+					return err
+				},
+			)
+		case "infra":
+			in := m.activeInfra()
+			label := "restart infra " + in.GetName()
+			return runAction(
+				"Restarting infra container "+in.GetName()+"...",
+				"Restarted infra "+in.GetName(),
+				label,
+				func() error {
+					ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+					defer cancel()
+					_, err := m.c.RestartInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName())
+					return err
+				},
+			)
+		default:
+			return setStatusCmd(statusError, "no active tab — select one with ←/→ first")
 		}
-		label := "restart " + t.GetName()
-		return runAction(
-			"Restarting "+t.GetName()+"...",
-			"Restarted "+t.GetName(),
-			label,
-			func() error {
-				ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-				defer cancel()
-				_, err := m.c.RestartTarget(ctx, t.GetId(), anovelv1.Mode_MODE_UNSPECIFIED)
-				return err
-			},
-		)
 	case "infra-start":
 		if svc == nil {
 			return setStatusCmd(statusError, "no active service — select one with ↑/↓ first")

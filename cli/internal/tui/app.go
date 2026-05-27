@@ -80,8 +80,13 @@ type model struct {
 	services []*anovelv1.Service
 	loaded   bool
 	// Selection state.
-	selectedSvc    int // index into services
-	selectedTarget int // index into services[selectedSvc].Targets
+	selectedSvc int // index into services
+	// selectedTab is the combined index into [targets..., infras...].
+	// Indices < len(svc.Targets) address targets; the rest address
+	// infras at i-len(svc.Targets). This unification lets `←/→`
+	// cycle through both kinds and lets every consumer ask
+	// activeTabKind() to branch.
+	selectedTab int
 	// Log streaming.
 	logLines     []*anovelv1.LogLine
 	followCancel context.CancelFunc // cancels the current follow goroutine on target switch
@@ -138,8 +143,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selectedSvc = 0
 		}
 		if m.selectedSvc < len(m.services) {
-			if m.selectedTarget >= len(m.services[m.selectedSvc].Targets) {
-				m.selectedTarget = 0
+			if m.selectedTab >= m.tabCount() {
+				m.selectedTab = 0
 			}
 		}
 		return m, nil
@@ -225,7 +230,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "j", "down":
 		if len(m.services) > 0 {
 			m.selectedSvc = (m.selectedSvc + 1) % len(m.services)
-			m.selectedTarget = 0
+			m.selectedTab = 0
 			m.logLines = nil
 		}
 		return m, m.followSelectedLogs()
@@ -235,21 +240,21 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.selectedSvc < 0 {
 				m.selectedSvc = len(m.services) - 1
 			}
-			m.selectedTarget = 0
+			m.selectedTab = 0
 			m.logLines = nil
 		}
 		return m, m.followSelectedLogs()
 	case "l", "right", "tab":
-		if m.activeServiceHasTargets() {
-			m.selectedTarget = (m.selectedTarget + 1) % len(m.services[m.selectedSvc].Targets)
+		if m.tabCount() > 0 {
+			m.selectedTab = (m.selectedTab + 1) % m.tabCount()
 			m.logLines = nil
 		}
 		return m, m.followSelectedLogs()
 	case "h", "left", "shift+tab":
-		if m.activeServiceHasTargets() {
-			m.selectedTarget--
-			if m.selectedTarget < 0 {
-				m.selectedTarget = len(m.services[m.selectedSvc].Targets) - 1
+		if m.tabCount() > 0 {
+			m.selectedTab--
+			if m.selectedTab < 0 {
+				m.selectedTab = m.tabCount() - 1
 			}
 			m.logLines = nil
 		}
@@ -281,17 +286,67 @@ func (m *model) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// activeServiceHasTargets is a clamp-helper for selection key handlers.
-func (m *model) activeServiceHasTargets() bool {
-	if m.selectedSvc >= len(m.services) {
-		return false
-	}
-	return len(m.services[m.selectedSvc].Targets) > 0
-}
-
-func (m *model) activeTarget() *anovelv1.Target {
-	if !m.activeServiceHasTargets() {
+// activeService returns the currently selected service, or nil if
+// there is none (empty stack or out-of-range index).
+func (m *model) activeService() *anovelv1.Service {
+	if m.selectedSvc < 0 || m.selectedSvc >= len(m.services) {
 		return nil
 	}
-	return m.services[m.selectedSvc].Targets[m.selectedTarget]
+	return m.services[m.selectedSvc]
+}
+
+// tabCount is the total number of selectable tabs for the active
+// service — targets first, then infras. Zero if no service active.
+func (m *model) tabCount() int {
+	svc := m.activeService()
+	if svc == nil {
+		return 0
+	}
+	return len(svc.GetTargets()) + len(svc.GetInfra())
+}
+
+// activeTabKind returns "target", "infra", or "" depending on which
+// section the selectedTab index falls into.
+func (m *model) activeTabKind() string {
+	svc := m.activeService()
+	if svc == nil || m.selectedTab < 0 || m.selectedTab >= m.tabCount() {
+		return ""
+	}
+	if m.selectedTab < len(svc.GetTargets()) {
+		return "target"
+	}
+	return "infra"
+}
+
+// activeTarget returns the selected target, or nil when the active
+// tab is an infra entry.
+func (m *model) activeTarget() *anovelv1.Target {
+	if m.activeTabKind() != "target" {
+		return nil
+	}
+	return m.services[m.selectedSvc].Targets[m.selectedTab]
+}
+
+// activeInfra returns the selected infra entry, or nil when the
+// active tab is a target.
+func (m *model) activeInfra() *anovelv1.Infra {
+	if m.activeTabKind() != "infra" {
+		return nil
+	}
+	svc := m.services[m.selectedSvc]
+	return svc.GetInfra()[m.selectedTab-len(svc.GetTargets())]
+}
+
+// activeLogID returns the ID format expected by StreamLogs for the
+// currently selected tab — target IDs use the runner's <stack>/<svc>/<tgt>
+// form, infra IDs use the <stack>/<svc>/infra/<name> sentinel.
+func (m *model) activeLogID() string {
+	switch m.activeTabKind() {
+	case "target":
+		return m.activeTarget().GetId()
+	case "infra":
+		in := m.activeInfra()
+		return in.GetStack() + "/" + in.GetService() + "/infra/" + in.GetName()
+	}
+	return ""
 }

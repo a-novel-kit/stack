@@ -152,10 +152,10 @@ func (m *model) renderNav(width, height int) string {
 }
 
 func (m *model) renderRight(width, height int) string {
-	if !m.activeServiceHasTargets() {
-		return styleFrame.Width(width).Height(height).Render(styleDim.Render("(this service has no targets)"))
+	svc := m.activeService()
+	if svc == nil || m.tabCount() == 0 {
+		return styleFrame.Width(width).Height(height).Render(styleDim.Render("(this service has no targets or infra)"))
 	}
-	svc := m.services[m.selectedSvc]
 	// Infra row — visible whenever the selected service has any infra
 	// declared. Stays at the top so it's always in view; targets shift
 	// down by however many lines the row takes.
@@ -164,26 +164,61 @@ func (m *model) renderRight(width, height int) string {
 	if infraRow != "" {
 		infraHeight = strings.Count(infraRow, "\n") + 2 // +1 trailing divider, +1 self
 	}
-	// Tabs row.
+	// Tabs row — targets first, then infras with curly braces so the
+	// kind difference is unmistakable at a glance ([target] vs
+	// {infra}). Selected tab gets the bright styleSelected
+	// regardless of kind.
 	var tabs []string
 	for i, t := range svc.GetTargets() {
 		label := t.GetName()
-		if i == m.selectedTarget {
+		if i == m.selectedTab {
 			tabs = append(tabs, styleSelected.Render("["+label+"]"))
 		} else {
 			tabs = append(tabs, styleDim.Render(" "+label+" "))
 		}
 	}
-	tabRow := strings.Join(tabs, " ")
-	// Target header.
-	t := m.activeTarget()
-	header := fmt.Sprintf("%s · %s · %s",
-		t.GetName(), modeShort(t.GetMode()), phaseShort(t.GetPhase()))
-	if t.GetPid() != 0 {
-		header += fmt.Sprintf(" pid=%d", t.GetPid())
+	infraOffset := len(svc.GetTargets())
+	for i, in := range svc.GetInfra() {
+		label := in.GetName()
+		idx := infraOffset + i
+		// Curly brackets + a leading "·" separator after the targets
+		// (only on the FIRST infra) for an extra visual break.
+		marker := ""
+		if i == 0 && len(svc.GetTargets()) > 0 {
+			marker = styleDim.Render(" · ")
+		}
+		if idx == m.selectedTab {
+			tabs = append(tabs, marker+styleSelected.Render("{"+label+"}"))
+		} else {
+			tabs = append(tabs, marker+styleDim.Render(" "+label+" "))
+		}
 	}
-	if t.GetContainerId() != "" {
-		header += " container=" + safeShort(t.GetContainerId(), 12)
+	tabRow := strings.Join(tabs, " ")
+	// Detail header — branches on kind. Targets keep the existing
+	// "name · mode · phase [pid] [container]" shape; infras get
+	// "name · infra · phase healthy container=xxx".
+	var header string
+	switch m.activeTabKind() {
+	case "target":
+		t := m.activeTarget()
+		header = fmt.Sprintf("%s · %s · %s",
+			t.GetName(), modeShort(t.GetMode()), phaseShort(t.GetPhase()))
+		if t.GetPid() != 0 {
+			header += fmt.Sprintf(" pid=%d", t.GetPid())
+		}
+		if t.GetContainerId() != "" {
+			header += " container=" + safeShort(t.GetContainerId(), 12)
+		}
+	case "infra":
+		in := m.activeInfra()
+		header = fmt.Sprintf("%s · %s · %s %s",
+			in.GetName(),
+			styleDim.Render("infra"),
+			phaseShort(in.GetPhase()),
+			styleDim.Render(infraHealthLabel(in)))
+		if in.GetContainerId() != "" {
+			header += " container=" + safeShort(in.GetContainerId(), 12)
+		}
 	}
 	headerStyled := styleHeader.Render(header)
 	// Log pane — shrinks by infraHeight so the infra row never pushes
@@ -309,13 +344,17 @@ func (m *model) renderHelp() string {
 		"  ↑/↓ or j/k           select service",
 		"  ←/→ or h/l or Tab   select target tab",
 		"",
+		styleHeader.Render("Tab kinds"),
+		"  [target]               daemon-supervised process (go-exec or container)",
+		"  {infra}                podman container (postgres, mailserver, ...)",
+		"",
 		styleHeader.Render("Daemon-backed actions (via Esc command palette)"),
-		"  :start                 start active target (default go-exec)",
+		"  :start                 start active target (default go-exec) — targets only",
 		"  :start container       start active target in container mode",
-		"  :kill                  kill active target",
-		"  :restart               kill then start active target",
-		"  :infra-start           bring up active service's infra + one-shots",
-		"  :infra-kill            tear down active service's infra (refuses if targets up)",
+		"  :kill                  kill active tab (target → SIGTERM; infra → podman stop)",
+		"  :restart               kill then start (target) / podman restart (infra)",
+		"  :infra-start           bring up active service's WHOLE infra + one-shots",
+		"  :infra-kill            tear down active service's WHOLE infra (refuses if targets up)",
 		"  :infra-kill force      cascade-kill targets + infra",
 		"  :env                   show env block for active service in stderr",
 		"  :volume-backup         snapshot active service's volumes",
