@@ -87,8 +87,29 @@ type model struct {
 	followCancel context.CancelFunc // cancels the current follow goroutine on target switch
 	// Command palette.
 	cmdInput   string
-	cmdHint    string // last command result / error
 	topologyTx string // last GetTopology response (for viewTopology)
+	// Status bar — single line of action feedback above the footer.
+	// busy persists until the action resolves; info auto-fades after
+	// 5s; error persists until next action overrides it. See
+	// renderStatus + statusMsg / actionResultMsg / statusFadeMsg.
+	status statusEntry
+}
+
+// statusLevel discriminates the four status-bar visual modes.
+type statusLevel int
+
+const (
+	statusIdle statusLevel = iota
+	statusBusy
+	statusInfo
+	statusError
+)
+
+// statusEntry is one snapshot of the status bar's contents.
+type statusEntry struct {
+	level statusLevel
+	text  string
+	at    time.Time
 }
 
 func newModel(c *rpc.Client) *model {
@@ -124,7 +145,35 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case errMsg:
+		// Connection / refresh failures land in m.err (rendered in the
+		// nav when the service list is empty). Don't route these into
+		// the status bar — that's reserved for action results.
 		m.err = msg.err
+		return m, nil
+
+	case statusMsg:
+		m.status = msg.entry
+		if msg.entry.level == statusInfo {
+			return m, fadeStatusAfter(5 * time.Second)
+		}
+		return m, nil
+
+	case actionResultMsg:
+		if msg.err != nil {
+			m.status = statusEntry{level: statusError, text: msg.actionLabel + ": " + msg.err.Error(), at: time.Now()}
+			// Errors persist; user dismisses by issuing the next
+			// command. Still refresh to pick up partial state.
+			return m, refreshServicesCmd(m.c)
+		}
+		m.status = statusEntry{level: statusInfo, text: msg.successText, at: time.Now()}
+		return m, tea.Batch(refreshServicesCmd(m.c), fadeStatusAfter(5*time.Second))
+
+	case statusFadeMsg:
+		// Only fade info — busy is still in-flight, error is sticky
+		// until the user acts again.
+		if m.status.level == statusInfo && time.Since(m.status.at) >= 5*time.Second {
+			m.status = statusEntry{}
+		}
 		return m, nil
 
 	case logsMsg:

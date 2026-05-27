@@ -44,7 +44,7 @@ func (m *model) View() string {
 }
 
 // renderMain is the two-column layout: services nav left, target detail
-// + log viewer right. Bottom row is the footer hint.
+// + log viewer right. Bottom two rows are the status bar + footer.
 func (m *model) renderMain() string {
 	navWidth := computeNavWidth(m.services)
 	mainWidth := m.width - navWidth - 4 // borders
@@ -52,7 +52,8 @@ func (m *model) renderMain() string {
 		mainWidth = m.width
 		navWidth = 0
 	}
-	contentHeight := m.height - 3 // footer
+	// Reserve 1 line for status bar + 1 line for footer hint.
+	contentHeight := m.height - 4
 
 	nav := m.renderNav(navWidth, contentHeight)
 	right := m.renderRight(mainWidth, contentHeight)
@@ -63,8 +64,35 @@ func (m *model) renderMain() string {
 	} else {
 		body = right
 	}
+	status := m.renderStatus(m.width)
 	footer := m.renderFooter()
-	return lipgloss.JoinVertical(lipgloss.Left, body, footer)
+	return lipgloss.JoinVertical(lipgloss.Left, body, status, footer)
+}
+
+// renderStatus is the always-visible feedback line: shows action
+// progress, results, errors, and validation warnings. Single line so
+// it doesn't fight for vertical space with the log viewer; truncates
+// long messages with an ellipsis instead of wrapping (a wrapped
+// status line plays havoc with the layout below it).
+func (m *model) renderStatus(width int) string {
+	if m.status.level == statusIdle || m.status.text == "" {
+		return styleDim.Render(strings.Repeat("─", width))
+	}
+	var prefix string
+	var style lipgloss.Style
+	switch m.status.level {
+	case statusBusy:
+		prefix = "⏳ "
+		style = styleWarn
+	case statusInfo:
+		prefix = "✓  "
+		style = styleSuccess
+	case statusError:
+		prefix = "✗  "
+		style = styleErr
+	}
+	msg := truncate(m.status.text, width-len(prefix)-1)
+	return style.Render(prefix + msg)
 }
 
 func (m *model) renderNav(width, height int) string {
@@ -189,7 +217,8 @@ func (m *model) renderLogs(width, height int) string {
 
 // renderFooter is layer-1 of the three-layer palette per spec §14.3:
 // always-visible hint of the 4–5 most-relevant commands for the
-// current context.
+// current context. Single-line — action feedback now lives in the
+// dedicated status bar above (renderStatus).
 func (m *model) renderFooter() string {
 	hints := []string{
 		styleCmd.Render("?") + " help",
@@ -197,9 +226,6 @@ func (m *model) renderFooter() string {
 		styleCmd.Render("↑↓") + " service",
 		styleCmd.Render("←→") + " target",
 		styleCmd.Render("q") + " quit",
-	}
-	if m.cmdHint != "" {
-		return styleFooter.Render(strings.Join(hints, "  ·  ")) + "\n" + styleSuccess.Render(m.cmdHint)
 	}
 	return styleFooter.Render(strings.Join(hints, "  ·  "))
 }
@@ -230,6 +256,11 @@ func (m *model) renderHelp() string {
 		"  ?                      this help screen (any key to dismiss)",
 		"  Esc                    open command palette",
 		"  q or Ctrl-C            quit (daemon keeps running)",
+		"",
+		styleHeader.Render("Status bar (above the footer)"),
+		"  " + styleWarn.Render("⏳") + "  busy   — action in flight; persists until it resolves",
+		"  " + styleSuccess.Render("✓") + "  done   — last action succeeded; fades after 5s",
+		"  " + styleErr.Render("✗") + "  error  — last action failed or invalid; sticks until the next action",
 		"",
 		styleDim.Render("(daemon-backed verbs are implemented via the same RPC as the CLI; what you see in the UI is what `a-novel run ps` would show)"),
 	}, "\n")
