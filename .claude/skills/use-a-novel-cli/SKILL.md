@@ -36,22 +36,22 @@ through the CLI for consistency.
 
 ## Quick mapping: raw → `a-novel`
 
-| Raw / make | `a-novel` equivalent |
-|---|---|
-| `make test-unit` | `a-novel test --type=go -y` |
-| `make test-pkg` | `a-novel test --type=go -y` (CLI auto-discovers `pkg/go` targets) |
-| `make test-pkg-js` | `a-novel test --type=pnpm -y` |
-| `make test` (everything) | `a-novel test -y` |
-| `go test ./...` | `a-novel test --type=go --dir=.` |
-| `make build` | `a-novel build -y` |
-| `podman build -f Dockerfile -t name:local .` | `a-novel build --type=podman` |
-| `pnpm build` | `a-novel build --type=pnpm` |
-| `go run ./cmd/<target>` (service local-dev) | `a-novel run start <service>/<target>` |
-| `podman compose --profile X up -d` | `a-novel run start <service>/<target> --mode=container` |
-| `podman compose up <infra>` | `a-novel run service infra start <service>` |
-| `podman compose down` | `a-novel run service infra kill <service>` |
-| `podman logs -f <container>` | `a-novel run logs <service>/<target> --follow` |
-| `podman volume export` + manual tar | `a-novel run volume backup <service>` |
+| Raw / make                                   | `a-novel` equivalent                                              |
+| -------------------------------------------- | ----------------------------------------------------------------- |
+| `make test-unit`                             | `a-novel test --type=go -y`                                       |
+| `make test-pkg`                              | `a-novel test --type=go -y` (CLI auto-discovers `pkg/go` targets) |
+| `make test-pkg-js`                           | `a-novel test --type=pnpm -y`                                     |
+| `make test` (everything)                     | `a-novel test -y`                                                 |
+| `go test ./...`                              | `a-novel test --type=go --dir=.`                                  |
+| `make build`                                 | `a-novel build -y`                                                |
+| `podman build -f Dockerfile -t name:local .` | `a-novel build --type=podman`                                     |
+| `pnpm build`                                 | `a-novel build --type=pnpm`                                       |
+| `go run ./cmd/<target>` (service local-dev)  | `a-novel run start <service>/<target>`                            |
+| `podman compose --profile X up -d`           | `a-novel run start <service>/<target> --mode=container`           |
+| `podman compose up <infra>`                  | `a-novel run service infra start <service>`                       |
+| `podman compose down`                        | `a-novel run service infra kill <service>`                        |
+| `podman logs -f <container>`                 | `a-novel run logs <service>/<target> --follow`                    |
+| `podman volume export` + manual tar          | `a-novel run volume backup <service>`                             |
 
 Use the bare `a-novel <verb> --help` (or `a-novel help <verb>`) for the full flag list
 of any subcommand. Every subcommand carries exhaustive Short/Long/Example help text.
@@ -81,11 +81,13 @@ a-novel test -j 4             # cap parallelism at 4 (interactive only)
 
 **When to use:** ALWAYS for local-dev test runs. Use `make test-unit` /
 `make test-pkg` ONLY when:
+
 - Documenting CI behavior (CI workflows invoke `make`)
 - Scripted contexts inside the service repo that need the raw make target
 - Debugging a specific make-rule interaction
 
 **Substitutions in skill text:**
+
 - Instead of "run `make test-unit`" → "run `a-novel test --type=go -y` (or
   `make test-unit` inside the service repo)"
 - Test plan checkboxes in PR bodies:
@@ -205,7 +207,7 @@ Some tasks fall outside the CLI's scope and still use raw commands:
   (per [[feedback-go-tools-policy]]); `go tool buf format -w` for protos. The
   CLI doesn't wrap these.
 - **Direct database access**: use `a-novel run exec <service>/<infra-target> --
-  psql -U postgres` (when implemented) OR `podman exec <container-name> psql ...`
+psql -U postgres` (when implemented) OR `podman exec <container-name> psql ...`
   if exec isn't wired yet.
 - **CI workflows**: CI invokes `make test-unit` / `make build` / etc. directly.
   Skills documenting CI behavior should reference the `make` targets.

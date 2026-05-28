@@ -140,5 +140,5 @@ keeps proto bindings in sync.
 - `spec.md` — full design specification (working doc)
 - `PLAN.md` — implementation plan + phased rollout
 - Per-service `app/service-*/builds/podman-compose.yaml` — compose
-  contract per spec §11 (every service-* repo's PR in the
+  contract per spec §11 (every service-\* repo's PR in the
   `chore/builds/migrate-compose-for-daemon` branch)
