@@ -50,6 +50,8 @@ const (
 	// CoreServicePrepareReinstallProcedure is the fully-qualified name of the CoreService's
 	// PrepareReinstall RPC.
 	CoreServicePrepareReinstallProcedure = "/anovel.v1.CoreService/PrepareReinstall"
+	// CoreServiceShutdownProcedure is the fully-qualified name of the CoreService's Shutdown RPC.
+	CoreServiceShutdownProcedure = "/anovel.v1.CoreService/Shutdown"
 	// CoreServiceListStacksProcedure is the fully-qualified name of the CoreService's ListStacks RPC.
 	CoreServiceListStacksProcedure = "/anovel.v1.CoreService/ListStacks"
 	// CoreServiceListServicesProcedure is the fully-qualified name of the CoreService's ListServices
@@ -107,6 +109,7 @@ type CoreServiceClient interface {
 	Ping(context.Context, *connect.Request[v1.PingRequest]) (*connect.Response[v1.PingResponse], error)
 	Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error)
 	PrepareReinstall(context.Context, *connect.Request[v1.PrepareReinstallRequest]) (*connect.Response[v1.PrepareReinstallResponse], error)
+	Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error)
 	// Discovery
 	ListStacks(context.Context, *connect.Request[v1.ListStacksRequest]) (*connect.Response[v1.ListStacksResponse], error)
 	ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error)
@@ -169,6 +172,12 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+CoreServicePrepareReinstallProcedure,
 			connect.WithSchema(coreServiceMethods.ByName("PrepareReinstall")),
+			connect.WithClientOptions(opts...),
+		),
+		shutdown: connect.NewClient[v1.ShutdownRequest, v1.ShutdownResponse](
+			httpClient,
+			baseURL+CoreServiceShutdownProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("Shutdown")),
 			connect.WithClientOptions(opts...),
 		),
 		listStacks: connect.NewClient[v1.ListStacksRequest, v1.ListStacksResponse](
@@ -305,6 +314,7 @@ type coreServiceClient struct {
 	ping                  *connect.Client[v1.PingRequest, v1.PingResponse]
 	status                *connect.Client[v1.StatusRequest, v1.StatusResponse]
 	prepareReinstall      *connect.Client[v1.PrepareReinstallRequest, v1.PrepareReinstallResponse]
+	shutdown              *connect.Client[v1.ShutdownRequest, v1.ShutdownResponse]
 	listStacks            *connect.Client[v1.ListStacksRequest, v1.ListStacksResponse]
 	listServices          *connect.Client[v1.ListServicesRequest, v1.ListServicesResponse]
 	describeService       *connect.Client[v1.DescribeServiceRequest, v1.DescribeServiceResponse]
@@ -341,6 +351,11 @@ func (c *coreServiceClient) Status(ctx context.Context, req *connect.Request[v1.
 // PrepareReinstall calls anovel.v1.CoreService.PrepareReinstall.
 func (c *coreServiceClient) PrepareReinstall(ctx context.Context, req *connect.Request[v1.PrepareReinstallRequest]) (*connect.Response[v1.PrepareReinstallResponse], error) {
 	return c.prepareReinstall.CallUnary(ctx, req)
+}
+
+// Shutdown calls anovel.v1.CoreService.Shutdown.
+func (c *coreServiceClient) Shutdown(ctx context.Context, req *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error) {
+	return c.shutdown.CallUnary(ctx, req)
 }
 
 // ListStacks calls anovel.v1.CoreService.ListStacks.
@@ -454,6 +469,7 @@ type CoreServiceHandler interface {
 	Ping(context.Context, *connect.Request[v1.PingRequest]) (*connect.Response[v1.PingResponse], error)
 	Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error)
 	PrepareReinstall(context.Context, *connect.Request[v1.PrepareReinstallRequest]) (*connect.Response[v1.PrepareReinstallResponse], error)
+	Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error)
 	// Discovery
 	ListStacks(context.Context, *connect.Request[v1.ListStacksRequest]) (*connect.Response[v1.ListStacksResponse], error)
 	ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error)
@@ -512,6 +528,12 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 		CoreServicePrepareReinstallProcedure,
 		svc.PrepareReinstall,
 		connect.WithSchema(coreServiceMethods.ByName("PrepareReinstall")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coreServiceShutdownHandler := connect.NewUnaryHandler(
+		CoreServiceShutdownProcedure,
+		svc.Shutdown,
+		connect.WithSchema(coreServiceMethods.ByName("Shutdown")),
 		connect.WithHandlerOptions(opts...),
 	)
 	coreServiceListStacksHandler := connect.NewUnaryHandler(
@@ -648,6 +670,8 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 			coreServiceStatusHandler.ServeHTTP(w, r)
 		case CoreServicePrepareReinstallProcedure:
 			coreServicePrepareReinstallHandler.ServeHTTP(w, r)
+		case CoreServiceShutdownProcedure:
+			coreServiceShutdownHandler.ServeHTTP(w, r)
 		case CoreServiceListStacksProcedure:
 			coreServiceListStacksHandler.ServeHTTP(w, r)
 		case CoreServiceListServicesProcedure:
@@ -709,6 +733,10 @@ func (UnimplementedCoreServiceHandler) Status(context.Context, *connect.Request[
 
 func (UnimplementedCoreServiceHandler) PrepareReinstall(context.Context, *connect.Request[v1.PrepareReinstallRequest]) (*connect.Response[v1.PrepareReinstallResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.PrepareReinstall is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.Shutdown is not implemented"))
 }
 
 func (UnimplementedCoreServiceHandler) ListStacks(context.Context, *connect.Request[v1.ListStacksRequest]) (*connect.Response[v1.ListStacksResponse], error) {

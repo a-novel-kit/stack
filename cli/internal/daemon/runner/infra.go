@@ -48,6 +48,28 @@ func (r *Runner) InfraSession(stack, service string) (infraSession, bool) {
 	return *s, true
 }
 
+// InfraSessionRef identifies one tracked infra session (its stack + service
+// pair). Used by callers that need to iterate every active session — e.g.,
+// Shutdown(force=true) which tears down every service's infra in one go.
+type InfraSessionRef struct {
+	Stack   string
+	Service string
+	Up      bool // false if the session was registered but never reached Up
+}
+
+// ActiveInfraSessions returns one InfraSessionRef per currently-tracked
+// infra session. Both Up and not-yet-Up sessions are included; the caller
+// can filter on Ref.Up if only fully-running sessions matter.
+func (r *Runner) ActiveInfraSessions() []InfraSessionRef {
+	r.sessMu.RLock()
+	defer r.sessMu.RUnlock()
+	out := make([]InfraSessionRef, 0, len(r.infraSessions))
+	for _, s := range r.infraSessions {
+		out = append(out, InfraSessionRef{Stack: s.Stack, Service: s.Service, Up: s.Up})
+	}
+	return out
+}
+
 // StartInfra brings up a service's infrastructure containers, waits for
 // healthchecks, then auto-runs every one-shot target in compose-dep
 // order. Idempotent — calling on an already-up service is a no-op.
@@ -59,6 +81,10 @@ func (r *Runner) InfraSession(stack, service string) (infraSession, bool) {
 // so compose's `${POSTGRES_PORT}` substitutes to a real number even
 // when called via the dep-walk path (where the caller can't pre-allocate).
 func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShotsMode Mode, extraEnv []string) error {
+	// `compose up` creates new containers; the next ListServices must
+	// see them. The idempotent already-up early-return doesn't change
+	// state, so the extra invalidate is harmless there.
+	defer r.InvalidateInfraStateCache()
 	svc, err := r.findService(stack, service)
 	if err != nil {
 		return err
@@ -148,6 +174,7 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 // running (unless force). Otherwise tears down all infra containers and
 // resets the session.
 func (r *Runner) KillInfra(ctx context.Context, stack, service string, force bool) error {
+	defer r.InvalidateInfraStateCache()
 	svc, err := r.findService(stack, service)
 	if err != nil {
 		return err

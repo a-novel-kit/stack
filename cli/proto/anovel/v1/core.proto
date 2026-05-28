@@ -174,6 +174,25 @@ message PrepareReinstallResponse {
   int32  go_exec_target_count = 2; // for logging
 }
 
+// Shutdown is the no-checkpoint cousin of PrepareReinstall: it terminates
+// the daemon WITHOUT writing reinstall.json, so on next 'core start' nothing
+// is auto-relaunched. Used by 'a-novel core kill' and 'a-novel core restart'.
+//
+// With force=false (default), the daemon SIGTERMs every go-exec target
+// (10s grace) and leaves containers alone — those have their own podman
+// lifecycle that survives the daemon's death.
+//
+// With force=true, the daemon ALSO cascade-kills every service's infra
+// (KillInfra force=true), leaving no daemon-managed state running. Use
+// when the user wants a clean local environment ('shut everything off').
+message ShutdownRequest {
+  bool force = 1;
+}
+message ShutdownResponse {
+  int32 go_exec_killed = 1; // count of go-exec targets that got SIGTERM
+  int32 infra_services_torn_down = 2; // 0 unless force
+}
+
 // =============================================================================
 // Discovery
 // =============================================================================
@@ -402,6 +421,7 @@ service CoreService {
   rpc Ping(PingRequest) returns (PingResponse);
   rpc Status(StatusRequest) returns (StatusResponse);
   rpc PrepareReinstall(PrepareReinstallRequest) returns (PrepareReinstallResponse);
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
 
   // Discovery
   rpc ListStacks(ListStacksRequest) returns (ListStacksResponse);

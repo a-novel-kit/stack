@@ -103,7 +103,37 @@ type Runner struct {
 	// reads in the rest of the package.
 	sessMu        sync.RWMutex
 	infraSessions map[string]*infraSession // keyed by sessionKey(stack, service)
+
+	// subsMu + subs implement the phase-event broadcaster (see events.go).
+	// Kept as its own lock so emitting an event doesn't block on
+	// long-running state mutations.
+	subsMu sync.RWMutex
+	subs   []*eventSub
+
+	// infraStateCache memoizes InfraStatesOf per stack. Without this,
+	// every ListServices RPC pays ~1s for podman's cold-start scan,
+	// which makes the TUI's 2-second poll feel laggy and back-to-back
+	// CLI `ps` calls slow. TTL is chosen LONGER than the TUI's poll
+	// interval (2s) so consecutive polls hit cache; mutating RPCs
+	// (KillInfra, StartInfra, KillInfraContainer, …) invalidate via
+	// InvalidateInfraStateCache so user-initiated changes surface
+	// immediately. See infraStateCacheTTL.
+	infraStateMu    sync.Mutex
+	infraStateCache map[string]infraStateCacheEntry // keyed by stack
 }
+
+// infraStateCacheEntry is one (stack → states snapshot, when scanned).
+type infraStateCacheEntry struct {
+	at     time.Time
+	states map[string]InfraState
+}
+
+// infraStateCacheTTL is the freshness window for the batched podman
+// scan. Picked at 2.5s so the TUI's 2-second poll cadence hits cache
+// every other iteration without ever serving data older than ~one
+// poll. CLI single-shot users see the first call cold (~1s) and
+// subsequent calls within the window come back essentially instant.
+const infraStateCacheTTL = 2500 * time.Millisecond
 
 // New returns an empty Runner with the discovery snapshot it'll resolve
 // target IDs against, the env allocator for refcount release on
@@ -111,13 +141,25 @@ type Runner struct {
 // store for capturing target stdout/stderr.
 func New(disc []*discovery.Stack, alloc *env.Allocator, builder *env.Builder, logStore *logs.Store) *Runner {
 	return &Runner{
-		instances:     make(map[string]*Instance),
-		discovery:     disc,
-		alloc:         alloc,
-		builder:       builder,
-		logs:          logStore,
-		infraSessions: make(map[string]*infraSession),
+		instances:       make(map[string]*Instance),
+		discovery:       disc,
+		alloc:           alloc,
+		builder:         builder,
+		logs:            logStore,
+		infraSessions:   make(map[string]*infraSession),
+		infraStateCache: make(map[string]infraStateCacheEntry),
 	}
+}
+
+// InvalidateInfraStateCache drops cached InfraStatesOf entries — call
+// after any user-initiated state-change (KillInfra, StartInfra,
+// KillInfraContainer, RestartInfraContainer) so the next ListServices
+// reflects reality instantly. Cheap; safe to call when nothing is
+// cached.
+func (r *Runner) InvalidateInfraStateCache() {
+	r.infraStateMu.Lock()
+	r.infraStateCache = make(map[string]infraStateCacheEntry)
+	r.infraStateMu.Unlock()
 }
 
 // Instance returns the live record for id, or false if no instance is
@@ -219,8 +261,13 @@ func (r *Runner) Kill(ctx context.Context, id string, grace time.Duration) error
 		r.mu.Unlock()
 		return nil
 	}
-	inst.Phase = anovelv1.Phase_PHASE_STOPPING
 	r.mu.Unlock()
+	// transition() emits the *→STOPPING PhaseEvent so Watch subscribers
+	// can show "stopping" momentarily before the eventual TERMINATED.
+	r.transition(id, anovelv1.Phase_PHASE_STOPPING)
+	r.mu.RLock()
+	inst = r.instances[id]
+	r.mu.RUnlock()
 
 	// Mode-specific stop dispatch.
 	switch inst.Mode {
@@ -236,7 +283,8 @@ func (r *Runner) Kill(ctx context.Context, id string, grace time.Duration) error
 // markTerminated transitions the instance into PHASE_TERMINATED with the
 // supplied reason. Idempotent — calling on an already-terminated instance
 // is a no-op so the watch goroutine racing kill() doesn't corrupt state.
-// Also releases the instance's env-allocation refcounts.
+// Also releases the instance's env-allocation refcounts and emits the
+// terminal PhaseEvent (with ExitReason populated) to Watch subscribers.
 func (r *Runner) markTerminated(id string, reason anovelv1.ExitReason, errMsg string) {
 	r.mu.Lock()
 	inst, ok := r.instances[id]
@@ -244,6 +292,7 @@ func (r *Runner) markTerminated(id string, reason anovelv1.ExitReason, errMsg st
 		r.mu.Unlock()
 		return
 	}
+	old := inst.Phase
 	inst.Phase = anovelv1.Phase_PHASE_TERMINATED
 	inst.ExitReason = reason
 	inst.TerminatedAt = time.Now()
@@ -252,10 +301,19 @@ func (r *Runner) markTerminated(id string, reason anovelv1.ExitReason, errMsg st
 	}
 	inst.cmd = nil
 	inst.cancel = nil
+	ev := PhaseEvent{
+		TargetID:   inst.ID,
+		Service:    inst.Service,
+		Stack:      inst.Stack,
+		OldPhase:   old,
+		NewPhase:   anovelv1.Phase_PHASE_TERMINATED,
+		ExitReason: reason,
+	}
 	r.mu.Unlock()
 	// Release allocator refcounts OUTSIDE the runner's lock — the
 	// allocator has its own lock and we don't want to interleave them.
 	if r.alloc != nil {
 		r.alloc.Release(id)
 	}
+	r.emitPhase(ev)
 }

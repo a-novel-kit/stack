@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -241,6 +242,61 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *connect.Request[anovelv1
 		time.Sleep(50 * time.Millisecond)
 		s.SignalShutdown()
 	}()
+	return connect.NewResponse(resp), nil
+}
+
+// Shutdown is the no-checkpoint daemon stop. With force=false it SIGTERMs
+// every running go-exec target with a 10s grace each and leaves containers
+// alone. With force=true it ALSO calls KillInfra(force=true) on every
+// service that has an active infra session — cascade-killing any
+// remaining targets and tearing down infra containers.
+//
+// Concurrency: just like PrepareReinstall, the shutdown signal is fired
+// after the response is sent so the client gets a clean reply.
+func (s *Server) Shutdown(ctx context.Context, req *connect.Request[anovelv1.ShutdownRequest]) (*connect.Response[anovelv1.ShutdownResponse], error) {
+	force := req.Msg.GetForce()
+	// 1) Snapshot go-exec instances that need stopping. Capture under the
+	//    runner's lock indirectly by going through AllInstances.
+	var goExecIDs []string
+	for _, inst := range s.runner.AllInstances() {
+		if inst.Mode != runner.ModeGoExec {
+			continue
+		}
+		if inst.Phase != anovelv1.Phase_PHASE_RUNNING && inst.Phase != anovelv1.Phase_PHASE_STARTING {
+			continue
+		}
+		goExecIDs = append(goExecIDs, inst.ID)
+	}
+	// 2) Kill them in parallel-ish (10s grace each, but issued back-to-back)
+	//    so a single slow shutdown doesn't fan-out the total wait.
+	killCtx, cancelKill := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelKill()
+	for _, id := range goExecIDs {
+		// Best-effort: log the error path via the response counts rather
+		// than rejecting the whole shutdown.
+		_ = s.runner.Kill(killCtx, id, 10*time.Second)
+	}
+	// 3) If force, tear down every active infra session.
+	infraTorn := 0
+	if force {
+		for _, ref := range s.runner.ActiveInfraSessions() {
+			if err := s.runner.KillInfra(killCtx, ref.Stack, ref.Service, true /* force */); err == nil {
+				infraTorn++
+			}
+		}
+	}
+	resp := &anovelv1.ShutdownResponse{
+		GoExecKilled:           int32(len(goExecIDs)),
+		InfraServicesTornDown:  int32(infraTorn),
+	}
+	// 4) Fire the shutdown signal AFTER the response is on the wire. Same
+	//    50ms defer trick PrepareReinstall uses — the runtime flushes the
+	//    response back to the client before the listener closes.
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		s.SignalShutdown()
+	}()
+	_ = ctx // keep signature parity with the rest of the handlers
 	return connect.NewResponse(resp), nil
 }
 
@@ -932,16 +988,245 @@ func runningNames(insts []runner.Instance) []string {
 	return out
 }
 
-func (s *Server) Exec(_ context.Context, _ *connect.Request[anovelv1.ExecRequest], _ *connect.ServerStream[anovelv1.ExecOutput]) error {
-	return unimplemented("Exec", "phase 3")
+// Exec runs an arbitrary command "as if it were a sibling of the target":
+//
+//   - Container mode: `podman exec <container_id> <cmd...>` — runs inside
+//     the live container, so `a-novel exec rest sh` drops you into a
+//     shell next to the rest binary. Requires the target to be RUNNING.
+//   - Go-exec mode: spawns the command in the target's working directory
+//     with the target's resolved env (POSTGRES_DSN, *_PORT etc.). Useful
+//     for `a-novel exec migrations psql` — psql gets the right DSN out
+//     of the box. Does NOT require the target to be running, just
+//     discoverable — the env builder synthesises a fresh allocation if
+//     none is current (so `a-novel exec migrations psql` works on a cold
+//     stack with infra up).
+//
+// Stdout / stderr are forwarded as LOG_STREAM_STDOUT / _STDERR; the proto
+// reuses LogStream so clients render with the same code path as logs.
+func (s *Server) Exec(ctx context.Context, req *connect.Request[anovelv1.ExecRequest], stream *connect.ServerStream[anovelv1.ExecOutput]) error {
+	id := req.Msg.GetTargetId()
+	cmdv := req.Msg.GetCmd()
+	if len(cmdv) == 0 {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("exec: empty cmd"))
+	}
+	if id == "" {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("exec: target_id required"))
+	}
+	tgt, _, err := s.findTargetByID(id)
+	if err != nil {
+		return connect.NewError(connect.CodeNotFound, err)
+	}
+	// Decide mode from the live instance — if running, use its mode;
+	// otherwise fall back to go-exec (the only mode that works without
+	// a live container to attach to).
+	mode := runner.ModeGoExec
+	containerID := ""
+	if inst, ok := s.runner.Instance(id); ok && inst.Phase == anovelv1.Phase_PHASE_RUNNING {
+		mode = inst.Mode
+		containerID = inst.ContainerID
+	}
+	var execCmd *exec.Cmd
+	switch mode {
+	case runner.ModeContainer:
+		if containerID == "" {
+			return connect.NewError(connect.CodeFailedPrecondition,
+				errors.New("exec: target running in container mode but containerId is empty"))
+		}
+		args := append([]string{"exec", containerID}, cmdv...)
+		execCmd = exec.CommandContext(ctx, "podman", args...)
+	default:
+		// Go-exec sibling: same dir + env the target would get. The env
+		// builder allocates if needed — passing the target's own ID as
+		// the consumer is fine because we Release as part of normal
+		// allocator refcounting (an exec'd one-off doesn't change the
+		// invariant: every consumer-ID owns its slots until released).
+		envEntries, err := s.envBuilder.ForTarget(tgt, s.allServiceNames())
+		if err != nil {
+			return connect.NewError(connect.CodeInternal, fmt.Errorf("exec: env: %w", err))
+		}
+		envList := osEnviron()
+		for _, e := range envEntries {
+			envList = append(envList, e.Key+"="+e.Value)
+		}
+		execCmd = exec.CommandContext(ctx, cmdv[0], cmdv[1:]...)
+		// Run in the SERVICE directory (one level up from cmd/<target>)
+		// so relative paths inside the cmd match what the target sees.
+		execCmd.Dir = filepath.Dir(filepath.Dir(tgt.CmdDir))
+		execCmd.Env = envList
+	}
+	stdoutR, err := execCmd.StdoutPipe()
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("exec: stdout pipe: %w", err))
+	}
+	stderrR, err := execCmd.StderrPipe()
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("exec: stderr pipe: %w", err))
+	}
+	if err := execCmd.Start(); err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("exec: start: %w", err))
+	}
+	// Two readers, one stream: a pair of goroutines line-scan stdout
+	// and stderr; the parent goroutine forwards to the connect stream
+	// under a mutex. Stream.Send is not safe for concurrent calls.
+	var sendMu sync.Mutex
+	send := func(s anovelv1.LogStream, line string) {
+		sendMu.Lock()
+		defer sendMu.Unlock()
+		_ = stream.Send(&anovelv1.ExecOutput{Stream: s, Line: line})
+	}
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		sc := bufio.NewScanner(stdoutR)
+		sc.Buffer(make([]byte, 64*1024), 1024*1024)
+		for sc.Scan() {
+			send(anovelv1.LogStream_LOG_STREAM_STDOUT, sc.Text())
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		sc := bufio.NewScanner(stderrR)
+		sc.Buffer(make([]byte, 64*1024), 1024*1024)
+		for sc.Scan() {
+			send(anovelv1.LogStream_LOG_STREAM_STDERR, sc.Text())
+		}
+	}()
+	wg.Wait()
+	waitErr := execCmd.Wait()
+	if waitErr != nil {
+		// Convey non-zero exits as a stream-final stderr line then
+		// success — the client decides how to render. (Wrapping waitErr
+		// into a connect.Error would mask the captured output that
+		// already streamed.)
+		send(anovelv1.LogStream_LOG_STREAM_STDERR, "[exec exited: "+waitErr.Error()+"]")
+	}
+	return nil
 }
 
-func (s *Server) Debug(context.Context, *connect.Request[anovelv1.DebugRequest]) (*connect.Response[anovelv1.DebugResponse], error) {
-	return nil, unimplemented("Debug", "phase 3")
+// Debug returns instructions for attaching Delve to a running go-exec
+// target. It does NOT spawn dlv itself — the user runs the printed
+// command in their own terminal so the dlv REPL is interactive and
+// disconnects don't kill the target. (Auto-spawning dlv would require
+// bidi streaming + raw-tty plumbing the daemon doesn't yet have.)
+//
+// For container-mode targets, Debug is rejected — attaching to a
+// containerised process needs a container-internal dlv install and a
+// port-forward the daemon doesn't manage. Service developers can iterate
+// in go-exec mode (the default) and graduate to container mode for
+// integration tests.
+//
+// DelvePort is a SUGGESTED port the user can pass to `dlv attach
+// --listen=:<port>` — the daemon doesn't bind it. Chosen as `PID +
+// 20000` (kept inside the high-but-not-privileged range) so a user
+// debugging multiple targets gets a unique-per-PID port without
+// allocation bookkeeping.
+func (s *Server) Debug(_ context.Context, req *connect.Request[anovelv1.DebugRequest]) (*connect.Response[anovelv1.DebugResponse], error) {
+	id := req.Msg.GetTargetId()
+	if id == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("debug: target_id required"))
+	}
+	inst, ok := s.runner.Instance(id)
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("debug: target %q not tracked (start it first)", id))
+	}
+	if inst.Phase != anovelv1.Phase_PHASE_RUNNING {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("debug: target %q is not running (phase=%s)", id, inst.Phase))
+	}
+	if inst.Mode != runner.ModeGoExec {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			errors.New("debug: only go-exec targets can be attached to (container-mode dlv requires in-image dlv + port-forward)"))
+	}
+	port := int32(inst.PID + 20000)
+	hint := fmt.Sprintf(
+		"Attach with:\n  dlv attach %d --listen=:%d --headless --api-version=2\nThen connect from your editor (vscode: 'Connect to server' on port %d).",
+		inst.PID, port, port,
+	)
+	return connect.NewResponse(&anovelv1.DebugResponse{
+		DelvePort: port,
+		Hint:      hint,
+	}), nil
 }
 
-func (s *Server) Watch(_ context.Context, _ *connect.Request[anovelv1.WatchRequest], _ *connect.ServerStream[anovelv1.StateEvent]) error {
-	return unimplemented("Watch", "phase 3")
+// Watch streams every phase transition the runner emits, filtered by the
+// caller's (stack, service, target_id) tuple. An empty filter field means
+// "match any value" — clients usually pass (stack, service, "") to watch
+// one service or all three empty to watch everything.
+//
+// The stream stays open until the client cancels its side (or the daemon
+// shuts down — the runner's emit fanout simply stops). No snapshot is
+// emitted up-front; callers that need the initial state should pair Watch
+// with a `ListServices` snapshot themselves (the CLI's `ps --watch`
+// pattern).
+func (s *Server) Watch(ctx context.Context, req *connect.Request[anovelv1.WatchRequest], stream *connect.ServerStream[anovelv1.StateEvent]) error {
+	wantStack := req.Msg.GetStack()
+	wantService := req.Msg.GetService()
+	wantTargetID := req.Msg.GetTargetId()
+	filter := func(ev runner.PhaseEvent) bool {
+		if wantStack != "" && wantStack != "*" && ev.Stack != wantStack {
+			return false
+		}
+		if wantService != "" && ev.Service != wantService {
+			return false
+		}
+		if wantTargetID != "" && ev.TargetID != wantTargetID {
+			return false
+		}
+		return true
+	}
+	ch, unsub := s.runner.SubscribePhases(filter)
+	defer unsub()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev, ok := <-ch:
+			if !ok {
+				return nil // runner closed our subscription
+			}
+			out := &anovelv1.StateEvent{
+				Ts:          timestamppb.New(ev.Ts),
+				TargetId:    ev.TargetID,
+				Service:     ev.Service,
+				Stack:       ev.Stack,
+				OldPhase:    ev.OldPhase,
+				NewPhase:    ev.NewPhase,
+				Description: describePhaseEvent(ev),
+			}
+			if err := stream.Send(out); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// describePhaseEvent produces the one-line human summary that lands in
+// StateEvent.description. The proto field is opaque to the daemon — clients
+// can re-render based on (old_phase, new_phase, exit_reason) themselves
+// — but a pre-baked summary is the cheap default for `ps --watch` etc.
+func describePhaseEvent(ev runner.PhaseEvent) string {
+	switch ev.NewPhase {
+	case anovelv1.Phase_PHASE_STARTING:
+		return ev.TargetID + " starting"
+	case anovelv1.Phase_PHASE_RUNNING:
+		return ev.TargetID + " running"
+	case anovelv1.Phase_PHASE_STOPPING:
+		return ev.TargetID + " stopping"
+	case anovelv1.Phase_PHASE_TERMINATED:
+		switch ev.ExitReason {
+		case anovelv1.ExitReason_EXIT_REASON_SUCCESS:
+			return ev.TargetID + " terminated (success)"
+		case anovelv1.ExitReason_EXIT_REASON_ERROR:
+			return ev.TargetID + " terminated (error)"
+		case anovelv1.ExitReason_EXIT_REASON_KILLED:
+			return ev.TargetID + " terminated (killed)"
+		case anovelv1.ExitReason_EXIT_REASON_CRASHED:
+			return ev.TargetID + " terminated (crashed)"
+		}
+		return ev.TargetID + " terminated"
+	}
+	return ev.TargetID + " " + ev.NewPhase.String()
 }
 
 // unimplemented returns a uniform error for not-yet-built RPCs. The phase

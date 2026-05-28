@@ -321,6 +321,59 @@ func (c *Client) PrepareReinstall(ctx context.Context) (*anovelv1.PrepareReinsta
 	return resp.Msg, nil
 }
 
+// Shutdown is the no-checkpoint daemon stop. `force=true` cascade-kills
+// every service's infra + targets. Both variants signal the daemon to
+// exit after the response is sent; callers poll Ping to know when the
+// socket is gone.
+func (c *Client) Shutdown(ctx context.Context, force bool) (*anovelv1.ShutdownResponse, error) {
+	resp, err := c.core.Shutdown(ctx, connect.NewRequest(&anovelv1.ShutdownRequest{Force: force}))
+	if err != nil {
+		return nil, c.mapErr(err)
+	}
+	return resp.Msg, nil
+}
+
+// Watch opens a server-streaming subscription to phase events. Filters:
+// empty stack means "any stack"; empty service means "any service in the
+// stack"; empty targetID means "every target". The returned stream
+// closes when the caller's context is cancelled or the daemon exits.
+func (c *Client) Watch(ctx context.Context, stack, service, targetID string) (*connect.ServerStreamForClient[anovelv1.StateEvent], error) {
+	stream, err := c.core.Watch(ctx, connect.NewRequest(&anovelv1.WatchRequest{
+		Stack:    stack,
+		Service:  service,
+		TargetId: targetID,
+	}))
+	if err != nil {
+		return nil, c.mapErr(err)
+	}
+	return stream, nil
+}
+
+// Exec runs cmd inside the target's runtime (container exec, or a sibling
+// process in the target's env for go-exec). The returned server-stream
+// emits one ExecOutput per stdout/stderr line; closes on natural EOF.
+func (c *Client) Exec(ctx context.Context, targetID string, cmdv []string) (*connect.ServerStreamForClient[anovelv1.ExecOutput], error) {
+	stream, err := c.core.Exec(ctx, connect.NewRequest(&anovelv1.ExecRequest{
+		TargetId: targetID,
+		Cmd:      cmdv,
+	}))
+	if err != nil {
+		return nil, c.mapErr(err)
+	}
+	return stream, nil
+}
+
+// Debug returns the dlv-attach hint for a running go-exec target.
+func (c *Client) Debug(ctx context.Context, targetID string) (*anovelv1.DebugResponse, error) {
+	resp, err := c.core.Debug(ctx, connect.NewRequest(&anovelv1.DebugRequest{
+		TargetId: targetID,
+	}))
+	if err != nil {
+		return nil, c.mapErr(err)
+	}
+	return resp.Msg, nil
+}
+
 // IsNotRunning reports whether err signals the daemon is unreachable (socket
 // missing, connection refused). Distinct from a daemon-side error.
 func IsNotRunning(err error) bool {

@@ -92,8 +92,11 @@ func (r *Runner) StartGoExec(ctx context.Context, id string, env []string) (*Ins
 	// 6. PID known; transition to RUNNING and start the watcher.
 	r.mu.Lock()
 	inst.PID = int32(cmd.Process.Pid)
-	inst.Phase = anovelv1.Phase_PHASE_RUNNING
 	r.mu.Unlock()
+	// transition() emits the STARTING→RUNNING PhaseEvent for Watch
+	// subscribers; don't mutate inst.Phase directly here or the event is
+	// lost.
+	r.transition(id, anovelv1.Phase_PHASE_RUNNING)
 	go r.watchGoExec(id, logWriter)
 
 	out := *inst
@@ -210,13 +213,27 @@ func (r *Runner) killGoExec(ctx context.Context, id string, grace time.Duration)
 }
 
 // transition is a small helper for atomic phase changes when there's
-// nothing else to update.
+// nothing else to update. Emits a PhaseEvent on every actual change so
+// Watch subscribers observe the transition. No-op when the phase didn't
+// actually change (avoids spamming subscribers with redundant events).
 func (r *Runner) transition(id string, phase anovelv1.Phase) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if inst, ok := r.instances[id]; ok {
-		inst.Phase = phase
+	inst, ok := r.instances[id]
+	if !ok || inst.Phase == phase {
+		r.mu.Unlock()
+		return
 	}
+	old := inst.Phase
+	inst.Phase = phase
+	ev := PhaseEvent{
+		TargetID: inst.ID,
+		Service:  inst.Service,
+		Stack:    inst.Stack,
+		OldPhase: old,
+		NewPhase: phase,
+	}
+	r.mu.Unlock()
+	r.emitPhase(ev)
 }
 
 // Silence "imported and not used: discovery" — we'll use it shortly for

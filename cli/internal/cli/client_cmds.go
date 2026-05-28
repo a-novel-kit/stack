@@ -142,7 +142,7 @@ With --json, emits one JSON object per service for machine consumption
 				return fmt.Errorf("--kind=%q: must be 'target', 'infra', or 'all'", kind)
 			}
 			if watch {
-				return errors.New("ps --watch: not yet implemented (scheduled for phase 3)")
+				return runPsWatch(ctx, c, cmd.OutOrStdout(), services, stack, service, kind, jsonOut)
 			}
 			renderPs(cmd.OutOrStdout(), services, jsonOut)
 			return nil
@@ -1091,14 +1091,52 @@ func newExecCmd() *cobra.Command {
 	var ss stackScope
 	cmd := &cobra.Command{
 		Use:   "exec <target> -- <cmd> [args...]",
-		Short: "Run a command inside a target's container",
-		Long: `Container-mode targets only. Resolves the target's container ID and
-invokes 'podman exec' with the provided command + args. Useful for
-psql / sh / curl / etc. inside the container's network namespace.`,
-		Example: `  a-novel exec service-json-keys-rest -- sh
-  a-novel exec service-json-keys-postgres -- psql -U postgres`,
+		Short: "Run a command alongside a target (container exec, or sibling process)",
+		Long: `Runs <cmd> "as if it were a sibling of the target":
+
+  - Container-mode targets (currently RUNNING): the command runs INSIDE
+    the target's container via 'podman exec'. Useful for sh/psql/curl
+    in the container's network namespace.
+
+  - Go-exec targets (or anything not currently running): the command
+    runs on the host with the target's resolved env (POSTGRES_DSN,
+    *_PORT, etc.) and the service directory as CWD. Useful for
+    'exec migrations psql' to get psql with the right DSN.
+
+Output is forwarded line-by-line from the daemon. Exit code reflects
+the underlying command's success.`,
+		Example: `  a-novel exec service-json-keys/rest -- sh
+  a-novel exec service-json-keys/migrations -- psql
+  a-novel exec default/service-json-keys/rest -- curl -s localhost:8080`,
 		Args: cobra.MinimumNArgs(2),
-		RunE: stubRunE("exec", "phase 3"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			c := rpc.New("")
+			// Cobra strips "--" — args[0] is the target, args[1:] is the command.
+			targetSpec := args[0]
+			cmdv := args[1:]
+			ref := parseEntityID(targetSpec, ss.stack)
+			if ref.IsInfra {
+				return fmt.Errorf("exec: %s is an infra container; use 'podman exec %s/%s/...' directly", targetSpec, ref.Stack, ref.Service)
+			}
+			stream, err := c.Exec(ctx, ref.ID, cmdv)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = stream.Close() }()
+			for stream.Receive() {
+				ev := stream.Msg()
+				w := cmd.OutOrStdout()
+				if ev.GetStream() == anovelv1.LogStream_LOG_STREAM_STDERR {
+					w = cmd.ErrOrStderr()
+				}
+				fmt.Fprintln(w, ev.GetLine())
+			}
+			if err := stream.Err(); err != nil && ctx.Err() == nil {
+				return err
+			}
+			return nil
+		},
 	}
 	ss.bind(cmd)
 	return cmd
@@ -1108,16 +1146,32 @@ func newDebugCmd() *cobra.Command {
 	var ss stackScope
 	cmd := &cobra.Command{
 		Use:   "debug <target>",
-		Short: "Attach delve to a target (go-exec) or start a remote delve (container)",
-		Long: `For go-exec mode: spawns delve attached to the target's PID and prints
-the host:port to connect to from your IDE.
+		Short: "Print the dlv attach command for a running go-exec target",
+		Long: `For go-exec targets currently in PHASE_RUNNING: returns a ready-to-paste
+'dlv attach' command pinned to the target's PID + a suggested headless
+port. Run the command in your own terminal so the dlv REPL is interactive;
+your IDE then connects to dlv's headless listener.
 
-For container mode: prefers a sibling Dockerfile named
-'<existing>.debug.Dockerfile' that extends the standard image with delve
-headless; falls back to dynamic injection if no debug Dockerfile is
-present. Returns the published delve port.`,
+Container-mode targets are rejected — attaching dlv inside a container
+requires an in-image dlv install + a port-forward the daemon doesn't
+manage.`,
+		Example: `  a-novel debug service-json-keys/grpc
+  a-novel debug default/service-json-keys/grpc`,
 		Args: cobra.ExactArgs(1),
-		RunE: stubRunE("debug", "phase 3"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			c := rpc.New("")
+			ref := parseEntityID(args[0], ss.stack)
+			if ref.IsInfra {
+				return fmt.Errorf("debug: %s is an infra container; dlv attach is only meaningful on go-exec targets", args[0])
+			}
+			resp, err := c.Debug(ctx, ref.ID)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), resp.GetHint())
+			return nil
+		},
 	}
 	ss.bind(cmd)
 	return cmd
@@ -1141,13 +1195,129 @@ exit, health flip, etc. is emitted as a newline-delimited JSON object.
 Designed for agentic workflows: polling 'ps' is wasteful; watch tells
 you the moment a state changes. Filter by --service or --target to
 narrow the stream.`,
-		RunE: stubRunE("watch", "phase 3"),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			c := rpc.New("")
+			stack := ss.stack
+			if ss.allStacks {
+				stack = "*"
+			}
+			stream, err := c.Watch(ctx, stack, service, target)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = stream.Close() }()
+			enc := json.NewEncoder(cmd.OutOrStdout())
+			for stream.Receive() {
+				ev := stream.Msg()
+				if jsonOut {
+					_ = enc.Encode(map[string]any{
+						"ts":          ev.GetTs().AsTime().Format(time.RFC3339Nano),
+						"stack":       ev.GetStack(),
+						"service":     ev.GetService(),
+						"target_id":   ev.GetTargetId(),
+						"old_phase":   ev.GetOldPhase().String(),
+						"new_phase":   ev.GetNewPhase().String(),
+						"description": ev.GetDescription(),
+					})
+				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), "%s  %s\n",
+						ev.GetTs().AsTime().Format("15:04:05.000"),
+						ev.GetDescription())
+				}
+			}
+			if err := stream.Err(); err != nil && ctx.Err() == nil {
+				return err
+			}
+			return nil
+		},
 	}
 	ss.bindAll(cmd)
 	cmd.Flags().StringVar(&service, "service", "", "filter to one service")
 	cmd.Flags().StringVar(&target, "target", "", "filter to one target")
 	cmd.Flags().BoolVar(&jsonOut, "json", true, "emit JSON (default: true — this command is agent-oriented)")
 	return cmd
+}
+
+// runPsWatch is the ps-style streaming variant: render the current
+// snapshot once, then re-render after every StateEvent. Uses ANSI cursor
+// control to overwrite the previous frame instead of scrolling — feels
+// like `top` / `htop` rather than a log tail.
+//
+// In --json mode, we don't redraw; we emit one JSON object per state
+// event (newline-delimited) on top of the initial snapshot. That keeps
+// machine consumers' parsing simple (read until \n, parse).
+func runPsWatch(
+	ctx context.Context, c *rpc.Client, out io.Writer,
+	services []*anovelv1.Service, stack, service, kind string, jsonOut bool,
+) error {
+	if !jsonOut {
+		// Initial snapshot.
+		renderPs(out, services, false)
+	} else {
+		renderPs(out, services, true)
+	}
+	stream, err := c.Watch(ctx, stack, service, "")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = stream.Close() }()
+	enc := json.NewEncoder(out)
+	for stream.Receive() {
+		ev := stream.Msg()
+		if jsonOut {
+			_ = enc.Encode(map[string]any{
+				"ts":          ev.GetTs().AsTime().Format(time.RFC3339Nano),
+				"stack":       ev.GetStack(),
+				"service":     ev.GetService(),
+				"target_id":   ev.GetTargetId(),
+				"old_phase":   ev.GetOldPhase().String(),
+				"new_phase":   ev.GetNewPhase().String(),
+				"description": ev.GetDescription(),
+			})
+			continue
+		}
+		// Human mode: refresh the snapshot. Single ListServices call
+		// per event is cheap (one RPC, batched podman query) and
+		// guarantees the rendered ps reflects the same view a manual
+		// 'ps' would. The terminal "clear-from-cursor + repaint" trick
+		// avoids accumulating frames in the scrollback.
+		resp, err := c.ListServices(ctx, stack)
+		if err != nil {
+			fmt.Fprintf(out, "watch: refresh failed: %v\n", err)
+			continue
+		}
+		fresh := resp.GetServices()
+		if service != "" {
+			filtered := fresh[:0]
+			for _, s := range fresh {
+				if s.GetName() == service {
+					filtered = append(filtered, s)
+				}
+			}
+			fresh = filtered
+		}
+		switch kind {
+		case "target":
+			for _, s := range fresh {
+				s.Infra = nil
+			}
+		case "infra":
+			for _, s := range fresh {
+				s.Targets = nil
+			}
+		}
+		// ANSI: move cursor home + clear screen. Cheap, terminal-agnostic.
+		// (For non-TTY pipes the escape sequences are harmless filler.)
+		fmt.Fprint(out, "\x1b[H\x1b[2J")
+		renderPs(out, fresh, false)
+		fmt.Fprintf(out, "\n%s  %s\n",
+			ev.GetTs().AsTime().Format("15:04:05"), ev.GetDescription())
+	}
+	if err := stream.Err(); err != nil && ctx.Err() == nil {
+		return err
+	}
+	return nil
 }
 
 // =============================================================================

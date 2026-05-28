@@ -265,6 +265,21 @@ type InfraState struct {
 // Returns an empty map (not nil) on podman errors so callers can
 // uniformly check `if state, ok := m[key]` without nil-guarding.
 func (r *Runner) InfraStatesOf(ctx context.Context, stack string) map[string]InfraState {
+	// Cache check — TUI poll cadence (~2s) hits this most of the time.
+	// Mutating RPCs call InvalidateInfraStateCache so a stale entry
+	// never outlives an explicit state change.
+	r.infraStateMu.Lock()
+	if entry, ok := r.infraStateCache[stack]; ok && time.Since(entry.at) < infraStateCacheTTL {
+		// Copy the map so callers don't race a concurrent invalidation.
+		cp := make(map[string]InfraState, len(entry.states))
+		for k, v := range entry.states {
+			cp[k] = v
+		}
+		r.infraStateMu.Unlock()
+		return cp
+	}
+	r.infraStateMu.Unlock()
+
 	out := make(map[string]InfraState)
 	cmd := exec.CommandContext(ctx, "podman", "ps", "-a",
 		"--filter", "label=anovel.stack="+stack,
@@ -314,6 +329,17 @@ func (r *Runner) InfraStatesOf(ctx context.Context, stack string) map[string]Inf
 		}
 		out[svc+"/"+infraName] = InfraState{ContainerID: e.ID, Phase: p, Health: anovelv1.Health_HEALTH_UNSPECIFIED}
 	}
+	// Seed cache for the TTL window. Copy `out` so a subsequent caller
+	// reading from the cache doesn't share the same map with the
+	// in-progress accumulator (defensive — both happen to be safe in
+	// today's flow but cheap to keep correct).
+	cached := make(map[string]InfraState, len(out))
+	for k, v := range out {
+		cached[k] = v
+	}
+	r.infraStateMu.Lock()
+	r.infraStateCache[stack] = infraStateCacheEntry{at: time.Now(), states: cached}
+	r.infraStateMu.Unlock()
 	return out
 }
 
@@ -338,6 +364,10 @@ func containerHealthFromInspect(ctx context.Context, cid string) string {
 // without losing its pod / network attachments. Returns an error if
 // no container matches (already down, or never up).
 func (r *Runner) KillInfraContainer(ctx context.Context, stack, service, infraName string) error {
+	// Drop the cached state so the next ps reflects the stopped
+	// container immediately, even though podman's filtered scan
+	// would have caught it inside the TTL anyway.
+	defer r.InvalidateInfraStateCache()
 	st, ok := r.InfraStatesOf(ctx, stack)[service+"/"+infraName]
 	if !ok || st.ContainerID == "" {
 		return fmt.Errorf("no container for %s/%s/%s", stack, service, infraName)
@@ -355,6 +385,7 @@ func (r *Runner) KillInfraContainer(ctx context.Context, stack, service, infraNa
 // than KillInfra → StartInfra because it skips compose-up entirely
 // and preserves the container's existing volume bindings / labels.
 func (r *Runner) RestartInfraContainer(ctx context.Context, stack, service, infraName string) error {
+	defer r.InvalidateInfraStateCache()
 	st, ok := r.InfraStatesOf(ctx, stack)[service+"/"+infraName]
 	if !ok || st.ContainerID == "" {
 		return fmt.Errorf("no container for %s/%s/%s", stack, service, infraName)
