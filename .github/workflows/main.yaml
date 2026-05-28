@@ -65,3 +65,50 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           app_private_key: ${{ secrets.DEPENDENCY_BOT_PRIVATE_KEY }}
           app_id: ${{ vars.DEPENDENCY_BOT_ID }}
+
+  test-go:
+    # Go unit tests for the cli/ module. Uses the same shared
+    # gotestsum-based action every service runs so test reports and
+    # coverage artifacts land in one consistent place. Gated on
+    # generated-go so we don't waste runners on a stale proto-gen.
+    runs-on: ubuntu-latest
+    needs: [generated-go]
+    permissions:
+      contents: read
+    defaults:
+      run:
+        # The module lives under cli/; the shared action's default
+        # checkout-and-setup steps assume the workdir contains go.mod.
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: "cli/go.mod"
+      - name: download go packages
+        run: go mod download
+      # Compose the same incantation as a-novel-kit/workflows/go-actions/test-go,
+      # but inlined here because that action assumes the module sits at the
+      # repo root (the shared action runs from the checked-out workdir, not
+      # the workflow's defaults). gotestsum is installed via the tool
+      # directive in cli/gotestsum.mod.
+      - name: discover modules
+        id: discover
+        run: |
+          echo "$(for mod in $(go list -m); do go list ${mod//$(go list .)/.}/... | grep -v /mocks | grep -v /test | grep -v /proto; done)" > modules.txt
+          echo "MODULES=$(cat modules.txt | tr '\n' ' ')" >> $GITHUB_ENV
+      - name: run tests
+        run: |
+          go tool -modfile=gotestsum.mod gotestsum --jsonfile tests.json --format pkgname \
+            -- -count=1 -race -cover -coverprofile=coverage.txt -json ${{ env.MODULES }}
+          go tool cover -func coverage.txt
+      - name: archive coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: cli/coverage.txt
+      - name: archive test results
+        uses: actions/upload-artifact@v7
+        with:
+          name: gotest
+          path: cli/tests.json
