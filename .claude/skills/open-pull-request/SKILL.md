@@ -332,7 +332,7 @@ Do not merge — merges are a developer decision unless explicitly delegated.
 ## Common Mistakes
 
 - **Opening or editing a PR with the bot token.** `a-novel core bot-gh` / `a-novel core
-  bot-token` is for comments only. PR create/edit/ready always run as the operator's
+bot-token` is for comments only. PR create/edit/ready always run as the operator's
   user token (Phase 5.0).
 - **Treating "PR opened" as task-done.** The task is not finished until `monitor-ci`
   reports CI green or an escalated/blocked state (Phase 7).
