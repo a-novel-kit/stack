@@ -10,10 +10,8 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -1309,7 +1307,7 @@ func runPsWatch(
 		}
 		// ANSI: move cursor home + clear screen. Cheap, terminal-agnostic.
 		// (For non-TTY pipes the escape sequences are harmless filler.)
-		fmt.Fprint(out, "\x1b[H\x1b[2J")
+		_, _ = fmt.Fprint(out, "\x1b[H\x1b[2J")
 		renderPs(out, fresh, false)
 		fmt.Fprintf(out, "\n%s  %s\n",
 			ev.GetTs().AsTime().Format("15:04:05"), ev.GetDescription())
@@ -1341,26 +1339,5 @@ palette (':start', ':kill', ':infra-start', etc.). q or Ctrl-C quits.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return tui.Run()
 		},
-	}
-}
-
-// stubRunE returns a placeholder runner for not-yet-implemented commands.
-// The error includes the phase number so users know when to expect it,
-// and the daemon connection is exercised so transport bugs surface early.
-func stubRunE(verb, phase string) func(cmd *cobra.Command, args []string) error {
-	return func(cmd *cobra.Command, _ []string) error {
-		// Verify the daemon is reachable so phase-1 testing surfaces
-		// transport issues even via Unimplemented commands.
-		ctx, cancel := context.WithTimeout(cmd.Context(), 2*time.Second)
-		defer cancel()
-		c := rpc.New("")
-		if _, err := c.Ping(ctx); err != nil {
-			if rpc.IsNotRunning(err) {
-				fmt.Fprintln(os.Stderr, err.Error())
-				return &ExitError{Code: 2}
-			}
-			return err
-		}
-		return errors.New(verb + ": not yet implemented (scheduled for " + phase + ")")
 	}
 }

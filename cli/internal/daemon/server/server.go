@@ -1138,7 +1138,7 @@ func (s *Server) Debug(_ context.Context, req *connect.Request[anovelv1.DebugReq
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("debug: only go-exec targets can be attached to (container-mode dlv requires in-image dlv + port-forward)"))
 	}
-	port := int32(inst.PID + 20000)
+	port := inst.PID + 20000
 	hint := fmt.Sprintf(
 		"Attach with:\n  dlv attach %d --listen=:%d --headless --api-version=2\nThen connect from your editor (vscode: 'Connect to server' on port %d).",
 		inst.PID, port, port,
