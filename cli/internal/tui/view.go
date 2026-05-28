@@ -318,13 +318,30 @@ func (m *model) renderLogs(width, height int) string {
 	if len(m.logLines) == 0 {
 		return styleDim.Render("(no log lines yet — start the target or press 'r' to refresh)")
 	}
-	// Show only the last `height` lines.
-	from := 0
-	if len(m.logLines) > height {
-		from = len(m.logLines) - height
+	// Reserve the bottom line of the pane for the scroll indicator
+	// when we're not at the tail. When at the tail, the full height
+	// is available for log content (no indicator needed since
+	// auto-follow is the default state).
+	contentH := height
+	if m.logScroll > 0 {
+		contentH = height - 1
+		if contentH < 1 {
+			contentH = 1
+		}
+	}
+	// Compute the window into logLines:
+	//   logScroll == 0    → tail (the last `contentH` lines)
+	//   logScroll == N>0  → window `[len-contentH-N, len-N)`
+	end := len(m.logLines) - m.logScroll
+	if end < 0 {
+		end = 0
+	}
+	from := end - contentH
+	if from < 0 {
+		from = 0
 	}
 	var b strings.Builder
-	for _, ln := range m.logLines[from:] {
+	for _, ln := range m.logLines[from:end] {
 		tag := "out"
 		if ln.GetStream() == anovelv1.LogStream_LOG_STREAM_STDERR {
 			tag = "err"
@@ -333,19 +350,34 @@ func (m *model) renderLogs(width, height int) string {
 		fmt.Fprintf(&b, "%s %s %s\n",
 			styleDim.Render(ts), styleWarn.Render(tag), truncate(ln.GetLine(), width-20))
 	}
+	// Scroll indicator — only visible when we've paused auto-follow.
+	// Tells the user (a) they're paused, (b) how far up they are, and
+	// (c) how to get back. End/G snaps to the tail, the other keys
+	// step the window further.
+	if m.logScroll > 0 {
+		indicator := fmt.Sprintf("⏸ paused — %d line(s) below cursor  ·  pgdn/end resumes tail",
+			m.logScroll)
+		b.WriteString(styleWarn.Render(truncate(indicator, width)))
+	}
 	return b.String()
 }
 
 // renderFooter is layer-1 of the three-layer palette per spec §14.3:
-// always-visible hint of the 4–5 most-relevant commands for the
-// current context. Single-line — action feedback now lives in the
-// dedicated status bar above (renderStatus).
+// always-visible hint of the most-relevant commands for the current
+// context. Single-line — action feedback now lives in the dedicated
+// status bar above (renderStatus). When the log pane is scrolled
+// back, the "scroll" hint adapts to advertise End/G as the way out.
 func (m *model) renderFooter() string {
+	scrollHint := styleCmd.Render("PgUp/PgDn") + " scroll logs"
+	if m.logScroll > 0 {
+		scrollHint = styleCmd.Render("End") + " resume tail"
+	}
 	hints := []string{
 		styleCmd.Render("?") + " help",
 		styleCmd.Render("Esc") + " command",
 		styleCmd.Render("↑↓") + " service",
 		styleCmd.Render("←→") + " target",
+		scrollHint,
 		styleCmd.Render("q") + " quit",
 	}
 	return styleFooter.Render(strings.Join(hints, "  ·  "))
@@ -360,6 +392,13 @@ func (m *model) renderHelp() string {
 		styleHeader.Render("Navigation"),
 		"  ↑/↓ or j/k           select service",
 		"  ←/→ or h/l or Tab   select target tab",
+		"",
+		styleHeader.Render("Log pane"),
+		"  PgUp/PgDn             scroll a half page (auto-follow pauses on PgUp)",
+		"  Ctrl-↑/Ctrl-↓        step one line",
+		"  Home / g              jump to oldest buffered line",
+		"  End  / G              jump to tail and resume auto-follow",
+		styleDim.Render("  (terminal text selection works — click + drag to copy lines)"),
 		"",
 		styleHeader.Render("Tab kinds"),
 		"  [target]               daemon-supervised process (go-exec or container)",

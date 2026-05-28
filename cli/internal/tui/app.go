@@ -46,7 +46,14 @@ func Run() error {
 		return err
 	}
 	m := newModel(c)
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	// NOTE: no tea.WithMouseCellMotion(). Mouse-cell capture would put
+	// the terminal into a mode where it forwards every mouse event to
+	// us — useful for click-to-focus, but it disables the terminal's
+	// own click-drag-to-select. Since this UI is keyboard-driven, the
+	// trade we want is "native text selection works" over "we could
+	// handle click events"; users routinely copy log lines out for
+	// grepping / pasting into issues.
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	// Hand the program back into the model so background log-follow
 	// goroutines can Send messages via p.Send (Bubble Tea's
 	// cross-goroutine event-injection primitive).
@@ -94,6 +101,14 @@ type model struct {
 	// from previous followers are dropped on arrival so the
 	// cancel-then-start race window can't mix streams.
 	followGen int
+	// logScroll is the offset from the tail of logLines. 0 means
+	// "auto-follow the bottom" — new lines push the view forward.
+	// Any positive value means the user has paged up; the view shows
+	// `logLines[len-h-scroll : len-scroll]` and new lines accumulate
+	// in the buffer without scrolling the view. Reset to 0 on
+	// tab/service switch and on successful actions (where the
+	// underlying log file may have been truncated).
+	logScroll int
 	// Command palette.
 	cmdInput   string
 	topologyTx string // last GetTopology response (for viewTopology)
@@ -175,7 +190,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, refreshServicesCmd(m.c)
 		}
 		m.status = statusEntry{level: statusInfo, text: msg.successText, at: time.Now()}
-		return m, tea.Batch(refreshServicesCmd(m.c), fadeStatusAfter(5*time.Second))
+		// Any successful action may have replaced the underlying
+		// log file (kill+restart truncates via O_TRUNC; even a plain
+		// start opens a fresh file). The buffered logLines are now
+		// stale — drop them, reset the scroll, and reattach the
+		// follower so it streams the fresh history-then-tail. The
+		// follower-generation counter inside followSelectedLogs
+		// drops any in-flight messages from the prior follower.
+		m.logLines = nil
+		m.logScroll = 0
+		return m, tea.Batch(refreshServicesCmd(m.c), fadeStatusAfter(5*time.Second), m.followSelectedLogs())
 
 	case statusFadeMsg:
 		// Only fade info — busy is still in-flight, error is sticky
@@ -194,9 +218,23 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.logLines = append(m.logLines, msg.lines...)
+		// Pause-anchor: when paused (logScroll > 0), shift the offset
+		// forward by however many lines arrived so the visible window
+		// continues to show the same absolute lines instead of
+		// drifting toward the tail. When logScroll == 0 we're in
+		// auto-follow mode; nothing to anchor.
+		if m.logScroll > 0 {
+			m.logScroll += len(msg.lines)
+		}
 		// Bound to last 500 lines so the model doesn't grow unbounded.
 		if len(m.logLines) > 500 {
 			m.logLines = m.logLines[len(m.logLines)-500:]
+		}
+		// If the paused view's target line fell off the front of the
+		// trimmed buffer (or off the viewport-aware max), snap scroll
+		// to the most-back position that still shows a full window.
+		if m.logScroll > 0 {
+			m.logScroll = m.clampLogScroll(m.logScroll)
 		}
 		return m, nil
 
@@ -239,6 +277,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.selectedSvc = (m.selectedSvc + 1) % len(m.services)
 			m.selectedTab = 0
 			m.logLines = nil
+			m.logScroll = 0
 		}
 		return m, m.followSelectedLogs()
 	case "k", "up":
@@ -249,12 +288,14 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.selectedTab = 0
 			m.logLines = nil
+			m.logScroll = 0
 		}
 		return m, m.followSelectedLogs()
 	case "l", "right", "tab":
 		if m.tabCount() > 0 {
 			m.selectedTab = (m.selectedTab + 1) % m.tabCount()
 			m.logLines = nil
+			m.logScroll = 0
 		}
 		return m, m.followSelectedLogs()
 	case "h", "left", "shift+tab":
@@ -264,10 +305,90 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.selectedTab = m.tabCount() - 1
 			}
 			m.logLines = nil
+			m.logScroll = 0
 		}
 		return m, m.followSelectedLogs()
+	// Log-pane scrolling. Stepping units chosen so a single key feels
+	// responsive (ctrl+up/down step one line) while pgup/pgdn jump a
+	// half-page each. End/g returns to the tail (auto-follow on); home
+	// jumps to the top of the buffered window. logScroll is clamped to
+	// [0, len(logLines)] by clampLogScroll.
+	case "pgup":
+		m.logScroll = m.clampLogScroll(m.logScroll + m.logViewportHeight()/2)
+		return m, nil
+	case "pgdown", "pgdn":
+		m.logScroll = m.clampLogScroll(m.logScroll - m.logViewportHeight()/2)
+		return m, nil
+	case "ctrl+up":
+		m.logScroll = m.clampLogScroll(m.logScroll + 1)
+		return m, nil
+	case "ctrl+down":
+		m.logScroll = m.clampLogScroll(m.logScroll - 1)
+		return m, nil
+	case "home", "g":
+		m.logScroll = m.clampLogScroll(len(m.logLines))
+		return m, nil
+	case "end", "G":
+		m.logScroll = 0
+		return m, nil
 	}
 	return m, nil
+}
+
+// clampLogScroll keeps logScroll inside [0, maxScroll] where maxScroll
+// is the largest offset that still leaves the visible window FULL — i.e.
+// `len(logLines) - contentHeight`. Without that ceiling the user could
+// page back until only one line of log shows above the indicator, which
+// looks like "logs paused" took over the pane.
+//
+// Zero = auto-follow tail; positive = paged up that many lines from the
+// tail. The "−1" accounts for the indicator row that's reserved at the
+// bottom of the pane whenever logScroll > 0 (see renderLogs).
+func (m *model) clampLogScroll(n int) int {
+	if n < 0 {
+		return 0
+	}
+	h := m.logViewportHeight()
+	if n > 0 {
+		// Indicator row will take one line; the actual log content fits
+		// in (h-1) rows.
+		h--
+	}
+	if h < 1 {
+		h = 1
+	}
+	maxScroll := len(m.logLines) - h
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if n > maxScroll {
+		return maxScroll
+	}
+	return n
+}
+
+// logViewportHeight mirrors the height arithmetic in renderRight so
+// pgup/pgdn jump by a true half-page. The constants here MUST match
+// renderRight: -4 chrome lines (status bar, footer, two borders), -5
+// for header+divider inside the right frame, minus the number of tab
+// rows we actually render.
+func (m *model) logViewportHeight() int {
+	contentHeight := m.height - 4
+	rowCount := 0
+	svc := m.activeService()
+	if svc != nil {
+		if len(svc.GetInfra()) > 0 {
+			rowCount++
+		}
+		if len(svc.GetTargets()) > 0 {
+			rowCount++
+		}
+	}
+	h := contentHeight - 5 - (rowCount - 1)
+	if h < 4 {
+		h = 4
+	}
+	return h
 }
 
 func (m *model) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
