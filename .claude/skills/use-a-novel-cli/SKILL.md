@@ -185,17 +185,32 @@ are observable from `a-novel run watch` (when implemented) and vice-versa.
 
 ---
 
-## `a-novel core` — daemon lifecycle
+## `a-novel core` — daemon lifecycle + workspace tooling
 
 ```bash
 a-novel core setup            # one-time interactive bootstrap (run once after install)
 a-novel core start            # idempotent + silent if already running (lives in .zshrc)
+a-novel core restart          # stop then start (use --preserve-targets for checkpoint replay)
 a-novel core status           # is it running? what stacks? checkpoint pending?
-a-novel core kill             # graceful shutdown
-a-novel core prepare-reinstall  # for scripts/install.sh — checkpoints + exits
+a-novel core kill [--force]   # graceful shutdown (--force also tears down infra)
+a-novel core prepare-reinstall  # used by `a-novel install` — checkpoints + exits
+
+# Workspace tooling — these replaced scripts/sync-repos.sh and scripts/lib/bot-token.sh.
+a-novel core sync                          # clone/ff-pull the curated workspace whitelist
+a-novel core sync --allow=a-novel-kit/golib  # subset to specific repos
+a-novel core sync --ignore=<org>/<repo>      # skip specific repos
+a-novel core bot-token <org>               # mint a 1h GitHub App installation token
+a-novel core bot-gh <org> <gh args...>     # run gh as the bot (COMMENTS ONLY — enforced)
 ```
 
 `core setup` is interactive; everything else is non-interactive and `.zshrc`-safe.
+
+**Sub-agents spawning fresh stacks**: run `a-novel core sync --root=<new-stack-root>`
+as the first action in the new workspace. This pulls the six whitelisted repos
+into `kit/` and `app/` so subsequent test/build/run commands have something to
+operate on. The current whitelist is intentionally narrow (workflows, golib,
+nodelib, service-template, service-json-keys, service-authentication) until
+the broader workspace is stabilised; expanding it is a one-line PR.
 
 ---
 
@@ -212,7 +227,7 @@ psql -U postgres` (when implemented) OR `podman exec <container-name> psql ...`
 - **CI workflows**: CI invokes `make test-unit` / `make build` / etc. directly.
   Skills documenting CI behavior should reference the `make` targets.
 - **Git operations**: standard `git` / `gh` (per [[feedback-bot-attribution]] —
-  user token for PR ops, `bot_gh` for comments).
+  user token for PR ops, `a-novel core bot-gh` for comments).
 
 ---
 
@@ -231,6 +246,6 @@ verbatim to the user.
 
 - [[feedback-go-tools-policy]] — `go tool -modfile=<x>.mod` for golangci-lint /
   gotestsum (the CLI doesn't wrap these; raw invocations stay).
-- [[feedback-bot-attribution]] — `bot_gh` for PR/issue comments only; PR
-  creation uses the operator's user token.
+- [[feedback-bot-attribution]] — `a-novel core bot-gh` for PR/issue comments only;
+  PR creation uses the operator's user token.
 - [[project-workspace-layout]] — `app/` (gitignored services) + `kit/` checkouts.

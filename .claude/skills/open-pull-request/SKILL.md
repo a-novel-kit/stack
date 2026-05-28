@@ -182,24 +182,24 @@ Never wrap PR creation/editing in the bot-token helper:
 
 ```bash
 # WRONG — do not open or edit a PR as the app bot
-bot_gh a-novel pr create ...
-GH_TOKEN="$(bot_token a-novel)" gh pr create ...
+a-novel core bot-gh a-novel pr create ...
+GH_TOKEN="$(a-novel core bot-token a-novel)" gh pr create ...
 
 # RIGHT — plain gh, operator's user token
 gh pr create ...
 ```
 
-The `scripts/lib/bot-token.sh` helper (`bot_gh <org> ...` / `bot_token <org>`) is
+`a-novel core bot-gh <org> ...` / `a-novel core bot-token <org>` is
 **reserved for commenting** — top-level PR/issue comments and review-thread replies in
 `resolve-pr-feedback`. Opening, editing, or readying a PR is never a bot action. If a
 `gh` call here fails with an auth/permission error, surface it to the user; do not fall
 back to the bot token to get past it.
 
-This is enforced, not just documented: `bot_gh` refuses `pr create|edit|ready|merge|
-close|reopen|review|lock` and the `issue` equivalents (exit 3, before any token is
-minted) — only `pr comment` / `issue comment` (and reads) pass through. If you see that
-denial, you reached for the wrong token: rerun the command as plain `gh` (operator user
-token). Do not try to route around the guard.
+This is enforced, not just documented: `bot-gh` refuses `pr create|edit|ready|merge|
+close|reopen|review|lock` and the `issue` equivalents (non-zero exit, before any token
+is minted) — only `pr comment` / `issue comment` (and reads) pass through. If you see
+that denial, you reached for the wrong token: rerun the command as plain `gh` (operator
+user token). Do not try to route around the guard.
 
 ### 5.1 Choose the base branch
 
@@ -331,8 +331,9 @@ Do not merge — merges are a developer decision unless explicitly delegated.
 
 ## Common Mistakes
 
-- **Opening or editing a PR with the bot token.** `bot_gh`/`bot_token` is for comments
-  only. PR create/edit/ready always run as the operator's user token (Phase 5.0).
+- **Opening or editing a PR with the bot token.** `a-novel core bot-gh` / `a-novel core
+  bot-token` is for comments only. PR create/edit/ready always run as the operator's
+  user token (Phase 5.0).
 - **Treating "PR opened" as task-done.** The task is not finished until `monitor-ci`
   reports CI green or an escalated/blocked state (Phase 7).
 - **Pushing before local tests pass.** CI is not a debugger. Run tests locally first.

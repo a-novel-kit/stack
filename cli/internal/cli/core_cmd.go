@@ -44,6 +44,9 @@ which is silent on already-running and idempotent.`,
 	}
 	cmd.AddCommand(newCoreStartCmd())
 	cmd.AddCommand(newCoreSetupCmd())
+	cmd.AddCommand(newCoreSyncCmd())
+	cmd.AddCommand(newCoreBotTokenCmd())
+	cmd.AddCommand(newCoreBotGhCmd())
 	cmd.AddCommand(newCoreKillCmd())
 	cmd.AddCommand(newCoreRestartCmd())
 	cmd.AddCommand(newCoreStatusCmd())

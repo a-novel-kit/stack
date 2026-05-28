@@ -224,47 +224,28 @@ Other portability notes:
 
 ## Output Formatting and Colors
 
-User-facing scripts (anything a developer runs interactively) should use the shared
-style helpers in `scripts/lib/style.sh` rather than open-coding ANSI escapes or plain
-`printf`s. The helpers give scripts a consistent visual language across the workspace
-and stay readable on both light- and dark-themed terminals.
+**The first question for any new user-facing script is "does this belong in the
+a-novel CLI instead?"** The stack's bash inventory shrunk to near-zero when
+sync-repos and bot-token were ported to `a-novel core sync` and `a-novel core
+bot-token` / `a-novel core bot-gh`. New tooling should prefer Cobra subcommands
+under `cli/internal/cli/` over a fresh `scripts/*.sh` — Go gives us testable
+flag parsing, real error types, and consistent help output. The only scripts
+that stay in bash are tiny shims (often consumed by CI) where adding a Cobra
+command would be heavier than the script itself.
 
-```bash
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-. "${SCRIPT_DIR}/lib/style.sh"   # or relative path from wherever the script lives
+For the rare remaining bash, keep output simple:
 
-banner "Repository Sync"
-log_step    "Phase 1 — discovery"
-log_info    "fetching remote refs"
-log_success "service-json-keys updated"
-log_warn    "service-template: master diverged"
-log_error   "remote unreachable"
-log_dim     "(secondary detail line)"
-separator
-```
+- Errors and warnings to stderr; routine info to stdout.
+- Use `printf '%s\n'` over `echo` for portability.
+- Avoid ANSI escapes unless the script is interactive-only — they corrupt log
+  capture. If you must, gate on `[ -t 1 ]` (stdout is a TTY).
+- Honor `NO_COLOR` (force off) and `FORCE_COLOR` (force on) when emitting any
+  color at all.
 
-**Conventions:**
-
-- `banner "<title>"` — once at the start of a top-level script run.
-- `log_step "<title>"` — a major phase. Adds a leading blank line so phases breathe.
-- `log_info` / `log_success` / `log_warn` / `log_error` — one entry per discrete unit
-  of work (per repo, per file, per service). Errors and warnings go to stderr.
-- `log_dim` — secondary detail under a primary entry, indented further.
-- Colors: cyan = info / neutral, green = success, yellow = warning, red = error,
-  magenta = section heading. Never set background colors; never rely on
-  bright-white / bright-black.
-- The helpers honor `NO_COLOR` (force off) and `FORCE_COLOR` (force on even when
-  stdout is not a TTY — useful for piping into `less -R` or capturing logs).
-
-**Building separator lines.** Do not use `tr ' ' '─'` — `tr` is byte-oriented and
-will corrupt the multi-byte UTF-8 sequence (`0xE2 0x94 0x80`) by replacing each
-space with only `0xE2`. Use the `__style_hrule` helper (or a pure-bash loop) for
-any string built from non-ASCII characters.
-
-**Style helpers must remain importable by other repositories.** The file
-`scripts/lib/style.sh` has no external dependencies beyond bash itself and `tput`
-(optional, used only for terminal width). It is safe to copy or symlink into any
-repo in the a-novel ecosystem to maintain a coherent framework.
+**Building separator lines.** Do not use `tr ' ' '─'` — `tr` is byte-oriented
+and will corrupt the multi-byte UTF-8 sequence (`0xE2 0x94 0x80`) by replacing
+each space with only `0xE2`. Use `printf` with a pre-built string of dashes,
+or a pure-bash loop.
 
 ---
 
