@@ -642,9 +642,9 @@ func serviceHasError(svc *anovelv1.Service) bool {
 func modeShort(m anovelv1.Mode) string {
 	switch m {
 	case anovelv1.Mode_MODE_GO_EXEC:
-		return "go-exec"
+		return modeGoExec
 	case anovelv1.Mode_MODE_CONTAINER:
-		return "container"
+		return modeContainer
 	default:
 		return "-"
 	}

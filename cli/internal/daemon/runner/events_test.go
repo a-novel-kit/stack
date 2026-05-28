@@ -106,6 +106,31 @@ func TestEvents_FullBufferDrops(t *testing.T) {
 	}
 }
 
+// TestEvents_UnsubDuringEmitNoPanic regresses the close-on-closed-channel
+// race: an earlier version snapshot-then-released-the-lock before
+// iterating the subscribers, so an unsub that ran in the snapshot →
+// iterate window could close sub.ch while emit was still sending into
+// it. Triggering the race deterministically takes thousands of
+// iterations under -race; we run a tight loop that subscribes,
+// concurrently emits, then unsubs while emit is still going. Pre-fix:
+// panic on `send on closed channel`. Post-fix: clean exit.
+func TestEvents_UnsubDuringEmitNoPanic(t *testing.T) {
+	r := newRunnerForEvents()
+	const rounds = 500
+	for range rounds {
+		_, unsub := r.SubscribePhases(nil)
+		done := make(chan struct{})
+		go func() {
+			for range 32 {
+				r.emitPhase(PhaseEvent{TargetID: "race"})
+			}
+			close(done)
+		}()
+		unsub() // may interleave anywhere in the emit loop
+		<-done
+	}
+}
+
 func TestEvents_MultipleSubscribers(t *testing.T) {
 	r := newRunnerForEvents()
 	const N = 8

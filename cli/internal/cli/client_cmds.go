@@ -629,7 +629,7 @@ func parseEntityID(arg, defaultStack string) entityRef {
 	}
 	parts := strings.Split(arg, "/")
 	// Infra: 3 segments (svc/infra/name) or 4 (stack/svc/infra/name).
-	if len(parts) >= 3 && parts[len(parts)-2] == "infra" {
+	if len(parts) >= 3 && parts[len(parts)-2] == kindInfra {
 		ref := entityRef{IsInfra: true, Infra: parts[len(parts)-1]}
 		if len(parts) == 4 {
 			ref.Stack = parts[0]
@@ -1314,11 +1314,11 @@ func runPsWatch(
 			fresh = filtered
 		}
 		switch kind {
-		case "target":
+		case kindTarget:
 			for _, s := range fresh {
 				s.Infra = nil
 			}
-		case "infra":
+		case kindInfra:
 			for _, s := range fresh {
 				s.Targets = nil
 			}

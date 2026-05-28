@@ -74,24 +74,29 @@ func (sw *streamWriter) Write(p []byte) (int, error) {
 }
 
 // flush writes one Line to the file and fans out to subscribers. The
-// target's mutex protects the file write + subscriber list snapshot;
-// the fanout itself is non-blocking — a subscriber whose buffer is full
-// silently drops the line.
+// target's mutex protects the file write AND the fanout. Holding
+// during the fanout serializes against Subscribe/unsub — without that,
+// the earlier "snapshot-then-send-outside-lock" pattern raced with
+// the new unsubscribe API: a goroutine could remove its sub from the
+// list, GC the receiver, and the writer would still try to send to a
+// channel nobody reads (and harmlessly fall through select-default,
+// but it's a smell). Holding the lock keeps the send window tied to
+// "still in the list."
+//
+// Cost: each fanout serializes Subscribe + unsub for ~O(N_subs ×
+// microseconds). Sends are non-blocking (select-default), so it's
+// bounded.
 func (sw *streamWriter) flush(ln Line) {
 	ts := sw.w.ts
 	ts.mu.Lock()
+	defer ts.mu.Unlock()
 	if ts.closed {
-		ts.mu.Unlock()
 		return
 	}
 	if ts.encoder != nil {
 		_ = ts.encoder.Encode(ln)
 	}
-	// Snapshot subscribers under the lock so an unsubscribe doesn't
-	// race with the fanout.
-	subs := append([]chan Line(nil), ts.subscribers...)
-	ts.mu.Unlock()
-	for _, ch := range subs {
+	for _, ch := range ts.subscribers {
 		select {
 		case ch <- ln:
 		default:

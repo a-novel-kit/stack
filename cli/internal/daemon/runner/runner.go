@@ -120,6 +120,12 @@ type Runner struct {
 	// immediately. See infraStateCacheTTL.
 	infraStateMu    sync.Mutex
 	infraStateCache map[string]infraStateCacheEntry // keyed by stack
+	// infraStateGen bumps on every InvalidateInfraStateCache call.
+	// InfraStatesOf snapshots it before its (long) podman scan and
+	// only writes the cache if the generation is still the same on
+	// completion — otherwise the scan's data is older than the
+	// invalidation and would resurrect the just-killed state.
+	infraStateGen uint64
 }
 
 // infraStateCacheEntry is one (stack → states snapshot, when scanned).
@@ -159,6 +165,7 @@ func New(disc []*discovery.Stack, alloc *env.Allocator, builder *env.Builder, lo
 func (r *Runner) InvalidateInfraStateCache() {
 	r.infraStateMu.Lock()
 	r.infraStateCache = make(map[string]infraStateCacheEntry)
+	r.infraStateGen++
 	r.infraStateMu.Unlock()
 }
 

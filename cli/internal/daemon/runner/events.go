@@ -70,14 +70,24 @@ func (r *Runner) SubscribePhases(filter func(PhaseEvent) bool) (<-chan PhaseEven
 
 // emitPhase is the runner-internal fanout. Called from transition() and
 // markTerminated() so every subscriber sees the same view as Instance
-// readers. Snapshots subscribers under the lock, then sends non-blocking
-// outside the lock.
+// readers.
+//
+// The fanout holds subsMu.RLock for the ENTIRE iteration rather than
+// snapshotting then sending outside the lock. The earlier
+// snapshot-then-send pattern races with unsub: unsub removes the sub
+// from the slice AND closes sub.ch under the write lock, but a
+// snapshot taken before the unsub still holds the *eventSub pointer
+// and would panic on `send on closed channel`. Holding the read lock
+// while sending serializes correctly against unsub's write lock
+// without any close-detection ceremony. The cost is bounded:
+// `select-default` makes every send non-blocking, so iteration is
+// O(N_subs × microseconds) — well below the time any caller of
+// emitPhase already spends inside the runner's `mu`.
 func (r *Runner) emitPhase(ev PhaseEvent) {
 	ev.Ts = time.Now()
 	r.subsMu.RLock()
-	subs := append([]*eventSub(nil), r.subs...)
-	r.subsMu.RUnlock()
-	for _, s := range subs {
+	defer r.subsMu.RUnlock()
+	for _, s := range r.subs {
 		if s.filter != nil && !s.filter(ev) {
 			continue
 		}

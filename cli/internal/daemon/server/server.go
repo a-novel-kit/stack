@@ -265,15 +265,24 @@ func (s *Server) Shutdown(ctx context.Context, req *connect.Request[anovelv1.Shu
 		}
 		goExecIDs = append(goExecIDs, inst.ID)
 	}
-	// 2) Kill them in parallel-ish (10s grace each, but issued back-to-back)
-	//    so a single slow shutdown doesn't fan-out the total wait.
+	// 2) Kill them in parallel — runner.Kill is synchronous (blocks
+	//    until the grace expires) so a serial loop would take
+	//    N × grace seconds. With one goroutine per target, total kill
+	//    time is bounded by the longest grace plus a tiny scheduling
+	//    overhead. Background context (not the request ctx) on
+	//    purpose: shutdown is a commitment, a cancelled RPC shouldn't
+	//    leave half-killed targets.
 	killCtx, cancelKill := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelKill()
+	var killWG sync.WaitGroup
+	killWG.Add(len(goExecIDs))
 	for _, id := range goExecIDs {
-		// Best-effort: log the error path via the response counts rather
-		// than rejecting the whole shutdown.
-		_ = s.runner.Kill(killCtx, id, 10*time.Second)
+		go func(id string) {
+			defer killWG.Done()
+			_ = s.runner.Kill(killCtx, id, 10*time.Second)
+		}(id)
 	}
+	killWG.Wait()
 	// 3) If force, tear down every active infra session.
 	infraTorn := 0
 	if force {
@@ -711,9 +720,17 @@ func (s *Server) StreamLogs(ctx context.Context, req *connect.Request[anovelv1.S
 
 	// Subscribe BEFORE reading the file when in --follow mode — so any
 	// line written between snapshot and subscribe doesn't get lost.
+	// The unsub MUST fire on handler exit so the subscriber slice on
+	// the target's stream doesn't accumulate dead channels (one per
+	// disconnected client) over the target's lifetime.
 	var sub <-chan logs.Line
+	var unsubLogs func()
 	if follow {
-		sub, _ = s.logs.Subscribe(tid)
+		var ok bool
+		sub, unsubLogs, ok = s.logs.Subscribe(tid)
+		if ok && unsubLogs != nil {
+			defer unsubLogs()
+		}
 	}
 
 	if err := streamFileToClient(ctx, path, stream, req.Msg.GetStream()); err != nil {

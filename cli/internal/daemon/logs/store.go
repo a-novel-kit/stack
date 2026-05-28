@@ -115,33 +115,59 @@ func (s *Store) OpenForWrite(targetID, stack, service, target string) (*Writer, 
 	return &Writer{ts: ts}, nil
 }
 
-// Subscribe adds a delivery channel for `targetID` and returns it. The
-// channel is buffered modestly (32 slots); slow subscribers that don't
-// drain get dropped lines silently — the daemon never blocks the runner
-// on a stuck client. Caller MUST receive from the channel until it's
-// closed; the close signal means "no more lines coming."
+// Subscribe adds a delivery channel for `targetID` and returns it
+// alongside an unsubscribe function the caller MUST defer-call on
+// exit. Without that call, the subscriber channel stays in the
+// stream's fanout list until the target itself terminates — a leak
+// that grows linearly with disconnect rate for long-running targets.
 //
-// Returns (nil, false) if no stream exists yet for the target — the
-// caller can poll back later or read the archived run instead.
-func (s *Store) Subscribe(targetID string) (<-chan Line, bool) {
+// The channel is buffered modestly (32 slots); slow subscribers that
+// don't drain get dropped lines silently — the daemon never blocks the
+// runner on a stuck client.
+//
+// Returns (nil, nil, false) if no stream exists yet for the target —
+// the caller can poll back later or read the archived run instead.
+func (s *Store) Subscribe(targetID string) (<-chan Line, func(), bool) {
 	s.mu.RLock()
 	ts, ok := s.streams[targetID]
 	s.mu.RUnlock()
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	if ts.closed {
 		// Stream is already over; return a closed channel so the
-		// subscriber gets a clean EOF immediately.
+		// subscriber gets a clean EOF immediately. No unsub needed —
+		// nothing was registered with the fanout.
 		ch := make(chan Line)
 		close(ch)
-		return ch, true
+		return ch, func() {}, true
 	}
 	ch := make(chan Line, 32)
 	ts.subscribers = append(ts.subscribers, ch)
-	return ch, true
+	unsub := func() {
+		ts.mu.Lock()
+		defer ts.mu.Unlock()
+		if ts.closed {
+			// close() already drained the slice and closed every
+			// channel; nothing to do.
+			return
+		}
+		for i, c := range ts.subscribers {
+			if c == ch {
+				ts.subscribers = append(ts.subscribers[:i], ts.subscribers[i+1:]...)
+				break
+			}
+		}
+		// Don't close ch here — the fanout in writer.go holds ts.mu
+		// during sends (see flush) so it's serialized against this
+		// unsub, but a separate close+send race is easier to reason
+		// about by leaving the channel unclosed. Readers know to stop
+		// because no more sends arrive; GC reclaims when the reader
+		// goroutine exits.
+	}
+	return ch, unsub, true
 }
 
 // CloseTarget marks the target's stream as done — closes the file

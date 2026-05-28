@@ -296,6 +296,12 @@ func (r *Runner) InfraStatesOf(ctx context.Context, stack string) map[string]Inf
 		r.infraStateMu.Unlock()
 		return cp
 	}
+	// Snapshot the generation. The reseed at the end of this function
+	// will refuse to write the cache if Invalidate fired in the
+	// meantime — otherwise a long podman scan started PRE-mutation
+	// would resurrect pre-mutation state after the mutation cleared
+	// the cache.
+	startGen := r.infraStateGen
 	r.infraStateMu.Unlock()
 
 	out := make(map[string]InfraState)
@@ -347,16 +353,17 @@ func (r *Runner) InfraStatesOf(ctx context.Context, stack string) map[string]Inf
 		}
 		out[svc+"/"+infraName] = InfraState{ContainerID: e.ID, Phase: p, Health: anovelv1.Health_HEALTH_UNSPECIFIED}
 	}
-	// Seed cache for the TTL window. Copy `out` so a subsequent caller
-	// reading from the cache doesn't share the same map with the
-	// in-progress accumulator (defensive — both happen to be safe in
-	// today's flow but cheap to keep correct).
+	// Seed cache for the TTL window — but only if no invalidation
+	// happened during our scan. Otherwise we'd resurrect pre-mutation
+	// state for the next ListServices caller until TTL expires.
 	cached := make(map[string]InfraState, len(out))
 	for k, v := range out {
 		cached[k] = v
 	}
 	r.infraStateMu.Lock()
-	r.infraStateCache[stack] = infraStateCacheEntry{at: time.Now(), states: cached}
+	if r.infraStateGen == startGen {
+		r.infraStateCache[stack] = infraStateCacheEntry{at: time.Now(), states: cached}
+	}
 	r.infraStateMu.Unlock()
 	return out
 }

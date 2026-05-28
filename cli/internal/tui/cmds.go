@@ -197,7 +197,7 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 			return setStatusCmd(statusError, "no active target — select one with ←/→ first")
 		}
 		mode := anovelv1.Mode_MODE_GO_EXEC
-		modeLabel := "go-exec"
+		modeLabel := modeGoExec
 		if len(args) > 0 && args[0] == modeContainer {
 			mode = anovelv1.Mode_MODE_CONTAINER
 			modeLabel = modeContainer

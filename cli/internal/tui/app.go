@@ -68,10 +68,13 @@ func Run() error {
 const (
 	tabKindInfra  = "infra"
 	tabKindTarget = "target"
-	// modeContainer matches palette commands like ":start container".
-	// CLI/RPC use the typed anovelv1.Mode_MODE_CONTAINER enum; this
-	// string lives in the palette-args layer where everything is text.
+	// modeContainer / modeGoExec match palette args like ":start
+	// container" and the user-facing labels in renderRight's header.
+	// CLI/RPC use the typed anovelv1.Mode_MODE_* enums; these strings
+	// live in the palette-args and label-display layers where
+	// everything is text.
 	modeContainer = "container"
+	modeGoExec    = "go-exec"
 )
 
 // view is the discriminator for top-level screens.
