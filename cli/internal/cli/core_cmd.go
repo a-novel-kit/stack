@@ -9,6 +9,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -121,7 +122,7 @@ For graceful 'restart-the-daemon-and-relaunch-my-targets', prefer
 			if _, err := c.Ping(pingCtx); err != nil {
 				cancel()
 				if rpc.IsNotRunning(err) {
-					fmt.Fprintln(os.Stderr, "a-novel: daemon not running")
+					_, _ = fmt.Fprintln(os.Stderr, "a-novel: daemon not running")
 					return nil
 				}
 				return err
@@ -138,11 +139,11 @@ For graceful 'restart-the-daemon-and-relaunch-my-targets', prefer
 				return err
 			}
 			if force {
-				fmt.Fprintf(cmd.OutOrStdout(),
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 					"shutdown: %d go-exec target(s) killed, %d service infra torn down\n",
 					resp.GetGoExecKilled(), resp.GetInfraServicesTornDown())
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(),
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 					"shutdown: %d go-exec target(s) killed (containers left running)\n",
 					resp.GetGoExecKilled())
 			}
@@ -164,7 +165,7 @@ func waitForDaemonGone(ctx context.Context, c *rpc.Client, timeout time.Duration
 		_, err := c.Ping(pingCtx)
 		cancel()
 		if err != nil && rpc.IsNotRunning(err) {
-			fmt.Fprintln(out, "daemon stopped.")
+			_, _ = fmt.Fprintln(out, "daemon stopped.")
 			return nil
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -207,7 +208,7 @@ If the daemon is already down, this is just 'core start'.`,
 			daemonUp := pingErr == nil
 			if daemonUp {
 				if preserve && force {
-					return fmt.Errorf("--preserve-targets and --force are mutually exclusive (force tears down everything; preserve assumes the targets continue)")
+					return errors.New("--preserve-targets and --force are mutually exclusive (force tears down everything; preserve assumes the targets continue)")
 				}
 				if preserve {
 					// Same path as 'core prepare-reinstall' — write the
@@ -218,7 +219,7 @@ If the daemon is already down, this is just 'core start'.`,
 					if err != nil {
 						return err
 					}
-					fmt.Fprintf(cmd.OutOrStdout(),
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 						"checkpoint written: %s (%d go-exec target(s))\n",
 						resp.GetCheckpointPath(), resp.GetGoExecTargetCount())
 				} else {
@@ -229,11 +230,11 @@ If the daemon is already down, this is just 'core start'.`,
 						return err
 					}
 					if force {
-						fmt.Fprintf(cmd.OutOrStdout(),
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 							"shutdown: %d go-exec target(s) killed, %d service infra torn down\n",
 							resp.GetGoExecKilled(), resp.GetInfraServicesTornDown())
 					} else {
-						fmt.Fprintf(cmd.OutOrStdout(),
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 							"shutdown: %d go-exec target(s) killed (containers left running)\n",
 							resp.GetGoExecKilled())
 					}
@@ -312,7 +313,7 @@ during development. Not for direct manual use — for an immediate stop use
 			c := rpc.New("")
 			if _, err := c.Ping(ctx); err != nil {
 				if rpc.IsNotRunning(err) {
-					fmt.Fprintln(cmd.OutOrStderr(), "a-novel: daemon not running (nothing to checkpoint)")
+					_, _ = fmt.Fprintln(cmd.OutOrStderr(), "a-novel: daemon not running (nothing to checkpoint)")
 					return nil
 				}
 				return err
@@ -321,7 +322,7 @@ during development. Not for direct manual use — for an immediate stop use
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "checkpoint written: %s (%d go-exec target(s))\n",
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "checkpoint written: %s (%d go-exec target(s))\n",
 				resp.GetCheckpointPath(), resp.GetGoExecTargetCount())
 			return waitForDaemonGone(ctx, c, 10*time.Second, cmd.OutOrStdout())
 		},
@@ -438,5 +439,5 @@ func startDetached() error {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	return fmt.Errorf("daemon did not become ready within 5s; check stderr by running `a-novel core start --foreground`")
+	return errors.New("daemon did not become ready within 5s; check stderr by running `a-novel core start --foreground`")
 }

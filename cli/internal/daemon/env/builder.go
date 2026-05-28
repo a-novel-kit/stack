@@ -180,7 +180,7 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 		user := nonEmptyOr(out["POSTGRES_USER"], "postgres")
 		pass := nonEmptyOr(out["POSTGRES_PASSWORD"], "postgres")
 		db := nonEmptyOr(out["POSTGRES_DB"], "postgres")
-		out["POSTGRES_DSN"] = "postgres://" + user + ":" + pass + "@localhost:" + portStr + "/" + db + "?sslmode=disable"
+		out["POSTGRES_DSN"] = "postgres://" + user + ":" + pass + "@" + hostLocalhost + ":" + portStr + "/" + db + "?sslmode=disable"
 	}
 
 	// Operator un-prefix: this target's OWN service prefix is stripped
@@ -205,7 +205,7 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 	// produces the double-prefix bug
 	// (SERVICE_X_SERVICE_X_SERVICE_Y_VAR).
 	for k, v := range out {
-		if !(isAllocatedKind(k) || isSynthesizedKind(k)) {
+		if !isAllocatedKind(k) && !isSynthesizedKind(k) {
 			continue
 		}
 		if owner2, _ := resolveOwner(k, allServices); owner2 != "" {
@@ -332,7 +332,7 @@ func (b *Builder) resolveOne(varName, owner string, allServices []string, alloca
 	}
 	// *_HOST → synthesized.
 	if isHostKind(localVar) {
-		return "localhost", nil
+		return hostLocalhost, nil
 	}
 	// *_URL → synthesized from the matching _PORT (must have been
 	// resolved already, else we can't compose the URL).
@@ -363,9 +363,11 @@ func stripPrefix(s, prefix string) (string, bool) {
 func isSynthesizedKind(k string) bool {
 	return isHostKind(k) || isURLKind(k)
 }
+
 func isHostKind(k string) bool {
 	return len(k) > len("_HOST") && k[len(k)-len("_HOST"):] == "_HOST"
 }
+
 func isURLKind(k string) bool {
 	return len(k) > len("_URL") && k[len(k)-len("_URL"):] == "_URL"
 }

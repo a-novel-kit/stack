@@ -141,7 +141,7 @@ func (e *composeEnv) UnmarshalYAML(value *yaml.Node) error {
 		}
 		for _, kv := range list {
 			// KEY=value — split on first '='.
-			for i := 0; i < len(kv); i++ {
+			for i := range len(kv) {
 				if kv[i] == '=' {
 					out[kv[:i]] = kv[i+1:]
 					break

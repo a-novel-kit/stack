@@ -98,7 +98,7 @@ func TestEvents_FullBufferDrops(t *testing.T) {
 	_, unsub := r.SubscribePhases(nil)
 	defer unsub()
 	start := time.Now()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		r.emitPhase(PhaseEvent{TargetID: "spam"})
 	}
 	if dur := time.Since(start); dur > 100*time.Millisecond {
@@ -111,7 +111,7 @@ func TestEvents_MultipleSubscribers(t *testing.T) {
 	const N = 8
 	chans := make([]<-chan PhaseEvent, N)
 	unsubs := make([]func(), N)
-	for i := 0; i < N; i++ {
+	for i := range N {
 		chans[i], unsubs[i] = r.SubscribePhases(nil)
 	}
 	defer func() {
@@ -122,7 +122,7 @@ func TestEvents_MultipleSubscribers(t *testing.T) {
 	r.emitPhase(PhaseEvent{TargetID: "broadcast"})
 	var wg sync.WaitGroup
 	wg.Add(N)
-	for i := 0; i < N; i++ {
+	for i := range N {
 		go func(i int) {
 			defer wg.Done()
 			select {

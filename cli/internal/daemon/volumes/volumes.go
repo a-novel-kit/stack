@@ -39,9 +39,9 @@ type Volume struct {
 	FullName    string // podman volume name (`<stack>_<service>_<name>`)
 	Service     string
 	Stack       string
-	SizeBytes   int64  // 0 if volume doesn't exist yet
-	BackupCount int32  // archives in our backups dir
-	Exists      bool   // does the podman volume actually exist?
+	SizeBytes   int64 // 0 if volume doesn't exist yet
+	BackupCount int32 // archives in our backups dir
+	Exists      bool  // does the podman volume actually exist?
 }
 
 // PodmanVolumeName returns the podman-namespaced volume name from a

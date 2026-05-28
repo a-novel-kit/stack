@@ -28,45 +28,45 @@ func bootstrapStack(s stacks.Stack, nonInteractive bool, prompter Prompter) Stac
 	case statErr == nil && info.IsDir():
 		// Exists. Is it a valid stack repo?
 		if isValidStackRepo(s.Path) {
-			out.Status = "valid"
+			out.Status = statusValid
 			out.Detail = "already cloned at " + s.Path
 			return out
 		}
 		// Exists but not a valid repo with our remote.
-		out.Status = "refused"
+		out.Status = statusRefused
 		out.Detail = "path exists at " + s.Path + " but is not a git repo for " + stackRemoteURL
 		return out
 	case statErr == nil:
 		// Exists as a file — won't touch it.
-		out.Status = "refused"
+		out.Status = statusRefused
 		out.Detail = "path " + s.Path + " exists and is not a directory"
 		return out
 	case os.IsNotExist(statErr):
 		// Missing — clone or prompt.
 		if s.IsDefault {
 			if nonInteractive || prompter == nil {
-				out.Status = "skipped"
+				out.Status = statusSkipped
 				out.Detail = "default stack missing at " + s.Path + " (re-run interactively to clone, or set it up manually)"
 				return out
 			}
 			yes, err := prompter.YesNo(fmt.Sprintf(
 				"Default stack not found at %s. Clone %s into it?", s.Path, stackRemoteURL))
 			if err != nil || !yes {
-				out.Status = "skipped"
+				out.Status = statusSkipped
 				out.Detail = "user declined; set up " + s.Path + " manually before running `a-novel core start`"
 				return out
 			}
 		}
 		if err := cloneStack(s.Path); err != nil {
-			out.Status = "refused"
+			out.Status = statusRefused
 			out.Detail = "clone failed: " + err.Error()
 			return out
 		}
-		out.Status = "cloned"
+		out.Status = statusCloned
 		out.Detail = "cloned " + stackRemoteURL + " → " + s.Path
 		return out
 	default:
-		out.Status = "refused"
+		out.Status = statusRefused
 		out.Detail = "stat failed: " + statErr.Error()
 		return out
 	}

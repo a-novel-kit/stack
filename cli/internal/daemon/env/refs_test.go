@@ -89,9 +89,9 @@ func TestResolveOwner(t *testing.T) {
 		"service-json-keys",
 	}
 	cases := []struct {
-		varName     string
-		wantOwner   string
-		wantLocal   string
+		varName   string
+		wantOwner string
+		wantLocal string
 	}{
 		{"SERVICE_JSON_KEYS_GRPC_PORT", "service-json-keys", "GRPC_PORT"},
 		{"SERVICE_AUTHENTICATION_REST_PORT", "service-authentication", "REST_PORT"},

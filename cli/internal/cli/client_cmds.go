@@ -10,6 +10,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -23,15 +24,29 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
+// Shared string constants for the CLI surface. Mode values (`go-exec`,
+// `container`) appear in flag defaults, palette args, AND user-visible
+// labels — same canonical token everywhere. Entity-kind values
+// (`target`, `infra`) discriminate the --kind filter and the
+// entity-ID parser's sentinel segment.
+const (
+	modeGoExec     = "go-exec"
+	modeContainer  = "container"
+	kindTarget     = "target"
+	kindInfra      = "infra"
+	cmdNameService = "service"
+)
+
 // Common flag values shared across most daemon-backed commands.
 type stackScope struct {
-	stack      string
-	allStacks  bool
+	stack     string
+	allStacks bool
 }
 
 func (s *stackScope) bind(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&s.stack, "stack", "", "stack name (default: first in $A_NOVEL_STACKS)")
 }
+
 func (s *stackScope) bindAll(cmd *cobra.Command) {
 	s.bind(cmd)
 	cmd.Flags().BoolVar(&s.allStacks, "all-stacks", false, "operate across every registered stack")
@@ -128,11 +143,11 @@ With --json, emits one JSON object per service for machine consumption
 			switch kind {
 			case "", "all":
 				// default — show both
-			case "target":
+			case kindTarget:
 				for _, s := range services {
 					s.Infra = nil
 				}
-			case "infra":
+			case kindInfra:
 				for _, s := range services {
 					s.Targets = nil
 				}
@@ -166,14 +181,14 @@ func renderPs(w io.Writer, services []*anovelv1.Service, asJSON bool) {
 		return
 	}
 	if len(services) == 0 {
-		fmt.Fprintln(w, "(no services)")
+		_, _ = fmt.Fprintln(w, "(no services)")
 		return
 	}
 	for i, s := range services {
 		if i > 0 {
-			fmt.Fprintln(w)
+			_, _ = fmt.Fprintln(w)
 		}
-		fmt.Fprintf(w, "%s  (stack %s)\n", s.GetName(), s.GetStack())
+		_, _ = fmt.Fprintf(w, "%s  (stack %s)\n", s.GetName(), s.GetStack())
 		// Targets first (the user's primary interaction surface),
 		// then infra. The 'kind' column ('1shot' / 'longr' / 'infra')
 		// + the trailing fully-qualified ID make the two
@@ -182,21 +197,22 @@ func renderPs(w io.Writer, services []*anovelv1.Service, asJSON bool) {
 		for _, t := range s.GetTargets() {
 			kindStr := targetKindShort(t.GetKind())
 			id := s.GetStack() + "/" + s.GetName() + "/" + t.GetName()
-			fmt.Fprintf(w, "  %-6s %-30s  %-12s  %s\n",
+			_, _ = fmt.Fprintf(w, "  %-6s %-30s  %-12s  %s\n",
 				kindStr, t.GetName(), targetStatusLabel(t), id)
 		}
 		for _, in := range s.GetInfra() {
 			label := phaseLabel(in.GetPhase())
-			if h := in.GetHealth(); h == anovelv1.Health_HEALTH_HEALTHY {
+			switch in.GetHealth() {
+			case anovelv1.Health_HEALTH_HEALTHY:
 				label += " healthy"
-			} else if h == anovelv1.Health_HEALTH_UNHEALTHY {
+			case anovelv1.Health_HEALTH_UNHEALTHY:
 				label += " unhealthy"
-			} else if h == anovelv1.Health_HEALTH_STARTING {
+			case anovelv1.Health_HEALTH_STARTING:
 				label += " starting"
 			}
 			id := s.GetStack() + "/" + s.GetName() + "/infra/" + in.GetName()
-			fmt.Fprintf(w, "  %-6s %-30s  %-10s  %s\n",
-				"infra", in.GetName(), label, id)
+			_, _ = fmt.Fprintf(w, "  %-6s %-30s  %-10s  %s\n",
+				kindInfra, in.GetName(), label, id)
 		}
 	}
 }
@@ -281,7 +297,7 @@ container health.`,
 			if err != nil {
 				return err
 			}
-			fmt.Fprint(cmd.OutOrStdout(), resp.GetRendered())
+			_, _ = fmt.Fprint(cmd.OutOrStdout(), resp.GetRendered())
 			return nil
 		},
 	}
@@ -292,7 +308,7 @@ container health.`,
 
 func newServiceCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "service",
+		Use:   cmdNameService,
 		Short: "Operate on a service's infrastructure and overall state",
 	}
 	cmd.AddCommand(newServiceStatusCmd())
@@ -323,7 +339,7 @@ func newServiceStatusCmd() *cobra.Command {
 
 func newServiceInfraCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "infra",
+		Use:   kindInfra,
 		Short: "Manage a service's infrastructure (containers without Go counterparts)",
 		Long: `Bring up or tear down the compose services that aren't tied to a 'cmd/'
 target — typically the database (postgres-<service>). 'infra start' also
@@ -349,20 +365,20 @@ func newServiceInfraStartCmd() *cobra.Command {
 			ctx := cmd.Context()
 			c := rpc.New("")
 			m := anovelv1.Mode_MODE_GO_EXEC
-			if oneShotsMode == "container" {
+			if oneShotsMode == modeContainer {
 				m = anovelv1.Mode_MODE_CONTAINER
 			}
 			resp, err := c.StartInfra(ctx, ss.stack, args[0], m)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "infra-up for %s (one-shots ran in %s mode)\n",
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "infra-up for %s (one-shots ran in %s mode)\n",
 				resp.GetService().GetName(), modeLabel(m))
 			return nil
 		},
 	}
 	ss.bind(cmd)
-	cmd.Flags().StringVar(&oneShotsMode, "one-shots", "go-exec",
+	cmd.Flags().StringVar(&oneShotsMode, "one-shots", modeGoExec,
 		"mode for one-shot targets auto-run with infra (go-exec | container)")
 	return cmd
 }
@@ -384,7 +400,7 @@ together.`,
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "infra-down for %s\n", resp.GetService().GetName())
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "infra-down for %s\n", resp.GetService().GetName())
 			return nil
 		},
 	}
@@ -428,14 +444,14 @@ attempting --mode=container today returns a clear Unimplemented error.`,
 			c := rpc.New("")
 			id := resolveTargetID(args[0], ss.stack)
 			m := anovelv1.Mode_MODE_GO_EXEC
-			if mode == "container" {
+			if mode == modeContainer {
 				m = anovelv1.Mode_MODE_CONTAINER
 			}
 			resp, err := c.StartTarget(ctx, id, m)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "started %s (mode=%s, phase=%s, %s)\n",
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "started %s (mode=%s, phase=%s, %s)\n",
 				resp.GetTarget().GetId(),
 				modeLabel(resp.GetTarget().GetMode()),
 				phaseLabel(resp.GetTarget().GetPhase()),
@@ -444,7 +460,7 @@ attempting --mode=container today returns a clear Unimplemented error.`,
 		},
 	}
 	ss.bind(cmd)
-	cmd.Flags().StringVar(&mode, "mode", "go-exec", "execution mode (go-exec | container)")
+	cmd.Flags().StringVar(&mode, "mode", modeGoExec, "execution mode (go-exec | container)")
 	return cmd
 }
 
@@ -490,7 +506,7 @@ disambiguated by the stack-prefixed form.`,
 				if err != nil {
 					return err
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "stopped infra %s\n", ref.ID)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "stopped infra %s\n", ref.ID)
 				return nil
 			}
 			resp, err := c.KillTarget(ctx, ref.ID, timeout)
@@ -499,10 +515,10 @@ disambiguated by the stack-prefixed form.`,
 			}
 			t := resp.GetTarget()
 			if t == nil || t.GetId() == "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "%s: not running (no-op)\n", ref.ID)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: not running (no-op)\n", ref.ID)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "killed %s (phase=%s, exit=%s)\n",
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "killed %s (phase=%s, exit=%s)\n",
 				t.GetId(), phaseLabel(t.GetPhase()), exitLabel(t.GetExitReason()))
 			return nil
 		},
@@ -536,13 +552,14 @@ is reused. --mode is ignored for infra (infra is always containerized).`,
 				if err != nil {
 					return err
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "restarted infra %s\n", ref.ID)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "restarted infra %s\n", ref.ID)
 				return nil
 			}
 			m := anovelv1.Mode_MODE_UNSPECIFIED
-			if mode == "go-exec" {
+			switch mode {
+			case modeGoExec:
 				m = anovelv1.Mode_MODE_GO_EXEC
-			} else if mode == "container" {
+			case modeContainer:
 				m = anovelv1.Mode_MODE_CONTAINER
 			}
 			resp, err := c.RestartTarget(ctx, ref.ID, m)
@@ -550,7 +567,7 @@ is reused. --mode is ignored for infra (infra is always containerized).`,
 				return err
 			}
 			t := resp.GetTarget()
-			fmt.Fprintf(cmd.OutOrStdout(), "restarted %s (mode=%s, phase=%s, %s)\n",
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "restarted %s (mode=%s, phase=%s, %s)\n",
 				t.GetId(), modeLabel(t.GetMode()), phaseLabel(t.GetPhase()), runtimeIdentLabel(t))
 			return nil
 		},
@@ -626,15 +643,16 @@ func parseEntityID(arg, defaultStack string) entityRef {
 	}
 	// Target.
 	ref := entityRef{}
-	if len(parts) == 3 {
+	switch len(parts) {
+	case 3:
 		ref.Stack = parts[0]
 		ref.Service = parts[1]
 		ref.Target = parts[2]
-	} else if len(parts) == 2 {
+	case 2:
 		ref.Stack = defaultStack
 		ref.Service = parts[0]
 		ref.Target = parts[1]
-	} else {
+	default:
 		// Unrecognized — treat as a bare name and let the daemon
 		// 404, with the message pointing at the right shape.
 		ref.Stack = defaultStack
@@ -649,9 +667,9 @@ func parseEntityID(arg, defaultStack string) entityRef {
 func modeLabel(m anovelv1.Mode) string {
 	switch m {
 	case anovelv1.Mode_MODE_GO_EXEC:
-		return "go-exec"
+		return modeGoExec
 	case anovelv1.Mode_MODE_CONTAINER:
-		return "container"
+		return modeContainer
 	default:
 		return "?"
 	}
@@ -716,7 +734,7 @@ current/latest session.`,
 			// log files, not the daemon. Refuse --previous / --run-id
 			// up-front rather than letting the daemon return Unimplemented.
 			if ref.IsInfra && (previous || runID != "") {
-				return fmt.Errorf("--previous / --run-id are not supported for infra (podman owns its log file)")
+				return errors.New("--previous / --run-id are not supported for infra (podman owns its log file)")
 			}
 			// Resolve --previous to the most-recent archived run id.
 			if previous && runID == "" {
@@ -790,7 +808,7 @@ func printLogLine(w io.Writer, ln *anovelv1.LogLine) {
 	if ln.GetStream() == anovelv1.LogStream_LOG_STREAM_STDERR {
 		tag = "err"
 	}
-	fmt.Fprintf(w, "%s %s %s\n",
+	_, _ = fmt.Fprintf(w, "%s %s %s\n",
 		ln.GetTs().AsTime().Format("15:04:05.000"),
 		tag,
 		ln.GetLine())
@@ -872,7 +890,7 @@ func renderEnv(w io.Writer, entries []*anovelv1.EnvEntry, format string) {
 		}
 	case "dotenv":
 		for _, e := range entries {
-			fmt.Fprintf(w, "%s=%s\n", e.GetKey(), e.GetValue())
+			_, _ = fmt.Fprintf(w, "%s=%s\n", e.GetKey(), e.GetValue())
 		}
 	default: // "shell"
 		var lastSvc string
@@ -883,15 +901,15 @@ func renderEnv(w io.Writer, entries []*anovelv1.EnvEntry, format string) {
 			}
 			if svc != lastSvc {
 				if lastSvc != "" {
-					fmt.Fprintln(w)
+					_, _ = fmt.Fprintln(w)
 				}
-				fmt.Fprintf(w, "# %s\n", svc)
+				_, _ = fmt.Fprintf(w, "# %s\n", svc)
 				lastSvc = svc
 			}
 			// Single-quote the value, escaping any embedded single quotes
 			// via the standard '"'"' trick. Safe for shell eval.
 			esc := strings.ReplaceAll(e.GetValue(), "'", `'"'"'`)
-			fmt.Fprintf(w, "export %s='%s'\n", e.GetKey(), esc)
+			_, _ = fmt.Fprintf(w, "export %s='%s'\n", e.GetKey(), esc)
 		}
 	}
 }
@@ -938,12 +956,12 @@ func newVolumeListCmd() *cobra.Command {
 				return err
 			}
 			if len(resp.GetVolumes()) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "(no volumes declared)")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "(no volumes declared)")
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%-40s %12s %8s\n", "VOLUME", "SIZE", "BACKUPS")
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s %12s %8s\n", "VOLUME", "SIZE", "BACKUPS")
 			for _, v := range resp.GetVolumes() {
-				fmt.Fprintf(cmd.OutOrStdout(), "%-40s %12s %8d\n",
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s %12s %8d\n",
 					v.GetName(), humanBytes(v.GetSizeBytes()), v.GetBackupCount())
 			}
 			return nil
@@ -973,7 +991,7 @@ archive's consistency is then your responsibility.`,
 				return err
 			}
 			for _, p := range resp.GetArchivePaths() {
-				fmt.Fprintln(cmd.OutOrStdout(), p)
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), p)
 			}
 			return nil
 		},
@@ -1005,7 +1023,7 @@ file is validated (decompresses cleanly) before any volume is touched.`,
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "restored: %v\n", resp.GetRestoredVolumes())
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "restored: %v\n", resp.GetRestoredVolumes())
 			return nil
 		},
 	}
@@ -1035,7 +1053,7 @@ Refuses while the service is up. --force cascade-stops first.`,
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "cleared: %v\n", resp.GetClearedVolumes())
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "cleared: %v\n", resp.GetClearedVolumes())
 			return nil
 		},
 	}
@@ -1128,7 +1146,7 @@ the underlying command's success.`,
 				if ev.GetStream() == anovelv1.LogStream_LOG_STREAM_STDERR {
 					w = cmd.ErrOrStderr()
 				}
-				fmt.Fprintln(w, ev.GetLine())
+				_, _ = fmt.Fprintln(w, ev.GetLine())
 			}
 			if err := stream.Err(); err != nil && ctx.Err() == nil {
 				return err
@@ -1167,7 +1185,7 @@ manage.`,
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), resp.GetHint())
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), resp.GetHint())
 			return nil
 		},
 	}
@@ -1219,7 +1237,7 @@ narrow the stream.`,
 						"description": ev.GetDescription(),
 					})
 				} else {
-					fmt.Fprintf(cmd.OutOrStdout(), "%s  %s\n",
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s\n",
 						ev.GetTs().AsTime().Format("15:04:05.000"),
 						ev.GetDescription())
 				}
@@ -1282,7 +1300,7 @@ func runPsWatch(
 		// avoids accumulating frames in the scrollback.
 		resp, err := c.ListServices(ctx, stack)
 		if err != nil {
-			fmt.Fprintf(out, "watch: refresh failed: %v\n", err)
+			_, _ = fmt.Fprintf(out, "watch: refresh failed: %v\n", err)
 			continue
 		}
 		fresh := resp.GetServices()
@@ -1309,7 +1327,7 @@ func runPsWatch(
 		// (For non-TTY pipes the escape sequences are harmless filler.)
 		_, _ = fmt.Fprint(out, "\x1b[H\x1b[2J")
 		renderPs(out, fresh, false)
-		fmt.Fprintf(out, "\n%s  %s\n",
+		_, _ = fmt.Fprintf(out, "\n%s  %s\n",
 			ev.GetTs().AsTime().Format("15:04:05"), ev.GetDescription())
 	}
 	if err := stream.Err(); err != nil && ctx.Err() == nil {

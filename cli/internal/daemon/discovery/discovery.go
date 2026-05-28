@@ -28,10 +28,10 @@ type Stack struct {
 // Service is one app/service-* directory, with everything we discovered
 // about its compose file.
 type Service struct {
-	Name        string  // e.g., "service-json-keys"
-	Stack       string  // owning stack name
-	Path        string  // absolute path to the service directory
-	ComposePath string  // absolute path to its compose file
+	Name        string // e.g., "service-json-keys"
+	Stack       string // owning stack name
+	Path        string // absolute path to the service directory
+	ComposePath string // absolute path to its compose file
 	Targets     []*Target
 	Infra       []*Infra
 	Volumes     []*Volume
@@ -67,15 +67,15 @@ func (t *Target) ID() string {
 // Infra is a compose service with no profile assignment and no matching
 // cmd/<name>/ directory.
 type Infra struct {
-	Name        string  // compose service name, e.g., "postgres-json-keys"
-	Service     string  // owning service name
-	Stack       string  // owning stack name
-	Dockerfile  string  // referenced Dockerfile (for build)
+	Name           string // compose service name, e.g., "postgres-json-keys"
+	Service        string // owning service name
+	Stack          string // owning stack name
+	Dockerfile     string // referenced Dockerfile (for build)
 	HasHealthcheck bool
-	DependsOn   []string
-	Ports       []string
-	Environment map[string]string
-	Volumes     []string // volume mounts the infra declares
+	DependsOn      []string
+	Ports          []string
+	Environment    map[string]string
+	Volumes        []string // volume mounts the infra declares
 }
 
 // Volume is a top-level compose `volumes:` entry, scoped to its service.

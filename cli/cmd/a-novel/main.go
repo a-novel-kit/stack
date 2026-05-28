@@ -44,9 +44,6 @@ const (
 	exitAborted = 130 // user interrupted before completing a run (128+SIGINT)
 )
 
-// cmdHelp is the help subcommand name (also the bare/empty-command default).
-const cmdHelp = "help"
-
 // cmdTest is the test subcommand name, which also happens to be the `go test`
 // subcommand token — one constant for both readings.
 const cmdTest = "test"
@@ -230,13 +227,6 @@ func parseTypes(v string) map[detect.Kind]bool {
 // removed in the daemon redesign. The `a-novel run <verb>` surface now lives
 // in internal/cli, talks to the daemon via internal/client/rpc, and
 // supersedes every responsibility this function had.)
-
-func typeScope(o buildOpts) string {
-	if o.types != nil {
-		return " matching --type"
-	}
-	return ""
-}
 
 // runCapability is the shared body of `build` and `test`: identical flags,
 // discovery, selection UI and reporting — only the verb and the discovery

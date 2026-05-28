@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os/exec"
@@ -26,8 +27,9 @@ import (
 // next infra-start cycle, which is consistent with spec §5.5's
 // "idempotent one-shots run on every infra-up".
 //
-// Returns the number of adopted containers + targets for reporting.
-func (r *Runner) AdoptOrphanContainers(ctx context.Context) (containers, targets int) {
+// Returns (adopted-containers, adopted-targets) for reporting.
+func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
+	var containers, targets int
 	// Use --format json — Go's default map-formatting (used by
 	// `{{.Labels}}`) emits `map[k:v k:v]` which has no documented
 	// parser and collides with values containing spaces or colons
@@ -158,7 +160,7 @@ func (r *Runner) reseedAllocator(ctx context.Context, stack, service, cid string
 	if err != nil {
 		return
 	}
-	pipe := strings.IndexByte(string(out), '|')
+	pipe := bytes.IndexByte(out, '|')
 	if pipe < 0 {
 		return
 	}
@@ -340,4 +342,3 @@ func translatePodmanStatus(status string) (anovelv1.Phase, anovelv1.Health) {
 		return anovelv1.Phase_PHASE_RUNNING, health
 	}
 }
-

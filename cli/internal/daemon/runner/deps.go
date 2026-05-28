@@ -134,11 +134,11 @@ func findTarget(svc *discovery.Service, name string) *discovery.Target {
 func healthLabel(h anovelv1.Health) string {
 	switch h {
 	case anovelv1.Health_HEALTH_HEALTHY:
-		return "healthy"
+		return pmHealthHealthy
 	case anovelv1.Health_HEALTH_UNHEALTHY:
-		return "unhealthy"
+		return pmHealthUnhealthy
 	case anovelv1.Health_HEALTH_STARTING:
-		return "starting"
+		return pmHealthStarting
 	default:
 		return "unknown"
 	}

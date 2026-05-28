@@ -13,6 +13,24 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
+// Podman state strings, hoisted into constants so the half-dozen
+// switch sites across container.go, infra.go, adopt.go, and deps.go
+// agree on a single spelling. These are podman API contracts (the
+// strings podman ps / inspect emit), not arbitrary internal labels —
+// renaming them is a podman-version change, not a refactor.
+const (
+	pmPhaseRunning    = "running"
+	pmPhasePaused     = "paused"
+	pmPhaseCreated    = "created"
+	pmPhaseConfigured = "configured"
+	pmPhaseExited     = "exited"
+	pmPhaseStopped    = "stopped"
+
+	pmHealthHealthy   = "healthy"
+	pmHealthUnhealthy = "unhealthy"
+	pmHealthStarting  = "starting"
+)
+
 // streamContainerLogs runs `podman logs -f <cid>` and pipes its output
 // through the daemon's log writer. Exits when ctx is cancelled (kill)
 // or the container is removed (podman logs detects EOF). Closes the
@@ -217,7 +235,7 @@ func (r *Runner) watchContainer(ctx context.Context, id, cid string) {
 			return
 		}
 		r.updateContainerState(id, phase, health)
-		if phase == "exited" || phase == "stopped" {
+		if phase == pmPhaseExited || phase == pmPhaseStopped {
 			reason := anovelv1.ExitReason_EXIT_REASON_SUCCESS
 			r.mu.RLock()
 			stopping := r.instances[id] != nil && r.instances[id].Phase == anovelv1.Phase_PHASE_STOPPING
@@ -318,11 +336,11 @@ func (r *Runner) InfraStatesOf(ctx context.Context, stack string) map[string]Inf
 		// "exited"/"stopped" → TERMINATED, "created" → STARTING.
 		var p anovelv1.Phase
 		switch strings.ToLower(e.State) {
-		case "running", "paused":
+		case pmPhaseRunning, pmPhasePaused:
 			p = anovelv1.Phase_PHASE_RUNNING
-		case "created", "configured":
+		case pmPhaseCreated, pmPhaseConfigured:
 			p = anovelv1.Phase_PHASE_STARTING
-		case "exited", "stopped":
+		case pmPhaseExited, pmPhaseStopped:
 			p = anovelv1.Phase_PHASE_TERMINATED
 		default:
 			p = anovelv1.Phase_PHASE_UNSPECIFIED
@@ -341,21 +359,6 @@ func (r *Runner) InfraStatesOf(ctx context.Context, stack string) map[string]Inf
 	r.infraStateCache[stack] = infraStateCacheEntry{at: time.Now(), states: cached}
 	r.infraStateMu.Unlock()
 	return out
-}
-
-// containerHealthFromInspect returns the podman healthcheck status
-// ("healthy" / "unhealthy" / "starting" / "" for no healthcheck).
-// Used by the single-shot InfraStateOf fallback path; kept out of
-// the batched InfraStatesOf so refresh-cycle cost stays at one
-// podman call.
-func containerHealthFromInspect(ctx context.Context, cid string) string {
-	cmd := exec.CommandContext(ctx, "podman", "inspect", cid,
-		"--format", "{{if .State.Health}}{{.State.Health.Status}}{{end}}")
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }
 
 // KillInfraContainer stops a single infra container by (stack,
@@ -399,9 +402,10 @@ func (r *Runner) RestartInfraContainer(ctx context.Context, stack, service, infr
 }
 
 // InfraStateOf is the legacy single-infra query — preserved for
-// callers that don't have the batched map yet. Internally now uses
-// InfraStatesOf for consistency.
-func (r *Runner) InfraStateOf(ctx context.Context, stack, service, infraName string) (phase anovelv1.Phase, health anovelv1.Health, containerID string) {
+// callers that don't have the batched map yet. Returns
+// (phase, health, containerID). Internally uses InfraStatesOf for
+// consistency.
+func (r *Runner) InfraStateOf(ctx context.Context, stack, service, infraName string) (anovelv1.Phase, anovelv1.Health, string) {
 	st, ok := r.InfraStatesOf(ctx, stack)[service+"/"+infraName]
 	if !ok {
 		return anovelv1.Phase_PHASE_UNSPECIFIED, anovelv1.Health_HEALTH_UNSPECIFIED, ""
@@ -410,8 +414,8 @@ func (r *Runner) InfraStateOf(ctx context.Context, stack, service, infraName str
 }
 
 // podmanInspect parses just the fields we care about (status, health,
-// exit code) from one container.
-func podmanInspect(ctx context.Context, cid string) (phase, health string, exitCode int, err error) {
+// exit code) from one container. Returns (phase, health, exitCode, err).
+func podmanInspect(ctx context.Context, cid string) (string, string, int, error) {
 	cmd := exec.CommandContext(ctx, "podman", "inspect", cid,
 		"--format", "{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}")
 	out, err := cmd.Output()
@@ -422,10 +426,8 @@ func podmanInspect(ctx context.Context, cid string) (phase, health string, exitC
 	if len(parts) < 3 {
 		return "", "", 0, fmt.Errorf("inspect %s: malformed output %q", cid, string(out))
 	}
-	phase = parts[0]
-	health = parts[1]
-	exitCode, _ = strconv.Atoi(parts[2])
-	return
+	exitCode, _ := strconv.Atoi(parts[2])
+	return parts[0], parts[1], exitCode, nil
 }
 
 // updateContainerState mutates the runner's view of a container instance
@@ -448,21 +450,21 @@ func (r *Runner) updateContainerState(id, phase, health string) {
 		return
 	}
 	switch phase {
-	case "running", "paused":
+	case pmPhaseRunning, pmPhasePaused:
 		if inst.Phase != anovelv1.Phase_PHASE_STOPPING {
 			inst.Phase = anovelv1.Phase_PHASE_RUNNING
 		}
-	case "created":
+	case pmPhaseCreated:
 		inst.Phase = anovelv1.Phase_PHASE_STARTING
 	case "stopping":
 		inst.Phase = anovelv1.Phase_PHASE_STOPPING
 	}
 	switch health {
-	case "healthy":
+	case pmHealthHealthy:
 		inst.Health = anovelv1.Health_HEALTH_HEALTHY
-	case "unhealthy":
+	case pmHealthUnhealthy:
 		inst.Health = anovelv1.Health_HEALTH_UNHEALTHY
-	case "starting":
+	case pmHealthStarting:
 		inst.Health = anovelv1.Health_HEALTH_STARTING
 	default:
 		inst.Health = anovelv1.Health_HEALTH_UNKNOWN

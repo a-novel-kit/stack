@@ -52,11 +52,6 @@ type Line struct {
 // archives past this count are pruned.
 const maxArchivedRuns = 5
 
-// flushInterval bounds how long a buffered line can sit in memory
-// before reaching disk + subscribers. 100ms keeps live `--follow`
-// feeling instant (spec §7.1 performance note).
-const flushInterval = 100 * time.Millisecond
-
 // Store is the daemon's per-target log registry. Concurrency-safe;
 // one Store per daemon.
 type Store struct {

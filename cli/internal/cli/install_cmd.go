@@ -21,6 +21,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -68,11 +69,11 @@ running before.`,
 			if _, err := os.Stat(filepath.Join(sourceDir, "go.mod")); err != nil {
 				return fmt.Errorf("no go.mod at %s — pass --source pointing at the CLI source dir", sourceDir)
 			}
-			fmt.Fprintf(out, "▸ source: %s\n", sourceDir)
+			_, _ = fmt.Fprintf(out, "▸ source: %s\n", sourceDir)
 
 			// 2. Checkpoint the running daemon (if any). PrepareReinstall
 			// is idempotent and silently no-ops when no daemon is up.
-			fmt.Fprintln(out, "▸ checkpointing running daemon (if any)...")
+			_, _ = fmt.Fprintln(out, "▸ checkpointing running daemon (if any)...")
 			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 			daemonRunning := false
 			if _, err := rpc.New("").Ping(ctx); err == nil {
@@ -86,19 +87,19 @@ running before.`,
 				if err != nil {
 					return fmt.Errorf("prepare-reinstall: %w", err)
 				}
-				fmt.Fprintf(out, "  ✓ checkpoint written: %s (%d go-exec target(s))\n",
+				_, _ = fmt.Fprintf(out, "  ✓ checkpoint written: %s (%d go-exec target(s))\n",
 					resp.GetCheckpointPath(), resp.GetGoExecTargetCount())
 				// Wait for the daemon to actually exit so the next
 				// `go install` doesn't race the running binary.
 				if err := waitDaemonGone(5 * time.Second); err != nil {
-					fmt.Fprintf(out, "  ⚠ daemon still responding after %v; continuing anyway\n", 5*time.Second)
+					_, _ = fmt.Fprintf(out, "  ⚠ daemon still responding after %v; continuing anyway\n", 5*time.Second)
 				}
 			} else {
-				fmt.Fprintln(out, "  ○ no daemon running (skipping checkpoint)")
+				_, _ = fmt.Fprintln(out, "  ○ no daemon running (skipping checkpoint)")
 			}
 
 			// 3. go install.
-			fmt.Fprintln(out, "▸ go install ./cmd/a-novel ...")
+			_, _ = fmt.Fprintln(out, "▸ go install ./cmd/a-novel ...")
 			install := exec.Command("go", "install", "./cmd/a-novel")
 			install.Dir = sourceDir
 			install.Stdout = out
@@ -107,18 +108,18 @@ running before.`,
 			if err := install.Run(); err != nil {
 				return fmt.Errorf("go install: %w", err)
 			}
-			fmt.Fprintln(out, "  ✓ binary built")
+			_, _ = fmt.Fprintln(out, "  ✓ binary built")
 
 			// 4. Start the new daemon. startDetached is idempotent
 			// against an already-running daemon (pings first), so a
 			// no-op race is safe. The new daemon will read the
 			// reinstall checkpoint and relaunch go-exec targets.
-			fmt.Fprintln(out, "▸ starting fresh daemon...")
+			_, _ = fmt.Fprintln(out, "▸ starting fresh daemon...")
 			if err := startDetached(); err != nil {
 				return fmt.Errorf("daemon start: %w", err)
 			}
-			fmt.Fprintln(out, "")
-			fmt.Fprintln(out, "✓ install complete.")
+			_, _ = fmt.Fprintln(out, "")
+			_, _ = fmt.Fprintln(out, "✓ install complete.")
 			return nil
 		},
 	}
@@ -135,7 +136,7 @@ func defaultCLISource() (string, error) {
 		return "", err
 	}
 	if len(stk) == 0 {
-		return "", fmt.Errorf("no stacks registered")
+		return "", errors.New("no stacks registered")
 	}
 	// First entry is always the default per stacks.Parse contract.
 	return filepath.Join(stk[0].Path, "cli"), nil
@@ -151,7 +152,11 @@ func waitDaemonGone(timeout time.Duration) error {
 		_, err := rpc.New("").Ping(ctx)
 		cancel()
 		if err != nil {
-			return nil // daemon is gone
+			// Ping error == socket closed == daemon stopped, which IS
+			// the success condition we're polling for. Returning the
+			// transport error would mean "couldn't talk to daemon" =
+			// failure, the opposite of what we want.
+			return nil //nolint:nilerr // intentional: error here means daemon is gone
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

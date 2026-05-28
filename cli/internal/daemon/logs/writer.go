@@ -11,15 +11,11 @@ import (
 // JSON-encodes each line with {ts, stream, line}, writes to the
 // per-target file, and fans out to every subscriber.
 //
-// A single Writer carries one stream tag (Stdout vs Stderr); the runner
-// creates two — one for each — pointing at the same targetStream.
+// A single Writer is shared by both the Stdout and Stderr views; each view
+// carries the actual stream tag. Per-stream partials live on streamWriter
+// (see below).
 type Writer struct {
-	ts     *targetStream
-	stream Stream
-	// partial holds bytes from a prior Write that didn't end in a
-	// newline. Concatenated to the next Write so a line split across
-	// reads still serializes as one Line entry.
-	partial []byte
+	ts *targetStream
 }
 
 // Stdout / Stderr return a new Writer view bound to this stream tag.
@@ -51,12 +47,16 @@ func (sw *streamWriter) Write(p []byte) (int, error) {
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
 	// Combine any partial from the previous Write with the new bytes.
-	buf := append(sw.partial, p...)
+	// Assign back to sw.partial first (appendAssign lint), then transfer
+	// ownership to buf and clear sw.partial — the for-loop below either
+	// flushes complete lines or stashes a new tail back onto sw.partial.
+	sw.partial = append(sw.partial, p...)
+	buf := sw.partial
 	sw.partial = nil
 	// Split on newlines; flush each complete line; carry the tail.
 	for {
 		i := -1
-		for j := 0; j < len(buf); j++ {
+		for j := range buf {
 			if buf[j] == '\n' {
 				i = j
 				break

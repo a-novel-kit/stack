@@ -38,7 +38,7 @@ func (m *model) View() string {
 	// Main layout (with command-palette overlay if in viewCommand).
 	main := m.renderMain()
 	if m.view == viewCommand {
-		main = overlayCommand(main, m.cmdInput, m.width)
+		main = overlayCommand(main, m.cmdInput)
 	}
 	return main
 }
@@ -172,7 +172,7 @@ func (m *model) renderRight(width, height int) string {
 	// "name · infra · phase healthy container=xxx".
 	var header string
 	switch m.activeTabKind() {
-	case "target":
+	case tabKindTarget:
 		t := m.activeTarget()
 		header = fmt.Sprintf("%s · %s · %s",
 			t.GetName(), modeShort(t.GetMode()), phaseShort(t.GetPhase()))
@@ -182,7 +182,7 @@ func (m *model) renderRight(width, height int) string {
 		if t.GetContainerId() != "" {
 			header += " container=" + safeShort(t.GetContainerId(), 12)
 		}
-	case "infra":
+	case tabKindInfra:
 		in := m.activeInfra()
 		header = fmt.Sprintf("%s · %s · %s %s",
 			in.GetName(),
@@ -312,7 +312,6 @@ func targetStatusDot(t *anovelv1.Target) string {
 	}
 	return styleDim.Render("○")
 }
-
 
 func (m *model) renderLogs(width, height int) string {
 	if len(m.logLines) == 0 {
@@ -448,7 +447,7 @@ func (m *model) renderTopology() string {
 // overlayCommand draws the command input + autocomplete suggestions over
 // the bottom-most lines of the main view. Spec §14.3 layer 2: as the
 // user types, show matching commands with one-line descriptions.
-func overlayCommand(main, input string, width int) string {
+func overlayCommand(main, input string) string {
 	cmd := styleCmd.Render(input) + styleDim.Render("█")
 	suggestions := suggestCommands(strings.TrimPrefix(input, ":"))
 	lines := strings.Split(main, "\n")
@@ -668,12 +667,12 @@ func phaseShort(p anovelv1.Phase) string {
 	}
 }
 
-func truncate(s string, max int) string {
-	if max <= 0 {
+func truncate(s string, maxLen int) string {
+	if maxLen <= 0 {
 		return s
 	}
-	if len(s) > max {
-		return s[:max-1] + "…"
+	if len(s) > maxLen {
+		return s[:maxLen-1] + "…"
 	}
 	return s
 }

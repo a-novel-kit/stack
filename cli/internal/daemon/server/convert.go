@@ -18,6 +18,7 @@ import (
 func targetIDFor(stack, service, target string) string {
 	return stack + "/" + service + "/" + target
 }
+
 func infraIDFor(stack, service, name string) string {
 	return stack + "/" + service + "/" + name
 }
@@ -131,9 +132,7 @@ func convertTargetStatic(t *discovery.Target) *anovelv1.Target {
 		Stack:   t.Stack,
 		Kind:    convertKind(t.Kind),
 	}
-	for _, dep := range t.DependsOn {
-		out.Deps = append(out.Deps, dep)
-	}
+	out.Deps = append(out.Deps, t.DependsOn...)
 	return out
 }
 
@@ -165,9 +164,7 @@ func instanceToProto(inst *runner.Instance, t *discovery.Target) *anovelv1.Targe
 	}
 	if t != nil {
 		out.Kind = convertKind(t.Kind)
-		for _, dep := range t.DependsOn {
-			out.Deps = append(out.Deps, dep)
-		}
+		out.Deps = append(out.Deps, t.DependsOn...)
 	}
 	return out
 }

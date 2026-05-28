@@ -62,6 +62,18 @@ func Run() error {
 	return err
 }
 
+// tabKindInfra / tabKindTarget are the discriminator values
+// activeTabKind() returns. Hoisted into named constants so the dozen
+// string-equality sites across the TUI agree on a single source.
+const (
+	tabKindInfra  = "infra"
+	tabKindTarget = "target"
+	// modeContainer matches palette commands like ":start container".
+	// CLI/RPC use the typed anovelv1.Mode_MODE_CONTAINER enum; this
+	// string lives in the palette-args layer where everything is text.
+	modeContainer = "container"
+)
+
 // view is the discriminator for top-level screens.
 type view int
 
@@ -74,12 +86,12 @@ const (
 
 // model is the Bubble Tea root model.
 type model struct {
-	c        *rpc.Client
-	program  *tea.Program // for background goroutines to Send messages
-	view     view
-	width    int
-	height   int
-	err      error
+	c       *rpc.Client
+	program *tea.Program // for background goroutines to Send messages
+	view    view
+	width   int
+	height  int
+	err     error
 	// Discovery — refreshed periodically. `loaded` flips true on the
 	// first servicesMsg so the nav can distinguish "haven't refreshed
 	// yet" (loading…) from "refresh succeeded with zero results"
@@ -444,15 +456,15 @@ func (m *model) activeTabKind() string {
 		return ""
 	}
 	if m.selectedTab < len(svc.GetInfra()) {
-		return "infra"
+		return tabKindInfra
 	}
-	return "target"
+	return tabKindTarget
 }
 
 // activeInfra returns the selected infra entry, or nil when the
 // active tab is a target.
 func (m *model) activeInfra() *anovelv1.Infra {
-	if m.activeTabKind() != "infra" {
+	if m.activeTabKind() != tabKindInfra {
 		return nil
 	}
 	return m.services[m.selectedSvc].GetInfra()[m.selectedTab]
@@ -461,7 +473,7 @@ func (m *model) activeInfra() *anovelv1.Infra {
 // activeTarget returns the selected target, or nil when the active
 // tab is an infra entry.
 func (m *model) activeTarget() *anovelv1.Target {
-	if m.activeTabKind() != "target" {
+	if m.activeTabKind() != tabKindTarget {
 		return nil
 	}
 	svc := m.services[m.selectedSvc]
@@ -473,9 +485,9 @@ func (m *model) activeTarget() *anovelv1.Target {
 // form, infra IDs use the <stack>/<svc>/infra/<name> sentinel.
 func (m *model) activeLogID() string {
 	switch m.activeTabKind() {
-	case "target":
+	case tabKindTarget:
 		return m.activeTarget().GetId()
-	case "infra":
+	case tabKindInfra:
 		in := m.activeInfra()
 		return in.GetStack() + "/" + in.GetService() + "/infra/" + in.GetName()
 	}

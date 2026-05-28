@@ -112,11 +112,17 @@ func tickEvery(d time.Duration) tea.Cmd {
 }
 
 // followSelectedLogs starts a log-streaming subscription on the
-// currently-selected target. Returns a one-shot tea.Cmd that fetches
-// the snapshot, AND spawns a background goroutine that follows new
-// lines and pushes them via p.Send. The goroutine is bound to
+// currently-selected target. Spawns a background goroutine that follows
+// new lines and pushes them via p.Send. The goroutine is bound to
 // m.followCancel so a target-switch cleanly cancels the previous
 // follower.
+//
+// Returns tea.Cmd (always nil today) so callers can plug it straight
+// into tea.Batch alongside other commands — the Cmd-returning shape
+// keeps the call sites idiomatic even though the work itself happens
+// out-of-band on the goroutine.
+//
+//nolint:unparam // tea.Cmd shape is intentional; see comment.
 func (m *model) followSelectedLogs() tea.Cmd {
 	id := m.activeLogID()
 	if id == "" {
@@ -183,7 +189,7 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 		// dependencies on other infra). Use :infra-start for the
 		// service-level bring-up; use :restart for a single
 		// already-existing infra container.
-		if m.activeTabKind() == "infra" {
+		if m.activeTabKind() == tabKindInfra {
 			return setStatusCmd(statusError,
 				":start only works on targets. For infra: use :infra-start (whole service) or :restart (this container)")
 		}
@@ -192,9 +198,9 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 		}
 		mode := anovelv1.Mode_MODE_GO_EXEC
 		modeLabel := "go-exec"
-		if len(args) > 0 && args[0] == "container" {
+		if len(args) > 0 && args[0] == modeContainer {
 			mode = anovelv1.Mode_MODE_CONTAINER
-			modeLabel = "container"
+			modeLabel = modeContainer
 		}
 		label := "start " + t.GetName()
 		return runAction(
@@ -214,7 +220,7 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 		// that container, leaves the rest of the service's infra +
 		// any running targets alone).
 		switch m.activeTabKind() {
-		case "target":
+		case tabKindTarget:
 			label := "kill " + t.GetName()
 			return runAction(
 				"Killing "+t.GetName()+"...",
@@ -227,7 +233,7 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 					return err
 				},
 			)
-		case "infra":
+		case tabKindInfra:
 			in := m.activeInfra()
 			label := "kill infra " + in.GetName()
 			return runAction(
@@ -246,7 +252,7 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 		}
 	case "restart":
 		switch m.activeTabKind() {
-		case "target":
+		case tabKindTarget:
 			label := "restart " + t.GetName()
 			return runAction(
 				"Restarting "+t.GetName()+"...",
@@ -259,7 +265,7 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 					return err
 				},
 			)
-		case "infra":
+		case tabKindInfra:
 			in := m.activeInfra()
 			label := "restart infra " + in.GetName()
 			return runAction(

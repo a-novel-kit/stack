@@ -20,6 +20,11 @@ import (
 	"strings"
 )
 
+// hostLocalhost is the canonical synthesized hostname for *_HOST
+// derivations. Hoisted so a future "rewrite for remote daemon" can
+// flip the value in one place without grepping the package.
+const hostLocalhost = "localhost"
+
 // refRe matches a ${VAR} reference in a compose environment value. Two
 // variants supported: bare ${VAR} and ${VAR:-default}. Default values
 // aren't honored yet — they're rare in our compose files and adding them
@@ -74,7 +79,7 @@ func ServicePrefix(serviceName string) string {
 // Order of evaluation matters: when two service names share a prefix
 // (e.g., `service-template` and `service-template-extra`), the longer
 // match wins. allServices must be sorted longest-first by the caller.
-func resolveOwner(varName string, allServices []string) (owner, localVar string) {
+func resolveOwner(varName string, allServices []string) (string, string) {
 	for _, svc := range allServices {
 		prefix := ServicePrefix(svc) + "_"
 		if strings.HasPrefix(varName, prefix) {
@@ -95,12 +100,12 @@ func isAllocatedKind(localVar string) bool {
 // (un-prefixed) form; callers re-prefix for cross-service exposure.
 func derivedFor(localPortVar string, port int) map[string]string {
 	base := strings.TrimSuffix(localPortVar, "_PORT")
-	host := "localhost"
+	host := hostLocalhost
 	url := urlFor(base, port)
 	return map[string]string{
-		localPortVar:    itoa(port),
-		base + "_HOST":  host,
-		base + "_URL":   url,
+		localPortVar:   itoa(port),
+		base + "_HOST": host,
+		base + "_URL":  url,
 	}
 }
 
@@ -110,9 +115,9 @@ func derivedFor(localPortVar string, port int) map[string]string {
 func urlFor(base string, port int) string {
 	switch base {
 	case "GRPC":
-		return "localhost:" + itoa(port)
+		return hostLocalhost + ":" + itoa(port)
 	default:
-		return "http://localhost:" + itoa(port)
+		return "http://" + hostLocalhost + ":" + itoa(port)
 	}
 }
 

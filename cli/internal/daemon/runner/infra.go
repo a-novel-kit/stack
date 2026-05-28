@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -239,7 +240,7 @@ func (r *Runner) runOneShot(ctx context.Context, t *discovery.Target, mode Mode)
 	// Build env for the one-shot. The env builder allocates ports as
 	// needed, just like for long-runners.
 	if r.alloc == nil {
-		return fmt.Errorf("runner has no allocator (internal misconfiguration)")
+		return errors.New("runner has no allocator (internal misconfiguration)")
 	}
 	// Build env AFTER any prior allocation steps (infra-up). The
 	// builder's snapshot-fill picks up POSTGRES_PORT etc. that infra-up
@@ -316,9 +317,9 @@ func (r *Runner) waitInfraHealthy(ctx context.Context, svc *discovery.Service, t
 				continue
 			}
 			switch {
-			case phase == "running" && (health == "healthy" || health == "-"):
+			case phase == pmPhaseRunning && (health == pmHealthHealthy || health == "-"):
 				// Good.
-			case phase == "exited" && exitCode == 0:
+			case phase == pmPhaseExited && exitCode == 0:
 				// One-shot succeeded.
 			default:
 				ready = false

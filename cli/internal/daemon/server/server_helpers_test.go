@@ -16,9 +16,9 @@ import (
 
 func TestParseInfraLogID(t *testing.T) {
 	cases := []struct {
-		in              string
-		stack, svc, nm  string
-		ok              bool
+		in             string
+		stack, svc, nm string
+		ok             bool
 	}{
 		{"default/svc-x/infra/postgres-x", "default", "svc-x", "postgres-x", true},
 		// Wrong segment count.

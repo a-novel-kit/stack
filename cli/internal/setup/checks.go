@@ -42,9 +42,9 @@ func checkGitHubSSH() error {
 		truncate(strings.TrimSpace(string(out)), 100))
 }
 
-func truncate(s string, max int) string {
-	if len(s) > max {
-		return s[:max] + "..."
+func truncate(s string, maxLen int) string {
+	if len(s) > maxLen {
+		return s[:maxLen] + "..."
 	}
 	return s
 }

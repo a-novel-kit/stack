@@ -110,10 +110,10 @@ func TestForTarget_PortsBlockTriggersAllocation(t *testing.T) {
 	// `mergePortRefs` folds it into the same resolution pass.
 	b, alloc := newBuilderWith([]string{"svc"})
 	tgt := &discovery.Target{
-		Name:    "rest",
-		Service: "svc",
-		Stack:   "default",
-		Ports:   []string{"${REST_PORT}:8080"},
+		Name:        "rest",
+		Service:     "svc",
+		Stack:       "default",
+		Ports:       []string{"${REST_PORT}:8080"},
 		Environment: map[string]string{}, // intentionally empty
 	}
 	entries, err := b.ForTarget(tgt, alloc.Services())
@@ -140,10 +140,10 @@ func TestForTarget_PrefixedAndUnprefixedOwnView(t *testing.T) {
 	// looking through either name resolve to the same number.
 	b, alloc := newBuilderWith([]string{"service-foo"})
 	tgt := &discovery.Target{
-		Name:    "rest",
-		Service: "service-foo",
-		Stack:   "default",
-		Ports:   []string{"${REST_PORT}:8080"},
+		Name:        "rest",
+		Service:     "service-foo",
+		Stack:       "default",
+		Ports:       []string{"${REST_PORT}:8080"},
 		Environment: map[string]string{},
 	}
 	entries, err := b.ForTarget(tgt, alloc.Services())

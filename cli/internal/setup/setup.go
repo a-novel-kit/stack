@@ -59,10 +59,10 @@ type Result struct {
 
 // StackResult is the per-stack bootstrap outcome.
 type StackResult struct {
-	Name       string
-	Path       string
-	Status     string // "valid" | "cloned" | "skipped" | "refused"
-	Detail     string
+	Name   string
+	Path   string
+	Status string // "valid" | "cloned" | "skipped" | "refused"
+	Detail string
 }
 
 // Run executes the full bootstrap sequence with the given Options. The
@@ -75,17 +75,17 @@ func Run(opts Options, w io.Writer, prompter Prompter) (*Result, error) {
 	res := &Result{StateDir: paths.State(), DataDir: paths.Data()}
 
 	// 1. Environment checks.
-	fmt.Fprintln(w, "▸ Checking environment...")
+	_, _ = fmt.Fprintln(w, "▸ Checking environment...")
 	if err := checkPodman(); err != nil {
 		return res, fmt.Errorf("podman check: %w", err)
 	}
 	res.PodmanOK = true
-	fmt.Fprintln(w, "  ✓ podman")
+	_, _ = fmt.Fprintln(w, "  ✓ podman")
 	if err := checkGit(); err != nil {
 		return res, fmt.Errorf("git check: %w", err)
 	}
 	res.GitOK = true
-	fmt.Fprintln(w, "  ✓ git")
+	_, _ = fmt.Fprintln(w, "  ✓ git")
 	if err := checkGitHubSSH(); err != nil {
 		// Non-fatal — the user may genuinely not have GitHub SSH set
 		// up if their default stack is already cloned and no
@@ -93,41 +93,38 @@ func Run(opts Options, w io.Writer, prompter Prompter) (*Result, error) {
 		res.Notes = append(res.Notes,
 			"GitHub SSH check failed: "+err.Error()+
 				" (only matters if a stack needs cloning)")
-		fmt.Fprintln(w, "  ⚠ GitHub SSH ("+err.Error()+")")
+		_, _ = fmt.Fprintln(w, "  ⚠ GitHub SSH ("+err.Error()+")")
 	} else {
 		res.GitHubSSHOK = true
-		fmt.Fprintln(w, "  ✓ GitHub SSH")
+		_, _ = fmt.Fprintln(w, "  ✓ GitHub SSH")
 	}
 
 	// 2. State directories.
-	fmt.Fprintln(w, "▸ Verifying state directories...")
+	_, _ = fmt.Fprintln(w, "▸ Verifying state directories...")
 	if err := ensureDir(res.StateDir); err != nil {
 		return res, err
 	}
 	if err := ensureDir(res.DataDir); err != nil {
 		return res, err
 	}
-	fmt.Fprintf(w, "  ✓ %s\n  ✓ %s\n", res.StateDir, res.DataDir)
+	_, _ = fmt.Fprintf(w, "  ✓ %s\n  ✓ %s\n", res.StateDir, res.DataDir)
 
 	// 3. Stack bootstrap.
 	stk, err := stacks.ParseEnv()
 	if err != nil {
 		return res, fmt.Errorf("parse %s: %w", stacks.EnvVar, err)
 	}
-	fmt.Fprintf(w, "▸ Bootstrapping %d stack(s)...\n", len(stk))
+	_, _ = fmt.Fprintf(w, "▸ Bootstrapping %d stack(s)...\n", len(stk))
 	for _, s := range stk {
 		sr := bootstrapStack(s, opts.NonInteractive, prompter)
 		res.Stacks = append(res.Stacks, sr)
-		fmt.Fprintf(w, "  %s %s (%s)\n", statusGlyph(sr.Status), sr.Name, sr.Detail)
+		_, _ = fmt.Fprintf(w, "  %s %s (%s)\n", statusGlyph(sr.Status), sr.Name, sr.Detail)
 	}
 
 	// 4. Shell rc integration.
 	if !opts.NoShellRC {
-		fmt.Fprintln(w, "▸ Managing shell rc block...")
-		rcPath, shell, err := resolveRC(opts.RCPath)
-		if err != nil {
-			return res, fmt.Errorf("resolve shell rc: %w", err)
-		}
+		_, _ = fmt.Fprintln(w, "▸ Managing shell rc block...")
+		rcPath, shell := resolveRC(opts.RCPath)
 		res.RCPath = rcPath
 		block := renderRCBlock(stk, shell)
 		backupPath, changed, err := upsertRCBlock(rcPath, block)
@@ -137,12 +134,12 @@ func Run(opts Options, w io.Writer, prompter Prompter) (*Result, error) {
 		if changed {
 			res.RCEdited = true
 			res.BackupPath = backupPath
-			fmt.Fprintf(w, "  ✓ updated %s (backup: %s)\n", rcPath, backupPath)
+			_, _ = fmt.Fprintf(w, "  ✓ updated %s (backup: %s)\n", rcPath, backupPath)
 		} else {
-			fmt.Fprintf(w, "  ✓ %s already up-to-date\n", rcPath)
+			_, _ = fmt.Fprintf(w, "  ✓ %s already up-to-date\n", rcPath)
 		}
 	} else {
-		fmt.Fprintln(w, "▸ Shell rc step skipped (--no-shell-rc)")
+		_, _ = fmt.Fprintln(w, "▸ Shell rc step skipped (--no-shell-rc)")
 	}
 
 	// 5. Start the daemon now so the user doesn't have to open a new
@@ -150,13 +147,13 @@ func Run(opts Options, w io.Writer, prompter Prompter) (*Result, error) {
 	// Skipped on --no-start-daemon, or when no callback was wired
 	// (e.g., a test harness calling Run without the CLI bridge).
 	if !opts.NoStartDaemon && opts.StartDaemon != nil {
-		fmt.Fprintln(w, "▸ Starting the a-novel daemon...")
+		_, _ = fmt.Fprintln(w, "▸ Starting the a-novel daemon...")
 		if err := opts.StartDaemon(); err != nil {
 			res.DaemonNote = err.Error()
-			fmt.Fprintf(w, "  ⚠ daemon start failed: %v\n", err)
+			_, _ = fmt.Fprintf(w, "  ⚠ daemon start failed: %v\n", err)
 		} else {
 			res.DaemonStarted = true
-			fmt.Fprintln(w, "  ✓ daemon running")
+			_, _ = fmt.Fprintln(w, "  ✓ daemon running")
 		}
 	}
 
@@ -166,19 +163,19 @@ func Run(opts Options, w io.Writer, prompter Prompter) (*Result, error) {
 	// In both daemon-up cases we also nudge the user to source the rc
 	// so shell completion (`a-novel <TAB>`) lights up in the CURRENT
 	// shell — the rc block is only auto-loaded by future shells.
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Setup complete.")
+	_, _ = fmt.Fprintln(w, "")
+	_, _ = fmt.Fprintln(w, "Setup complete.")
 	switch {
 	case res.DaemonStarted:
-		fmt.Fprintln(w, "  → Daemon is up. Try `a-novel run ui` or `a-novel run ps`.")
+		_, _ = fmt.Fprintln(w, "  → Daemon is up. Try `a-novel run ui` or `a-novel run ps`.")
 		if res.RCEdited {
-			fmt.Fprintf(w, "  → For tab-completion in THIS shell: `source %s`\n", res.RCPath)
-			fmt.Fprintln(w, "    (future shells load it automatically.)")
+			_, _ = fmt.Fprintf(w, "  → For tab-completion in THIS shell: `source %s`\n", res.RCPath)
+			_, _ = fmt.Fprintln(w, "    (future shells load it automatically.)")
 		}
 	case res.RCEdited:
-		fmt.Fprintf(w, "  → Open a new shell, or `source %s`, then `a-novel core start`.\n", res.RCPath)
+		_, _ = fmt.Fprintf(w, "  → Open a new shell, or `source %s`, then `a-novel core start`.\n", res.RCPath)
 	default:
-		fmt.Fprintln(w, "  → Run `a-novel core start` to bring the daemon up.")
+		_, _ = fmt.Fprintln(w, "  → Run `a-novel core start` to bring the daemon up.")
 	}
 	return res, nil
 }
@@ -211,7 +208,7 @@ func (p *StdinPrompter) YesNo(prompt string) (bool, error) {
 	if w == nil {
 		w = os.Stderr
 	}
-	fmt.Fprintf(w, "%s [y/N]: ", prompt)
+	_, _ = fmt.Fprintf(w, "%s [y/N]: ", prompt)
 	sc := bufio.NewScanner(os.Stdin)
 	if !sc.Scan() {
 		return false, sc.Err()
@@ -222,11 +219,11 @@ func (p *StdinPrompter) YesNo(prompt string) (bool, error) {
 
 func statusGlyph(status string) string {
 	switch status {
-	case "valid", "cloned":
+	case statusValid, statusCloned:
 		return "✓"
-	case "skipped":
+	case statusSkipped:
 		return "○"
-	case "refused":
+	case statusRefused:
 		return "✗"
 	default:
 		return "•"

@@ -23,9 +23,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
-	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
-
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/env"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/logs"
@@ -33,6 +30,8 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/daemon/runner"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/volumes"
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
+	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
+	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
 
 // Compile-time check: Server must satisfy the generated handler interface.
@@ -45,17 +44,16 @@ var _ anovelv1connect.CoreServiceHandler = (*Server)(nil)
 // (Runner — phase 3), the env allocator/builder (phase 4), the log hub
 // (phase 5), etc.
 type Server struct {
-	mu             sync.RWMutex
-	version        string             // daemon binary version (from build info)
-	startedAt      time.Time          // for uptime calculation
-	socketPath     string             // for Status responses
-	stacks         []stacks.Stack     // raw config from $A_NOVEL_STACKS
-	discovered     []*discovery.Stack // phase 2: per-stack service tree
-	runner         *runner.Runner     // phase 3: process / container supervisor
-	envAlloc       *env.Allocator     // phase 4: port allocator + refcount
-	envBuilder     *env.Builder       // phase 4: env block synthesis
-	logs           *logs.Store        // phase 5: per-target log files + streaming hub
-	checkpointPath string             // reinstall.json location (phase 8)
+	mu         sync.RWMutex
+	version    string             // daemon binary version (from build info)
+	startedAt  time.Time          // for uptime calculation
+	socketPath string             // for Status responses
+	stacks     []stacks.Stack     // raw config from $A_NOVEL_STACKS
+	discovered []*discovery.Stack // phase 2: per-stack service tree
+	runner     *runner.Runner     // phase 3: process / container supervisor
+	envAlloc   *env.Allocator     // phase 4: port allocator + refcount
+	envBuilder *env.Builder       // phase 4: env block synthesis
+	logs       *logs.Store        // phase 5: per-target log files + streaming hub
 	// shutdownCh is closed by PrepareReinstall to signal the daemon's
 	// main loop to perform a clean exit. Use SignalShutdown() to fire;
 	// idempotent.
@@ -108,7 +106,7 @@ func (s *Server) findStack(name string) (*discovery.Stack, error) {
 	defer s.mu.RUnlock()
 	if len(s.discovered) == 0 {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("no stacks registered (set A_NOVEL_STACKS)"))
+			errors.New("no stacks registered (set A_NOVEL_STACKS)"))
 	}
 	if name == "" {
 		return s.discovered[0], nil
@@ -286,8 +284,8 @@ func (s *Server) Shutdown(ctx context.Context, req *connect.Request[anovelv1.Shu
 		}
 	}
 	resp := &anovelv1.ShutdownResponse{
-		GoExecKilled:           int32(len(goExecIDs)),
-		InfraServicesTornDown:  int32(infraTorn),
+		GoExecKilled:          int32(len(goExecIDs)),
+		InfraServicesTornDown: int32(infraTorn),
 	}
 	// 4) Fire the shutdown signal AFTER the response is on the wire. Same
 	//    50ms defer trick PrepareReinstall uses — the runtime flushes the
@@ -389,14 +387,14 @@ func (s *Server) GetTopology(_ context.Context, req *connect.Request[anovelv1.Ge
 	if err != nil {
 		return nil, err
 	}
-	var rendered string
+	var b strings.Builder
 	for i, svc := range st.Services {
 		if i > 0 {
-			rendered += "\n"
+			b.WriteByte('\n')
 		}
-		rendered += discovery.RenderTopology(svc)
+		b.WriteString(discovery.RenderTopology(svc))
 	}
-	return connect.NewResponse(&anovelv1.GetTopologyResponse{Rendered: rendered}), nil
+	return connect.NewResponse(&anovelv1.GetTopologyResponse{Rendered: b.String()}), nil
 }
 
 // StartTarget brings up the named target in the requested mode (defaults
@@ -831,7 +829,8 @@ func (s *Server) GetEnv(_ context.Context, req *connect.Request[anovelv1.GetEnvR
 		}
 		return nil
 	}
-	if req.Msg.GetAllStacks() {
+	switch {
+	case req.Msg.GetAllStacks():
 		for _, st := range s.discovered {
 			for _, svc := range st.Services {
 				if err := gather(svc); err != nil {
@@ -839,7 +838,7 @@ func (s *Server) GetEnv(_ context.Context, req *connect.Request[anovelv1.GetEnvR
 				}
 			}
 		}
-	} else if req.Msg.GetService() != "" {
+	case req.Msg.GetService() != "":
 		svc, err := s.findService(req.Msg.GetStack(), req.Msg.GetService())
 		if err != nil {
 			return nil, err
@@ -847,7 +846,7 @@ func (s *Server) GetEnv(_ context.Context, req *connect.Request[anovelv1.GetEnvR
 		if err := gather(svc); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-	} else {
+	default:
 		st, err := s.findStack(req.Msg.GetStack())
 		if err != nil {
 			return nil, err
@@ -1244,7 +1243,8 @@ func unimplemented(rpc, phase string) error {
 // can't legally be named "infra" since target IDs come from compose
 // service names (which don't start with that word in any of our
 // services).
-func parseInfraLogID(id string) (stack, service, name string, ok bool) {
+// parseInfraLogID returns (stack, service, name, ok).
+func parseInfraLogID(id string) (string, string, string, bool) {
 	parts := strings.Split(id, "/")
 	if len(parts) != 4 || parts[2] != "infra" {
 		return "", "", "", false

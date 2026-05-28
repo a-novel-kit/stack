@@ -104,7 +104,7 @@ func Read() (*Checkpoint, error) {
 	var cp Checkpoint
 	if err := json.Unmarshal(data, &cp); err != nil {
 		// Silently drop malformed checkpoint — see package doc.
-		return nil, nil
+		return nil, nil //nolint:nilerr // intentional: malformed checkpoint is non-fatal
 	}
 	if cp.Schema != SchemaVersion {
 		return nil, nil

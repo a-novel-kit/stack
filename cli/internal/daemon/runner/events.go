@@ -88,4 +88,3 @@ func (r *Runner) emitPhase(ev PhaseEvent) {
 		}
 	}
 }
-

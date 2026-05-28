@@ -61,7 +61,7 @@ func validateService(svc *Service, allServices []string) []DiscoveryError {
 
 	check := func(where, key, value string) {
 		for _, ref := range extractRefsLocal(value) {
-			if isResolvable(ref, svc.Name, allServices, declared) {
+			if isResolvable(ref, allServices, declared) {
 				continue
 			}
 			errs = append(errs, DiscoveryError{
@@ -102,7 +102,7 @@ func extractRefsLocal(raw string) []string {
 
 // isResolvable applies the spec §6 rules to decide whether the daemon
 // can synthesize the reference.
-func isResolvable(varName, ownService string, allServices []string, declared map[string]bool) bool {
+func isResolvable(varName string, allServices []string, declared map[string]bool) bool {
 	if declared[varName] {
 		return true // sibling constant in the same service's env block
 	}

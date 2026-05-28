@@ -14,9 +14,9 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
-	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
 // Client is a thin wrapper around the generated CoreServiceClient with

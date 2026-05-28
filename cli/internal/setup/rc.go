@@ -19,6 +19,25 @@ const (
 	endMarker   = "# <<< a-novel setup <<<"
 )
 
+// Shell names — hoisted so the dispatch tables in resolveRC,
+// shellFromPath, renderRCBlock agree on a single canonical spelling
+// for each shell we detect.
+const (
+	shellZsh  = "zsh"
+	shellBash = "bash"
+	shellFish = "fish"
+)
+
+// Stack-bootstrap status outcomes. Surfaces in setup.go's summary
+// render and in stack.go's classification; constants prevent typos
+// from silently producing an "(unknown)" status.
+const (
+	statusValid   = "valid"
+	statusCloned  = "cloned"
+	statusSkipped = "skipped"
+	statusRefused = "refused"
+)
+
 // maxRCBackups bounds the rotating `.a-novel-backup-<ts>` siblings of
 // the rc file. Three is enough recovery depth without cluttering the
 // user's $HOME with unbounded copies.
@@ -29,24 +48,24 @@ const maxRCBackups = 3
 // basename mapping → fallback ~/.zshrc. Returns (path, shellName)
 // where shellName is one of "zsh" | "bash" | "fish" so renderRCBlock
 // can emit the matching completion-source line.
-func resolveRC(override string) (string, string, error) {
+func resolveRC(override string) (string, string) {
 	home, _ := os.UserHomeDir()
 	if override != "" {
 		// User-supplied path always wins. Infer shell from filename.
 		p := expandHome(override)
-		return p, shellFromPath(p), nil
+		return p, shellFromPath(p)
 	}
 	if zdot := os.Getenv("ZDOTDIR"); zdot != "" {
-		return filepath.Join(zdot, ".zshrc"), "zsh", nil
+		return filepath.Join(zdot, ".zshrc"), shellZsh
 	}
 	shell := filepath.Base(os.Getenv("SHELL"))
 	switch shell {
-	case "bash":
-		return filepath.Join(home, ".bashrc"), "bash", nil
-	case "fish":
-		return filepath.Join(home, ".config", "fish", "config.fish"), "fish", nil
+	case shellBash:
+		return filepath.Join(home, ".bashrc"), shellBash
+	case shellFish:
+		return filepath.Join(home, ".config", "fish", "config.fish"), shellFish
 	default:
-		return filepath.Join(home, ".zshrc"), "zsh", nil
+		return filepath.Join(home, ".zshrc"), shellZsh
 	}
 }
 
@@ -57,12 +76,12 @@ func resolveRC(override string) (string, string, error) {
 func shellFromPath(p string) string {
 	base := filepath.Base(p)
 	switch {
-	case strings.Contains(base, "bash"):
-		return "bash"
-	case strings.Contains(base, "fish"):
-		return "fish"
+	case strings.Contains(base, shellBash):
+		return shellBash
+	case strings.Contains(base, shellFish):
+		return shellFish
 	default:
-		return "zsh"
+		return shellZsh
 	}
 }
 
@@ -92,9 +111,9 @@ func renderRCBlock(stk []stacks.Stack, shell string) string {
 	// Shell completion. The `command -v` guard means a missing binary
 	// (e.g., uninstalled CLI) doesn't error every shell startup.
 	switch shell {
-	case "bash":
+	case shellBash:
 		b.WriteString("command -v a-novel >/dev/null 2>&1 && source <(a-novel completion bash)\n")
-	case "fish":
+	case shellFish:
 		// Fish uses pipe-to-source rather than process-substitution.
 		b.WriteString("command -v a-novel >/dev/null 2>&1; and a-novel completion fish | source\n")
 	default: // zsh
@@ -173,8 +192,8 @@ func upsertRCBlock(rcPath, blockContent string) (string, bool, error) {
 		return backup, true, err
 	case blockMalformed:
 		return "", false, fmt.Errorf(
-			"shell rc at %s has malformed a-novel markers (begin marker without matching end, or vice versa). "+
-				"Restore both markers around the existing managed block, or delete both markers entirely and re-run setup.",
+			"shell rc at %s has malformed a-novel markers (begin marker without matching end, or vice versa); "+
+				"restore both markers around the existing managed block, or delete both markers entirely and re-run setup",
 			rcPath)
 	}
 	return "", false, nil
@@ -189,8 +208,8 @@ const (
 )
 
 type blockLoc struct {
-	kind                 blockKind
-	beginStart, endStop  int // [beginStart:endStop] covers the whole block including markers + trailing newline
+	kind                blockKind
+	beginStart, endStop int // [beginStart:endStop] covers the whole block including markers + trailing newline
 }
 
 // locateBlock scans `content` for the begin/end markers. Returns

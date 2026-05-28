@@ -16,8 +16,8 @@ import (
 // references resolve by looking up the owner's allocation; the consumer
 // is added to the refs list without taking a separate slot.
 type Allocator struct {
-	mu     sync.RWMutex
-	slots  map[string]*portSlot // key: ownerService + "/" + localVar
+	mu    sync.RWMutex
+	slots map[string]*portSlot // key: ownerService + "/" + localVar
 	// services is the list of every known service name, longest-first
 	// (so resolveOwner picks the most specific match). Populated by
 	// SetServices at daemon-start.
@@ -199,6 +199,9 @@ func pickFreePort() (int, error) {
 		return 0, err
 	}
 	defer func() { _ = ln.Close() }()
-	addr := ln.Addr().(*net.TCPAddr)
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		return 0, fmt.Errorf("env: unexpected listener type %T", ln.Addr())
+	}
 	return addr.Port, nil
 }

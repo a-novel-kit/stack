@@ -172,10 +172,10 @@ func TestAllocator_ConcurrentAcquireSameKey(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(N)
 	got := make([]int, N)
-	for i := 0; i < N; i++ {
+	for i := range N {
 		go func(idx int) {
 			defer wg.Done()
-			p, err := a.Acquire("svc", "REST_PORT", "consumer-" + itoa(idx))
+			p, err := a.Acquire("svc", "REST_PORT", "consumer-"+itoa(idx))
 			if err != nil {
 				t.Errorf("goroutine %d Acquire: %v", idx, err)
 				return

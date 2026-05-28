@@ -27,7 +27,7 @@ func RenderTopology(s *Service) string {
 	for _, in := range s.Infra {
 		detail := "(infra)"
 		if len(in.DependsOn) > 0 {
-			detail = fmt.Sprintf("(infra)  depends-on: %s", strings.Join(in.DependsOn, ", "))
+			detail = "(infra)  depends-on: " + strings.Join(in.DependsOn, ", ")
 		}
 		rows = append(rows, row{label: in.Name, detail: detail})
 	}
