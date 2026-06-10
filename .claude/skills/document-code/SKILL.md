@@ -211,6 +211,34 @@ entry point. Callers need this to reason about correctness and trust:
 
 ---
 
+## Document the code as it is, not the change that produced it
+
+A comment describes the code in its current form — never the edit, migration, or plan that
+created it. The reader has no access to what the code used to be, and references to that past rot
+the moment the change merges.
+
+The test: **if this were the first commit introducing the file — not a modification of something
+already there — would you still write this comment?** If not, delete it or rewrite it in the
+present tense. This rules out:
+
+- **Change narrative**: "now that X is removed", "the new model", "predates the redesign", "was
+  previously", "had to go", "dropped in the rewrite". State what the code does, not what it
+  stopped doing.
+- **Comparisons to deleted code**: "matches the old bash script", "the Go port of `foo.sh`", "same
+  default the script used". The thing compared against is gone; the comparison points at nothing.
+- **Dangling pointers to transient docs**: "per spec §6.4", "see PLAN.md". A design doc that won't
+  outlive the branch is not a durable reference — fold the rationale into the comment itself.
+- **Removal notes**: "placeholder removed — see above", or any comment whose only content is that
+  something used to be here. Absence needs no monument.
+
+Keep the rationale, drop the history. _"Uses `--no-deps` to avoid podman-compose's broken
+`depends_on` wait"_ is durable; _"mirrors the lessons from the old CLI's `--no-deps` handling"_ is
+not — same fact, but the second only parses for someone who remembers the old CLI. And the prior
+bar still applies: comment only when the code itself doesn't supply the context; a durable comment
+that merely restates the code is still noise.
+
+---
+
 ## Consistency and Quality
 
 Documentation is as much a liability as an asset when it's wrong. Every time you write or touch documentation:
@@ -262,6 +290,9 @@ Documentation is as much a liability as an asset when it's wrong. Every time you
 - **All-caps emphasis words**: avoid `MUST`, `SHOULD`, `OPTIONAL`, `NOT`, etc. in prose documentation.
   These are RFC-style terms that feel out of place in code docs; plain prose ("must", "only", "nil for...") is
   clearer and easier to read.
+- **Change narrative and references to deleted code or transient docs**: "now that X is removed",
+  "the new model", "matches the old script", "per spec §6.4". Document the code as it is, not the
+  edit that produced it — see "Document the code as it is, not the change that produced it" above.
 
 ---
 
