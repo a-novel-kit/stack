@@ -36,7 +36,7 @@ Commands fall into three groups:
 
   Standalone capabilities — operate on the local working tree, no daemon
   required:
-    test, build
+    test, build, publish
 
   Daemon control — manage the long-lived a-novel daemon (one per user):
     core start, core setup, core kill, core status, core prepare-reinstall
@@ -51,8 +51,8 @@ Commands fall into three groups:
 Run 'a-novel help <command>' for details on any of them. Every subcommand
 also accepts -h / --help to print the same content.
 
-See docs at https://github.com/a-novel-kit/stack/blob/master/spec.md for the
-full design.`,
+See docs at https://github.com/a-novel-kit/stack/blob/master/cli/README.md
+for the full design.`,
 		SilenceUsage:  true, // don't dump usage on every error — too noisy for the daemon-backed verbs
 		SilenceErrors: false,
 		Version:       version.String(),
@@ -73,6 +73,10 @@ them, and prints a pass/fail report.`,
 tree, lets you pick what to build through an interactive menu (or a CLI
 selector), runs the selection, and prints a pass/fail report.`,
 		legacy.Build))
+
+	// `a-novel publish` — cut a release locally (bump, commit, tag, push).
+	// Standalone like test/build: operates on the working tree, no daemon.
+	root.AddCommand(newPublishCmd())
 
 	// Version (compatibility with legacy `a-novel version` invocation —
 	// Cobra also exposes --version on root automatically).

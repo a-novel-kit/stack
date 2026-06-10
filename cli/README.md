@@ -15,13 +15,20 @@ a-novel core setup    # one-time interactive bootstrap (checks, dirs, .zshrc)
 After setup, every new shell auto-starts the daemon (`a-novel core start`
 silent if already running). Then use the verbs.
 
-## Three command groups
+## Command groups
 
 ```
 a-novel
 ├── test          standalone — runs Go + pnpm tests in the working tree
 ├── build         standalone — builds Go binaries, pnpm bundles, Podman images
-├── core          daemon control (start, setup, kill, status, prepare-reinstall)
+├── publish       standalone — cut a release (bump, commit, tag vX.Y.Z, push)
+│   ├── version <new-version>           preflight + bump + commit + tag + push
+│   └── stamp <prefix> <file>           refresh vX.Y.Z references in doc files
+├── install       graceful binary upgrade (daemon handoff via checkpoint)
+├── core          daemon control + workspace plumbing
+│   ├── start / setup / kill / status / prepare-reinstall
+│   ├── sync                            clone/ff-pull the curated workspace repos
+│   └── bot-token / bot-gh <org>        GitHub App token mint (comments-only gh)
 └── run           daemon-backed surface for operating on services/targets:
     ├── ui                              full-screen TUI (Bubble Tea)
     ├── ps / stacks / topology          discovery & state
@@ -32,7 +39,8 @@ a-novel
     └── exec / debug                    inside-container shells
 ```
 
-`test` and `build` don't need the daemon. Everything under `run` does.
+`test`, `build` and `publish` don't need the daemon. Everything under `run`
+does.
 
 ## Quick reference
 
@@ -68,6 +76,9 @@ a-novel run volume clear <service> [--no-backup]
 
 # TUI
 a-novel run ui                                # ? for help, Esc for commands
+
+# Releases (local-only; CI release workflow fires on the pushed tag)
+a-novel publish version 0.21.0                # or: patch / minor / major
 ```
 
 ## Architecture
@@ -78,33 +89,32 @@ unix-domain socket using [connect-rpc](https://connectrpc.com/). The same
 daemon supervises every running target, owns the env/port allocator,
 streams logs, and manages volumes. Multiple clients see consistent state.
 
-Spec: `spec.md` at the repo root (working document; deleted post-MVP).
-Implementation plan + phased rollout: `PLAN.md`.
-
 ### Package layout
 
 ```
 cli/
-├── cmd/a-novel/main.go            single binary; Cobra dispatch
+├── cmd/a-novel/main.go            single binary; Cobra dispatch + legacy test/build
 ├── proto/anovel/v1/core.proto     connect-rpc contract
-├── internal/
-│   ├── daemon/                    daemon-side (server, runner, env, logs, volumes, ...)
-│   ├── client/rpc/                unix-socket connect-rpc client
-│   ├── cli/                       Cobra command tree (test/build are wrapped legacy)
-│   ├── tui/                       Bubble Tea TUI
-│   ├── setup/                     `core setup` bootstrap
-│   ├── help/                      shared help registry (TODO: phase 13 polish)
-│   └── shared/                    XDG paths, stacks parser
-└── scripts/install.sh             graceful daemon-handoff install wrapper
+└── internal/
+    ├── daemon/                    daemon-side (server, runner, env, logs, volumes, ...)
+    ├── client/rpc/                unix-socket connect-rpc client
+    ├── cli/                       Cobra command tree (test/build are wrapped legacy)
+    ├── detect/                    working-tree discovery (test/build/run targets)
+    ├── build/                     standalone test/build execution engine
+    ├── tui/                       Bubble Tea TUI
+    ├── ui/                        interactive pickers + reports for test/build
+    ├── setup/                     `core setup` bootstrap
+    ├── version/                   build-version resolution (ldflags / buildinfo)
+    └── shared/                    XDG paths, stacks parser
 ```
 
 ### Key invariants
 
 - **One daemon per user**, unix socket at `$XDG_RUNTIME_DIR/a-novel.sock`.
-- **Stateless recovery** (spec §3.3): daemon doesn't checkpoint its own
-  state — every restart rebuilds from podman labels + filesystem + env
-  var. The reinstall checkpoint (§3.6) is the named exception, scoped
-  to one handoff cycle.
+- **Stateless recovery**: daemon doesn't checkpoint its own state —
+  every restart rebuilds from podman labels + filesystem + env var. The
+  reinstall checkpoint is the named exception, scoped to one handoff
+  cycle.
 - **Strict refusal of incoherent ops** with always-included remediation
   hints (e.g., "kill the target first" rather than silently failing).
 - **Multi-stack** by default: configure via `A_NOVEL_STACKS=name1:path1,name2:path2`.
@@ -125,11 +135,11 @@ cli/
 ```bash
 # Edit the proto (cli/proto/anovel/v1/core.proto), then:
 go generate ./...      # regenerates proto Go bindings via buf
-make test-unit         # not yet wired; for now: go test ./...
+go test ./...          # or, dogfooding: a-novel test --type=go -y
 
-# Graceful binary upgrade (preserves running go-exec targets via reinstall
-# checkpoint — see spec §3.6):
-./scripts/install.sh
+# Graceful binary upgrade (preserves running go-exec targets via the
+# reinstall checkpoint):
+a-novel install
 ```
 
 CI's `generated-go` job runs `go generate ./...` and fails on diff —
@@ -137,8 +147,9 @@ keeps proto bindings in sync.
 
 ## See also
 
-- `spec.md` — full design specification (working doc)
-- `PLAN.md` — implementation plan + phased rollout
-- Per-service `app/service-*/builds/podman-compose.yaml` — compose
-  contract per spec §11 (every service-\* repo's PR in the
-  `chore/builds/migrate-compose-for-daemon` branch)
+- Per-service `app/service-*/builds/podman-compose.yaml` — the compose
+  contract the daemon's discovery enforces (every `cmd/<target>/` has a
+  profile-matched compose mirror; long-runners declare healthchecks;
+  `depends_on` is complete; ports are `${VAR}` references the daemon
+  allocates).
+- `.claude/skills/use-a-novel-cli/` — the full raw-command → CLI mapping.

@@ -18,6 +18,28 @@ understand the current patterns.
 
 ---
 
+## Out of Scope: Release / Publish Scripts
+
+**Do not write or revive a `scripts/publish.sh` or `scripts/prepublish-version.sh`** for any
+service or kit repo. The release flow — version bump (workspace-aware), commit, tag, push — lives
+in the `a-novel` CLI as `a-novel publish version <v>`. That command auto-detects whether the repo
+uses `pnpm-workspace.yaml` (recursive `pnpm version`) or not (root-only), runs a local preflight
+(branch == master, clean tree, HEAD == origin/master, `git push --dry-run`), then performs the
+bump-commit-tag-push sequence. The bash equivalents were deleted because each copy drifted
+independently (pnpm 10 → 11 broke two of three at once).
+
+**The security model for who can publish is server-side**, not script-side: GitHub branch
+protection on `master` AND tag protection on `v*` are what actually enforce "only X can release."
+The CLI's preflight is UX — it surfaces a 403 before any local mutation — but it is not a
+boundary. See [[reference-release-security]] and [[project-publish-cli-verb]] in the memory
+index for the full design.
+
+In-container release steps (Docker image builds, npm publish on a pushed tag) are not in this
+skill's scope either — they live in the `a-novel-kit/workflows/` composite GitHub Actions and run
+on CI, not on a developer machine. Do not duplicate that logic in a bash script.
+
+---
+
 ## After Every Edit
 
 Run `bash -n <script>` to syntax-check without executing:
@@ -27,8 +49,10 @@ bash -n scripts/my-script.sh
 ```
 
 Then run the script in a safe context (local env, no production credentials) to verify runtime
-behaviour. For test scripts, run `make test-unit` or `make test-pkg`. Never run `scripts/publish.sh`
-to test — it pushes to the remote.
+behaviour. For test runners, prefer `a-novel test` (per the `use-a-novel-cli` rule); falling back
+to `make test-unit` / `make test-pkg` is fine for repos where the CLI doesn't yet wrap the
+relevant target. Never run a release-flow command (e.g. `a-novel publish version`) to test —
+it pushes to the remote.
 
 ---
 
@@ -233,19 +257,36 @@ flag parsing, real error types, and consistent help output. The only scripts
 that stay in bash are tiny shims (often consumed by CI) where adding a Cobra
 command would be heavier than the script itself.
 
-For the rare remaining bash, keep output simple:
+For the rare remaining bash, keep formatting minimal: plain `printf`, no shared
+helper library, and honor `NO_COLOR` if you emit colors at all.
 
-- Errors and warnings to stderr; routine info to stdout.
+```bash
+# Honor NO_COLOR up front; everything else can branch on $RED/$RESET etc.
+if [ -z "${NO_COLOR:-}" ] && [ -t 1 ]; then
+    RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
+else
+    RED=""; GREEN=""; YELLOW=""; RESET=""
+fi
+
+printf "%s✓%s %s\n" "${GREEN}" "${RESET}" "service-json-keys updated"
+printf "%s✗%s %s\n" "${RED}"   "${RESET}" "remote unreachable" >&2
+```
+
+**Conventions:**
+
+- Errors and warnings go to stderr (`>&2`). Successes and progress go to stdout.
 - Use `printf '%s\n'` over `echo` for portability.
-- Avoid ANSI escapes unless the script is interactive-only — they corrupt log
-  capture. If you must, gate on `[ -t 1 ]` (stdout is a TTY).
-- Honor `NO_COLOR` (force off) and `FORCE_COLOR` (force on) when emitting any
-  color at all.
+- Colors: green = success, yellow = warning, red = error. Never set backgrounds;
+  avoid bright-white / bright-black — they vanish on light or dark themes.
+- Honor `NO_COLOR` (set → never emit escapes). Don't gate on `FORCE_COLOR` unless a
+  caller asks for it — keep the scaffolding small.
+- Do not use `tr ' ' '─'` to build separator lines — `tr` is byte-oriented and will
+  corrupt the multi-byte UTF-8 sequence (`0xE2 0x94 0x80`) by replacing each space
+  with only `0xE2`. Use a pure-bash loop or pre-built constant string.
 
-**Building separator lines.** Do not use `tr ' ' '─'` — `tr` is byte-oriented
-and will corrupt the multi-byte UTF-8 sequence (`0xE2 0x94 0x80`) by replacing
-each space with only `0xE2`. Use `printf` with a pre-built string of dashes,
-or a pure-bash loop.
+Long-lived interactive UX (rich progress, multi-phase banners, spinners) is the
+Go CLI's job, not bash's. If a bash script is growing a banner/log_step framework,
+that's a signal it should move under `a-novel` instead.
 
 ---
 
