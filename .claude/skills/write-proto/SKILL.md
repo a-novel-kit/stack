@@ -32,25 +32,25 @@ internal/handlers/protogen/   # Generated Go stubs (never edit — always regene
 ```
 
 The entire `internal/handlers/protogen/` directory is **deleted and recreated** on every
-`make generate` run. Never put hand-written code there.
+`pnpm generate:go` run. Never put hand-written code there.
 
 ---
 
 ## After Every Edit
 
 ```
-make format-proto   # format .proto files + sync buf.lock
-make lint-proto     # validate against buf's STANDARD ruleset
-make generate       # wipe protogen/ and regenerate Go stubs + mocks
-make format-go      # goimports on the newly generated files
-make lint-go        # catch any issues in handler code using new types
+pnpm format:proto   # format .proto files + sync buf.lock
+pnpm lint:proto     # validate against buf's STANDARD ruleset
+pnpm generate:go       # wipe protogen/ and regenerate Go stubs + mocks
+pnpm format:go      # goimports on the newly generated files
+pnpm lint:go        # catch any issues in handler code using new types
 ```
 
-Run these in order. `make format-proto` must come before `make generate` — buf formats the source
+Run these in order. `pnpm format:proto` must come before `pnpm generate:go` — buf formats the source
 files in place, and the generated output reflects the formatted source.
 
-After `make generate`, update the Go handler code that uses the changed types, then run
-`make format-go` and `make lint-go` to confirm everything compiles cleanly.
+After `pnpm generate:go`, update the Go handler code that uses the changed types, then run
+`pnpm format:go` and `pnpm lint:go` to confirm everything compiles cleanly.
 
 Then invoke the **`document-code` skill** for every `.proto` file you created or modified. Proto
 comments are the public API contract — they must be accurate, complete, and written before the
@@ -288,18 +288,18 @@ struct and registers with `protogen.Register<Name>Server` in `cmd/grpc/main.go`.
 
 1. **Create `internal/models/proto/<entity>_<operation>.proto`** with the service, request,
    and response messages. Follow file structure and naming conventions above.
-2. **Run `make format-proto`** — formats the file and updates buf.lock.
-3. **Run `make lint-proto`** — fix any violations before generating.
-4. **Run `make generate`** — wipes `protogen/` and regenerates everything.
+2. **Run `pnpm format:proto`** — formats the file and updates buf.lock.
+3. **Run `pnpm lint:proto`** — fix any violations before generating.
+4. **Run `pnpm generate:go`** — wipes `protogen/` and regenerates everything.
 5. **Create `internal/handlers/grpc.<entity><Operation>.go`** with the new handler type.
    Embed `protogen.Unimplemented<ServiceName>Server`, define the service interface, implement
    the RPC method.
-6. **Run `make generate`** again if you added a new interface (regenerates mocks).
+6. **Run `pnpm generate:go`** again if you added a new interface (regenerates mocks).
 7. **Wire it up in `cmd/grpc/main.go`**: construct the handler and call
    `protogen.Register<ServiceName>Server(server, handler)`.
 8. **Invoke the `document-code` skill** for the new `.proto` file and the new Go handler file.
 9. **Invoke the `write-go-tests` skill** to write tests for the new handler.
-10. **Run `make format-go lint-go test-unit`** to confirm everything is clean.
+10. **Run `pnpm format:go`, `pnpm lint:go`, and `a-novel test --type=go -y`** to confirm everything is clean.
 
 ---
 
@@ -312,12 +312,12 @@ struct and registers with `protogen.Register<Name>Server` in `cmd/grpc/main.go`.
   injects these automatically. Adding them manually will conflict with managed mode settings
   or produce duplicate declarations.
 - **Editing files in `internal/handlers/protogen/`.** They are always overwritten. Any edits
-  will be lost on the next `make generate`.
+  will be lost on the next `pnpm generate:go`.
 - **Reusing a field number.** Once a number is removed, reserve it. Reusing a number from a
   deleted field causes silent data corruption for clients that still send the old field.
 - **Using proto types in services or DAO.** Proto types belong exclusively in handlers. Never
   import `internal/handlers/protogen` from `internal/services` or `internal/dao`.
-- **Forgetting `make format-proto` before `make generate`.** buf formats source files in place;
+- **Forgetting `pnpm format:proto` before `pnpm generate:go`.** buf formats source files in place;
   the generated output reflects the formatted source. Run format first, then generate.
 - **Renaming a field as a "safe" refactor.** Field renames are breaking at FILE level — buf will
   reject them. If a field must be renamed, add a new field with the correct name and a new

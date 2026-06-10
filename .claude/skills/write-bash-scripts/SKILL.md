@@ -49,10 +49,9 @@ bash -n scripts/my-script.sh
 ```
 
 Then run the script in a safe context (local env, no production credentials) to verify runtime
-behaviour. For test runners, prefer `a-novel test` (per the `use-a-novel-cli` rule); falling back
-to `make test-unit` / `make test-pkg` is fine for repos where the CLI doesn't yet wrap the
-relevant target. Never run a release-flow command (e.g. `a-novel publish version`) to test —
-it pushes to the remote.
+behaviour. For test runs, always go through `a-novel test` (per the `use-a-novel-cli` rule) —
+the bash test-runner scripts it replaced no longer exist. Never run a release-flow command
+(e.g. `a-novel publish version`) to test — it pushes to the remote.
 
 ---
 
@@ -202,17 +201,19 @@ done
 
 ## Environment Variables
 
-`scripts/setup-env.sh` is sourced (not executed) by every test and run script. It uses the
-assign-if-unset pattern so that pre-exported values are preserved:
+Port and URL allocation is the `a-novel` daemon's job now (`a-novel run env <service>`);
+the old `scripts/setup-env.sh` files that hand-rolled random ports are gone. If a script
+genuinely needs an env file, use the assign-if-unset pattern so pre-exported values are
+preserved:
 
 ```bash
-POSTGRES_PORT="${POSTGRES_PORT:="$(node -e 'console.log(await (await import("get-port-please")).getRandomPort())')"}"
+POSTGRES_PORT="${POSTGRES_PORT:=5432}"
 export POSTGRES_PORT
 ```
 
 - Use `${VAR:=default}` to set a default only when the variable is unset or empty.
-- Source with `. "$PWD/scripts/setup-env.sh"` (not `bash scripts/setup-env.sh`), so the exported
-  variables are visible in the calling shell.
+- Source env files with `. "$PWD/scripts/env.sh"` (not `bash scripts/env.sh`), so the
+  exported variables are visible in the calling shell.
 
 ---
 

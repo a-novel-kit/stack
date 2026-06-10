@@ -71,12 +71,9 @@ Run the narrowest test target that covers the branch's layer — see `implement-
 the layer-to-target mapping. Typical:
 
 ```bash
-a-novel test --type=go -y       # preferred local — Go internal + pkg/go
-a-novel test --type=pnpm -y     # preferred local — pkg/js
-# Raw equivalents (CI uses these; load `use-a-novel-cli` skill for the full mapping):
-make test-unit      # Go internal layers
-make test-pkg       # pkg/go (needs running service)
-make test-pkg-js    # pkg/js
+a-novel test --type=go -y       # Go internal + pkg/go
+a-novel test --type=pnpm -y     # pkg/js
+a-novel test -y                 # everything (final pre-push validation)
 ```
 
 If tests fail locally, CI will fail too. Fix before pushing. Never push a red branch with
@@ -88,7 +85,7 @@ attention.
 If the branch touches `.proto` files or Go interfaces that have mocks:
 
 ```bash
-make generate
+pnpm generate:go
 git status --porcelain
 ```
 
@@ -247,7 +244,7 @@ None.
 
 ## Test plan
 
-- [x] `make test-unit` passes
+- [x] `a-novel test --type=go -y` passes
 - [ ] CI green
 EOF
 )"
@@ -332,7 +329,7 @@ Do not merge — merges are a developer decision unless explicitly delegated.
 ## Common Mistakes
 
 - **Opening or editing a PR with the bot token.** `a-novel core bot-gh` / `a-novel core
-  bot-token` is for comments only. PR create/edit/ready always run as the operator's
+bot-token` is for comments only. PR create/edit/ready always run as the operator's
   user token (Phase 5.0).
 - **Treating "PR opened" as task-done.** The task is not finished until `monitor-ci`
   reports CI green or an escalated/blocked state (Phase 7).

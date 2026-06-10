@@ -2,13 +2,14 @@
 name: use-a-novel-cli
 description: >
   Canonical reference for the `a-novel` CLI. ALWAYS load alongside any skill that
-  involves running tests, building artifacts, or starting/stopping local services. The
-  CLI replaces raw invocations (`make test-unit`, `podman build`, `podman compose up`)
-  with three command groups: `test` (standalone), `build` (standalone), and `run`
-  (daemon-backed verbs for `start`/`kill`/`logs`/`env`/`volume`/`ui` etc.) plus `core`
-  for daemon lifecycle. Prefer `a-novel <verb>` over equivalent raw commands wherever
-  a 1:1 mapping exists; raw `make` targets stay valid (CI uses them) but local-dev
-  workflows should route through `a-novel`. Loaded automatically by `implement-feature`,
+  involves running tests, building artifacts, releasing, or starting/stopping local
+  services. The CLI replaces the deleted Makefiles and per-repo scripts with four
+  command groups: `test`, `build`, `publish` (standalone), and `run` (daemon-backed
+  verbs for `start`/`kill`/`logs`/`env`/`volume`/`ui` etc.) plus `core` for daemon
+  lifecycle. Prefer `a-novel <verb>` over equivalent raw commands wherever a 1:1
+  mapping exists; lint/format/generate live in pnpm scripts (`pnpm lint:go`,
+  `pnpm format:go`, ...), never in Makefiles (which no longer exist in any repo).
+  Loaded automatically by `implement-feature`,
   `open-pull-request`, `resolve-pr-feedback`, `write-go`, `write-go-tests`,
   `write-go-service`, `write-go-kit`, `write-js-package`, `write-dockerfiles`,
   `write-bash-scripts`, and `write-proto`.
@@ -17,41 +18,49 @@ description: >
 # Use the `a-novel` CLI
 
 The `a-novel` CLI is the single user-facing entrypoint for local-dev workflows in the
-a-novel ecosystem. It replaces ad-hoc invocations of `make`, `go test`, `podman build`,
-and `podman compose` with three coherent command groups:
+a-novel ecosystem. It replaces the deleted Makefiles and per-repo bash scripts (`go
+test` wrappers, `podman build`, `podman compose`, `publish.sh`) with four coherent
+command groups:
 
 ```
 a-novel
 ├── test          standalone — runs Go + pnpm tests in the working tree
 ├── build         standalone — builds Go binaries, pnpm bundles, Podman images
+├── publish       standalone — cut a release (bump, commit, tag vX.Y.Z, push)
 ├── core          daemon control (start, setup, kill, status, prepare-reinstall)
 └── run           daemon-backed verbs (services + targets)
 ```
 
 **Always prefer `a-novel <verb>` over the equivalent raw command** when one exists.
-Raw `make` targets still work and CI uses them, but local-dev workflows should route
-through the CLI for consistency.
+Makefiles are gone from every repo — `make` is never the answer. What the CLI doesn't
+cover lives in pnpm scripts (lint/format/generate, see "When NOT to use the CLI") so
+each repo's surface is exactly: `a-novel <verb>` + `pnpm <script>` + raw `go`/`git`.
 
 ---
 
-## Quick mapping: raw → `a-novel`
+## Quick mapping: raw / legacy → `a-novel`
 
-| Raw / make                                   | `a-novel` equivalent                                              |
-| -------------------------------------------- | ----------------------------------------------------------------- |
-| `make test-unit`                             | `a-novel test --type=go -y`                                       |
-| `make test-pkg`                              | `a-novel test --type=go -y` (CLI auto-discovers `pkg/go` targets) |
-| `make test-pkg-js`                           | `a-novel test --type=pnpm -y`                                     |
-| `make test` (everything)                     | `a-novel test -y`                                                 |
-| `go test ./...`                              | `a-novel test --type=go --dir=.`                                  |
-| `make build`                                 | `a-novel build -y`                                                |
-| `podman build -f Dockerfile -t name:local .` | `a-novel build --type=podman`                                     |
-| `pnpm build`                                 | `a-novel build --type=pnpm`                                       |
-| `go run ./cmd/<target>` (service local-dev)  | `a-novel run start <service>/<target>`                            |
-| `podman compose --profile X up -d`           | `a-novel run start <service>/<target> --mode=container`           |
-| `podman compose up <infra>`                  | `a-novel run service infra start <service>`                       |
-| `podman compose down`                        | `a-novel run service infra kill <service>`                        |
-| `podman logs -f <container>`                 | `a-novel run logs <service>/<target> --follow`                    |
-| `podman volume export` + manual tar          | `a-novel run volume backup <service>`                             |
+| Raw / legacy (deleted)                          | `a-novel` equivalent                                              |
+| ----------------------------------------------- | ----------------------------------------------------------------- |
+| `make test-unit` (gone)                         | `a-novel test --type=go -y`                                       |
+| `make test-pkg` (gone)                          | `a-novel test --type=go -y` (CLI auto-discovers `pkg/go` targets) |
+| `make test-pkg-js` (gone)                       | `a-novel test --type=pnpm -y`                                     |
+| `make test` (gone)                              | `a-novel test -y`                                                 |
+| `go test ./...`                                 | `a-novel test --type=go --dir=.`                                  |
+| `make build` (gone)                             | `a-novel build -y`                                                |
+| `podman build -f Dockerfile -t name:local .`    | `a-novel build --type=podman`                                     |
+| `pnpm build`                                    | `a-novel build --type=pnpm`                                       |
+| `go run ./cmd/<target>` (service local-dev)     | `a-novel run start <service>/<target>`                            |
+| `podman compose --profile X up -d`              | `a-novel run start <service>/<target> --mode=container`           |
+| `podman compose up <infra>`                     | `a-novel run service infra start <service>`                       |
+| `podman compose down`                           | `a-novel run service infra kill <service>`                        |
+| `podman logs -f <container>`                    | `a-novel run logs <service>/<target> --follow`                    |
+| `podman volume export` + manual tar             | `a-novel run volume backup <service>`                             |
+| `scripts/publish.sh patch` / `pnpm publish:*`   | `a-novel publish version patch`                                   |
+| `scripts/prepublish-version.sh <prefix> <file>` | `a-novel publish stamp <prefix> <file>`                           |
+| `make lint-go` (gone)                           | `pnpm lint:go` (not a CLI verb — see "When NOT to use")           |
+| `make format` (gone)                            | `pnpm format:go` / `pnpm format` / `pnpm format:proto`            |
+| `make generate` (gone)                          | `pnpm generate:go` (plus `pnpm generate:mjml` where present)      |
 
 Use the bare `a-novel <verb> --help` (or `a-novel help <verb>`) for the full flag list
 of any subcommand. Every subcommand carries exhaustive Short/Long/Example help text.
@@ -79,22 +88,18 @@ a-novel test --no-cover       # skip coverage (on by default)
 a-novel test -j 4             # cap parallelism at 4 (interactive only)
 ```
 
-**When to use:** ALWAYS for local-dev test runs. Use `make test-unit` /
-`make test-pkg` ONLY when:
+**When to use:** ALWAYS for local-dev test runs — there is no `make` fallback
+anymore (Makefiles and the `scripts/test*.sh` family are deleted). The raw
+`go test ./<path>/...` form remains for running a single package/test while
+iterating; CI runs `gotestsum` directly through the `kit/workflows`
+composite actions, not through the CLI.
 
-- Documenting CI behavior (CI workflows invoke `make`)
-- Scripted contexts inside the service repo that need the raw make target
-- Debugging a specific make-rule interaction
+**Test plan checkboxes in PR bodies:**
 
-**Substitutions in skill text:**
-
-- Instead of "run `make test-unit`" → "run `a-novel test --type=go -y` (or
-  `make test-unit` inside the service repo)"
-- Test plan checkboxes in PR bodies:
-  ```
-  - [ ] `a-novel test --type=go -y` passes
-  - [ ] `a-novel test --type=pnpm -y` passes (if JS changed)
-  ```
+```
+- [ ] `a-novel test --type=go -y` passes
+- [ ] `a-novel test --type=pnpm -y` passes (if JS changed)
+```
 
 ---
 
@@ -120,6 +125,30 @@ a pass/fail report.
 
 ---
 
+## `a-novel publish` — cutting releases
+
+Releases are created locally by a developer with push rights, not by CI. The
+sequence is: bump version files → commit → tag `vX.Y.Z` → push commit + tag;
+CI's release workflow fires on the pushed tag. Covered in depth by
+`manage-versions` — the short form:
+
+```bash
+a-novel publish version 0.21.0        # explicit semver
+a-novel publish version patch         # or a pnpm increment keyword
+```
+
+The command is workspace-aware (`pnpm version --recursive` vs
+`--no-git-tag-version`), runs the repo's `prepublish:doc` script if present,
+and preflights before mutating anything: branch == master, clean tree,
+HEAD == origin/master, `git push --dry-run`. Server-side branch + tag
+protection is the actual security boundary; the preflight is UX.
+
+`a-novel publish stamp <prefix> <file>` is the doc-stamping helper the
+`prepublish:doc` pnpm scripts call — it rewrites `<prefix>vX.Y.Z` references
+(prefix is a regex) to the current package.json version.
+
+---
+
 ## `a-novel run` — daemon-backed service operations
 
 This is the entire surface for starting, stopping, observing, and inspecting
@@ -142,7 +171,8 @@ The supervisor **auto-walks dependencies**: `a-novel run start service-X/rest`
 brings up postgres, runs migrations + rotate-keys (one-shots), then starts rest.
 Mutual exclusion is enforced (refuses with hint if the target is already running
 in the other mode). One-shots are tracked per infra-up session — they re-run on
-every `infra start` per spec §5.5.
+every `infra start` (one-shots are idempotent by contract, so re-applying
+migrations locally is by design).
 
 ### Observability
 
@@ -216,16 +246,23 @@ the broader workspace is stabilised; expanding it is a one-line PR.
 
 ## When NOT to use the CLI
 
-Some tasks fall outside the CLI's scope and still use raw commands:
+Some tasks fall outside the CLI's scope and use pnpm scripts or raw commands:
 
-- **Lint / format**: `go tool -modfile=golangci-lint.mod golangci-lint run ./...`
-  (per [[feedback-go-tools-policy]]); `go tool buf format -w` for protos. The
-  CLI doesn't wrap these.
+- **Lint / format / generate**: pnpm scripts, uniform across repos —
+  `pnpm lint:go` / `pnpm lint:proto` / `pnpm lint` (node) and
+  `pnpm format:go` / `pnpm format:proto` / `pnpm format` (prettier), plus
+  `pnpm generate:go` (mocks/proto stubs). Each is a one-line wrapper over the
+  raw form (`go tool -modfile=golangci-lint.mod golangci-lint run ./...`,
+  `go tool buf format -w`, `go generate ./...` — per
+  [[feedback-go-tools-policy]]), so the raw forms stay valid too. The CLI
+  deliberately doesn't wrap these.
 - **Direct database access**: use `a-novel run exec <service>/<infra-target> --
 psql -U postgres` (when implemented) OR `podman exec <container-name> psql ...`
   if exec isn't wired yet.
-- **CI workflows**: CI invokes `make test-unit` / `make build` / etc. directly.
-  Skills documenting CI behavior should reference the `make` targets.
+- **CI workflows**: CI never shells into the CLI — the `kit/workflows`
+  composite actions invoke `gotestsum` / `golangci-lint` / `pnpm run <script>`
+  directly. Skills documenting CI behavior should reference those actions, not
+  local commands.
 - **Git operations**: standard `git` / `gh` (per [[feedback-bot-attribution]] —
   user token for PR ops, `a-novel core bot-gh` for comments).
 

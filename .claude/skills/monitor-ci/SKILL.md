@@ -28,25 +28,25 @@ across those services. For the actual jobs on the current checkout, run `gh pr c
 <n>` (or read `.github/workflows/main.yaml`) and intersect with the rows below; jobs
 that aren't listed here are either repo-specific or downstream of a base table entry.
 
-| CI Job                        | What it checks                             | Local equivalent                         | Typical failure                                                              |
-| ----------------------------- | ------------------------------------------ | ---------------------------------------- | ---------------------------------------------------------------------------- |
-| `generated-go`                | `go generate ./...` is up to date          | `make generate`                          | Forgot to run `make generate` after proto/interface                          |
-| `lint-go`                     | `golangci-lint run` clean                  | `make lint-go`                           | New Go code violates style or has a bug                                      |
-| `lint-proto`                  | `buf lint` clean                           | `make lint-proto`                        | Proto file violates buf style                                                |
-| `lint-node`                   | `pnpm lint:ci` clean                       | `pnpm lint:ci`                           | JS/TS code violates eslint/prettier                                          |
-| `test`                        | Go unit tests in `/internal`               | `make test-unit`                         | Broken Go code or test                                                       |
-| `test-pkg`                    | Go integration tests in `/pkg/go`          | `make test-pkg`                          | gRPC contract mismatch OR flake                                              |
-| `test-pkg-js`                 | JS integration tests in `/pkg/js`          | `make test-pkg-js`                       | REST contract mismatch OR flake                                              |
-| `build-database`              | Docker build for Postgres image            | (no direct make target; read Dockerfile) | Dockerfile error, bad init script                                            |
-| `build-migrations`            | Docker build for migrations job            | (none)                                   | Migration file issue                                                         |
-| `build-job-rotate-keys`       | Docker build for rotate-keys job           | (none)                                   | Go build error in cmd/rotatekeys                                             |
-| `build-grpc`                  | Docker build for gRPC service image        | (none)                                   | Go build error                                                               |
-| `build-standalone-grpc`       | Docker build for standalone gRPC dev image | (none)                                   | Go build error                                                               |
-| `build-rest`                  | Docker build for REST service image        | (none)                                   | Go build error                                                               |
-| `build-standalone-rest`       | Docker build for standalone REST dev image | (none)                                   | Go build error                                                               |
-| `build-js`                    | `pnpm build:rest` for pkg/js               | `pnpm -C pkg/js build:rest`              | TS compile error or broken export                                            |
-| `report-grc` / `publish-docs` | Post-success reporting, **master only**    | (none)                                   | Rarely actionable; usually transient                                         |
-| `report-codecov`              | Coverage upload, runs on **every branch**  | (none)                                   | Upload failure can still mark the run failed in PR checks; usually transient |
+| CI Job                        | What it checks                             | Local equivalent              | Typical failure                                                              |
+| ----------------------------- | ------------------------------------------ | ----------------------------- | ---------------------------------------------------------------------------- |
+| `generated-go`                | `go generate ./...` is up to date          | `pnpm generate:go`            | Forgot to run `pnpm generate:go` after proto/interface                       |
+| `lint-go`                     | `golangci-lint run` clean                  | `pnpm lint:go`                | New Go code violates style or has a bug                                      |
+| `lint-proto`                  | `buf lint` clean                           | `pnpm lint:proto`             | Proto file violates buf style                                                |
+| `lint-node`                   | `pnpm lint:ci` clean                       | `pnpm lint:ci`                | JS/TS code violates eslint/prettier                                          |
+| `test`                        | Go unit tests in `/internal`               | `a-novel test --type=go -y`   | Broken Go code or test                                                       |
+| `test-pkg`                    | Go integration tests in `/pkg/go`          | `a-novel test --type=go -y`   | gRPC contract mismatch OR flake                                              |
+| `test-pkg-js`                 | JS integration tests in `/pkg/js`          | `a-novel test --type=pnpm -y` | REST contract mismatch OR flake                                              |
+| `build-database`              | Docker build for Postgres image            | `a-novel build --type=podman` | Dockerfile error, bad init script                                            |
+| `build-migrations`            | Docker build for migrations job            | (none)                        | Migration file issue                                                         |
+| `build-job-rotate-keys`       | Docker build for rotate-keys job           | (none)                        | Go build error in cmd/rotatekeys                                             |
+| `build-grpc`                  | Docker build for gRPC service image        | (none)                        | Go build error                                                               |
+| `build-standalone-grpc`       | Docker build for standalone gRPC dev image | (none)                        | Go build error                                                               |
+| `build-rest`                  | Docker build for REST service image        | (none)                        | Go build error                                                               |
+| `build-standalone-rest`       | Docker build for standalone REST dev image | (none)                        | Go build error                                                               |
+| `build-js`                    | `pnpm build:rest` for pkg/js               | `pnpm -C pkg/js build:rest`   | TS compile error or broken export                                            |
+| `report-grc` / `publish-docs` | Post-success reporting, **master only**    | (none)                        | Rarely actionable; usually transient                                         |
+| `report-codecov`              | Coverage upload, runs on **every branch**  | (none)                        | Upload failure can still mark the run failed in PR checks; usually transient |
 
 `test` blocks most application `build-*` jobs (`build-grpc`, `build-rest`,
 `build-standalone-*`, `build-job-rotate-keys`). When `test` fails those downstream jobs
@@ -181,7 +181,7 @@ generate` being run afterward.
 own follow-up:
 
 ```bash
-make generate
+pnpm generate:go
 git status --porcelain
 git add internal/handlers/protogen/ internal/handlers/mocks/ internal/services/mocks/
 git commit -m "chore(gen): regenerate Go bindings for <scope>"
@@ -197,13 +197,13 @@ the "never amend a pushed commit" rule is categorical and wins here.
 
 **Symptom**: linter reports specific files + line numbers.
 
-**Fix**: run the exact make target locally, read its output, edit the flagged files, re-run
+**Fix**: run the matching local script, read its output, edit the flagged files, re-run
 until clean, then commit:
 
 ```bash
-make lint-go        # or lint-proto / lint-node
+pnpm lint:go        # or lint-proto / lint-node
 # edit flagged files
-make lint-go        # re-run to confirm clean
+pnpm lint:go        # re-run to confirm clean
 git add <files>
 git commit -m "fix(<scope>): resolve lint findings"
 git push
@@ -227,7 +227,7 @@ the PR author at merge time if the branch uses squash-merge.
    # Run just the failing package and test for fast iteration
    go test ./internal/<package>/... -run TestXxx -v
    # Or the full suite if multiple tests fail
-   make test-unit
+   a-novel test --type=go -y
    ```
 
 2. Read the failure carefully. Decide: **is the test wrong, or is the code wrong?**
@@ -270,8 +270,8 @@ flake and investigate as real.
 1. Reproduce locally — these suites need a running service:
 
    ```bash
-   make test-pkg       # starts gRPC standalone
-   make test-pkg-js    # starts REST standalone
+   a-novel test --type=go -y       # starts gRPC standalone
+   a-novel test --type=pnpm -y    # starts REST standalone
    ```
 
 2. The failure usually means a contract mismatch between handlers and client:
@@ -314,8 +314,8 @@ causes:
 
 After applying a fix:
 
-1. Re-run the relevant local target to confirm green (`make test-unit`, `make lint-go`,
-   `make generate`, etc.)
+1. Re-run the relevant local target to confirm green (`a-novel test --type=go -y`, `pnpm lint:go`,
+   `pnpm generate:go`, etc.)
 2. Create a new fix commit per `git-conventions`. Do not amend or rewrite history on
    this already-pushed branch — doing so strands CI run logs and review threads
    anchored to the old SHAs.
@@ -403,14 +403,14 @@ anything the Phase 1.2 self-review surfaced that you did not fix yourself.
 | Rerun failed jobs only (flake retry)  | `gh run rerun <run-id> --failed`                                                    |
 | Wait for in-progress run              | Bash `sleep 90` with `run_in_background=true`, then re-check                        |
 
-| CI Job         | Local fix target                   |
-| -------------- | ---------------------------------- |
-| `generated-go` | `make generate` + follow-up commit |
-| `lint-go`      | `make lint-go`                     |
-| `lint-proto`   | `make lint-proto`                  |
-| `lint-node`    | `pnpm lint:ci`                     |
-| `test`         | `make test-unit`                   |
-| `test-pkg`     | `make test-pkg`                    |
-| `test-pkg-js`  | `make test-pkg-js`                 |
-| `build-js`     | `pnpm -C pkg/js build:rest`        |
-| `build-*` (Go) | `go build ./...`                   |
+| CI Job         | Local fix target                      |
+| -------------- | ------------------------------------- |
+| `generated-go` | `pnpm generate:go` + follow-up commit |
+| `lint-go`      | `pnpm lint:go`                        |
+| `lint-proto`   | `pnpm lint:proto`                     |
+| `lint-node`    | `pnpm lint:ci`                        |
+| `test`         | `a-novel test --type=go -y`           |
+| `test-pkg`     | `a-novel test --type=go -y`           |
+| `test-pkg-js`  | `a-novel test --type=pnpm -y`         |
+| `build-js`     | `pnpm -C pkg/js build:rest`           |
+| `build-*` (Go) | `go build ./...`                      |

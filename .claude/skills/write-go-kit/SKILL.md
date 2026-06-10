@@ -121,8 +121,8 @@ retire.)
   `utils/` (or top-level helper files) holds the functions. Keep the top-level package surface of
   a sub-package small and stable.
 - `golib` ships a small amount of generated code (the `grpcf` proto bits) — `buf` is in the
-  toolchain (`buf.yaml`, `buf.gen.yaml`); `make generate` runs `go generate` and `buf generate`,
-  `make lint` runs `buf lint`, `make format` runs `buf format`/`buf dep update`. Treat `.proto` in
+  toolchain (`buf.yaml`, `buf.gen.yaml`); `pnpm generate:go` runs `go generate` and `buf generate`,
+  `pnpm lint:proto` runs `buf lint`, `pnpm format:proto` runs `buf format`/`buf dep update`. Treat `.proto` in
   a kit repo with the **`write-proto`** skill (the contract-stability rules there apply doubly to a
   shared library).
 - Doc comments on every exported symbol (`document-code`) — `golib` is consumed by every service,
@@ -167,15 +167,16 @@ the released tag before merging).
 
 Match the repo's existing setup; the standard shape:
 
-- **Makefile targets** — match the repo's existing set:
-  - `make test` — gotestsum via `gotestsum.mod`.
-  - `make lint` — `golangci-lint` via `golangci-lint.mod` (+ `buf lint` if there's proto, +
-    `pnpm lint` for the prettier/docs tooling).
-  - `make generate` — `go generate` (+ `buf generate` if proto).
-  - `make format` — `go mod tidy`, `golangci-lint --fix` (+ `buf format` if proto), `pnpm format`.
+- **pnpm scripts** — match the repo's existing set (no Makefiles anywhere):
+  - `a-novel test -y` — gotestsum via `gotestsum.mod` (the CLI discovers it).
+  - `pnpm lint:go` — `golangci-lint` via `golangci-lint.mod`; `pnpm lint:proto` — `buf lint`
+    (when there's proto); `pnpm lint` — the prettier/docs tooling.
+  - `pnpm generate:go` — `go generate` (+ `buf generate` if proto).
+  - `pnpm format:go` — `go mod tidy` + `golangci-lint --fix`; `pnpm format:proto` —
+    `buf format` + `buf dep update`; `pnpm format` — prettier.
 
-  `write-go` already says: run `make format` and `make lint` after every edit; `make generate`
-  when generated inputs changed.
+  `write-go` already says: run `pnpm format:go` and `pnpm lint:go` after every edit;
+  `pnpm generate:go` when generated inputs changed.
 
 - **Tool dependencies are pinned in `*.mod` side files** — `golangci-lint.mod`, `gotestsum.mod` —
   kept out of the main `go.mod`, invoked via `go tool -modfile=<name>.mod <tool>`. Don't move tool

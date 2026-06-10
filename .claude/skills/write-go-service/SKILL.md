@@ -20,7 +20,7 @@ This skill governs Go in the a-novel backend services: repos shaped as
 coherent, idiomatic, minimal code that strictly respects the layered architecture.
 
 **This skill is layered on `write-go`.** Everything in `write-go` — read-before-edit, the
-`make format`/`make lint` discipline, dependency policy, naming of packages/files/variables,
+`pnpm format:go`/`pnpm lint:go` discipline, dependency policy, naming of packages/files/variables,
 constructors, error sentinels and `%w` wrapping, context rules, time-capture-once, secrets
 hygiene, the layer-relative span-reporting rule — applies here unchanged. This skill adds only the
 **service-architecture-specific** rules on top. Load `write-go` and `write-go-tests` (and
@@ -35,12 +35,12 @@ exactly; coherence outranks preference.
 
 ## After every edit
 
-Run the base loop from `write-go` (`make generate` when interfaces/proto changed → `make format`
-→ `make lint`), then:
+Run the base loop from `write-go` (`pnpm generate:go` when interfaces/proto changed →
+`pnpm format:go` → `pnpm lint:go`), then:
 
-1. **`write-go-tests`** — tests for every file touched; run `make test-unit` (`internal/…`) or
-   `make test-pkg` (`pkg/go`), the narrowest target that covers the change. Never run the full
-   `make test` during incremental work — it is reserved for the final commit.
+1. **`write-go-tests`** — tests for every file touched; run `a-novel test --type=go -y` (or raw
+   `go test` on the one package being iterated), the narrowest target that covers the change.
+   Reserve the full `a-novel test -y` for the final commit.
 2. **`document-code`** — doc comments for every symbol added or changed.
 3. If you changed a REST handler in a way that alters the public API contract (new endpoint,
    changed parameters, changed response shape, added/removed status codes), invoke
@@ -740,7 +740,7 @@ shared across cases.
 ### pkg/go tests — end-to-end against a running service
 
 `pkg/go` tests connect to a running service stack and exercise the exported client API. Run with
-`make test-pkg`, not `make test-unit`. Don't mock anything at this layer — the point is the real
+`a-novel test --type=go -y`, not `a-novel test --type=go -y`. Don't mock anything at this layer — the point is the real
 integration path.
 
 ### Common test pitfalls (service-specific)
@@ -784,7 +784,7 @@ discarding errors. These are the **service-architecture** ones:)
 - **Inline SQL.** All SQL lives in `.sql` files embedded with `//go:embed` at package level; all
   queries are parameterized via bun — no `fmt.Sprintf`.
 - **Hand-written mocks.** Mocks are `mockery`-generated from the interfaces in each file; run
-  `make generate` after adding/changing an interface.
+  `pnpm generate:go` after adding/changing an interface.
 - **`http` in new file or type names.** Use `rest` everywhere; rename legacy `http.*` / `Http*`
   when in scope.
 - **Returning raw error detail in a REST response** — including in a structured JSON field. Map to a

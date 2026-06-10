@@ -27,17 +27,17 @@ before changing it.
 Run these in order after changing any SQL file:
 
 ```
-make format   # runs format-go + format-proto + format-node — the last one is what formats SQL
-make lint     # catches any Go-level issues introduced by the SQL change
+pnpm format     # prettier — this is what formats SQL (via prettier-plugin-sql)
+pnpm format:go  # only when the SQL change rippled into Go files
+pnpm lint:go    # catches any Go-level issues introduced by the SQL change
 ```
 
-**Run the bare `make format`, not `make format-go`.** SQL files are formatted by Prettier
-(via `prettier-plugin-sql`), which lives behind `make format-node` (`pnpm format`). The Go-only
-`make format-go` target does not touch SQL — running just that after a SQL edit will leave
-indentation, comment, and whitespace drift in place. CI's `lint-node` stage runs
-`prettier --check`, which will fail on the unformatted file even when Go lint is clean. If you
-edited any `.sql` file, you must run the full `make format` (or at minimum `make format-node`)
-before pushing.
+**`pnpm format` is the one that matters for SQL.** SQL files are formatted by Prettier
+(via `prettier-plugin-sql`), which lives behind `pnpm format`. The Go-only `pnpm format:go`
+script does not touch SQL — running just that after a SQL edit will leave indentation,
+comment, and whitespace drift in place. CI's `lint-node` stage runs `prettier --check`,
+which will fail on the unformatted file even when Go lint is clean. If you edited any
+`.sql` file, you must run `pnpm format` before pushing.
 
 After formatting and linting, invoke the **`write-go-tests` skill** to verify (or update) the
 DAO test for the changed query. SQL changes often affect query results in ways that existing

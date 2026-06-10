@@ -29,7 +29,7 @@ build still succeeds:
 podman build --format docker -f ./builds/<name>.Dockerfile -t <name>:local .
 ```
 
-Run `make build` to rebuild all images at once. Avoid assuming a build is correct without
+Run `a-novel build --type=podman -y` to rebuild all images at once. Avoid assuming a build is correct without
 actually running it — Docker layer caching means a previously-failing step may appear to
 succeed on a stale cache.
 

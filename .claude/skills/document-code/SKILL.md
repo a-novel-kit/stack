@@ -5,7 +5,7 @@ description: >
   code, add comments, improve or review existing documentation, write doc comments, annotate functions or types,
   document a package, explain a file's purpose, or clean up unclear/outdated comments — even if they phrase it as
   "add comments", "write some doc", "document this", "explain what this does", "update the comments", or simply
-  "doc this". Applies to Go, Bash/shell scripts, Makefiles, YAML config files, Svelte, SQL, TypeScript, and other
+  "doc this". Applies to Go, Bash/shell scripts, YAML config files, Svelte, SQL, TypeScript, and other
   source or general configuration files. Always invoke this skill before writing any documentation, even for a single function.
 ---
 
@@ -18,7 +18,7 @@ understand **what** something does and **how to use it** — not to narrate the 
 itself directly. Never describe elements in an aggregate block above them. A section header that lists its
 targets, a type doc that enumerates its variants, a struct doc that itemizes its fields: all of these put
 documentation in the wrong place. The reader looks at a target and finds no comment; the description is buried
-paragraphs above with all the others. Put it on the element. This applies everywhere: Makefile targets, enum
+paragraphs above with all the others. Put it on the element. This applies everywhere: pnpm scripts, enum
 values, interface methods, struct fields.
 
 ---
@@ -27,7 +27,7 @@ values, interface methods, struct fields.
 
 Document these file types:
 
-- **Language source files**: `.go`, `.ts`, `.svelte`, `.sql`, `.sh`, `.bash`, `.proto`, `Makefile`, etc.
+- **Language source files**: `.go`, `.ts`, `.svelte`, `.sql`, `.sh`, `.bash`, `.proto`, etc.
 - **General configuration files**: `.yaml`, `.toml`, `.json` (when they encode project logic, not tool config)
 
 Do **not** document these:
@@ -150,24 +150,6 @@ For files that describe a sequence of actions (shell scripts, `main.go`, job run
 - Shebang first, then a top-level comment block explaining the script's purpose and usage.
 - Use `# ---- Section ----` style separators for distinct phases.
 - Comment variables when their purpose or expected format isn't obvious.
-
-### Makefile
-
-- Treat targets like functions: add a comment above a target when its name alone doesn't explain
-  what it does or how it differs from similar targets (e.g., `test-unit` vs `test-pkg`).
-- Document aggregate targets (targets that call other targets) only when the composition isn't
-  obvious from the dependency list. Usually the target name and its dependencies speak for themselves.
-- Use section separators (`# === Section Name ===`) as visual dividers only — a short label, no body text.
-  Non-obvious behavior (e.g., "also runs go mod tidy") belongs on the individual target, not in the header.
-- Never enumerate targets in a section header block. That's the anti-pattern: the reader lands on a target
-  and finds no comment; the description is buried lines above inside a listing with all the others.
-- A file-level comment is warranted when the Makefile covers multiple unrelated workflows. Skip it
-  if the section headers already tell the full story.
-- Target comments should answer **when to run this** and **what to expect**, not describe the tool's
-  internals. A developer reading the comment is deciding whether to run the target, not studying the
-  implementation. Prefer: "Run after editing .proto files." over "Invokes buf's formatter on the
-  protobuf module graph." Side effects that change behavior (e.g., a format target that also updates
-  a lock file, or a lint target whose auto-fix modifies sources) are worth calling out explicitly.
 
 ### YAML (config files)
 

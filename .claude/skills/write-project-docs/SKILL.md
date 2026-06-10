@@ -405,7 +405,7 @@ pull request.
 ```markdown
 # Contributing to {{project-slug}}
 
-For platform-wide setup, prerequisites, and the standard `make` targets, see the
+For platform-wide setup, prerequisites, and the standard `a-novel` / `pnpm` commands, see the
 [generic contribution guidelines](https://github.com/{{org-contributing-url}}). This file
 documents what is specific to {{project-display-name}}.
 
@@ -413,7 +413,7 @@ documents what is specific to {{project-display-name}}.
 
 ## Quick local interactions
 
-<!-- A handful of curl / grpcurl examples that hit the live service after `make run`.
+<!-- A handful of curl / grpcurl examples that hit the live service after `a-novel run start`.
      This is the pragmatic on-ramp for a contributor who already has the service running.
      Do NOT include compose blocks, env-var tables, or client install instructions —
      those live in the README. -->
@@ -450,7 +450,7 @@ If you have questions or run into issues:
 ```
 
 **Note on the template body that used to live here:** earlier versions of this skill
-generated a Prerequisites list, a `make install` block, and a Common Commands table
+generated a Prerequisites list, an install block, and a Common Commands table
 inside CONTRIBUTING. Those were moved out — they belong in the org-wide contribution
 guide that the intro paragraph already links to. Duplicating them per repo creates a
 second source of truth that drifts. If you are working on a repo that still has them,
@@ -474,7 +474,7 @@ Concretely, this means:
   expected to have read the README first.
 - Client install snippets, deployment compose blocks, and the env-var reference tables
   belong in the README. CONTRIBUTING refers to them with a link.
-- Platform-wide setup (prerequisites, generic `make` commands, lint/test/format) belongs
+- Platform-wide setup (prerequisites, generic `a-novel`/`pnpm` commands, lint/test/format) belongs
   in the org-level contribution guide that the intro paragraph already links to. When
   that link exists, **omit Prerequisites and Common Commands from CONTRIBUTING entirely**
   — they create a second source of truth that drifts from the org guide.
@@ -483,7 +483,7 @@ Concretely, this means:
 
 1. **Intro paragraph + link to the org-wide contribution guide.** One short paragraph.
 2. **Quick local interactions.** A handful of curl / grpcurl examples that hit the live
-   service after `make run`. This is the pragmatic on-ramp for a contributor who has the
+   service after `a-novel run start <service>/<target>`. This is the pragmatic on-ramp for a contributor who has the
    service running and wants to poke at it.
 3. **Service-specific concepts.** The bespoke section. Examples of what belongs here:
    - Domain invariants that aren't obvious from the code (e.g., main-vs-legacy key
@@ -501,7 +501,7 @@ What does NOT belong:
 - Architecture diagrams of generic Go layering (DAO → service → handler) — that's in the
   `write-go-service` skill, not in per-project docs.
 - Code examples for the published client packages — that's README integrator content.
-- Prerequisites and `make` command tables — those live in the org-wide contributing
+- Prerequisites and command tables — those live in the org-wide contributing
   guide.
 - Restating the role of the service — that's the README.
 
@@ -575,7 +575,7 @@ Agora service:
 2. In the new repo, invoke the skill (Claude picks it up once the file exists). Phase 1
    will collect the new project's inputs.
 
-3. The templates are intentionally Agora-flavoured (mentions of `make` targets, podman,
+3. The templates are intentionally Agora-flavoured (mentions of `a-novel` verbs, podman,
    `.github/CONTRIBUTING.md`, etc.). That is a feature, not a bug — it keeps docs consistent
    across services. When a new project legitimately deviates (different tooling, different
    org), update the templates in place rather than forking them.
