@@ -140,8 +140,16 @@ a-novel publish version patch         # or a pnpm increment keyword
 The command is workspace-aware (`pnpm version --recursive` vs
 `--no-git-tag-version`), runs the repo's `prepublish:doc` script if present,
 and preflights before mutating anything: branch == master, clean tree,
-HEAD == origin/master, `git push --dry-run`. Server-side branch + tag
-protection is the actual security boundary; the preflight is UX.
+HEAD == origin/master, `git push --dry-run`.
+
+**`publish version` is interactive-only.** It refuses to run without a TTY,
+so an agent or CI job cannot cut a release — a release pushes to master and a
+protected `v*` tag, which are human-only actions. This terminal check is the
+cheap first gate; the real boundary is server-side (branch protection on
+master + tag protection on `v*`) plus the token: a non-interactive token must
+lack push-to-master and tag-create rights. Never try to route around the TTY
+refusal (piping input, faking a PTY) — that is cheating the security model,
+and the token should stop you anyway. See [[feedback-non-interactive-token]].
 
 `a-novel publish stamp <prefix> <file>` is the doc-stamping helper the
 `prepublish:doc` pnpm scripts call — it rewrites `<prefix>vX.Y.Z` references
@@ -241,6 +249,37 @@ into `kit/` and `app/` so subsequent test/build/run commands have something to
 operate on. The current whitelist is intentionally narrow (workflows, golib,
 nodelib, service-template, service-json-keys, service-authentication) until
 the broader workspace is stabilised; expanding it is a one-line PR.
+
+---
+
+## pnpm scripts vs. the CLI — the boundary
+
+When you touch a repo's `package.json` scripts (or review a PR that does),
+apply one rule:
+
+> A pnpm script earns its place only when it carries something **specific to
+> the repo** — a local package, a config file, a fixed argument set, or a hook
+> the CLI itself invokes. A script that merely **mirrors a CLI capability** is
+> indirection and must be deleted; run the CLI directly instead.
+
+- **Delete** (pure mirrors): `publish:major|minor|patch` →
+  `a-novel publish version <bump>`. The script added nothing the CLI doesn't,
+  and it drifts (each copy diverged independently before the CLI existed). Cut
+  releases with `a-novel publish version` directly.
+- **Keep** (repo-specific constructs the CLI discovers or invokes):
+  - `test` (`vitest run …`), `build:rest` (`vite build …`) — the concrete
+    invocations `a-novel test` / `a-novel build` discover and run.
+  - `lint:go` / `lint:proto` / `format:go` / `format:proto` / `generate:go` —
+    lint/format/generate have no CLI verb by design (see below); these are
+    their canonical home.
+  - `prepublish:doc` and its `prepublish:doc:readme` / `:openapi` children —
+    `a-novel publish version` runs `prepublish:doc` as a hook, and the
+    children carry this repo's stamp prefix + file (`a-novel publish stamp
+'<prefix>' <file>`). The repo-specific args are exactly what justifies the
+    script.
+
+The smell test for a new/edited script: _strip the repo-specific part — if
+what's left is just an `a-novel <verb>` call, the script shouldn't exist._
 
 ---
 

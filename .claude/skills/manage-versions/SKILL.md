@@ -57,8 +57,9 @@ sequence is: bump version files → commit → tag `vX.Y.Z` → push commit + ta
 workflow then fires on the pushed tag and does the rest (GitHub Release notes, Docker images,
 npm packages).
 
-**Use `a-novel publish version <new-version>`** for this; do not run the steps by hand and do not
-write a per-repo `publish.sh`. The CLI:
+**Use `a-novel publish version <new-version>`** for this; do not run the steps by hand, do not
+write a per-repo `publish.sh`, and do not add a `publish:*` pnpm script that just wraps it (a
+script mirroring a CLI capability is indirection — run the CLI directly). The CLI:
 
 1. Auto-detects whether the repo is a pnpm workspace (presence of `pnpm-workspace.yaml`) and runs
    the correct `pnpm version` form — `--recursive` for workspaces, `--no-git-tag-version` for
@@ -84,6 +85,11 @@ a-novel publish version 0.21.0
 
 Both must be configured for "only the release team can publish" to hold. The CLI's preflight is
 UX, not security. See [[reference-release-security]] for the full model.
+
+**Releases are human-only.** `a-novel publish version` refuses to run without a TTY, so an agent
+or CI job cannot cut a release. The agent never publishes (or merges, or pushes to master); those
+are the human's actions, and the non-interactive token must lack the rights server-side. See
+[[feedback-non-interactive-token]].
 
 ---
 
