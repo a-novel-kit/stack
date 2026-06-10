@@ -281,6 +281,41 @@ apply one rule:
 The smell test for a new/edited script: _strip the repo-specific part — if
 what's left is just an `a-novel <verb>` call, the script shouldn't exist._
 
+### Naming: generic does everything, language lanes are suffixed
+
+A second rule governs how the surviving scripts are **named**, so a contributor
+never gets a surprise:
+
+> A **generic** verb (`format`, `lint`, `build`, `generate`, `test`) must do
+> **everything** that verb covers in the repo. A script scoped to one
+> language/lane is **suffixed** (`format:go`, `lint:proto`, `format:js`). A
+> bare verb that silently runs only one lane is the bug this rule forbids.
+
+- **Multi-lane verb → umbrella + suffixes.** A service has Go, Protobuf and a
+  JS package, so `format` = `pnpm format:go && pnpm format:proto && pnpm
+format:js`, and `lint` likewise. Each lane is a `:`-suffixed script; the bare
+  verb chains them. The classic violation: `format` aliased to Prettier only,
+  so `pnpm format` leaves Go unformatted and the contributor trips `lint-go` in
+  CI.
+- **Single-lane verb → stay generic, do NOT suffix.** A pure-JS repo
+  (`nodelib`), a Prettier-only repo (`workflows`), or `build`/`test` in a
+  service (only a JS pnpm lane — Go is built/tested via `a-novel`) already do
+  everything under the bare verb. Adding a redundant `:js`/`:go` alias there is
+  overdoing it — don't. The suffix exists to disambiguate **multiple** lanes,
+  not to restate the obvious.
+- **Name the lane by what it actually contains.** The Node/Prettier lane is
+  `:js` when the repo ships a real JS/TS package (the lane runs eslint + tsc +
+  prettier on actual JS). When the lane only runs Prettier over docs/config and
+  there is **no JS** (`golib`), name it `:prettier` — `format:js` in a Go-only
+  repo is the confusion this whole rule exists to prevent.
+- **CI calls the lane, not the umbrella.** The `lint-node` composite action
+  runs on a node-only runner with no Go/buf toolchain, so it must target the
+  node lane (`lint:ci` → `lint:js`, or `lint_action: "lint:prettier"`), never
+  the bare `lint` umbrella. The per-language CI jobs (`lint-go`, `lint-proto`)
+  invoke their tools directly, not through pnpm. When you turn a bare verb into
+  a Go-inclusive umbrella, re-point that repo's `lint-node` at the node lane in
+  the same change or you red-build CI.
+
 ---
 
 ## When NOT to use the CLI
