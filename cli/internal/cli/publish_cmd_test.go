@@ -7,6 +7,26 @@ import (
 	"testing"
 )
 
+func TestPublishVersionRefusesNonInteractive(t *testing.T) {
+	// Not parallel: swaps the package-level stdinIsTTY seam.
+	orig := stdinIsTTY
+	stdinIsTTY = func() bool { return false }
+	t.Cleanup(func() { stdinIsTTY = orig })
+
+	cmd := newPublishVersionCmd()
+	cmd.SetArgs([]string{"patch"})
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected non-interactive publish to be refused, got nil")
+	}
+	if !strings.Contains(err.Error(), "non-interactively") {
+		t.Fatalf("expected an interactive-only refusal, got: %v", err)
+	}
+}
+
 func TestStampFile(t *testing.T) {
 	t.Parallel()
 

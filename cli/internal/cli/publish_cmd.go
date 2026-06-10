@@ -21,6 +21,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -29,8 +30,18 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
+
+// stdinIsTTY reports whether the CLI is attached to an interactive terminal.
+// A package var (not a direct call) so tests can drive the non-interactive
+// branch without a real PTY. Used to gate release-cutting (§ publish version):
+// a release pushes to master and a protected tag, so it is HUMAN-ONLY — an
+// agent or CI run (no TTY) is refused. This is the cheap first gate; the real
+// boundary is the token's GitHub rights (a non-interactive token must lack
+// push-to-master / tag-create), which this CLI cannot weaken.
+var stdinIsTTY = func() bool { return term.IsTerminal(os.Stdin.Fd()) }
 
 func newPublishCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -73,13 +84,26 @@ Preflight — all checks pass before anything is mutated:
   - HEAD matches origin's default branch head
   - 'git push --dry-run' succeeds (surfaces branch-protection 403s early)
 
-Publishing rights are enforced server-side by branch protection on master
-and tag protection on v*; this preflight is UX, not security.`,
+This command is INTERACTIVE-ONLY: it refuses to run without a terminal, so
+an agent or CI job cannot cut a release. Publishing rights are enforced
+server-side by branch protection on master and tag protection on v* (a
+non-interactive token must lack both); the terminal check and this
+preflight are UX, not the security boundary.`,
 		Example: `  a-novel publish version 0.21.0
   a-novel publish version patch`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
+			// Release-cutting is human-only. Refuse before touching anything
+			// when there's no terminal — an agent / CI run must not push to
+			// master or create a release tag. (Defence in depth: the
+			// non-interactive token should also lack those rights server-side.)
+			if !stdinIsTTY() {
+				return errors.New("publish version: refusing to run non-interactively — " +
+					"a release pushes to master and a protected tag, so it must be cut by a " +
+					"human from a terminal. Run it yourself; an agent/CI token should not be " +
+					"able to publish")
+			}
 			root, err := gitToplevel(".")
 			if err != nil {
 				return err
