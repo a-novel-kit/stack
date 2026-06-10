@@ -261,6 +261,13 @@ Rules:
 - **Test plan** is a checklist. Check the boxes you have already verified locally; leave
   `CI green` unchecked (monitor-ci will mark it).
 
+**Writing style — rationale-dense, zero filler.** The body's job is what the diff cannot say:
+why the change, what tradeoff was taken, what a reviewer should scrutinize. Never narrate the
+diff — file lists, mechanical renames, and "updated X to Y" bullets restate what review tooling
+already shows. Maximize meaning per word: every sentence either carries rationale or gets cut.
+Exhaustive on decisions, silent on mechanics. The same bar applies to PR thread comments
+(`resolve-pr-feedback`), where prose may lean more technical.
+
 ### 5.4 Do NOT pass these flags
 
 - `--assignee` / `--reviewer` — the `auto-assign-author` workflow handles assignees; the

@@ -1,13 +1,3 @@
-// Package discovery parses each stack's per-service podman-compose.yaml files
-// and exposes the result as a structured model (services, targets, infra,
-// volumes, networks, dependency graph). The result is the daemon's source of
-// truth for everything operational — every later phase (supervision, env,
-// logs, volumes) keys off these types.
-//
-// Discovery is deliberately strict: it surfaces every §11 violation as an
-// error at daemon startup, so misconfigurations never become runtime
-// surprises. The one place we're lenient is healthcheck classification —
-// see classify.go for why.
 package discovery
 
 import (

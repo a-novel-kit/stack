@@ -47,6 +47,50 @@ write-openapi for every spec-structural decision (status codes, schema shape, br
 
 ---
 
+## What deserves a comment at all
+
+Most code deserves none. A comment must clear one of two bars:
+
+1. **It describes the repo's own logic** — type and method docs, package roles, domain
+   invariants (the "Documentation Priorities" below).
+2. **It explains an unusual behavior specific to this repo** — a constraint, workaround, or
+   ordering the reader cannot extract from the code in front of them.
+
+Everything else is noise. In particular:
+
+- **Platform-wide conventions don't get repeated per repo.** If a behavior is unusual but holds
+  across the organization (e.g., compose files never declare sibling services because the tooling
+  resolves them), it belongs ONCE in the tool that implements it or in the org-level documentation
+  — never copy-pasted into each repo, where copies drift. If a reader could be surprised, fix the
+  central doc, not the local file.
+- **Nothing the code already says.** If reading the surrounding lines answers the question, the
+  comment restates; delete it. `depends_on` already shows ordering — only the _why_ of a
+  surprising dependency is comment-worthy.
+- **No external dependencies.** A comment must stay meaningful from the git history alone. Never
+  reference a PR, review thread, or temporary plan document. The one exception: linking an issue
+  for a patch or temporary workaround, where the issue _is_ the tracking artifact.
+
+The test, combined with "document the code as it is" below: a new contributor with only this repo
+checked out, today — does the comment teach them something true, local, and not already on their
+screen?
+
+---
+
+## Prose economy
+
+Maximize meaning per word. Every sentence should carry an idea the reader needs — rationale
+first, mechanics only when surprising. Exhaustive and terse are not opposites: cover everything
+that matters, in as few words as it takes, and stop.
+
+- Lead with _why_; the code already shows _what_.
+- Cut hedges, preambles, and ceremony ("note that", "in order to", "it is important to").
+- One precise sentence beats three approximate ones. If a comment reads well aloud, it ships.
+
+This applies to every prose surface this skill touches — doc comments, package docs, README
+sections — and equally to PR descriptions (see `open-pull-request`).
+
+---
+
 ## Documentation Priorities
 
 ### 1. Exported / public symbols (highest priority)
