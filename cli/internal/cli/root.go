@@ -30,7 +30,7 @@ func NewRoot(legacy LegacyHandlers) *cobra.Command {
 		Use:   "a-novel",
 		Short: "the A-Novel storyverse build tool",
 		Long: `a-novel is the storyverse build tool: a single, branded CLI that
-replaces the per-repo bash scripts.
+replaces the per-repo bash scripts and Makefiles.
 
 Commands fall into three groups:
 
@@ -38,8 +38,10 @@ Commands fall into three groups:
   required:
     test, build, publish
 
-  Daemon control — manage the long-lived a-novel daemon (one per user):
-    core start, core setup, core kill, core status, core prepare-reinstall
+  Daemon control — manage the long-lived a-novel daemon (one per user)
+  and the workspace it serves:
+    core start, core setup, core kill, core status, core sync,
+    core prepare-reinstall; install (rebuild + reinstall, state-preserving)
 
   Daemon-backed verbs — interact with the daemon over its unix socket,
   always nested under 'run':
@@ -48,8 +50,8 @@ Commands fall into three groups:
     run stacks, run service infra start|kill, run service status,
     run volume list|backup|restore|clear, run exec <target>, run debug
 
-Run 'a-novel help <command>' for details on any of them. Every subcommand
-also accepts -h / --help to print the same content.
+Run 'a-novel help <command>' or 'a-novel <command> --help' for any
+command's flags and examples.
 
 See docs at https://github.com/a-novel-kit/stack/blob/master/cli/README.md
 for the full design.`,

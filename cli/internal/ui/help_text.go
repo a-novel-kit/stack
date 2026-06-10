@@ -30,30 +30,28 @@ const helpHint = "Run `a-novel <command> --help` (or `a-novel help <command>`) "
 // the test-only --no-cover and `build`/`test` never list the run-only
 // --recreate (the "wrong flag in help" bug).
 var (
-	flagDir       = flagDoc{"-C, --dir <path>", "Directory to scan (default: current directory)"}
-	flagType      = flagDoc{"-t, --type <kinds>", "Comma-separated kind filter: go,pnpm,podman (default: all)"}
-	flagJobs      = flagDoc{"-j, --jobs <n>", "Max targets run in parallel, interactive only (default: CPU count)"}
-	flagTimeout   = flagDoc{"-T, --timeout <dur>", "Per-target deadline, e.g. 10m / 30s / 0 to disable (default: 10m)"}
-	flagYes       = flagDoc{"-y, --yes", "Skip the menu; run everything non-interactively & sequentially (CI-safe)"}
-	flagNoCover   = flagDoc{"--no-cover", "Skip coverage (it is collected & reported by default)"}
-	flagRecreate  = flagDoc{"--recreate", "Rebuild the compose env instead of reusing an existing one"}
-	flagContainer = flagDoc{"--container", "Picker shows compose-service targets; each is launched via `podman compose --profile X up <svc>`. Default per-repo."}
-	flagLive      = flagDoc{"--live", "Picker shows Go `cmd/*` mains + pnpm `run*` scripts; each runs as a local exec (`go run`/`pnpm run`). Default in global mode."}
-	flagDryRun    = flagDoc{"--dry-run", "List detected targets (and their envs) and exit without running"}
-	flagHelp      = flagDoc{"-h, --help", "Show this command's help"}
+	flagDir      = flagDoc{"-C, --dir <path>", "Directory to scan (default: current directory)"}
+	flagType     = flagDoc{"-t, --type <kinds>", "Comma-separated kind filter: go,pnpm,podman (default: all)"}
+	flagTypeTest = flagDoc{"-t, --type <kinds>", "Comma-separated kind filter: go,pnpm (default: all)"}
+	flagJobs     = flagDoc{"-j, --jobs <n>", "Max targets run in parallel, interactive only (default: CPU count)"}
+	flagTimeout  = flagDoc{"-T, --timeout <dur>", "Per-target deadline, e.g. 10m / 30s / 0 to disable (default: 10m)"}
+	flagYes      = flagDoc{"-y, --yes", "Skip the menu; run everything non-interactively & sequentially (CI-safe)"}
+	flagNoCover  = flagDoc{"--no-cover", "Skip coverage (it is collected & reported by default)"}
+	flagDryRun   = flagDoc{"--dry-run", "List detected targets (and their envs) and exit without running"}
+	flagHelp     = flagDoc{"-h, --help", "Show this command's help"}
 )
 
-// buildFlags / testFlags / runCmdFlags are the exact, honoured flag sets.
-// `run` deliberately omits -j/-T/-y/--no-cover: run targets are long-lived
-// (no per-target timeout or parallel pool) and selection is its own step.
+// buildFlags / testFlags are the exact, honoured flag sets. `test` omits the
+// podman kind (there are no podman test targets) and adds --no-cover.
 var (
-	buildFlags  = []flagDoc{flagDir, flagType, flagJobs, flagTimeout, flagYes, flagDryRun, flagHelp}
-	testFlags   = []flagDoc{flagDir, flagType, flagJobs, flagTimeout, flagYes, flagNoCover, flagDryRun, flagHelp}
-	runCmdFlags = []flagDoc{flagDir, flagType, flagContainer, flagLive, flagRecreate, flagDryRun, flagHelp}
+	buildFlags = []flagDoc{flagDir, flagType, flagJobs, flagTimeout, flagYes, flagDryRun, flagHelp}
+	testFlags  = []flagDoc{flagDir, flagTypeTest, flagJobs, flagTimeout, flagYes, flagNoCover, flagDryRun, flagHelp}
 )
 
-// commandDocs is the single source of truth for the command set; its order is
-// the order shown on the generic help screen.
+// commandDocs holds the banner-style help for the two standalone capability
+// commands (`build`, `test`) — the only commands that route through
+// CommandHelpView. Every other command (core, run, publish, install, version)
+// is a Cobra command and renders Cobra's own help; do not add them here.
 var commandDocs = []commandDoc{
 	{
 		name:    "build",
@@ -91,44 +89,6 @@ var commandDocs = []commandDoc{
 			"a-novel test -y               # run all tests, no prompt (CI-safe)",
 			"a-novel test --dry-run        # show targets + their envs, run nothing",
 		},
-	},
-	{
-		name:    "run",
-		summary: "Run Go entrypoints / pnpm run* scripts under a live dashboard",
-		usage:   "a-novel run [flags]",
-		long: "Two modes, two distinct target lists. LIVE: Go `cmd/*` mains + " +
-			"pnpm `run*` scripts, launched as local exec (`go run` / `pnpm run`) — " +
-			"the iterate-on-source path. CONTAINER: compose-service targets " +
-			"(profile-guarded entries in builds/podman-compose.yaml), launched " +
-			"via `podman compose --profile X up <svc>` — the standalone image " +
-			"you would actually ship. The runner always brings deps (postgres, " +
-			"mailserver, …) up via the compose env, then either runs your local " +
-			"exec (live) or starts the profiled container (container). Default: " +
-			"per-repo → container; global (stack root with multiple services) → " +
-			"live; override with --container / --live. Quitting, or any process " +
-			"failing, tears the whole environment down — no phantom runners. An " +
-			"already-up env is reused by default; --recreate rebuilds it.",
-		flags: runCmdFlags,
-		examples: []string{
-			"a-novel run                   # interactive run menu + dashboard",
-			"a-novel run -t go             # only Go entrypoints",
-			"a-novel run --recreate        # rebuild the env instead of reusing it",
-			"a-novel run --dry-run         # show entrypoints + their envs",
-		},
-	},
-	{
-		name:    "version",
-		summary: "Print the resolved CLI version and exit",
-		usage:   "a-novel version",
-		long:    "Prints the resolved CLI version (ldflags → go install tag → VCS revision → \"dev\") and exits.",
-	},
-	{
-		name:    "help",
-		summary: "Show help; `a-novel help <command>` for one command",
-		usage:   "a-novel help [command]",
-		long: "With no argument, lists the available commands. With a command name, " +
-			"shows that command's usage, flags and examples — equivalently to " +
-			"`a-novel <command> --help`.",
 	},
 }
 
