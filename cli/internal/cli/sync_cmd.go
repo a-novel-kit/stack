@@ -1,15 +1,12 @@
 // `a-novel core sync` — clone or fast-forward-pull the curated set of
 // a-novel / a-novel-kit repositories that make up the local workspace.
 //
-// Replaces scripts/sync-repos.sh. Two main differences vs the old bash:
+// The repo set is an explicit whitelist (defaultRepos), not `gh repo list`
+// discovery: while the workspace is still narrow only the curated repos are
+// pulled, and `--allow`/`--ignore` subset that list. Git over SSH is the only
+// dependency.
 //
-//  1. Temporary explicit whitelist instead of `gh repo list` discovery.
-//     Until the workspace stabilizes we only want six repos pulled.
-//     The list lives in defaultRepos; `--allow`/`--ignore` flags still
-//     subset it (mirroring the old script's -a/-i).
-//  2. No gh dependency. Git over SSH is enough.
-//
-// Behavior preserved from the bash:
+// Behavior:
 //   - Skip the workspace's own repo (so kit/stack never appears as a
 //     duplicate of the dir the binary was launched from).
 //   - Existing repos: ff-only pull on the default branch, ref-update
@@ -144,7 +141,7 @@ first to populate kit/ and app/ before any other work.`,
 			}
 			counts := syncCounts{}
 			for _, r := range defaultRepos {
-				// Ignore-list wins over allow-list, mirroring the bash.
+				// Ignore-list wins over allow-list.
 				if _, no := ignore[r.FullName()]; no {
 					_, _ = fmt.Fprintf(out, "  ○ %s — ignored via --ignore\n", r.FullName())
 					counts.add("skipped", r.FullName()+" (ignored)")
@@ -211,16 +208,14 @@ func syncOne(out io.Writer, root string, r repoEntry, counts *syncCounts) {
 }
 
 // updateExistingRepo performs the fetch-then-pull-or-update-ref dance
-// for a repo that's already present locally. Logic mirrors the bash
-// script's update_existing_repo:
+// for a repo that's already present locally:
 //   - Off the default branch → `git fetch origin <def>:<def>` updates
 //     the local default-branch ref only if fast-forwardable.
 //   - On the default branch  → stash dirty work → ff-only pull → unstash.
 //   - Divergence → skip.
 func updateExistingRepo(out io.Writer, target string, r repoEntry, counts *syncCounts) {
-	// Resolve the default branch from `origin/HEAD`. Falls back to
-	// "master" — the bash script's fallback too — only if the symref
-	// is missing.
+	// Resolve the default branch from `origin/HEAD`, falling back to
+	// "master" only if the symref is missing.
 	def := resolveDefaultBranch(target)
 	// Refresh refs.
 	if cmdOut, err := runGit(target, "fetch", "--quiet", "--tags", "--prune", "origin"); err != nil {
@@ -283,7 +278,7 @@ func updateExistingRepo(out io.Writer, target string, r repoEntry, counts *syncC
 
 // resolveDefaultBranch reads `origin/HEAD` to find the upstream's
 // default branch. Falls back to "master" only when the symref is
-// missing — matches the bash script's fallback.
+// missing.
 func resolveDefaultBranch(target string) string {
 	out, err := runGit(target, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
 	if err == nil {
@@ -298,7 +293,6 @@ func resolveDefaultBranch(target string) string {
 
 // detectSelfRemote returns the SSH URL of the stack repo containing
 // `root`, if any — so the sync loop can skip cloning it into itself.
-// Matches the bash script's SELF_REMOTE_URL detection.
 func detectSelfRemote(root string) string {
 	out, err := runGit(root, "config", "--get", "remote.origin.url")
 	if err != nil {
@@ -360,10 +354,9 @@ func runGit(target string, args ...string) (string, error) {
 	return string(out), err
 }
 
-// appendLFSEnv returns a fresh slice with GIT_LFS_SKIP_SMUDGE=1
-// layered on. The bash script forces this for the entire process;
-// in Go we only force it per-git-invocation so the caller's env stays
-// clean.
+// appendLFSEnv returns a fresh slice with GIT_LFS_SKIP_SMUDGE=1 layered
+// on. Applied per-git-invocation rather than process-wide so the caller's
+// env stays clean.
 func appendLFSEnv(env []string) []string {
 	return append(env, "GIT_LFS_SKIP_SMUDGE=1")
 }
@@ -383,8 +376,8 @@ func normaliseFilter(values []string) map[string]struct{} {
 	return out
 }
 
-// renderSyncSummary prints the end-of-run summary in the same shape as
-// the bash script: counts per bucket + the per-repo line list.
+// renderSyncSummary prints the end-of-run summary: counts per bucket plus
+// the per-repo line list.
 func renderSyncSummary(w io.Writer, c *syncCounts) {
 	_, _ = fmt.Fprintln(w, "")
 	_, _ = fmt.Fprintln(w, "Summary")

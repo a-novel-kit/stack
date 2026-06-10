@@ -1,5 +1,5 @@
-// `a-novel core bot-token <org>` + `a-novel core bot-gh <org> ...` —
-// the Go port of scripts/lib/bot-token.sh.
+// `a-novel core bot-token <org>` + `a-novel core bot-gh <org> ...` — mint a
+// GitHub App installation token, and run gh authenticated as the bot.
 //
 // What this does:
 //
@@ -53,9 +53,8 @@ type botOrg struct {
 	KeyFile        string
 }
 
-// botOrgs mirrors scripts/lib/bots.conf one-for-one. Keep these IDs in
-// sync if/when the bash file changes (the bash file remains the source
-// of truth until both ports are committed and the file is deleted).
+// botOrgs maps each org to its GitHub App credentials: the App ID,
+// installation ID, and the private-key filename under the secrets dir.
 var botOrgs = map[string]botOrg{
 	orgAnovel: {
 		AppID:          "3549319",
@@ -210,9 +209,9 @@ func mintInstallationToken(org string) (string, error) {
 // resolveBotPemPath returns the absolute path of the org's private
 // key. Precedence:
 //  1. $BOT_KEY_DIR/<file> if BOT_KEY_DIR is set (explicit operator
-//     override — bash compat).
-//  2. <stack-root>/.secrets/<file> otherwise — same default the bash
-//     script uses, computed via defaultCLISource (which returns
+//     override).
+//  2. <stack-root>/.secrets/<file> otherwise, computed via defaultCLISource
+//     (which returns
 //     <stack>/cli; the .secrets dir is one level up).
 //
 // Returns an error if the file is missing — failing fast with a clear
@@ -235,8 +234,7 @@ func assertReadable(path string) error {
 	if err != nil {
 		return fmt.Errorf("private key not found at %s: %w", path, err)
 	}
-	// Permission warning matches the bash script — group/world-readable
-	// .pem lets any local user mint tokens.
+	// Warn on a group/world-readable .pem — it lets any local user mint tokens.
 	if info.Mode().Perm()&0o077 != 0 {
 		_, _ = fmt.Fprintf(os.Stderr,
 			"warning: %s has permissive mode %o; recommend chmod 600\n",
@@ -278,7 +276,7 @@ func loadRSAPrivateKey(path string) (*rsa.PrivateKey, error) {
 //	{ "iat": <now-60s>, "exp": <now+540s>, "iss": "<appID>" }
 //
 // iat is set 60s back to absorb local clock skew; exp stays under
-// GitHub's 600s cap. Exact same window the bash script uses.
+// GitHub's 600s cap.
 func signAppJWT(appID string, key *rsa.PrivateKey) (string, error) {
 	now := time.Now().Unix()
 	header := `{"alg":"RS256","typ":"JWT"}`

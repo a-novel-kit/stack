@@ -21,7 +21,7 @@ import (
 // yaml.v3 unmarshaler is strict by default for unknown TOP-level keys, but
 // loose inside maps — we only declare fields we use, the rest is silently
 // ignored. That's fine: a compose file evolves with podman-compose, and we
-// only operate on the subset documented in spec §11.
+// only operate on the subset that satisfies the discovery contract.
 type composeFile struct {
 	Services map[string]composeService `yaml:"services"`
 	Volumes  map[string]composeVolume  `yaml:"volumes"`

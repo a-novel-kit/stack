@@ -1,5 +1,5 @@
 // Package setup implements `a-novel core setup` — the interactive
-// first-time bootstrap per spec §3.5. Idempotent: re-running on an
+// first-time bootstrap. Idempotent: re-running on an
 // already-set-up system performs zero filesystem writes and exits 0.
 //
 // Sequence:

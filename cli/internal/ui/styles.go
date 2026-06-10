@@ -11,9 +11,8 @@ import (
 // All semantic colours are the exact A-Novel values and so are fixed
 // lipgloss.Color (not adaptive) — brand and status signalling must not drift
 // per terminal theme. Only colMuted/colWarn stay adaptive (pure dimming, no
-// brand meaning). Everything is foreground-only, the same readability
-// discipline as the shared scripts/lib/style.sh: no backgrounds, no pure
-// black/white.
+// brand meaning). Everything is foreground-only — no backgrounds, no pure
+// black/white — for consistent readability across terminal themes.
 //
 // The two brand colours (purple/blue) are the identity; colGold is a third,
 // non-brand accent used for structural chrome (section headings, counts) so
@@ -121,8 +120,8 @@ func kindLabel(k detect.Kind) string {
 	}
 }
 
-// glyphs — Unicode for richness; mirrors style.sh's symbol choices so CLI and
-// shell tooling read consistently.
+// glyphs — Unicode status symbols, chosen for richness and consistent
+// rendering across terminals.
 const (
 	glyphChecked   = "◉"
 	glyphPartial   = "◐" // group: some-but-not-all members selected

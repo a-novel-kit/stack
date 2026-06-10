@@ -79,10 +79,10 @@ func runAction(busyText, successText, actionLabel string, do func() error) tea.C
 // cancel-then-start race where the prior follower's in-flight
 // messages would otherwise mix with the new follower's stream.
 //
-// Lines are always appended (the snapshot path was removed because
-// the server's follow=true mode delivers history-then-tail in one
-// stream; combining a snapshot with a follower made every historical
-// line appear twice).
+// Lines are always appended: the server's follow=true mode delivers
+// history-then-tail in one stream, so there is no separate snapshot path
+// (combining a snapshot with a follower would make every historical line
+// appear twice).
 type logsMsg struct {
 	lines []*anovelv1.LogLine
 	gen   int

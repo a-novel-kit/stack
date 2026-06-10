@@ -14,7 +14,7 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// infraSession tracks the per-service "infra is up" record (spec §5.5).
+// infraSession tracks the per-service "infra is up" record.
 // One-shots that succeed during the session are remembered until the
 // session ends (kill-infra); long-runners refuse to start unless their
 // one-shot deps have succeeded in the current session.
@@ -76,7 +76,7 @@ func (r *Runner) ActiveInfraSessions() []InfraSessionRef {
 // order. Idempotent — calling on an already-up service is a no-op.
 //
 // `oneShotsMode` controls the mode of auto-run one-shots (defaults to
-// go-exec per spec §5.5). `extraEnv` is the daemon's inherited env
+// go-exec). `extraEnv` is the daemon's inherited env
 // (PATH/HOME etc.) layered ON TOP of synthesized port allocations.
 // The runner ALLOCATES infra ports itself (via env.Builder.ForServiceUp)
 // so compose's `${POSTGRES_PORT}` substitutes to a real number even
@@ -210,7 +210,7 @@ func (r *Runner) KillInfra(ctx context.Context, stack, service string, force boo
 	}
 	// `compose down` tears down infra + any orphaned containers in the
 	// project. We DO NOT pass --volume so postgres data survives —
-	// spec §8.1 says only `volume clear` destroys volumes.
+	// Only `volume clear` destroys volumes.
 	project := composeProjectName(stack, service)
 	cmd := exec.CommandContext(ctx, "podman", "compose",
 		"-p", project, "-f", svc.ComposePath,

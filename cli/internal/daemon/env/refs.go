@@ -1,6 +1,6 @@
 // Package env owns the daemon's environment-variable handling: port
 // allocation (with refcounting), value synthesis (HOST / URL for allocated
-// ports), cross-service propagation, and operator un-prefix — per spec §6.
+// ports), cross-service propagation, and operator un-prefix —.
 //
 // The package exposes two surfaces:
 //
@@ -63,7 +63,7 @@ func substitute(raw string, ctx map[string]string) string {
 }
 
 // ServicePrefix is the uppercase, underscore-separated form of a service
-// name used in cross-service env references (spec §6.4). The convention
+// name used in cross-service env references. The convention
 // turns `service-json-keys` into `SERVICE_JSON_KEYS`; the resulting
 // prefix is what other services prepend when consuming this service's
 // vars: `${SERVICE_JSON_KEYS_GRPC_PORT}`.
@@ -96,7 +96,7 @@ func isAllocatedKind(localVar string) bool {
 }
 
 // derivedFor produces the synthesized vars that always accompany an
-// allocated `<X>_PORT` (spec §6.3). The keys returned use the local
+// allocated `<X>_PORT`. The keys returned use the local
 // (un-prefixed) form; callers re-prefix for cross-service exposure.
 func derivedFor(localPortVar string, port int) map[string]string {
 	base := strings.TrimSuffix(localPortVar, "_PORT")

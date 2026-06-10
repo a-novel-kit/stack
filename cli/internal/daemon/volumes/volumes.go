@@ -1,5 +1,5 @@
 // Package volumes owns the daemon-side volume operations: list, backup,
-// restore, clear — all service-scoped per spec §8.
+// restore, clear — all service-scoped.
 //
 // Backup format: `podman volume export` produces a tar stream; we pipe
 // it through zstd into $XDG_DATA_HOME/a-novel/backups/<stack>/<service>/<volume>/<ts>.tar.zst.
@@ -8,7 +8,7 @@
 //
 // Every destructive op (backup, restore, clear) pre-checks that the
 // service's infra + targets are all down — running ops on a live
-// volume produces inconsistent state (spec §8.3). --force overrides
+// volume produces inconsistent state. --force overrides
 // after cascade-killing the service first.
 package volumes
 
@@ -45,8 +45,8 @@ type Volume struct {
 }
 
 // PodmanVolumeName returns the podman-namespaced volume name from a
-// bare compose volume name. Matches the convention spec §10.2 commits
-// to: `<stack>_<service>_<volume>`.
+// bare compose volume name, following the per-stack convention
+// `<stack>_<service>_<volume>`.
 func PodmanVolumeName(stack, service, bareVolume string) string {
 	return stack + "_" + service + "_" + bareVolume
 }
@@ -238,7 +238,7 @@ func pruneOldBackups(dir string) {
 // selects the archive timestamp; empty means "latest backup for each
 // volume" (the most recent .tar.zst by mtime in the per-volume dir).
 //
-// Per spec §8.3 — validates the archive (decompress sanity-check)
+// Validates the archive (decompress sanity-check)
 // before touching any volume. Returns the list of restored volume
 // names.
 func Restore(svc *discovery.Service, from string) ([]string, error) {
@@ -313,7 +313,7 @@ func resolveBackup(dir, from string) (string, error) {
 }
 
 // validateArchive opens the archive and reads through to ensure it
-// decompresses cleanly. Done up-front per spec §8.3 so we don't trash
+// decompresses cleanly. Done up-front so we don't trash
 // a volume halfway through with a corrupt input.
 func validateArchive(path string) error {
 	f, err := os.Open(path)

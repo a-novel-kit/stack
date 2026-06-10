@@ -24,8 +24,8 @@ import (
 // doesn't try to spin infra again when a target start follows
 // adoption. One-shot results aren't restored (no signal for "did this
 // succeed in the session that's now gone") — they'll re-run on the
-// next infra-start cycle, which is consistent with spec §5.5's
-// "idempotent one-shots run on every infra-up".
+// next infra-start cycle, since idempotent one-shots run on every
+// infra-up.
 //
 // Returns (adopted-containers, adopted-targets) for reporting.
 func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {

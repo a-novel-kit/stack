@@ -12,7 +12,7 @@ import (
 )
 
 // Block markers used to locate / replace the managed section in the
-// user's shell rc. See spec §3.5 step 4 — the marker pattern is the
+// user's shell rc.5 step 4 — the marker pattern is the
 // industry-standard "self-locating block" used by conda, pyenv, nvm, etc.
 const (
 	beginMarker = "# >>> a-novel setup >>>"
@@ -43,8 +43,8 @@ const (
 // user's $HOME with unbounded copies.
 const maxRCBackups = 3
 
-// resolveRC picks the shell rc file to manage. Detection priority per
-// spec §3.5 step 4: explicit override → $ZDOTDIR/.zshrc → $SHELL
+// resolveRC picks the shell rc file to manage. Detection priority:
+// explicit override → $ZDOTDIR/.zshrc → $SHELL
 // basename mapping → fallback ~/.zshrc. Returns (path, shellName)
 // where shellName is one of "zsh" | "bash" | "fish" so renderRCBlock
 // can emit the matching completion-source line.
@@ -148,7 +148,7 @@ func serializeStacks(stk []stacks.Stack) string {
 // (backupPath, changed, err). `changed` is false when the file already
 // contains the exact desired block — no write happens in that case.
 //
-// Idempotency rules (spec §3.5):
+// Idempotency rules:
 //   - block present + content identical → no write
 //   - block present + content differs → in-place replace
 //   - block absent → append with leading blank line

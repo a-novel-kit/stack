@@ -1,6 +1,6 @@
 // Package logs owns the daemon-side log storage and streaming hub.
 //
-// Storage shape (spec §7.1):
+// Storage shape:
 //
 //	$XDG_STATE_HOME/a-novel/logs/<stack>/<service>/<target>/
 //	├── current.log              ← currently-streaming run

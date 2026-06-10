@@ -361,7 +361,7 @@ func (m *model) renderLogs(width, height int) string {
 	return b.String()
 }
 
-// renderFooter is layer-1 of the three-layer palette per spec §14.3:
+// renderFooter is layer-1 of the three-layer palette:
 // always-visible hint of the most-relevant commands for the current
 // context. Single-line — action feedback now lives in the dedicated
 // status bar above (renderStatus). When the log pane is scrolled

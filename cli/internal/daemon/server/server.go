@@ -142,7 +142,7 @@ func (s *Server) findService(stackName, serviceName string) (*discovery.Service,
 
 // Ping is the cheap handshake clients use to verify the daemon is alive.
 // Used by `core start` to detect an already-running instance before exiting
-// silently (spec §3.1 "silent on already-running").
+// silently when one is already running.
 func (s *Server) Ping(_ context.Context, _ *connect.Request[anovelv1.PingRequest]) (*connect.Response[anovelv1.PingResponse], error) {
 	return connect.NewResponse(&anovelv1.PingResponse{
 		DaemonVersion: s.version,
@@ -180,7 +180,7 @@ func (s *Server) Status(_ context.Context, _ *connect.Request[anovelv1.StatusReq
 // PrepareReinstall writes a checkpoint listing every running go-exec
 // target (with its env, for relaunch), fsyncs it, then signals the
 // daemon to shut down. Containers are NOT included — they survive the
-// daemon's death independently. Per spec §3.6.
+// daemon's death independently.
 //
 // Concurrency: rejects a second PrepareReinstall if one is already
 // pending (the checkpoint file's existence is the guard).
@@ -419,7 +419,7 @@ func (s *Server) StartTarget(ctx context.Context, req *connect.Request[anovelv1.
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	// Dependency-walk gating (spec §5.4): ensure infra is up + one-shots
+	// Dependency-walk gating: ensure infra is up + one-shots
 	// satisfied before starting the target. Auto-triggers StartInfra
 	// (which cascades to one-shot auto-run). Refuses-with-hint for
 	// long-runner deps that aren't already running. Done BEFORE env

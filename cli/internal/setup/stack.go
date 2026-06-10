@@ -14,7 +14,7 @@ import (
 // to point at.
 const stackRemoteURL = "git@github.com:a-novel-kit/stack.git"
 
-// bootstrapStack runs the three-way check for one stack per spec §3.5
+// bootstrapStack runs the three-way check for one stack
 // step 3:
 //   - exists + valid (right repo + remote) → no-op
 //   - exists + invalid (wrong remote or not a repo) → refuse
@@ -95,7 +95,7 @@ func isValidStackRepo(path string) bool {
 }
 
 // cloneStack clones the canonical stack repo into path. LFS disabled
-// + partial blob filter per spec §3.4 (fast clone, no large assets).
+// + partial blob filter (fast clone, no large assets).
 func cloneStack(path string) error {
 	// Ensure parent dir exists; clone creates the leaf.
 	parent := filepath.Dir(path)

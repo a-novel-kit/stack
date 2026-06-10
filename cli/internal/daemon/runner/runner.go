@@ -1,7 +1,7 @@
 // Package runner owns the daemon-side process supervision: spawning targets
 // in either go-exec or container mode, tracking each instance's lifecycle
-// (phase / exit-reason / health), and enforcing the invariants spec §5
-// requires (mutual exclusion, dependency-walk gating, idempotency).
+// (phase / exit-reason / health), and enforcing the lifecycle invariants
+// (mutual exclusion, dependency-walk gating, idempotency).
 //
 // The package exposes one type — Runner — and a set of typed methods. The
 // daemon's server package calls into it from the RPC handlers; the runner
@@ -212,7 +212,7 @@ func (r *Runner) resolveTarget(id string) (*discovery.Target, *discovery.Service
 	return nil, nil, fmt.Errorf("unknown target %q", id)
 }
 
-// canStart enforces the start-time invariants in spec §5.3:
+// canStart enforces the start-time invariants:
 //   - already-running in the same mode → idempotent (return existing)
 //   - already-running in a different mode → refuse with hint
 //   - currently stopping → refuse (caller should wait or use restart)

@@ -3,7 +3,7 @@
 // `core start` is the .zshrc-friendly entrypoint — silent on already-running,
 // detaches the daemon in the background, refuses with a hint on missing setup.
 // `core setup`, `core kill`, `core status`, `core prepare-reinstall` round out
-// the lifecycle. See spec §3.
+// the lifecycle.
 
 package cli
 
@@ -78,7 +78,7 @@ stack isn't set up; run 'a-novel core setup' to bootstrap.`,
   a-novel core start --foreground`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
-			// Already running? Exit silently per spec §3.1.
+			// Already running? Exit silently.
 			c := rpc.New("")
 			pingCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 			defer cancel()
@@ -344,7 +344,7 @@ func newCoreSetupCmd() *cobra.Command {
 on re-run (every step checks current state first, performs zero filesystem
 writes on a fully-set-up system).
 
-What it does (spec §3.5):
+What it does:
 
   1. Checks podman, git, and GitHub SSH access are available.
   2. Creates $XDG_STATE_HOME/a-novel and $XDG_DATA_HOME/a-novel (mode 0700).

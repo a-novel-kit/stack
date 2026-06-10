@@ -46,7 +46,7 @@ func (r *Runner) streamContainerLogs(ctx context.Context, cid string, writer *lo
 	_ = cmd.Run()
 }
 
-// composeProjectName is the prefix-aware compose project per spec §10.2:
+// composeProjectName is the prefix-aware compose project:
 // "<stack>_<service>". Used for every podman-compose invocation so
 // multi-stack isolation just works.
 func composeProjectName(stack, service string) string {
@@ -56,7 +56,7 @@ func composeProjectName(stack, service string) string {
 // containerLabelArgs returns the --podman-args flag value used to inject
 // our adoption labels onto every container spawned by a compose
 // invocation. The triple (stack, service, target) is the unique key the
-// daemon uses to find a container after a restart (spec §3.4 step 3).
+// daemon uses to find a container after a restart.
 func containerLabelArgs(stack, service, target string) string {
 	parts := []string{
 		"--label", "anovel.stack=" + stack,
@@ -73,11 +73,10 @@ func containerLabelArgs(stack, service, target string) string {
 }
 
 // StartContainer brings up `id` as a podman-compose container in the
-// target's declared profile. Mirrors the lessons from the old CLI's
-// container path: --no-deps to avoid the broken depends_on wait machinery
-// in podman-compose 1.5.0+, --label injection so adoption works on the
-// next daemon start, env passthrough so compose's ${VAR} substitution
-// resolves to our allocated ports.
+// target's declared profile, with: --no-deps to avoid the broken depends_on
+// wait machinery in podman-compose 1.5.0+, --label injection so adoption
+// works on the next daemon start, and env passthrough so compose's ${VAR}
+// substitution resolves to our allocated ports.
 //
 // Phase 3 chunk 2 first cut. The actual log streaming is deferred to
 // phase 5 (logs hub); for now container stdout/stderr stay in podman's

@@ -17,7 +17,7 @@ import (
 //
 // Behavior by dep kind:
 //   - infra: ensures the service's infra session is Up. Auto-triggers
-//     StartInfra if it isn't (cascade per spec §5.4).
+//     StartInfra if it isn't (cascade).
 //   - one-shot target: ensures the current infra session recorded
 //     success for it. Auto-triggers via the infra session if the session
 //     is Up but the one-shot hasn't run yet. Refuses if the previous run
@@ -64,7 +64,7 @@ func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *
 			continue
 		}
 		// Unknown dep — could be a cross-service reference (out of
-		// scope for phase 3 per spec §1: "Cross-service credential /
+		// scope for phase 3: "Cross-service credential /
 		// token sharing. Deferred to a later API-keys spec."). For
 		// now we skip with a warning.
 		// TODO: when cross-service is spec'd, resolve here.

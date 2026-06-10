@@ -12,14 +12,12 @@ import (
 )
 
 // LegacyHandlers carries the entrypoints for the standalone capabilities
-// (test, build) that predate the daemon redesign and have their own flag
-// parsers. main.go in cmd/a-novel injects these so we don't have to move the
-// pre-existing implementation code into this package — the daemon redesign
-// only touches the `run` namespace, which lives entirely here.
+// (test, build), which run their own flag parsers rather than Cobra's.
+// cmd/a-novel injects them so that flag-parsing code stays in that package;
+// the daemon-backed verbs under `run` live entirely in this one.
 //
-// Note the absence of `Run` — the old `a-novel run` was the legacy
-// per-repo runner; the new top-level `run` is the daemon proxy parent, so
-// the legacy form had to go to avoid namespace collision.
+// There is no `Run` handler: `run` is the parent namespace for the
+// daemon-backed verbs, so a standalone run capability would collide with it.
 type LegacyHandlers struct {
 	Test  func(args []string) int
 	Build func(args []string) int
@@ -101,10 +99,9 @@ selector), runs the selection, and prints a pass/fail report.`,
 	// binary, preserving live state across the upgrade.
 	root.AddCommand(newInstallCmd())
 
-	// Daemon-backed verbs, ALL under `run`. The namespace makes the
+	// Daemon-backed verbs, all under `run`. The namespace keeps the
 	// daemon-touching surface visually distinct from the standalone
-	// capabilities, and replaces the now-removed legacy `a-novel run` so
-	// there's no command-name collision.
+	// capabilities (test, build, publish).
 	root.AddCommand(newRunCmd())
 
 	return root

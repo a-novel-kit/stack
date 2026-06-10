@@ -100,7 +100,7 @@ func extractRefsLocal(raw string) []string {
 	return out
 }
 
-// isResolvable applies the spec §6 rules to decide whether the daemon
+// isResolvable applies the env-resolution rules to decide whether the daemon
 // can synthesize the reference.
 func isResolvable(varName string, allServices []string, declared map[string]bool) bool {
 	if declared[varName] {

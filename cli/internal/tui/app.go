@@ -1,5 +1,5 @@
 // Package tui implements `a-novel run ui` — the daemon-backed
-// terminal UI per spec §14. Built on Bubble Tea + Lip Gloss; every
+// terminal UI. Built on Bubble Tea + Lip Gloss; every
 // action routes through the same RPC client the CLI uses, so the UI
 // and CLI are always observably consistent.
 //
@@ -16,7 +16,7 @@
 //	│              │ <footer hint>                          [Esc] cmd │
 //	└──────────────┴──────────────────────────────────────────────────┘
 //
-// Three-layer palette (spec §14.3) — first cut implements layers 1
+// Three-layer palette — first cut implements layers 1
 // (footer hint) and 3 (dedicated :help screen). Layer 2 (Esc
 // autocomplete palette) is a phase-13 polish addition; basic Esc opens
 // a single-line command input for now.

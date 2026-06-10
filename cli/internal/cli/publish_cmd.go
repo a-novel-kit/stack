@@ -2,14 +2,13 @@
 // tag vX.Y.Z, push commit + tag. CI's release workflow fires on the pushed
 // tag and does the rest (GitHub Release notes, Docker images, npm packages).
 //
-// Replaces the per-repo scripts/publish.sh + scripts/prepublish-version.sh
-// pair. Two things the bash never did:
+// Two behaviors matter:
 //
 //  1. Workspace auto-detection. `pnpm version` needs different flags for a
 //     pnpm workspace (--recursive) vs a single-package repo
-//     (--no-git-tag-version); every per-repo publish.sh hardcoded one form
-//     and drifted when pnpm changed behavior (pnpm 11 broke the npm-style
-//     --workspaces flags in every service at once).
+//     (--no-git-tag-version); the command picks the right form so callers
+//     don't hardcode (and drift) one — pnpm 11, for instance, rejects the
+//     npm-style --workspaces flags.
 //  2. A preflight before any mutation: branch == default, tree clean,
 //     HEAD == origin/<default>, and a `git push --dry-run` that surfaces a
 //     403 from branch protection without leaving the repo half-bumped.
@@ -36,8 +35,8 @@ import (
 
 // stdinIsTTY reports whether the CLI is attached to an interactive terminal.
 // A package var (not a direct call) so tests can drive the non-interactive
-// branch without a real PTY. Used to gate release-cutting (§ publish version):
-// a release pushes to master and a protected tag, so it is HUMAN-ONLY — an
+// branch without a real PTY. Used to gate release-cutting (publish version):
+// a release pushes to master and a protected tag, so it is human-only — an
 // agent or CI run (no TTY) is refused. This is the cheap first gate; the real
 // boundary is the token's GitHub rights (a non-interactive token must lack
 // push-to-master / tag-create), which this CLI cannot weaken.
@@ -84,7 +83,7 @@ Preflight — all checks pass before anything is mutated:
   - HEAD matches origin's default branch head
   - 'git push --dry-run' succeeds (surfaces branch-protection 403s early)
 
-This command is INTERACTIVE-ONLY: it refuses to run without a terminal, so
+This command is interactive-only: it refuses to run without a terminal, so
 an agent or CI job cannot cut a release. Publishing rights are enforced
 server-side by branch protection on master and tag protection on v* (a
 non-interactive token must lack both); the terminal check and this

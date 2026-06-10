@@ -10,7 +10,7 @@ import (
 // Allocator picks free host ports for `*_PORT` env variables and tracks
 // refcounts so an allocation is freed only when its last consumer
 // terminates. Local-dev convention: ephemeral range, kernel-assigned, no
-// fixed pool — see spec §6.1.
+// fixed pool.
 //
 // The (ownerService, localVar) tuple is the unique key. Cross-service
 // references resolve by looking up the owner's allocation; the consumer

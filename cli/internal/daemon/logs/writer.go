@@ -74,12 +74,11 @@ func (sw *streamWriter) Write(p []byte) (int, error) {
 }
 
 // flush writes one Line to the file and fans out to subscribers. The
-// target's mutex protects the file write AND the fanout. Holding
-// during the fanout serializes against Subscribe/unsub — without that,
-// the earlier "snapshot-then-send-outside-lock" pattern raced with
-// the new unsubscribe API: a goroutine could remove its sub from the
-// list, GC the receiver, and the writer would still try to send to a
-// channel nobody reads (and harmlessly fall through select-default,
+// target's mutex protects the file write AND the fanout. Holding it
+// during the fanout serializes against Subscribe/unsub: sending outside
+// the lock would race with unsubscribe — a goroutine could remove its sub
+// from the list, GC the receiver, and the writer would still try to send
+// to a channel nobody reads (it falls harmlessly through select-default,
 // but it's a smell). Holding the lock keeps the send window tied to
 // "still in the list."
 //

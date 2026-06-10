@@ -1,7 +1,7 @@
 // `a-novel install` — the safe re-install path.
 //
 // Why this exists: running `go install ./cmd/a-novel` directly leaves the
-// previous daemon process running (with the OLD binary). The user then
+// previous daemon process running (with the old binary). The user then
 // sees inconsistent behavior — new CLI talking to old daemon — and
 // `core status` shows the old version's `started:` timestamp.
 //
@@ -13,9 +13,7 @@
 //     the recorded go-exec targets, then deletes the checkpoint.
 //
 // End-state: same containers + same go-exec targets running, but now on
-// the NEW binary. Mirrors what scripts/install.sh does, but invokable
-// from anywhere (not just inside the cli/ dir) and without remembering
-// the script path.
+// the new binary. Runnable from anywhere, not just inside the cli/ dir.
 
 package cli
 

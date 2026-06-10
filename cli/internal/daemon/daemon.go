@@ -125,7 +125,7 @@ func Run(ctx context.Context, opts Options) error {
 	run := runner.New(disc, alloc, builder, logStore)
 	srv := server.New(opts.Version, opts.SocketPath, opts.Stacks, disc, run, alloc, builder, logStore)
 
-	// Orphan adoption (spec §3.4 step 3): scan podman for containers
+	// Orphan adoption: scan podman for containers
 	// labeled with our adoption labels and reconstitute Instance +
 	// InfraSession records. Containers that survived a daemon
 	// restart (or kill -9) are picked up so the daemon's view matches

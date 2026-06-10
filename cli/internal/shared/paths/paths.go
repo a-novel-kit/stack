@@ -11,7 +11,7 @@ import (
 
 // Socket returns the absolute path of the daemon's unix domain socket.
 //
-// Resolution priority (highest first), per spec §3.2:
+// Resolution priority (highest first):
 //  1. $XDG_RUNTIME_DIR/a-novel.sock — the canonical XDG location.
 //  2. /run/user/<uid>/a-novel.sock — the standard systemd-user runtime dir.
 //  3. /tmp/a-novel-<uid>.sock — the universal fallback.
@@ -57,7 +57,7 @@ func LogsRoot() string { return filepath.Join(State(), "logs") }
 func BackupsRoot() string { return filepath.Join(Data(), "backups") }
 
 // ReinstallCheckpoint is the path of the one-shot reinstall handoff file.
-// See spec §3.6. Single fixed location; presence == "new daemon should replay".
+// Single fixed location; presence == "new daemon should replay".
 func ReinstallCheckpoint() string { return filepath.Join(State(), "reinstall.json") }
 
 // home returns $HOME (falls back to "/" if unset, which would be a broken

@@ -172,7 +172,7 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 		}
 	}
 
-	// POSTGRES_DSN synthesis (spec §6.3 named case). When this service
+	// POSTGRES_DSN synthesis (the one named special case). When this service
 	// has an allocated POSTGRES_PORT, the daemon owns POSTGRES_DSN and
 	// overwrites any value the compose file declared (which is typically
 	// the in-container `postgres-<svc>:5432` form, wrong for go-exec).
@@ -184,7 +184,7 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 	}
 
 	// Operator un-prefix: this target's OWN service prefix is stripped
-	// for its own process env. spec §6.4. So service-json-keys-grpc gets
+	// for its own process env. So service-json-keys-grpc gets
 	// both `GRPC_PORT=44447` (from its local view) AND, for symmetry,
 	// `SERVICE_JSON_KEYS_GRPC_PORT=44447`.
 	ownerPrefix := ServicePrefix(owner) + "_"
@@ -255,7 +255,7 @@ func (b *Builder) buildInfraEnv(in *discovery.Infra, svc *discovery.Service, all
 func (b *Builder) resolveContext(env map[string]string, owner string, allServices []string, allocate bool, consumer string) (map[string]string, error) {
 	ctx := make(map[string]string)
 	// First, seed with constants (entries that contain no ${VAR}
-	// references). These are the inline-hardcoded values per spec §11
+	// references). These are the inline-hardcoded values
 	// rule 4.
 	for k, v := range env {
 		if len(extractRefs(v)) == 0 {
@@ -279,7 +279,7 @@ func (b *Builder) resolveContext(env map[string]string, owner string, allService
 }
 
 // resolveOne resolves a single VAR name against the running context.
-// The classification is per spec §6:
+// The classification is:
 //
 //   - `<prefix>_<localVar>` where <prefix> matches a registered service
 //     prefix → cross-service reference; resolve via the allocator with
@@ -387,8 +387,8 @@ func atoi(s string) int {
 
 // nonEmptyOr returns v if non-empty, otherwise fallback. Used to keep
 // POSTGRES_DSN well-formed when the compose hasn't (yet) inlined the
-// standard credentials (the spec §12 migration hardcodes "postgres" for
-// USER/PASSWORD/DB; until that lands, fallback fills the gap).
+// standard credentials, supplying "postgres" for USER/PASSWORD/DB when the
+// compose file leaves them unset.
 func nonEmptyOr(v, fallback string) string {
 	if v == "" {
 		return fallback

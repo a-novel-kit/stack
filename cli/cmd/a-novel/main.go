@@ -1,9 +1,9 @@
 // Command a-novel is the A-Novel storyverse build tool: a single, branded CLI
-// that replaces the per-repo bash scripts. As of the daemon redesign (see
-// spec.md / PLAN.md), it also fronts a long-lived background daemon that
-// supervises run targets — `a-novel core start` brings it up, and the
-// daemon-backed verbs (`ps`, `start`, `kill`, `logs`, `env`, `volume`, ...)
-// talk to it over a unix socket via connect-rpc.
+// for local development. It runs standalone capabilities (test, build, publish)
+// and fronts a long-lived background daemon that supervises run targets —
+// `a-novel core start` brings it up, and the daemon-backed verbs (`ps`,
+// `start`, `kill`, `logs`, `env`, `volume`, ...) talk to it over a unix socket
+// via connect-rpc.
 //
 // Dispatch is Cobra-based: every subcommand is a *cobra.Command attached to
 // the root. The existing `test` / `build` / `run` commands are wrapped via
@@ -107,10 +107,8 @@ func wantsHelp(args []string) bool {
 	return false
 }
 
-// buildOpts is the parsed `build` / `test` invocation. Was shared with the
-// (now-removed) legacy `run` capability; the run-only fields and constants
-// were dropped in the daemon redesign — `a-novel run <verb>` is the new
-// surface and has its own flags.
+// buildOpts is the parsed `build` / `test` invocation. (`a-novel run` is a
+// separate daemon-backed surface with its own flags.)
 type buildOpts struct {
 	dir      string
 	types    map[detect.Kind]bool // nil means "all kinds"
@@ -221,12 +219,6 @@ func parseTypes(v string) map[detect.Kind]bool {
 	}
 	return set
 }
-
-// (Legacy `runRun` and its run-only helpers — promptRunMode, filterRunMode,
-// otherMode, procResults, and the modeContainer/modeLive constants — were
-// removed in the daemon redesign. The `a-novel run <verb>` surface now lives
-// in internal/cli, talks to the daemon via internal/client/rpc, and
-// supersedes every responsibility this function had.)
 
 // runCapability is the shared body of `build` and `test`: identical flags,
 // discovery, selection UI and reporting — only the verb and the discovery

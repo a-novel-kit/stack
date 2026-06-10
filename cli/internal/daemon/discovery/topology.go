@@ -10,7 +10,7 @@ import (
 // formatted for `a-novel run topology` output. One service per invocation;
 // the daemon RPC handler concatenates per service when --service is omitted.
 //
-// Layout matches the spec §14.4 sketch — infra first (it's the root), then
+// Layout puts infra first (it's the root), then
 // one-shots (in compose-graph order), then long-runners, with each leaf
 // annotated by current phase + (mode).
 func RenderTopology(s *Service) string {

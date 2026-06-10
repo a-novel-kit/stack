@@ -1,5 +1,5 @@
 // Package reinstall implements the daemon's reinstall-handoff
-// checkpoint per spec §3.6.
+// checkpoint.
 //
 // Lifecycle:
 //
@@ -14,7 +14,7 @@
 //
 // The checkpoint is single-purpose handoff state — the daemon's
 // correctness doesn't depend on it (missing checkpoint = degraded
-// behavior, not broken behavior). This preserves the spec §3.3
+// behavior, not broken behavior). This preserves the daemon's
 // stateless-recovery principle.
 package reinstall
 
