@@ -1,0 +1,466 @@
+// CoreService is the RPC contract between the a-novel daemon and its CLI/TUI
+// clients. The full contract lives here in one file so the wire schema is the
+// single source of truth — clients in any language can codegen against it.
+//
+// Connect-rpc is the wire protocol; the daemon serves both HTTP/1.1+JSON
+// (curl-friendly debugging) and gRPC framing (programmatic clients) from the
+// same handlers. Streaming RPCs use server-streaming.
+//
+// Versioning: this is v1. Breaking changes go to v2 in a new package.
+syntax = "proto3";
+
+package anovel.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+// Phase is a target instance's lifecycle position. See spec §5.1.
+enum Phase {
+  PHASE_UNSPECIFIED = 0;
+  PHASE_PENDING     = 1; // client called start, daemon hasn't yet issued the launch
+  PHASE_STARTING    = 2; // launch command issued, process/container not yet up
+  PHASE_RUNNING     = 3; // process/container is up
+  PHASE_STOPPING    = 4; // graceful shutdown in progress
+  PHASE_TERMINATED  = 5; // process exited or container removed
+}
+
+// ExitReason is set when Phase = TERMINATED.
+enum ExitReason {
+  EXIT_REASON_UNSPECIFIED = 0;
+  EXIT_REASON_SUCCESS     = 1; // exit code 0
+  EXIT_REASON_ERROR       = 2; // exit code non-zero (target's own failure)
+  EXIT_REASON_KILLED      = 3; // killed by client request
+  EXIT_REASON_CRASHED     = 4; // unexpected termination (e.g., daemon died)
+}
+
+// Mode selects how a target runs.
+enum Mode {
+  MODE_UNSPECIFIED = 0;
+  MODE_GO_EXEC     = 1; // go run ./cmd/<target>
+  MODE_CONTAINER   = 2; // podman compose --profile <target>
+}
+
+// Health is the container's runtime healthcheck state. Always UNKNOWN for
+// go-exec mode (the daemon does not replicate readiness probes for go-exec).
+enum Health {
+  HEALTH_UNSPECIFIED = 0;
+  HEALTH_UNKNOWN     = 1;
+  HEALTH_STARTING    = 2;
+  HEALTH_HEALTHY     = 3;
+  HEALTH_UNHEALTHY   = 4;
+}
+
+// TargetKind distinguishes one-shots from long-runners. The daemon derives
+// this from compose (healthcheck presence). Clients use it for display only.
+enum TargetKind {
+  TARGET_KIND_UNSPECIFIED = 0;
+  TARGET_KIND_ONE_SHOT    = 1; // no compose healthcheck; runs to completion
+  TARGET_KIND_LONG_RUNNER = 2; // has compose healthcheck; runs until killed
+}
+
+// LogStream tags each log line's origin.
+enum LogStream {
+  LOG_STREAM_UNSPECIFIED = 0;
+  LOG_STREAM_STDOUT      = 1;
+  LOG_STREAM_STDERR      = 2;
+}
+
+// =============================================================================
+// Core types
+// =============================================================================
+
+// Stack identifies one registered git checkout. See spec §10.
+message Stack {
+  string name      = 1; // "default", "agent-foo", ...
+  string path      = 2; // absolute filesystem path
+  bool   is_default = 3;
+}
+
+// Service is one app/service-<name>/ directory.
+message Service {
+  string name              = 1; // "service-json-keys"
+  string stack             = 2; // owning stack name
+  string compose_file_path = 3;
+  repeated Target targets  = 4;
+  repeated Infra  infra    = 5;
+  repeated Volume volumes  = 6;
+}
+
+// Target is one cmd/<name>/ entry with its compose mirror.
+message Target {
+  string     id                = 1; // "<stack>/<service>/<target>" — globally unique
+  string     name              = 2; // "rest"
+  string     service           = 3;
+  string     stack             = 4;
+  TargetKind kind              = 5;
+  Phase      phase             = 6;
+  ExitReason exit_reason       = 7; // only set when phase == TERMINATED
+  Mode       mode              = 8;
+  Health     health            = 9; // container long-runners only
+  int32      pid               = 10; // go-exec mode only
+  string     container_id      = 11; // container mode only
+  repeated string deps         = 12; // target IDs this depends on
+  google.protobuf.Timestamp started_at  = 13;
+  google.protobuf.Timestamp terminated_at = 14;
+}
+
+// Infra is a compose service with no profile and no cmd/ counterpart.
+message Infra {
+  string id            = 1;
+  string name          = 2; // "postgres-json-keys"
+  string service       = 3;
+  string stack         = 4;
+  Phase  phase         = 5;
+  Health health        = 6;
+  string container_id  = 7;
+}
+
+// Volume is a compose volume declaration owned by a service.
+message Volume {
+  string name       = 1;
+  string service    = 2;
+  string stack      = 3;
+  int64  size_bytes = 4; // 0 if not yet created
+  int32  backup_count = 5;
+}
+
+// LogLine is one entry in a target's log stream.
+message LogLine {
+  google.protobuf.Timestamp ts     = 1;
+  LogStream                 stream = 2;
+  string                    line   = 3;
+}
+
+// StateEvent is one transition emitted by Watch.
+message StateEvent {
+  google.protobuf.Timestamp ts          = 1;
+  string                    target_id   = 2; // empty for service/infra events
+  string                    service     = 3;
+  string                    stack       = 4;
+  string                    description = 5; // human-readable summary
+  // Old/new states (populated for transitions; either may be empty for
+  // pure-event entries like "log file rotated").
+  Phase  old_phase = 6;
+  Phase  new_phase = 7;
+}
+
+// =============================================================================
+// Daemon control
+// =============================================================================
+
+message PingRequest {}
+message PingResponse {
+  string daemon_version = 1;
+  google.protobuf.Timestamp now = 2;
+}
+
+message StatusRequest {}
+message StatusResponse {
+  string daemon_version        = 1;
+  string socket_path           = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Duration  uptime     = 4;
+  repeated Stack stacks        = 5;
+  bool   reinstall_checkpoint_pending = 6;
+}
+
+message PrepareReinstallRequest {}
+message PrepareReinstallResponse {
+  string checkpoint_path = 1;
+  int32  go_exec_target_count = 2; // for logging
+}
+
+// Shutdown is the no-checkpoint cousin of PrepareReinstall: it terminates
+// the daemon WITHOUT writing reinstall.json, so on next 'core start' nothing
+// is auto-relaunched. Used by 'a-novel core kill' and 'a-novel core restart'.
+//
+// With force=false (default), the daemon SIGTERMs every go-exec target
+// (10s grace) and leaves containers alone — those have their own podman
+// lifecycle that survives the daemon's death.
+//
+// With force=true, the daemon ALSO cascade-kills every service's infra
+// (KillInfra force=true), leaving no daemon-managed state running. Use
+// when the user wants a clean local environment ('shut everything off').
+message ShutdownRequest {
+  bool force = 1;
+}
+message ShutdownResponse {
+  int32 go_exec_killed = 1; // count of go-exec targets that got SIGTERM
+  int32 infra_services_torn_down = 2; // 0 unless force
+}
+
+// =============================================================================
+// Discovery
+// =============================================================================
+
+message ListStacksRequest {}
+message ListStacksResponse {
+  repeated Stack stacks = 1;
+}
+
+message ListServicesRequest {
+  string stack       = 1; // empty == default; "*" == all stacks
+}
+message ListServicesResponse {
+  repeated Service services = 1;
+}
+
+message DescribeServiceRequest {
+  string service = 1;
+  string stack   = 2;
+}
+message DescribeServiceResponse {
+  Service service = 1;
+}
+
+message GetTopologyRequest {
+  string stack   = 1;
+  string service = 2; // empty == all services in stack
+}
+message GetTopologyResponse {
+  // Text-formatted topology (ready to render). Keeps client rendering trivial.
+  string rendered = 1;
+}
+
+// =============================================================================
+// Target lifecycle
+// =============================================================================
+
+message StartTargetRequest {
+  string target_id = 1;
+  Mode   mode      = 2; // unspecified → MODE_GO_EXEC
+}
+message StartTargetResponse {
+  Target target = 1;
+}
+
+message KillTargetRequest {
+  string target_id = 1;
+  google.protobuf.Duration timeout = 2; // default 10s, 0 == SIGKILL immediate
+}
+message KillTargetResponse {
+  Target target = 1;
+}
+
+message RestartTargetRequest {
+  string target_id = 1;
+  Mode   mode      = 2; // unspecified → keep current mode
+}
+message RestartTargetResponse {
+  Target target = 1;
+}
+
+// =============================================================================
+// Service infrastructure
+// =============================================================================
+
+message StartInfraRequest {
+  string service = 1;
+  string stack   = 2;
+  Mode   one_shots_mode = 3; // mode for auto-run one-shots; default go-exec
+}
+message StartInfraResponse {
+  Service service = 1;
+}
+
+message KillInfraRequest {
+  string service = 1;
+  string stack   = 2;
+  bool   force   = 3; // cascade-kill any running targets first
+}
+message KillInfraResponse {
+  Service service = 1;
+}
+
+// Per-infra-container lifecycle. The (stack, service, name) tuple
+// addresses one row in Service.infra; the daemon resolves it to a
+// container ID via the same label-scan it uses for ps live state.
+
+message KillInfraContainerRequest {
+  string stack   = 1;
+  string service = 2;
+  string name    = 3; // e.g., "postgres-json-keys"
+}
+message KillInfraContainerResponse {
+  Infra infra = 1; // refreshed state after the stop
+}
+
+message RestartInfraContainerRequest {
+  string stack   = 1;
+  string service = 2;
+  string name    = 3;
+}
+message RestartInfraContainerResponse {
+  Infra infra = 1;
+}
+
+// =============================================================================
+// Logs
+// =============================================================================
+
+message StreamLogsRequest {
+  string target_id = 1;
+  bool   follow    = 2;
+  int32  tail      = 3; // 0 == all
+  google.protobuf.Duration since = 4;
+  LogStream stream = 5; // unspecified == both
+  string run_id    = 6; // empty == current run; otherwise a past run
+}
+
+message ListRunsRequest {
+  string target_id = 1;
+}
+message ListRunsResponse {
+  repeated string run_ids = 1; // newest first
+}
+
+// =============================================================================
+// Environment
+// =============================================================================
+
+message GetEnvRequest {
+  string service = 1; // empty == every service in stack
+  string stack   = 2;
+  string only    = 3; // glob filter (e.g., "REST*")
+  bool   all_stacks = 4;
+}
+message GetEnvResponse {
+  // One entry per (stack, service, key) — clients format as shell/json/dotenv.
+  repeated EnvEntry entries = 1;
+}
+message EnvEntry {
+  string stack   = 1;
+  string service = 2;
+  string key     = 3;
+  string value   = 4;
+}
+
+// =============================================================================
+// Volumes
+// =============================================================================
+
+message ListVolumesRequest {
+  string service = 1;
+  string stack   = 2;
+}
+message ListVolumesResponse {
+  repeated Volume volumes = 1;
+}
+
+message BackupVolumeRequest {
+  string service = 1;
+  string stack   = 2;
+  string tag     = 3;
+  bool   force   = 4;
+}
+message BackupVolumeResponse {
+  repeated string archive_paths = 1; // one per volume
+}
+
+message RestoreVolumeRequest {
+  string service = 1;
+  string stack   = 2;
+  string from    = 3; // timestamp; empty == latest
+  bool   force   = 4;
+}
+message RestoreVolumeResponse {
+  repeated string restored_volumes = 1;
+}
+
+message ClearVolumeRequest {
+  string service   = 1;
+  string stack     = 2;
+  bool   no_backup = 3;
+  bool   force     = 4;
+}
+message ClearVolumeResponse {
+  repeated string cleared_volumes = 1;
+}
+
+// =============================================================================
+// Exec / debug
+// =============================================================================
+
+message ExecRequest {
+  string target_id   = 1;
+  repeated string cmd = 2;
+}
+message ExecOutput {
+  LogStream stream = 1;
+  string    line   = 2;
+}
+
+message DebugRequest {
+  string target_id = 1;
+}
+message DebugResponse {
+  int32 delve_port = 1;
+  string hint      = 2;
+}
+
+// =============================================================================
+// Watch
+// =============================================================================
+
+message WatchRequest {
+  string stack     = 1;
+  string service   = 2;
+  string target_id = 3;
+}
+
+// =============================================================================
+// Service definition
+// =============================================================================
+
+service CoreService {
+  // Daemon control
+  rpc Ping(PingRequest) returns (PingResponse);
+  rpc Status(StatusRequest) returns (StatusResponse);
+  rpc PrepareReinstall(PrepareReinstallRequest) returns (PrepareReinstallResponse);
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+
+  // Discovery
+  rpc ListStacks(ListStacksRequest) returns (ListStacksResponse);
+  rpc ListServices(ListServicesRequest) returns (ListServicesResponse);
+  rpc DescribeService(DescribeServiceRequest) returns (DescribeServiceResponse);
+  rpc GetTopology(GetTopologyRequest) returns (GetTopologyResponse);
+
+  // Targets
+  rpc StartTarget(StartTargetRequest) returns (StartTargetResponse);
+  rpc KillTarget(KillTargetRequest) returns (KillTargetResponse);
+  rpc RestartTarget(RestartTargetRequest) returns (RestartTargetResponse);
+
+  // Service infrastructure
+  rpc StartInfra(StartInfraRequest) returns (StartInfraResponse);
+  rpc KillInfra(KillInfraRequest) returns (KillInfraResponse);
+  // Per-infra container lifecycle. Lets the TUI treat infra entries
+  // like targets — kill / restart one container without tearing down
+  // the rest of the service's infra. The whole-service equivalents
+  // (StartInfra/KillInfra) remain for cold-start and full teardown.
+  rpc KillInfraContainer(KillInfraContainerRequest) returns (KillInfraContainerResponse);
+  rpc RestartInfraContainer(RestartInfraContainerRequest) returns (RestartInfraContainerResponse);
+
+  // Logs (streaming)
+  rpc StreamLogs(StreamLogsRequest) returns (stream LogLine);
+  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
+
+  // Environment
+  rpc GetEnv(GetEnvRequest) returns (GetEnvResponse);
+
+  // Volumes
+  rpc ListVolumes(ListVolumesRequest) returns (ListVolumesResponse);
+  rpc BackupVolume(BackupVolumeRequest) returns (BackupVolumeResponse);
+  rpc RestoreVolume(RestoreVolumeRequest) returns (RestoreVolumeResponse);
+  rpc ClearVolume(ClearVolumeRequest) returns (ClearVolumeResponse);
+
+  // Exec / debug
+  rpc Exec(ExecRequest) returns (stream ExecOutput);
+  rpc Debug(DebugRequest) returns (DebugResponse);
+
+  // State events
+  rpc Watch(WatchRequest) returns (stream StateEvent);
+}

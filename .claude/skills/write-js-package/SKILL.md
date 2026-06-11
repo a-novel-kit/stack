@@ -52,15 +52,15 @@ test file. Never merge unrelated domains into a single file.
 Run these two targets before declaring the work done:
 
 ```bash
-make lint-node      # check format (Prettier) + lint (ESLint + TypeScript typecheck)
-make test-pkg-js    # integration tests against a live containerised service
+pnpm lint      # check format (Prettier) + lint (ESLint + TypeScript typecheck)
+a-novel test --type=pnpm -y    # integration tests against a live containerised service
 ```
 
-`make lint-node` checks formatting and runs all linters — run it first so type errors surface
+`pnpm lint` checks formatting and runs all linters — run it first so type errors surface
 before the heavier integration suite. If Prettier reports issues, fix them with `pnpm format`
-first, then re-run `make lint-node`.
+first, then re-run `pnpm lint`.
 
-`make test-pkg-js` orchestrates the full integration environment (container startup, port
+`a-novel test --type=pnpm -y` orchestrates the full integration environment (container startup, port
 allocation, readiness wait) via `scripts/test.pkg.js.sh`. Never run vitest directly for the
 integration tests — the script wires up the required environment variables and container lifecycle.
 
@@ -322,7 +322,7 @@ contract: what goes in, what comes out, which HTTP errors are surfaced.
 
 - **Importing from relative paths in tests.** Tests must import from `@a-novel/service-json-keys-rest`,
   not from `../../rest/src/...`. The workspace symlink is the integration point being tested.
-- **Running vitest directly.** Always use `make test-pkg-js` — running `pnpm test` alone skips
+- **Running vitest directly.** Always use `a-novel test --type=pnpm -y` — running `pnpm test` alone skips
   container setup and the tests will fail due to missing `REST_URL`.
 - **Adding a new domain file without updating `index.ts`.** Every new file must be re-exported
   from `index.ts` or consumers will not see it.

@@ -49,12 +49,12 @@ idiomatic one. Seconds of reading prevents subtle misuse — do it before the co
 Run, in this order, after any change to Go files:
 
 ```
-make generate   # ONLY when you changed an interface or a .proto file — regenerates mocks / proto stubs
-make format     # always
-make lint       # always
+pnpm generate:go   # ONLY when you changed an interface or a .proto file — regenerates mocks / proto stubs
+pnpm format:go     # always
+pnpm lint:go       # always
 ```
 
-`make format` / `make lint` exist in every repo (they wrap `gofmt`, `go mod tidy`, and a pinned
+`pnpm format:go` / `pnpm lint:go` exist in every Go repo (they wrap `go mod tidy` and a pinned
 `golangci-lint` invoked through `golangci-lint.mod`); never skip them. If `lint` flags something
 you did not introduce, fix it anyway while you are in the file — leave it cleaner than you found
 it.
@@ -62,8 +62,9 @@ it.
 Then, before the change is done:
 
 1. Invoke **`write-go-tests`** — write or update tests for every file you created or modified, and
-   run the narrowest test target the repo offers (`make test-unit`, `make test-pkg`, or `make
-test`) until it is green. Tests are part of the change, not a follow-up.
+   run the narrowest test target that covers the change (`a-novel test --type=go -y`, or raw
+   `go test ./<pkg>/...` for one package) until it is green. Tests are part of the change, not a
+   follow-up.
 2. Invoke **`document-code`** — doc comments for every symbol you added or changed. Also part of
    the change.
 

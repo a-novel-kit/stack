@@ -96,7 +96,7 @@ callers and need extra care.
 Decompose the feature into **one branch per layer boundary**. A branch is the smallest unit that:
 
 - Compiles on its own
-- Passes `make test-unit` (or the appropriate test target)
+- Passes `a-novel test --type=go -y` (see `use-a-novel-cli` skill)
 - Is independently reviewable
 
 **Branch order** follows the dependency chain — always work bottom-up:
@@ -166,7 +166,7 @@ cannot compile without that branch's changes.
   | Shell scripts                             | `write-bash-scripts` |
   | Git operations                            | `git-conventions`    |
 
-- **After any proto or interface change, run `make generate`** to regenerate protobuf Go bindings
+- **After any proto or interface change, run `pnpm generate:go`** to regenerate protobuf Go bindings
   and Go interface mocks. Commit the generated files (`internal/models/proto/gen/`, `internal/handlers/mocks/`, `internal/services/mocks/`)
   in the same commit as the change that necessitated them — never in a separate cleanup commit.
 - **Only change what the feature requires.** No refactoring, no style fixes, no "while we're here"
@@ -178,9 +178,8 @@ cannot compile without that branch's changes.
 Run the narrowest target that covers the changed layer:
 
 ```bash
-make test-unit    # DAO, services, handlers, lib
-make test-pkg     # pkg/go (requires running service)
-make test-pkg-js  # pkg/js (requires containerised service)
+a-novel test --type=go -y    # Go: DAO, services, handlers, lib + pkg/go
+a-novel test --type=pnpm -y  # pkg/js (containerised service env, auto-managed)
 ```
 
 Tests must pass before declaring the branch ready. Never mark a branch done with failing tests.
@@ -257,7 +256,7 @@ developer.
 cannot describe a commit in a single conventional-commit line, it contains more than one concern.
 
 **Test every branch.** The relevant test target must pass on every branch, not just the final
-one: `make test-unit` for Go layers, `make test-pkg` for pkg/go, `make test-pkg-js` for pkg/js.
+one: `a-novel test --type=go -y` for Go layers (internal + pkg/go), `a-novel test --type=pnpm -y` for pkg/js.
 A branch that compiles but fails tests is not ready for review.
 
 **Verify before proposing.** Never propose a plan based on assumed file locations or signatures.

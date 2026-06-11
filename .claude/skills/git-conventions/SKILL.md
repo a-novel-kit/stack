@@ -154,7 +154,7 @@ EOF
 - **Generated files belong in the same commit as the change that necessitated them.** Proto Go
   bindings (`internal/models/proto/gen/`) and mock files (`internal/handlers/mocks/`,
   `internal/services/mocks/`) are generated artifacts. Do not commit them separately — stage them
-  together with the `.proto` or interface change that required `make generate`.
+  together with the `.proto` or interface change that required `pnpm generate:go`.
 - **Never commit secrets.** .env files, APP_MASTER_KEY values, real credentials.
 - **Never skip hooks** (`--no-verify`) unless explicitly asked.
 - **Never amend a pushed commit.** Create a new commit instead.
@@ -187,9 +187,8 @@ None. / <List any breaking changes with migration steps.>
 
 ## Test plan
 
-- [ ] `make test-unit` passes
-- [ ] `make test-pkg` passes (if pkg/go changed)
-- [ ] `make test-pkg-js` passes (if pkg/js changed)
+- [ ] `a-novel test --type=go -y` passes
+- [ ] `a-novel test --type=pnpm -y` passes (if pkg/js changed)
 - [ ] <Any manual verification steps>
 EOF
 )"

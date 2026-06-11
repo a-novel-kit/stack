@@ -5,7 +5,7 @@ description: >
   code, add comments, improve or review existing documentation, write doc comments, annotate functions or types,
   document a package, explain a file's purpose, or clean up unclear/outdated comments — even if they phrase it as
   "add comments", "write some doc", "document this", "explain what this does", "update the comments", or simply
-  "doc this". Applies to Go, Bash/shell scripts, Makefiles, YAML config files, Svelte, SQL, TypeScript, and other
+  "doc this". Applies to Go, Bash/shell scripts, YAML config files, Svelte, SQL, TypeScript, and other
   source or general configuration files. Always invoke this skill before writing any documentation, even for a single function.
 ---
 
@@ -18,7 +18,7 @@ understand **what** something does and **how to use it** — not to narrate the 
 itself directly. Never describe elements in an aggregate block above them. A section header that lists its
 targets, a type doc that enumerates its variants, a struct doc that itemizes its fields: all of these put
 documentation in the wrong place. The reader looks at a target and finds no comment; the description is buried
-paragraphs above with all the others. Put it on the element. This applies everywhere: Makefile targets, enum
+paragraphs above with all the others. Put it on the element. This applies everywhere: pnpm scripts, enum
 values, interface methods, struct fields.
 
 ---
@@ -27,7 +27,7 @@ values, interface methods, struct fields.
 
 Document these file types:
 
-- **Language source files**: `.go`, `.ts`, `.svelte`, `.sql`, `.sh`, `.bash`, `.proto`, `Makefile`, etc.
+- **Language source files**: `.go`, `.ts`, `.svelte`, `.sql`, `.sh`, `.bash`, `.proto`, etc.
 - **General configuration files**: `.yaml`, `.toml`, `.json` (when they encode project logic, not tool config)
 
 Do **not** document these:
@@ -44,6 +44,50 @@ the proto-specific comment style and placement rules.
 For `openapi.yaml`, field descriptions, examples, and spec-level documentation rules are covered
 by the **`write-openapi` skill**. Apply this skill's general principles to prose quality, but follow
 write-openapi for every spec-structural decision (status codes, schema shape, breaking changes).
+
+---
+
+## What deserves a comment at all
+
+Most code deserves none. A comment must clear one of two bars:
+
+1. **It describes the repo's own logic** — type and method docs, package roles, domain
+   invariants (the "Documentation Priorities" below).
+2. **It explains an unusual behavior specific to this repo** — a constraint, workaround, or
+   ordering the reader cannot extract from the code in front of them.
+
+Everything else is noise. In particular:
+
+- **Platform-wide conventions don't get repeated per repo.** If a behavior is unusual but holds
+  across the organization (e.g., compose files never declare sibling services because the tooling
+  resolves them), it belongs ONCE in the tool that implements it or in the org-level documentation
+  — never copy-pasted into each repo, where copies drift. If a reader could be surprised, fix the
+  central doc, not the local file.
+- **Nothing the code already says.** If reading the surrounding lines answers the question, the
+  comment restates; delete it. `depends_on` already shows ordering — only the _why_ of a
+  surprising dependency is comment-worthy.
+- **No external dependencies.** A comment must stay meaningful from the git history alone. Never
+  reference a PR, review thread, or temporary plan document. The one exception: linking an issue
+  for a patch or temporary workaround, where the issue _is_ the tracking artifact.
+
+The test, combined with "document the code as it is" below: a new contributor with only this repo
+checked out, today — does the comment teach them something true, local, and not already on their
+screen?
+
+---
+
+## Prose economy
+
+Maximize meaning per word. Every sentence should carry an idea the reader needs — rationale
+first, mechanics only when surprising. Exhaustive and terse are not opposites: cover everything
+that matters, in as few words as it takes, and stop.
+
+- Lead with _why_; the code already shows _what_.
+- Cut hedges, preambles, and ceremony ("note that", "in order to", "it is important to").
+- One precise sentence beats three approximate ones. If a comment reads well aloud, it ships.
+
+This applies to every prose surface this skill touches — doc comments, package docs, README
+sections — and equally to PR descriptions (see `open-pull-request`).
 
 ---
 
@@ -151,24 +195,6 @@ For files that describe a sequence of actions (shell scripts, `main.go`, job run
 - Use `# ---- Section ----` style separators for distinct phases.
 - Comment variables when their purpose or expected format isn't obvious.
 
-### Makefile
-
-- Treat targets like functions: add a comment above a target when its name alone doesn't explain
-  what it does or how it differs from similar targets (e.g., `test-unit` vs `test-pkg`).
-- Document aggregate targets (targets that call other targets) only when the composition isn't
-  obvious from the dependency list. Usually the target name and its dependencies speak for themselves.
-- Use section separators (`# === Section Name ===`) as visual dividers only — a short label, no body text.
-  Non-obvious behavior (e.g., "also runs go mod tidy") belongs on the individual target, not in the header.
-- Never enumerate targets in a section header block. That's the anti-pattern: the reader lands on a target
-  and finds no comment; the description is buried lines above inside a listing with all the others.
-- A file-level comment is warranted when the Makefile covers multiple unrelated workflows. Skip it
-  if the section headers already tell the full story.
-- Target comments should answer **when to run this** and **what to expect**, not describe the tool's
-  internals. A developer reading the comment is deciding whether to run the target, not studying the
-  implementation. Prefer: "Run after editing .proto files." over "Invokes buf's formatter on the
-  protobuf module graph." Side effects that change behavior (e.g., a format target that also updates
-  a lock file, or a lint target whose auto-fix modifies sources) are worth calling out explicitly.
-
 ### YAML (config files)
 
 - Add inline comments to explain non-obvious fields, valid values, or important constraints.
@@ -229,6 +255,34 @@ entry point. Callers need this to reason about correctness and trust:
 
 ---
 
+## Document the code as it is, not the change that produced it
+
+A comment describes the code in its current form — never the edit, migration, or plan that
+created it. The reader has no access to what the code used to be, and references to that past rot
+the moment the change merges.
+
+The test: **if this were the first commit introducing the file — not a modification of something
+already there — would you still write this comment?** If not, delete it or rewrite it in the
+present tense. This rules out:
+
+- **Change narrative**: "now that X is removed", "the new model", "predates the redesign", "was
+  previously", "had to go", "dropped in the rewrite". State what the code does, not what it
+  stopped doing.
+- **Comparisons to deleted code**: "matches the old bash script", "the Go port of `foo.sh`", "same
+  default the script used". The thing compared against is gone; the comparison points at nothing.
+- **Dangling pointers to transient docs**: "per spec §6.4", "see PLAN.md". A design doc that won't
+  outlive the branch is not a durable reference — fold the rationale into the comment itself.
+- **Removal notes**: "placeholder removed — see above", or any comment whose only content is that
+  something used to be here. Absence needs no monument.
+
+Keep the rationale, drop the history. _"Uses `--no-deps` to avoid podman-compose's broken
+`depends_on` wait"_ is durable; _"mirrors the lessons from the old CLI's `--no-deps` handling"_ is
+not — same fact, but the second only parses for someone who remembers the old CLI. And the prior
+bar still applies: comment only when the code itself doesn't supply the context; a durable comment
+that merely restates the code is still noise.
+
+---
+
 ## Consistency and Quality
 
 Documentation is as much a liability as an asset when it's wrong. Every time you write or touch documentation:
@@ -280,6 +334,9 @@ Documentation is as much a liability as an asset when it's wrong. Every time you
 - **All-caps emphasis words**: avoid `MUST`, `SHOULD`, `OPTIONAL`, `NOT`, etc. in prose documentation.
   These are RFC-style terms that feel out of place in code docs; plain prose ("must", "only", "nil for...") is
   clearer and easier to read.
+- **Change narrative and references to deleted code or transient docs**: "now that X is removed",
+  "the new model", "matches the old script", "per spec §6.4". Document the code as it is, not the
+  edit that produced it — see "Document the code as it is, not the change that produced it" above.
 
 ---
 

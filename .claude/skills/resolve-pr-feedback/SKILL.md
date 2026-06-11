@@ -45,6 +45,11 @@ re-interpretation is what erodes trust. Larger deviations where the reviewer mig
 prefer the original suggestion fall under rule 2 — leave open with an explicit "OK with
 this approach?" question.
 
+**Reply style: rationale-dense, zero filler.** Thread replies may be more technical than a
+PR body, but the same economy applies — lead with the reason, cite the evidence (a SHA, a
+doc, a measured fact), and stop. Never restate what the reviewer or the diff already shows;
+every sentence either advances the decision or gets cut.
+
 ---
 
 ## Phase 1: Survey PR state
@@ -332,11 +337,10 @@ create new commits. (This is a hard rule from `git-conventions`.)
 
 After each logical change, before pushing:
 
-- Go internal changes → `make test-unit`
-- `pkg/go` changes → `make test-pkg`
-- `pkg/js` changes → `make test-pkg-js`
+- Go changes (internal or `pkg/go`) → `a-novel test --type=go -y`
+- `pkg/js` changes → `a-novel test --type=pnpm -y`
 
-Never push a red tree.
+Full mapping in the `use-a-novel-cli` skill (auto-loaded). Never push a red tree.
 
 ### 4.3 Push
 

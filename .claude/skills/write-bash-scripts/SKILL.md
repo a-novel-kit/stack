@@ -18,6 +18,28 @@ understand the current patterns.
 
 ---
 
+## Out of Scope: Release / Publish Scripts
+
+**Do not write or revive a `scripts/publish.sh` or `scripts/prepublish-version.sh`** for any
+service or kit repo. The release flow — version bump (workspace-aware), commit, tag, push — lives
+in the `a-novel` CLI as `a-novel publish version <v>`. That command auto-detects whether the repo
+uses `pnpm-workspace.yaml` (recursive `pnpm version`) or not (root-only), runs a local preflight
+(branch == master, clean tree, HEAD == origin/master, `git push --dry-run`), then performs the
+bump-commit-tag-push sequence. The bash equivalents were deleted because each copy drifted
+independently (pnpm 10 → 11 broke two of three at once).
+
+**The security model for who can publish is server-side**, not script-side: GitHub branch
+protection on `master` AND tag protection on `v*` are what actually enforce "only X can release."
+The CLI's preflight is UX — it surfaces a 403 before any local mutation — but it is not a
+boundary. See [[reference-release-security]] and [[project-publish-cli-verb]] in the memory
+index for the full design.
+
+In-container release steps (Docker image builds, npm publish on a pushed tag) are not in this
+skill's scope either — they live in the `a-novel-kit/workflows/` composite GitHub Actions and run
+on CI, not on a developer machine. Do not duplicate that logic in a bash script.
+
+---
+
 ## After Every Edit
 
 Run `bash -n <script>` to syntax-check without executing:
@@ -27,8 +49,9 @@ bash -n scripts/my-script.sh
 ```
 
 Then run the script in a safe context (local env, no production credentials) to verify runtime
-behaviour. For test scripts, run `make test-unit` or `make test-pkg`. Never run `scripts/publish.sh`
-to test — it pushes to the remote.
+behaviour. For test runs, always go through `a-novel test` (per the `use-a-novel-cli` rule) —
+the bash test-runner scripts it replaced no longer exist. Never run a release-flow command
+(e.g. `a-novel publish version`) to test — it pushes to the remote.
 
 ---
 
@@ -178,17 +201,19 @@ done
 
 ## Environment Variables
 
-`scripts/setup-env.sh` is sourced (not executed) by every test and run script. It uses the
-assign-if-unset pattern so that pre-exported values are preserved:
+Port and URL allocation is the `a-novel` daemon's job now (`a-novel run env <service>`);
+the old `scripts/setup-env.sh` files that hand-rolled random ports are gone. If a script
+genuinely needs an env file, use the assign-if-unset pattern so pre-exported values are
+preserved:
 
 ```bash
-POSTGRES_PORT="${POSTGRES_PORT:="$(node -e 'console.log(await (await import("get-port-please")).getRandomPort())')"}"
+POSTGRES_PORT="${POSTGRES_PORT:=5432}"
 export POSTGRES_PORT
 ```
 
 - Use `${VAR:=default}` to set a default only when the variable is unset or empty.
-- Source with `. "$PWD/scripts/setup-env.sh"` (not `bash scripts/setup-env.sh`), so the exported
-  variables are visible in the calling shell.
+- Source env files with `. "$PWD/scripts/env.sh"` (not `bash scripts/env.sh`), so the
+  exported variables are visible in the calling shell.
 
 ---
 
@@ -224,47 +249,45 @@ Other portability notes:
 
 ## Output Formatting and Colors
 
-User-facing scripts (anything a developer runs interactively) should use the shared
-style helpers in `scripts/lib/style.sh` rather than open-coding ANSI escapes or plain
-`printf`s. The helpers give scripts a consistent visual language across the workspace
-and stay readable on both light- and dark-themed terminals.
+**The first question for any new user-facing script is "does this belong in the
+a-novel CLI instead?"** The stack's bash inventory shrunk to near-zero when
+sync-repos and bot-token were ported to `a-novel core sync` and `a-novel core
+bot-token` / `a-novel core bot-gh`. New tooling should prefer Cobra subcommands
+under `cli/internal/cli/` over a fresh `scripts/*.sh` — Go gives us testable
+flag parsing, real error types, and consistent help output. The only scripts
+that stay in bash are tiny shims (often consumed by CI) where adding a Cobra
+command would be heavier than the script itself.
+
+For the rare remaining bash, keep formatting minimal: plain `printf`, no shared
+helper library, and honor `NO_COLOR` if you emit colors at all.
 
 ```bash
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-. "${SCRIPT_DIR}/lib/style.sh"   # or relative path from wherever the script lives
+# Honor NO_COLOR up front; everything else can branch on $RED/$RESET etc.
+if [ -z "${NO_COLOR:-}" ] && [ -t 1 ]; then
+    RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
+else
+    RED=""; GREEN=""; YELLOW=""; RESET=""
+fi
 
-banner "Repository Sync"
-log_step    "Phase 1 — discovery"
-log_info    "fetching remote refs"
-log_success "service-json-keys updated"
-log_warn    "service-template: master diverged"
-log_error   "remote unreachable"
-log_dim     "(secondary detail line)"
-separator
+printf "%s✓%s %s\n" "${GREEN}" "${RESET}" "service-json-keys updated"
+printf "%s✗%s %s\n" "${RED}"   "${RESET}" "remote unreachable" >&2
 ```
 
 **Conventions:**
 
-- `banner "<title>"` — once at the start of a top-level script run.
-- `log_step "<title>"` — a major phase. Adds a leading blank line so phases breathe.
-- `log_info` / `log_success` / `log_warn` / `log_error` — one entry per discrete unit
-  of work (per repo, per file, per service). Errors and warnings go to stderr.
-- `log_dim` — secondary detail under a primary entry, indented further.
-- Colors: cyan = info / neutral, green = success, yellow = warning, red = error,
-  magenta = section heading. Never set background colors; never rely on
-  bright-white / bright-black.
-- The helpers honor `NO_COLOR` (force off) and `FORCE_COLOR` (force on even when
-  stdout is not a TTY — useful for piping into `less -R` or capturing logs).
+- Errors and warnings go to stderr (`>&2`). Successes and progress go to stdout.
+- Use `printf '%s\n'` over `echo` for portability.
+- Colors: green = success, yellow = warning, red = error. Never set backgrounds;
+  avoid bright-white / bright-black — they vanish on light or dark themes.
+- Honor `NO_COLOR` (set → never emit escapes). Don't gate on `FORCE_COLOR` unless a
+  caller asks for it — keep the scaffolding small.
+- Do not use `tr ' ' '─'` to build separator lines — `tr` is byte-oriented and will
+  corrupt the multi-byte UTF-8 sequence (`0xE2 0x94 0x80`) by replacing each space
+  with only `0xE2`. Use a pure-bash loop or pre-built constant string.
 
-**Building separator lines.** Do not use `tr ' ' '─'` — `tr` is byte-oriented and
-will corrupt the multi-byte UTF-8 sequence (`0xE2 0x94 0x80`) by replacing each
-space with only `0xE2`. Use the `__style_hrule` helper (or a pure-bash loop) for
-any string built from non-ASCII characters.
-
-**Style helpers must remain importable by other repositories.** The file
-`scripts/lib/style.sh` has no external dependencies beyond bash itself and `tput`
-(optional, used only for terminal width). It is safe to copy or symlink into any
-repo in the a-novel ecosystem to maintain a coherent framework.
+Long-lived interactive UX (rich progress, multi-phase banners, spinners) is the
+Go CLI's job, not bash's. If a bash script is growing a banner/log_step framework,
+that's a signal it should move under `a-novel` instead.
 
 ---
 
