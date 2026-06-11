@@ -25,7 +25,7 @@ Node.js + pnpm (per [`package.json`](package.json)), the GitHub CLI (`gh`),
 and SSH access to GitHub.
 
 Per-OS install commands (macOS / Ubuntu / Arch) live in the
-[a-novel-kit org profile](https://github.com/a-novel-kit/.github/blob/master/profile/README.md).
+[developer onboarding guide](https://github.com/a-novel-kit/.github/blob/master/README.md).
 
 ## Install the CLI
 
