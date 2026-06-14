@@ -1,11 +1,10 @@
 package ui
 
 import (
+	"image/color"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/a-novel-kit/stack/cli/internal/build"
 )
@@ -45,7 +44,7 @@ func RenderTextReport(results []build.Result, aborted bool, elapsed time.Duratio
 
 	// Headline stats as pills: failed turns critical only when non-zero so a
 	// clean run is calm, a broken one shouts.
-	var failColor lipgloss.TerminalColor = colMuted
+	var failColor color.Color = colMuted
 	if s.Failed > 0 {
 		failColor = colCrit
 	}

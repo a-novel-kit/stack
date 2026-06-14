@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
@@ -24,8 +25,17 @@ var (
 	styleCmd      = lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Bold(true)
 )
 
-// View is Bubble Tea's render entry point.
-func (m *model) View() string {
+// View is Bubble Tea's render entry point. Bubble Tea v2 makes the alternate
+// screen a property of the View (not a NewProgram option, see Run), so every
+// frame opts in here.
+func (m *model) View() tea.View {
+	v := tea.NewView(m.render())
+	v.AltScreen = true
+	return v
+}
+
+// render builds the screen content string for the active view.
+func (m *model) render() string {
 	if m.width == 0 {
 		return "loading..."
 	}

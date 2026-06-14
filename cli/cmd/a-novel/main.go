@@ -26,7 +26,7 @@ import (
 	"syscall"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/term"
 
 	"github.com/a-novel-kit/stack/cli/internal/build"
@@ -315,7 +315,7 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 	// leaves its final frame on screen and we'd print the report a second
 	// time underneath it (the "results appear twice" bug).
 	model := ui.New(ctx, version.String(), verb, targets, opts.jobs, opts.timeout)
-	final, err := tea.NewProgram(model, tea.WithAltScreen()).Run()
+	final, err := tea.NewProgram(model).Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "a-novel %s: ui error: %v\n", verb.Base, err)
 		return exitFailure

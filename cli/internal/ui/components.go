@@ -1,12 +1,13 @@
 package ui
 
 import (
+	"image/color"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 
 	"github.com/a-novel-kit/stack/cli/internal/build"
 	"github.com/a-novel-kit/stack/cli/internal/detect"
@@ -106,7 +107,7 @@ func rule(width int) string {
 // section is a titled divider: a coloured, bold, upper-cased label followed by
 // a dim rule that fills the rest of the width. It headlines a block of output
 // so the eye can find "RESULTS" / "FAILURES" without counting blank lines.
-func section(title string, c lipgloss.TerminalColor, width int) string {
+func section(title string, c color.Color, width int) string {
 	if width <= 0 {
 		width = termWidth()
 	}
@@ -138,7 +139,7 @@ func para(text string, width int) string {
 // kindColor gives each build kind its own palette colour so a glance at the
 // KIND column (or a badge) is enough to tell go/pnpm/podman apart: go = brand
 // blue, pnpm = gold accent, podman = brand purple.
-func kindColor(k detect.Kind) lipgloss.TerminalColor {
+func kindColor(k detect.Kind) color.Color {
 	switch k {
 	case detect.KindGo:
 		return colAccent
@@ -176,7 +177,7 @@ func targetName(name string, ok bool) string {
 
 // pill renders a rounded chip — "label value" — bordered and coloured by c.
 // Used in a row to give scannable headline stats (counts, pass/fail).
-func pill(label, value string, c lipgloss.TerminalColor) string {
+func pill(label, value string, c color.Color) string {
 	inner := lipgloss.NewStyle().Foreground(colMuted).Render(label) + " " +
 		lipgloss.NewStyle().Foreground(c).Bold(true).Render(value)
 	return lipgloss.NewStyle().
@@ -206,7 +207,7 @@ func pillRow(pills ...string) string {
 // width-4 (1 border + 1 padding each side) and lipgloss wraps long lines into
 // it, so a single 370-char build-log line no longer stretches the border off
 // the terminal.
-func panel(title string, c lipgloss.TerminalColor, body string, width int) string {
+func panel(title string, c color.Color, body string, width int) string {
 	if width <= 0 {
 		width = termWidth()
 	}

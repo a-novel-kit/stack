@@ -7,15 +7,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image/color"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/a-novel-kit/stack/cli/internal/build"
 	"github.com/a-novel-kit/stack/cli/internal/detect"
@@ -330,7 +331,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
 	return m, nil
@@ -354,7 +355,7 @@ func isAbortKey(k string) bool {
 	return k == keyCtrlC || k == keyEsc || k == keyQ
 }
 
-func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.phase {
 	case phaseSelect:
 		return m.handleSelectKey(msg)
@@ -375,7 +376,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case keyCtrlC, keyEsc, keyQ:
 		m.aborted = true
@@ -390,7 +391,9 @@ func (m Model) handleSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor++
 		}
 
-	case " ", "x":
+	// Bubble Tea v2 reports the spacebar as "space" (not " ") from
+	// KeyPressMsg.String(); match that so space still toggles selection.
+	case "space", "x":
 		m.toggleAt(m.cursor)
 
 	case "g":
@@ -519,7 +522,7 @@ func (m Model) selectedTargets() []detect.Target {
 	return out
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	var b strings.Builder
 	b.WriteString(Banner(m.version))
 	b.WriteString("\n\n")
@@ -532,7 +535,12 @@ func (m Model) View() string {
 	case phaseReport:
 		b.WriteString(m.viewReport())
 	}
-	return b.String()
+	// Bubble Tea v2 makes the alternate screen a property of the View, not a
+	// NewProgram option; every frame opts in so cmd/a-novel's
+	// report-after-teardown flow still discards the TUI's last frame.
+	v := tea.NewView(b.String())
+	v.AltScreen = true
+	return v
 }
 
 func (m Model) viewSelect() string {
@@ -745,7 +753,7 @@ func (m Model) viewReport() string {
 	b.WriteString("  " + headline + "\n")
 	b.WriteString(indentBlock(para(lead, cw)) + "\n\n")
 
-	var failColor lipgloss.TerminalColor = colMuted
+	var failColor color.Color = colMuted
 	if s.Failed > 0 {
 		failColor = colCrit
 	}
