@@ -1,7 +1,8 @@
 package ui
 
 import (
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/compat"
 
 	"github.com/a-novel-kit/stack/cli/internal/detect"
 )
@@ -20,14 +21,14 @@ import (
 // for the few things that demand the eye immediately (a failed build) — used
 // sparingly so it keeps its alarm value.
 var (
-	colBrand  = lipgloss.Color("#DC24FF")                                 // A-Novel purple   — rgb(220,36,255)
-	colAccent = lipgloss.Color("#00A9B2")                                 // A-Novel blue     — rgb(0,169,178)
-	colGold   = lipgloss.Color("#C38500")                                 // structural accent — rgb(195,133,0)
-	colOK     = lipgloss.Color("#00AF84")                                 // success          — rgb(0,175,132)
-	colErr    = lipgloss.Color("#ED6200")                                 // error            — rgb(237,98,0)
-	colCrit   = lipgloss.Color("#FF00AB")                                 // immediate attention — rgb(255,0,171)
-	colMuted  = lipgloss.AdaptiveColor{Light: "#868E96", Dark: "#6C757D"} // dim detail
-	colWarn   = lipgloss.AdaptiveColor{Light: "#E8590C", Dark: "#FFA94D"} // aborted / caution
+	colBrand  = lipgloss.Color("#DC24FF")                                                               // A-Novel purple   — rgb(220,36,255)
+	colAccent = lipgloss.Color("#00A9B2")                                                               // A-Novel blue     — rgb(0,169,178)
+	colGold   = lipgloss.Color("#C38500")                                                               // structural accent — rgb(195,133,0)
+	colOK     = lipgloss.Color("#00AF84")                                                               // success          — rgb(0,175,132)
+	colErr    = lipgloss.Color("#ED6200")                                                               // error            — rgb(237,98,0)
+	colCrit   = lipgloss.Color("#FF00AB")                                                               // immediate attention — rgb(255,0,171)
+	colMuted  = compat.AdaptiveColor{Light: lipgloss.Color("#868E96"), Dark: lipgloss.Color("#6C757D")} // dim detail
+	colWarn   = compat.AdaptiveColor{Light: lipgloss.Color("#E8590C"), Dark: lipgloss.Color("#FFA94D")} // aborted / caution
 )
 
 var (

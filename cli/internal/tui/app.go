@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/a-novel-kit/stack/cli/internal/client/rpc"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
@@ -53,7 +53,7 @@ func Run() error {
 	// trade we want is "native text selection works" over "we could
 	// handle click events"; users routinely copy log lines out for
 	// grepping / pasting into issues.
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m)
 	// Hand the program back into the model so background log-follow
 	// goroutines can Send messages via p.Send (Bubble Tea's
 	// cross-goroutine event-injection primitive).
@@ -261,13 +261,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.view = viewTopology
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
 	return m, nil
 }
 
-func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.view {
 	case viewHelp, viewTopology:
 		// Any key returns to main.
@@ -406,8 +406,8 @@ func (m *model) logViewportHeight() int {
 	return h
 }
 
-func (m *model) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
+func (m *model) handleCommandKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.Key().Code {
 	case tea.KeyEsc:
 		m.view = viewMain
 		m.cmdInput = ""
@@ -422,9 +422,13 @@ func (m *model) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cmdInput = m.cmdInput[:len(m.cmdInput)-1]
 		}
 		return m, nil
-	case tea.KeyRunes, tea.KeySpace:
-		m.cmdInput += msg.String()
-		return m, nil
+	}
+	// Printable input carries its characters in Key.Text — populated for runes
+	// and space, empty for modifier combos and special keys. Appending it both
+	// captures typed text and ignores chords, replacing v1's KeyRunes/KeySpace
+	// cases (the KeyType enum was removed in Bubble Tea v2).
+	if txt := msg.Key().Text; txt != "" {
+		m.cmdInput += txt
 	}
 	return m, nil
 }

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/a-novel-kit/stack/cli/internal/build"
 	"github.com/a-novel-kit/stack/cli/internal/detect"

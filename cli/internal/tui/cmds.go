@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/a-novel-kit/stack/cli/internal/client/rpc"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
