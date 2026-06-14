@@ -5,7 +5,7 @@ go 1.26.4
 require (
 	connectrpc.com/connect v1.20.0
 	github.com/charmbracelet/bubbles v1.0.0
-	github.com/charmbracelet/bubbletea v1.3.10
+	github.com/charmbracelet/bubbletea/v2 v2.0.7
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/klauspost/compress v1.18.6
