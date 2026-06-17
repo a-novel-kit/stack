@@ -1,6 +1,8 @@
 // `a-novel publish` — cut a release locally: bump version files, commit,
-// tag vX.Y.Z, push commit + tag. CI's release workflow fires on the pushed
-// tag and does the rest (GitHub Release notes, Docker images, npm packages).
+// tag the release, push commit + tag. CI's release workflow fires on the
+// pushed tag and does the rest (GitHub Release notes, Docker images, npm
+// packages). The tag is vX.Y.Z for a root module and <subdir>/vX.Y.Z for a
+// sub-directory module (see goTagPrefix).
 //
 // Two behaviors matter:
 //
@@ -25,6 +27,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -65,7 +68,9 @@ func newPublishVersionCmd() *cobra.Command {
 		Short: "Bump, commit, tag and push a new release version",
 		Long: `Bumps the repo version to <new-version> (an explicit semver like 0.21.0,
 or a pnpm increment keyword: patch, minor, major), commits the change with
-the version as the message, tags it v<version>, and pushes commit + tag.
+the version as the message, tags it (v<version>, or <subdir>/v<version> when
+the Go module lives in a sub-directory, as the CLI's does under cli/), and
+pushes commit + tag.
 
 The bump is workspace-aware: a repo with pnpm-workspace.yaml is bumped with
 'pnpm version --recursive' (root + every member in one pass), a
@@ -123,7 +128,11 @@ preflight are UX, not the security boundary.`,
 			if err != nil {
 				return err
 			}
-			tag := "v" + version
+			tagPrefix, err := goTagPrefix(root)
+			if err != nil {
+				return err
+			}
+			tag := tagPrefix + "v" + version
 
 			// runGit captures all output (replayed only on error), so no
 			// --quiet flags are needed to keep success runs clean.
@@ -258,6 +267,52 @@ func readPackageVersion(root string) (string, error) {
 		return "", fmt.Errorf("publish: package.json at %s has no version field", root)
 	}
 	return pkg.Version, nil
+}
+
+// goModFile is the Go module manifest's fixed file name.
+const goModFile = "go.mod"
+
+// goTagPrefix returns the prefix Go requires on this repo's version tags.
+// A module at the repo root is released with plain "vX.Y.Z" tags (prefix
+// ""); a module in a sub-directory is released with tags prefixed by its
+// path, because that is how Go resolves a sub-directory module — e.g. the
+// a-novel CLI lives in cli/, so module github.com/a-novel-kit/stack/cli is
+// released as cli/vX.Y.Z and `go install …/cli/cmd/a-novel@vX.Y.Z` only
+// resolves against that prefixed tag.
+//
+// Detection keys on the single *tracked* go.mod, so gitignored sibling
+// checkouts (app/, kit/) that carry their own go.mod do not count, and a
+// root go.mod wins over any nested one. No tracked go.mod (a JS-only repo)
+// yields "". Multiple sub-directory modules are refused — there is no single
+// release tag to derive.
+func goTagPrefix(root string) (string, error) {
+	out, err := runGit(root, "ls-files", "--", "*go.mod")
+	if err != nil {
+		return "", fmt.Errorf("publish: list tracked go.mod files: %w", err)
+	}
+	var subdirs []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = strings.TrimSpace(line)
+		// git emits slash-separated paths; the pathspec also matches
+		// lookalikes (e.g. cargo.mod), so require an exact base name.
+		if line == "" || path.Base(line) != goModFile {
+			continue
+		}
+		dir := path.Dir(line)
+		if dir == "." {
+			return "", nil // module at the repo root → plain vX.Y.Z
+		}
+		subdirs = append(subdirs, dir)
+	}
+	switch len(subdirs) {
+	case 0:
+		return "", nil // no Go module → plain vX.Y.Z
+	case 1:
+		return subdirs[0] + "/", nil // sub-directory module → <dir>/vX.Y.Z
+	default:
+		return "", fmt.Errorf("publish: %d Go modules tracked (%s) — can't derive a single release tag; tag manually",
+			len(subdirs), strings.Join(subdirs, ", "))
+	}
 }
 
 // stampFile rewrites every `<prefix>vX.Y.Z` occurrence in the file at path

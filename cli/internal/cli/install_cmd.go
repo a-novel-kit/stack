@@ -64,7 +64,7 @@ running before.`,
 				sourceDir = resolved
 			}
 			// Sanity-check: a go.mod must live at <source>/go.mod.
-			if _, err := os.Stat(filepath.Join(sourceDir, "go.mod")); err != nil {
+			if _, err := os.Stat(filepath.Join(sourceDir, goModFile)); err != nil {
 				return fmt.Errorf("no go.mod at %s — pass --source pointing at the CLI source dir", sourceDir)
 			}
 			_, _ = fmt.Fprintf(out, "▸ source: %s\n", sourceDir)
