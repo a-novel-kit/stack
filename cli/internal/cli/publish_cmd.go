@@ -51,8 +51,9 @@ func newPublishCmd() *cobra.Command {
 		Short: "Cut and push a release from the local working tree",
 		Long: `Release helpers. Releases are created locally by a developer with push
 rights, not by CI — the end-to-end sequence is: bump version files, commit,
-tag vX.Y.Z, push commit + tag. CI's release workflow then fires on the
-pushed tag.
+tag the release (vX.Y.Z, or <subdir>/vX.Y.Z for a sub-directory Go module
+such as the CLI's under cli/), push commit + tag. CI's release workflow then
+fires on the pushed tag.
 
   publish version <new-version>   the full sequence above, with preflight
   publish stamp <prefix> <file>   refresh vX.Y.Z references inside a doc file`,
