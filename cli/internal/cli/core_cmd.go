@@ -31,6 +31,14 @@ import (
 // to make accidental human invocation implausible without confusing the parser.
 const daemonInternalCmd = "__daemon"
 
+// IsDaemonReexec reports whether args (typically os.Args) invoke the hidden
+// daemon re-exec — `a-novel core __daemon`. main() uses it to skip the
+// version-update check in the detached, long-lived daemon process (which has no
+// user watching and must not phone home on shutdown).
+func IsDaemonReexec(args []string) bool {
+	return len(args) >= 3 && args[1] == "core" && args[2] == daemonInternalCmd
+}
+
 func newCoreCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "core",
