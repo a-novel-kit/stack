@@ -67,6 +67,55 @@ of any subcommand. Every subcommand carries exhaustive Short/Long/Example help t
 
 ---
 
+## Driving the CLI non-interactively (agents, CI, scripts)
+
+The CLI is interactive only where a human benefits — the `test` / `build` pickers
+and the `run ui` TUI. Everything else already runs to completion and returns.
+When you are an agent, a CI job, or a script, drive it like this:
+
+- **`test` / `build`: always pass `-y`.** It skips the picker and runs every
+  discovered target sequentially (CI-safe). Both commands also auto-fall-back to
+  that path when there is no TTY, but pass `-y` explicitly — it states intent and
+  survives a stray PTY. Pair with `--dry-run` to inspect the target list first.
+
+  ```bash
+  a-novel test -y --type=go        # all Go tests, no prompt
+  a-novel build -y --type=podman   # all Podman images, no prompt
+  ```
+
+- **`run` verbs are already non-interactive** — `start`, `kill`, `restart`,
+  `logs`, `ps`, `service`, `volume`, `topology`, `env`, `watch`, `exec` and
+  `debug` all complete and return an exit code. The one interactive member of
+  the group is `run ui` (the TUI): **never launch it from an agent or CI** — use
+  the discrete verbs instead.
+
+- **Observe state with `run watch`, do not poll `ps`.** `a-novel run watch`
+  subscribes to the daemon's event stream and emits one newline-delimited JSON
+  object per state change (phase transition, exit, health flip). It is the
+  agent-facing primitive — built so you react the moment a target turns healthy
+  instead of looping `ps`. Narrow it with `--service` / `--target`.
+
+  ```bash
+  a-novel run watch --service=service-json-keys   # NDJSON, one event per line
+  ```
+
+- **Ask for machine-readable output where it exists.** `run ps --json` emits one
+  JSON object per service (with canonical fully-qualified target IDs).
+  `run env --format=json` (or `dotenv`) replaces the default eval-able `shell` form.
+
+  ```bash
+  a-novel run ps --json
+  a-novel run env <service> --format=json
+  ```
+
+- **`publish version` is the deliberate exception — keep it interactive.** It
+  refuses without a TTY because a release pushes to `master` and a protected
+  `v*` tag, which are human-only. Never route around the refusal (piping input,
+  faking a PTY); the server-side boundary and the token will stop you anyway.
+  See [[feedback-non-interactive-token]].
+
+---
+
 ## `a-novel test` — running tests
 
 Discovers every Go test target (`go test ./...` per module, scoped by
@@ -219,7 +268,9 @@ a-novel run ui                                # full-screen TUI
 ```
 
 The TUI is a thin client over the same RPCs as the CLI — actions taken in the UI
-are observable from `a-novel run watch` (when implemented) and vice-versa.
+are observable from `a-novel run watch` and vice-versa. For non-interactive /
+agent use, reach for `run watch` (and the other discrete verbs) instead of the
+TUI — see [Driving the CLI non-interactively](#driving-the-cli-non-interactively-agents-ci-scripts).
 
 ---
 
@@ -330,9 +381,13 @@ Some tasks fall outside the CLI's scope and use pnpm scripts or raw commands:
   `go tool buf format -w`, `go generate ./...` — per
   [[feedback-go-tools-policy]]), so the raw forms stay valid too. The CLI
   deliberately doesn't wrap these.
-- **Direct database access**: use `a-novel run exec <service>/<infra-target> --
-psql -U postgres` (when implemented) OR `podman exec <container-name> psql ...`
-  if exec isn't wired yet.
+- **Direct database access**: `a-novel run exec <service>/<target> -- psql ...`.
+  For a container-mode target that is running, the command runs inside its
+  container (`podman exec`); for a go-exec or stopped target it runs on the host
+  with the target's resolved env (`POSTGRES_DSN`, `*_PORT`, …) — e.g.
+  `a-novel run exec <service>/migrations -- psql` to get `psql` with the right
+  DSN. Raw `podman exec <container-name> psql ...` still works against a running
+  container.
 - **CI workflows**: CI never shells into the CLI — the `kit/workflows`
   composite actions invoke `gotestsum` / `golangci-lint` / `pnpm run <script>`
   directly. Skills documenting CI behavior should reference those actions, not
