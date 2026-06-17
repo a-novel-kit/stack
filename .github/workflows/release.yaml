@@ -1,0 +1,23 @@
+name: release
+
+# Fires when `a-novel publish version` pushes a release tag. The CLI's Go
+# module lives under cli/, so its tags are prefixed — cli/vX.Y.Z; a future
+# root module would be vX.Y.Z. Both are matched explicitly so a stray or
+# accidental tag never cuts a release. auto-release creates the GitHub Release
+# from the tag, so the release name, the git tag, and the version `go install`
+# records all stay one value.
+on:
+  push:
+    tags:
+      - "v*"
+      - "cli/v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: a-novel-kit/workflows/publish-actions/auto-release@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}

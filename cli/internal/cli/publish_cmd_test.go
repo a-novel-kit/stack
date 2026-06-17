@@ -314,3 +314,102 @@ func TestGitToplevel(t *testing.T) {
 		t.Error("expected error outside a git repo, got none")
 	}
 }
+
+func TestGoTagPrefix(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name string
+
+		// goMods are paths (slash-separated, relative to root) of files to
+		// create and commit. The helper only counts those whose base name is
+		// exactly "go.mod"; the others exercise the lookalike filter.
+		goMods []string
+
+		expect    string
+		expectErr bool
+	}{
+		{
+			name:   "module at repo root",
+			goMods: []string{"go.mod"},
+			expect: "",
+		},
+		{
+			name:   "module in a sub-directory",
+			goMods: []string{"cli/go.mod"},
+			expect: "cli/",
+		},
+		{
+			name:   "module in a nested sub-directory",
+			goMods: []string{"a/b/go.mod"},
+			expect: "a/b/",
+		},
+		{
+			name:   "no go module",
+			goMods: nil,
+			expect: "",
+		},
+		{
+			name:   "root module wins over a nested one",
+			goMods: []string{"go.mod", "tools/go.mod"},
+			expect: "",
+		},
+		{
+			name:      "multiple sub-directory modules refused",
+			goMods:    []string{"x/go.mod", "y/go.mod"},
+			expectErr: true,
+		},
+		{
+			name:   "ignores files merely ending in go.mod",
+			goMods: []string{"sub/cargo.mod"},
+			expect: "",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			mustGit := func(args ...string) {
+				t.Helper()
+				if out, err := runGit(root, args...); err != nil {
+					t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+				}
+			}
+			mustGit("init", "--quiet", "--initial-branch=master")
+			mustGit("config", "user.email", "test@a-novel.dev")
+			mustGit("config", "user.name", "test")
+
+			// Always keep at least one tracked file so the commit succeeds.
+			if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("x\n"), 0o600); err != nil {
+				t.Fatalf("write fixture: %v", err)
+			}
+			for _, gm := range testCase.goMods {
+				p := filepath.Join(root, filepath.FromSlash(gm))
+				if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+					t.Fatalf("mkdir: %v", err)
+				}
+				if err := os.WriteFile(p, []byte("module example.com/x\n"), 0o600); err != nil {
+					t.Fatalf("write go.mod: %v", err)
+				}
+			}
+			mustGit("add", "-A")
+			mustGit("commit", "--quiet", "-m", "init")
+
+			got, err := goTagPrefix(root)
+			if testCase.expectErr {
+				if err == nil {
+					t.Fatal("expected an error, got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("goTagPrefix: %v", err)
+			}
+			if got != testCase.expect {
+				t.Errorf("prefix = %q, want %q", got, testCase.expect)
+			}
+		})
+	}
+}
