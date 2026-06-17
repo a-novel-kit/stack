@@ -117,9 +117,6 @@ preflight are UX, not the security boundary.`,
 			if err = publishPreflight(root, def); err != nil {
 				return err
 			}
-			if err = refuseNestedRepoBleed(root); err != nil {
-				return err
-			}
 			_, _ = fmt.Fprintf(out, "▸ Preflight OK (%s, clean, in sync with origin/%s)\n", root, def)
 
 			if err = bumpVersion(out, root, args[0]); err != nil {
@@ -235,12 +232,27 @@ func publishPreflight(root, def string) error {
 // skips its own git commit/tag in recursive mode, and --no-git-tag-version
 // forces the same in single-package mode — the publish command owns the
 // commit/tag either way.
+//
+// `pnpm version --recursive` filesystem-scans every nested package.json,
+// ignoring the workspace `packages` globs AND .gitignore, so from the stack
+// root it would otherwise bump (and dirty) the pulled app/ + kit/ checkouts.
+// We --filter out every gitignored top-level dir so the bump only ever touches
+// this repo's own tracked packages. A --filter for a dir with no package.json
+// is a harmless no-op, so the same logic is safe for any repo.
 func bumpVersion(out io.Writer, root, newVersion string) error {
-	mode := "--no-git-tag-version"
-	if isPnpmWorkspace(root) {
-		mode = "--recursive"
+	args := []string{"version", newVersion}
+	if !isPnpmWorkspace(root) {
+		args = append(args, "--no-git-tag-version")
+	} else {
+		ignored, err := gitignoredTopLevelDirs(root)
+		if err != nil {
+			return err
+		}
+		args = append(args, "--recursive")
+		for _, dir := range ignored {
+			args = append(args, "--filter", "!{./"+dir+"}")
+		}
 	}
-	args := []string{"version", newVersion, mode}
 	if err := runPnpm(out, root, args...); err != nil {
 		return fmt.Errorf("publish: pnpm %s: %w", strings.Join(args, " "), err)
 	}
@@ -252,36 +264,6 @@ func bumpVersion(out io.Writer, root, newVersion string) error {
 func isPnpmWorkspace(root string) bool {
 	_, err := os.Stat(filepath.Join(root, "pnpm-workspace.yaml"))
 	return err == nil
-}
-
-// absMember anchors a pnpm member path at root. `pnpm ls --parseable` prints
-// absolute paths in practice, but normalising guards against a relative form
-// (`.`, `packages/foo`) — pnpm runs with its cwd at root, so a relative path is
-// relative to root — so the gitignore check never silently skips a member.
-func absMember(root, member string) string {
-	if filepath.IsAbs(member) {
-		return member
-	}
-	return filepath.Join(root, member)
-}
-
-// pnpmWorkspaceMembers returns the absolute directory of every package pnpm
-// resolves for the workspace at root (root itself included). `--parseable`
-// prints one path per line.
-func pnpmWorkspaceMembers(root string) ([]string, error) {
-	c := exec.Command("pnpm", "-r", "ls", "--depth", "-1", "--parseable")
-	c.Dir = root
-	out, err := c.Output()
-	if err != nil {
-		return nil, fmt.Errorf("publish: list pnpm workspace members: %w", err)
-	}
-	var members []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			members = append(members, absMember(root, line))
-		}
-	}
-	return members, nil
 }
 
 // gitIgnored reports whether git ignores rel (a path relative to root). It maps
@@ -299,38 +281,30 @@ func gitIgnored(root, rel string) (bool, error) {
 	return false, fmt.Errorf("publish: git check-ignore %s: %w", rel, err)
 }
 
-// refuseNestedRepoBleed fails the preflight if the pnpm workspace would version
-// a package that git ignores. `pnpm version --recursive` bumps every workspace
-// member, and a gitignored member is a foreign checkout — the stack's pulled
-// service / library repos under app/ and kit/ — not part of this release. The
-// git tag and commit are already safe (gitignored paths are never staged); this
-// closes the npm side, and keys on "gitignored" rather than the literal app/kit
-// names so a repo that legitimately tracks its own app/ directory still
-// publishes. Non-workspace repos can't recurse, so they short-circuit.
-func refuseNestedRepoBleed(root string) error {
-	if !isPnpmWorkspace(root) {
-		return nil
-	}
-	members, err := pnpmWorkspaceMembers(root)
+// gitignoredTopLevelDirs lists the immediate sub-directories of root that git
+// ignores — the stack's pulled app/ + kit/ checkouts (and node_modules, etc.).
+// `pnpm version --recursive` filesystem-scans every nested package.json on disk,
+// ignoring both the workspace `packages` globs and .gitignore, so bumpVersion
+// has to --filter these out by hand or the bump dirties the pulled repos.
+func gitignoredTopLevelDirs(root string) ([]string, error) {
+	entries, err := os.ReadDir(root)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("publish: read %s: %w", root, err)
 	}
-	for _, member := range members {
-		rel, err := filepath.Rel(root, member)
-		if err != nil || rel == "." {
+	var dirs []string
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == ".git" {
 			continue
 		}
-		ignored, err := gitIgnored(root, rel)
+		ignored, err := gitIgnored(root, entry.Name())
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if ignored {
-			return fmt.Errorf("publish: pnpm workspace member %s is gitignored — a pulled repo (the "+
-				"stack's app/ or kit/ checkouts), not part of this release; exclude it from "+
-				"pnpm-workspace.yaml so the version bump can't reach it", rel)
+			dirs = append(dirs, entry.Name())
 		}
 	}
-	return nil
+	return dirs, nil
 }
 
 // readPackageVersion returns the "version" field of root/package.json —
