@@ -119,11 +119,12 @@ preflight are UX, not the security boundary.`,
 			}
 			_, _ = fmt.Fprintf(out, "▸ Preflight OK (%s, clean, in sync with origin/%s)\n", root, def)
 
+			_, _ = fmt.Fprintln(out, "▸ Bumping version...")
 			if err = bumpVersion(out, root, args[0]); err != nil {
 				return err
 			}
-			if err = runPnpm(out, root, "run", "--if-present", "prepublish:doc"); err != nil {
-				return fmt.Errorf("publish: prepublish:doc: %w", err)
+			if cmdOut, dErr := runPnpmCapture(root, "run", "--if-present", "prepublish:doc"); dErr != nil {
+				return pnpmFailure("prepublish:doc", cmdOut, dErr)
 			}
 			version, err := readPackageVersion(root)
 			if err != nil {
@@ -253,8 +254,28 @@ func bumpVersion(out io.Writer, root, newVersion string) error {
 			args = append(args, "--filter", "!{./"+dir+"}")
 		}
 	}
-	if err := runPnpm(out, root, args...); err != nil {
-		return fmt.Errorf("publish: pnpm %s: %w", strings.Join(args, " "), err)
+	cmdOut, err := runPnpmCapture(root, args...)
+	if err != nil {
+		return pnpmFailure("pnpm "+strings.Join(args, " "), cmdOut, err)
+	}
+	// pnpm prints one "name: old → new" line per bumped package, buried in
+	// lockfile chatter and the negative-filter notice. Surface just the changes
+	// so the operator can see (and sanity-check) exactly what was versioned. If
+	// the format ever changes and no such line is found, fall back to the raw
+	// output so the bump is never silent.
+	printed := false
+	for _, line := range strings.Split(cmdOut, "\n") {
+		if strings.Contains(line, "→") {
+			_, _ = fmt.Fprintf(out, "  %s\n", strings.TrimSpace(line))
+			printed = true
+		}
+	}
+	if !printed {
+		for _, line := range strings.Split(strings.TrimSpace(cmdOut), "\n") {
+			if line != "" {
+				_, _ = fmt.Fprintf(out, "  %s\n", line)
+			}
+		}
 	}
 	return nil
 }
@@ -400,15 +421,26 @@ func stampFile(path, prefix, version string) (int, error) {
 	return len(matches), nil
 }
 
-// runPnpm runs `pnpm <args...>` from dir, streaming output to out. Used
-// for the version bump and the optional prepublish:doc script — both want
-// their progress visible, unlike the git plumbing around them.
-func runPnpm(out io.Writer, dir string, args ...string) error {
+// runPnpmCapture runs `pnpm <args...>` from dir and returns the combined
+// output. The publish command keeps the success path quiet — pnpm is chatty
+// (lockfile supply-chain checks, "Done in Nms", a "No projects matched the
+// filters" notice from the bump's negative --filter excludes) — and replays the
+// full output only on failure, the same way the surrounding git plumbing does.
+func runPnpmCapture(dir string, args ...string) (string, error) {
 	c := exec.Command("pnpm", args...)
 	c.Dir = dir
-	c.Stdout = out
-	c.Stderr = out
-	return c.Run()
+	out, err := c.CombinedOutput()
+	return string(out), err
+}
+
+// pnpmFailure wraps a failed pnpm step as "publish: <label>: <err>", appending
+// the captured output only when it is non-empty — so a failure before pnpm
+// prints anything (e.g. pnpm not installed) doesn't leave a trailing blank line.
+func pnpmFailure(label, out string, err error) error {
+	if out = strings.TrimSpace(out); out != "" {
+		return fmt.Errorf("publish: %s: %w\n%s", label, err, out)
+	}
+	return fmt.Errorf("publish: %s: %w", label, err)
 }
 
 // gitToplevel resolves the repo root containing dir, so publish commands
