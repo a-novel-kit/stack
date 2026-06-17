@@ -489,3 +489,42 @@ func TestGoTagPrefix(t *testing.T) {
 		})
 	}
 }
+
+func TestAbsMember(t *testing.T) {
+	t.Parallel()
+
+	root := filepath.FromSlash("/home/x/stack")
+
+	testCases := []struct {
+		name string
+
+		member string
+		expect string
+	}{
+		{
+			name:   "absolute path is returned as-is",
+			member: filepath.Join(root, "cli"),
+			expect: filepath.Join(root, "cli"),
+		},
+		{
+			name:   "relative member is anchored at root",
+			member: "packages/rest",
+			expect: filepath.Join(root, "packages", "rest"),
+		},
+		{
+			name:   "relative dot is the root",
+			member: ".",
+			expect: root,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := absMember(root, testCase.member); got != testCase.expect {
+				t.Errorf("absMember(%q) = %q, want %q", testCase.member, got, testCase.expect)
+			}
+		})
+	}
+}

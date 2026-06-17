@@ -254,6 +254,17 @@ func isPnpmWorkspace(root string) bool {
 	return err == nil
 }
 
+// absMember anchors a pnpm member path at root. `pnpm ls --parseable` prints
+// absolute paths in practice, but normalising guards against a relative form
+// (`.`, `packages/foo`) — pnpm runs with its cwd at root, so a relative path is
+// relative to root — so the gitignore check never silently skips a member.
+func absMember(root, member string) string {
+	if filepath.IsAbs(member) {
+		return member
+	}
+	return filepath.Join(root, member)
+}
+
 // pnpmWorkspaceMembers returns the absolute directory of every package pnpm
 // resolves for the workspace at root (root itself included). `--parseable`
 // prints one path per line.
@@ -267,7 +278,7 @@ func pnpmWorkspaceMembers(root string) ([]string, error) {
 	var members []string
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		if line = strings.TrimSpace(line); line != "" {
-			members = append(members, line)
+			members = append(members, absMember(root, line))
 		}
 	}
 	return members, nil
