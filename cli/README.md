@@ -6,14 +6,14 @@ scripts.
 ## Install
 
 ```bash
-git clone git@github.com:a-novel-kit/stack.git ~/git-projects/a-novel
-cd ~/git-projects/a-novel/cli
-go install ./cmd/a-novel
+go install github.com/a-novel-kit/stack/cli/cmd/a-novel@latest
 a-novel core setup    # one-time interactive bootstrap (checks, dirs, .zshrc)
 ```
 
-After setup, every new shell auto-starts the daemon (`a-novel core start`
-silent if already running). Then use the verbs.
+No upfront clone: `go install` builds the binary straight from the module path,
+and `core setup` clones the stack repo into `~/git-projects/a-novel` (the default
+stack) for you. After setup, every new shell auto-starts the daemon
+(`a-novel core start` silent if already running). Then use the verbs.
 
 ## Command groups
 
