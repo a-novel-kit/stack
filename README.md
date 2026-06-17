@@ -28,17 +28,18 @@ and requires `git` and a running Podman. The rest of the toolchain (Node + pnpm,
 [developer onboarding guide](https://github.com/a-novel-kit/.github/blob/master/README.md).
 
 ```bash
-git clone git@github.com:a-novel-kit/stack.git ~/git-projects/a-novel
-cd ~/git-projects/a-novel/cli
-go install ./cmd/a-novel
+go install github.com/a-novel-kit/stack/cli/cmd/a-novel@latest
 
 a-novel core setup    # one-time bootstrap: env checks, state dirs, shell rc, daemon
 a-novel core sync     # clone / fast-forward the workspace repos into app/ and kit/
 ```
 
-`core setup` is idempotent. It installs a block in your shell rc (zsh, bash and
-fish are supported) that auto-starts the background daemon and loads
-tab-completion in every new shell.
+`go install` pulls and builds the binary straight from the module path — no
+upfront clone. `core setup` then clones the stack repo itself into
+`~/git-projects/a-novel` (the default stack) when it's missing, so you don't
+bootstrap the workspace by hand. It is otherwise idempotent, and installs a block
+in your shell rc (zsh, bash and fish are supported) that auto-starts the
+background daemon and loads tab-completion in every new shell.
 
 Verify:
 
