@@ -33,6 +33,7 @@ import (
 	anovelcli "github.com/a-novel-kit/stack/cli/internal/cli"
 	"github.com/a-novel-kit/stack/cli/internal/detect"
 	"github.com/a-novel-kit/stack/cli/internal/ui"
+	"github.com/a-novel-kit/stack/cli/internal/update"
 	"github.com/a-novel-kit/stack/cli/internal/version"
 )
 
@@ -59,7 +60,17 @@ func main() {
 		Test:  legacyTest,
 		Build: legacyBuild,
 	})
-	if err := root.Execute(); err != nil {
+	err := root.Execute()
+
+	// Best-effort "newer release available" notice after any foreground
+	// command (interactive or not). Skipped for the detached daemon re-exec,
+	// which is long-lived and has no user to notify. Writes to stderr so it
+	// never corrupts stdout that callers parse / eval (e.g. `run env`).
+	if !anovelcli.IsDaemonReexec(os.Args) {
+		update.Notify(os.Stderr, version.String())
+	}
+
+	if err != nil {
 		// internal/cli's ExitError carries the legacy commands' explicit
 		// exit code through Cobra's error path so we preserve it here.
 		var exitErr *anovelcli.ExitError
