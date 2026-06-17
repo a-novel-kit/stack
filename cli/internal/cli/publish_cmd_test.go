@@ -313,6 +313,82 @@ func TestGitToplevel(t *testing.T) {
 	if _, err = gitToplevel(t.TempDir()); err == nil {
 		t.Error("expected error outside a git repo, got none")
 	}
+
+	// An independent repo nested inside (a pulled checkout under app/) resolves
+	// to ITSELF, not the outer repo — this is what scopes `publish` to a single
+	// service when you cd into it.
+	nested := filepath.Join(root, "app", "service-x")
+	if err = os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("mkdir nested: %v", err)
+	}
+	if out, gErr := runGit(nested, "init", "--quiet", "--initial-branch=master"); gErr != nil {
+		t.Fatalf("init nested: %v\n%s", gErr, out)
+	}
+	got, err = gitToplevel(nested)
+	if err != nil {
+		t.Fatalf("gitToplevel(nested): %v", err)
+	}
+	wantNested, _ := filepath.EvalSymlinks(nested)
+	gotNested, _ := filepath.EvalSymlinks(got)
+	if gotNested != wantNested {
+		t.Errorf("nested toplevel = %q, want %q (must scope to the nested repo, not the outer)", gotNested, wantNested)
+	}
+}
+
+func TestGitIgnored(t *testing.T) {
+	t.Parallel()
+
+	// app/ stands in for a pulled checkout (gitignored); pkg/ is a tracked
+	// own package — the case that must keep publishing.
+	root := t.TempDir()
+	mustGit := func(args ...string) {
+		t.Helper()
+		if out, err := runGit(root, args...); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	mustGit("init", "--quiet", "--initial-branch=master")
+	mustGit("config", "user.email", "test@a-novel.dev")
+	mustGit("config", "user.name", "test")
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("app/\n"), 0o600); err != nil {
+		t.Fatalf("write .gitignore: %v", err)
+	}
+	for _, dir := range []string{"app/service", "pkg/rest"} {
+		p := filepath.Join(root, filepath.FromSlash(dir))
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(p, "package.json"), []byte("{}"), 0o600); err != nil {
+			t.Fatalf("write fixture: %v", err)
+		}
+	}
+	mustGit("add", "-A")
+	mustGit("commit", "--quiet", "-m", "init")
+
+	testCases := []struct {
+		name string
+
+		rel    string
+		expect bool
+	}{
+		{name: "gitignored pulled dir", rel: "app/service", expect: true},
+		{name: "tracked own package", rel: "pkg/rest", expect: false},
+		{name: "repo root is not ignored", rel: ".", expect: false},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := gitIgnored(root, testCase.rel)
+			if err != nil {
+				t.Fatalf("gitIgnored(%q): %v", testCase.rel, err)
+			}
+			if got != testCase.expect {
+				t.Errorf("gitIgnored(%q) = %v, want %v", testCase.rel, got, testCase.expect)
+			}
+		})
+	}
 }
 
 func TestGoTagPrefix(t *testing.T) {
