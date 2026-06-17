@@ -100,8 +100,8 @@ When you are an agent, a CI job, or a script, drive it like this:
   ```
 
 - **Ask for machine-readable output where it exists.** `run ps --json` emits one
-  JSON object per service (with canonical fully-qualified target IDs); `run env
---format=json` (or `dotenv`) replaces the default eval-able `shell` form.
+  JSON object per service (with canonical fully-qualified target IDs).
+  `run env --format=json` (or `dotenv`) replaces the default eval-able `shell` form.
 
   ```bash
   a-novel run ps --json

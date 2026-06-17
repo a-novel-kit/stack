@@ -22,8 +22,9 @@ a-novel/                  this repo (github.com/a-novel-kit/stack)
 
 ## Install
 
-You need `git` and Go. The rest of the toolchain (Podman, Node + pnpm, `gh`) and
-the per-OS install commands live in the
+Building the CLI needs Go; `a-novel core setup` then preflights your environment
+and requires `git` and a running Podman. The rest of the toolchain (Node + pnpm,
+`gh`) and the per-OS install commands live in the
 [developer onboarding guide](https://github.com/a-novel-kit/.github/blob/master/README.md).
 
 ```bash
