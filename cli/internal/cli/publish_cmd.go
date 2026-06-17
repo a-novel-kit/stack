@@ -117,6 +117,9 @@ preflight are UX, not the security boundary.`,
 			if err = publishPreflight(root, def); err != nil {
 				return err
 			}
+			if err = refuseNestedRepoBleed(root); err != nil {
+				return err
+			}
 			_, _ = fmt.Fprintf(out, "▸ Preflight OK (%s, clean, in sync with origin/%s)\n", root, def)
 
 			if err = bumpVersion(out, root, args[0]); err != nil {
@@ -249,6 +252,85 @@ func bumpVersion(out io.Writer, root, newVersion string) error {
 func isPnpmWorkspace(root string) bool {
 	_, err := os.Stat(filepath.Join(root, "pnpm-workspace.yaml"))
 	return err == nil
+}
+
+// absMember anchors a pnpm member path at root. `pnpm ls --parseable` prints
+// absolute paths in practice, but normalising guards against a relative form
+// (`.`, `packages/foo`) — pnpm runs with its cwd at root, so a relative path is
+// relative to root — so the gitignore check never silently skips a member.
+func absMember(root, member string) string {
+	if filepath.IsAbs(member) {
+		return member
+	}
+	return filepath.Join(root, member)
+}
+
+// pnpmWorkspaceMembers returns the absolute directory of every package pnpm
+// resolves for the workspace at root (root itself included). `--parseable`
+// prints one path per line.
+func pnpmWorkspaceMembers(root string) ([]string, error) {
+	c := exec.Command("pnpm", "-r", "ls", "--depth", "-1", "--parseable")
+	c.Dir = root
+	out, err := c.Output()
+	if err != nil {
+		return nil, fmt.Errorf("publish: list pnpm workspace members: %w", err)
+	}
+	var members []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			members = append(members, absMember(root, line))
+		}
+	}
+	return members, nil
+}
+
+// gitIgnored reports whether git ignores rel (a path relative to root). It maps
+// `git check-ignore`'s exit codes — 0 ignored, 1 not ignored, anything else a
+// real failure — onto a bool.
+func gitIgnored(root, rel string) (bool, error) {
+	err := exec.Command("git", "-C", root, "check-ignore", "-q", "--", rel).Run()
+	if err == nil {
+		return true, nil
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, fmt.Errorf("publish: git check-ignore %s: %w", rel, err)
+}
+
+// refuseNestedRepoBleed fails the preflight if the pnpm workspace would version
+// a package that git ignores. `pnpm version --recursive` bumps every workspace
+// member, and a gitignored member is a foreign checkout — the stack's pulled
+// service / library repos under app/ and kit/ — not part of this release. The
+// git tag and commit are already safe (gitignored paths are never staged); this
+// closes the npm side, and keys on "gitignored" rather than the literal app/kit
+// names so a repo that legitimately tracks its own app/ directory still
+// publishes. Non-workspace repos can't recurse, so they short-circuit.
+func refuseNestedRepoBleed(root string) error {
+	if !isPnpmWorkspace(root) {
+		return nil
+	}
+	members, err := pnpmWorkspaceMembers(root)
+	if err != nil {
+		return err
+	}
+	for _, member := range members {
+		rel, err := filepath.Rel(root, member)
+		if err != nil || rel == "." {
+			continue
+		}
+		ignored, err := gitIgnored(root, rel)
+		if err != nil {
+			return err
+		}
+		if ignored {
+			return fmt.Errorf("publish: pnpm workspace member %s is gitignored — a pulled repo (the "+
+				"stack's app/ or kit/ checkouts), not part of this release; exclude it from "+
+				"pnpm-workspace.yaml so the version bump can't reach it", rel)
+		}
+	}
+	return nil
 }
 
 // readPackageVersion returns the "version" field of root/package.json —
