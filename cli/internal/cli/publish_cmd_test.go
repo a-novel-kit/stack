@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -490,41 +491,47 @@ func TestGoTagPrefix(t *testing.T) {
 	}
 }
 
-func TestAbsMember(t *testing.T) {
+func TestGitignoredTopLevelDirs(t *testing.T) {
 	t.Parallel()
 
-	root := filepath.FromSlash("/home/x/stack")
-
-	testCases := []struct {
-		name string
-
-		member string
-		expect string
-	}{
-		{
-			name:   "absolute path is returned as-is",
-			member: filepath.Join(root, "cli"),
-			expect: filepath.Join(root, "cli"),
-		},
-		{
-			name:   "relative member is anchored at root",
-			member: "packages/rest",
-			expect: filepath.Join(root, "packages", "rest"),
-		},
-		{
-			name:   "relative dot is the root",
-			member: ".",
-			expect: root,
-		},
+	// app/ + kit/ stand in for pulled checkouts (gitignored); pkg/ is tracked,
+	// and a tracked top-level file must not be mistaken for a dir.
+	root := t.TempDir()
+	mustGit := func(args ...string) {
+		t.Helper()
+		if out, err := runGit(root, args...); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
 	}
+	mustGit("init", "--quiet", "--initial-branch=master")
+	mustGit("config", "user.email", "test@a-novel.dev")
+	mustGit("config", "user.name", "test")
 
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
+	want := []string{"app", "kit"} // the gitignored (pulled) dirs
+	var gitignore strings.Builder
+	for _, dir := range want {
+		gitignore.WriteString(dir + "/\n")
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte(gitignore.String()), 0o600); err != nil {
+		t.Fatalf("write .gitignore: %v", err)
+	}
+	for _, dir := range append([]string{"pkg"}, want...) {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+		if err := os.WriteFile(filepath.Join(root, dir, "keep.txt"), []byte("x\n"), 0o600); err != nil {
+			t.Fatalf("write fixture: %v", err)
+		}
+	}
+	mustGit("add", "-A")
+	mustGit("commit", "--quiet", "-m", "init")
 
-			if got := absMember(root, testCase.member); got != testCase.expect {
-				t.Errorf("absMember(%q) = %q, want %q", testCase.member, got, testCase.expect)
-			}
-		})
+	got, err := gitignoredTopLevelDirs(root)
+	if err != nil {
+		t.Fatalf("gitignoredTopLevelDirs: %v", err)
+	}
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
+		t.Errorf("gitignored dirs = %v, want %v (tracked pkg/ must be excluded)", got, want)
 	}
 }
