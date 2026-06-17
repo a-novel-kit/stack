@@ -43,6 +43,10 @@ const (
 	// command by more than this on the once-a-day refresh.
 	httpTimeout = 2 * time.Second
 
+	// maxResponseBytes bounds how much of the proxy response is read before
+	// decoding — the @latest JSON is a few hundred bytes; 64 KiB is ample.
+	maxResponseBytes = 64 << 10
+
 	cacheFile = "update-check.json"
 )
 
@@ -52,11 +56,12 @@ type cacheEntry struct {
 	Latest    string    `json:"latest"`
 }
 
-// Notify writes a one-line "update available" suggestion to w when a tagged
-// release newer than current exists. current is version.String(): a non-release
-// value (a commit hash, "dev", "(devel)") is skipped, since there is nothing to
-// compare a local build against. Honors the A_NOVEL_NO_UPDATE_CHECK opt-out.
-// All errors are intentionally ignored.
+// Notify writes a short "update available" suggestion to w — two lines: the
+// available version, then the install command — when a tagged release newer than
+// current exists. current is version.String(): a non-release value (a commit
+// hash, "dev", "(devel)") is skipped, since there is nothing to compare a local
+// build against. Honors the A_NOVEL_NO_UPDATE_CHECK opt-out. All errors are
+// intentionally ignored.
 func Notify(w io.Writer, current string) {
 	if os.Getenv(disableEnv) != "" || !semver.IsValid(current) {
 		return
@@ -65,7 +70,7 @@ func Notify(w io.Writer, current string) {
 	if !shouldNotify(current, latest) {
 		return
 	}
-	_, _ = fmt.Fprintf(w, "\na-novel %s is available — you're on %s.\n", latest, current)
+	_, _ = fmt.Fprintf(w, "a-novel %s is available — you're on %s.\n", latest, current)
 	_, _ = fmt.Fprintf(w, "  Update: go install %s@latest\n", installPath)
 }
 
@@ -81,7 +86,11 @@ func shouldNotify(current, latest string) bool {
 // Returns "" on any failure.
 func latestVersion() string {
 	path := filepath.Join(paths.State(), cacheFile)
-	if entry, err := readCache(path); err == nil && time.Since(entry.LastCheck) < checkInterval {
+	// Require the cached version to be valid, not just fresh — otherwise a
+	// corrupt / hand-edited cache with a recent timestamp would suppress the
+	// check for the whole interval instead of triggering a re-fetch.
+	if entry, err := readCache(path); err == nil &&
+		time.Since(entry.LastCheck) < checkInterval && semver.IsValid(entry.Latest) {
 		return entry.Latest
 	}
 	latest := fetchLatest()
@@ -113,7 +122,9 @@ func fetchLatest() string {
 	var info struct {
 		Version string `json:"Version"`
 	}
-	if json.NewDecoder(resp.Body).Decode(&info) != nil {
+	// The @latest payload is a few hundred bytes; bound the read so an
+	// unexpectedly large response can't balloon memory.
+	if json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(&info) != nil {
 		return ""
 	}
 	return info.Version
@@ -129,6 +140,10 @@ func readCache(path string) (cacheEntry, error) {
 	return entry, err
 }
 
+// writeCache writes entry atomically — to a temp file in the same directory,
+// then rename into place — so a concurrent invocation or an interrupted write
+// can never leave a half-written cache that disables the check until the
+// interval expires.
 func writeCache(path string, entry cacheEntry) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -137,5 +152,17 @@ func writeCache(path string, entry cacheEntry) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, raw, 0o600)
+	tmp, err := os.CreateTemp(filepath.Dir(path), cacheFile+".*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }() // no-op once the rename succeeds
+	if _, err := tmp.Write(raw); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
