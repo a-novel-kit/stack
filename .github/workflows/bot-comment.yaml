@@ -4,10 +4,15 @@
 # comment as this org's App bot. They trigger it (workflow_dispatch, via
 # `a-novel core bot-comment`) with their OWN gh token; the App private
 # key never leaves this org's Actions secrets and never touches a dev
-# machine. The job can do exactly one thing — post a comment — so a
-# compromised trigger cannot escalate beyond "make the bot say
-# something". Pushing, merging, editing or authoring a PR/issue is
-# physically impossible from here.
+# machine. This job only ever posts a comment. The token it mints is
+# scoped to this single repo with issues + pull_requests write and
+# nothing else — no `contents`, no `administration` — so pushing,
+# merging, releasing and settings changes are impossible by permission.
+# Authoring or editing a PR/issue rides on those same writes the bot
+# needs to comment, so that is prevented not by the token but by what
+# this job does (comment, then exit) — on a workflow that lives on the
+# protected default branch. Net: a compromised trigger can ask for a
+# comment and nothing more.
 #
 # ONE COPY PER ORG. Org secrets do not cross org boundaries, so each org
 # (a-novel, a-novel-kit) hosts its own copy of this file in a repo it
@@ -49,6 +54,13 @@ on:
 # the run it just dispatched and watch it synchronously.
 run-name: "bot-comment ${{ github.repository_owner }}/${{ inputs.repo }}#${{ inputs.number }} (${{ inputs.nonce }})"
 
+# Serialize same-nonce dispatches so the idempotency check in the post
+# step cannot race two runs into a double-post. Distinct dispatches carry
+# distinct nonces, so this never serializes unrelated comments.
+concurrency:
+  group: bot-comment-${{ inputs.repo }}-${{ inputs.number }}-${{ inputs.nonce }}
+  cancel-in-progress: false
+
 # The default GITHUB_TOKEN gets nothing; every write below uses the
 # scoped App token instead.
 permissions: {}
@@ -67,6 +79,7 @@ jobs:
           REPLY_TO: ${{ inputs.reply_to }}
           NONCE: ${{ inputs.nonce }}
         run: |
+          set -euo pipefail
           if [ -z "$REPO" ]; then
             echo "::error::repo is empty"
             exit 1

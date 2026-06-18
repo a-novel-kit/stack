@@ -127,8 +127,9 @@ a-novel core bot-comment a-novel service-authentication 123 \
 `bot-comment` dispatches the
 [`bot-comment`](.github/workflows/bot-comment.yaml) workflow in the **target
 org's dispatcher repo** and waits for the run. The workflow mints a short-lived
-token scoped to the single target repo with comment-only permissions, posts,
-and exits — it cannot push, merge, edit, or author a PR/issue. So an operator
+token scoped to the single target repo (issues + pull-request writes only — no
+`contents`, so it cannot push, merge or release), then posts a comment and
+exits — it never authors or edits a PR/issue. So an operator
 (or the agent) only needs `gh` plus `actions: write` on that dispatcher repo;
 **no `.pem` is ever stored locally**, and a compromised machine cannot do
 anything as the bot beyond ask for a comment. It handles top-level comments on
