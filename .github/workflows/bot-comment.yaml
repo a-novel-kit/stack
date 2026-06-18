@@ -1,35 +1,33 @@
-# Centralized bot-comment dispatcher.
+# Per-org bot-comment dispatcher.
 #
 # This is the ONLY way an operator or agent posts a PR / issue / review
-# comment as an org App bot. They trigger it (workflow_dispatch, via
+# comment as this org's App bot. They trigger it (workflow_dispatch, via
 # `a-novel core bot-comment`) with their OWN gh token; the App private
-# keys never leave this repo's Actions secrets and never touch a dev
+# key never leaves this org's Actions secrets and never touches a dev
 # machine. The job can do exactly one thing — post a comment — so a
 # compromised trigger cannot escalate beyond "make the bot say
 # something". Pushing, merging, editing or authoring a PR/issue is
 # physically impossible from here.
 #
-# A single dispatcher serves BOTH orgs: the App token is minted for
-# whichever org the caller names, signed with that org's key. Because
-# the App is installed org-wide, a run here can comment on any repo in
-# the target org.
+# ONE COPY PER ORG. Org secrets do not cross org boundaries, so each org
+# (a-novel, a-novel-kit) hosts its own copy of this file in a repo it
+# owns, and the workflow derives everything from github.repository_owner:
+# it reads that org's key and comments on that org's repos. Keep the two
+# copies identical.
 #
-# Secrets (configured once, in a-novel-kit/stack > Settings > Secrets):
-#   BOT_ANOVEL_KEY     anovelbot-agent    (org a-novel)     private key, PEM
-#   BOT_ANOVELKIT_KEY  anovelkitbot-agent (org a-novel-kit) private key, PEM
+# Secret (one org-level secret per org, same name in each):
+#   AGENT_BOT_PRIVATE_KEY  this org's bot App private key, PEM
+# (a-novel -> anovelbot-agent, a-novel-kit -> anovelkitbot-agent.)
 # App IDs are public (visible in any App settings URL), so they are
-# inlined below rather than stored as secrets.
+# inlined below.
 
 name: bot-comment
 
 on:
   workflow_dispatch:
     inputs:
-      org:
-        description: "Target org (a-novel | a-novel-kit)"
-        required: true
       repo:
-        description: "Target repo name within the org (no owner/ prefix)"
+        description: "Target repo name within this org (no owner/ prefix)"
         required: true
       number:
         # Issues and PRs share one number sequence per repo, so a number
@@ -49,7 +47,7 @@ on:
 
 # The run-name carries the nonce so `a-novel core bot-comment` can find
 # the run it just dispatched and watch it synchronously.
-run-name: "bot-comment ${{ inputs.org }}/${{ inputs.repo }}#${{ inputs.number }} (${{ inputs.nonce }})"
+run-name: "bot-comment ${{ github.repository_owner }}/${{ inputs.repo }}#${{ inputs.number }} (${{ inputs.nonce }})"
 
 # The default GITHUB_TOKEN gets nothing; every write below uses the
 # scoped App token instead.
@@ -59,22 +57,45 @@ jobs:
   comment:
     runs-on: ubuntu-latest
     steps:
+      # Validate every input the later steps rely on, before minting a
+      # token — so a hand-made manual dispatch fails fast and safely.
       - name: Validate inputs
         env:
-          ORG: ${{ inputs.org }}
+          REPO: ${{ inputs.repo }}
           NUMBER: ${{ inputs.number }}
           BODY: ${{ inputs.body }}
+          REPLY_TO: ${{ inputs.reply_to }}
+          NONCE: ${{ inputs.nonce }}
         run: |
-          case "$ORG" in
-            a-novel | a-novel-kit) ;;
-            *)
-              echo "::error::unknown org '$ORG' (want a-novel | a-novel-kit)"
+          if [ -z "$REPO" ]; then
+            echo "::error::repo is empty"
+            exit 1
+          fi
+          case "$REPO" in
+            */*)
+              echo "::error::repo '$REPO' must be a bare repo name, no owner/ prefix"
               exit 1
               ;;
           esac
+          # Positive integer, no leading zero (rejects '', '0', '007', non-digits).
           case "$NUMBER" in
-            '' | *[!0-9]*)
-              echo "::error::number '$NUMBER' is not a positive integer"
+            '' | 0* | *[!0-9]*)
+              echo "::error::number '$NUMBER' must be a positive integer"
+              exit 1
+              ;;
+          esac
+          if [ -n "$REPLY_TO" ]; then
+            case "$REPLY_TO" in
+              0* | *[!0-9]*)
+                echo "::error::reply_to '$REPLY_TO' must be a positive integer"
+                exit 1
+                ;;
+            esac
+          fi
+          # nonce is lowercase hex (matches the CLI's hex.EncodeToString).
+          case "$NONCE" in
+            '' | *[!0-9a-f]*)
+              echo "::error::nonce '$NONCE' must be lowercase hex"
               exit 1
               ;;
           esac
@@ -91,13 +112,15 @@ jobs:
       # Mint a token scoped to the single target repo, with only the two
       # permissions a comment needs. The token cannot push, merge, or
       # touch any other repo — even though the App is installed org-wide.
+      # owner + key both come from the host org, so this copy can only
+      # ever act within its own org.
       - name: Mint scoped bot token
         id: app
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ inputs.org == 'a-novel' && '3549319' || '3549379' }}
-          private-key: ${{ inputs.org == 'a-novel' && secrets.BOT_ANOVEL_KEY || secrets.BOT_ANOVELKIT_KEY }}
-          owner: ${{ inputs.org }}
+          app-id: ${{ github.repository_owner == 'a-novel' && '3549319' || '3549379' }}
+          private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
           repositories: ${{ inputs.repo }}
           permission-issues: write
           permission-pull-requests: write
@@ -105,7 +128,7 @@ jobs:
       - name: Post comment
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
-          ORG: ${{ inputs.org }}
+          OWNER: ${{ github.repository_owner }}
           REPO: ${{ inputs.repo }}
           NUMBER: ${{ inputs.number }}
           BODY: ${{ inputs.body }}
@@ -113,7 +136,7 @@ jobs:
           NONCE: ${{ inputs.nonce }}
         run: |
           set -euo pipefail
-          slug="${ORG}/${REPO}"
+          slug="${OWNER}/${REPO}"
           marker="<!-- bot-comment:${NONCE} -->"
           full_body="${BODY}"$'\n\n'"${marker}"
 

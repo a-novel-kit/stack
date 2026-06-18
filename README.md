@@ -115,8 +115,8 @@ ready/merge/close — runs as you. The bot is strictly for comments, so automate
 notes attribute to `<app>[bot]` rather than a human account.
 
 The bot's signing keys never touch a dev machine. To comment as the bot you
-trigger a central workflow with your **own** `gh` token; the workflow holds the
-keys and posts:
+trigger your org's dispatcher workflow with your **own** `gh` token; the
+workflow holds the key and posts:
 
 ```bash
 gh auth login   # operator: pick GitHub.com + SSH
@@ -125,14 +125,22 @@ a-novel core bot-comment a-novel service-authentication 123 \
 ```
 
 `bot-comment` dispatches the
-[`bot-comment`](.github/workflows/bot-comment.yaml) workflow in this repo and
-waits for the run. The workflow mints a short-lived token scoped to the single
-target repo with comment-only permissions, posts, and exits — it cannot push,
-merge, edit, or author a PR/issue. So an operator (or the agent) only needs
-`gh` plus `actions: write` on this repo; **no `.pem` is ever stored locally**,
-and a compromised machine cannot do anything as the bot beyond ask for a
-comment. It handles top-level comments on PRs **or** issues, and `--reply-to`
-replies inside a PR review thread.
+[`bot-comment`](.github/workflows/bot-comment.yaml) workflow in the **target
+org's dispatcher repo** and waits for the run. The workflow mints a short-lived
+token scoped to the single target repo with comment-only permissions, posts,
+and exits — it cannot push, merge, edit, or author a PR/issue. So an operator
+(or the agent) only needs `gh` plus `actions: write` on that dispatcher repo;
+**no `.pem` is ever stored locally**, and a compromised machine cannot do
+anything as the bot beyond ask for a comment. It handles top-level comments on
+PRs **or** issues, and `--reply-to` replies inside a PR review thread.
+
+There is **one dispatcher per org**, because the App key is an org-level secret
+and org secrets do not cross org boundaries:
+
+| Org           | Dispatcher repo     |
+| ------------- | ------------------- |
+| `a-novel-kit` | `a-novel-kit/stack` |
+| `a-novel`     | `a-novel/.github`   |
 
 <details>
 <summary>One-time GitHub App setup (per org) + dispatcher secrets</summary>
@@ -155,17 +163,16 @@ The **App ID** is public and inlined in
 [`bot-comment.yaml`](.github/workflows/bot-comment.yaml); no Installation ID is
 needed — `create-github-app-token` resolves it from the org owner.
 
-**Dispatcher secrets (once, in this repo — never on a dev machine).** Generate a
-private key from each App's settings page (downloads a `.pem`) and store it as a
-repository **Actions secret** in `a-novel-kit/stack`:
+**Dispatcher secret (once per org — never on a dev machine).** Generate a
+private key from each App's settings page (downloads a `.pem`) and store it as
+an **organization-level Actions secret** named `AGENT_BOT_PRIVATE_KEY` in that
+org (one in `a-novel` for `anovelbot-agent`, one in `a-novel-kit` for
+`anovelkitbot-agent`). Make sure its repository visibility includes that org's
+dispatcher repo. The workflow derives which key/App/owner to use from
+`github.repository_owner`, so the two copies are identical.
 
-| Secret              | App                                |
-| ------------------- | ---------------------------------- |
-| `BOT_ANOVEL_KEY`    | `anovelbot-agent` (a-novel)        |
-| `BOT_ANOVELKIT_KEY` | `anovelkitbot-agent` (a-novel-kit) |
-
-Then grant each operator/agent `actions: write` on this repo so they can
-dispatch. Verify end-to-end by commenting on a scratch PR or issue:
+Then grant each operator/agent `actions: write` on the dispatcher repo so they
+can dispatch. Verify end-to-end by commenting on a scratch PR or issue:
 
 ```bash
 a-novel core bot-comment a-novel <repo> <number> --body "bot test"
@@ -179,6 +186,6 @@ Releases, merges and pushes to `master` are human-only. `a-novel publish
 version` refuses to run without a TTY, and the real boundary is server-side:
 branch protection on `master`, tag protection on `v*`, and a comments-only bot
 whose signing keys live only in CI (never on a dev machine — see
-[GitHub access](#github-access)), reached through a single dispatcher workflow
+[GitHub access](#github-access)), reached through a per-org dispatcher workflow
 that can do nothing but post a comment. The org-wide security policy lives in
 [a-novel/.github](https://github.com/a-novel/.github/blob/master/SECURITY.md).
