@@ -251,8 +251,8 @@ Other portability notes:
 
 **The first question for any new user-facing script is "does this belong in the
 a-novel CLI instead?"** The stack's bash inventory shrunk to near-zero when
-sync-repos and bot-token were ported to `a-novel core sync` and `a-novel core
-bot-token` / `a-novel core bot-gh`. New tooling should prefer Cobra subcommands
+sync-repos and bot-token were ported to `a-novel core sync` and
+`a-novel core bot-comment`. New tooling should prefer Cobra subcommands
 under `cli/internal/cli/` over a fresh `scripts/*.sh` — Go gives us testable
 flag parsing, real error types, and consistent help output. The only scripts
 that stay in bash are tiny shims (often consumed by CI) where adding a Cobra
