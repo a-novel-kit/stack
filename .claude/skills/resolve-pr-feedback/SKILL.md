@@ -266,8 +266,8 @@ A defensible decline does not need to wait for the reviewer to close — leaving
 creates audit-trail noise.
 
 ```bash
-gh api repos/<owner>/<repo>/pulls/<number>/comments/<comment-id>/replies \
-  -f body="$(cat <<'EOF'
+a-novel core bot-comment <org> <repo> <number> --reply-to <comment-id> \
+  --body "$(cat <<'EOF'
 <one-sentence reason>
 
 Per <.claude/skills/...-SKILL.md section / CLAUDE.md anchor / linked source>.
@@ -362,13 +362,19 @@ resolve button alone leaves reviewers guessing which commit addressed which comm
 For declines and deviations, the reply is the whole point; the resolution (if any)
 follows from it.
 
-Use the inline reply endpoint — top-level PR comments do **not** thread with inline
-review comments:
+Post the reply **as the bot** with `a-novel core bot-comment --reply-to` — never bare
+`gh`, which attributes the note to your user account. The `<comment-id>` is the REST
+review-comment id from the Phase 1.2 inline listing (not the GraphQL thread node id).
+Top-level comments do **not** thread with inline review comments, so a thread reply must
+pass `--reply-to`:
 
 ```bash
-gh api repos/<owner>/<repo>/pulls/<number>/comments/<comment-id>/replies \
-  -f body="Fixed in <short-sha>."
+a-novel core bot-comment <org> <repo> <number> --reply-to <comment-id> \
+  --body "Fixed in <short-sha>."
 ```
+
+The command triggers the dispatcher workflow and blocks until it finishes; on a non-zero
+exit, read the surfaced run log and retry. See [[feedback-bot-attribution]].
 
 ### 5.2 Resolve settled threads
 
@@ -377,9 +383,9 @@ deviation (3.3), or defensible decline (3.1). All three get resolved. Only large
 deviations and unsure threads (3.2) stay open, because both genuinely need the
 reviewer's next move.
 
-If the helper bot's GitHub App lacks `resolveReviewThread` permission (returns
-`FORBIDDEN`), fall back to the operator's user token. Bots are for posting; resolution
-sometimes needs the broader admin scope.
+Resolving a thread is **not** a comment, so it always runs as you (operator user token,
+plain `gh`) — there is no bot path for it; the bot can only post comments. Resolve with
+the thread node id from Phase 1.3:
 
 ```bash
 gh api graphql -f query='
@@ -431,26 +437,26 @@ The skill is not just defensive. Claude may initiate a thread when:
   future readers.
 - An assumption needs reviewer confirmation before another round.
 
-**Inline thread** (anchored to a line on the current head commit):
+Every comment you post goes through the bot (`a-novel core bot-comment`), never bare
+`gh` — see [[feedback-bot-attribution]].
+
+**Top-level comment** (general discussion — or a concern that points at specific code,
+naming the `file:line` in the body):
 
 ```bash
-gh api repos/<owner>/<repo>/pulls/<number>/comments \
-  -f body="..." \
-  -f commit_id="<head-sha>" \
-  -f path="<file>" \
-  -F line=<N> \
-  -f side="RIGHT"
+a-novel core bot-comment <org> <repo> <number> --body "..."
 ```
 
-**Top-level comment** (general discussion, not anchored to code):
+**Reply on an existing thread** (continuing a review conversation):
 
 ```bash
-gh pr comment <number> --body "..."
+a-novel core bot-comment <org> <repo> <number> --reply-to <comment-id> --body "..."
 ```
 
-Rule of thumb: inline for anything that points at specific code; top-level for PR-wide
-context (e.g., a summary of how a batch of fixes was applied, or a question about the
-overall direction).
+Starting a _brand-new_ inline thread anchored to a code line is not a bot capability —
+the dispatcher posts top-level comments and thread replies only. To raise line-specific
+code as the bot, post a top-level comment that names the `file:line`; reserve raw
+anchored-thread creation for a human reviewer.
 
 ---
 
@@ -467,9 +473,12 @@ overall direction).
   asserts a specific API shape, endpoint path, header name, or protocol detail, verify
   it against the upstream docs — or make a single empirical call — before editing.
   Plausibility is not evidence.
-- **Using the wrong endpoint for replies.** Top-level PR comments (`gh pr comment`) do
-  not thread with inline review comments. A reply to an inline comment must go through
-  `POST /pulls/:n/comments/:id/replies`.
+- **Replying with the wrong mode.** A top-level comment does not thread with an inline
+  review comment. To reply on a review thread, pass `--reply-to <comment-id>` to
+  `a-novel core bot-comment`; a bare comment (no `--reply-to`) posts at the top level.
+- **Commenting as yourself.** Every PR/issue/review comment goes through `a-novel core
+bot-comment` so it attributes to `<app-slug>[bot]`. Bare `gh pr comment` / `gh api …
+comments` posts as your user account — only reads use plain `gh`.
 - **Leaving clear-cut threads open.** A thread you have decisively answered — accept
   and fixed, or decline with a defended reason — does not need to wait for the reviewer
   to close. Leaving it open creates audit-trail noise. Resolve it; the reviewer can
@@ -511,8 +520,8 @@ overall direction).
 | Review envelopes                   | `gh api repos/<o>/<r>/pulls/<n>/reviews`                                                                            |
 | Thread resolution state (node IDs) | GraphQL `reviewThreads` query (Phase 1.3)                                                                           |
 | CI status                          | `gh pr checks <n>`                                                                                                  |
-| Reply on an inline thread          | `gh api repos/<o>/<r>/pulls/<n>/comments/<cid>/replies -f body="..."`                                               |
+| Reply on a review thread (bot)     | `a-novel core bot-comment <o> <r> <n> --reply-to <cid> --body "..."`                                                |
 | Resolve a thread                   | GraphQL `resolveReviewThread` mutation (Phase 5.2)                                                                  |
-| Start a new inline thread          | `POST .../pulls/<n>/comments` with `commit_id`, `path`, `line`, `side`                                              |
-| Top-level PR comment               | `gh pr comment <n> --body "..."`                                                                                    |
+| Start a new inline thread          | not a bot action — post a top-level bot comment naming `file:line` (see "Starting your own thread")                 |
+| Comment on a PR or issue (bot)     | `a-novel core bot-comment <o> <r> <n> --body "..."`                                                                 |
 | Re-request review                  | `gh api .../pulls/<n>/requested_reviewers -X POST -F 'reviewers[]=<login>'`                                         |

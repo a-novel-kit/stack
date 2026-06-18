@@ -284,13 +284,22 @@ a-novel core status           # is it running? what stacks? checkpoint pending?
 a-novel core kill [--force]   # graceful shutdown (--force also tears down infra)
 a-novel core prepare-reinstall  # used by `a-novel install` — checkpoints + exits
 
-# Workspace tooling — these replaced scripts/sync-repos.sh and scripts/lib/bot-token.sh.
+# Workspace tooling (ported from the old sync / bot-token bash scripts, now deleted).
 a-novel core sync                          # clone/ff-pull the curated workspace whitelist
 a-novel core sync --allow=a-novel-kit/golib  # subset to specific repos
 a-novel core sync --ignore=<org>/<repo>      # skip specific repos
-a-novel core bot-token <org>               # mint a 1h GitHub App installation token
-a-novel core bot-gh <org> <gh args...>     # run gh as the bot (COMMENTS ONLY — enforced)
+a-novel core bot-comment <org> <repo> <number> --body <text> [--reply-to <id>]
+                                           # comment as the org App bot (see below)
 ```
+
+`bot-comment` is the **only** way to post a PR/issue/review comment as
+`<app-slug>[bot]`. It does **not** mint a local token: it triggers the
+centralized `bot-comment` workflow in `a-novel-kit/stack` with your own
+`gh` token, and the workflow (which alone holds the App keys) posts the
+comment and is watched to completion. No `.pem` ever lives on a dev
+machine; you only need `gh` + `actions:write` on the dispatcher repo. PR
+authoring/merge/close are impossible through it — the bot can only
+comment. See [[feedback-bot-attribution]].
 
 `core setup` is interactive; everything else is non-interactive and `.zshrc`-safe.
 
@@ -393,7 +402,7 @@ Some tasks fall outside the CLI's scope and use pnpm scripts or raw commands:
   directly. Skills documenting CI behavior should reference those actions, not
   local commands.
 - **Git operations**: standard `git` / `gh` (per [[feedback-bot-attribution]] —
-  user token for PR ops, `a-novel core bot-gh` for comments).
+  user token for PR ops, `a-novel core bot-comment` for comments).
 
 ---
 
@@ -412,6 +421,7 @@ verbatim to the user.
 
 - [[feedback-go-tools-policy]] — `go tool -modfile=<x>.mod` for golangci-lint /
   gotestsum (the CLI doesn't wrap these; raw invocations stay).
-- [[feedback-bot-attribution]] — `a-novel core bot-gh` for PR/issue comments only;
-  PR creation uses the operator's user token.
+- [[feedback-bot-attribution]] — `a-novel core bot-comment` for PR/issue comments
+  only (via the dispatcher workflow, no local token); PR creation uses the
+  operator's user token.
 - [[project-workspace-layout]] — `app/` (gitignored services) + `kit/` checkouts.

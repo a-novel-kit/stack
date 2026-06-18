@@ -28,7 +28,7 @@ a-novel
 ├── core          daemon control + workspace plumbing
 │   ├── start / setup / kill / status / prepare-reinstall
 │   ├── sync                            clone/ff-pull the curated workspace repos
-│   └── bot-token / bot-gh <org>        GitHub App token mint (comments-only gh)
+│   └── bot-comment <org> <repo> <n>    comment as the org bot (via dispatcher workflow)
 └── run           daemon-backed surface for operating on services/targets:
     ├── ui                              full-screen TUI (Bubble Tea)
     ├── ps / stacks / topology          discovery & state

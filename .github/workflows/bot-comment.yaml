@@ -1,0 +1,178 @@
+# Per-org bot-comment dispatcher.
+#
+# This is the ONLY way an operator or agent posts a PR / issue / review
+# comment as this org's App bot. They trigger it (workflow_dispatch, via
+# `a-novel core bot-comment`) with their OWN gh token; the App private
+# key never leaves this org's Actions secrets and never touches a dev
+# machine. This job only ever posts a comment. The token it mints is
+# scoped to this single repo with issues + pull_requests write and
+# nothing else — no `contents`, no `administration` — so pushing,
+# merging, releasing and settings changes are impossible by permission.
+# Authoring or editing a PR/issue rides on those same writes the bot
+# needs to comment, so that is prevented not by the token but by what
+# this job does (comment, then exit) — on a workflow that lives on the
+# protected default branch. Net: a compromised trigger can ask for a
+# comment and nothing more.
+#
+# ONE COPY PER ORG. Org secrets do not cross org boundaries, so each org
+# (a-novel, a-novel-kit) hosts its own copy of this file in a repo it
+# owns, and the workflow derives everything from github.repository_owner:
+# it reads that org's key and comments on that org's repos. Keep the two
+# copies identical.
+#
+# Secret (one org-level secret per org, same name in each):
+#   AGENT_BOT_PRIVATE_KEY  this org's bot App private key, PEM
+# (a-novel -> anovelbot-agent, a-novel-kit -> anovelkitbot-agent.)
+# App IDs are public (visible in any App settings URL), so they are
+# inlined below.
+
+name: bot-comment
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Target repo name within this org (no owner/ prefix)"
+        required: true
+      number:
+        # Issues and PRs share one number sequence per repo, so a number
+        # is never ambiguous — it is an issue XOR a PR.
+        description: "PR or issue number"
+        required: true
+      body:
+        description: "Markdown comment body"
+        required: true
+      reply_to:
+        description: "Inline review-comment ID to reply to (empty = top-level comment)"
+        required: false
+        default: ""
+      nonce:
+        description: "Client-generated id, for run correlation + idempotency"
+        required: true
+
+# The run-name carries the nonce so `a-novel core bot-comment` can find
+# the run it just dispatched and watch it synchronously.
+run-name: "bot-comment ${{ github.repository_owner }}/${{ inputs.repo }}#${{ inputs.number }} (${{ inputs.nonce }})"
+
+# Serialize same-nonce dispatches so the idempotency check in the post
+# step cannot race two runs into a double-post. Distinct dispatches carry
+# distinct nonces, so this never serializes unrelated comments.
+concurrency:
+  group: bot-comment-${{ inputs.repo }}-${{ inputs.number }}-${{ inputs.nonce }}
+  cancel-in-progress: false
+
+# The default GITHUB_TOKEN gets nothing; every write below uses the
+# scoped App token instead.
+permissions: {}
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    steps:
+      # Validate every input the later steps rely on, before minting a
+      # token — so a hand-made manual dispatch fails fast and safely.
+      - name: Validate inputs
+        env:
+          REPO: ${{ inputs.repo }}
+          NUMBER: ${{ inputs.number }}
+          BODY: ${{ inputs.body }}
+          REPLY_TO: ${{ inputs.reply_to }}
+          NONCE: ${{ inputs.nonce }}
+        run: |
+          set -euo pipefail
+          if [ -z "$REPO" ]; then
+            echo "::error::repo is empty"
+            exit 1
+          fi
+          case "$REPO" in
+            */*)
+              echo "::error::repo '$REPO' must be a bare repo name, no owner/ prefix"
+              exit 1
+              ;;
+          esac
+          # Positive integer, no leading zero (rejects '', '0', '007', non-digits).
+          case "$NUMBER" in
+            '' | 0* | *[!0-9]*)
+              echo "::error::number '$NUMBER' must be a positive integer"
+              exit 1
+              ;;
+          esac
+          if [ -n "$REPLY_TO" ]; then
+            case "$REPLY_TO" in
+              0* | *[!0-9]*)
+                echo "::error::reply_to '$REPLY_TO' must be a positive integer"
+                exit 1
+                ;;
+            esac
+          fi
+          # nonce is lowercase hex (matches the CLI's hex.EncodeToString).
+          case "$NONCE" in
+            '' | *[!0-9a-f]*)
+              echo "::error::nonce '$NONCE' must be lowercase hex"
+              exit 1
+              ;;
+          esac
+          if [ -z "$BODY" ]; then
+            echo "::error::body is empty"
+            exit 1
+          fi
+          # GitHub caps a comment at 65536 chars; stay safely under.
+          if [ "${#BODY}" -gt 60000 ]; then
+            echo "::error::body is ${#BODY} chars (max 60000)"
+            exit 1
+          fi
+
+      # Mint a token scoped to the single target repo, with only the two
+      # permissions a comment needs. The token cannot push, merge, or
+      # touch any other repo — even though the App is installed org-wide.
+      # owner + key both come from the host org, so this copy can only
+      # ever act within its own org.
+      - name: Mint scoped bot token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ github.repository_owner == 'a-novel' && '3549319' || '3549379' }}
+          private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ inputs.repo }}
+          permission-issues: write
+          permission-pull-requests: write
+
+      - name: Post comment
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ inputs.repo }}
+          NUMBER: ${{ inputs.number }}
+          BODY: ${{ inputs.body }}
+          REPLY_TO: ${{ inputs.reply_to }}
+          NONCE: ${{ inputs.nonce }}
+        run: |
+          set -euo pipefail
+          slug="${OWNER}/${REPO}"
+          marker="<!-- bot-comment:${NONCE} -->"
+          full_body="${BODY}"$'\n\n'"${marker}"
+
+          # reply_to set  -> reply inside a PR inline review thread (PR only).
+          # reply_to empty -> a top-level comment; the issues endpoint serves
+          #                   both PRs (a PR is an issue) and plain issues.
+          if [ -n "$REPLY_TO" ]; then
+            list_url="repos/${slug}/pulls/${NUMBER}/comments"
+            post_url="repos/${slug}/pulls/${NUMBER}/comments/${REPLY_TO}/replies"
+          else
+            list_url="repos/${slug}/issues/${NUMBER}/comments"
+            post_url="repos/${slug}/issues/${NUMBER}/comments"
+          fi
+
+          # Idempotency: if a comment already carries this nonce marker, a
+          # previous dispatch posted it — do not post again.
+          existing=$(gh api "$list_url" --paginate \
+            --jq "[.[] | select(.body | contains(\"${marker}\")) | .html_url] | .[0] // empty")
+          existing=$(printf '%s\n' "$existing" | head -n1)
+          if [ -n "$existing" ]; then
+            echo "already posted (idempotent): $existing" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          url=$(gh api --method POST "$post_url" -f body="$full_body" --jq .html_url)
+          echo "posted: $url" | tee -a "$GITHUB_STEP_SUMMARY"

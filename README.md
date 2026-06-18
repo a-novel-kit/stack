@@ -13,8 +13,7 @@ the projects it operates on:
 a-novel/                  this repo (github.com/a-novel-kit/stack)
 ├── cli/                  the a-novel CLI (Go)
 ├── app/                  a-novel org checkouts (services)   — gitignored
-├── kit/                  a-novel-kit org checkouts (libraries) — gitignored
-└── .secrets/             GitHub App private keys            — gitignored
+└── kit/                  a-novel-kit org checkouts (libraries) — gitignored
 ```
 
 `app/` and `kit/` are not submodules — they are plain clones managed by
@@ -110,24 +109,42 @@ contract — is in [`cli/README.md`](cli/README.md).
 
 ## GitHub access
 
-Two identities talk to GitHub from a dev machine: **you** (the operator, via
-`gh`) and the **org bot** (a GitHub App, via `a-novel core bot-gh`). Anything
-that authors or merges — PR creation, edits, ready/merge/close — runs as you.
-The bot is strictly for comments, so automated notes attribute to `<app>[bot]`
-rather than a human account.
+Two identities talk to GitHub: **you** (the operator, via `gh`) and the **org
+bot** (a GitHub App). Anything that authors or merges — PR creation, edits,
+ready/merge/close — runs as you. The bot is strictly for comments, so automated
+notes attribute to `<app>[bot]` rather than a human account.
+
+The bot's signing keys never touch a dev machine. To comment as the bot you
+trigger your org's dispatcher workflow with your **own** `gh` token; the
+workflow holds the key and posts:
 
 ```bash
-gh auth login         # operator: pick GitHub.com + SSH
-a-novel core bot-gh a-novel -- pr comment 123 --body "automated review note"
+gh auth login   # operator: pick GitHub.com + SSH
+a-novel core bot-comment a-novel service-authentication 123 \
+    --body "automated review note"
 ```
 
-The CLI mints short-lived (1h) installation tokens from each org's App private
-key — no long-lived bot token is ever stored. `bot-gh` hard-rejects every `gh`
-subcommand that authors or state-changes a PR or issue, so those always run as
-the operator and CI triggers and attribution stay correct.
+`bot-comment` dispatches the
+[`bot-comment`](.github/workflows/bot-comment.yaml) workflow in the **target
+org's dispatcher repo** and waits for the run. The workflow mints a short-lived
+token scoped to the single target repo (issues + pull-request writes only — no
+`contents`, so it cannot push, merge or release), then posts a comment and
+exits — it never authors or edits a PR/issue. So an operator
+(or the agent) only needs `gh` plus `actions: write` on that dispatcher repo;
+**no `.pem` is ever stored locally**, and a compromised machine cannot do
+anything as the bot beyond ask for a comment. It handles top-level comments on
+PRs **or** issues, and `--reply-to` replies inside a PR review thread.
+
+There is **one dispatcher per org**, because the App key is an org-level secret
+and org secrets do not cross org boundaries:
+
+| Org           | Dispatcher repo     |
+| ------------- | ------------------- |
+| `a-novel-kit` | `a-novel-kit/stack` |
+| `a-novel`     | `a-novel/.github`   |
 
 <details>
-<summary>One-time GitHub App setup (per org, then per machine)</summary>
+<summary>One-time GitHub App setup (per org) + dispatcher secrets</summary>
 
 Each org has a dedicated GitHub App (`anovelbot-agent` for `a-novel`,
 `anovelkitbot-agent` for `a-novel-kit`). Both are already registered — these
@@ -143,28 +160,23 @@ on the org with:
 - **Webhook**: disabled. The App is outbound-only.
 - Install the App on **all repositories** of the org.
 
-Record the **App ID** and **Installation ID** (the trailing number in
-`https://github.com/organizations/<org>/settings/installations/<id>`) in
-`botOrgs` in [`cli/internal/cli/bot_cmd.go`](cli/internal/cli/bot_cmd.go) — both
-IDs are public; only the private key is sensitive.
+The **App ID** is public and inlined in
+[`bot-comment.yaml`](.github/workflows/bot-comment.yaml); no Installation ID is
+needed — `create-github-app-token` resolves it from the org owner.
 
-**Per machine.** Generate a private key from the App's settings page (downloads
-a `.pem`), then move it into the gitignored `.secrets/` directory under the
-stack root:
+**Dispatcher secret (once per org — never on a dev machine).** Generate a
+private key from each App's settings page (downloads a `.pem`) and store it as
+an **organization-level Actions secret** named `AGENT_BOT_PRIVATE_KEY` in that
+org (one in `a-novel` for `anovelbot-agent`, one in `a-novel-kit` for
+`anovelkitbot-agent`). Make sure its repository visibility includes that org's
+dispatcher repo. The workflow derives which key/App/owner to use from
+`github.repository_owner`, so the two copies are identical.
 
-```bash
-mkdir -p ~/git-projects/a-novel/.secrets
-mv ~/Downloads/<key>.pem ~/git-projects/a-novel/.secrets/anovelbot-agent.private-key.pem      # a-novel
-mv ~/Downloads/<key>.pem ~/git-projects/a-novel/.secrets/anovelkitbot-agent.private-key.pem   # a-novel-kit
-chmod 600 ~/git-projects/a-novel/.secrets/*.pem
-```
-
-Set `BOT_KEY_DIR` to keep the keys elsewhere. Verify (mints a real token, prints
-nothing on success):
+Then grant each operator/agent `actions: write` on the dispatcher repo so they
+can dispatch. Verify end-to-end by commenting on a scratch PR or issue:
 
 ```bash
-a-novel core bot-token a-novel     > /dev/null && echo "a-novel bot OK"
-a-novel core bot-token a-novel-kit > /dev/null && echo "a-novel-kit bot OK"
+a-novel core bot-comment a-novel <repo> <number> --body "bot test"
 ```
 
 </details>
@@ -174,5 +186,7 @@ a-novel core bot-token a-novel-kit > /dev/null && echo "a-novel-kit bot OK"
 Releases, merges and pushes to `master` are human-only. `a-novel publish
 version` refuses to run without a TTY, and the real boundary is server-side:
 branch protection on `master`, tag protection on `v*`, and a comments-only bot
-App. The org-wide security policy lives in
+whose signing keys live only in CI (never on a dev machine — see
+[GitHub access](#github-access)), reached through a per-org dispatcher workflow
+that can do nothing but post a comment. The org-wide security policy lives in
 [a-novel/.github](https://github.com/a-novel/.github/blob/master/SECURITY.md).
