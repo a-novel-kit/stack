@@ -29,7 +29,6 @@ languages:
     detect: ["package.json"]
     checks:
       - { context: "lint-node", integration: actions }
-      - { context: "generated-pnpm", integration: actions }
     codeql: ["javascript-typescript"]
     dependabot: ["npm"]
   proto:
@@ -46,6 +45,7 @@ features:
   pkg-js:
     detect: ["pkg/js"]
     checks:
+      - { context: "generated-pnpm", integration: actions }
       - { context: "test-pkg-js", integration: actions }
       - { context: "build-js", integration: actions }
 

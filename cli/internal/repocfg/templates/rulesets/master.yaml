@@ -1,7 +1,8 @@
 # Branch protection for the default branch. The CLI injects the required
 # status checks from semantic discovery, and omits the code_quality rule
-# for classes that set code_quality: false. Only admins bypass — every job
-# is required for everyone else, including the bots.
+# for classes that set code_quality: false. Admins bypass; the publish bot
+# also bypasses because release commits land on the default branch directly
+# (no branch proxy). Every status check is required for everyone else.
 name: master
 target: branch
 enforcement: active
@@ -11,6 +12,7 @@ conditions:
     exclude: []
 bypass:
   - admins
+  - publish
 rules:
   deletion: true
   non_fast_forward: true

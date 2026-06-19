@@ -62,10 +62,13 @@ ruleset, unmanaged bypass actors already present are preserved.
 
 **Generic bypass actors** (`bypass:` entries):
 
-- `admins` — org admins + the admin repo role (always bypass). Resolved
-  identically for every org/repo, no per-org data.
-- `bot:dependencies` / `bot:agent` / `bot:publish` — the org's bot apps
-  (exempt mode), resolved per org from `orgs/<org>.yaml`.
+- `admins` — org admins + the admin repo role, always. Org/repo-independent.
+- `dependencies` / `agent` / `publish` — the org's three bot apps, resolved
+  per org from `orgs/<org>.yaml`. On `master` the bypass mode is `always`
+  (only `publish` is listed there — releases write to the default branch
+  directly, with no branch proxy); on the PR rulesets the mode is `exempt`.
+- `dependabot` — GitHub-native Dependabot (a fixed app id, identical for
+  every org). It mirrors the `dependencies` bot's bypass.
 
 The core team is intentionally **not** a bypass actor.
 

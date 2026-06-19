@@ -187,17 +187,50 @@ func LoadChecks() (*ChecksConfig, error) {
 	return &c, nil
 }
 
-// RulesetSpec is one rulesets/<name>.yaml base. Conditions and Rules are
-// kept as raw nodes; the ruleset builder parses them when assembling the
-// API payload (the required-status-checks list and bypass actors are
-// injected there, not stored here).
+// RulesetSpec is one rulesets/<name>.yaml base. The required-status-checks
+// list and concrete bypass actors are injected by the builder, not stored
+// here.
 type RulesetSpec struct {
-	Name        string    `yaml:"name"`
-	Target      string    `yaml:"target"`
-	Enforcement string    `yaml:"enforcement"`
-	Conditions  yaml.Node `yaml:"conditions"`
-	Bypass      []string  `yaml:"bypass"`
-	Rules       yaml.Node `yaml:"rules"`
+	Name        string            `yaml:"name"`
+	Target      string            `yaml:"target"`
+	Enforcement string            `yaml:"enforcement"`
+	Conditions  RulesetConditions `yaml:"conditions"`
+	Bypass      []string          `yaml:"bypass"`
+	Rules       RulesetRules      `yaml:"rules"`
+}
+
+// RulesetConditions is the ref-name match for a branch ruleset.
+type RulesetConditions struct {
+	RefName struct {
+		Include []string `yaml:"include"`
+		Exclude []string `yaml:"exclude"`
+	} `yaml:"ref_name"`
+}
+
+// RulesetRules holds every rule a template may set; absent ones stay nil/
+// false. Param blobs that pass straight through to the API (merge_queue,
+// pull_request, copilot_code_review) are kept as maps so the template owns
+// their shape.
+type RulesetRules struct {
+	Deletion             bool               `yaml:"deletion"`
+	NonFastForward       bool               `yaml:"non_fast_forward"`
+	RequiredStatusChecks *RSCParams         `yaml:"required_status_checks"`
+	MergeQueue           map[string]any     `yaml:"merge_queue"`
+	CodeQuality          *CodeQualityParams `yaml:"code_quality"`
+	PullRequest          map[string]any     `yaml:"pull_request"`
+	CopilotCodeReview    map[string]any     `yaml:"copilot_code_review"`
+}
+
+// RSCParams is the static part of a required_status_checks rule; the checks
+// list is injected from discovery.
+type RSCParams struct {
+	Strict               bool `yaml:"strict"`
+	DoNotEnforceOnCreate bool `yaml:"do_not_enforce_on_create"`
+}
+
+// CodeQualityParams is the code_quality rule's parameters.
+type CodeQualityParams struct {
+	Severity string `yaml:"severity"`
 }
 
 // LoadRuleset reads rulesets/<name>.yaml.
