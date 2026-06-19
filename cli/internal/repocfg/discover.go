@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/a-novel-kit/stack/cli/internal/detect"
 )
@@ -65,7 +66,7 @@ func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 	if targets, err := detect.Detect(repoPath); err == nil {
 		for _, t := range targets {
 			if t.Kind == detect.KindPodman {
-				addCheck(fmt.Sprintf(cc.Docker.ContextFormat, t.Name), cc.Integrations[cc.Docker.Integration])
+				addCheck(fmt.Sprintf(cc.Docker.ContextFormat, dockerTargetName(t.Name)), cc.Integrations[cc.Docker.Integration])
 			}
 		}
 	}
@@ -76,6 +77,16 @@ func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 
 	sort.Slice(d.Checks, func(i, j int) bool { return d.Checks[i].Context < d.Checks[j].Context })
 	return d, nil
+}
+
+// dockerTargetName turns a detect podman target ("rest.Dockerfile",
+// "standalone.rest.Dockerfile") into the CI job suffix ("rest",
+// "standalone-rest"). Note: a few CI jobs are not pure derivations of the
+// Dockerfile name (e.g. init -> job-init), which is why `update` reconciles
+// against the live ruleset rather than trusting discovery alone.
+func dockerTargetName(name string) string {
+	name = strings.TrimSuffix(name, ".Dockerfile")
+	return strings.ReplaceAll(name, ".", "-")
 }
 
 func anyExists(root string, names []string) bool {
