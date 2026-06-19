@@ -1,7 +1,6 @@
-# `codecov` ruleset base. Applied only when codecov is enabled (class
-# codecov: on, or codecov: auto + the repo has tests). The CLI injects
-# bypass_actors <- bypass_always + bypass_bots, and the checks <-
-# checks.yaml codecov section.
+# Coverage gate, applied only when codecov is enabled (class codecov:
+# enabled, or auto + the repo has tests). The dependencies bot is exempt so
+# dependency-update PRs are never blocked on coverage.
 name: codecov
 target: branch
 enforcement: active
@@ -9,8 +8,10 @@ conditions:
   ref_name:
     include: ["~DEFAULT_BRANCH"]
     exclude: []
+bypass:
+  - admins
+  - bot:dependencies
 rules:
   required_status_checks:
     strict: false
     do_not_enforce_on_create: false
-    # checks: injected from checks.yaml (codecov/patch, codecov/project)

@@ -30,11 +30,10 @@ func TestLoadOrgs(t *testing.T) {
 			if o.Org != org {
 				t.Fatalf("org field = %q, want %q", o.Org, org)
 			}
-			if o.TeamID == 0 {
-				t.Fatalf("team_id is zero for %s", org)
-			}
-			if len(o.BypassAlways) == 0 {
-				t.Fatalf("bypass_always empty for %s", org)
+			for _, bot := range []string{"dependencies", "agent", "publish"} {
+				if o.Bots[bot] == 0 {
+					t.Fatalf("%s: bots.%s missing", org, bot)
+				}
 			}
 		})
 	}
@@ -54,5 +53,43 @@ func TestLoadChecks(t *testing.T) {
 	}
 	if len(c.Always) == 0 {
 		t.Fatal("always checks empty")
+	}
+}
+
+func TestLoadRulesets(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"master", "require-approval", "codecov"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r, err := LoadRuleset(name)
+			if err != nil {
+				t.Fatalf("LoadRuleset(%s): %v", name, err)
+			}
+			if r.Name != name {
+				t.Fatalf("name = %q, want %q", r.Name, name)
+			}
+			if len(r.Bypass) == 0 {
+				t.Fatalf("%s: bypass empty", name)
+			}
+		})
+	}
+}
+
+func TestLoadRepoOverride(t *testing.T) {
+	t.Parallel()
+
+	p, ok, err := LoadRepoOverride("a-novel-kit", "stack")
+	if err != nil {
+		t.Fatalf("LoadRepoOverride(stack): %v", err)
+	}
+	if !ok {
+		t.Fatal("expected a stack override to exist")
+	}
+	if p.Class != ClassLibrary {
+		t.Fatalf("stack base class = %q, want %q", p.Class, ClassLibrary)
+	}
+
+	if _, ok, err := LoadRepoOverride("a-novel", "service-authentication"); err != nil || ok {
+		t.Fatalf("expected no override for service-authentication; ok=%v err=%v", ok, err)
 	}
 }

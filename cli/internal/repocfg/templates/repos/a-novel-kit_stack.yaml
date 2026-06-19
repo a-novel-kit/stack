@@ -1,6 +1,8 @@
-# Org community-health repo (.github). Docs only — no code to scan, no
-# coverage, no code-quality gate.
-class: meta
+# Repo-specific config for a-novel-kit/stack (the a-novel CLI). Config is
+# library-shaped today; this file is its home for stack-only divergence
+# later (e.g. per-cmd release tags). A repos/<org>_<repo>.yaml file fully
+# replaces the class for that repo.
+class: library
 features:
   issues: true
   wiki: false
@@ -19,10 +21,11 @@ security:
   push_protection: true
   dependabot: true
 codeql:
-  enabled: false
+  enabled: true
+  query_suite: security-and-quality
 pages: false
-codecov: disabled
-code_quality: false
+codecov: auto
+code_quality: true
 rulesets:
   master: true
   require_approval: true

@@ -1,6 +1,7 @@
-# Org community-health repo (.github). Docs only — no code to scan, no
-# coverage, no code-quality gate.
-class: meta
+# Shared library (Go or Node — the language is detected, not declared).
+# Covers golib, jwt, nodelib: their config is identical, only the
+# discovered checks differ.
+class: library
 features:
   issues: true
   wiki: false
@@ -19,10 +20,11 @@ security:
   push_protection: true
   dependabot: true
 codeql:
-  enabled: false
+  enabled: true
+  query_suite: security-and-quality
 pages: false
-codecov: disabled
-code_quality: false
+codecov: auto
+code_quality: true
 rulesets:
   master: true
   require_approval: true

@@ -1,6 +1,11 @@
-# Reusable GitHub Actions workflows (a-novel-kit): workflows.
+# Reusable GitHub Actions workflows. No application code, so CodeQL scans
+# only the actions and there is no code-quality gate.
 class: workflows
-features: { issues: true, wiki: false, projects: true, discussions: false }
+features:
+  issues: true
+  wiki: false
+  projects: true
+  discussions: true
 merge:
   squash: true
   merge_commit: false
@@ -9,9 +14,16 @@ merge:
   delete_branch_on_merge: true
   allow_update_branch: true
   signoff_required: true
-security: { secret_scanning: true, push_protection: true, dependabot: true }
-codeql: { enabled: true, query_suite: default } # actions scanning only (discovered)
+security:
+  secret_scanning: true
+  push_protection: true
+  dependabot: true
+codeql:
+  enabled: true
+  query_suite: default
 pages: false
 codecov: disabled
-code_quality: false # not a code repo
-rulesets: { master: true, require_approval: true }
+code_quality: false
+rulesets:
+  master: true
+  require_approval: true

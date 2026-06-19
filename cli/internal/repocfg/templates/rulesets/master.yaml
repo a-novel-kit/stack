@@ -1,8 +1,7 @@
-# `master` ruleset base. The CLI injects:
-#   - bypass_actors  <- orgs/<org>.yaml bypass_always
-#   - required_status_checks.checks  <- semantic discovery (checks.yaml)
-#   - the code_quality rule  <- only when the class sets code_quality: true
-# Everything else here is the editable static policy.
+# Branch protection for the default branch. The CLI injects the required
+# status checks from semantic discovery, and omits the code_quality rule
+# for classes that set code_quality: false. Only admins bypass — every job
+# is required for everyone else, including the bots.
 name: master
 target: branch
 enforcement: active
@@ -10,13 +9,14 @@ conditions:
   ref_name:
     include: ["~DEFAULT_BRANCH"]
     exclude: []
+bypass:
+  - admins
 rules:
   deletion: true
   non_fast_forward: true
   required_status_checks:
     strict: true
     do_not_enforce_on_create: false
-    # checks: injected from discovery
   merge_queue:
     grouping_strategy: ALLGREEN
     merge_method: SQUASH
@@ -26,4 +26,4 @@ rules:
     min_entries_to_merge: 1
     min_entries_to_merge_wait_minutes: 5
   code_quality:
-    severity: errors # included only when class.code_quality == true
+    severity: errors

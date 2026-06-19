@@ -17,7 +17,9 @@ package repocfg
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -34,37 +36,22 @@ var templatesFS embed.FS
 type Class string
 
 const (
-	ClassService     Class = "service"
-	ClassGoLibrary   Class = "go-library"
-	ClassNodeLibrary Class = "node-library"
-	ClassWorkflows   Class = "workflows"
-	ClassMeta        Class = "meta"
-	ClassTooling     Class = "tooling"
-	ClassAssets      Class = "assets"
+	ClassService   Class = "service"
+	ClassLibrary   Class = "library"
+	ClassWorkflows Class = "workflows"
+	ClassMeta      Class = "meta"
 )
 
 // AllClasses is the ordered set of known classes (for the UI picker and
 // flag validation).
-var AllClasses = []Class{
-	ClassService, ClassGoLibrary, ClassNodeLibrary,
-	ClassWorkflows, ClassMeta, ClassTooling, ClassAssets,
-}
+var AllClasses = []Class{ClassService, ClassLibrary, ClassWorkflows, ClassMeta}
 
-// BypassActor is one ruleset bypass entry. ActorID is nil for
-// OrganizationAdmin (which has no id).
-type BypassActor struct {
-	ActorType  string `yaml:"actor_type"`
-	ActorID    *int64 `yaml:"actor_id,omitempty"`
-	BypassMode string `yaml:"bypass_mode,omitempty"`
-}
-
-// OrgProfile is the per-org environment data kept out of code.
+// OrgProfile is orgs/<org>.yaml — per-org bot ids and signing policy. A
+// ruleset's generic bot name (bots key) resolves to the app id here.
 type OrgProfile struct {
-	Org             string        `yaml:"org"`
-	TeamID          int64         `yaml:"team_id"`
-	BypassAlways    []BypassActor `yaml:"bypass_always"`
-	BypassBots      []BypassActor `yaml:"bypass_bots"`
-	SigningRequired bool          `yaml:"signing_required"`
+	Org             string           `yaml:"org"`
+	SigningRequired bool             `yaml:"signing_required"`
+	Bots            map[string]int64 `yaml:"bots"`
 }
 
 // Features mirrors the repo "Features" toggles.
@@ -120,7 +107,6 @@ const (
 // ClassPreset is one classes/<class>.yaml file.
 type ClassPreset struct {
 	Class       Class           `yaml:"class"`
-	Private     bool            `yaml:"private"`
 	Features    Features        `yaml:"features"`
 	Merge       Merge           `yaml:"merge"`
 	Security    SecurityToggles `yaml:"security"`
@@ -199,6 +185,41 @@ func LoadChecks() (*ChecksConfig, error) {
 		return nil, fmt.Errorf("load checks.yaml: %w", err)
 	}
 	return &c, nil
+}
+
+// RulesetSpec is one rulesets/<name>.yaml base. Conditions and Rules are
+// kept as raw nodes; the ruleset builder parses them when assembling the
+// API payload (the required-status-checks list and bypass actors are
+// injected there, not stored here).
+type RulesetSpec struct {
+	Name        string    `yaml:"name"`
+	Target      string    `yaml:"target"`
+	Enforcement string    `yaml:"enforcement"`
+	Conditions  yaml.Node `yaml:"conditions"`
+	Bypass      []string  `yaml:"bypass"`
+	Rules       yaml.Node `yaml:"rules"`
+}
+
+// LoadRuleset reads rulesets/<name>.yaml.
+func LoadRuleset(name string) (*RulesetSpec, error) {
+	var r RulesetSpec
+	if err := loadTemplateYAML(path.Join("rulesets", name+".yaml"), &r); err != nil {
+		return nil, fmt.Errorf("load ruleset %q: %w", name, err)
+	}
+	return &r, nil
+}
+
+// LoadRepoOverride reads repos/<org>_<repo>.yaml if it exists. The bool is
+// false (nil error) when the repo has no override and should use its class.
+func LoadRepoOverride(org, repo string) (*ClassPreset, bool, error) {
+	var p ClassPreset
+	if err := loadTemplateYAML(path.Join("repos", org+"_"+repo+".yaml"), &p); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("load repo override %s/%s: %w", org, repo, err)
+	}
+	return &p, true, nil
 }
 
 func loadTemplateYAML(rel string, out any) error {

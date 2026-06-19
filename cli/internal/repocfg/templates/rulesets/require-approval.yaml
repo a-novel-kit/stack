@@ -1,6 +1,6 @@
-# `require-approval` ruleset base. The CLI injects bypass_actors <-
-# bypass_always + bypass_bots (bots are exempt from review so automation
-# can merge). Identical across every repo today.
+# Mandatory review on the default branch. The three org bots are exempt so
+# automation (dependency PRs, releases, the comment proxy) can merge without
+# a human approval.
 name: require-approval
 target: branch
 enforcement: active
@@ -8,6 +8,11 @@ conditions:
   ref_name:
     include: ["~DEFAULT_BRANCH"]
     exclude: []
+bypass:
+  - admins
+  - bot:dependencies
+  - bot:agent
+  - bot:publish
 rules:
   pull_request:
     allowed_merge_methods: ["squash"]
