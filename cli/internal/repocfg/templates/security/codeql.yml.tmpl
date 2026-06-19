@@ -1,0 +1,37 @@
+# Managed by `a-novel repo` — CodeQL advanced setup. Regenerated on
+# `a-novel repo update`; edit the template in stack, not this copy.
+# __LANGUAGES__ / __QUERY_SUITE__ / __DEFAULT_BRANCH__ are filled from the
+# repo's detected languages and class preset.
+name: "CodeQL"
+
+on:
+  push:
+    branches: ["__DEFAULT_BRANCH__"]
+  pull_request:
+    branches: ["__DEFAULT_BRANCH__"]
+  schedule:
+    - cron: "27 4 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  analyze:
+    name: "Analyze (${{ matrix.language }})"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: __LANGUAGES__
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: "${{ matrix.language }}"
+          queries: "__QUERY_SUITE__"
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

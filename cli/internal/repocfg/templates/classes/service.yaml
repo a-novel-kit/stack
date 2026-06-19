@@ -1,0 +1,17 @@
+# Backend service (Go clean-arch, a-novel org). Template: service-template.
+class: service
+features: { issues: true, wiki: false, projects: true, discussions: true }
+merge:
+  squash: true
+  merge_commit: false # decision #2: squash-only everywhere
+  rebase: false
+  auto_merge: true
+  delete_branch_on_merge: true
+  allow_update_branch: true
+  signoff_required: true # decision #1
+security: { secret_scanning: true, push_protection: true, dependabot: true }
+codeql: { enabled: true, query_suite: security-and-quality } # languages discovered
+pages: true
+codecov: auto # auto = on when the repo has tests (decision #6); enabled|disabled forces
+code_quality: true # decision #3
+rulesets: { master: true, require_approval: true }

@@ -1,0 +1,17 @@
+# Org community-health repo: .github (both orgs).
+class: meta
+features: { issues: true, wiki: false, projects: true, discussions: false }
+merge:
+  squash: true
+  merge_commit: false
+  rebase: false
+  auto_merge: true
+  delete_branch_on_merge: true
+  allow_update_branch: true
+  signoff_required: true
+security: { secret_scanning: true, push_protection: true, dependabot: true }
+codeql: { enabled: false } # no application code to scan
+pages: false
+codecov: disabled
+code_quality: false
+rulesets: { master: true, require_approval: true }

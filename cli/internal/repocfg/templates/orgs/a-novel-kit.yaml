@@ -1,0 +1,15 @@
+# Per-org profile for `a-novel-kit`. See orgs/a-novel.yaml for field docs.
+org: a-novel-kit
+team_id: 13765197
+
+bypass_always:
+  - { actor_type: OrganizationAdmin, bypass_mode: always }
+  - { actor_type: RepositoryRole, actor_id: 5, bypass_mode: always } # admin role
+  - { actor_type: Team, actor_id: 13765197, bypass_mode: always }
+
+bypass_bots:
+  - { actor_type: Integration, actor_id: 29110, bypass_mode: pull_request }
+  - { actor_type: Integration, actor_id: 1734926, bypass_mode: pull_request }
+  - { actor_type: Integration, actor_id: 1734949, bypass_mode: pull_request }
+
+signing_required: true

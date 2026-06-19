@@ -1,0 +1,26 @@
+# Per-org profile for `a-novel`. Edited separately from Go so the
+# environment-specific IDs (team, bot apps) live in one obvious place.
+#
+# Used to build ruleset bypass_actors at CREATE time. `update` PRESERVES
+# the live bypass_actors of an existing ruleset and only reconciles rules,
+# so a hand-tuned bypass set is never clobbered.
+org: a-novel
+team_id: 13683698
+
+# Actors that bypass EVERY ruleset (org owners, the admin repo role, the
+# org team). mode: always.
+bypass_always:
+  - { actor_type: OrganizationAdmin, bypass_mode: always }
+  - { actor_type: RepositoryRole, actor_id: 5, bypass_mode: always } # admin role
+  - { actor_type: Team, actor_id: 13683698, bypass_mode: always }
+
+# Bot apps exempt from review/status rulesets (require-approval, codecov)
+# so automation can merge without a human approval or its own checks.
+# mode: pull_request (exempt).
+bypass_bots:
+  - { actor_type: Integration, actor_id: 29110, bypass_mode: pull_request }
+  - { actor_type: Integration, actor_id: 1717331, bypass_mode: pull_request }
+  - { actor_type: Integration, actor_id: 1718144, bypass_mode: pull_request }
+
+# Decision #1: enforce commit signing + signoff on every repo.
+signing_required: true

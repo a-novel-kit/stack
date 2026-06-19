@@ -1,0 +1,64 @@
+# Semantic check-discovery map. The CLI probes the repo (via the `detect`
+# package) and assembles the `master` ruleset's required status checks +
+# the CodeQL/Dependabot languages from the signals below. Editing the
+# job<->signal mapping here needs no code change.
+#
+# integration is the GitHub App that posts the check (its id ends up in
+# the ruleset's required_status_checks[].integration_id).
+
+integrations:
+  actions: 15368
+  gitguardian: 46505
+  codecov: 254
+
+# Always required, regardless of languages.
+always:
+  - { context: "GitGuardian Security Checks", integration: gitguardian }
+
+# Language detection -> checks + CodeQL languages + Dependabot ecosystems.
+languages:
+  go:
+    detect: ["go.mod"]
+    checks:
+      - { context: "lint-go", integration: actions }
+      - { context: "generated-go", integration: actions }
+      - { context: "test", integration: actions }
+    codeql: ["go"]
+    dependabot: ["gomod"]
+  node:
+    detect: ["package.json"]
+    checks:
+      - { context: "lint-node", integration: actions }
+      - { context: "generated-pnpm", integration: actions }
+    codeql: ["javascript-typescript"]
+    dependabot: ["npm"]
+  proto:
+    detect: ["buf.yaml", "buf.gen.yaml"]
+    checks:
+      - { context: "lint-proto", integration: actions }
+  actions:
+    detect: [".github/workflows"]
+    codeql: ["actions"]
+    dependabot: ["github-actions"]
+
+# Sub-feature detection (more specific than language).
+features:
+  pkg-js:
+    detect: ["pkg/js"]
+    checks:
+      - { context: "test-pkg-js", integration: actions }
+      - { context: "build-js", integration: actions }
+
+# Docker/compose build targets -> one build-<target> check per detected
+# target (target names come from detect.Detect, e.g. rest, migrations,
+# database, job-init, standalone-rest).
+docker:
+  context_format: "build-%s"
+  integration: actions
+
+# Presence of tests (detect.DetectTests) -> enable the codecov ruleset.
+codecov:
+  enable_when_tests: true
+  checks:
+    - { context: "codecov/patch", integration: codecov }
+    - { context: "codecov/project", integration: codecov }
