@@ -233,7 +233,7 @@ func TestResolveStampTargets(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	for _, rel := range []string{"a/x/action.yaml", "a/y/action.yaml", "b/z/action.yaml", "top.yaml"} {
+	for _, rel := range []string{"a/x/action.yaml", "a/y/action.yaml", "b/z/action.yaml", "top.yaml", "weird[1].yaml"} {
 		full := filepath.Join(dir, rel)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
@@ -256,6 +256,14 @@ func TestResolveStampTargets(t *testing.T) {
 	got, err = resolveStampTargets([]string{filepath.Join(dir, "top.yaml")})
 	if err != nil || len(got) != 1 {
 		t.Fatalf("literal: got %v err %v", got, err)
+	}
+
+	// a literal filename containing glob metacharacters resolves to itself,
+	// not to whatever the brackets would match as a pattern.
+	weird := filepath.Join(dir, "weird[1].yaml")
+	got, err = resolveStampTargets([]string{weird})
+	if err != nil || len(got) != 1 || got[0] != weird {
+		t.Fatalf("literal-with-metachars: got %v err %v, want [%s]", got, err, weird)
 	}
 
 	// overlapping patterns de-dupe.

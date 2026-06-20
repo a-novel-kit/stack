@@ -428,22 +428,35 @@ func goTagPrefix(root string) (string, error) {
 
 // resolveStampTargets expands each file-or-glob argument into concrete file
 // paths (relative to the working directory), preserving order and de-duping
-// overlapping matches. A literal path globs to itself when it exists. It is an
-// error for the whole set to resolve to no files — that catches a typo'd path
-// or glob in a prepublish:doc script before it silently stamps nothing.
+// overlapping matches. An existing literal path is taken verbatim (so a real
+// filename with glob metacharacters is never reinterpreted); otherwise the
+// argument is globbed. It is an error for the whole set to resolve to no files
+// — that catches a typo'd path or glob in a prepublish:doc script before it
+// silently stamps nothing.
 func resolveStampTargets(patterns []string) ([]string, error) {
 	seen := map[string]bool{}
 	var files []string
+	add := func(p string) {
+		if !seen[p] {
+			seen[p] = true
+			files = append(files, p)
+		}
+	}
 	for _, p := range patterns {
+		// A path that exists as-is is a literal target: take it verbatim so a
+		// real filename containing glob metacharacters (e.g. weird[1].yaml) is
+		// never reinterpreted as a pattern. Fall back to globbing only when the
+		// literal path does not exist.
+		if _, err := os.Stat(p); err == nil {
+			add(p)
+			continue
+		}
 		matches, err := filepath.Glob(p)
 		if err != nil {
 			return nil, fmt.Errorf("publish: bad glob %q: %w", p, err)
 		}
 		for _, m := range matches {
-			if !seen[m] {
-				seen[m] = true
-				files = append(files, m)
-			}
+			add(m)
 		}
 	}
 	if len(files) == 0 {
