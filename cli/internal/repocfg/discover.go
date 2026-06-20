@@ -17,18 +17,17 @@ type CheckRef struct {
 }
 
 // Discovered is what probing a repo tells us: the required checks, the
-// CodeQL languages and Dependabot ecosystems to configure, and whether the
-// repo has tests (which gates the codecov ruleset).
+// CodeQL languages, and whether the repo has tests (informational; the
+// codecov ruleset is gated on actual Codecov reporting, not this).
 type Discovered struct {
-	Checks         []CheckRef
-	CodeQLLangs    []string
-	DependabotEcos []string
-	HasTests       bool
+	Checks      []CheckRef
+	CodeQLLangs []string
+	HasTests    bool
 }
 
 // Discover walks repoPath and applies the checks.yaml map to produce the
-// required-check set + CodeQL/Dependabot identifiers. Detection is by file
-// presence plus the detect package for docker build targets.
+// required-check set + CodeQL languages. Detection is by file presence plus
+// the detect package for docker build targets.
 func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 	d := &Discovered{}
 	seen := map[string]bool{}
@@ -52,7 +51,6 @@ func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 		if anyExists(repoPath, lr.Detect) {
 			addDefs(lr.Checks)
 			d.CodeQLLangs = appendUnique(d.CodeQLLangs, lr.CodeQL...)
-			d.DependabotEcos = appendUnique(d.DependabotEcos, lr.Dependabot...)
 		}
 	}
 

@@ -112,18 +112,6 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		})
 	}
 
-	if len(t.Discovered.DependabotEcos) > 0 {
-		content, err := RenderDependabot(t.Discovered.DependabotEcos)
-		if err != nil {
-			return nil, err
-		}
-		p.Ops = append(p.Ops, Op{
-			Method:  "PUT",
-			Path:    repoPath + "/contents/.github/dependabot.yml",
-			Content: content,
-		})
-	}
-
 	if c.Pages {
 		p.Ops = append(p.Ops, Op{Method: "POST", Path: repoPath + "/pages", Body: map[string]any{"build_type": "workflow"}})
 	}
@@ -323,19 +311,6 @@ func RenderCodeQL(langs []string, querySuite, defaultBranch string) (string, err
 	out = strings.ReplaceAll(out, "__QUERY_SUITE__", querySuite)
 	out = strings.ReplaceAll(out, "__DEFAULT_BRANCH__", defaultBranch)
 	return out, nil
-}
-
-// RenderDependabot fills the dependabot template with one block per ecosystem.
-func RenderDependabot(ecos []string) (string, error) {
-	raw, err := ReadTemplate("security/dependabot.yml.tmpl")
-	if err != nil {
-		return "", err
-	}
-	var b strings.Builder
-	for _, e := range ecos {
-		fmt.Fprintf(&b, "  - package-ecosystem: \"%s\"\n    directory: \"/\"\n    schedule:\n      interval: \"weekly\"\n", e)
-	}
-	return strings.ReplaceAll(string(raw), "__UPDATES__", strings.TrimRight(b.String(), "\n")), nil
 }
 
 // Render writes the plan as labelled raw JSON (and verbatim file content for

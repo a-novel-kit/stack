@@ -124,12 +124,11 @@ type CheckDef struct {
 	Integration string `yaml:"integration"`
 }
 
-// LangRule maps a detected language to checks + CodeQL/Dependabot identifiers.
+// LangRule maps a detected language to its checks + CodeQL languages.
 type LangRule struct {
-	Detect     []string   `yaml:"detect"`
-	Checks     []CheckDef `yaml:"checks"`
-	CodeQL     []string   `yaml:"codeql"`
-	Dependabot []string   `yaml:"dependabot"`
+	Detect []string   `yaml:"detect"`
+	Checks []CheckDef `yaml:"checks"`
+	CodeQL []string   `yaml:"codeql"`
 }
 
 // FeatureRule maps a sub-feature (e.g. pkg/js) to extra checks.

@@ -24,13 +24,11 @@ languages:
       - { context: "generated-go", integration: actions }
       - { context: "test", integration: actions }
     codeql: ["go"]
-    dependabot: ["gomod"]
   node:
     detect: ["package.json"]
     checks:
       - { context: "lint-node", integration: actions }
     codeql: ["javascript-typescript"]
-    dependabot: ["npm"]
   proto:
     detect: ["buf.yaml", "buf.gen.yaml"]
     checks:
@@ -38,7 +36,6 @@ languages:
   actions:
     detect: [".github/workflows"]
     codeql: ["actions"]
-    dependabot: ["github-actions"]
 
 # Sub-feature detection (more specific than language).
 features:
