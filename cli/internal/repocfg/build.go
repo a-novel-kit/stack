@@ -313,9 +313,29 @@ func RenderCodeQL(langs []string, querySuite, defaultBranch string) (string, err
 	}
 	out := string(raw)
 	out = strings.ReplaceAll(out, "__LANGUAGES__", string(langsJSON))
-	out = strings.ReplaceAll(out, "__QUERY_SUITE__", querySuite)
 	out = strings.ReplaceAll(out, "__DEFAULT_BRANCH__", defaultBranch)
+	// CodeQL's implicit default suite is selected by OMITTING `queries:`;
+	// passing the literal "default" makes init look for a query pack named
+	// "default" and fail. So drop the line entirely for the default suite,
+	// and substitute it only for an explicit named suite.
+	if querySuite == "" || querySuite == "default" {
+		out = removeLineContaining(out, "__QUERY_SUITE__")
+	} else {
+		out = strings.ReplaceAll(out, "__QUERY_SUITE__", querySuite)
+	}
 	return out, nil
+}
+
+// removeLineContaining drops every line that contains sub.
+func removeLineContaining(s, sub string) string {
+	lines := strings.Split(s, "\n")
+	kept := lines[:0]
+	for _, l := range lines {
+		if !strings.Contains(l, sub) {
+			kept = append(kept, l)
+		}
+	}
+	return strings.Join(kept, "\n")
 }
 
 // Render writes the plan as labelled raw JSON (and verbatim file content for
