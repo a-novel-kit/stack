@@ -50,6 +50,18 @@ type RepoTarget struct {
 	OrgProfile               *OrgProfile
 	Checks                   *ChecksConfig
 	Discovered               *Discovered
+
+	// MasterChecks, when non-nil, is the authoritative required-check set
+	// for the master ruleset — used by `update` to PRESERVE the live
+	// ruleset's checks rather than overwrite them with discovery (which can
+	// only approximate names). Nil (e.g. on `create`) falls back to the
+	// discovered set.
+	MasterChecks []CheckRef
+	// CodecovReports is whether Codecov posts a status on this repo. It
+	// gates `codecov: auto` — a coverage ruleset is only enforced where
+	// Codecov actually reports, so it never blocks PRs on a repo that has
+	// no coverage upload.
+	CodecovReports bool
 }
 
 // Op is one API operation the plan would perform. Body is rendered as JSON;
@@ -105,24 +117,27 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	}
 
 	// Rulesets, reconciled by name (POST when absent, PUT .../{id} when present).
-	rsTitle := fmt.Sprintf("POST /repos/%s/%s/rulesets (or PUT .../{id})", t.Org, t.Repo)
 	if c.Rulesets.Master {
-		if op, err := rulesetOp(rsTitle, "master", t, t.Discovered.Checks); err != nil {
+		masterChecks := t.Discovered.Checks
+		if t.MasterChecks != nil {
+			masterChecks = t.MasterChecks // preserve live (lossless on update)
+		}
+		if op, err := rulesetOp("master", t, masterChecks); err != nil {
 			return nil, err
 		} else {
 			p.Ops = append(p.Ops, op)
 		}
 	}
 	if c.Rulesets.RequireApproval {
-		if op, err := rulesetOp(rsTitle, "require-approval", t, nil); err != nil {
+		if op, err := rulesetOp("require-approval", t, nil); err != nil {
 			return nil, err
 		} else {
 			p.Ops = append(p.Ops, op)
 		}
 	}
-	if codecovEnabled(c, t.Discovered) {
+	if codecovEnabled(c, t) {
 		checks := resolveCheckDefs(t.Checks.Codecov.Checks, t.Checks)
-		if op, err := rulesetOp(rsTitle, "codecov", t, checks); err != nil {
+		if op, err := rulesetOp("codecov", t, checks); err != nil {
 			return nil, err
 		} else {
 			p.Ops = append(p.Ops, op)
@@ -132,20 +147,23 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	return p, nil
 }
 
-func rulesetOp(title, name string, t *RepoTarget, checks []CheckRef) (Op, error) {
+func rulesetOp(name string, t *RepoTarget, checks []CheckRef) (Op, error) {
 	spec, err := LoadRuleset(name)
 	if err != nil {
 		return Op{}, err
 	}
+	title := fmt.Sprintf("PUT|POST ruleset %q (/repos/%s/%s/rulesets)", name, t.Org, t.Repo)
 	return Op{Title: title, Body: BuildRuleset(spec, t.OrgProfile, checks)}, nil
 }
 
-func codecovEnabled(c *ClassPreset, d *Discovered) bool {
+func codecovEnabled(c *ClassPreset, t *RepoTarget) bool {
 	switch c.Codecov {
 	case CodecovEnabled:
 		return true
 	case CodecovAuto:
-		return d.HasTests
+		// Only enforce coverage where Codecov actually reports, so the gate
+		// never blocks PRs on a repo that uploads no coverage.
+		return t.CodecovReports
 	default:
 		return false
 	}

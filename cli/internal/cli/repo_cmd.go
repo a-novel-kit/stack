@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -73,14 +74,17 @@ discovers required checks from the working tree, and reconciles config.`,
 				return err
 			}
 
+			branch := repoDefaultBranch(org, repo)
 			plan, err := repocfg.BuildPlan(&repocfg.RepoTarget{
-				Org:           org,
-				Repo:          repo,
-				DefaultBranch: repoDefaultBranch(org, repo),
-				Class:         preset,
-				OrgProfile:    orgProfile,
-				Checks:        checks,
-				Discovered:    discovered,
+				Org:            org,
+				Repo:           repo,
+				DefaultBranch:  branch,
+				Class:          preset,
+				OrgProfile:     orgProfile,
+				Checks:         checks,
+				Discovered:     discovered,
+				MasterChecks:   liveMasterChecks(org, repo),
+				CodecovReports: codecovReports(org, repo, branch),
 			})
 			if err != nil {
 				return err
@@ -145,6 +149,50 @@ func repoDefaultBranch(org, repo string) string {
 		return b
 	}
 	return fallback
+}
+
+// liveMasterChecks returns the required status checks of the repo's live
+// `master` ruleset, so update preserves them. Returns nil when there is no
+// such ruleset (e.g. a brand-new repo), letting the plan fall back to the
+// discovered set.
+func liveMasterChecks(org, repo string) []repocfg.CheckRef {
+	idOut, err := exec.Command("gh", "api", "repos/"+org+"/"+repo+"/rulesets",
+		"--jq", `.[]|select(.name=="master").id`).Output()
+	id := strings.TrimSpace(string(idOut))
+	if err != nil || id == "" {
+		return nil
+	}
+	out, err := exec.Command("gh", "api", "repos/"+org+"/"+repo+"/rulesets/"+id,
+		"--jq", `.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[]|[.context,(.integration_id//0|tostring)]|join("\t")`).Output()
+	if err != nil {
+		return nil
+	}
+	var checks []repocfg.CheckRef
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 2)
+		ref := repocfg.CheckRef{Context: parts[0]}
+		if len(parts) == 2 {
+			if n, convErr := strconv.ParseInt(parts[1], 10, 64); convErr == nil {
+				ref.IntegrationID = n
+			}
+		}
+		checks = append(checks, ref)
+	}
+	return checks
+}
+
+// codecovReports reports whether Codecov posts a status check on the repo's
+// default branch (gates codecov: auto).
+func codecovReports(org, repo, branch string) bool {
+	out, err := exec.Command("gh", "api", "repos/"+org+"/"+repo+"/commits/"+branch+"/status",
+		"--jq", `[.statuses[].context]|map(select(startswith("codecov")))|length`).Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) != "0" && strings.TrimSpace(string(out)) != ""
 }
 
 func checkContexts(checks []repocfg.CheckRef) []string {
