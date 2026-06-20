@@ -5,6 +5,7 @@
 package cli
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"os"
@@ -16,6 +17,22 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/repocfg"
 )
+
+// branchMaster is the default branch name across the org's repos.
+const branchMaster = "master"
+
+// confirm prints prompt and reads a yes/no answer; only an explicit y/yes
+// returns true (so a bare Enter is a safe "no").
+func confirm(cmd *cobra.Command, prompt string) bool {
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s [y/N] ", prompt)
+	line, _ := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return true
+	default:
+		return false
+	}
+}
 
 func newRepoCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -104,7 +121,22 @@ discovers required checks from the working tree, and reconciles config.`,
 			if !stdinIsTTY() {
 				return errors.New("repo update is interactive (human-only); run it in a terminal, or use --dry-run")
 			}
-			return errors.New("apply is not implemented yet — use --dry-run to preview")
+
+			out := cmd.OutOrStdout()
+			_, _ = fmt.Fprintf(out, "▸ %s/%s — class %s\n\n", org, repo, preset.Class)
+			if err := plan.Render(out); err != nil {
+				return err
+			}
+			if !confirm(cmd, fmt.Sprintf("\nApply this configuration to %s/%s?", org, repo)) {
+				_, _ = fmt.Fprintln(out, "aborted.")
+				return nil
+			}
+			_, _ = fmt.Fprintln(out, "\n▸ Applying...")
+			if err := applyPlan(out, org, repo, branch, plan); err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(out, "\n✓ %s/%s reconciled.\n", org, repo)
+			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the API operations that would run, without applying")
@@ -145,15 +177,14 @@ func repoFromGitRemote(dir string) (string, string, error) {
 
 // repoDefaultBranch asks GitHub for the repo's default branch; falls back to master.
 func repoDefaultBranch(org, repo string) string {
-	const fallback = "master"
 	out, err := exec.Command("gh", "api", "repos/"+org+"/"+repo, "--jq", ".default_branch").Output()
 	if err != nil {
-		return fallback
+		return branchMaster
 	}
 	if b := strings.TrimSpace(string(out)); b != "" {
 		return b
 	}
-	return fallback
+	return branchMaster
 }
 
 // liveMasterChecks returns the required status checks of the repo's live
