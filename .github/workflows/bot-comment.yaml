@@ -129,7 +129,7 @@ jobs:
       # ever act within its own org.
       - name: Mint scoped bot token
         id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ github.repository_owner == 'a-novel' && '3549319' || '3549379' }}
           private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
