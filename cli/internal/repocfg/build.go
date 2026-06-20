@@ -307,12 +307,14 @@ func RenderCodeQL(langs []string, querySuite, defaultBranch string) (string, err
 	if err != nil {
 		return "", err
 	}
-	langsJSON, err := json.Marshal(langs)
-	if err != nil {
-		return "", err
+	// Build the array prettier-style (`["a", "b"]`, space after comma) so the
+	// committed workflow passes the org's `prettier --check` lint-node gate.
+	quoted := make([]string, len(langs))
+	for i, l := range langs {
+		quoted[i] = `"` + l + `"`
 	}
 	out := string(raw)
-	out = strings.ReplaceAll(out, "__LANGUAGES__", string(langsJSON))
+	out = strings.ReplaceAll(out, "__LANGUAGES__", "["+strings.Join(quoted, ", ")+"]")
 	out = strings.ReplaceAll(out, "__DEFAULT_BRANCH__", defaultBranch)
 	// CodeQL's implicit default suite is selected by OMITTING `queries:`;
 	// passing the literal "default" makes init look for a query pack named
