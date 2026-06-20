@@ -34,6 +34,7 @@ import (
 
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 // stdinIsTTY reports whether the CLI is attached to an interactive terminal.
@@ -73,9 +74,10 @@ the version as the message, tags it (v<version>, or <subdir>/v<version> when
 the Go module lives in a sub-directory, as the CLI's does under cli/), and
 pushes commit + tag.
 
-The bump is workspace-aware: a repo with pnpm-workspace.yaml is bumped with
-'pnpm version --recursive' (root + every member in one pass), a
-single-package repo with 'pnpm version --no-git-tag-version'. Either way
+The bump is workspace-aware: a multi-package pnpm workspace (one whose
+pnpm-workspace.yaml declares 'packages') is bumped with 'pnpm version
+--recursive' (root + every member in one pass), a single-package repo with
+'pnpm version --no-git-tag-version'. Either way
 this command owns the commit and the tag, never pnpm.
 
 If the repo declares a 'prepublish:doc' pnpm script it runs between the
@@ -280,11 +282,29 @@ func bumpVersion(out io.Writer, root, newVersion string) error {
 	return nil
 }
 
-// isPnpmWorkspace reports whether the repo at root is a pnpm workspace —
-// the presence of pnpm-workspace.yaml is pnpm's own definition of one.
+// isPnpmWorkspace reports whether the repo at root is a MULTI-PACKAGE pnpm
+// workspace — one whose pnpm-workspace.yaml declares `packages`.
+//
+// The mere presence of pnpm-workspace.yaml is not enough: repos use it for
+// settings alone (overrides, allowBuilds, …) without declaring any member
+// packages — the stack itself does. Treating those as workspaces runs the
+// bump with `pnpm version --recursive`, which filesystem-scans every nested
+// package.json (ignoring .gitignore) and dirties the pulled app/ + kit/
+// checkouts. Such repos have a single package and must bump in
+// single-package mode; only a real `packages` declaration warrants the
+// recursive bump (and its member-versioning).
 func isPnpmWorkspace(root string) bool {
-	_, err := os.Stat(filepath.Join(root, "pnpm-workspace.yaml"))
-	return err == nil
+	raw, err := os.ReadFile(filepath.Join(root, "pnpm-workspace.yaml"))
+	if err != nil {
+		return false
+	}
+	var ws struct {
+		Packages []string `yaml:"packages"`
+	}
+	if err := yaml.Unmarshal(raw, &ws); err != nil {
+		return false
+	}
+	return len(ws.Packages) > 0
 }
 
 // gitIgnored reports whether git ignores rel (a path relative to root). It maps

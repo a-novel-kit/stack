@@ -28,6 +28,38 @@ func TestPublishVersionRefusesNonInteractive(t *testing.T) {
 	}
 }
 
+func TestIsPnpmWorkspace(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name    string
+		write   bool // whether to create pnpm-workspace.yaml at all
+		content string
+		want    bool
+	}{
+		{name: "no file", write: false, content: "", want: false},
+		{name: "settings only (overrides)", write: true, content: "overrides:\n  picomatch@>=4.0.0 <4.0.4: \">=4.0.4\"\n", want: false},
+		{name: "settings only (allowBuilds)", write: true, content: "allowBuilds:\n  esbuild: true\n", want: false},
+		{name: "declares packages", write: true, content: "packages:\n  - packages/*\n", want: true},
+		{name: "empty packages list", write: true, content: "packages: []\n", want: false},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			if testCase.write {
+				if err := os.WriteFile(filepath.Join(dir, "pnpm-workspace.yaml"), []byte(testCase.content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := isPnpmWorkspace(dir); got != testCase.want {
+				t.Fatalf("isPnpmWorkspace = %v, want %v", got, testCase.want)
+			}
+		})
+	}
+}
+
 func TestStampFile(t *testing.T) {
 	t.Parallel()
 
@@ -194,21 +226,6 @@ func TestReadPackageVersion(t *testing.T) {
 				t.Errorf("version = %q, want %q", got, testCase.expect)
 			}
 		})
-	}
-}
-
-func TestIsPnpmWorkspace(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	if isPnpmWorkspace(root) {
-		t.Error("empty dir reported as workspace")
-	}
-	if err := os.WriteFile(filepath.Join(root, "pnpm-workspace.yaml"), []byte("packages:\n"), 0o600); err != nil {
-		t.Fatalf("write fixture: %v", err)
-	}
-	if !isPnpmWorkspace(root) {
-		t.Error("dir with pnpm-workspace.yaml not reported as workspace")
 	}
 }
 
