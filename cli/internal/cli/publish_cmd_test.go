@@ -229,6 +229,58 @@ func TestReadPackageVersion(t *testing.T) {
 	}
 }
 
+func TestResolveStampTargets(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for _, rel := range []string{"a/x/action.yaml", "a/y/action.yaml", "b/z/action.yaml", "top.yaml", "weird[1].yaml"} {
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// glob across two levels matches the three action files, not top.yaml.
+	got, err := resolveStampTargets([]string{filepath.Join(dir, "*", "*", "action.yaml")})
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("glob matched %d files, want 3: %v", len(got), got)
+	}
+
+	// a literal path resolves to itself.
+	got, err = resolveStampTargets([]string{filepath.Join(dir, "top.yaml")})
+	if err != nil || len(got) != 1 {
+		t.Fatalf("literal: got %v err %v", got, err)
+	}
+
+	// a literal filename containing glob metacharacters resolves to itself,
+	// not to whatever the brackets would match as a pattern.
+	weird := filepath.Join(dir, "weird[1].yaml")
+	got, err = resolveStampTargets([]string{weird})
+	if err != nil || len(got) != 1 || got[0] != weird {
+		t.Fatalf("literal-with-metachars: got %v err %v, want [%s]", got, err, weird)
+	}
+
+	// overlapping patterns de-dupe.
+	got, err = resolveStampTargets([]string{
+		filepath.Join(dir, "a", "*", "action.yaml"),
+		filepath.Join(dir, "*", "*", "action.yaml"),
+	})
+	if err != nil || len(got) != 3 {
+		t.Fatalf("dedupe: got %d %v err %v", len(got), got, err)
+	}
+
+	// nothing matched is an error (catches typos).
+	if _, err := resolveStampTargets([]string{filepath.Join(dir, "nope", "*.yaml")}); err == nil {
+		t.Fatal("expected an error when nothing matches")
+	}
+}
+
 // initPublishRepo creates a git repo with one commit on master and a bare
 // "origin" remote that already has that commit, so preflight's
 // origin-comparison and dry-run push have something real to talk to.

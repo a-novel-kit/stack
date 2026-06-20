@@ -160,19 +160,24 @@ preflight are UX, not the security boundary.`,
 
 func newPublishStampCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "stamp <prefix> <file>",
-		Short: "Refresh vX.Y.Z references in a doc file to the current package version",
-		Long: `Replaces every occurrence of <prefix>vX.Y.Z in <file> with
+		Use:   "stamp <prefix> <file-or-glob>...",
+		Short: "Refresh vX.Y.Z references in doc/config files to the current package version",
+		Long: `Replaces every occurrence of <prefix>vX.Y.Z in each target with
 <prefix>v<current-version>, where the current version is read from the repo
 root's package.json. <prefix> is a regular expression.
 
+Each target is a file path or a shell-style glob (expanded by the command,
+relative to the working directory), so one invocation can stamp many files —
+e.g. every composite action that pins a sibling action to a version.
+
 This is what 'prepublish:doc' pnpm scripts call between the version bump and
-the release commit, so module paths and spec versions inside docs always
-match the released version:
+the release commit, so module paths, spec versions and pinned action refs
+inside docs/config always match the released version:
 
   a-novel publish stamp 'version: ' openapi.yaml
-  a-novel publish stamp 'a-novel/service-json-keys/[^/]+' README.md`,
-		Args: cobra.ExactArgs(2),
+  a-novel publish stamp 'a-novel/service-json-keys/[^/]+' README.md
+  a-novel publish stamp 'a-novel-kit/workflows/[^@]+@' '*/*/action.yaml'`,
+		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, err := gitToplevel(".")
 			if err != nil {
@@ -182,11 +187,19 @@ match the released version:
 			if err != nil {
 				return err
 			}
-			count, err := stampFile(args[1], args[0], version)
+			files, err := resolveStampTargets(args[1:])
 			if err != nil {
 				return err
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ stamped %d reference(s) in %s to v%s\n", count, args[1], version)
+			total := 0
+			for _, f := range files {
+				count, err := stampFile(f, args[0], version)
+				if err != nil {
+					return err
+				}
+				total += count
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ stamped %d reference(s) across %d file(s) to v%s\n", total, len(files), version)
 			return nil
 		},
 	}
@@ -411,6 +424,45 @@ func goTagPrefix(root string) (string, error) {
 		return "", fmt.Errorf("publish: %d Go modules tracked (%s) — can't derive a single release tag; tag manually",
 			len(subdirs), strings.Join(subdirs, ", "))
 	}
+}
+
+// resolveStampTargets expands each file-or-glob argument into concrete file
+// paths (relative to the working directory), preserving order and de-duping
+// overlapping matches. An existing literal path is taken verbatim (so a real
+// filename with glob metacharacters is never reinterpreted); otherwise the
+// argument is globbed. It is an error for the whole set to resolve to no files
+// — that catches a typo'd path or glob in a prepublish:doc script before it
+// silently stamps nothing.
+func resolveStampTargets(patterns []string) ([]string, error) {
+	seen := map[string]bool{}
+	var files []string
+	add := func(p string) {
+		if !seen[p] {
+			seen[p] = true
+			files = append(files, p)
+		}
+	}
+	for _, p := range patterns {
+		// A path that exists as-is is a literal target: take it verbatim so a
+		// real filename containing glob metacharacters (e.g. weird[1].yaml) is
+		// never reinterpreted as a pattern. Fall back to globbing only when the
+		// literal path does not exist.
+		if _, err := os.Stat(p); err == nil {
+			add(p)
+			continue
+		}
+		matches, err := filepath.Glob(p)
+		if err != nil {
+			return nil, fmt.Errorf("publish: bad glob %q: %w", p, err)
+		}
+		for _, m := range matches {
+			add(m)
+		}
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("publish: no files matched: %s", strings.Join(patterns, " "))
+	}
+	return files, nil
 }
 
 // stampFile rewrites every `<prefix>vX.Y.Z` occurrence in the file at path
