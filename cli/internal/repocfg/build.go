@@ -64,12 +64,26 @@ type RepoTarget struct {
 	CodecovReports bool
 }
 
-// Op is one API operation the plan would perform. Body is rendered as JSON;
-// Content (file writes) is rendered verbatim.
+// Op is one API operation the plan would perform.
+//
+//   - settings/pages: Method + Path + Body.
+//   - contents (codeql/dependabot): Method PUT + Path + Content (file text).
+//   - ruleset: RulesetName set; reconciled by name at apply time (POST when
+//     absent, PUT .../{id} when present), Body is the ruleset payload.
 type Op struct {
-	Title   string
-	Body    any
-	Content string
+	Method      string `json:"method,omitempty"`
+	Path        string `json:"path,omitempty"`
+	Body        any    `json:"body,omitempty"`
+	Content     string `json:"content,omitempty"`
+	RulesetName string `json:"ruleset,omitempty"`
+}
+
+// Title is a one-line human label for the op.
+func (o Op) Title() string {
+	if o.RulesetName != "" {
+		return fmt.Sprintf("PUT|POST ruleset %q (%s)", o.RulesetName, o.Path)
+	}
+	return o.Method + " " + o.Path
 }
 
 // Plan is the ordered set of operations to bring a repo to desired state.
@@ -82,10 +96,9 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	p := &Plan{}
 	c := t.Class
 
-	p.Ops = append(p.Ops, Op{
-		Title: fmt.Sprintf("PATCH /repos/%s/%s", t.Org, t.Repo),
-		Body:  SettingsBody(c),
-	})
+	repoPath := fmt.Sprintf("repos/%s/%s", t.Org, t.Repo)
+
+	p.Ops = append(p.Ops, Op{Method: "PATCH", Path: repoPath, Body: SettingsBody(c)})
 
 	if c.CodeQL.Enabled && len(t.Discovered.CodeQLLangs) > 0 {
 		content, err := RenderCodeQL(t.Discovered.CodeQLLangs, c.CodeQL.QuerySuite, t.DefaultBranch)
@@ -93,7 +106,8 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 			return nil, err
 		}
 		p.Ops = append(p.Ops, Op{
-			Title:   fmt.Sprintf("PUT /repos/%s/%s/contents/.github/workflows/codeql.yml", t.Org, t.Repo),
+			Method:  "PUT",
+			Path:    repoPath + "/contents/.github/workflows/codeql.yml",
 			Content: content,
 		})
 	}
@@ -104,16 +118,14 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 			return nil, err
 		}
 		p.Ops = append(p.Ops, Op{
-			Title:   fmt.Sprintf("PUT /repos/%s/%s/contents/.github/dependabot.yml", t.Org, t.Repo),
+			Method:  "PUT",
+			Path:    repoPath + "/contents/.github/dependabot.yml",
 			Content: content,
 		})
 	}
 
 	if c.Pages {
-		p.Ops = append(p.Ops, Op{
-			Title: fmt.Sprintf("POST /repos/%s/%s/pages (or PUT to update)", t.Org, t.Repo),
-			Body:  map[string]any{"build_type": "workflow"},
-		})
+		p.Ops = append(p.Ops, Op{Method: "POST", Path: repoPath + "/pages", Body: map[string]any{"build_type": "workflow"}})
 	}
 
 	// Rulesets, reconciled by name (POST when absent, PUT .../{id} when present).
@@ -152,8 +164,11 @@ func rulesetOp(name string, t *RepoTarget, checks []CheckRef) (Op, error) {
 	if err != nil {
 		return Op{}, err
 	}
-	title := fmt.Sprintf("PUT|POST ruleset %q (/repos/%s/%s/rulesets)", name, t.Org, t.Repo)
-	return Op{Title: title, Body: BuildRuleset(spec, t.OrgProfile, checks)}, nil
+	return Op{
+		RulesetName: name,
+		Path:        fmt.Sprintf("repos/%s/%s/rulesets", t.Org, t.Repo),
+		Body:        BuildRuleset(spec, t.OrgProfile, checks),
+	}, nil
 }
 
 func codecovEnabled(c *ClassPreset, t *RepoTarget) bool {
@@ -330,7 +345,7 @@ func (p *Plan) Render(w io.Writer) error {
 		if i > 0 {
 			_, _ = fmt.Fprintln(w)
 		}
-		_, _ = fmt.Fprintf(w, "### %s\n", op.Title)
+		_, _ = fmt.Fprintf(w, "### %s\n", op.Title())
 		if op.Content != "" {
 			_, _ = fmt.Fprint(w, op.Content)
 			continue
@@ -342,4 +357,12 @@ func (p *Plan) Render(w io.Writer) error {
 		}
 	}
 	return nil
+}
+
+// RenderJSON writes the plan as a JSON array of ops — machine-readable, so
+// the exact operations can be inspected or applied verbatim.
+func (p *Plan) RenderJSON(w io.Writer) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(p.Ops)
 }

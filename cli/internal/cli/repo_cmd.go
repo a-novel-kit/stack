@@ -33,8 +33,9 @@ state and prints the raw API operations without applying anything.`,
 
 func newRepoUpdateCmd() *cobra.Command {
 	var (
-		dryRun bool
-		class  string
+		dryRun  bool
+		jsonOut bool
+		class   string
 	)
 	cmd := &cobra.Command{
 		Use:   "update",
@@ -90,6 +91,9 @@ discovers required checks from the working tree, and reconciles config.`,
 				return err
 			}
 
+			if jsonOut {
+				return plan.RenderJSON(cmd.OutOrStdout())
+			}
 			if dryRun {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 					"# dry-run %s/%s — class %s\n# discovered checks: %s\n\n",
@@ -104,6 +108,7 @@ discovers required checks from the working tree, and reconciles config.`,
 		},
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the API operations that would run, without applying")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "with --dry-run, emit the plan as a JSON array of operations")
 	cmd.Flags().StringVar(&class, "class", "", "class (service|library|workflows|meta); a repos/<org>_<repo>.yaml override wins")
 	return cmd
 }
