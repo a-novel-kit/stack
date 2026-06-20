@@ -152,6 +152,11 @@ func rulesetOp(name string, t *RepoTarget, checks []CheckRef) (Op, error) {
 	if err != nil {
 		return Op{}, err
 	}
+	// The code_quality rule only belongs on classes that opt into it; drop
+	// it everywhere else (docs/workflows repos have no code to gate).
+	if !t.Class.CodeQuality {
+		spec.Rules.CodeQuality = nil
+	}
 	return Op{
 		RulesetName: name,
 		Path:        fmt.Sprintf("repos/%s/%s/rulesets", t.Org, t.Repo),
