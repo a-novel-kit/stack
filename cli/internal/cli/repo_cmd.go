@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -44,8 +45,114 @@ rulesets, Pages) from the templates in cli/internal/repocfg/templates.
 Writes are interactive and human-only. '--dry-run' computes the desired
 state and prints the raw API operations without applying anything.`,
 	}
+	cmd.AddCommand(newRepoCreateCmd())
 	cmd.AddCommand(newRepoUpdateCmd())
 	return cmd
+}
+
+func newRepoCreateCmd() *cobra.Command {
+	var (
+		description string
+		class       string
+		template    string
+		private     bool
+	)
+	cmd := &cobra.Command{
+		Use:   "create <org> <name>",
+		Short: "Create a repository and apply its class config",
+		Long: `Creates <org>/<name> (optionally from a template), then discovers its
+checks and applies the class configuration — settings, security, CodeQL,
+rulesets, Pages. Interactive (human-only); run it from anywhere.`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			org, name := args[0], args[1]
+			if !stdinIsTTY() {
+				return errors.New("repo create is interactive (human-only); run it in a terminal")
+			}
+			preset, err := resolvePreset(org, name, class)
+			if err != nil {
+				return err
+			}
+
+			out := cmd.OutOrStdout()
+			tmpl := ""
+			if template != "" {
+				tmpl = " from template " + org + "/" + template
+			}
+			if !confirm(cmd, fmt.Sprintf("Create %s %s/%s%s (class %s)?", visibility(private), org, name, tmpl, preset.Class)) {
+				_, _ = fmt.Fprintln(out, "aborted.")
+				return nil
+			}
+
+			createArgs := []string{"repo", "create", org + "/" + name, "--" + visibility(private)}
+			if description != "" {
+				createArgs = append(createArgs, "--description", description)
+			}
+			if template != "" {
+				createArgs = append(createArgs, "--template", org+"/"+template)
+			}
+			if cmdOut, err := gh(createArgs...); err != nil {
+				return fmt.Errorf("repo create: %w\n%s", err, cmdOut)
+			}
+			_, _ = fmt.Fprintf(out, "✓ created %s/%s\n", org, name)
+
+			// Discover the new repo's checks from a throwaway clone (a fresh
+			// repo has no live ruleset or coverage history yet).
+			tmp, err := os.MkdirTemp("", "repo-create-")
+			if err != nil {
+				return err
+			}
+			defer func() { _ = os.RemoveAll(tmp) }()
+			cloneDir := filepath.Join(tmp, name)
+			checks, err := repocfg.LoadChecks()
+			if err != nil {
+				return err
+			}
+			discovered := &repocfg.Discovered{}
+			if _, err := gh("repo", "clone", org+"/"+name, cloneDir); err == nil {
+				if d, derr := repocfg.Discover(cloneDir, checks); derr == nil {
+					discovered = d
+				}
+			}
+			orgProfile, err := repocfg.LoadOrg(org)
+			if err != nil {
+				return err
+			}
+			branch := repoDefaultBranch(org, name)
+			plan, err := repocfg.BuildPlan(&repocfg.RepoTarget{
+				Org:            org,
+				Repo:           name,
+				DefaultBranch:  branch,
+				Class:          preset,
+				OrgProfile:     orgProfile,
+				Checks:         checks,
+				Discovered:     discovered,
+				CodecovReports: codecovReports(org, name, branch),
+			})
+			if err != nil {
+				return err
+			}
+
+			_, _ = fmt.Fprintf(out, "\n▸ Applying %s config...\n", preset.Class)
+			if err := applyPlan(out, org, name, branch, plan); err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(out, "\n✓ %s/%s created and configured.\n", org, name)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&class, "class", "", "class (service|library|workflows|meta); a repos/<org>_<repo>.yaml override wins")
+	cmd.Flags().StringVar(&description, "description", "", "repository description")
+	cmd.Flags().StringVar(&template, "template", "", "create from this org template repo (e.g. service-template)")
+	cmd.Flags().BoolVar(&private, "private", false, "create a private repository (default public)")
+	return cmd
+}
+
+func visibility(private bool) string {
+	if private {
+		return "private"
+	}
+	return "public"
 }
 
 func newRepoUpdateCmd() *cobra.Command {
