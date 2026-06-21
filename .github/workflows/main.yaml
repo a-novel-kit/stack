@@ -25,7 +25,7 @@ jobs:
         shell: bash
         working-directory: cli
         run: go generate ./...
-      - uses: a-novel-kit/workflows/generic-actions/check-changes@v1.0.2
+      - uses: a-novel-kit/workflows/generic-actions/check-changes@v1.0.3
         with:
           fail_message: cli/ go generate definitions are not up-to-date, please run 'go generate ./...' inside cli/ and commit the changes
 
@@ -50,7 +50,7 @@ jobs:
     steps:
       # Go module lives under cli/, not the repo root — working-directory is
       # honoured by the shared action (a-novel-kit/workflows#140).
-      - uses: a-novel-kit/workflows/go-actions/lint-go@v1.0.2
+      - uses: a-novel-kit/workflows/go-actions/lint-go@v1.0.3
         with:
           working-directory: cli
 
@@ -60,7 +60,7 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: a-novel-kit/workflows/node-actions/lint-node@v1.0.2
+      - uses: a-novel-kit/workflows/node-actions/lint-node@v1.0.3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           app_private_key: ${{ secrets.DEPENDENCY_BOT_PRIVATE_KEY }}
