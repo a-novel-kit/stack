@@ -1,7 +1,10 @@
 # Coverage gate, applied only when codecov is enabled (class codecov:
 # enabled, or auto + the repo has tests). The dependency bots (our Renovate
 # proxy and GitHub-native Dependabot) are exempt, so dependency-update PRs
-# are never blocked on coverage.
+# are never blocked on coverage. The publish bot is exempt too: it pushes
+# release commits straight to the default branch (see the master ruleset),
+# and that push carries no coverage status — without this it would be
+# rejected by required_status_checks.
 name: codecov
 target: branch
 enforcement: active
@@ -13,6 +16,7 @@ bypass:
   - admins
   - dependencies
   - dependabot
+  - publish
 rules:
   required_status_checks:
     strict: false
