@@ -316,28 +316,36 @@ func RenderCodeQL(langs []string, querySuite, defaultBranch string) (string, err
 	out := string(raw)
 	out = strings.ReplaceAll(out, "__LANGUAGES__", "["+strings.Join(quoted, ", ")+"]")
 	out = strings.ReplaceAll(out, "__DEFAULT_BRANCH__", defaultBranch)
-	// CodeQL's implicit default suite is selected by OMITTING `queries:`;
-	// passing the literal "default" makes init look for a query pack named
-	// "default" and fail. So drop the line entirely for the default suite,
-	// and substitute it only for an explicit named suite.
-	if querySuite == "" || querySuite == "default" {
-		out = removeLineContaining(out, "__QUERY_SUITE__")
-	} else {
-		out = strings.ReplaceAll(out, "__QUERY_SUITE__", querySuite)
-	}
+	out = strings.ReplaceAll(out, "__CODEQL_CONFIG__", codeqlConfigBlock(querySuite))
 	return out, nil
 }
 
-// removeLineContaining drops every line that contains sub.
-func removeLineContaining(s, sub string) string {
-	lines := strings.Split(s, "\n")
-	kept := lines[:0]
-	for _, l := range lines {
-		if !strings.Contains(l, sub) {
-			kept = append(kept, l)
-		}
+// codeqlConfigBlock builds the init step's inline `config:` input: the query
+// suite plus a filter that drops actions/unpinned-tag.
+//
+// Both the suite and the filter live inside `config:` (rather than the
+// separate `queries:` input) so query-filters apply cleanly — the docs note
+// the queries input/config interaction needs a `+` prefix and "instead of"
+// semantics that are easy to get wrong.
+//
+// CodeQL's implicit default suite is selected by OMITTING the queries block
+// (passing the literal "default" makes init look for a pack named "default"
+// and fail), so emit queries only for an explicit named suite.
+//
+// actions/unpinned-tag is excluded because the org pins GitHub Actions via
+// floating major tags managed by Renovate; the query would flag every
+// `uses: action@vN` as unpinned, which is pure noise under that policy.
+func codeqlConfigBlock(querySuite string) string {
+	var b strings.Builder
+	b.WriteString("          config: |\n")
+	if querySuite != "" && querySuite != "default" {
+		b.WriteString("            queries:\n")
+		b.WriteString("              - uses: " + querySuite + "\n")
 	}
-	return strings.Join(kept, "\n")
+	b.WriteString("            query-filters:\n")
+	b.WriteString("              - exclude:\n")
+	b.WriteString("                  id: actions/unpinned-tag")
+	return b.String()
 }
 
 // Render writes the plan as labelled raw JSON (and verbatim file content for
