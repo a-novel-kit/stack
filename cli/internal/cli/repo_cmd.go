@@ -69,7 +69,7 @@ rulesets, Pages. Interactive (human-only); run it from anywhere.`,
 			if !stdinIsTTY() {
 				return errors.New("repo create is interactive (human-only); run it in a terminal")
 			}
-			preset, err := resolvePreset(org, name, class)
+			preset, err := resolvePreset(cmd, org, name, class)
 			if err != nil {
 				return err
 			}
@@ -119,7 +119,7 @@ rulesets, Pages. Interactive (human-only); run it from anywhere.`,
 				return err
 			}
 			branch := repoDefaultBranch(org, name)
-			plan, err := repocfg.BuildPlan(&repocfg.RepoTarget{
+			target := &repocfg.RepoTarget{
 				Org:            org,
 				Repo:           name,
 				DefaultBranch:  branch,
@@ -128,11 +128,14 @@ rulesets, Pages. Interactive (human-only); run it from anywhere.`,
 				Checks:         checks,
 				Discovered:     discovered,
 				CodecovReports: codecovReports(org, name, branch),
-			})
+			}
+			plan, err := repocfg.BuildPlan(target)
 			if err != nil {
 				return err
 			}
 
+			_, _ = fmt.Fprintln(out)
+			renderSummary(out, target)
 			_, _ = fmt.Fprintf(out, "\n▸ Applying %s config...\n", preset.Class)
 			if err := applyPlan(out, org, name, branch, plan); err != nil {
 				return err
@@ -182,7 +185,7 @@ discovers required checks from the working tree, and reconciles config.`,
 				return err
 			}
 
-			preset, err := resolvePreset(org, repo, class)
+			preset, err := resolvePreset(cmd, org, repo, class)
 			if err != nil {
 				return err
 			}
@@ -200,7 +203,7 @@ discovers required checks from the working tree, and reconciles config.`,
 			}
 
 			branch := repoDefaultBranch(org, repo)
-			plan, err := repocfg.BuildPlan(&repocfg.RepoTarget{
+			target := &repocfg.RepoTarget{
 				Org:            org,
 				Repo:           repo,
 				DefaultBranch:  branch,
@@ -210,7 +213,8 @@ discovers required checks from the working tree, and reconciles config.`,
 				Discovered:     discovered,
 				MasterChecks:   liveMasterChecks(org, repo),
 				CodecovReports: codecovReports(org, repo, branch),
-			})
+			}
+			plan, err := repocfg.BuildPlan(target)
 			if err != nil {
 				return err
 			}
@@ -230,10 +234,7 @@ discovers required checks from the working tree, and reconciles config.`,
 			}
 
 			out := cmd.OutOrStdout()
-			_, _ = fmt.Fprintf(out, "▸ %s/%s — class %s\n\n", org, repo, preset.Class)
-			if err := plan.Render(out); err != nil {
-				return err
-			}
+			renderSummary(out, target)
 			if !confirm(cmd, fmt.Sprintf("\nApply this configuration to %s/%s?", org, repo)) {
 				_, _ = fmt.Fprintln(out, "aborted.")
 				return nil
@@ -252,15 +253,24 @@ discovers required checks from the working tree, and reconciles config.`,
 	return cmd
 }
 
-// resolvePreset prefers a repos/<org>_<repo>.yaml override, else the --class flag.
-func resolvePreset(org, repo, class string) (*repocfg.ClassPreset, error) {
+// resolvePreset prefers a repos/<org>_<repo>.yaml override, then the --class
+// flag; if neither is set it prompts interactively (or errors when there is
+// no terminal, e.g. --dry-run in CI).
+func resolvePreset(cmd *cobra.Command, org, repo, class string) (*repocfg.ClassPreset, error) {
 	if p, ok, err := repocfg.LoadRepoOverride(org, repo); err != nil {
 		return nil, err
 	} else if ok {
 		return p, nil
 	}
 	if class == "" {
-		return nil, fmt.Errorf("no repos/%s_%s.yaml override; pass --class (service|library|workflows|meta)", org, repo)
+		if !stdinIsTTY() {
+			return nil, fmt.Errorf("no repos/%s_%s.yaml override; pass --class (service|library|workflows|meta)", org, repo)
+		}
+		c, err := selectClass(cmd)
+		if err != nil {
+			return nil, err
+		}
+		class = string(c)
 	}
 	return repocfg.LoadClass(repocfg.Class(class))
 }
