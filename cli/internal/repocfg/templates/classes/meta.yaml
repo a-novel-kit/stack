@@ -17,7 +17,10 @@ merge:
 security:
   secret_scanning: true
   push_protection: true
-  dependabot: true
+  # Dependabot security updates are redundant with the node-audit workflow and
+  # fail on private @a-novel-kit deps (no registry token for Dependabot).
+  # Advisory detection (Dependabot alerts) stays on regardless.
+  dependabot: false
 codeql:
   enabled: false
 pages: false
