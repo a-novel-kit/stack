@@ -1,0 +1,7 @@
+# Per-org config for a-novel-kit. See orgs/a-novel.yaml for field docs.
+org: a-novel-kit
+signing_required: true
+bots:
+  dependencies: 1734926 # AnovelKitBot[Dependencies] — Renovate
+  agent: 3549379 # AnovelKitBot[Agent] — PR/issue comment proxy
+  publish: 1734949 # AnovelKitBot[Publish] — release automation

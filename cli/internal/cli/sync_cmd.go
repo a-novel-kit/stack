@@ -288,7 +288,7 @@ func resolveDefaultBranch(target string) string {
 			return strings.TrimPrefix(ref, "origin/")
 		}
 	}
-	return "master"
+	return branchMaster
 }
 
 // detectSelfRemote returns the SSH URL of the stack repo containing

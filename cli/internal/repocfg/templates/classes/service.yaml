@@ -1,0 +1,29 @@
+# Backend service (Go clean-architecture). Used by service-template and
+# the live services it spawns.
+class: service
+features:
+  issues: true
+  wiki: false
+  projects: true
+  discussions: true
+merge:
+  squash: true
+  merge_commit: false
+  rebase: false
+  auto_merge: true
+  delete_branch_on_merge: true
+  allow_update_branch: true
+  signoff_required: true
+security:
+  secret_scanning: true
+  push_protection: true
+  dependabot: true
+codeql:
+  enabled: true
+  query_suite: security-and-quality
+pages: true
+codecov: auto
+code_quality: true
+rulesets:
+  master: true
+  require_approval: true

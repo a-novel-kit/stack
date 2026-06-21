@@ -1,0 +1,19 @@
+# Coverage gate, applied only when codecov is enabled (class codecov:
+# enabled, or auto + the repo has tests). The dependency bots (our Renovate
+# proxy and GitHub-native Dependabot) are exempt, so dependency-update PRs
+# are never blocked on coverage.
+name: codecov
+target: branch
+enforcement: active
+conditions:
+  ref_name:
+    include: ["~DEFAULT_BRANCH"]
+    exclude: []
+bypass:
+  - admins
+  - dependencies
+  - dependabot
+rules:
+  required_status_checks:
+    strict: false
+    do_not_enforce_on_create: false

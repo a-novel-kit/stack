@@ -77,6 +77,7 @@ selector), runs the selection, and prints a pass/fail report.`,
 	// `a-novel publish` — cut a release locally (bump, commit, tag, push).
 	// Standalone like test/build: operates on the working tree, no daemon.
 	root.AddCommand(newPublishCmd())
+	root.AddCommand(newRepoCmd())
 
 	// Version (compatibility with legacy `a-novel version` invocation —
 	// Cobra also exposes --version on root automatically).

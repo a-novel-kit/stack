@@ -1,0 +1,31 @@
+# Branch protection for the default branch. The CLI injects the required
+# status checks from semantic discovery, and omits the code_quality rule
+# for classes that set code_quality: false. Admins bypass; the publish bot
+# also bypasses because release commits land on the default branch directly
+# (no branch proxy). Every status check is required for everyone else.
+name: master
+target: branch
+enforcement: active
+conditions:
+  ref_name:
+    include: ["~DEFAULT_BRANCH"]
+    exclude: []
+bypass:
+  - admins
+  - publish
+rules:
+  deletion: true
+  non_fast_forward: true
+  required_status_checks:
+    strict: true
+    do_not_enforce_on_create: false
+  merge_queue:
+    grouping_strategy: ALLGREEN
+    merge_method: SQUASH
+    check_response_timeout_minutes: 60
+    max_entries_to_build: 5
+    max_entries_to_merge: 5
+    min_entries_to_merge: 1
+    min_entries_to_merge_wait_minutes: 5
+  code_quality:
+    severity: errors

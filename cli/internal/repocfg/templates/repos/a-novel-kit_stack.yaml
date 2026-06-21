@@ -1,0 +1,31 @@
+# Repo-specific config for a-novel-kit/stack (the a-novel CLI). Config is
+# library-shaped today; this file is its home for stack-only divergence
+# later (e.g. per-cmd release tags). A repos/<org>_<repo>.yaml file fully
+# replaces the class for that repo.
+class: library
+features:
+  issues: true
+  wiki: false
+  projects: true
+  discussions: true
+merge:
+  squash: true
+  merge_commit: false
+  rebase: false
+  auto_merge: true
+  delete_branch_on_merge: true
+  allow_update_branch: true
+  signoff_required: true
+security:
+  secret_scanning: true
+  push_protection: true
+  dependabot: true
+codeql:
+  enabled: true
+  query_suite: security-and-quality
+pages: false
+codecov: auto
+code_quality: true
+rulesets:
+  master: true
+  require_approval: true

@@ -1,0 +1,27 @@
+# Mandatory review on the default branch. The org bots plus GitHub-native
+# Dependabot are exempt, so automation (dependency PRs, releases, the
+# comment proxy) can merge without a human approval.
+name: require-approval
+target: branch
+enforcement: active
+conditions:
+  ref_name:
+    include: ["~DEFAULT_BRANCH"]
+    exclude: []
+bypass:
+  - admins
+  - dependencies
+  - agent
+  - publish
+  - dependabot
+rules:
+  pull_request:
+    allowed_merge_methods: ["squash"]
+    required_approving_review_count: 1
+    dismiss_stale_reviews_on_push: true
+    require_last_push_approval: true
+    required_review_thread_resolution: true
+    require_code_owner_review: false
+  copilot_code_review:
+    review_draft_pull_requests: false
+    review_on_push: false

@@ -1,0 +1,9 @@
+# Per-org config for a-novel. When a ruleset's bypass list names a generic
+# bot (dependencies | agent | publish), the CLI resolves it to the GitHub
+# App id below for this org's repos.
+org: a-novel
+signing_required: true
+bots:
+  dependencies: 1717331 # AnovelBot[Dependencies] — Renovate
+  agent: 3549319 # AnovelBot[Agent] — PR/issue comment proxy
+  publish: 1718144 # AnovelBot[Publish] — release automation
