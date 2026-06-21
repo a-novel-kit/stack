@@ -21,6 +21,10 @@ const (
 	modeExempt = "exempt"
 )
 
+// rulesetMaster is the name of the default-branch ruleset; bots bypass it with
+// mode "always" (they push to the default branch directly).
+const rulesetMaster = "master"
+
 // APIBypassActor / APIRule / APIRuleset mirror the GitHub rulesets API
 // request body.
 type APIBypassActor struct {
@@ -122,7 +126,7 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		if t.MasterChecks != nil {
 			masterChecks = t.MasterChecks // preserve live (lossless on update)
 		}
-		if op, err := rulesetOp("master", t, masterChecks); err != nil {
+		if op, err := rulesetOp(rulesetMaster, t, masterChecks); err != nil {
 			return nil, err
 		} else {
 			p.Ops = append(p.Ops, op)
@@ -157,10 +161,14 @@ func rulesetOp(name string, t *RepoTarget, checks []CheckRef) (Op, error) {
 	if !t.Class.CodeQuality {
 		spec.Rules.CodeQuality = nil
 	}
+	body, err := BuildRuleset(spec, t.OrgProfile, checks)
+	if err != nil {
+		return Op{}, err
+	}
 	return Op{
 		RulesetName: name,
 		Path:        fmt.Sprintf("repos/%s/%s/rulesets", t.Org, t.Repo),
-		Body:        BuildRuleset(spec, t.OrgProfile, checks),
+		Body:        body,
 	}, nil
 }
 
@@ -187,7 +195,7 @@ func resolveCheckDefs(defs []CheckDef, cc *ChecksConfig) []CheckRef {
 
 // BuildRuleset turns a ruleset template + org + discovered checks into the
 // API body, resolving generic bypass entries and injecting the checks.
-func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) *APIRuleset {
+func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRuleset, error) {
 	rs := &APIRuleset{
 		Name:        spec.Name,
 		Target:      spec.Target,
@@ -199,7 +207,11 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) *APIRul
 	}
 
 	for _, entry := range spec.Bypass {
-		rs.BypassActors = append(rs.BypassActors, resolveBypass(entry, spec.Name, org)...)
+		actors, err := resolveBypass(entry, spec.Name, org)
+		if err != nil {
+			return nil, err
+		}
+		rs.BypassActors = append(rs.BypassActors, actors...)
 	}
 
 	r := spec.Rules
@@ -236,15 +248,17 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) *APIRul
 	if r.CodeQuality != nil {
 		rs.Rules = append(rs.Rules, APIRule{Type: "code_quality", Parameters: map[string]any{"severity": r.CodeQuality.Severity}})
 	}
-	return rs
+	return rs, nil
 }
 
 // resolveBypass maps one generic bypass entry to concrete actors. Admins
 // always bypass with mode "always"; bots bypass with "always" on master
-// (direct writes) and "exempt" on PR rulesets.
-func resolveBypass(entry, rulesetName string, org *OrgProfile) []APIBypassActor {
+// (direct writes) and "exempt" on PR rulesets. An entry that resolves to
+// nothing is an error, not a silent drop — a typo in a ruleset template would
+// otherwise quietly strip a bypass actor and break the bot's automation.
+func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor, error) {
 	botMode := modeExempt
-	if rulesetName == "master" {
+	if rulesetName == rulesetMaster {
 		botMode = modeAlways
 	}
 	switch entry {
@@ -253,17 +267,18 @@ func resolveBypass(entry, rulesetName string, org *OrgProfile) []APIBypassActor 
 		return []APIBypassActor{
 			{ActorID: nil, ActorType: "OrganizationAdmin", BypassMode: modeAlways},
 			{ActorID: &role, ActorType: "RepositoryRole", BypassMode: modeAlways},
-		}
+		}, nil
 	case "dependabot":
 		id := githubDependabotAppID
-		return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}
+		return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}, nil
 	default:
 		if id, ok := org.Bots[entry]; ok {
 			id := id
-			return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}
+			return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}, nil
 		}
 	}
-	return nil
+	return nil, fmt.Errorf("bypass entry %q in ruleset %q resolves to no actor "+
+		"(expected admins, dependabot, or an org bot key from orgs/<org>.yaml)", entry, rulesetName)
 }
 
 // SettingsBody is the PATCH /repos body for general + merge + security.
