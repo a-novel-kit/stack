@@ -1,11 +1,11 @@
 // Package repocfg models and applies a repository's GitHub configuration —
-// general settings, security, CodeQL, Pages, topics and the per-repo
-// rulesets — from editable YAML templates under templates/.
+// general settings, security, CodeQL, Pages and the per-repo rulesets —
+// from editable YAML templates under templates/.
 //
 // The desired state for a repo is composed from three inputs:
 //
 //   - a CLASS preset (classes/<class>.yaml) — the per-kind toggles,
-//   - an ORG profile (orgs/<org>.yaml) — bypass actors, team, signing,
+//   - an ORG profile (orgs/<org>.yaml) — bypass actors and signing,
 //   - semantically DISCOVERED checks (checks.yaml + the detect package),
 //
 // then overridden by CLI flags / the interactive form. The templates are
