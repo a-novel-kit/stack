@@ -1,9 +1,9 @@
 # Repository config templates
 
-These YAML files are the editable source of truth for `a-novel repo
-create` / `a-novel repo update`. They are embedded into the CLI binary,
-but an on-disk copy here (or under `$REPO_CONFIG_DIR`) takes precedence, so
-edits take effect without a rebuild.
+These YAML files are the editable source of truth for the `a-novel repo create`
+and `a-novel repo update` commands. They are embedded into the CLI binary, but
+an on-disk copy here (or under `$REPO_CONFIG_DIR`) takes precedence, so edits
+take effect without a rebuild.
 
 A repo's desired config is composed from three inputs:
 
@@ -39,11 +39,11 @@ are required unless noted.
 
 ## `orgs/<org>.yaml`
 
-| Field                                       | Type   | Meaning                                                                                                              |
-| ------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------- |
-| `org`                                       | string | Org login (must match the filename).                                                                                 |
-| `signing_required`                          | bool   | Require signed + signed-off commits.                                                                                 |
-| `bots.dependencies` / `.agent` / `.publish` | int    | GitHub App ids of the three org bots; the CLI resolves a ruleset's generic `bot:<name>` to the right id for the org. |
+| Field                                       | Type   | Meaning                                                                                                                   |
+| ------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `org`                                       | string | Org login (must match the filename).                                                                                      |
+| `signing_required`                          | bool   | Require signed + signed-off commits.                                                                                      |
+| `bots.dependencies` / `.agent` / `.publish` | int    | GitHub App ids of the three org bots; the CLI resolves a ruleset bypass entry like `publish` to the right id for the org. |
 
 ## `rulesets/<name>.yaml`
 

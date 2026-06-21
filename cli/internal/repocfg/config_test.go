@@ -93,3 +93,29 @@ func TestLoadRepoOverride(t *testing.T) {
 		t.Fatalf("expected no override for service-authentication; ok=%v err=%v", ok, err)
 	}
 }
+
+func TestBuildRulesetBypassResolution(t *testing.T) {
+	t.Parallel()
+	org := &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{"publish": 1734949}}
+
+	t.Run("unknown entry is an error, not a silent drop", func(t *testing.T) {
+		t.Parallel()
+		spec := &RulesetSpec{Name: rulesetMaster, Target: "branch", Enforcement: "active", Bypass: []string{"typo-bot"}}
+		if _, err := BuildRuleset(spec, org, nil); err == nil {
+			t.Fatal("expected an error for an unresolvable bypass entry")
+		}
+	})
+
+	t.Run("known entries resolve", func(t *testing.T) {
+		t.Parallel()
+		spec := &RulesetSpec{Name: rulesetMaster, Target: "branch", Enforcement: "active", Bypass: []string{"admins", "publish"}}
+		rs, err := BuildRuleset(spec, org, nil)
+		if err != nil {
+			t.Fatalf("BuildRuleset: %v", err)
+		}
+		// admins -> OrganizationAdmin + RepositoryRole; publish -> one Integration.
+		if len(rs.BypassActors) != 3 {
+			t.Fatalf("expected 3 bypass actors, got %d", len(rs.BypassActors))
+		}
+	})
+}

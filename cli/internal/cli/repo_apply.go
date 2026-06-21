@@ -132,8 +132,9 @@ func applyContents(org, repo, branch string, op repocfg.Op) (string, error) {
 	return verb, nil
 }
 
-// applyPages enables a Pages site; a 409/422 means one already exists, which
-// is fine.
+// applyPages enables a Pages site; a 409 (or an "already exists" message)
+// means one already exists, which is fine. Any other error — including a 422
+// validation failure — is surfaced rather than swallowed.
 func applyPages(op repocfg.Op) (string, error) {
 	if err := ghJSON("POST", op.Path, op.Body); err != nil {
 		if isAlreadyExists(err) {
