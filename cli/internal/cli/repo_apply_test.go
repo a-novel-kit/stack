@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -96,4 +97,50 @@ type signoffError struct{}
 
 func (signoffError) Error() string {
 	return "HTTP 422: Commit signoff is enforced by the organization and cannot be disabled"
+}
+
+func TestApplyRulesetBadBody(t *testing.T) {
+	// A malformed plan (wrong body type) must fail fast, not POST a null body.
+	calls := fakeGH(t, nil)
+	op := repocfg.Op{RulesetName: branchMaster, Path: "repos/o/r/rulesets", Body: map[string]any{"name": "x"}}
+	if _, err := applyRuleset("o", "r", op); err == nil {
+		t.Fatal("expected an error for a non-*APIRuleset body")
+	}
+	for _, c := range *calls {
+		if strings.Contains(c, "rulesets") && (strings.Contains(c, "POST") || strings.Contains(c, "PUT")) {
+			t.Errorf("must not write a ruleset with a bad body; got call %q", c)
+		}
+	}
+}
+
+func TestContentSHA(t *testing.T) {
+	orig := ghStdin
+	t.Cleanup(func() { ghStdin = orig })
+
+	t.Run("missing file (404) → empty sha, no error", func(t *testing.T) {
+		ghStdin = func(_ string, _ ...string) (string, error) {
+			return "", errors.New("exit 1: HTTP 404: Not Found")
+		}
+		sha, err := contentSHA("repos/o/r/contents/x.yml")
+		if err != nil || sha != "" {
+			t.Fatalf("404 should yield (\"\", nil); got (%q, %v)", sha, err)
+		}
+	})
+
+	t.Run("other error → propagated", func(t *testing.T) {
+		ghStdin = func(_ string, _ ...string) (string, error) {
+			return "", errors.New("exit 1: HTTP 401: Bad credentials")
+		}
+		if _, err := contentSHA("repos/o/r/contents/x.yml"); err == nil {
+			t.Fatal("a non-404 error must propagate, not be swallowed as create")
+		}
+	})
+
+	t.Run("existing file → trimmed sha", func(t *testing.T) {
+		ghStdin = func(_ string, _ ...string) (string, error) { return "abc123\n", nil }
+		sha, err := contentSHA("repos/o/r/contents/x.yml")
+		if err != nil || sha != "abc123" {
+			t.Fatalf("got (%q, %v), want (\"abc123\", nil)", sha, err)
+		}
+	})
 }

@@ -78,11 +78,14 @@ func applySettings(op repocfg.Op) error {
 // already exists, POST otherwise (so we never duplicate a ruleset and never
 // touch one we don't manage).
 func applyRuleset(org, repo string, op repocfg.Op) (string, error) {
+	body, ok := op.Body.(*repocfg.APIRuleset)
+	if !ok {
+		return "", fmt.Errorf("ruleset body is %T, want *repocfg.APIRuleset", op.Body)
+	}
 	id, err := rulesetID(org, repo, op.RulesetName)
 	if err != nil {
 		return "", err
 	}
-	body, _ := op.Body.(*repocfg.APIRuleset)
 	if id != "" {
 		if err := ghJSON("PUT", op.Path+"/"+id, body); err != nil {
 			return "", err
@@ -103,7 +106,10 @@ func applyContents(org, repo, branch string, op repocfg.Op) (string, error) {
 		// Best-effort: ignore the error when default setup is already off.
 		_, _ = gh("api", "-X", "PATCH", fmt.Sprintf("repos/%s/%s/code-scanning/default-setup", org, repo), "-f", "state=not-configured")
 	}
-	sha := strings.TrimSpace(must(gh("api", op.Path, "--jq", ".sha")))
+	sha, err := contentSHA(op.Path)
+	if err != nil {
+		return "", err
+	}
 	args := []string{
 		"api", "-X", "PUT", op.Path,
 		"-f", "message=ci: managed by a-novel repo",
@@ -186,6 +192,26 @@ var ghStdin = func(stdin string, args ...string) (string, error) {
 	return out.String(), nil
 }
 
+// contentSHA returns the blob sha of an existing file at path, or "" when the
+// file does not exist yet (a 404 — the create case). Any other error (auth,
+// network, rate limit) is returned so a transient failure isn't silently
+// misread as "create a new file", which would then PUT without the required
+// sha and fail with a confusing error.
+func contentSHA(path string) (string, error) {
+	out, err := gh("api", path, "--jq", ".sha")
+	if err != nil {
+		if isNotFound(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+func isNotFound(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "404")
+}
+
 func isSignoffLocked(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "signoff") && strings.Contains(err.Error(), "enforced")
 }
@@ -239,5 +265,3 @@ func firstLine(s string) string {
 	}
 	return s
 }
-
-func must(out string, _ error) string { return out }
