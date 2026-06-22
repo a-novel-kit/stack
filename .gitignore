@@ -5,5 +5,8 @@ kit/
 
 .claude/*.local.*
 
+# Scratch planning file used by the planning workflow — never committed.
+PLAN.md
+
 node_modules
 /.secrets/
