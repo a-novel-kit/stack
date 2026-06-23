@@ -2,5 +2,6 @@ pnpm-lock.yaml
 
 app
 kit
+tmp
 
 node_modules
