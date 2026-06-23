@@ -7,11 +7,6 @@ import (
 	"strings"
 )
 
-// githubDependabotAppID is GitHub-native Dependabot's app id — a fixed
-// integration, the same across every org. Referenced by the generic
-// `dependabot` bypass actor.
-const githubDependabotAppID int64 = 29110
-
 // adminRoleID is the built-in "admin" repository role.
 const adminRoleID int64 = 5
 
@@ -268,9 +263,6 @@ func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor
 			{ActorID: nil, ActorType: "OrganizationAdmin", BypassMode: modeAlways},
 			{ActorID: &role, ActorType: "RepositoryRole", BypassMode: modeAlways},
 		}, nil
-	case "dependabot":
-		id := githubDependabotAppID
-		return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}, nil
 	default:
 		if id, ok := org.Bots[entry]; ok {
 			id := id
@@ -278,7 +270,7 @@ func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor
 		}
 	}
 	return nil, fmt.Errorf("bypass entry %q in ruleset %q resolves to no actor "+
-		"(expected admins, dependabot, or an org bot key from orgs/<org>.yaml)", entry, rulesetName)
+		"(expected admins or an org bot key from orgs/<org>.yaml)", entry, rulesetName)
 }
 
 // SettingsBody is the PATCH /repos body for general + merge + security.
