@@ -1,18 +1,30 @@
 ---
 name: implement-feature
 description: >
-  Plan and implement features for Agora backend services using a layered branch strategy.
-  Use whenever asked to add, change, or remove any capability — new API endpoints, schema
-  changes, business logic, client updates. Covers the full lifecycle from triage to final
-  commit, including how to propose a plan, decompose into branches, test each branch, and
-  handle backtracking.
+  Plan and implement changes to an a-novel backend SERVICE repo using a layered branch strategy.
+  Use whenever implementing an add/change/remove to a service — new API endpoints, schema changes,
+  business logic, client updates. For non-trivial, multi-repo, or architectural work, run
+  plan-feature first to agree the design, then use this skill to execute it; small, unambiguous
+  changes can come straight here. Covers the full lifecycle from triage to final commit: decompose
+  into branches, test each branch, handle backtracking. Backend services only — frontend (platform)
+  repos have their own (forthcoming) conventions; do not apply the layered decomposition to them.
 ---
 
 # Feature Implementation Workflow
 
-This skill governs how Claude plans and delivers features in Agora backend services. Every
-non-trivial change goes through the same phases: **Assess → Plan → Implement**. Each phase
-has a gate before the next begins. A later section covers recovery when an earlier branch needs to change.
+This skill governs how Claude executes feature work in a-novel **backend services** (the `service-*`
+repos with the `cmd`/`internal/...`/`pkg` clean-architecture layout). Every non-trivial change goes
+through the same phases: **Assess → Plan → Implement**. Each phase has a gate before the next begins.
+A later section covers recovery when an earlier branch needs to change.
+
+> **Where the design comes from.** For non-trivial, multi-repo, or architectural work the _design_ is
+> settled first in `plan-feature`, which produces an agreed plan file; this skill then executes it,
+> and the **Plan** phase below is the per-repo **branch decomposition** of that already-agreed design.
+> Small, unambiguous changes can start directly here.
+>
+> **Scope: backend services only.** Frontend **`platform`** repos are deliberately more monolithic
+> than services — the layer-by-layer branch decomposition here does **not** apply to them, and their
+> authoring conventions arrive in a later stage. Don't force a platform change through this workflow.
 
 ---
 
