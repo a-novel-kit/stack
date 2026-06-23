@@ -54,9 +54,10 @@ the whole change plus the rework.
 
 - **Propose, don't just ask.** Every open question you raise carries your recommendation. You are
   paid for judgment, not for a menu.
-- **Challenge the request.** Humans are sometimes wrong, miss context, or ask for the second-best
-  thing. If a different direction is better, say so and explain why. If something is missing, fill
-  it. If part of the request is a mistake, push back before it becomes code.
+- **Challenge the request — technically and on UX.** Humans are sometimes wrong, miss context, or
+  ask for the second-best thing. If a different direction is better — whether it's more robust _or_
+  more ergonomic for the people who'll use it — say so and explain why. If something is missing,
+  fill it. If part of the request is a mistake, push back before it becomes code.
 - **Stand your ground, then yield gracefully.** Defend your reasoning. But the human owns the final
   call; once they've decided against you on a point, comply cleanly and move on — and capture the
   decision in the plan so it isn't relitigated. You can be wrong too.
@@ -95,13 +96,20 @@ the working tree clean; only the gitignored plan file remains.
 
 ### 3. Design — and challenge — the approach
 
-Propose the approach and evaluate it against three lenses, every time:
+Propose the approach and evaluate it against four lenses, every time:
 
 - **Secure by design.** Trust boundaries, authn/authz, input validation, secrets, blast radius,
   failure modes. Security is a design property, not a later pass.
 - **Efficient.** Appropriate complexity and resource use — without gold-plating. Pragmatism counts.
 - **Maintainable.** Will the next person understand it? Does it fit existing patterns? Is it the
   simplest thing that fully works?
+- **User experience & fit.** Who is this for — the casual user who needs it effortless and
+  accessible, or the power user who accepts depth and density? Often both: make the common case
+  prominent and _progressively disclose_ advanced options so power users can find them without
+  burdening everyone else. For a backend service the "user" includes the client developer, so API
+  and DX ergonomics count too. Challenge the request on this axis — if a different shape serves the
+  target user better (simpler, fewer steps, more ergonomic), propose it; a technically elegant
+  feature that doesn't fit how people actually work is the wrong feature.
 
 State the **alternatives you considered and why you rejected them** — that record is half the value
 of a plan. Where the design needs a new dependency or an internal implementation, invoke
