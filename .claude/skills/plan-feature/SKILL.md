@@ -170,8 +170,9 @@ Current state, the relevant code (with file paths), internet research (with sour
 
 ## 4. Proposed approach
 
-The design. Alternatives considered and why rejected. Notes against the
-secure / efficient / maintainable lenses.
+The design. **Freeze the domain vocabulary here** (a short glossary of the core terms) and use it
+consistently from here on. Alternatives — including any prior art — considered and why rejected or
+surpassed. Notes against the secure / efficient / maintainable / UX lenses.
 
 ## 5. Cross-repo & rollout
 
@@ -250,6 +251,15 @@ plan that is already agreed.
 - **Justify, don't decree.** Every recommendation states its reasoning. "Because it's best practice"
   is not a reason.
 - **Research before asserting.** Read the code; search trusted sources. Cite what you relied on.
+- **Freeze the vocabulary, then keep it.** Name the domain's core concepts deliberately and early,
+  with non-overlapping terms — no synonyms, never one word for two things (a reused name is a future
+  bug). Once a name is frozen in the plan, use it identically everywhere: code, API, schema, DB,
+  docs, and conversation. If a name proves wrong, change it everywhere in one deliberate pass — never
+  let two names for one thing coexist.
+- **Prior art is input to surpass, not a template.** Existing code — ours or a reference — shows what
+  was tried, not what to copy. Be critical of it, name its flaws explicitly, and aim for the best
+  solution we can build (more efficient, more reliable, cleaner) rather than a blend of predecessors'
+  compromises. Max the quality, then stage delivery sensibly.
 - **Stage what can't ship at once.** Single-step delivery is preferred; when deployment forces
   incompatible stages, plan a backward-compatible step then a cleanup step — and hand the mechanics
   to `manage-versions`.
