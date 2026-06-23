@@ -1,6 +1,6 @@
-# Mandatory review on the default branch. The org bots plus GitHub-native
-# Dependabot are exempt, so automation (dependency PRs, releases, the
-# comment proxy) can merge without a human approval.
+# Mandatory review on the default branch. The org bots are exempt, so
+# automation (dependency PRs, releases, the comment proxy) can merge
+# without a human approval.
 name: require-approval
 target: branch
 enforcement: active
@@ -13,7 +13,6 @@ bypass:
   - dependencies
   - agent
   - publish
-  - dependabot
 rules:
   pull_request:
     allowed_merge_methods: ["squash"]
