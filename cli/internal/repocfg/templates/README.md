@@ -67,8 +67,6 @@ ruleset, unmanaged bypass actors already present are preserved.
   per org from `orgs/<org>.yaml`. On `master` the bypass mode is `always`
   (only `publish` is listed there — releases write to the default branch
   directly, with no branch proxy); on the PR rulesets the mode is `exempt`.
-- `dependabot` — GitHub-native Dependabot (a fixed app id, identical for
-  every org). It mirrors the `dependencies` bot's bypass.
 
 The core team is intentionally **not** a bypass actor.
 
