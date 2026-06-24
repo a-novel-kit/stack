@@ -13,6 +13,8 @@ The `a-novel` CLI — one tool to build, test, run, and release every project ac
 
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/a-novel-kit/stack/main.yaml)
 
+## What this is
+
 This repository — the **stack** — hosts that CLI and anchors local checkouts of
 the projects it operates on:
 

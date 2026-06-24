@@ -77,33 +77,46 @@ whose CI uploads coverage.
 before adding the badge: `grep -rl generic-actions/codecov <repo>/.github/workflows`. Today
 services + `nodelib` report coverage; `golib`, `workflows`, `stack` do not.
 
-### Section order — lead with what is retrieved most, end with what is retrieved least
+### Section order — ONE order, every repo
 
-Readers should scroll as little as possible: frequently-referenced material first, one-time /
-rarely-needed material last (or split a "basics" section that links an "advanced" one).
+Every README uses the same five slots in the same order. Only the _content_ of each slot
+changes with repo type; **the order never does.** Readers scroll as little as possible —
+frequently-referenced material first, rarely-needed material last.
 
-- **Backend service:** Header → What it does → **Deploying** → Using the client packages →
-  Running locally → Contributing.
-  - **Deploying leads the operational content** — operators return to it often for quick edits.
-    Lead with the **production / expected** deployment, NOT the dev one. The expected production
-    path is OpenTofu/k8s over the published images; until those modules ship, the production
-    split-image composition (one canonical compose block + an image-role table) is the
-    deployment contract. Add this forward note:
-    > **OpenTofu modules are the planned canonical deployment path.** Until they land, deploy the
-    > images with any container orchestrator — the composition below is the reference for which
-    > images to run, how they wire together, and the environment they expect.
-  - `### Configuration` lives inside Deploying: required env vars visible; optional groups (REST
-    tuning, OTel) collapsed under `<details>` for density.
-  - **Running locally** (the standalone single-command dev compose) is relegated just above
-    Contributing — dev convenience, retrieved least.
-- **Go library:** Header → `go get` (quick install, right after the header) → What this is →
-  Sub-packages (reference table; link `pkg.go.dev`, do not enumerate) → Contributing.
-- **JS package:** Header → What this is → Installation (registry `.npmrc` note as ONE sentence,
-  not a blockquote, + per-package `pnpm add`) → Packages (table) → Contributing.
-- **Actions repo:** Header → What this is → Using an action
-  (`uses: <org>/workflows/<group>/<action>@<tag>`) → Action catalog (table grouped by
-  directory) → Contributing.
-- **CLI / stack:** Header → Install → operational sections (UI, commands, …) → Contributing.
+| #   | Slot             | Always contains                                                                        |
+| --- | ---------------- | -------------------------------------------------------------------------------------- |
+| 1   | **Header**       | Title, one-line description, badges (+ codecov sunburst if the repo reports coverage). |
+| 2   | **Role**         | What it is / does: the noun it owns, who it serves, the surface. 1–3 short paragraphs. |
+| 3   | **Use it**       | The primary how-to-use, leading with the _expected_ path (see hard rules).             |
+| 4   | **Reference**    | Detailed material — comes _after_ the slot-3 example, never before it.                 |
+| 5   | **Contributing** | Links the onboarding guide + `./CONTRIBUTING.md`. Always the last section.             |
+
+Use these exact slot headings per repo type:
+
+| Repo type       | Slot 2 (role)     | Slot 3 (use it)                           | Slot 4 (reference)                                                   |
+| --------------- | ----------------- | ----------------------------------------- | -------------------------------------------------------------------- |
+| Backend service | `## What it does` | `## Deploying` (+ `### Configuration`)    | `## Using the client packages`, then `## Running locally`            |
+| Go / JS library | `## What this is` | `## Installation` (`go get` / `pnpm add`) | `## Sub-packages` (Go) / `## Packages` (JS)                          |
+| Actions repo    | `## What this is` | `## Using an action`                      | `## Action catalog`                                                  |
+| CLI (stack)     | `## What this is` | `## Install`                              | operational sections (`## The UI`, `## Non-interactive commands`, …) |
+
+**Hard rules — no exceptions:**
+
+1. **Role (slot 2) ALWAYS precedes use / install / deploy (slot 3).** The header's one-line
+   description does NOT replace it — slot 2 is its own `##` section. A `go get` / `pnpm add`
+   one-liner sitting before the first `##` heading is a violation; put it inside slot 3.
+2. **Slot 3 leads with the EXPECTED / production path.** For a service that is the production
+   split-image composition (one canonical compose block + an image-role table) plus the OpenTofu
+   forward-note below. The standalone single-command dev compose is relegated to `## Running
+locally`, the LAST section before Contributing. `### Configuration` lives inside `## Deploying`:
+   required env vars visible, optional groups (REST tuning, OTel) under `<details>`.
+   > **OpenTofu modules are the planned canonical deployment path.** Until they land, deploy the
+   > images with any container orchestrator — the composition below is the reference for which
+   > images to run, how they wire together, and the environment they expect.
+3. **Contributing (slot 5) is always the last section.**
+
+**The one documented exception:** `service-template` MAY prepend a `## Using this template`
+section before slot 2 — its primary reader is forking it. No other repo reorders the five slots.
 
 ### Contributing section + links (fix the fleet-wide 404s)
 
@@ -360,80 +373,69 @@ with the inputs from Phase 1 before writing the file. Do not leave `{{…}}` in 
      identity live in service-authentication; this service only manages signing keys").
 -->
 
-## Running it
+## Deploying
 
-The minimal local setup is one Postgres image plus one service image. Pin both to the
-same release tag (current: `vX.Y.Z`). <!-- TODO(project-docs): replace vX.Y.Z with the current image tag -->
+The service runs as published OCI images plus Postgres; both surfaces are stateless and scale to
+multiple replicas.
 
-<!-- ONE canonical compose block. The simplest dev-mode shape (typically standalone-rest
-     or standalone-grpc). Do NOT paste a second compose block here for a different
-     deployment shape. -->
+> **OpenTofu modules are the planned canonical deployment path.** Until they land, deploy the
+> images with any container orchestrator — the composition below is the reference for which
+> images to run, how they wire together, and the environment they expect.
 
-For the other deployment shapes:
+| Image | Role |
+| ----- | ---- |
 
-| Shape | Use when | Image |
-| ----- | -------- | ----- |
+<!-- One row per PUBLISHED image. Verify the exact names against
+     .github/workflows/release.yaml (image_name:) — they are often `<repo>/jobs/<name>`
+     (e.g. jobs/migrations, jobs/rotatekeys), NOT a bare `<repo>/<name>`. -->
 
-<!-- One row per shape this service ships (standalone-rest, standalone-grpc, split-rest,
-     split-grpc, etc.). Each cell is a single line — no compose YAML inline. -->
+Pin every image to the same release tag — see the [latest release](https://github.com/{{repo-path}}/releases/latest).
 
-<details>
-<summary>Production (split images) example</summary>
-
-<!-- ONE compose block showing the split-image, migrations-as-separate-service shape.
-     Inside <details> so dev readers don't pay the scroll cost. -->
-
-</details>
-
-> Standalone images run migrations on startup. Convenient for dev, not recommended for
-> production — use the split images plus the dedicated `migrations` image instead.
+<!-- ONE canonical PRODUCTION compose block: database -> migrations (to completion) -> the
+     split server(s). This is the lead per Fleet-standard hard rule 2 — never the dev one. -->
 
 ### Configuration
 
-Configuration is driven by environment variables.
-
-**Required**
+<!-- Required env vars in a visible table; optional groups (REST tuning, OTel) under <details>.
+     The Images column lists EVERY image that reads each var — verify against internal/config,
+     and note when the rest surface maps ${REST_PORT} rather than ${GRPC_PORT}. -->
 
 | Name | Description | Images |
 | ---- | ----------- | ------ |
 
-<!-- One row per required env var. -->
+## Using the client packages
 
-**Optional — REST**
+<!-- One minimum-viable example per client (Go, JS). Link the API reference / pkg.go.dev;
+     do not enumerate the full surface (Principle 5). -->
 
-<!-- Only when has-rest. One table per concern. -->
+## Running locally
 
-**Optional — Logs and tracing**
+<!-- LAST section before Contributing. The standalone single-command dev compose (bundles
+     migrations), with the dev-only caveat. Relegated on purpose — least-retrieved. Point
+     contributors at the a-novel CLI + CONTRIBUTING. -->
 
-<!-- OTel + GCP project ID + app name. -->
+## Contributing
 
-<!-- If has-js-client: include the JS/npm usage section. Minimum-viable call only. -->
-<!-- If has-go-client: include the Go module usage section. Minimum-viable call only. -->
+<!-- Two links only: the onboarding guide and ./CONTRIBUTING.md (see Fleet standard). -->
 ```
 
-**README structure (top to bottom):**
-
-1. **Title + badge block.** Mechanical; the catalog below specifies exact URLs.
-2. **What it does.** Mandatory. One-to-three paragraph role section per Editorial
-   Principle 2. Comes before _anything_ about deployment.
-3. **Running it.** Operator section. One canonical compose block, table or `<details>`
-   for variants per Principle 4. Production-shape variant under details if it exists.
-4. **Configuration.** Reference tables for env vars. Required first, optional grouped by
-   concern. Lives in its own subsection after the canonical compose, never interleaved
-   (Principle 5).
-5. **Using the client packages.** Integrator section. One minimum-viable example per
-   client (Go, JS, etc.). Link to API reference; do not enumerate the full surface.
+**README structure:** follow the [Section order](#section-order--one-order-every-repo) table —
+authoritative. For a service that is Header → `## What it does` → `## Deploying` (with
+`### Configuration`) → `## Using the client packages` → `## Running locally` → `## Contributing`.
+This scaffold only fills slot content; it never reorders the slots.
 
 **Mechanical rules:**
 
-- The nine entries in the badge catalog (two socials + three repo metrics + four
-  CI/coverage, counting the Codecov sunburst) always appear in the order shown. Deviating
-  breaks the visual rhythm across services.
+- Badges follow the per-repo-type set in the **Fleet standard** header table, always in the
+  order shown there (socials, then `<hr />`, then the type's tech badges, then the Codecov
+  sunburst only when the repo reports coverage). Deviating breaks the visual rhythm across the
+  fleet.
 - The `<hr />` literal (not `---`) separates the social badges from the repo metrics —
   this matches the existing Agora convention.
-- Docker compose examples must pin images by tag (e.g., `:v2.2.6`), never `:latest`.
-  When scaffolding, ask the user for the current release version or write a
-  `<!-- TODO(project-docs): current image tag (see GitHub releases) -->` placeholder.
+- Docker compose examples pin images by an explicit release tag, never `:latest`. In PROSE, link
+  the latest release (`…/releases/latest`) rather than hard-coding a `(current: vX.Y.Z)` string
+  that goes stale; reserve concrete tags for inside the compose blocks (where the publish stamp
+  keeps them current).
 - The config-vars tables use `<br/>` to stack multiple image names in a single cell —
   keeps the table narrow.
 - The role section ("What it does") must name the entity, the consumers, and the
