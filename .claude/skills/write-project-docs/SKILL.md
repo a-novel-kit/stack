@@ -2,7 +2,8 @@
 name: write-project-docs
 description: >
   Write, review, and maintain the root-level project documentation — README.md, SECURITY.md,
-  CONTRIBUTING.md — for Agora backend services. Use this skill whenever scaffolding a new
+  CONTRIBUTING.md — for any repo across the a-novel / a-novel-kit orgs (backend services, the
+  golib Go library, the nodelib JS packages, the workflows Actions repo, the stack CLI). Use this skill whenever scaffolding a new
   project's docs, updating an existing README/SECURITY/CONTRIBUTING (new env var, new badge,
   new client section, security contact change), or adding sections like client usage or
   Docker examples. Does NOT cover CODE_OF_CONDUCT.md (standard Contributor Covenant, copy
@@ -30,6 +31,96 @@ Separate concerns:
   when setting up a new project and do not edit further.
 - `document-code` — governs doc comments inside source files (Go, SQL, TS, etc.), not these
   project-level Markdown files.
+
+---
+
+## Fleet standard (current)
+
+This section is **authoritative and supersedes any older guidance below** where they conflict.
+It applies to EVERY repo in the `a-novel` and `a-novel-kit` orgs — backend services, the Go
+library (`golib`), the JS/TS packages (`nodelib`), the reusable Actions repo (`workflows`),
+and the `stack` CLI. Reference implementations: the
+[`service-json-keys`](https://github.com/a-novel/service-json-keys) README (service) and the
+[`golib`](https://github.com/a-novel-kit/golib) README (library).
+
+### Header — identical shape across all repos
+
+```
+# <Title>
+
+<one concise line describing what this is>      ← ALWAYS present, directly under the title
+
+[![X (formerly Twitter) Follow](https://img.shields.io/twitter/follow/agorastoryverse)](https://twitter.com/agorastoryverse)
+[![Discord](https://img.shields.io/discord/1315240114691248138?logo=discord)](https://discord.gg/rp4Qr8cA)
+
+<hr />
+
+<tech badges — vary by repo type, see table>
+
+<codecov sunburst image — ONLY if the repo reports coverage>
+```
+
+The one-line description under the title is **mandatory** (older service READMEs omitted it and
+put badges where the description should be — add the line). Social badges, then a literal
+`<hr />`, then the tech-badge block. The codecov badge + sunburst image appear ONLY for repos
+whose CI uploads coverage.
+
+| Repo type                | Tech badges (in order)                                                       | Codecov? |
+| ------------------------ | ---------------------------------------------------------------------------- | -------- |
+| Go service (`service-*`) | go-mod version · file count · code size · CI status · Go Report Card         | yes      |
+| Go library (`golib`)     | go-mod version · file count · code size · CI status · Go Report Card         | no       |
+| JS package (`nodelib`)   | file count · code size · CI status                                           | yes      |
+| Actions (`workflows`)    | file count · code size · CI status                                           | no       |
+| CLI (`stack`)            | go-mod version (`?filename=cli/go.mod`) · file count · code size · CI status | no       |
+
+"Codecov if applicable" = the repo's CI calls the `generic-actions/codecov` action. Verify
+before adding the badge: `grep -rl generic-actions/codecov <repo>/.github/workflows`. Today
+services + `nodelib` report coverage; `golib`, `workflows`, `stack` do not.
+
+### Section order — lead with what is retrieved most, end with what is retrieved least
+
+Readers should scroll as little as possible: frequently-referenced material first, one-time /
+rarely-needed material last (or split a "basics" section that links an "advanced" one).
+
+- **Backend service:** Header → What it does → **Deploying** → Using the client packages →
+  Running locally → Contributing.
+  - **Deploying leads the operational content** — operators return to it often for quick edits.
+    Lead with the **production / expected** deployment, NOT the dev one. The expected production
+    path is OpenTofu/k8s over the published images; until those modules ship, the production
+    split-image composition (one canonical compose block + an image-role table) is the
+    deployment contract. Add this forward note:
+    > **OpenTofu modules are the planned canonical deployment path.** Until they land, deploy the
+    > images with any container orchestrator — the composition below is the reference for which
+    > images to run, how they wire together, and the environment they expect.
+  - `### Configuration` lives inside Deploying: required env vars visible; optional groups (REST
+    tuning, OTel) collapsed under `<details>` for density.
+  - **Running locally** (the standalone single-command dev compose) is relegated just above
+    Contributing — dev convenience, retrieved least.
+- **Go library:** Header → `go get` (quick install, right after the header) → What this is →
+  Sub-packages (reference table; link `pkg.go.dev`, do not enumerate) → Contributing.
+- **JS package:** Header → What this is → Installation (registry `.npmrc` note as ONE sentence,
+  not a blockquote, + per-package `pnpm add`) → Packages (table) → Contributing.
+- **Actions repo:** Header → What this is → Using an action
+  (`uses: <org>/workflows/<group>/<action>@<tag>`) → Action catalog (table grouped by
+  directory) → Contributing.
+- **CLI / stack:** Header → Install → operational sections (UI, commands, …) → Contributing.
+
+### Contributing section + links (fix the fleet-wide 404s)
+
+Every repo ends with a short `## Contributing` section that points at TWO things:
+
+1. The **developer onboarding guide** for platform setup (toolchain, the `a-novel` CLI, daily
+   usage): `https://github.com/a-novel-kit/.github/blob/master/README.md`. This is the single
+   canonical onboarding doc for BOTH orgs.
+2. The repo's own `./CONTRIBUTING.md` for repo-specific concepts.
+
+There is **no** org-level `CONTRIBUTING.md` in either `.github` repo. Older docs linked
+`a-novel/.github/.../CONTRIBUTING.md` or `a-novel-kit/.github/.../contributing/readme.md` —
+both 404. Always use the onboarding-guide URL above.
+
+`CONTRIBUTING.md` itself: intro (link the onboarding guide + "read the README first") →
+repo-specific concepts → `## Questions?` (issues link). Never restate platform setup or the
+service role there.
 
 ---
 
@@ -97,9 +188,9 @@ combinations), do not paste four near-identical compose blocks in sequence. The 
 who wants the simplest path is forced to scan past three blocks they will not use, and
 the duplication turns any future update into a four-place edit.
 
-Pick one canonical block — usually the simplest dev path — show it inline, then list the
-other shapes in a table or collapse them under a `<details>` block, with one example of
-the production-shape variant inside. The principle generalizes: any time two blocks
+Pick one canonical block — the **production / expected shape** (per the Fleet standard above:
+lead with production, relegate the dev one-liner to "Running locally") — show it inline, then
+list the other shapes in a table or collapse them under a `<details>` block. The principle generalizes: any time two blocks
 differ by one line, the second belongs in a diff, table, or collapsible block, not in line.
 
 ### 5. Reference, don't enumerate
@@ -160,10 +251,10 @@ access. Safe to commit. The private upload token lives in CI secrets, never in d
 
 ### 1.4 Required for CONTRIBUTING.md
 
-| Input                | Example                                       | Default                                       |
-| -------------------- | --------------------------------------------- | --------------------------------------------- |
-| Project slug         | `service-json-keys`                           | (ask — used in page title)                    |
-| Org contributing URL | `a-novel/.github/blob/master/CONTRIBUTING.md` | `a-novel/.github/blob/master/CONTRIBUTING.md` |
+| Input                    | Example                                     | Default                                                                                                                        |
+| ------------------------ | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Project slug             | `service-json-keys`                         | (ask — used in page title)                                                                                                     |
+| Developer onboarding URL | `a-novel-kit/.github/blob/master/README.md` | `a-novel-kit/.github/blob/master/README.md` (single canonical onboarding doc for both orgs; there is NO org `CONTRIBUTING.md`) |
 
 ### 1.5 Capability flags (shape template output)
 
@@ -405,8 +496,9 @@ pull request.
 ```markdown
 # Contributing to {{project-slug}}
 
-For platform-wide setup, prerequisites, and the standard `a-novel` / `pnpm` commands, see the
-[generic contribution guidelines](https://github.com/{{org-contributing-url}}). This file
+For platform-wide setup (Go, Node, Podman, the `a-novel` CLI) and the day-to-day `a-novel` /
+`pnpm` commands, see the
+[developer onboarding guide](https://github.com/{{developer-onboarding-url}}). This file
 documents what is specific to {{project-display-name}}.
 
 ---
