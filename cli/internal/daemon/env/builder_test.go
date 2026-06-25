@@ -1,6 +1,7 @@
 package env
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -242,5 +243,57 @@ func TestForTarget_PORTAloneDoesNotAllocate(t *testing.T) {
 	// No slot should have been allocated against svc.
 	if snap := alloc.Snapshot(); len(snap) != 0 {
 		t.Errorf("Allocator should be untouched, got %+v", snap)
+	}
+}
+
+func TestForTarget_InjectsRepoSecrets(t *testing.T) {
+	// ForTarget appends the repo's locally-stored secrets (decrypted) as plain
+	// env entries so they ride into the spawned process's cmd.Env. Here we stub
+	// the secrets seam to avoid touching the real key store, and assert the
+	// pairs land in the result keyed by their env-var name.
+	orig := injectSecrets
+	injectSecrets = func(repoRoot string) (map[string]string, error) {
+		return map[string]string{"OPENAI_API_KEY": "sk-test"}, nil
+	}
+	t.Cleanup(func() { injectSecrets = orig })
+
+	b, alloc := newBuilderWith([]string{"svc"})
+	tgt := &discovery.Target{
+		Name:    "rest",
+		Service: "svc",
+		Stack:   "default",
+		// A non-empty CmdDir is required for serviceRoot to resolve, which is
+		// what gates the injection.
+		CmdDir:      filepath.Join("/tmp", "service-svc", "cmd", "rest"),
+		Environment: map[string]string{},
+	}
+	entries, err := b.ForTarget(tgt, alloc.Services())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := toMap(entries)
+	if m["OPENAI_API_KEY"] != "sk-test" {
+		t.Errorf("injected secret missing: OPENAI_API_KEY = %q, want sk-test", m["OPENAI_API_KEY"])
+	}
+}
+
+func TestForTarget_NoCmdDirSkipsInjection(t *testing.T) {
+	// With no CmdDir, serviceRoot is empty and injection is skipped entirely —
+	// the seam must not even be called (no accidental relative-path read).
+	called := false
+	orig := injectSecrets
+	injectSecrets = func(repoRoot string) (map[string]string, error) {
+		called = true
+		return nil, nil
+	}
+	t.Cleanup(func() { injectSecrets = orig })
+
+	b, alloc := newBuilderWith([]string{"svc"})
+	tgt := &discovery.Target{Name: "rest", Service: "svc", Stack: "default", Environment: map[string]string{}}
+	if _, err := b.ForTarget(tgt, alloc.Services()); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Error("injectSecrets must not be called when the target has no CmdDir")
 	}
 }

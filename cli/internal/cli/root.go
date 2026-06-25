@@ -34,7 +34,7 @@ Commands fall into three groups:
 
   Standalone capabilities — operate on the local working tree, no daemon
   required:
-    test, build, publish
+    test, build, publish, secrets
 
   Daemon control — manage the long-lived a-novel daemon (one per user)
   and the workspace it serves:
@@ -78,6 +78,11 @@ selector), runs the selection, and prints a pass/fail report.`,
 	// Standalone like test/build: operates on the working tree, no daemon.
 	root.AddCommand(newPublishCmd())
 	root.AddCommand(newRepoCmd())
+
+	// `a-novel secrets` — local, encrypted secrets manager. Standalone like
+	// publish/repo: operates on the local key + store, no daemon. Its secrets
+	// are auto-injected into test/run/ui via a value-free per-repo mapping.
+	root.AddCommand(newSecretsCmd())
 
 	// Version (compatibility with legacy `a-novel version` invocation —
 	// Cobra also exposes --version on root automatically).
