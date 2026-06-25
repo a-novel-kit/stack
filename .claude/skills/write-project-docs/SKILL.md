@@ -257,6 +257,22 @@ identify the section the user is changing, edit only that section. A "rewrite" i
 from the user is the only override — and even then, surface anything that looks like
 deliberate custom content before discarding it.
 
+### 7. Explain by rationale, not by example
+
+A doc earns its keep with a clear, well-phrased explanation of what a thing is, why it
+exists, and how to approach it — not with examples. Case-specific examples (a particular
+provider, key, service, or value) go stale as the system changes, break the reading
+rhythm, and usually carry no information the surrounding prose doesn't already give. In
+particular, **never import an example from the conversation that produced the doc** — it
+was an aid for the author, not the reader, and lands as arbitrary and dated later.
+
+The one legitimate example is an **analogy that makes a genuinely hard concept click** —
+reach for it only then. Otherwise state the concept directly. When concrete specifics are
+genuinely needed (exact commands, names, links), they are reference material, not
+explanation: keep the explanatory prose general and push the specifics to where they
+belong — the relevant service's own `CONTRIBUTING.md`, a reference table, or a copy-paste
+code block.
+
 ---
 
 ## Phase 1: Collect Required Inputs
@@ -715,6 +731,12 @@ Agora service:
   They become stale fast and aren't in the Agora template.
 - **Do not write long prose.** README and CONTRIBUTING are reference documents. Tables,
   bullet lists, and runnable code blocks beat paragraphs.
+- **Do not put case-specific examples in generic prose.** A particular provider, key, or
+  value dates fast and rarely adds understanding; never import an example from the
+  conversation that produced the doc. Explain by rationale; reach for an example only as an
+  analogy for a genuinely hard concept, and push concrete specifics (commands, names,
+  links) to a service's own `CONTRIBUTING.md`, a reference table, or a code block. See
+  Editorial Principle 7.
 - **Do not embed secrets.** The codecov graph token is fine (public). API keys, passwords,
   real `APP_MASTER_KEY` values, npm auth tokens are not.
 - **Do not link to internal-only dashboards.** Anything linked in the README is
