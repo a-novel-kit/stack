@@ -21,7 +21,7 @@ func writeMapping(t *testing.T, repoRoot, content string) {
 }
 
 // TestInjectForRepo covers the value-free mapping → decrypted env-pair flow,
-// including the absent-store and unknown-secret cases.
+// including the absent-store and unset-secret (skipped) cases.
 //
 // Not parallel: uses t.Setenv("XDG_DATA_HOME", ...) for store isolation.
 func TestInjectForRepo(t *testing.T) {
@@ -82,7 +82,9 @@ func TestInjectForRepo(t *testing.T) {
 		}
 	})
 
-	t.Run("UnknownSecretIsError", func(t *testing.T) {
+	t.Run("UnsetSecretIsSkipped", func(t *testing.T) {
+		// A mapping that references a secret not in the store must NOT fail or
+		// block injection — the unset var is skipped, the set ones still inject.
 		t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 		st, err := secrets.Open()
@@ -95,10 +97,17 @@ func TestInjectForRepo(t *testing.T) {
 		}
 
 		repoRoot := t.TempDir()
-		writeMapping(t, repoRoot, "env:\n  MISSING_VAR: not-in-store\n")
+		writeMapping(t, repoRoot, "env:\n  PRESENT_VAR: present\n  MISSING_VAR: not-in-store\n")
 
-		if _, err := secrets.InjectForRepo(repoRoot); err == nil {
-			t.Fatal("expected an error when the mapping references an unknown secret id")
+		got, err := secrets.InjectForRepo(repoRoot)
+		if err != nil {
+			t.Fatalf("inject must not error on an unset mapped secret: %v", err)
+		}
+		if got["PRESENT_VAR"] != "v" {
+			t.Errorf("PRESENT_VAR = %q, want %q", got["PRESENT_VAR"], "v")
+		}
+		if _, ok := got["MISSING_VAR"]; ok {
+			t.Error("MISSING_VAR should be skipped when its secret is unset")
 		}
 	})
 

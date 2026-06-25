@@ -31,11 +31,13 @@ type mapping struct {
 // decrypts each referenced secret from the local store, and returns the
 // envVar→value pairs to inject into a child process's environment.
 //
-// It is deliberately forgiving: if the mapping file, the local key, or the store
-// is absent, it returns an empty map and no error — most repos have no secrets,
-// and a missing setup must never fail a test/run. A real error (unreadable or
-// malformed mapping, a mapping that references a secret ID not in the store) is
-// returned so misconfiguration is caught.
+// It is deliberately forgiving so secrets setup never blocks test/run:
+//   - no mapping, or no local key (secrets never initialized) → empty map, no error;
+//   - a mapped secret that isn't in the store yet → that var is skipped (not
+//     injected), so a repo can still run the tests that don't need it; the code
+//     that does need the secret surfaces its own missing-env error.
+//
+// Only a malformed/unreadable mapping or a corrupt store returns an error.
 //
 // The returned values are secret material: callers must inject them into the
 // child env only and never print or log them.
@@ -68,14 +70,12 @@ func injectForRepoAt(repoRoot, root string) (map[string]string, error) {
 
 	out := make(map[string]string, len(m.Env))
 	for envVar, id := range m.Env {
-		value, ok := st.Get(id)
-		if !ok {
-			// Reference to an unknown secret ID is a real misconfiguration —
-			// surface it (by ID, never by value).
-			return nil, fmt.Errorf("secrets: %s maps %s to unknown secret %q — run `a-novel secrets set %s`",
-				MappingFile, envVar, id, id)
+		// A mapped secret that isn't set yet is skipped, not an error — so a repo
+		// with a mapping but an unprovisioned secret can still run the tests that
+		// don't need it. The dependent code reports the missing env var itself.
+		if value, ok := st.Get(id); ok {
+			out[envVar] = value
 		}
-		out[envVar] = value
 	}
 	return out, nil
 }
