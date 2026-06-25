@@ -133,6 +133,11 @@ locally`, the LAST section before Contributing. `### Configuration` lives inside
    local and GCP exporters, the deployment images), but never an inventory of functions, methods,
    or client calls — intellisense and the code already supply those. A package or sub-package
    description says what it is FOR, not which symbols it exports.
+7. **Concrete versions live only in copy-paste code blocks.** A real tag (`@v1.0.3`, image
+   `:v2.3.1`) belongs only where the reader copies the block verbatim — a `uses:`, compose, or
+   install snippet. In prose, placeholder examples, and inline references, use a generic `@<tag>`
+   or link the latest release. A hard-coded version in prose is redundant with the repo and goes
+   stale.
 
 **The one documented exception:** `service-template` MAY prepend a `## Using this template`
 section before slot 2 — its primary reader is forking it. No other repo reorders the five slots.
