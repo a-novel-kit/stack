@@ -3,6 +3,7 @@ package secrets_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
@@ -20,12 +21,13 @@ func writeMapping(t *testing.T, repoRoot, content string) {
 	}
 }
 
-// TestInjectForRepo covers the value-free mapping → decrypted env-pair flow,
-// including the absent-store and unset-secret (skipped) cases.
+// TestInjectForRepo covers the value-free manifest → Resolution flow: the
+// set-secret (injected), unset-secret (reported missing), absent-store (all
+// missing), absent-manifest, and malformed-manifest cases.
 //
 // Not parallel: uses t.Setenv("XDG_DATA_HOME", ...) for store isolation.
 func TestInjectForRepo(t *testing.T) {
-	t.Run("MappingResolvesSecrets", func(t *testing.T) {
+	t.Run("ManifestResolvesSecrets", func(t *testing.T) {
 		t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 		st, err := secrets.Open()
@@ -39,52 +41,62 @@ func TestInjectForRepo(t *testing.T) {
 		}
 
 		repoRoot := t.TempDir()
-		writeMapping(t, repoRoot, "env:\n  OPENAI_API_KEY: openai-key\n  ANTHROPIC_API_KEY: anthropic-key\n")
+		writeMapping(t, repoRoot, "secrets:\n"+
+			"  - env: OPENAI_API_KEY\n    id: openai-key\n"+
+			"  - env: ANTHROPIC_API_KEY\n    id: anthropic-key\n")
 
-		got, err := secrets.InjectForRepo(repoRoot)
+		res, err := secrets.InjectForRepo(repoRoot)
 		if err != nil {
 			t.Fatalf("inject: %v", err)
 		}
-		if got["OPENAI_API_KEY"] != "sk-live" {
-			t.Errorf("OPENAI_API_KEY = %q, want %q", got["OPENAI_API_KEY"], "sk-live")
+		if res.Env["OPENAI_API_KEY"] != "sk-live" {
+			t.Errorf("OPENAI_API_KEY = %q, want %q", res.Env["OPENAI_API_KEY"], "sk-live")
 		}
-		if got["ANTHROPIC_API_KEY"] != "ak-live" {
-			t.Errorf("ANTHROPIC_API_KEY = %q, want %q", got["ANTHROPIC_API_KEY"], "ak-live")
+		if res.Env["ANTHROPIC_API_KEY"] != "ak-live" {
+			t.Errorf("ANTHROPIC_API_KEY = %q, want %q", res.Env["ANTHROPIC_API_KEY"], "ak-live")
+		}
+		if len(res.Missing) != 0 {
+			t.Errorf("expected no missing, got %v", res.Missing)
 		}
 	})
 
-	t.Run("AbsentMappingReturnsEmpty", func(t *testing.T) {
+	t.Run("AbsentManifestReturnsEmpty", func(t *testing.T) {
 		t.Setenv("XDG_DATA_HOME", t.TempDir())
 
-		got, err := secrets.InjectForRepo(t.TempDir()) // no .a-novel/secrets.yaml
+		res, err := secrets.InjectForRepo(t.TempDir()) // no .a-novel/secrets.yaml
 		if err != nil {
 			t.Fatalf("inject: %v", err)
 		}
-		if len(got) != 0 {
-			t.Fatalf("expected empty map for a repo with no mapping, got %v keys", len(got))
+		if len(res.Env) != 0 || len(res.Missing) != 0 {
+			t.Fatalf("expected empty Resolution for a repo with no manifest, got %+v", res)
 		}
 	})
 
-	t.Run("AbsentStoreReturnsEmpty", func(t *testing.T) {
+	t.Run("AbsentStoreReportsAllMissing", func(t *testing.T) {
 		// XDG points at a fresh dir; we deliberately never Open/Init, so no
-		// key/store exists. A mapping that references secrets must NOT fail.
+		// key/store exists. A manifest that references secrets must NOT fail —
+		// every declared secret is reported missing so the dev knows what to set.
 		t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 		repoRoot := t.TempDir()
-		writeMapping(t, repoRoot, "env:\n  OPENAI_API_KEY: openai-key\n")
+		writeMapping(t, repoRoot, "secrets:\n  - env: OPENAI_API_KEY\n    id: openai-key\n")
 
-		got, err := secrets.InjectForRepo(repoRoot)
+		res, err := secrets.InjectForRepo(repoRoot)
 		if err != nil {
 			t.Fatalf("inject with no store should not error: %v", err)
 		}
-		if len(got) != 0 {
-			t.Fatalf("expected empty map when the store is absent, got %v", got)
+		if len(res.Env) != 0 {
+			t.Errorf("expected no injected env when the store is absent, got %v", res.Env)
+		}
+		if len(res.Missing) != 1 || res.Missing[0].ID != "openai-key" {
+			t.Fatalf("expected the declared secret reported missing, got %+v", res.Missing)
 		}
 	})
 
-	t.Run("UnsetSecretIsSkipped", func(t *testing.T) {
-		// A mapping that references a secret not in the store must NOT fail or
-		// block injection — the unset var is skipped, the set ones still inject.
+	t.Run("UnsetSecretIsReportedMissing", func(t *testing.T) {
+		// A manifest that references a secret not in the store must NOT fail or
+		// block injection — the unset one is reported missing (with its
+		// description), the set ones still inject.
 		t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 		st, err := secrets.Open()
@@ -97,32 +109,80 @@ func TestInjectForRepo(t *testing.T) {
 		}
 
 		repoRoot := t.TempDir()
-		writeMapping(t, repoRoot, "env:\n  PRESENT_VAR: present\n  MISSING_VAR: not-in-store\n")
+		writeMapping(t, repoRoot, "secrets:\n"+
+			"  - env: PRESENT_VAR\n    id: present\n"+
+			"  - env: MISSING_VAR\n    id: not-in-store\n    description: needed for X\n")
 
-		got, err := secrets.InjectForRepo(repoRoot)
+		res, err := secrets.InjectForRepo(repoRoot)
 		if err != nil {
-			t.Fatalf("inject must not error on an unset mapped secret: %v", err)
+			t.Fatalf("inject must not error on an unset declared secret: %v", err)
 		}
-		if got["PRESENT_VAR"] != "v" {
-			t.Errorf("PRESENT_VAR = %q, want %q", got["PRESENT_VAR"], "v")
+		if res.Env["PRESENT_VAR"] != "v" {
+			t.Errorf("PRESENT_VAR = %q, want %q", res.Env["PRESENT_VAR"], "v")
 		}
-		if _, ok := got["MISSING_VAR"]; ok {
-			t.Error("MISSING_VAR should be skipped when its secret is unset")
+		if _, ok := res.Env["MISSING_VAR"]; ok {
+			t.Error("MISSING_VAR should not be injected when its secret is unset")
+		}
+		if len(res.Missing) != 1 || res.Missing[0].Env != "MISSING_VAR" ||
+			res.Missing[0].Description != "needed for X" {
+			t.Fatalf("expected MISSING_VAR reported missing with its description, got %+v", res.Missing)
 		}
 	})
 
-	t.Run("EmptyEnvBlockReturnsEmpty", func(t *testing.T) {
+	t.Run("EmptySecretsBlockReturnsEmpty", func(t *testing.T) {
 		t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 		repoRoot := t.TempDir()
-		writeMapping(t, repoRoot, "env: {}\n")
+		writeMapping(t, repoRoot, "secrets: []\n")
 
-		got, err := secrets.InjectForRepo(repoRoot)
+		res, err := secrets.InjectForRepo(repoRoot)
 		if err != nil {
 			t.Fatalf("inject: %v", err)
 		}
-		if len(got) != 0 {
-			t.Fatalf("expected empty map for an empty env block, got %v", got)
+		if len(res.Env) != 0 || len(res.Missing) != 0 {
+			t.Fatalf("expected empty Resolution for an empty secrets block, got %+v", res)
 		}
 	})
+
+	t.Run("MalformedManifestErrors", func(t *testing.T) {
+		t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+		repoRoot := t.TempDir()
+		writeMapping(t, repoRoot, "secrets: [this is not: valid: yaml\n")
+
+		if _, err := secrets.InjectForRepo(repoRoot); err == nil {
+			t.Fatal("expected an error for a malformed manifest")
+		}
+	})
+}
+
+// TestResolutionWarnings asserts the warning lines are actionable, include the
+// optional description when present, and never carry a secret value.
+func TestResolutionWarnings(t *testing.T) {
+	res := secrets.Resolution{
+		Missing: []secrets.Declaration{
+			{Env: "OPENAI_API_KEY", ID: "openai-key", Description: "used by generation"},
+			{Env: "BARE_VAR", ID: "bare-id"}, // no description
+		},
+	}
+	w := res.Warnings()
+	if len(w) != 2 {
+		t.Fatalf("expected 2 warnings, got %d: %v", len(w), w)
+	}
+	if !strings.Contains(w[0], "OPENAI_API_KEY") ||
+		!strings.Contains(w[0], "openai-key") ||
+		!strings.Contains(w[0], "used by generation") ||
+		!strings.Contains(w[0], "a-novel secrets set openai-key") {
+		t.Errorf("first warning missing expected content: %q", w[0])
+	}
+	// A declaration without a description still names the env, id, and the fix.
+	if !strings.Contains(w[1], "BARE_VAR") || !strings.Contains(w[1], "bare-id") ||
+		!strings.Contains(w[1], "a-novel secrets set bare-id") {
+		t.Errorf("second warning missing expected content: %q", w[1])
+	}
+
+	// An empty Resolution yields no warnings.
+	if got := (secrets.Resolution{}).Warnings(); got != nil {
+		t.Errorf("empty Resolution should produce no warnings, got %v", got)
+	}
 }

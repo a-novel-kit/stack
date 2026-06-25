@@ -81,7 +81,7 @@ func containerLabelArgs(stack, service, target string) string {
 // Phase 3 chunk 2 first cut. The actual log streaming is deferred to
 // phase 5 (logs hub); for now container stdout/stderr stay in podman's
 // own journal.
-func (r *Runner) StartContainer(ctx context.Context, id string, env []string) (*Instance, error) {
+func (r *Runner) StartContainer(ctx context.Context, id string, env []string, warnings []string) (*Instance, error) {
 	tgt, svc, err := r.resolveTarget(id)
 	if err != nil {
 		return nil, err
@@ -172,6 +172,11 @@ func (r *Runner) StartContainer(ctx context.Context, id string, env []string) (*
 	// as go-exec mode so the storage + streaming layers are uniform.
 	logWriter, err := r.logs.OpenForWrite(id, tgt.Stack, tgt.Service, tgt.Name)
 	if err == nil {
+		// Surface any missing-secret warnings (value-free) into the target's
+		// log so the operator sees what to set in `run logs` / the TUI.
+		for _, w := range warnings {
+			_, _ = fmt.Fprintln(logWriter.Stderr(), w)
+		}
 		go r.streamContainerLogs(procCtx, cid, logWriter)
 	}
 

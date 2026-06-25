@@ -246,7 +246,7 @@ func (r *Runner) runOneShot(ctx context.Context, t *discovery.Target, mode Mode)
 	// builder's snapshot-fill picks up POSTGRES_PORT etc. that infra-up
 	// allocated under the service-level consumer, so the target's
 	// POSTGRES_DSN synthesizes correctly to localhost:<port>.
-	envEntries, err := r.builder.ForTarget(t, r.alloc.Services())
+	envEntries, warnings, err := r.builder.ForTarget(t, r.alloc.Services())
 	if err != nil {
 		return fmt.Errorf("env for %s: %w", t.ID(), err)
 	}
@@ -257,9 +257,9 @@ func (r *Runner) runOneShot(ctx context.Context, t *discovery.Target, mode Mode)
 	envList = append(envList, envEntriesToList(envEntries)...)
 	switch mode {
 	case ModeContainer:
-		_, err = r.StartContainer(ctx, t.ID(), envList)
+		_, err = r.StartContainer(ctx, t.ID(), envList, warnings)
 	default:
-		_, err = r.StartGoExec(ctx, t.ID(), envList)
+		_, err = r.StartGoExec(ctx, t.ID(), envList, warnings)
 	}
 	if err != nil {
 		return err

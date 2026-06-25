@@ -23,7 +23,7 @@ import (
 // exclusion vs container mode, and the PHASE_PENDING → PHASE_STARTING →
 // PHASE_RUNNING transitions are handled here so callers don't reimplement
 // them per RPC.
-func (r *Runner) StartGoExec(ctx context.Context, id string, env []string) (*Instance, error) {
+func (r *Runner) StartGoExec(ctx context.Context, id string, env []string, warnings []string) (*Instance, error) {
 	// 1. Resolve target metadata from discovery.
 	tgt, svc, err := r.resolveTarget(id)
 	if err != nil {
@@ -62,6 +62,12 @@ func (r *Runner) StartGoExec(ctx context.Context, id string, env []string) (*Ins
 	}
 	cmd.Stdout = logWriter.Stdout()
 	cmd.Stderr = logWriter.Stderr()
+	// Surface any missing-secret warnings (value-free) into the target's log,
+	// before its own output, so the operator sees what to set in `run logs`
+	// and the TUI.
+	for _, w := range warnings {
+		_, _ = fmt.Fprintln(logWriter.Stderr(), w)
+	}
 
 	// 4. Register the instance in PENDING so concurrent Start callers see
 	//    the slot taken before we exec.

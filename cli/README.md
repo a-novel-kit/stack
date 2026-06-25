@@ -107,24 +107,31 @@ a-novel secrets rm <id>              # delete a secret
 a-novel secrets exec --env NAME=<id> [--env ...] -- <cmd> [args...]
 ```
 
-### Per-repo mapping + auto-injection
+### Per-repo manifest + auto-injection
 
-A service repo can commit a **value-free** mapping at `.a-novel/secrets.yaml`
-in its root — it maps environment-variable names to secret ids (never values):
+A service repo can commit a **value-free** manifest at `.a-novel/secrets.yaml`
+in its root, declaring the secrets it needs. Each entry pairs a target
+environment-variable name with a secret `id` in the local store (never a value)
+and an optional description:
 
 ```yaml
 # .a-novel/secrets.yaml — safe to commit; contains no secrets
-env:
-  OPENAI_API_KEY: openai-key
-  ANTHROPIC_API_KEY: anthropic-key
+secrets:
+  - env: OPENAI_API_KEY
+    id: openai-key
+    description: OpenAI API key used by narrative generation.
+  - env: ANTHROPIC_API_KEY
+    id: anthropic-key
 ```
 
-The named secrets are then decrypted from the local store and injected
+The declared secrets are decrypted from the local store and injected
 automatically into the child env of `a-novel test`, `a-novel run` and
-`a-novel run ui`. If the local key, the store, or the mapping is absent the
-injection is a silent no-op — a repo whose secrets aren't provisioned never
-fails a test or run. A mapping that references a secret id you haven't set is a
-clear error (`run a-novel secrets set <id>`).
+`a-novel run ui`. If the local key or the store is absent — or a declared secret
+isn't set yet — that secret is **skipped, never injected, and never an error**:
+the repo can still run the tests that don't need it. A skipped secret surfaces a
+value-free warning (its env var, id, and description, plus `a-novel secrets set
+<id>`) in the `test` output and in the service log shown by `run logs` and the
+UI, so you know exactly what to provision.
 
 ### Security properties
 
@@ -141,8 +148,8 @@ clear error (`run a-novel secrets set <id>`).
 - **Never printed.** No command prints a secret value — not `ls`, not `env`, not
   the test/run env progress block. Errors carry the secret **id**, never the
   value.
-- **Value-free git mappings.** Only env-var → id mappings live in git; values
-  stay encrypted on the developer's machine.
+- **Value-free git manifests.** Only the env-var → id (+ description)
+  declarations live in git; values stay encrypted on the developer's machine.
 - **Child-env only.** Secrets reach a process exclusively through its
   environment — never a command line.
 
