@@ -1,10 +1,19 @@
 # a-novel stack
 
-`a-novel` is the single command-line tool for the Agora storyverse: it builds,
-tests, runs and releases every project across the
-[`a-novel`](https://github.com/a-novel) and
-[`a-novel-kit`](https://github.com/a-novel-kit) organizations — one CLI in place
-of the per-repo Makefiles and bash scripts.
+The `a-novel` CLI — one tool to build, test, run, and release every project across the [`a-novel`](https://github.com/a-novel) and [`a-novel-kit`](https://github.com/a-novel-kit) organizations, in place of the per-repo Makefiles and scripts.
+
+[![X (formerly Twitter) Follow](https://img.shields.io/twitter/follow/agorastoryverse)](https://twitter.com/agorastoryverse)
+[![Discord](https://img.shields.io/discord/1315240114691248138?logo=discord)](https://discord.gg/rp4Qr8cA)
+
+<hr />
+
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/a-novel-kit/stack?filename=cli/go.mod)
+![GitHub repo file or directory count](https://img.shields.io/github/directory-file-count/a-novel-kit/stack)
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/a-novel-kit/stack)
+
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/a-novel-kit/stack/main.yaml)
+
+## What this is
 
 This repository — the **stack** — hosts that CLI and anchors local checkouts of
 the projects it operates on:
@@ -49,7 +58,8 @@ a-novel run ps        # the daemon answers over its unix socket
 ```
 
 After a `git pull` that touches `cli/`, run `a-novel install` to rebuild and
-reinstall — it hands the daemon off without dropping running services.
+reinstall — the new binary takes over from the running daemon in place, so
+services already running stay up.
 
 If a service needs an API secret (e.g. `OPENAI_API_KEY`), provision it once,
 encrypted and locally:
@@ -204,3 +214,11 @@ whose signing keys live only in CI (never on a dev machine — see
 [GitHub access](#github-access)), reached through a per-org dispatcher workflow
 that can do nothing but post a comment. The org-wide security policy lives in
 [a-novel/.github](https://github.com/a-novel/.github/blob/master/SECURITY.md).
+
+## Contributing
+
+New to the platform? The [developer onboarding guide](https://github.com/a-novel-kit/.github/blob/master/README.md)
+walks through the full toolchain and the CLI bootstrap. To work on the CLI
+itself, [`cli/README.md`](cli/README.md) is the deep reference, and
+[CONTRIBUTING.md](CONTRIBUTING.md) covers how the repo is laid out and how to
+add a command.
