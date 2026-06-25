@@ -216,6 +216,9 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRu
 	if r.NonFastForward {
 		rs.Rules = append(rs.Rules, APIRule{Type: "non_fast_forward"})
 	}
+	if r.RequiredSignatures {
+		rs.Rules = append(rs.Rules, APIRule{Type: "required_signatures"})
+	}
 	if r.RequiredStatusChecks != nil {
 		list := make([]map[string]any, 0, len(checks))
 		for _, c := range checks {
