@@ -210,7 +210,7 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *connect.Request[anovelv1
 		if err != nil {
 			continue
 		}
-		envEntries, err := s.envBuilder.ForTarget(tgt, s.allServiceNames())
+		envEntries, _, err := s.envBuilder.ForTarget(tgt, s.allServiceNames())
 		if err != nil {
 			continue
 		}
@@ -435,7 +435,7 @@ func (s *Server) StartTarget(ctx context.Context, req *connect.Request[anovelv1.
 	// REBUILD env now that infra-up has allocated service-level ports.
 	// The builder's snapshot-fill picks up POSTGRES_PORT etc. from the
 	// allocator and synthesizes POSTGRES_DSN with localhost:<port>.
-	envEntries, err := s.envBuilder.ForTarget(tgt, s.allServiceNames())
+	envEntries, warnings, err := s.envBuilder.ForTarget(tgt, s.allServiceNames())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal,
 			fmt.Errorf("env build: %w", err))
@@ -446,7 +446,7 @@ func (s *Server) StartTarget(ctx context.Context, req *connect.Request[anovelv1.
 	}
 	switch mode {
 	case anovelv1.Mode_MODE_GO_EXEC:
-		inst, err := s.runner.StartGoExec(ctx, req.Msg.GetTargetId(), envList)
+		inst, err := s.runner.StartGoExec(ctx, req.Msg.GetTargetId(), envList, warnings)
 		if err != nil {
 			s.envAlloc.Release(req.Msg.GetTargetId())
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
@@ -455,7 +455,7 @@ func (s *Server) StartTarget(ctx context.Context, req *connect.Request[anovelv1.
 			Target: instanceToProto(inst, s.lookupTargetForInstance(inst)),
 		}), nil
 	case anovelv1.Mode_MODE_CONTAINER:
-		inst, err := s.runner.StartContainer(ctx, req.Msg.GetTargetId(), envList)
+		inst, err := s.runner.StartContainer(ctx, req.Msg.GetTargetId(), envList, warnings)
 		if err != nil {
 			s.envAlloc.Release(req.Msg.GetTargetId())
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
@@ -1056,7 +1056,7 @@ func (s *Server) Exec(ctx context.Context, req *connect.Request[anovelv1.ExecReq
 		// the consumer is fine because we Release as part of normal
 		// allocator refcounting (an exec'd one-off doesn't change the
 		// invariant: every consumer-ID owns its slots until released).
-		envEntries, err := s.envBuilder.ForTarget(tgt, s.allServiceNames())
+		envEntries, _, err := s.envBuilder.ForTarget(tgt, s.allServiceNames())
 		if err != nil {
 			return connect.NewError(connect.CodeInternal, fmt.Errorf("exec: env: %w", err))
 		}

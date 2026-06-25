@@ -179,19 +179,25 @@ func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, 
 	}
 
 	// Inject the repo's locally-stored secrets (decrypted) into the child env.
-	// Driven by the value-free .a-novel/secrets.yaml mapping at the repo root;
-	// absent key/store/mapping is a no-op (most repos have none). Appended last
+	// Driven by the value-free .a-novel/secrets.yaml manifest at the repo root;
+	// an absent manifest is a no-op (most repos have none), while an absent
+	// key/store reports every declared secret as missing. Appended last
 	// so a developer-provisioned secret wins over any default, and folded into
 	// the delta so global mode cross-shares it like any other CLI-set var.
 	// Values are never printed — they are deliberately excluded from the
-	// `── env ──` block above.
+	// `── env ──` block above. A declared-but-unset secret is skipped and
+	// surfaced as a descriptive (value-free) warning so the developer knows
+	// what to set, without blocking the tests that don't need it.
 	if root := repoRoot(t); root != "" {
-		injected, err := secrets.InjectForRepo(root)
+		res, err := secrets.InjectForRepo(root)
 		if err != nil {
 			return nil, nil, fmt.Errorf("secrets injection failed: %w", err)
 		}
-		for name, value := range injected {
+		for name, value := range res.Env {
 			runEnv = append(runEnv, name+"="+value)
+		}
+		for _, w := range res.Warnings() {
+			_, _ = fmt.Fprintln(out, w)
 		}
 	}
 

@@ -70,7 +70,7 @@ a-novel secrets set openai-key       # reads the value with no echo
 ```
 
 Secrets are AES-256-GCM-encrypted at rest, never printed, and injected into the
-child env of `test`/`run`/`ui` via a value-free `.a-novel/secrets.yaml` mapping
+child env of `test`/`run`/`ui` via a value-free `.a-novel/secrets.yaml` manifest
 in the service repo. See
 [`cli/README.md`](https://github.com/a-novel-kit/stack/blob/master/cli/README.md#secrets)
 for the full model.

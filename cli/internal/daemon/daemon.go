@@ -142,7 +142,7 @@ func Run(ctx context.Context, opts Options) error {
 		fmt.Fprintf(os.Stderr, "reinstall: replaying %d go-exec target(s) from %s\n",
 			len(cp.GoExec), reinstall.Path())
 		for _, gx := range cp.GoExec {
-			if _, err := run.StartGoExec(ctx, gx.TargetID, gx.Env); err != nil {
+			if _, err := run.StartGoExec(ctx, gx.TargetID, gx.Env, nil); err != nil {
 				fmt.Fprintf(os.Stderr, "reinstall: relaunch %s failed: %v\n", gx.TargetID, err)
 			}
 		}

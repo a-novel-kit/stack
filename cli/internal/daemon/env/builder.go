@@ -34,30 +34,35 @@ type Entry struct {
 // the consumer for every `*_PORT` it references (directly or via
 // cross-service), and Allocator.Release(targetID) frees them.
 //
-// The return shape is []string in "KEY=VALUE" form, ready for
-// exec.Cmd.Env. Use BuildResult.ToMap if you want the same content as a
-// map (e.g., for JSON output via GetEnv).
-func (b *Builder) ForTarget(t *discovery.Target, allServices []string) ([]Entry, error) {
+// It returns the resolved env entries plus any missing-secret warning lines
+// (value-free) the caller should write to the target's log so the operator
+// sees what to set. Callers that only inspect env (not start a process)
+// discard the warnings.
+func (b *Builder) ForTarget(t *discovery.Target, allServices []string) ([]Entry, []string, error) {
 	entries, err := b.buildEnv(t, allServices, true /* allocate */, t.ID())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// Inject the service repo's locally-stored secrets (decrypted) as plain
 	// env entries, so they ride into runner.StartGoExec/StartContainer's
-	// cmd.Env. Driven by the value-free .a-novel/secrets.yaml mapping at the
-	// service repo root (the service dir is cmd/<target>'s grandparent);
-	// absent key/store/mapping is a no-op. Values are never logged or returned
-	// through any inspect path (ForService/ForServiceUp deliberately skip this).
+	// cmd.Env. Driven by the value-free .a-novel/secrets.yaml manifest at the
+	// service repo root (the service dir is cmd/<target>'s grandparent); an
+	// absent manifest is a no-op, while an absent key/store reports every
+	// declared secret as missing. Values are never logged or returned through
+	// any inspect path (ForService/ForServiceUp deliberately skip this). A
+	// declared-but-unset secret becomes a warning line, never a hard error.
+	var warnings []string
 	if root := serviceRoot(t); root != "" {
-		injected, err := injectSecrets(root)
+		res, err := injectSecrets(root)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		for name, value := range injected {
+		for name, value := range res.Env {
 			entries = append(entries, Entry{Key: name, Value: value})
 		}
+		warnings = res.Warnings()
 	}
-	return entries, nil
+	return entries, warnings, nil
 }
 
 // serviceRoot returns the service repo root for a target — the directory that

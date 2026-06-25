@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
+	"github.com/a-novel-kit/stack/cli/internal/secrets"
 )
 
 // Builder tests assert the integration of refs.go + allocator.go against
@@ -55,7 +56,7 @@ func TestForTarget_DSNRewriteForGoExec(t *testing.T) {
 			"POSTGRES_DSN": "postgres://postgres:postgres@postgres-svc:5432/postgres?sslmode=disable",
 		},
 	}
-	entries, err := b.ForTarget(tgt, alloc.Services())
+	entries, _, err := b.ForTarget(tgt, alloc.Services())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +84,7 @@ func TestForTarget_CrossServiceRef(t *testing.T) {
 			"DEP_PORT": "${SERVICE_X_GRPC_PORT}",
 		},
 	}
-	entries, err := b.ForTarget(tgt, alloc.Services())
+	entries, _, err := b.ForTarget(tgt, alloc.Services())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +118,7 @@ func TestForTarget_PortsBlockTriggersAllocation(t *testing.T) {
 		Ports:       []string{"${REST_PORT}:8080"},
 		Environment: map[string]string{}, // intentionally empty
 	}
-	entries, err := b.ForTarget(tgt, alloc.Services())
+	entries, _, err := b.ForTarget(tgt, alloc.Services())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +148,7 @@ func TestForTarget_PrefixedAndUnprefixedOwnView(t *testing.T) {
 		Ports:       []string{"${REST_PORT}:8080"},
 		Environment: map[string]string{},
 	}
-	entries, err := b.ForTarget(tgt, alloc.Services())
+	entries, _, err := b.ForTarget(tgt, alloc.Services())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +177,7 @@ func TestForTarget_NoDoublePrefix(t *testing.T) {
 			"DEP_PORT": "${SERVICE_BAR_GRPC_PORT}",
 		},
 	}
-	entries, err := b.ForTarget(tgt, alloc.Services())
+	entries, _, err := b.ForTarget(tgt, alloc.Services())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +233,7 @@ func TestForTarget_PORTAloneDoesNotAllocate(t *testing.T) {
 			"PORT": "9999", // literal, not a ref
 		},
 	}
-	entries, err := b.ForTarget(tgt, alloc.Services())
+	entries, _, err := b.ForTarget(tgt, alloc.Services())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,8 +253,8 @@ func TestForTarget_InjectsRepoSecrets(t *testing.T) {
 	// the secrets seam to avoid touching the real key store, and assert the
 	// pairs land in the result keyed by their env-var name.
 	orig := injectSecrets
-	injectSecrets = func(repoRoot string) (map[string]string, error) {
-		return map[string]string{"OPENAI_API_KEY": "sk-test"}, nil
+	injectSecrets = func(repoRoot string) (secrets.Resolution, error) {
+		return secrets.Resolution{Env: map[string]string{"OPENAI_API_KEY": "sk-test"}}, nil
 	}
 	t.Cleanup(func() { injectSecrets = orig })
 
@@ -267,7 +268,7 @@ func TestForTarget_InjectsRepoSecrets(t *testing.T) {
 		CmdDir:      filepath.Join("/tmp", "service-svc", "cmd", "rest"),
 		Environment: map[string]string{},
 	}
-	entries, err := b.ForTarget(tgt, alloc.Services())
+	entries, _, err := b.ForTarget(tgt, alloc.Services())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,18 +283,57 @@ func TestForTarget_NoCmdDirSkipsInjection(t *testing.T) {
 	// the seam must not even be called (no accidental relative-path read).
 	called := false
 	orig := injectSecrets
-	injectSecrets = func(repoRoot string) (map[string]string, error) {
+	injectSecrets = func(repoRoot string) (secrets.Resolution, error) {
 		called = true
-		return nil, nil
+		return secrets.Resolution{}, nil
 	}
 	t.Cleanup(func() { injectSecrets = orig })
 
 	b, alloc := newBuilderWith([]string{"svc"})
 	tgt := &discovery.Target{Name: "rest", Service: "svc", Stack: "default", Environment: map[string]string{}}
-	if _, err := b.ForTarget(tgt, alloc.Services()); err != nil {
+	if _, _, err := b.ForTarget(tgt, alloc.Services()); err != nil {
 		t.Fatal(err)
 	}
 	if called {
 		t.Error("injectSecrets must not be called when the target has no CmdDir")
+	}
+}
+
+func TestForTarget_MissingSecretWarns(t *testing.T) {
+	// A declared-but-unset secret is surfaced as a warning line (value-free),
+	// not injected and not an error — so the operator sees what to set.
+	orig := injectSecrets
+	injectSecrets = func(repoRoot string) (secrets.Resolution, error) {
+		return secrets.Resolution{
+			Missing: []secrets.Declaration{
+				{Env: "OPENAI_API_KEY", ID: "openai-key", Description: "used by generation"},
+			},
+		}, nil
+	}
+	t.Cleanup(func() { injectSecrets = orig })
+
+	b, alloc := newBuilderWith([]string{"svc"})
+	tgt := &discovery.Target{
+		Name:        "rest",
+		Service:     "svc",
+		Stack:       "default",
+		CmdDir:      filepath.Join("/tmp", "service-svc", "cmd", "rest"),
+		Environment: map[string]string{},
+	}
+	entries, warnings, err := b.ForTarget(tgt, alloc.Services())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := toMap(entries)["OPENAI_API_KEY"]; ok {
+		t.Error("a missing secret must not be injected into the env")
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("expected 1 warning line, got %d: %v", len(warnings), warnings)
+	}
+	if !strings.Contains(warnings[0], "OPENAI_API_KEY") ||
+		!strings.Contains(warnings[0], "openai-key") ||
+		!strings.Contains(warnings[0], "used by generation") ||
+		!strings.Contains(warnings[0], "a-novel secrets set openai-key") {
+		t.Errorf("warning missing expected (value-free) content: %q", warnings[0])
 	}
 }

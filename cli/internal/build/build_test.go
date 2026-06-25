@@ -40,7 +40,7 @@ func TestPrepareEnv_InjectsRepoSecrets(t *testing.T) {
 		t.Fatalf("mkdir mapping: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(mappingDir, "secrets.yaml"),
-		[]byte("env:\n  OPENAI_API_KEY: openai-key\n"), 0o600); err != nil {
+		[]byte("secrets:\n  - env: OPENAI_API_KEY\n    id: openai-key\n"), 0o600); err != nil {
 		t.Fatalf("write mapping: %v", err)
 	}
 
@@ -79,5 +79,42 @@ func TestPrepareEnv_NoMappingNoSecrets(t *testing.T) {
 		if strings.HasPrefix(e, "OPENAI_API_KEY=") {
 			t.Errorf("unexpected injected secret in a repo with no mapping: %q", e)
 		}
+	}
+}
+
+// TestPrepareEnv_MissingSecretWarns confirms a declared-but-unset secret is not
+// injected, does not fail the build, and surfaces a value-free warning in the
+// progress output so the developer knows what to set.
+func TestPrepareEnv_MissingSecretWarns(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir()) // fresh store, secret never set
+
+	repoRoot := t.TempDir()
+	mappingDir := filepath.Join(repoRoot, ".a-novel")
+	if err := os.MkdirAll(mappingDir, 0o755); err != nil {
+		t.Fatalf("mkdir mapping: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(mappingDir, "secrets.yaml"),
+		[]byte("secrets:\n  - env: OPENAI_API_KEY\n    id: openai-key\n    description: used by generation\n"),
+		0o600); err != nil {
+		t.Fatalf("write mapping: %v", err)
+	}
+
+	tgt := detect.Target{Kind: detect.KindGo, Name: "x", Dir: repoRoot}
+
+	var out strings.Builder
+	runEnv, _, err := PrepareEnv(t.Context(), tgt, &out)
+	if err != nil {
+		t.Fatalf("PrepareEnv must not fail on a missing secret: %v", err)
+	}
+	for _, e := range runEnv {
+		if strings.HasPrefix(e, "OPENAI_API_KEY=") {
+			t.Errorf("missing secret must not be injected: %q", e)
+		}
+	}
+	got := out.String()
+	if !strings.Contains(got, "OPENAI_API_KEY") || !strings.Contains(got, "openai-key") ||
+		!strings.Contains(got, "used by generation") ||
+		!strings.Contains(got, "a-novel secrets set openai-key") {
+		t.Errorf("expected a descriptive missing-secret warning, got:\n%s", got)
 	}
 }
