@@ -56,6 +56,12 @@ func LogsRoot() string { return filepath.Join(State(), "logs") }
 // BackupsRoot is the per-stack volume-backups root (Data()/backups/).
 func BackupsRoot() string { return filepath.Join(Data(), "backups") }
 
+// SecretsRoot is the local secrets store root (Data()/secrets/). It holds the
+// AES-256-GCM local key and the encrypted store; both are created mode 0600
+// inside a 0700 directory by the secrets package. Honors $XDG_DATA_HOME
+// (through Data()), which the secrets tests override to a temp dir.
+func SecretsRoot() string { return filepath.Join(Data(), "secrets") }
+
 // ReinstallCheckpoint is the path of the one-shot reinstall handoff file.
 // Single fixed location; presence == "new daemon should replay".
 func ReinstallCheckpoint() string { return filepath.Join(State(), "reinstall.json") }
