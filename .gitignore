@@ -2,6 +2,7 @@
 
 app/
 kit/
+tmp/
 
 .claude/*.local.*
 

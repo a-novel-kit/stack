@@ -59,7 +59,7 @@ const (
 
 // defaultRepos is the curated whitelist. Intentionally narrow — the
 // stack still discovers a lot of repos via `gh repo list`, but only
-// these six need to be cloned locally for current work. Extending the
+// these seven need to be cloned locally for current work. Extending the
 // list is one line; whittling it is the user's call.
 var defaultRepos = []repoEntry{
 	{Org: orgAnovelKit, Name: "workflows"},
@@ -68,6 +68,7 @@ var defaultRepos = []repoEntry{
 	{Org: orgAnovel, Name: "service-template"},
 	{Org: orgAnovel, Name: "service-json-keys"},
 	{Org: orgAnovel, Name: "service-authentication"},
+	{Org: orgAnovel, Name: "service-narrative-engine"},
 }
 
 // syncCounts is the per-run summary buckets.
@@ -104,9 +105,10 @@ func newCoreSyncCmd() *cobra.Command {
   a-novel-kit/workflows   → kit/workflows
   a-novel-kit/golib       → kit/golib
   a-novel-kit/nodelib     → kit/nodelib
-  a-novel/service-template       → app/service-template
-  a-novel/service-json-keys      → app/service-json-keys
-  a-novel/service-authentication → app/service-authentication
+  a-novel/service-template         → app/service-template
+  a-novel/service-json-keys        → app/service-json-keys
+  a-novel/service-authentication   → app/service-authentication
+  a-novel/service-narrative-engine → app/service-narrative-engine
 
 Existing repos are fast-forward pulled on the default branch (or have
 their default-branch ref updated when the user is on a feature
