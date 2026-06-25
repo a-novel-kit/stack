@@ -120,6 +120,9 @@ locally`, the LAST section before Contributing. `### Configuration` lives inside
    place to maintain. Rule of thumb: four-plus comma-separated items belong in a table, not a
    sentence. Lead with the plain-English purpose; let the table, intellisense, or the API
    reference carry the inventory. Keep it tight — cut every word that does not add information.
+   Prefer the precise word over a long phrase and short sentences over long ones; the right noun
+   or verb often replaces a whole clause. Boilerplate ("if you have questions or run into issues",
+   "check existing issues") is filler — drop it.
 5. **Contribution rules live in `CONTRIBUTING.md`, not the README.** The README Contributing
    section is only the two links. The "what belongs here / bar for additions" policy, review
    norms, and any other contributor guidance go in CONTRIBUTING.md, phrased naturally.
@@ -545,11 +548,7 @@ documents what is specific to {{project-display-name}}.
 
 ## Questions?
 
-If you have questions or run into issues:
-
-- Open an issue at https://github.com/{{repo-path}}/issues
-- Check existing issues for similar problems
-- Include relevant logs and environment details
+[Open an issue](https://github.com/{{repo-path}}/issues) — include logs and environment details.
 ```
 
 **Note on the template body that used to live here:** earlier versions of this skill
