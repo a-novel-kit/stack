@@ -204,7 +204,6 @@ that can do nothing but post a comment. The org-wide security policy lives in
 
 New to the platform? The [developer onboarding guide](https://github.com/a-novel-kit/.github/blob/master/README.md)
 walks through the full toolchain and the CLI bootstrap. To work on the CLI
-itself, [`cli/README.md`](cli/README.md) is the deep reference — command tree,
-daemon architecture, state directories, the compose contract — and
-[CONTRIBUTING.md](CONTRIBUTING.md) covers how this repo is laid out and how to
+itself, [`cli/README.md`](cli/README.md) is the deep reference, and
+[CONTRIBUTING.md](CONTRIBUTING.md) covers how the repo is laid out and how to
 add a command.

@@ -83,13 +83,13 @@ Every README uses the same five slots in the same order. Only the _content_ of e
 changes with repo type; **the order never does.** Readers scroll as little as possible —
 frequently-referenced material first, rarely-needed material last.
 
-| #   | Slot             | Always contains                                                                        |
-| --- | ---------------- | -------------------------------------------------------------------------------------- |
-| 1   | **Header**       | Title, one-line description, badges (+ codecov sunburst if the repo reports coverage). |
-| 2   | **Role**         | What it is / does: the noun it owns, who it serves, the surface. 1–3 short paragraphs. |
-| 3   | **Use it**       | The primary how-to-use, leading with the _expected_ path (see hard rules).             |
-| 4   | **Reference**    | Detailed material — comes _after_ the slot-3 example, never before it.                 |
-| 5   | **Contributing** | Links the onboarding guide + `./CONTRIBUTING.md`. Always the last section.             |
+| #   | Slot             | Always contains                                                                                                                                          |
+| --- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Header**       | Title, one-line description, badges (+ codecov sunburst if the repo reports coverage).                                                                   |
+| 2   | **Role**         | What it is / does: the noun it owns, who it serves, the surface. 1–3 short paragraphs of prose — never an inline capability list (that lives in slot 4). |
+| 3   | **Use it**       | The primary how-to-use, leading with the _expected_ path (see hard rules).                                                                               |
+| 4   | **Reference**    | Detailed material — comes _after_ the slot-3 example, never before it.                                                                                   |
+| 5   | **Contributing** | The onboarding-guide link + `./CONTRIBUTING.md`, nothing else — contribution rules live in CONTRIBUTING.md. Always last.                                 |
 
 Use these exact slot headings per repo type:
 
@@ -114,6 +114,15 @@ locally`, the LAST section before Contributing. `### Configuration` lives inside
    > images with any container orchestrator — the composition below is the reference for which
    > images to run, how they wire together, and the environment they expect.
 3. **Contributing (slot 5) is always the last section.**
+4. **Describe in prose; enumerate in tables.** The role section (slot 2) is prose — never inline
+   a capability list (sub-packages, packages, endpoints, env vars) in a sentence. Each list lives
+   once, in its slot-4 reference table; duplicating it in prose breaks rhythm and creates a second
+   place to maintain. Rule of thumb: four-plus comma-separated items belong in a table, not a
+   sentence. Lead with the plain-English purpose; let the table, intellisense, or the API
+   reference carry the inventory. Keep it tight — cut every word that does not add information.
+5. **Contribution rules live in `CONTRIBUTING.md`, not the README.** The README Contributing
+   section is only the two links. The "what belongs here / bar for additions" policy, review
+   norms, and any other contributor guidance go in CONTRIBUTING.md, phrased naturally.
 
 **The one documented exception:** `service-template` MAY prepend a `## Using this template`
 section before slot 2 — its primary reader is forking it. No other repo reorders the five slots.
