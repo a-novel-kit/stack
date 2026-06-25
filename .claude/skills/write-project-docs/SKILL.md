@@ -126,7 +126,11 @@ locally`, the LAST section before Contributing. `### Configuration` lives inside
    grammar — keep sentences fully formed (subject + verb), not terse fragments. And cutting filler
    is not the same as cutting explanation: when a concept is unfamiliar or a rationale is
    non-obvious, spend the words to make it clear, in plain language. A doc that is short but
-   cryptic has failed — clarity beats brevity.
+   cryptic has failed — clarity beats brevity. And don't pause an explanation to catalog its
+   members: lead with the concept, and enumerate separately (its own section) only if the list
+   adds value. If that list already lives in a catalog or table elsewhere — the README's, a
+   reference table — point there instead of repeating it. A catalog dropped mid-explanation is
+   verbose, breaks rhythm, isn't memorable, and drifts out of sync over time.
 5. **Contribution rules live in `CONTRIBUTING.md`, not the README.** The README Contributing
    section is only the two links. The "what belongs here / bar for additions" policy, review
    norms, and any other contributor guidance go in CONTRIBUTING.md, phrased naturally.
