@@ -2,7 +2,7 @@
 // AES-256-GCM-encrypted at rest under a 0600 local key, set interactively with
 // no echo, and never printed by any command. They are injected into a child
 // process's environment only — by `secrets exec`, and automatically by
-// `test`/`run`/`ui` via the value-free per-repo mapping (.a-novel/secrets.yaml).
+// `test`/`run`/`ui` via the value-free per-repo manifest (.a-novel/secrets.yaml).
 //
 // The goal is to prevent accidental exposure of API secrets (e.g.
 // OPENAI_API_KEY) when a developer — or an AI agent — runs the toolchain: the
@@ -49,10 +49,11 @@ only.
   secrets rm <id>          delete a secret
   secrets exec --env ...   run a command with named secrets in its env
 
-Auto-injection: a service repo can commit a value-free mapping at
-.a-novel/secrets.yaml ('env: { OPENAI_API_KEY: openai-key }') and the named
-secrets are injected automatically into the child env of 'a-novel test',
-'a-novel run' and 'a-novel run ui'. No command ever prints a secret value.`,
+Auto-injection: a service repo can commit a value-free manifest at
+.a-novel/secrets.yaml (a 'secrets:' list of {env, id, optional description}) and
+the declared secrets are injected automatically into the child env of 'a-novel
+test', 'a-novel run' and 'a-novel run ui'. A declared-but-unset secret is
+skipped with a descriptive warning. No command ever prints a secret value.`,
 	}
 	cmd.AddCommand(newSecretsInitCmd())
 	cmd.AddCommand(newSecretsSetCmd())

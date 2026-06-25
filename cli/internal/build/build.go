@@ -180,7 +180,8 @@ func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, 
 
 	// Inject the repo's locally-stored secrets (decrypted) into the child env.
 	// Driven by the value-free .a-novel/secrets.yaml manifest at the repo root;
-	// absent key/store/manifest is a no-op (most repos have none). Appended last
+	// an absent manifest is a no-op (most repos have none), while an absent
+	// key/store reports every declared secret as missing. Appended last
 	// so a developer-provisioned secret wins over any default, and folded into
 	// the delta so global mode cross-shares it like any other CLI-set var.
 	// Values are never printed — they are deliberately excluded from the

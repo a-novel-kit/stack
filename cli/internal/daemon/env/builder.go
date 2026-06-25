@@ -46,10 +46,11 @@ func (b *Builder) ForTarget(t *discovery.Target, allServices []string) ([]Entry,
 	// Inject the service repo's locally-stored secrets (decrypted) as plain
 	// env entries, so they ride into runner.StartGoExec/StartContainer's
 	// cmd.Env. Driven by the value-free .a-novel/secrets.yaml manifest at the
-	// service repo root (the service dir is cmd/<target>'s grandparent);
-	// absent key/store/manifest is a no-op. Values are never logged or returned
-	// through any inspect path (ForService/ForServiceUp deliberately skip this).
-	// A declared-but-unset secret becomes a warning line, never a hard error.
+	// service repo root (the service dir is cmd/<target>'s grandparent); an
+	// absent manifest is a no-op, while an absent key/store reports every
+	// declared secret as missing. Values are never logged or returned through
+	// any inspect path (ForService/ForServiceUp deliberately skip this). A
+	// declared-but-unset secret becomes a warning line, never a hard error.
 	var warnings []string
 	if root := serviceRoot(t); root != "" {
 		res, err := injectSecrets(root)
