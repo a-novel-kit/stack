@@ -154,6 +154,33 @@ func TestInjectForRepo(t *testing.T) {
 			t.Fatal("expected an error for a malformed manifest")
 		}
 	})
+
+	t.Run("LegacyEnvShapeErrors", func(t *testing.T) {
+		// The legacy top-level `env:` map shape (pre-list) is an unknown field
+		// under strict decoding — it must error loudly, not silently inject
+		// nothing.
+		t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+		repoRoot := t.TempDir()
+		writeMapping(t, repoRoot, "env:\n  OPENAI_API_KEY: openai-key\n")
+
+		if _, err := secrets.InjectForRepo(repoRoot); err == nil {
+			t.Fatal("expected an error for the legacy env: map shape")
+		}
+	})
+
+	t.Run("MissingRequiredFieldErrors", func(t *testing.T) {
+		// A declaration without an id (or env) is malformed — it must error, not
+		// be silently skipped.
+		t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+		repoRoot := t.TempDir()
+		writeMapping(t, repoRoot, "secrets:\n  - env: OPENAI_API_KEY\n")
+
+		if _, err := secrets.InjectForRepo(repoRoot); err == nil {
+			t.Fatal("expected an error for a declaration missing its id")
+		}
+	})
 }
 
 // TestResolutionWarnings asserts the warning lines are actionable, include the

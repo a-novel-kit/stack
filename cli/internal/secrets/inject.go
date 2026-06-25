@@ -1,8 +1,10 @@
 package secrets
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -142,9 +144,22 @@ func readMapping(path string) (mapping, error) {
 	if err != nil {
 		return mapping{}, fmt.Errorf("secrets: read %s: %w", path, err)
 	}
+	// Decode strictly: an unknown top-level key — including the legacy `env:`
+	// map shape — is a hard error rather than a silent no-op, so a mistyped or
+	// outdated manifest fails loudly instead of injecting nothing.
+	dec := yaml.NewDecoder(bytes.NewReader(raw))
+	dec.KnownFields(true)
 	var m mapping
-	if err := yaml.Unmarshal(raw, &m); err != nil {
+	if err := dec.Decode(&m); err != nil && !errors.Is(err, io.EOF) {
 		return mapping{}, fmt.Errorf("secrets: parse %s: %w", path, err)
+	}
+	// Each declaration must name both the target env var and the secret id —
+	// otherwise we'd inject under an empty name or look up an empty id. A
+	// missing field is a malformed manifest, not a silently skipped entry.
+	for i, d := range m.Secrets {
+		if d.Env == "" || d.ID == "" {
+			return mapping{}, fmt.Errorf("secrets: %s: entry %d must set both env and id", path, i)
+		}
 	}
 	return m, nil
 }
