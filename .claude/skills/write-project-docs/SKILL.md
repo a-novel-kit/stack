@@ -593,6 +593,10 @@ Concretely, this means:
 
 - The "What it does" / role description belongs in the README, not here. Contributors are
   expected to have read the README first.
+- Contributors already know the stack, so do NOT re-document the framework or platform itself
+  (GitHub Actions mechanics, the Go clean-architecture layering, the pnpm workspace model, etc.).
+  Link its official docs and spend the words only on what is specific to THIS repo — its
+  conventions, directory layout, and build/release model.
 - Client install snippets, deployment compose blocks, and the env-var reference tables
   belong in the README. CONTRIBUTING refers to them with a link.
 - Platform-wide setup (prerequisites, generic `a-novel`/`pnpm` commands, lint/test/format) belongs
