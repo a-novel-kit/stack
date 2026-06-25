@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/a-novel-kit/stack/cli/internal/detect"
+	"github.com/a-novel-kit/stack/cli/internal/secrets"
 )
 
 // Result is the outcome of running one [detect.Target].
@@ -175,6 +176,23 @@ func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, 
 	// the script provided.
 	if prefix := servicePrefix(t.Service); prefix != "" {
 		runEnv = unprefixForOwner(runEnv, prefix)
+	}
+
+	// Inject the repo's locally-stored secrets (decrypted) into the child env.
+	// Driven by the value-free .a-novel/secrets.yaml mapping at the repo root;
+	// absent key/store/mapping is a no-op (most repos have none). Appended last
+	// so a developer-provisioned secret wins over any default, and folded into
+	// the delta so global mode cross-shares it like any other CLI-set var.
+	// Values are never printed — they are deliberately excluded from the
+	// `── env ──` block above.
+	if root := repoRoot(t); root != "" {
+		injected, err := secrets.InjectForRepo(root)
+		if err != nil {
+			return nil, nil, fmt.Errorf("secrets injection failed: %w", err)
+		}
+		for name, value := range injected {
+			runEnv = append(runEnv, name+"="+value)
+		}
 	}
 
 	// Compute the delta: any var that did not exist in the inherited env or

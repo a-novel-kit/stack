@@ -2,10 +2,12 @@ package env
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
+	"github.com/a-novel-kit/stack/cli/internal/secrets"
 )
 
 // Builder assembles env blocks for services / targets. It reads compose
@@ -36,8 +38,41 @@ type Entry struct {
 // exec.Cmd.Env. Use BuildResult.ToMap if you want the same content as a
 // map (e.g., for JSON output via GetEnv).
 func (b *Builder) ForTarget(t *discovery.Target, allServices []string) ([]Entry, error) {
-	return b.buildEnv(t, allServices, true /* allocate */, t.ID())
+	entries, err := b.buildEnv(t, allServices, true /* allocate */, t.ID())
+	if err != nil {
+		return nil, err
+	}
+	// Inject the service repo's locally-stored secrets (decrypted) as plain
+	// env entries, so they ride into runner.StartGoExec/StartContainer's
+	// cmd.Env. Driven by the value-free .a-novel/secrets.yaml mapping at the
+	// service repo root (the service dir is cmd/<target>'s grandparent);
+	// absent key/store/mapping is a no-op. Values are never logged or returned
+	// through any inspect path (ForService/ForServiceUp deliberately skip this).
+	if root := serviceRoot(t); root != "" {
+		injected, err := injectSecrets(root)
+		if err != nil {
+			return nil, err
+		}
+		for name, value := range injected {
+			entries = append(entries, Entry{Key: name, Value: value})
+		}
+	}
+	return entries, nil
 }
+
+// serviceRoot returns the service repo root for a target — the directory that
+// may hold .a-novel/secrets.yaml. CmdDir is `.../service-X/cmd/<name>/`, so the
+// service dir is its grandparent.
+func serviceRoot(t *discovery.Target) string {
+	if t.CmdDir == "" {
+		return ""
+	}
+	return filepath.Dir(filepath.Dir(t.CmdDir))
+}
+
+// injectSecrets is the seam to the secrets package, indirected through a package
+// var so the env-builder tests can stub it without touching the local key store.
+var injectSecrets = secrets.InjectForRepo
 
 // ForServiceUp is the allocate-on-demand variant of ForService — used
 // when bringing infra up so the daemon claims `${*_PORT}` slots
