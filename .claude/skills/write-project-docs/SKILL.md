@@ -122,10 +122,17 @@ locally`, the LAST section before Contributing. `### Configuration` lives inside
    reference carry the inventory. Keep it tight — cut every word that does not add information.
    Prefer the precise word over a long phrase and short sentences over long ones; the right noun
    or verb often replaces a whole clause. Boilerplate ("if you have questions or run into issues",
-   "check existing issues") is filler — drop it.
+   "check existing issues") is filler — drop it. Concision is careful word choice, not dropped
+   grammar — keep sentences fully formed (subject + verb), not terse fragments.
 5. **Contribution rules live in `CONTRIBUTING.md`, not the README.** The README Contributing
    section is only the two links. The "what belongs here / bar for additions" policy, review
    norms, and any other contributor guidance go in CONTRIBUTING.md, phrased naturally.
+6. **Rationale over surface.** Explain why a thing exists, what kind of logic belongs in it, and
+   how a dev should approach it — the doc is a guide, not a second copy of the API. Note
+   large-scale facts that are hard to spot at a glance (a service's env vars, that OTel ships
+   local and GCP exporters, the deployment images), but never an inventory of functions, methods,
+   or client calls — intellisense and the code already supply those. A package or sub-package
+   description says what it is FOR, not which symbols it exports.
 
 **The one documented exception:** `service-template` MAY prepend a `## Using this template`
 section before slot 2 — its primary reader is forking it. No other repo reorders the five slots.
