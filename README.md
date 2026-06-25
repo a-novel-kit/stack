@@ -58,7 +58,8 @@ a-novel run ps        # the daemon answers over its unix socket
 ```
 
 After a `git pull` that touches `cli/`, run `a-novel install` to rebuild and
-reinstall — it hands the daemon off without dropping running services.
+reinstall — the new binary takes over from the running daemon in place, so
+services already running stay up.
 
 ## The UI — start here
 

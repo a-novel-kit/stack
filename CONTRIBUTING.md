@@ -15,7 +15,7 @@ A new command is a Cobra subcommand under `cli/internal/cli/` (a `*_cmd.go` file
 
 ## Building and testing
 
-After a change under `cli/`, run `a-novel install` to rebuild and reinstall — it hands the daemon off without dropping running services. Test with `a-novel test`, or `go test ./...` from `cli/`.
+After a change under `cli/`, run `a-novel install` to rebuild and reinstall — the new binary takes over from the running daemon in place, so running services stay up. Test with `a-novel test`, or `go test ./...` from `cli/`.
 
 ## Questions?
 
