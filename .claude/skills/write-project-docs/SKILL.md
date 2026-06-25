@@ -123,7 +123,10 @@ locally`, the LAST section before Contributing. `### Configuration` lives inside
    Prefer the precise word over a long phrase and short sentences over long ones; the right noun
    or verb often replaces a whole clause. Boilerplate ("if you have questions or run into issues",
    "check existing issues") is filler — drop it. Concision is careful word choice, not dropped
-   grammar — keep sentences fully formed (subject + verb), not terse fragments.
+   grammar — keep sentences fully formed (subject + verb), not terse fragments. And cutting filler
+   is not the same as cutting explanation: when a concept is unfamiliar or a rationale is
+   non-obvious, spend the words to make it clear, in plain language. A doc that is short but
+   cryptic has failed — clarity beats brevity.
 5. **Contribution rules live in `CONTRIBUTING.md`, not the README.** The README Contributing
    section is only the two links. The "what belongs here / bar for additions" policy, review
    norms, and any other contributor guidance go in CONTRIBUTING.md, phrased naturally.
