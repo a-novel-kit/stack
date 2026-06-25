@@ -24,6 +24,11 @@ a-novel
 ├── publish       standalone — cut a release (bump, commit, tag vX.Y.Z, push)
 │   ├── version <new-version>           preflight + bump + commit + tag + push
 │   └── stamp <prefix> <file>           refresh vX.Y.Z references in doc files
+├── secrets       standalone — local, encrypted secrets manager (child-env only)
+│   ├── init                            create the local key + store dir
+│   ├── set <id>                        store a value (no echo); never printed
+│   ├── ls / rm <id>                    list ids / delete a secret
+│   └── exec --env NAME=<id> -- <cmd>   run a command with secrets in its env
 ├── install       graceful binary upgrade (daemon handoff via checkpoint)
 ├── core          daemon control + workspace plumbing
 │   ├── start / setup / kill / status / prepare-reinstall
@@ -39,8 +44,8 @@ a-novel
     └── exec / debug                    inside-container shells
 ```
 
-`test`, `build` and `publish` don't need the daemon. Everything under `run`
-does.
+`test`, `build`, `publish` and `secrets` don't need the daemon. Everything
+under `run` does.
 
 ## Quick reference
 
@@ -79,7 +84,67 @@ a-novel run ui                                # ? for help, Esc for commands
 
 # Releases (local-only; CI release workflow fires on the pushed tag)
 a-novel publish version 0.21.0                # or: patch / minor / major
+
+# Secrets (local, encrypted; injected into the child env only)
+a-novel secrets init                          # one-time: create key + store
+a-novel secrets set OPENAI_KEY                # reads value with no echo
+a-novel secrets ls                            # ids only, never values
+a-novel secrets exec --env OPENAI_API_KEY=OPENAI_KEY -- python main.py
 ```
+
+## Secrets
+
+`a-novel secrets` is a local, encrypted secrets manager. It lets you (and an
+AI agent) run the toolchain with API secrets — e.g. `OPENAI_API_KEY` — injected
+into a **child process's environment only**, so a secret is never seen on a
+terminal, printed, logged, committed, or passed as a CLI argument.
+
+```bash
+a-novel secrets init                 # create the local key + store dir (idempotent)
+a-novel secrets set <id>             # read a value with NO echo, store it encrypted
+a-novel secrets ls                   # list secret ids (never values)
+a-novel secrets rm <id>              # delete a secret
+a-novel secrets exec --env NAME=<id> [--env ...] -- <cmd> [args...]
+```
+
+### Per-repo mapping + auto-injection
+
+A service repo can commit a **value-free** mapping at `.a-novel/secrets.yaml`
+in its root — it maps environment-variable names to secret ids (never values):
+
+```yaml
+# .a-novel/secrets.yaml — safe to commit; contains no secrets
+env:
+  OPENAI_API_KEY: openai-key
+  ANTHROPIC_API_KEY: anthropic-key
+```
+
+The named secrets are then decrypted from the local store and injected
+automatically into the child env of `a-novel test`, `a-novel run` and
+`a-novel run ui`. If the local key, the store, or the mapping is absent the
+injection is a silent no-op — a repo whose secrets aren't provisioned never
+fails a test or run. A mapping that references a secret id you haven't set is a
+clear error (`run a-novel secrets set <id>`).
+
+### Security properties
+
+- **Encrypted at rest.** The store (`store.enc`) is the whole secrets map
+  encrypted with **AES-256-GCM**; a fresh random 12-byte nonce per write, so two
+  writes of the same value yield different ciphertext, and a tampered store fails
+  to decrypt. Crypto is Go standard library only.
+- **0600 local key.** A 32-byte key (`key`, mode `0600`) inside a `0700`
+  directory under `$XDG_DATA_HOME/a-novel/secrets/`. Generated once and never
+  overwritten. Writes are atomic (temp file + rename).
+- **TTY-set, never piped.** `secrets set` reads the value with echo disabled and
+  refuses to run without a terminal, so a value can't be piped through a log or
+  shell history.
+- **Never printed.** No command prints a secret value — not `ls`, not `env`, not
+  the test/run env progress block. Errors carry the secret **id**, never the
+  value.
+- **Value-free git mappings.** Only env-var → id mappings live in git; values
+  stay encrypted on the developer's machine.
+- **Child-env only.** Secrets reach a process exclusively through its
+  environment — never a command line.
 
 ## Architecture
 
@@ -104,6 +169,7 @@ cli/
     ├── tui/                       Bubble Tea TUI
     ├── ui/                        interactive pickers + reports for test/build
     ├── setup/                     `core setup` bootstrap
+    ├── secrets/                   local AES-256-GCM secrets store + env injection
     ├── version/                   build-version resolution (ldflags / buildinfo)
     └── shared/                    XDG paths, stacks parser
 ```
@@ -128,6 +194,7 @@ cli/
   - `reinstall.json` (single-purpose handoff; deleted after replay)
 - `$XDG_DATA_HOME/a-novel/` (default `~/.local/share/a-novel/`)
   - `backups/<stack>/<service>/<volume>/<timestamp>.tar.zst` (max 5/volume)
+  - `secrets/{key, store.enc}` (0600 local key + AES-256-GCM encrypted store)
 - `$XDG_RUNTIME_DIR/a-novel.sock` (daemon's unix socket)
 
 ## Development
