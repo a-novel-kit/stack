@@ -213,6 +213,7 @@ type RulesetConditions struct {
 type RulesetRules struct {
 	Deletion             bool               `yaml:"deletion"`
 	NonFastForward       bool               `yaml:"non_fast_forward"`
+	RequiredSignatures   bool               `yaml:"required_signatures"`
 	RequiredStatusChecks *RSCParams         `yaml:"required_status_checks"`
 	MergeQueue           map[string]any     `yaml:"merge_queue"`
 	CodeQuality          *CodeQualityParams `yaml:"code_quality"`

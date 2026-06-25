@@ -3,6 +3,13 @@
 # for classes that set code_quality: false. Admins bypass; the publish bot
 # also bypasses because release commits land on the default branch directly
 # (no branch proxy). Every status check is required for everyone else.
+#
+# required_signatures enforces verified commits on the default branch. The merge
+# queue squashes, so GitHub validates the signature on the resulting (GitHub-
+# signed) squash commit, not the contributor's individual PR commits — merges are
+# never blocked on unsigned feature commits. The publish bot's direct release
+# commits are covered by its bypass above. Renovate already commits via the API
+# (signed), so dependency PRs are unaffected.
 name: master
 target: branch
 enforcement: active
@@ -16,6 +23,7 @@ bypass:
 rules:
   deletion: true
   non_fast_forward: true
+  required_signatures: true
   required_status_checks:
     strict: true
     do_not_enforce_on_create: false
