@@ -58,7 +58,7 @@ if (ctx && typeof ctx.used_percentage === "number") {
       color(shortTokens(ctx.total_input_tokens || 0), fill) +
       window +
       " " +
-      color(`${ctx.used_percentage}%`, fill)
+      color(`${Math.round(ctx.used_percentage)}%`, fill)
   );
 }
 
@@ -70,7 +70,7 @@ if (limits) {
     ["seven_day", "7d"],
   ]) {
     const pct = limits[key]?.used_percentage;
-    if (typeof pct === "number") segments.push(color(`${label} `, 2) + color(`${pct}%`, loadColor(pct)));
+    if (typeof pct === "number") segments.push(color(`${label} `, 2) + color(`${Math.round(pct)}%`, loadColor(pct)));
   }
 }
 
