@@ -508,7 +508,8 @@ number sequence and one dispatcher. Reads still use plain `gh`.
   noting it's resolved.
 - **Closing, not resolving.** An issue stays **open** while work is pending; it closes when its PR
   merges (`Closes #<n>`) or when you and the human agree it's done or won't be done
-  (`gh issue close <n> --repo <org>/<repo> --reason completed|"not planned"`). Drop the `triage`
+  (`gh issue close <n> --repo <org>/<repo>`, passing `--reason completed` or `--reason "not planned"`
+  — gh's spaced, quoted values, per `gh issue close --help`). Drop the `triage`
   label once assessed, and advance the board **Status** as the work moves.
 
 **The planning loop, concretely.** Post each open question as its own bot comment, carrying your
@@ -591,4 +592,4 @@ comments` posts as your user account — only reads use plain `gh`.
 | **Issue** comment stream           | `gh api repos/<o>/<r>/issues/<n>/comments`                                                                          |
 | Comment on an issue (bot)          | `a-novel core bot-comment <o> <r> <n> --body "..."` (flat — no `--reply-to`)                                        |
 | Edit the plan body (operator)      | `gh issue edit <n> --repo <o>/<r> --body-file <file>`                                                               |
-| Close an issue                     | `gh issue close <n> --repo <o>/<r> --reason completed\|"not planned"`                                               |
+| Close an issue                     | `gh issue close <n> --repo <o>/<r> --reason "not planned"` (or `completed`)                                         |

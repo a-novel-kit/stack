@@ -250,8 +250,8 @@ for the classify/reply/close mechanics.
 
 ### Body template
 
-Adapt to fit, but cover these. (This is also the shape of the `task.yml` issue template; open
-questions live in **comments**, never here.)
+Adapt to fit, but cover these. (This is also the shape of the `task.yml` planning template in each
+org's `.github` repo — not this repo; open questions live in **comments**, never here.)
 
 ```markdown
 ## Goal
