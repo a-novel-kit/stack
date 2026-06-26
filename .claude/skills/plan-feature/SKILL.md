@@ -388,11 +388,14 @@ GitHub's own model is **one project, many saved views**. Do **not** add per-area
 The one real limit: a project **cannot span two orgs**, which is the other reason the two orgs keep
 separate boards (cross-org epics are tracked by reference — see "Where the issue lives").
 
-**Enable the built-in automations** (one-time, in each board's Settings → Workflows — these are not
-settable via the API): _Item closed → Done_, _Pull request merged → Done_, _Item added → set Status
-to Backlog/Todo_, and the one free-tier _Auto-add_ workflow (point it at the busiest repo; add other
-repos' issues with `gh project item-add` or `--project` on create). _Auto-archive_ items Done > 2
-weeks keeps the board light.
+**Enable the built-in _status_ automations** (one-time, in each board's `⋯` → Workflows — not
+settable via the API): _Item added → Backlog_, _Item closed → Done_, _Pull request merged → Done_,
+_Pull request linked to issue → In progress_ (this is what flips an issue to **active**, which arms
+the due-date rule in `triage-issues`), _Auto-close issue_ (when Status → Done), and _Auto-archive
+items_ (Done > 2 weeks). **Keep the _auto-add_ workflows OFF** — both _Auto-add to project_ (repo)
+and _Auto-add sub-issues to project_. The principle: automations may set **Status**, but **the skills
+add the items**. Every issue and sub-issue joins the board explicitly via `--project` on
+`gh issue create` (or `gh project item-add`), so board membership stays deliberate, not magic.
 
 **Saved views worth having** (also UI-only): _Board by Status_; _Triage_ (`is:open is:issue
 label:triage`); _My/agent items_ (`assignee:@me is:open`); _Roadmap_ grouped by Milestone or Release;
