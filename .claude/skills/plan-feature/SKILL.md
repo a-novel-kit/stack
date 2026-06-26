@@ -155,10 +155,10 @@ current as work lands (see completion handling).
 
 ### Where the issue lives
 
-| Situation | Where the planning issue goes |
-| --------- | ----------------------------- |
-| **Single repo** | One issue in that repo. |
-| **Multiple repos within one org** | An **Epic** in that org's `.github` repo, with **Task sub-issues** in each member repo. Sub-issue progress rolls up to the Epic. |
+| Situation                                                                      | Where the planning issue goes                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Single repo**                                                                | One issue in that repo.                                                                                                                                                                                                                                                    |
+| **Multiple repos within one org**                                              | An **Epic** in that org's `.github` repo, with **Task sub-issues** in each member repo. Sub-issue progress rolls up to the Epic.                                                                                                                                           |
 | **Cross-org** (an `a-novel` repo needs an `a-novel-kit` change, or vice versa) | Epic in the **outcome-owning** org's `.github`. The dependency in the _other_ org is a **referenced + `blocked-by`** link, **not** a cross-org sub-issue — cross-org sub-issues link but their progress rollup undercounts. `manage-versions` owns the actual merge order. |
 
 The two `.github` repos (`a-novel/.github`, `a-novel-kit/.github`) are the natural home for
@@ -169,12 +169,12 @@ cross-repo Epics; per-repo work lives in the repo it touches.
 - **Type** (org-level issue type — the "kind" axis, shared across all repos in the org). GitHub's
   model is **Epic → Feature → Task** (+ **Bug**):
 
-  | Type | Use for |
-  | ---- | ------- |
-  | **Epic** | A multi-stage or multi-repo initiative — the parent that replaces a stepped `plan-X-1.md`/`plan-X-2.md` chain. |
-  | **Feature** | One shippable capability, usually one repo (possibly a few branches). |
-  | **Task** | A branch-sized unit of work — ≈ one PR. The sub-issues of an Epic or Feature. |
-  | **Bug** | A defect. |
+  | Type        | Use for                                                                                                        |
+  | ----------- | -------------------------------------------------------------------------------------------------------------- |
+  | **Epic**    | A multi-stage or multi-repo initiative — the parent that replaces a stepped `plan-X-1.md`/`plan-X-2.md` chain. |
+  | **Feature** | One shippable capability, usually one repo (possibly a few branches).                                          |
+  | **Task**    | A branch-sized unit of work — ≈ one PR. The sub-issues of an Epic or Feature.                                  |
+  | **Bug**     | A defect.                                                                                                      |
 
   Set it with `gh issue create --type <Epic\|Feature\|Task\|Bug>`. The type carries the kind, so
   there is **no `bug`/`enhancement` label** any more.
@@ -190,13 +190,13 @@ cross-repo Epics; per-repo work lives in the repo it touches.
 - **Project board** — add the issue to the org's **"Tasks"** board (`a-novel` project #7,
   `a-novel-kit` project #1) and set its fields:
 
-  | Field | Values | Meaning |
-  | ----- | ------ | ------- |
-  | **Status** | Backlog · Ready · In progress · In review · Done · Track | Workflow state. A not-yet-ready draft stage sits in **Backlog**; promote to **Ready** when unblocked. |
-  | **Priority** | P0 · P1 · P2 · P3 · P4 | P0 = drop-everything; P4 = nice-to-have. |
-  | **Size** | XS · S · M · L · XL | The **effort** estimate. |
-  | **Release** | _free single-select_ | Cross-repo version grouping (the only release axis that spans repos). |
-  | **Milestone** | _per-repo_ | Optional. A repo's release train (e.g. `v1.3.0`); cannot span repos. |
+  | Field         | Values                                                   | Meaning                                                                                               |
+  | ------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+  | **Status**    | Backlog · Ready · In progress · In review · Done · Track | Workflow state. A not-yet-ready draft stage sits in **Backlog**; promote to **Ready** when unblocked. |
+  | **Priority**  | P0 · P1 · P2 · P3 · P4                                   | P0 = drop-everything; P4 = nice-to-have.                                                              |
+  | **Size**      | XS · S · M · L · XL                                      | The **effort** estimate.                                                                              |
+  | **Release**   | _free single-select_                                     | Cross-repo version grouping (the only release axis that spans repos).                                 |
+  | **Milestone** | _per-repo_                                               | Optional. A repo's release train (e.g. `v1.3.0`); cannot span repos.                                  |
 
 - **Milestone vs Release.** Milestones are **per-repo and cannot span repos**, so use a milestone
   for a single repo's release train and the board's **Release** field for a version that spans
@@ -317,7 +317,7 @@ kind early — it changes the work breakdown and which skills apply.
 | **service**                    | `a-novel`     | Backend microservice, layered clean-arch (`cmd`/`internal/{config,lib,dao,services,handlers,models}`/`pkg`) | `service-authentication`, `service-json-keys` |
 | **platform**                   | `a-novel`     | **Frontend**, deliberately more **monolithic** than the services                                            | (forthcoming)                                 |
 | **library**                    | `a-novel-kit` | Shared Go/JS libs                                                                                           | `golib`, `jwt`, `nodelib`                     |
-| **tooling / meta / workflows** | both          | CLI, `.github`, reusable CI                                                                                  | `stack`, `workflows`                          |
+| **tooling / meta / workflows** | both          | CLI, `.github`, reusable CI                                                                                 | `stack`, `workflows`                          |
 
 `implement-feature`'s layer-by-layer branch decomposition is a **service** pattern — do **not** apply
 it wholesale to a platform repo. Frontend (platform) authoring conventions are a separate, later
@@ -330,17 +330,17 @@ stage; until those skills exist, plan platform work conservatively and flag the 
 IDs (project, field, single-select option) are discovered with `gh project field-list <num> --owner
 <org>` and `gh project item-list`; field values are then set with `gh project item-edit`.
 
-| Action | Command |
-| ------ | ------- |
-| Create an Epic (cross-repo) | `gh issue create --repo <org>/.github --type Epic --title "..." --label triage --body-file <file>` |
-| Create a Task sub-issue | `gh issue create --repo <org>/<repo> --type Task --parent <epic-#-or-url> --label triage --title "..." --body-file <file>` |
-| Add it to the board on creation | append `--project "Tasks"` to `gh issue create` |
-| Add an existing issue to the board | `gh project item-add <num> --owner <org> --url <issue-url>` |
-| Sequence stages | `gh issue edit <m> --repo <org>/<repo> --add-blocked-by <n>` |
-| Set Priority / Size / Status | `gh project item-edit --id <item-id> --field-id <field-id> --project-id <proj-id> --single-select-option-id <opt-id>` |
-| Iterate the plan body | `gh issue edit <n> --repo <org>/<repo> --body-file <file>` |
-| Discuss / open question (bot) | `a-novel core bot-comment <org> <repo> <n> --body "..."` |
-| Delete a not-yet-started draft | `gh issue delete <n> --repo <org>/<repo> --yes` |
+| Action                             | Command                                                                                                                    |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Create an Epic (cross-repo)        | `gh issue create --repo <org>/.github --type Epic --title "..." --label triage --body-file <file>`                         |
+| Create a Task sub-issue            | `gh issue create --repo <org>/<repo> --type Task --parent <epic-#-or-url> --label triage --title "..." --body-file <file>` |
+| Add it to the board on creation    | append `--project "Tasks"` to `gh issue create`                                                                            |
+| Add an existing issue to the board | `gh project item-add <num> --owner <org> --url <issue-url>`                                                                |
+| Sequence stages                    | `gh issue edit <m> --repo <org>/<repo> --add-blocked-by <n>`                                                               |
+| Set Priority / Size / Status       | `gh project item-edit --id <item-id> --field-id <field-id> --project-id <proj-id> --single-select-option-id <opt-id>`      |
+| Iterate the plan body              | `gh issue edit <n> --repo <org>/<repo> --body-file <file>`                                                                 |
+| Discuss / open question (bot)      | `a-novel core bot-comment <org> <repo> <n> --body "..."`                                                                   |
+| Delete a not-yet-started draft     | `gh issue delete <n> --repo <org>/<repo> --yes`                                                                            |
 
 (Board numbers: `a-novel` → project **#7** "Tasks"; `a-novel-kit` → project **#1** "Tasks".)
 

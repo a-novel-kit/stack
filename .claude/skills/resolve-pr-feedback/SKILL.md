@@ -587,8 +587,8 @@ comments` posts as your user account — only reads use plain `gh`.
 | Start a new inline thread          | not a bot action — post a top-level bot comment naming `file:line` (see "Starting your own thread")                 |
 | Comment on a PR or issue (bot)     | `a-novel core bot-comment <o> <r> <n> --body "..."`                                                                 |
 | Re-request review                  | `gh api .../pulls/<n>/requested_reviewers -X POST -F 'reviewers[]=<login>'`                                         |
-| **Issue** envelope                 | `gh issue view <n> --repo <o>/<r> --json number,state,title,labels,assignees,body,comments`                        |
-| **Issue** comment stream           | `gh api repos/<o>/<r>/issues/<n>/comments`                                                                         |
+| **Issue** envelope                 | `gh issue view <n> --repo <o>/<r> --json number,state,title,labels,assignees,body,comments`                         |
+| **Issue** comment stream           | `gh api repos/<o>/<r>/issues/<n>/comments`                                                                          |
 | Comment on an issue (bot)          | `a-novel core bot-comment <o> <r> <n> --body "..."` (flat — no `--reply-to`)                                        |
-| Edit the plan body (operator)      | `gh issue edit <n> --repo <o>/<r> --body-file <file>`                                                              |
-| Close an issue                     | `gh issue close <n> --repo <o>/<r> --reason completed\|"not planned"`                                              |
+| Edit the plan body (operator)      | `gh issue edit <n> --repo <o>/<r> --body-file <file>`                                                               |
+| Close an issue                     | `gh issue close <n> --repo <o>/<r> --reason completed\|"not planned"`                                               |
