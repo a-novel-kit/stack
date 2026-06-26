@@ -18,9 +18,11 @@ through the same phases: **Assess → Plan → Implement**. Each phase has a gat
 A later section covers recovery when an earlier branch needs to change.
 
 > **Where the design comes from.** For non-trivial, multi-repo, or architectural work the _design_ is
-> settled first in `plan-feature`, which produces an agreed plan file; this skill then executes it,
-> and the **Plan** phase below is the per-repo **branch decomposition** of that already-agreed design.
-> Small, unambiguous changes can start directly here.
+> settled first in `plan-feature`, which produces an agreed **planning issue** (an Epic, or a Feature
+> with its Task sub-issues); this skill then executes it, and the **Plan** phase below is the per-repo
+> **branch decomposition** of that already-agreed design — typically one branch/PR per Task sub-issue.
+> Link every PR back to its issue with a `Closes #<n>` line so merging closes the unit and the Epic's
+> sub-issue progress advances. Small, unambiguous changes can start directly here.
 >
 > **Scope: backend services only.** Frontend **`platform`** repos are deliberately more monolithic
 > than services — the layer-by-layer branch decomposition here does **not** apply to them, and their
