@@ -344,6 +344,27 @@ IDs (project, field, single-select option) are discovered with `gh project field
 
 (Board numbers: `a-novel` → project **#7** "Tasks"; `a-novel-kit` → project **#1** "Tasks".)
 
+### Token scopes & permissions
+
+Issue work is core to this workflow, so the `gh` session **should always be able to manage the full
+issue lifecycle** — create, read, update, delete, plus sub-issues, dependencies, labels, and
+milestones. That rides on the **`repo`** scope (deleting an issue additionally needs an owner/admin
+role on the repo, which org owners have). Reading and writing **board fields** (Priority / Size /
+Status / Release) needs the **`project`** scope. Managing the org-level **issue types** themselves
+(adding / editing / removing a type such as `Epic`) needs **`admin:org`** — a one-time admin act, not
+part of day-to-day planning.
+
+**If any `gh` / `gh api` command fails with an authorization or `INSUFFICIENT_SCOPES` error, do not
+work around it** (don't fall back to a label, a comment, or a local file). Stop and **ask the human
+to grant the missing scope**, naming it explicitly:
+
+```bash
+gh auth refresh -h github.com -s <missing-scope>   # e.g. -s project, -s admin:org
+```
+
+Then retry the command. Higher privilege is granted on request for exactly this reason; silently
+degrading the plan to fit a missing scope is the wrong move.
+
 ---
 
 ## How this composes
