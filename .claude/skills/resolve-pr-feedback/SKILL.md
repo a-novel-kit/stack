@@ -2,7 +2,9 @@
 name: resolve-pr-feedback
 description: >
   Survey a pull request's combined state (CI + review threads + reviewer status) and work through
-  reviewer feedback for Agora backend services. Use this skill whenever checking on an open PR
+  reviewer feedback on ANY repo across the a-novel / a-novel-kit orgs — backend services, the golib /
+  nodelib libraries, the workflows Actions repo, the stack CLI, and the org .github / docs repos. Use
+  this skill whenever checking on an open PR
   ("what's the state of PR X", "look at the CI and comments on 123", "monitor PR 532"), reading
   Copilot or human review comments, deciding whether to accept a suggestion, replying on a thread,
   resolving a thread after a fix, starting your own thread to flag a concern, or re-requesting
