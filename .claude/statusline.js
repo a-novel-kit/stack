@@ -23,6 +23,7 @@ function loadColor(pct) {
 const EFFORT_COLOR = { low: 90, medium: 96, high: 92, xhigh: 93, max: 91 };
 
 function shortTokens(n) {
+  if (n >= 1_000_000) return `${+(n / 1_000_000).toFixed(1)}M`;
   return n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`;
 }
 
