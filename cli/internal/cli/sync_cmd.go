@@ -59,12 +59,14 @@ const (
 
 // defaultRepos is the curated whitelist. Intentionally narrow — the
 // stack still discovers a lot of repos via `gh repo list`, but only
-// these seven need to be cloned locally for current work. Extending the
-// list is one line; whittling it is the user's call.
+// the repos below need to be cloned locally for current work. Extending
+// the list is one line; whittling it is the user's call.
 var defaultRepos = []repoEntry{
 	{Org: orgAnovelKit, Name: "workflows"},
 	{Org: orgAnovelKit, Name: "golib"},
 	{Org: orgAnovelKit, Name: "nodelib"},
+	{Org: orgAnovelKit, Name: ".github"},
+	{Org: orgAnovel, Name: ".github"},
 	{Org: orgAnovel, Name: "service-template"},
 	{Org: orgAnovel, Name: "service-json-keys"},
 	{Org: orgAnovel, Name: "service-authentication"},
@@ -105,6 +107,8 @@ func newCoreSyncCmd() *cobra.Command {
   a-novel-kit/workflows   → kit/workflows
   a-novel-kit/golib       → kit/golib
   a-novel-kit/nodelib     → kit/nodelib
+  a-novel-kit/.github     → kit/.github
+  a-novel/.github                  → app/.github
   a-novel/service-template         → app/service-template
   a-novel/service-json-keys        → app/service-json-keys
   a-novel/service-authentication   → app/service-authentication
