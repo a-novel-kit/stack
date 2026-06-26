@@ -205,8 +205,9 @@ cross-repo Epics; per-repo work lives in the repo it touches.
   otherwise **assign/refine them during the triage pass** (`triage-issues`). Leave the **Target date**
   (due date) empty until the issue becomes **active** — i.e. it has an open PR linked against it — then
   **agree a due date with the operator**; an active issue without a due date is a triage smell. Give
-  every **milestone** a due date too (`gh api repos/<o>/<r>/milestones -f due_on=<RFC3339>`): both dates
-  exist to make triage decisions, not decoration.
+  every **milestone** a due date too — PATCH the specific milestone, not the collection:
+  `gh api repos/<o>/<r>/milestones/<n> -X PATCH -f due_on=<RFC3339>` (or pass `-f due_on=…` to
+  `... -f title=…` when first creating it). Both dates exist to make triage decisions, not decoration.
 
 - **Milestone vs Release.** Milestones are **per-repo and cannot span repos**, so use a milestone
   for a single repo's release train and the board's **Release** field for a version that spans
