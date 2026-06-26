@@ -8,10 +8,13 @@ description: >
   ("what's the state of PR X", "look at the CI and comments on 123", "monitor PR 532"), reading
   Copilot or human review comments, deciding whether to accept a suggestion, replying on a thread,
   resolving a thread after a fix, starting your own thread to flag a concern, or re-requesting
-  review after changes. Always invoke it when the user mentions PR review comments, a reviewer's
-  name, a failing check on an open PR, or asks anything that involves reading + responding to
-  feedback on a pull request — even if the word "resolve" is not used. Pairs with git-conventions
-  (for the format of review-driven fix commits).
+  review after changes. ALSO covers discussion under an ISSUE — the planning issues plan-feature
+  produces — reading and answering comments, posting open questions for the human, and folding
+  settled decisions back into the issue body. Always invoke it when the user mentions PR review
+  comments, a reviewer's name, a failing check on an open PR, comments under an issue, or asks
+  anything that involves reading + responding to feedback on a pull request OR an issue — even if the
+  word "resolve" is not used. Pairs with git-conventions (for the format of review-driven fix
+  commits) and plan-feature (which owns the planning-issue body this skill discusses around).
 ---
 
 # Resolve PR Feedback
@@ -21,13 +24,19 @@ feedback. It is called both as a passive read ("check PR 532") and as an active 
 ("address the comments on PR 532"). Both modes share Phase 1; only the resolve workflow
 continues through Phases 2–5.
 
+It **also** governs discussion under an **issue** — chiefly the planning issues `plan-feature`
+produces, where the human and the agent converse in comments while the body holds the agreed plan.
+Phases 1–5 are written for PRs; the [Issue discussions](#issue-discussions-planning--triage) section
+near the end maps the same posture onto issues (which are simpler — flat comments, no review
+threads, no resolution state) and is the place to start when the work is an issue rather than a PR.
+
 ---
 
 ## Guiding principle
 
-A pull request is a **conversation**, not a checklist. Reviewers — human or bot — can be
-right, wrong, unclear, or working from a partial picture of the change. Apply judgment,
-not obedience. The failure modes are symmetric: silently overriding a valid concern
+A pull request — or a planning issue — is a **conversation**, not a checklist. Reviewers
+and collaborators — human or bot — can be right, wrong, unclear, or working from a partial
+picture of the change. Apply judgment, not obedience. The failure modes are symmetric: silently overriding a valid concern
 erodes trust; blindly applying an incorrect suggestion ships a regression. In both cases
 the remedy is the same — speak on the thread so the reviewer sees your reasoning and
 can push back.
@@ -462,6 +471,54 @@ anchored-thread creation for a human reviewer.
 
 ---
 
+## Issue discussions (planning & triage)
+
+Everything above is written for pull requests, but the same posture — **a conversation, not a
+checklist** — governs **issues**, above all the planning issues `plan-feature` produces, where the
+human and the agent converse in comments while the body holds the agreed plan. Use this section
+whenever you're reading and responding to comments under an issue: answering the human's questions
+on a plan, posting your own open questions, or triaging an incoming report.
+
+**What carries over unchanged:** the survey-then-act shape; the accept / accept-with-deviation /
+decline / unsure classification (Phase 2); rationale-dense, zero-filler replies; the bots-vs-humans
+skepticism; and the hard rule that **every comment goes through the bot** —
+`a-novel core bot-comment <org> <repo> <issue-number> --body` — because issues and PRs share one
+number sequence and one dispatcher. Reads still use plain `gh`.
+
+**What's different — issues are simpler than PRs:**
+
+- **No inline threads, no resolution state, no re-request-review.** Issue comments are a single flat
+  top-level stream. There is no `--reply-to` (that targets PR inline review threads), no
+  `resolveReviewThread` mutation, and no reviewer to re-request. Don't reach for the PR-only
+  machinery — none of Phase 1.3 (thread node IDs), Phase 5.2 (resolve), or Phase 5.3 (re-request)
+  applies.
+- **Survey with the issue endpoints:**
+
+  ```bash
+  gh issue view <n> --repo <org>/<repo> \
+    --json number,state,title,labels,assignees,body,comments
+  gh api repos/<org>/<repo>/issues/<n>/comments   # the full comment stream
+  ```
+
+- **The body belongs to the plan; the comments are the discussion.** Keep the back-and-forth in
+  comments so the body stays the clean, current plan (see `plan-feature`). When you and the human
+  settle a question, fold the decision into the **body** with
+  `gh issue edit <n> --repo <org>/<repo> --body-file <file>` — that edit runs as the **operator**
+  token (the bot can comment but cannot edit a body) — then optionally drop a one-line bot comment
+  noting it's resolved.
+- **Closing, not resolving.** An issue stays **open** while work is pending; it closes when its PR
+  merges (`Closes #<n>`) or when you and the human agree it's done or won't be done
+  (`gh issue close <n> --repo <org>/<repo> --reason completed|"not planned"`). Drop the `triage`
+  label once assessed, and advance the board **Status** as the work moves.
+
+**The planning loop, concretely.** Post each open question as its own bot comment, carrying your
+recommendation (the `plan-feature` posture — propose, don't just ask). Wait for the human's reply.
+Classify it with the Phase 2 buckets exactly as you would a review comment, then act: fold accepted
+decisions into the body, keep discussing the unsure ones, and push back (once, with a reason) where
+you disagree. The body converges on the agreed plan; the comment stream records how you got there.
+
+---
+
 ## Common pitfalls
 
 - **Silent resolution without a reply.** Reviewers cannot tell which commit addressed
@@ -503,6 +560,9 @@ comments` posts as your user account — only reads use plain `gh`.
 - **From `open-pull-request`** — once a PR is open and reviewers start commenting, the
   push-and-open flow hands off here to assess CI, review threads, and reviewer status,
   then work through the feedback.
+- **With `plan-feature`** — `plan-feature` owns the planning-issue **body** (the agreed plan);
+  this skill owns the **comment loop** around it (posting open questions, answering the human's
+  replies, folding decisions back into the body). See [Issue discussions](#issue-discussions-planning--triage).
 - **To `monitor-ci`** — for failing checks that need flake-vs-real classification or a
   retry loop. When CI agrees with a reviewer (same root cause), fold the fix into the
   thread response rather than pushing twice.
@@ -527,3 +587,8 @@ comments` posts as your user account — only reads use plain `gh`.
 | Start a new inline thread          | not a bot action — post a top-level bot comment naming `file:line` (see "Starting your own thread")                 |
 | Comment on a PR or issue (bot)     | `a-novel core bot-comment <o> <r> <n> --body "..."`                                                                 |
 | Re-request review                  | `gh api .../pulls/<n>/requested_reviewers -X POST -F 'reviewers[]=<login>'`                                         |
+| **Issue** envelope                 | `gh issue view <n> --repo <o>/<r> --json number,state,title,labels,assignees,body,comments`                        |
+| **Issue** comment stream           | `gh api repos/<o>/<r>/issues/<n>/comments`                                                                         |
+| Comment on an issue (bot)          | `a-novel core bot-comment <o> <r> <n> --body "..."` (flat — no `--reply-to`)                                        |
+| Edit the plan body (operator)      | `gh issue edit <n> --repo <o>/<r> --body-file <file>`                                                              |
+| Close an issue                     | `gh issue close <n> --repo <o>/<r> --reason completed\|"not planned"`                                              |
