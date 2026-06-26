@@ -12,7 +12,8 @@ description: >
   is iterated with the human until agreed — then handing off to implement-feature (per-repo
   execution) and manage-versions (cross-repo staging). Always invoke it before writing code when the
   implementation steps are not already 100% clear; skip it only for trivial, well-scoped changes.
-  Pairs with implement-feature, manage-versions, choose-dependency, git-conventions, open-pull-request.
+  Pairs with implement-feature, manage-versions, choose-dependency, git-conventions, open-pull-request,
+  and triage-issues (the recurring grooming pass over the issues this skill creates).
 ---
 
 # Plan & design before you build
@@ -190,13 +191,22 @@ cross-repo Epics; per-repo work lives in the repo it touches.
 - **Project board** — add the issue to the org's **"Tasks"** board (`a-novel` project #7,
   `a-novel-kit` project #1) and set its fields:
 
-  | Field         | Values                                                   | Meaning                                                                                               |
-  | ------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-  | **Status**    | Backlog · Ready · In progress · In review · Done · Track | Workflow state. A not-yet-ready draft stage sits in **Backlog**; promote to **Ready** when unblocked. |
-  | **Priority**  | P0 · P1 · P2 · P3 · P4                                   | P0 = drop-everything; P4 = nice-to-have.                                                              |
-  | **Size**      | XS · S · M · L · XL                                      | The **effort** estimate.                                                                              |
-  | **Release**   | _free single-select_                                     | Cross-repo version grouping (the only release axis that spans repos).                                 |
-  | **Milestone** | _per-repo_                                               | Optional. A repo's release train (e.g. `v1.3.0`); cannot span repos.                                  |
+  | Field           | Values                                                   | Meaning                                                                                                 |
+  | --------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+  | **Status**      | Backlog · Ready · In progress · In review · Done · Track | Workflow state. A not-yet-ready draft stage sits in **Backlog**; promote to **Ready** when unblocked.   |
+  | **Priority**    | P0 · P1 · P2 · P3 · P4                                   | P0 = drop-everything; P4 = nice-to-have.                                                                |
+  | **Size**        | XS · S · M · L · XL                                      | The **effort / weight** estimate. Every actionable ticket gets one.                                     |
+  | **Target date** | _date_                                                   | The **due date**. Set it once the issue goes **active** (see below).                                    |
+  | **Release**     | _free single-select_                                     | Cross-repo version grouping (the only release axis that spans repos).                                   |
+  | **Milestone**   | _per-repo_                                               | Optional. A repo's release train (e.g. `v1.3.0`); cannot span repos. Give it a **due date** (`due_on`). |
+
+- **When to set each field — weight, priority, due dates.** Set **Size** (weight) and **Priority** at
+  **creation when the scope is clear** — you usually know a planned Task's rough size and urgency — and
+  otherwise **assign/refine them during the triage pass** (`triage-issues`). Leave the **Target date**
+  (due date) empty until the issue becomes **active** — i.e. it has an open PR linked against it — then
+  **agree a due date with the operator**; an active issue without a due date is a triage smell. Give
+  every **milestone** a due date too (`gh api repos/<o>/<r>/milestones -f due_on=<RFC3339>`): both dates
+  exist to make triage decisions, not decoration.
 
 - **Milestone vs Release.** Milestones are **per-repo and cannot span repos**, so use a milestone
   for a single repo's release train and the board's **Release** field for a version that spans
@@ -367,6 +377,33 @@ degrading the plan to fit a missing scope is the wrong move.
 
 ---
 
+## Operating the board
+
+**One board per org, scaled by _views_ not boards.** Each org has exactly one "Tasks" project. This
+is deliberate and idiomatic for a small operation: orgs that run many boards (Kubernetes per-SIG,
+Node.js per-team, Prometheus per-release) do so because they have many parallel _teams_ — a scale
+driver we don't have. Comparable focused projects (Astro, Vite, Excalidraw) anchor on a single board;
+GitHub's own model is **one project, many saved views**. Do **not** add per-area or per-release boards.
+The one real limit: a project **cannot span two orgs**, which is the other reason the two orgs keep
+separate boards (cross-org epics are tracked by reference — see "Where the issue lives").
+
+**Enable the built-in automations** (one-time, in each board's Settings → Workflows — these are not
+settable via the API): _Item closed → Done_, _Pull request merged → Done_, _Item added → set Status
+to Backlog/Todo_, and the one free-tier _Auto-add_ workflow (point it at the busiest repo; add other
+repos' issues with `gh project item-add` or `--project` on create). _Auto-archive_ items Done > 2
+weeks keeps the board light.
+
+**Saved views worth having** (also UI-only): _Board by Status_; _Triage_ (`is:open is:issue
+label:triage`); _My/agent items_ (`assignee:@me is:open`); _Roadmap_ grouped by Milestone or Release;
+_Epics_ grouped by **Parent issue** (or filtered `type:Epic`).
+
+**Recurring triage is its own skill.** Grooming the open-issue set — prioritising, assigning weights,
+setting due dates, refining drafts that are about to go active — is the `triage-issues` skill, run
+manually during a planning pass. This skill (`plan-feature`) sets a ticket's fields at _creation_;
+`triage-issues` keeps them honest over time.
+
+---
+
 ## How this composes
 
 ```
@@ -374,6 +411,7 @@ plan-feature ─ (choose-dependency for build-vs-buy) ─> agreed planning issue
       │                                                   ├─ typed, labelled, on the org "Tasks" board
       │                                                   ├─ staged via blocked-by dependencies
       │                                                   └─ discussion in comments (resolve-pr-feedback loop)
+      ├─ triage-issues (recurring manual pass: prioritise · weigh · due-date · groom drafts)
       └─ execution: implement-feature (per repo, one PR per Task, Closes #<task>)
                   + manage-versions (cross-repo order & staging)
                   └─ open-pull-request ─> monitor-ci ─> resolve-pr-feedback
