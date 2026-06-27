@@ -89,12 +89,15 @@ jobs:
         env:
           REPO: ${{ inputs.repo }}
           NONCE: ${{ inputs.nonce }}
-          NUMBER: ${{ inputs.number }}
-          BODY: ${{ inputs.body }}
-          REPLY_TO: ${{ inputs.reply_to }}
           COMMENTS: ${{ inputs.comments }}
         run: |
           set -euo pipefail
+          # Validate only what the GitHub API can't report meaningfully: the
+          # token-scope input, the nonce format, and the batch shape. Per-comment
+          # number / body / reply_to errors are left to the API at post time, so
+          # our rules can't drift from GitHub's; a malformed batch may partially
+          # post, which the per-item idempotency markers make recoverable on a
+          # re-dispatch.
           if [ -z "$REPO" ]; then
             echo "::error::repo is empty"
             exit 1
@@ -105,60 +108,19 @@ jobs:
               exit 1
               ;;
           esac
-          # nonce is lowercase hex (matches the CLI's hex.EncodeToString).
+          # nonce is lowercase hex (matches the CLI's hex.EncodeToString); the
+          # API never sees it — it is marker / run-name text the CLI correlates on.
           case "$NONCE" in
             '' | *[!0-9a-f]*)
               echo "::error::nonce '$NONCE' must be lowercase hex"
               exit 1
               ;;
           esac
-
-          # Validate one comment's fields. Args: number reply_to body
-          validate_item() {
-            n="$1"
-            r="$2"
-            b="$3"
-            # Positive integer, no leading zero (rejects '', '0', '007', non-digits).
-            case "$n" in
-              '' | 0* | *[!0-9]*)
-                echo "::error::number '$n' must be a positive integer"
-                exit 1
-                ;;
-            esac
-            if [ -n "$r" ]; then
-              case "$r" in
-                0* | *[!0-9]*)
-                  echo "::error::reply_to '$r' must be a positive integer"
-                  exit 1
-                  ;;
-              esac
-            fi
-            if [ -z "$b" ]; then
-              echo "::error::body is empty"
-              exit 1
-            fi
-            # GitHub caps a comment at 65536 chars; stay safely under.
-            if [ "${#b}" -gt 60000 ]; then
-              echo "::error::body is ${#b} chars (max 60000)"
-              exit 1
-            fi
-          }
-
-          if [ -n "$COMMENTS" ]; then
-            # Batch form: a non-empty JSON array; validate every item.
-            if ! printf '%s' "$COMMENTS" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
-              echo "::error::comments must be a non-empty JSON array"
-              exit 1
-            fi
-            while IFS= read -r item; do
-              validate_item \
-                "$(printf '%s' "$item" | jq -r '.number // ""')" \
-                "$(printf '%s' "$item" | jq -r '.reply_to // ""')" \
-                "$(printf '%s' "$item" | jq -r '.body // ""')"
-            done < <(printf '%s' "$COMMENTS" | jq -c '.[]')
-          else
-            # Single form.
-            validate_item "$NUMBER" "$REPLY_TO" "$BODY"
+          # comments, when present, must be a non-empty JSON array — otherwise the
+          # post loop's jq fails cryptically mid-run.
+          if [ -n "$COMMENTS" ] && ! printf '%s' "$COMMENTS" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
+            echo "::error::comments must be a non-empty JSON array"
+            exit 1
           fi
 
       # Mint a token scoped to the single target repo, with only the two
