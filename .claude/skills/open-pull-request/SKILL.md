@@ -268,9 +268,27 @@ Exhaustive on decisions, silent on mechanics. The same bar applies to PR thread 
   assignment duplicates or conflicts with that automation.
 - `--label` — labels are derived from the title's Conventional-Commits type by downstream
   automation. Do not add them manually unless the user requests a specific one.
-- `--milestone` — project management concern; leave to humans.
+- `--milestone` / project board / tracking labels — **not** left to humans: a **ready** PR mirrors
+  the milestone, project board, and labels of the issue it closes. See
+  [Tracking metadata](#55-tracking-metadata--match-the-linked-issue).
 
-### 5.5 Capture the PR URL
+### 5.5 Tracking metadata — match the linked issue
+
+A PR that is **ready for review** (not a draft) should be as trackable as the planning issue it
+closes: add it to the org **"Tasks"** board and give it the **same milestone** and the relevant
+**tracking labels** as that issue, so a glance at the board shows the work whether you look at the
+issue or its PR. A draft skips this — apply it when opening ready, or at the **draft → ready** flip
+(Phase 6).
+
+```bash
+gh pr edit <n> --repo <org>/<repo> --add-label <label> --milestone "<milestone-title>"
+gh project item-add <project-number> --owner <org> --url <pr-url>
+```
+
+This is **tracking** metadata mirroring the issue — distinct from the type label automation derives
+from the title, and from assignee/reviewer (still automation's job, see 5.4).
+
+### 5.6 Capture the PR URL
 
 The `gh pr create` command prints the PR URL on success. Surface it to the user in the
 final message so they can jump to it.
@@ -291,7 +309,7 @@ gh pr edit --body "$(cat <<'EOF'
 EOF
 )"
 
-# Flip from draft to ready
+# Flip from draft to ready — then apply tracking metadata (5.5): board + milestone + labels
 gh pr ready
 
 # Flip from ready back to draft
@@ -335,7 +353,8 @@ bot-comment` only posts comments. PR create/edit/ready always run as the operato
 - **Pushing before local tests pass.** CI is not a debugger. Run tests locally first.
 - **Opening a PR from master.** Branch first, then PR.
 - **Closing and re-creating a PR to "fix" the title.** Use `gh pr edit --title` instead.
-- **Manual reviewer/assignee/label flags.** Automation handles these.
+- **Manual reviewer/assignee flags.** Automation handles these. (Tracking metadata — milestone,
+  project board, and issue-matching labels — is the exception: a ready PR carries them, per 5.5.)
 - **`--force` without `--lease`.** Always `--force-with-lease` after a rebase.
 - **Missing `BREAKING CHANGE:` footer.** If any commit on the branch is breaking, the PR
   body's Breaking Changes section must list it. Mismatches between commits and PR body are
