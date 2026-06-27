@@ -188,6 +188,10 @@ cross-repo Epics; per-repo work lives in the repo it touches.
   signals `good first issue` / `help wanted` where they apply. **Never** label kind (that's Type),
   priority/effort (Project fields), or blocked state (native dependencies).
 
+- **Assignee** — assign every Epic and Task to its **creator** on creation (`--assignee "@me"`, the
+  operator whose `gh` token authors it — not the bot). They may reassign later, but a default owner
+  keeps the board triageable the moment more contributors arrive: no issue sits ownerless.
+
 - **Project board** — add the issue to the org's **"Tasks"** board (`a-novel` project #7,
   `a-novel-kit` project #1) and set its fields:
 
@@ -341,17 +345,17 @@ stage; until those skills exist, plan platform work conservatively and flag the 
 IDs (project, field, single-select option) are discovered with `gh project field-list <num> --owner
 <org>` and `gh project item-list`; field values are then set with `gh project item-edit`.
 
-| Action                             | Command                                                                                                                    |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Create an Epic (cross-repo)        | `gh issue create --repo <org>/.github --type Epic --title "..." --label triage --body-file <file>`                         |
-| Create a Task sub-issue            | `gh issue create --repo <org>/<repo> --type Task --parent <epic-#-or-url> --label triage --title "..." --body-file <file>` |
-| Add it to the board on creation    | append `--project "Tasks"` to `gh issue create`                                                                            |
-| Add an existing issue to the board | `gh project item-add <num> --owner <org> --url <issue-url>`                                                                |
-| Sequence stages                    | `gh issue edit <m> --repo <org>/<repo> --add-blocked-by <n>`                                                               |
-| Set Priority / Size / Status       | `gh project item-edit --id <item-id> --field-id <field-id> --project-id <proj-id> --single-select-option-id <opt-id>`      |
-| Iterate the plan body              | `gh issue edit <n> --repo <org>/<repo> --body-file <file>`                                                                 |
-| Discuss / open question (bot)      | `a-novel core bot-comment <org> <repo> <n> --body "..."`                                                                   |
-| Delete a not-yet-started draft     | `gh issue delete <n> --repo <org>/<repo> --yes`                                                                            |
+| Action                             | Command                                                                                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create an Epic (cross-repo)        | `gh issue create --repo <org>/.github --type Epic --title "..." --label triage --assignee "@me" --body-file <file>`                         |
+| Create a Task sub-issue            | `gh issue create --repo <org>/<repo> --type Task --parent <epic-#-or-url> --label triage --assignee "@me" --title "..." --body-file <file>` |
+| Add it to the board on creation    | append `--project "Tasks"` to `gh issue create`                                                                                             |
+| Add an existing issue to the board | `gh project item-add <num> --owner <org> --url <issue-url>`                                                                                 |
+| Sequence stages                    | `gh issue edit <m> --repo <org>/<repo> --add-blocked-by <n>`                                                                                |
+| Set Priority / Size / Status       | `gh project item-edit --id <item-id> --field-id <field-id> --project-id <proj-id> --single-select-option-id <opt-id>`                       |
+| Iterate the plan body              | `gh issue edit <n> --repo <org>/<repo> --body-file <file>`                                                                                  |
+| Discuss / open question (bot)      | `a-novel core bot-comment <org> <repo> <n> --body "..."`                                                                                    |
+| Delete a not-yet-started draft     | `gh issue delete <n> --repo <org>/<repo> --yes`                                                                                             |
 
 (Board numbers: `a-novel` → project **#7** "Tasks"; `a-novel-kit` → project **#1** "Tasks".)
 
