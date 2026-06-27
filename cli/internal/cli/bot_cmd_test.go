@@ -106,7 +106,7 @@ func TestValidateBotOrgRepo(t *testing.T) {
 		expectErr bool
 	}{
 		{name: "valid a-novel", org: orgAnovel, repo: testBotRepo},
-		{name: "valid a-novel-kit", org: orgAnovelKit, repo: "golib"},
+		{name: "valid a-novel-kit", org: orgAnovelKit, repo: "nodelib"},
 		{name: "unknown org", org: "a-other", repo: testBotRepo, expectErr: true},
 		{name: "empty repo", org: orgAnovel, repo: "", expectErr: true},
 		{name: "repo carries org prefix", org: orgAnovel, repo: orgAnovel + "/" + testBotRepo, expectErr: true},
