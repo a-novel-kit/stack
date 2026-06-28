@@ -158,6 +158,11 @@ type ChecksConfig struct {
 	Features     map[string]FeatureRule `yaml:"features"`
 	Docker       DockerRule             `yaml:"docker"`
 	Codecov      CodecovRule            `yaml:"codecov"`
+	// Retired lists check contexts the map once emitted but has since renamed
+	// or removed. They stay part of the managed namespace (see
+	// ChecksConfig.IsManaged) so `repo update` DROPS a stale live check by one
+	// of these names instead of mistaking it for a manual (unmanaged) one.
+	Retired []string `yaml:"retired"`
 }
 
 // LoadClass reads and parses classes/<class>.yaml.

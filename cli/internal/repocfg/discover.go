@@ -2,8 +2,6 @@ package repocfg
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -26,8 +24,10 @@ type Discovered struct {
 }
 
 // Discover walks repoPath and applies the checks.yaml map to produce the
-// required-check set + CodeQL languages. Detection is by file presence plus
-// the detect package for docker build targets.
+// required-check set + CodeQL languages. A language/feature signal is matched
+// by detect.ExistsUnder — a bounded, gitignore-aware walk — so a module that
+// lives in a sub-directory (e.g. stack's Go module under cli/) is detected, not
+// just one at the repo root. Docker build targets come from the detect package.
 func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 	d := &Discovered{}
 	seen := map[string]bool{}
@@ -48,7 +48,7 @@ func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 
 	for _, name := range sortedKeys(cc.Languages) {
 		lr := cc.Languages[name]
-		if anyExists(repoPath, lr.Detect) {
+		if detect.ExistsUnder(repoPath, lr.Detect) {
 			addDefs(lr.Checks)
 			d.CodeQLLangs = appendUnique(d.CodeQLLangs, lr.CodeQL...)
 		}
@@ -56,7 +56,7 @@ func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 
 	for _, name := range sortedFeatureKeys(cc.Features) {
 		fr := cc.Features[name]
-		if anyExists(repoPath, fr.Detect) {
+		if detect.ExistsUnder(repoPath, fr.Detect) {
 			addDefs(fr.Checks)
 		}
 	}
@@ -80,20 +80,13 @@ func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 // dockerTargetName turns a detect podman target ("rest.Dockerfile",
 // "standalone.rest.Dockerfile") into the CI job suffix ("rest",
 // "standalone-rest"). Note: a few CI jobs are not pure derivations of the
-// Dockerfile name (e.g. init -> job-init), which is why `update` reconciles
-// against the live ruleset rather than trusting discovery alone.
+// Dockerfile name (e.g. init -> job-init), so discovery cannot reproduce them.
+// Such a context is "unmanaged" — present live but outside the map's namespace —
+// and `update` preserves it rather than reconciling it away (see
+// reconcileMasterChecks); a `--full` reset, by contrast, drops it.
 func dockerTargetName(name string) string {
 	name = strings.TrimSuffix(name, ".Dockerfile")
 	return strings.ReplaceAll(name, ".", "-")
-}
-
-func anyExists(root string, names []string) bool {
-	for _, n := range names {
-		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(n))); err == nil {
-			return true
-		}
-	}
-	return false
 }
 
 func appendUnique(dst []string, vs ...string) []string {

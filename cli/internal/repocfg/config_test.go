@@ -1,6 +1,9 @@
 package repocfg
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestLoadAllClasses(t *testing.T) {
 	t.Parallel()
@@ -53,6 +56,20 @@ func TestLoadChecks(t *testing.T) {
 	}
 	if len(c.Always) == 0 {
 		t.Fatal("always checks empty")
+	}
+
+	// The Go test check is the renamed test-go (matching lint-go/generated-go
+	// and the actual CI job context); the bare `test` it replaced is retired so
+	// `update` drops a stale live one rather than treating it as manual.
+	goChecks := contextsOf(resolveCheckDefs(c.Languages["go"].Checks, c))
+	if !slices.Contains(goChecks, "test-go") {
+		t.Errorf("languages.go.checks missing test-go; got %v", goChecks)
+	}
+	if slices.Contains(goChecks, "test") {
+		t.Errorf("languages.go.checks still carries the bare test; got %v", goChecks)
+	}
+	if !slices.Contains(c.Retired, "test") {
+		t.Errorf("retired must list test; got %v", c.Retired)
 	}
 }
 
