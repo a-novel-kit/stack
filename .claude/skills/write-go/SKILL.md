@@ -21,7 +21,7 @@ two companion skills; load the one that matches where you are working **in addit
 one:
 
 - **`write-go-service`** — clean-architecture services under `a-novel` (`app/service-*`,
-  `app/platform-*`): the `cmd`/`internal/{config,lib,dao,services,handlers,models}`/`pkg` layout,
+  `app/platform-*`): the `cmd`/`internal/{config,lib,dao,core,handlers,models}`/`pkg` layout,
   the interface+implementation pattern, transactions, OpenTelemetry instrumentation, REST/gRPC
   handlers, and the layer-specific test patterns.
 - **`write-go-kit`** — shared libraries under `a-novel-kit` (`kit/golib`, `kit/jwt`, …): the
@@ -122,7 +122,7 @@ layer/role prefixes (`pg.*`, `rest.*`, `grpc.*`, `*.config.go`, `common.go`, …
 
 ### Variables and fields
 
-- **Be explicit.** `userRepository`, not `repo`. `orderCreateService`, not `svc`. Length is not
+- **Be explicit.** `userDao`, not `repo`. `orderCreateService`, not `svc`. Length is not
   the cost; ambiguity is.
 - **Short names are fine for conventional roles only**: `w` / `r` for HTTP handler params, `ctx`
   for `context.Context`, `err` for errors, `i` / `k` / `v` in range loops, `t` for `*testing.T`.
@@ -146,7 +146,7 @@ func NewPgUserSelect() *PgUserSelect { return new(PgUserSelect) }
 
 // CORRECT — reads identically whether the struct is empty or has fields.
 func NewPgUserSelect() *PgUserSelect              { return &PgUserSelect{} }
-func NewUserSearch(r UserSearchRepository) *UserSearch { return &UserSearch{repository: r} }
+func NewUserSearch(r UserSearchDao) *UserSearch { return &UserSearch{dao: r} }
 ```
 
 Treat any `new(T)` you find as cleanup-on-sight when the file is already in scope.

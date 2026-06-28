@@ -53,13 +53,13 @@ The scope is the area of the codebase affected. Use the layer name, not the feat
 | `proto`      | Protobuf definitions (`internal/models/proto/`) |
 | `migrations` | Database schema (`internal/models/migrations/`) |
 | `dao`        | Data access layer (`internal/dao/`)             |
-| `services`   | Business logic (`internal/services/`)           |
+| `core`       | Business logic (`internal/core/`)               |
 | `handlers`   | gRPC and REST handlers (`internal/handlers/`)   |
 | `config`     | Configuration (`internal/config/`)              |
 | `lib`        | Shared utilities (`internal/lib/`)              |
 | `pkg`        | Exported Go client (`pkg/go/`)                  |
 | `pkg-js`     | Exported JS/TS client (`pkg/js/`)               |
-| `cmd`        | Entrypoints (`cmd/`)                            |
+| `cmd`        | Targets (`cmd/`)                                |
 | `builds`     | Dockerfiles and compose files (`builds/`)       |
 | `scripts`    | Shell scripts (`scripts/`)                      |
 | `ci`         | GitHub Actions workflows (`.github/`)           |
@@ -113,10 +113,10 @@ Flag any change that:
 feat/proto/add-key-revoke-rpc
 feat/migrations/add-revoked-keys-table
 feat/dao/jwk-revoke
-feat/services/jwk-revoke
+feat/core/jwk-revoke
 feat/handlers/grpc-jwk-revoke
 fix/dao/search-returns-deleted-keys
-refactor/services/extract-key-rotation-logic
+refactor/core/extract-key-rotation-logic
 chore/builds/add-rotate-keys-dockerfile
 chore/skills/feature-workflow
 docs/pkg/update-client-examples
@@ -153,7 +153,7 @@ EOF
   commit. A migration file = one commit. Never combine DAO + service in a single commit.
 - **Generated files belong in the same commit as the change that necessitated them.** Proto Go
   bindings (`internal/models/proto/gen/`) and mock files (`internal/handlers/mocks/`,
-  `internal/services/mocks/`) are generated artifacts. Do not commit them separately — stage them
+  `internal/core/mocks/`) are generated artifacts. Do not commit them separately — stage them
   together with the `.proto` or interface change that required `pnpm generate:go`.
 - **Never commit secrets.** .env files, APP_MASTER_KEY values, real credentials.
 - **Never skip hooks** (`--no-verify`) unless explicitly asked.

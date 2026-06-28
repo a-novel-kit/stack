@@ -327,12 +327,12 @@ The old "keep the plan file from rotting" discipline is now mostly automatic:
 The workspace has more than one kind of repo, and the right conventions differ by kind. Identify the
 kind early — it changes the work breakdown and which skills apply.
 
-| Kind                           | Org           | Shape                                                                                                       | Examples                                      |
-| ------------------------------ | ------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| **service**                    | `a-novel`     | Backend microservice, layered clean-arch (`cmd`/`internal/{config,lib,dao,services,handlers,models}`/`pkg`) | `service-authentication`, `service-json-keys` |
-| **platform**                   | `a-novel`     | **Frontend**, deliberately more **monolithic** than the services                                            | (forthcoming)                                 |
-| **library**                    | `a-novel-kit` | Shared Go/JS libs                                                                                           | `golib`, `jwt`, `nodelib`                     |
-| **tooling / meta / workflows** | both          | CLI, `.github`, reusable CI                                                                                 | `stack`, `workflows`                          |
+| Kind                           | Org           | Shape                                                                                                   | Examples                                      |
+| ------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| **service**                    | `a-novel`     | Backend microservice, layered clean-arch (`cmd`/`internal/{config,lib,dao,core,handlers,models}`/`pkg`) | `service-authentication`, `service-json-keys` |
+| **platform**                   | `a-novel`     | **Frontend**, deliberately more **monolithic** than the services                                        | (forthcoming)                                 |
+| **library**                    | `a-novel-kit` | Shared Go/JS libs                                                                                       | `golib`, `jwt`, `nodelib`                     |
+| **tooling / meta / workflows** | both          | CLI, `.github`, reusable CI                                                                             | `stack`, `workflows`                          |
 
 `implement-feature`'s layer-by-layer branch decomposition is a **service** pattern — do **not** apply
 it wholesale to a platform repo. Frontend (platform) authoring conventions are a separate, later

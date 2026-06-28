@@ -183,7 +183,7 @@ own follow-up:
 ```bash
 pnpm generate:go
 git status --porcelain
-git add internal/handlers/protogen/ internal/handlers/mocks/ internal/services/mocks/
+git add internal/handlers/protogen/ internal/handlers/mocks/ internal/core/mocks/
 git commit -m "chore(gen): regenerate Go bindings for <scope>"
 git push
 ```

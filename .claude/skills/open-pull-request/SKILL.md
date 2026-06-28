@@ -90,7 +90,7 @@ git status --porcelain
 ```
 
 Any newly-modified files under `internal/handlers/protogen/`, `internal/handlers/mocks/`, or
-`internal/services/mocks/` belong with the source change that caused them. Before the
+`internal/core/mocks/` belong with the source change that caused them. Before the
 branch's first push, amend them into the relevant commit. After the branch has been
 pushed, do not rewrite published history — add a follow-up `chore(gen): ...` commit
 instead (per `monitor-ci`). CI has a `generated-go` job that will fail if these are
@@ -125,7 +125,7 @@ Never use plain `--force`. Never force-push to `master` or `main`.
 
 ### 2.3 Stacked branches
 
-If this branch depends on another open PR (e.g., `feat/services/jwk-revoke` depends on
+If this branch depends on another open PR (e.g., `feat/core/jwk-revoke` depends on
 `feat/dao/jwk-revoke`), the base of the PR must be the parent branch, not master. Push the
 parent first and make sure its PR is already open.
 

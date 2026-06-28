@@ -2,11 +2,11 @@
 name: write-go-service
 description: >
   Clean-architecture conventions for the a-novel backend SERVICES — `app/service-*`,
-  `app/platform-*`, and any repo with the `cmd`/`internal/{config,lib,dao,services,handlers,models}`/`pkg`
+  `app/platform-*`, and any repo with the `cmd`/`internal/{config,lib,dao,core,handlers,models}`/`pkg`
   layout. Load this skill whenever writing or modifying Go in such a repo: new endpoints, schema
   changes, business logic, new layers, handlers, refactors, or layer-specific tests (DAO Postgres
   harness, REST/gRPC handler tests). Covers the layer split and import direction, the
-  interface+implementation pattern, DAO/services/handlers/config/lib/models/pkg/cmd, transaction
+  interface+implementation pattern, DAO/core/handlers/config/lib/models/pkg/cmd, transaction
   scoping, OpenTelemetry instrumentation, and the service security model. ALWAYS load `write-go`
   (the base Go conventions) ALONGSIDE this skill; for shared libraries under `a-novel-kit` use
   `write-go-kit` instead of this one. Pairs with `write-go-tests`, `document-code`, `write-sql`,
@@ -16,7 +16,7 @@ description: >
 # Go — Backend Services (clean architecture)
 
 This skill governs Go in the a-novel backend services: repos shaped as
-`cmd/` + `internal/{config,lib,dao,services,handlers,models}` + (optionally) `pkg/`. The goal is
+`cmd/` + `internal/{config,lib,dao,core,handlers,models}` + (optionally) `pkg/`. The goal is
 coherent, idiomatic, minimal code that strictly respects the layered architecture.
 
 **This skill is layered on `write-go`.** Everything in `write-go` — read-before-edit, the
@@ -52,12 +52,12 @@ Run the base loop from `write-go` (`pnpm generate:go` when interfaces/proto chan
 ## Project structure
 
 ```
-cmd/                   # Main entrypoints (one binary per subdirectory)
+cmd/                   # Main targets (one binary per subdirectory)
 internal/
   config/              # Static configuration types + env-driven presets
   lib/                 # Minimal internal utilities (keep as small as possible — ideally empty)
   dao/                 # Data access layer (postgres, external sources)
-  services/            # Business logic layer
+  core/                # Business logic layer
   handlers/            # Transport layer (REST, gRPC)
   models/
     migrations/        # SQL migrations (up/down pairs)
@@ -71,13 +71,13 @@ pkg/go/                # Exported Go client library (only if another service con
 config   →  (no imports from internal layers)
 lib      →  (no imports from internal layers)
 dao      →  config, lib
-services →  config, lib, dao   (via interfaces only)
-handlers →  config, lib, services (via interfaces only)
+core     →  config, lib, dao   (via interfaces only)
+handlers →  config, lib, core   (via interfaces only)
 cmd      →  all layers (wires everything together)
 ```
 
-Handlers never import `dao` directly. Services never import `handlers`. No circular imports.
-Proto-generated types never enter the `services` or `dao` layers — handlers own all proto↔service
+Handlers never import `dao` directly. Core never imports `handlers`. No circular imports.
+Proto-generated types never enter the `core` or `dao` layers — handlers own all proto↔core
 conversion.
 
 ---
@@ -91,7 +91,7 @@ prefix is fixed — match the existing files exactly:
 | ------------------ | ----------------------------------- | ------------------------------------------ |
 | DAO                | `pg.<entity>[<Operation>].go`       | `pg.user.go` (model), `pg.userSearch.go`   |
 | DAO SQL            | `pg.<entity><Operation>.sql`        | `pg.userSearch.sql`                        |
-| Services           | `<entity><Operation>.go`            | `userSearch.go`, `orderCreate.go`          |
+| Core               | `<entity><Operation>.go`            | `userSearch.go`, `orderCreate.go`          |
 | Handlers           | `<protocol>.<entity><Operation>.go` | `rest.userList.go`, `grpc.orderCreate.go`  |
 | Config             | `<subject>.config.go`               | `app.config.go`, `users.config.go`         |
 | Config defaults    | `<subject>.config.default.go`       | `app.config.default.go`                    |
@@ -106,42 +106,42 @@ types prefixed `Http` are legacy; rename them when they come into scope (see Act
 
 ## Type names
 
-| Kind                                       | Pattern                                | Example                                       |
-| ------------------------------------------ | -------------------------------------- | --------------------------------------------- |
-| Operation interface + struct               | `<Entity><Operation>`                  | `UserSearch`, `OrderCreate`                   |
-| DAO dependency interface (in services)     | `<Entity><Operation>Repository`        | `UserSearchRepository`, `JwkSelectRepository` |
-| Service dependency interface (in handlers) | `<Protocol><Entity><Operation>Service` | `RestJwkGetService`, `GrpcJwkListService`     |
-| Service dependency interface (in services) | `<Entity><Operation>Service<Role>`     | `JwkSearchServiceExtract`                     |
-| Request struct                             | `<Entity><Operation>Request`           | `UserSearchRequest`                           |
-| Config struct                              | Domain-named                           | `App`, `RestTimeouts`, `Database`             |
-| DAO entity (bun model)                     | Entity name, singular                  | `User`, `Order`                               |
-| Handler struct                             | `<Protocol><Entity><Operation>`        | `RestUserList`, `GrpcOrderCreate`             |
+| Kind                                       | Pattern                                | Example                                   |
+| ------------------------------------------ | -------------------------------------- | ----------------------------------------- |
+| Operation interface + struct               | `<Entity><Operation>`                  | `UserSearch`, `OrderCreate`               |
+| DAO dependency interface (in core)         | `<Entity><Operation>Dao`               | `UserSearchDao`, `JwkSelectDao`           |
+| Service dependency interface (in handlers) | `<Protocol><Entity><Operation>Service` | `RestJwkGetService`, `GrpcJwkListService` |
+| Service dependency interface (in core)     | `<Entity><Operation>Service<Role>`     | `JwkSearchServiceExtract`                 |
+| Request struct                             | `<Entity><Operation>Request`           | `UserSearchRequest`                       |
+| Config struct                              | Domain-named                           | `App`, `RestTimeouts`, `Database`         |
+| DAO entity (bun model)                     | Entity name, singular                  | `User`, `Order`                           |
+| Handler struct                             | `<Protocol><Entity><Operation>`        | `RestUserList`, `GrpcOrderCreate`         |
 
 ---
 
 ## The interface + implementation pattern
 
-Every file in `dao/`, `services/`, and `handlers/` exports **exactly one struct implementation**;
+Every file in `dao/`, `core/`, and `handlers/` exports **exactly one struct implementation**;
 the struct name mirrors the file name (camel-cased). The file also defines the **dependency
 interfaces** that implementation needs — but not every layer has them:
 
-| Layer       | Struct exports | Interface exports                                                                           |
-| ----------- | -------------- | ------------------------------------------------------------------------------------------- |
-| `dao/`      | one struct     | **none** — DAO files export no interface; the interface lives in the consuming service file |
-| `services/` | one struct     | one per dependency (DAO repo + any sub-services)                                            |
-| `handlers/` | one struct     | one (the service it delegates to)                                                           |
+| Layer       | Struct exports | Interface exports                                                                        |
+| ----------- | -------------- | ---------------------------------------------------------------------------------------- |
+| `dao/`      | one struct     | **none** — DAO files export no interface; the interface lives in the consuming core file |
+| `core/`     | one struct     | one per dependency (the DAO interface + any sub-services)                                |
+| `handlers/` | one struct     | one (the service it delegates to)                                                        |
 
 ```go
-// File: services/userSearch.go
+// File: core/userSearch.go
 
-// UserSearchRepository is the DAO interface this service depends on (defined here, not in dao/).
-type UserSearchRepository interface {
+// UserSearchDao is the DAO interface this service depends on (defined here, not in dao/).
+type UserSearchDao interface {
     Exec(ctx context.Context, request *dao.UserSearchRequest) ([]*dao.User, error)
 }
 
 // UserSearch searches for users matching the given criteria.
 type UserSearch struct {
-    repository UserSearchRepository
+    dao UserSearchDao
 }
 
 // UserSearchRequest carries the inputs for [UserSearch.Exec].
@@ -153,8 +153,8 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
     // ...
 }
 
-func NewUserSearch(repository UserSearchRepository) *UserSearch {
-    return &UserSearch{repository: repository}
+func NewUserSearch(dao UserSearchDao) *UserSearch {
+    return &UserSearch{dao: dao}
 }
 ```
 
@@ -163,7 +163,7 @@ func NewUserSearch(repository UserSearchRepository) *UserSearch {
 - One exported struct per file; its name mirrors the file name.
 - **Interfaces proxy the imported package — always defined by the _consumer_, never the producer.**
   A service that imports `dao.PgUserSearch` does not use that concrete type directly; it declares a
-  local `UserSearchRepository` interface describing only the methods it needs. The DAO package has
+  local `UserSearchDao` interface describing only the methods it needs. The DAO package has
   no interface of its own. Consumer owns the contract; producer satisfies it; neither layer forces
   the other to import it.
 - **One method per interface, named `Exec`.** This is _not_ idiomatic Go (idiomatic Go names
@@ -249,7 +249,7 @@ they participate in whatever is already on the context.
 
 **Who starts a transaction:**
 
-- **Services** — when two or more DAO calls must succeed or fail together (one atomic unit of work).
+- **Core** — when two or more DAO calls must succeed or fail together (one atomic unit of work).
 - **`cmd/`** — for batch jobs (rotation, seeding) that should roll back wholesale on failure.
 - **Handlers** — never. Transactions are a persistence concern, not a transport concern.
 
@@ -272,14 +272,14 @@ err = pgdb.Ping()
 
 ---
 
-## Services layer (`internal/services/`)
+## Core layer (`internal/core/`)
 
 Business logic, validation, orchestration of DAO calls. No HTTP concerns, no JSON marshalling, no
 gRPC status codes — those live exclusively in handlers.
 
 ```go
 func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*User, error) {
-    ctx, span := otel.Tracer().Start(ctx, "services.UserSearch")
+    ctx, span := otel.Tracer().Start(ctx, "core.UserSearch")
     defer span.End()
 
     err := validate.Struct(request)
@@ -287,22 +287,22 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
         return nil, otel.ReportError(span, errors.Join(err, ErrInvalidRequest))
     }
 
-    entities, err := s.repository.Exec(ctx, &dao.UserSearchRequest{Name: request.Name})
+    entities, err := s.dao.Exec(ctx, &dao.UserSearchRequest{Name: request.Name})
     if err != nil {
         return nil, otel.ReportError(span, fmt.Errorf("search users: %w", err))
     }
-    // map dao entities → service types, then:
+    // map dao entities → core models, then:
     return otel.ReportSuccess(span, results), nil
 }
 ```
 
 - **Validate inputs in the `Exec` body** — validation is a service responsibility, never a handler
-  one. Use the project's validation library where the service already has one
+  one. Use the project's validation library where the core layer already has one
   (`go-playground/validator` via a package-level `validate` instance, with a shared
   `ErrInvalidRequest` sentinel); otherwise plain conditional checks. Reject blank required strings,
   zero-value identifiers, out-of-range values, and values outside a known set.
 - **DAO/sub-service sentinels travel up** — return them wrapped with `%w` so handlers can match
-  with `errors.Is`. The service may re-export a DAO sentinel as its own (`services.ErrXxx`) when
+  with `errors.Is`. The service may re-export a DAO sentinel as its own (`core.ErrXxx`) when
   the handler needs to map it (see Common Pitfalls).
 - Services reach DAOs **only** through the local interfaces they declare. Configuration is injected
   as a **concrete config struct** — config is static and never needs to be mocked.
@@ -321,7 +321,7 @@ carry the protocol prefix; the service-dependency interface mirrors the handler 
 // rest.userList.go
 
 type RestUserListService interface {
-    Exec(ctx context.Context, request *services.UserSearchRequest) ([]*services.User, error)
+    Exec(ctx context.Context, request *core.UserSearchRequest) ([]*core.User, error)
 }
 
 type RestUserList struct {
@@ -339,11 +339,11 @@ func (h *RestUserList) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    users, err := h.service.Exec(ctx, &services.UserSearchRequest{Name: request.Name})
+    users, err := h.service.Exec(ctx, &core.UserSearchRequest{Name: request.Name})
     if err != nil {
         httpf.HandleError(ctx, h.logger, w, span, httpf.ErrMap{
-            services.ErrUserNotFound:   http.StatusNotFound,
-            services.ErrInvalidRequest: http.StatusUnprocessableEntity,
+            core.ErrUserNotFound:   http.StatusNotFound,
+            core.ErrInvalidRequest: http.StatusUnprocessableEntity,
         }, err)
         return
     }
@@ -374,7 +374,7 @@ func NewRestUserList(service RestUserListService, logger logging.Log) *RestUserL
 // grpc.orderCreate.go
 
 type GrpcOrderCreateService interface {
-    Exec(ctx context.Context, request *services.OrderCreateRequest) (*services.Order, error)
+    Exec(ctx context.Context, request *core.OrderCreateRequest) (*core.Order, error)
 }
 
 type GrpcOrderCreate struct {
@@ -388,8 +388,8 @@ func (h *GrpcOrderCreate) OrderCreate(
     ctx, span := otel.Tracer().Start(ctx, "grpc.OrderCreate")
     defer span.End()
 
-    result, err := h.service.Exec(ctx, &services.OrderCreateRequest{UserID: req.GetUserId()})
-    if errors.Is(err, services.ErrUserNotFound) {
+    result, err := h.service.Exec(ctx, &core.OrderCreateRequest{UserID: req.GetUserId()})
+    if errors.Is(err, core.ErrUserNotFound) {
         _ = otel.ReportError(span, err)
         return nil, status.Error(codes.NotFound, "create order: user not found")
     }
@@ -408,10 +408,10 @@ func NewGrpcOrderCreate(service GrpcOrderCreateService) *GrpcOrderCreate {
 
 - **gRPC is internal** (service-to-service only) — never exposed to the internet. Embed
   `protogen.Unimplemented<ServiceName>Server`.
-- Map service sentinels to `codes.*` via `errors.Is` + `status.Error`. Inside `status.Error` /
+- Map core sentinels to `codes.*` via `errors.Is` + `status.Error`. Inside `status.Error` /
   `status.Errorf` use `%v`, never `%w` — gRPC status errors don't support `errors.Unwrap`, so `%w`
   is misleading. Keep status _messages_ generic enough not to leak DB/crypto detail.
-- Convert proto↔service types **in the handler**. Never pass a proto type into the service layer.
+- Convert proto↔core models **in the handler**. Never pass a proto type into the core layer.
 - Handler type names carry the `Grpc` prefix; the service interface mirrors it. File:
   `grpc.<entity><Operation>.go`.
 
@@ -457,7 +457,7 @@ Use **`write-sql`** for all migration work. Rules that span both skills:
 
 Use **`write-proto`** for all `.proto` work — naming, the buf toolchain, breaking-change rules,
 well-known types, the new-RPC walkthrough. The cross-cutting rule: proto-generated types never
-enter `services` or `dao`; handlers own all proto↔service conversion.
+enter `core` or `dao`; handlers own all proto↔core conversion.
 
 ---
 
@@ -470,7 +470,7 @@ internal implementation detail through the public API.
 
 ---
 
-## cmd/ (entrypoints)
+## cmd/ (targets)
 
 Each `cmd/<name>/main.go` wires the full dependency graph and starts a server or runs a job:
 
@@ -523,7 +523,7 @@ return otel.ReportSuccess(span, &user), nil
   `"rest.RestJwkGet"`, `"grpc.GrpcStatus"` are wrong.
 - **DAO** — keep the storage prefix; it's the technology qualifier within the layer:
   `"dao.PgJwkSearch"` for `PgJwkSearch`.
-- **Services** — nothing to strip: `"services.JwkSearch"` for `JwkSearch`.
+- **Core** — nothing to strip: `"core.JwkSearch"` for `JwkSearch`.
 - **Sub-spans** (private methods) — append in parentheses: `"rest.JwkGet(parseID)"`,
   `"grpc.Status(reportPostgres)"`.
 
@@ -537,9 +537,9 @@ service layers:
 - **DAO** hits `sql.ErrNoRows`, a unique violation, etc. → `otel.ReportError`. It ran a query and
   got a real outcome it didn't fully resolve. (Join the domain sentinel onto the error first so
   callers keep `errors.Is` identity.)
-- **Service** that produces a sentinel itself (validation failure, claim/source mismatch, a wrong
+- **Core** that produces a sentinel itself (validation failure, claim/source mismatch, a wrong
   secret it detected) → `otel.ReportError`. It raised it.
-- **Service** that receives an error from a DAO/sub-service and returns it upward → still
+- **Core** that receives an error from a DAO/sub-service and returns it upward → still
   `otel.ReportError`. Returning upward is _propagating_, not discarding; wrapping it changes nothing.
 - **Handler** that maps the error to a transport response → it reports too. `httpf.HandleError`
   calls `otel.ReportError` unconditionally before writing the HTTP status, so the REST handler
@@ -556,7 +556,7 @@ service layers:
 The "is the service broken" view is built on the **HTTP status code** (the otel HTTP
 instrumentation records it) — not on span status. Span status answers "did an error occur in
 processing", which is `true` even for a deliberate 404, and that is fine: spans are independent,
-so the DAO span says "no row", the service span says "no row", the handler span says "no row → 404",
+so the DAO span says "no row", the core span says "no row", the handler span says "no row → 404",
 and the dashboard counts the 404 as a 404, not as a 500. For bulk-anomaly visibility on a specific
 security sentinel (a spike of `ErrInvalidSignature`), use a counter / audit log / dedicated event
 — not `span.status`.
@@ -575,9 +575,9 @@ real work.
 comparison; equalize auth-miss timing) and the "use established crypto, never roll your own"
 rule — all of which apply here. The service-specific additions:
 
-- **Validate at the service layer.** Handlers reject only _structurally_ malformed input
+- **Validate at the core layer.** Handlers reject only _structurally_ malformed input
   (unparseable UUID); inputs that parse but are semantically wrong (blank required string,
-  out-of-range value, value outside a known set) are rejected in services with `ErrInvalidRequest`.
+  out-of-range value, value outside a known set) are rejected in the core layer with `ErrInvalidRequest`.
   Bound every length that feeds storage or a downstream system.
 - **No string-built SQL — ever.** Every DAO query is `//go:embed`-ed from a `.sql` file and run
   through bun's parameterized API (`NewRaw(query, args...)`). The embed pattern keeps SQL visible
@@ -616,7 +616,7 @@ func TestPgJwkSelect(t *testing.T) {
 
     testCases := []struct{ /* name, fixtures, request, expect, expectErr */ }{ /* … */ }
 
-    repository := dao.NewPgJwkSelect() // constructed once, outside the loop
+    dao := dao.NewPgJwkSelect() // constructed once, outside the loop
 
     for _, testCase := range testCases {
         t.Run(testCase.name, func(t *testing.T) {
@@ -639,7 +639,7 @@ func TestPgJwkSelect(t *testing.T) {
                     _, err = db.NewRaw("REFRESH MATERIALIZED VIEW active_keys;").Exec(ctx)
                     require.NoError(t, err)
 
-                    key, err := repository.Exec(ctx, testCase.request)
+                    key, err := dao.Exec(ctx, testCase.request)
                     require.ErrorIs(t, err, testCase.expectErr)
                     require.Equal(t, testCase.expect, key)
                 },
@@ -649,28 +649,28 @@ func TestPgJwkSelect(t *testing.T) {
 }
 ```
 
-- `t.Parallel()` on the outer function, like any test. Construct the repository once outside the
+- `t.Parallel()` on the outer function, like any test. Construct the DAO once outside the
   loop. Insert fixtures via `db.NewInsert().Model(...)` on the transaction-bound DB.
 - A test that verifies filtering/ordering must include enough fixtures to make the assertion
   meaningful (a `"FilterUsage"` case needs at least one matching row and one non-matching row).
 - Use fixed UUIDs (`uuid.MustParse("00000000-0000-0000-0000-000000000001")`) and fixed timestamps
   relative to `time.Now()` (`hourAgo`, `hourLater`) so the data is deterministic and readable.
 
-### Services tests — mocks for every dependency, no DB
+### Core tests — mocks for every dependency, no DB
 
 ```go
-repositorySelect := servicesmocks.NewMockJwkSelectRepository(t)
-if testCase.repositorySelectMock != nil {
-    repositorySelect.EXPECT().
+daoSelect := coremocks.NewMockJwkSelectDao(t)
+if testCase.daoSelectMock != nil {
+    daoSelect.EXPECT().
         Exec(mock.Anything, &dao.JwkSelectRequest{ID: testCase.request.ID}).
-        Return(testCase.repositorySelectMock.resp, testCase.repositorySelectMock.err)
+        Return(testCase.daoSelectMock.resp, testCase.daoSelectMock.err)
 }
 
-service := services.NewJwkSelect(repositorySelect /* , sub-services… */)
+service := core.NewJwkSelect(daoSelect /* , sub-services… */)
 res, err := service.Exec(t.Context(), testCase.request)
 require.ErrorIs(t, err, testCase.expectErr)
 require.Equal(t, testCase.expect, res)
-repositorySelect.AssertExpectations(t)
+daoSelect.AssertExpectations(t)
 ```
 
 - One mock per interface the service depends on; test each independently.
@@ -680,7 +680,7 @@ repositorySelect.AssertExpectations(t)
   `mock.MatchedBy(func(r *dao.SomeRequest) bool { ... })` with a validator that calls `t.Error`
   (not `require`) and returns a bool.
 - For a service returning a collection, add a `"Success/Empty"` case with `expect:
-[]*services.Jwk{}` (non-nil) — `make([]*T, len(entities))` always returns a non-nil slice, so a
+[]*core.Jwk{}` (non-nil) — `make([]*T, len(entities))` always returns a non-nil slice, so a
   `nil` expectation would diverge from reality and mask a regression.
 
 ### REST handler tests — `net/http/httptest`, no real server
@@ -746,9 +746,9 @@ integration path.
 ### Common test pitfalls (service-specific)
 
 - **Mocking the database in DAO tests.** DAO tests always use the real DB via
-  `postgres.RunIsolatedTransactionalTest`. Mocks belong in service and handler tests.
+  `postgres.RunIsolatedTransactionalTest`. Mocks belong in core and handler tests.
 - **Using DAO sentinels in handler tests.** Handler tests must not import `dao`. The service mock
-  in a handler test returns the _service-layer_ sentinel (`services.ErrJwkNotFound`), not the DAO
+  in a handler test returns the _core-layer_ sentinel (`core.ErrJwkNotFound`), not the DAO
   one (`dao.ErrJwkSelectNotFound`) — that mirrors what the real service returns after translation
   and keeps the test honest about the handler's actual contract.
 
@@ -758,15 +758,21 @@ integration path.
 
 Apply these when a file is already in scope — never speculatively:
 
-| Legacy pattern                                   | Current standard                                           |
-| ------------------------------------------------ | ---------------------------------------------------------- |
-| Handler files named `http.*`                     | Rename to `rest.*`                                         |
-| Type names with `Http` prefix                    | Rename to `Rest` prefix                                    |
-| Handler span name `"handler.X"`                  | `"rest.X"` / `"grpc.X"` (strip the type's protocol prefix) |
-| Test-only preset in a production `config` file   | Move to `internal/config/configtest/`                      |
-| `.test.go` file carrying test-only globals       | Move to a `*test` subpackage / `_test.go`                  |
-| `new(T)` in a constructor                        | `&T{}`                                                     |
-| `current := item` copy inside a `for range` loop | Delete (Go 1.22+ per-iteration vars)                       |
+| Legacy pattern                                   | Current standard                                                                 |
+| ------------------------------------------------ | -------------------------------------------------------------------------------- |
+| Handler files named `http.*`                     | Rename to `rest.*`                                                               |
+| Type names with `Http` prefix                    | Rename to `Rest` prefix                                                          |
+| Handler span name `"handler.X"`                  | `"rest.X"` / `"grpc.X"` (strip the type's protocol prefix)                       |
+| Test-only preset in a production `config` file   | Move to `internal/config/configtest/`                                            |
+| `.test.go` file carrying test-only globals       | Move to a `*test` subpackage / `_test.go`                                        |
+| `new(T)` in a constructor                        | `&T{}`                                                                           |
+| `current := item` copy inside a `for range` loop | Delete (Go 1.22+ per-iteration vars)                                             |
+| `internal/services/` layer + `*Repository` deps  | `internal/core/` (`package core`, `coremocks`), `*Dao` interfaces + `dao` fields |
+
+> **`service-narrative-engine` is a known divergence.** It went through the `services`→`core` /
+> `repository`→`dao` rename in a separate session and may still carry the pre-rename naming. Do
+> **not** migrate it piecemeal as a side effect of another change — leave it until its own session
+> catches up.
 
 ---
 
@@ -776,10 +782,10 @@ Apply these when a file is already in scope — never speculatively:
 secrets, multiple `time.Now()`, bare `return nil, ErrXxx` from a layer with a span, `new(T)`,
 discarding errors. These are the **service-architecture** ones:)
 
-- **HTTP/gRPC concerns leaking into services.** `http.Error`, `json.Marshal`, `status.Errorf` in a
-  service file → move it to the handler.
-- **`dao` imported in handlers.** Handlers depend on services via interfaces; if a handler needs a
-  DAO sentinel, the service re-exports it as `services.ErrXxx` (in `services/common.go` if shared)
+- **HTTP/gRPC concerns leaking into the core layer.** `http.Error`, `json.Marshal`, `status.Errorf`
+  in a core file → move it to the handler.
+- **`dao` imported in handlers.** Handlers depend on core components via interfaces; if a handler
+  needs a DAO sentinel, the core re-exports it as `core.ErrXxx` (in `core/common.go` if shared)
   and the handler checks that. Keeps the handler decoupled from the DAO layer.
 - **Inline SQL.** All SQL lives in `.sql` files embedded with `//go:embed` at package level; all
   queries are parameterized via bun — no `fmt.Sprintf`.
@@ -789,8 +795,8 @@ discarding errors. These are the **service-architecture** ones:)
   when in scope.
 - **Returning raw error detail in a REST response** — including in a structured JSON field. Map to a
   generic status; carry at most a stable error code.
-- **Validation in handlers instead of services.** Business-rule checks belong in services; handlers
-  reject only structurally invalid input.
+- **Validation in handlers instead of the core layer.** Business-rule checks belong in the core
+  layer; handlers reject only structurally invalid input.
 - **A span on a constructor or config loader.** Spans go on operations that do real work.
-- **A transaction started in a handler.** Transactions are a persistence concern — services or
-  `cmd/` start them, never handlers.
+- **A transaction started in a handler.** Transactions are a persistence concern — the core layer
+  or `cmd/` start them, never handlers.
