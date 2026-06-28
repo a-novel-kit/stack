@@ -62,6 +62,31 @@ func TestApplyPlan(t *testing.T) {
 	}
 }
 
+// A missing `workflow` scope surfaces as a bare 404 on the codeql.yml write
+// (GitHub obscures it as Not Found); the detail must still hint the scope.
+func TestApplyContentsWorkflowScope404(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam.
+	orig := ghStdin
+	ghStdin = func(_ string, args ...string) (string, error) {
+		j := strings.Join(args, " ")
+		if strings.Contains(j, "-X PUT") && strings.Contains(j, "codeql.yml") {
+			return "", errors.New("exit 1: gh: Not Found (HTTP 404)")
+		}
+		return "", nil // the sha-GET and the default-setup PATCH succeed
+	}
+	t.Cleanup(func() { ghStdin = orig })
+
+	detail, err := applyContents("o", "r", branchMaster, repocfg.Op{
+		Method: "PUT", Path: "repos/o/r/contents/.github/workflows/codeql.yml", Content: "name: CodeQL\n",
+	})
+	if err == nil {
+		t.Fatal("expected the 404 to surface as an error")
+	}
+	if !strings.Contains(detail, "workflow") || !strings.Contains(detail, "scope") {
+		t.Fatalf("a bare 404 on a workflow write should hint the `workflow` scope; got detail %q", detail)
+	}
+}
+
 func TestApplySettingsSignoffRetry(t *testing.T) {
 	var bodies []string
 	orig := ghStdin

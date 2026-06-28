@@ -124,7 +124,12 @@ func applyContents(org, repo, branch string, op repocfg.Op) (string, error) {
 		verb = opUpdated
 	}
 	if _, err := gh(args...); err != nil {
-		if isWorkflowScope(err) {
+		// A missing `workflow` token scope surfaces here as either the worded
+		// scope error or a bare 404 — GitHub obscures the scope failure on a
+		// `.github/workflows/` write as Not Found. applyContents only ever writes
+		// codeql.yml under that path (and the repo demonstrably exists by now, its
+		// settings were just patched), so both mean the same thing: add the scope.
+		if isWorkflowScope(err) || isNotFound(err) {
 			return "needs the `workflow` token scope (gh auth refresh -s workflow)", err
 		}
 		return "", err
