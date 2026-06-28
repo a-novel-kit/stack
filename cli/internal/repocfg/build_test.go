@@ -69,7 +69,7 @@ func TestIsManaged(t *testing.T) {
 		{"build-js (feature catalog)", "build-js", true},
 		{"gitguardian (always catalog)", "GitGuardian Security Checks", true},
 		{"codecov (catalog)", "codecov/patch", true},
-		{"bare test (retired)", "test", true},
+		{"bare test (overloaded, not retired)", "test", false},
 		{"hand-named docker job (quirk)", "build-job-init", false},
 		{"derived docker check", "build-rest", false},
 		{"manual addition", "some-manual-check", false},
@@ -81,6 +81,20 @@ func TestIsManaged(t *testing.T) {
 				t.Errorf("IsManaged(%q) = %v, want %v", tc.ctx, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestIsManagedRetired covers the retired mechanism in isolation (the live map
+// retires nothing right now): a retired name is managed, so a normal update
+// drops a stale live check by that name.
+func TestIsManagedRetired(t *testing.T) {
+	t.Parallel()
+	cc := &ChecksConfig{Retired: []string{"old-lint"}}
+	if !cc.IsManaged("old-lint") {
+		t.Error("a retired context must be managed")
+	}
+	if cc.IsManaged("still-manual") {
+		t.Error("a non-retired, non-catalog context must be unmanaged")
 	}
 }
 
@@ -115,12 +129,6 @@ func TestReconcileMasterChecks(t *testing.T) {
 			want:       []string{"build-job-init", "lint-go", "test-go"},
 		},
 		{
-			name:       "DropRetired",
-			discovered: refs("test-go"),
-			live:       refs("test"), // old name → retired → dropped
-			want:       []string{"test-go"},
-		},
-		{
 			name:       "DropRemovedManaged",
 			discovered: refs("lint-go", "test-go"), // repo dropped its proto
 			live:       refs("lint-go", "test-go", "lint-proto"),
@@ -151,6 +159,21 @@ func TestReconcileMasterChecks(t *testing.T) {
 	}
 }
 
+// TestReconcileMasterChecksRetired drives the retired path with a synthetic map
+// (the live map retires nothing): a renamed managed check's OLD name, present
+// live but no longer discovered, is dropped.
+func TestReconcileMasterChecksRetired(t *testing.T) {
+	t.Parallel()
+	cc := &ChecksConfig{
+		Languages: map[string]LangRule{"go": {Checks: []CheckDef{{Context: "test-go"}}}},
+		Retired:   []string{"test"},
+	}
+	got := contextsOf(reconcileMasterChecks(refs("test-go"), refs("test"), cc, false))
+	if want := []string{"test-go"}; !slices.Equal(got, want) {
+		t.Errorf("retired drop: got %v, want %v", got, want)
+	}
+}
+
 // TestResolveMasterChecks ties the reconcile to the RepoTarget method the plan
 // and the summary both call, including the --full (ForceChecks) reset.
 func TestResolveMasterChecks(t *testing.T) {
@@ -160,10 +183,11 @@ func TestResolveMasterChecks(t *testing.T) {
 	target := &RepoTarget{
 		Checks:           cc,
 		Discovered:       &Discovered{Checks: refs("test-go", "lint-go")},
-		LiveMasterChecks: refs("test", "build-job-init"),
+		LiveMasterChecks: refs("build-job-init"),
 	}
 
-	// Reconcile: `test` (retired) dropped, `build-job-init` (unmanaged) kept.
+	// Reconcile preserves the unmanaged hand-named `build-job-init` on top of
+	// the discovered set.
 	if got, want := contextsOf(target.ResolveMasterChecks()),
 		[]string{"build-job-init", "lint-go", "test-go"}; !slices.Equal(got, want) {
 		t.Errorf("ResolveMasterChecks = %v, want %v", got, want)

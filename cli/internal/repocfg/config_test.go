@@ -59,8 +59,7 @@ func TestLoadChecks(t *testing.T) {
 	}
 
 	// The Go test check is the renamed test-go (matching lint-go/generated-go
-	// and the actual CI job context); the bare `test` it replaced is retired so
-	// `update` drops a stale live one rather than treating it as manual.
+	// and the actual CI job context).
 	goChecks := contextsOf(resolveCheckDefs(c.Languages["go"].Checks, c))
 	if !slices.Contains(goChecks, "test-go") {
 		t.Errorf("languages.go.checks missing test-go; got %v", goChecks)
@@ -68,8 +67,10 @@ func TestLoadChecks(t *testing.T) {
 	if slices.Contains(goChecks, "test") {
 		t.Errorf("languages.go.checks still carries the bare test; got %v", goChecks)
 	}
-	if !slices.Contains(c.Retired, "test") {
-		t.Errorf("retired must list test; got %v", c.Retired)
+	// `test` is deliberately NOT retired: it is overloaded (Go's test job vs
+	// nodelib's JS test), so retiring it would drop nodelib's real gate.
+	if slices.Contains(c.Retired, "test") {
+		t.Errorf("test must not be retired (overloaded with nodelib's JS gate); got %v", c.Retired)
 	}
 }
 
