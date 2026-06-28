@@ -134,7 +134,7 @@ where it sits in the codebase, what layer it belongs to, and how it relates to a
 features — those change; the role usually doesn't.
 
 Before writing or rewriting a package doc, make sure you understand the package's place in the overall architecture.
-If you're uncertain (e.g., it's unclear whether a package is a utility layer, a service layer, or something else),
+If you're uncertain (e.g., it's unclear whether a package is a utility layer, a business-logic layer, or something else),
 **ask the developer** rather than guessing. A wrong package doc is worse than none.
 
 Each language has a canonical place for the package doc — always use it:

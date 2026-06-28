@@ -61,7 +61,7 @@ change**, or **not affected**.
 | --------------- | ------------------------------------------------------------ |
 | Schema          | The data model gains, loses, or changes columns/tables       |
 | DAO             | The database query changes or a new query is needed          |
-| Services        | Business logic changes, new error cases, new orchestration   |
+| Core            | Business logic changes, new error cases, new orchestration   |
 | Handlers (gRPC) | A new RPC is added or an existing one changes behaviour      |
 | Handlers (REST) | A new endpoint is added or an existing one changes behaviour |
 | Proto           | A gRPC message or service interface changes                  |
@@ -181,7 +181,7 @@ cannot compile without that branch's changes.
   | Git operations                            | `git-conventions`    |
 
 - **After any proto or interface change, run `pnpm generate:go`** to regenerate protobuf Go bindings
-  and Go interface mocks. Commit the generated files (`internal/models/proto/gen/`, `internal/handlers/mocks/`, `internal/services/mocks/`)
+  and Go interface mocks. Commit the generated files (`internal/models/proto/gen/`, `internal/handlers/mocks/`, `internal/core/mocks/`)
   in the same commit as the change that necessitated them — never in a separate cleanup commit.
 - **Only change what the feature requires.** No refactoring, no style fixes, no "while we're here"
   improvements alongside feature work. Those are separate commits on a separate branch.
@@ -287,6 +287,6 @@ Read the code first. A plan built on wrong assumptions wastes the developer's re
 | "Add a new column / store new data"   | Migration → DAO → service (at minimum)                           |
 | "Change what an existing API returns" | Potential breaking change — flag it                              |
 | "Remove something"                    | Breaking change — get explicit developer approval                |
-| "Internal only, no API change"        | Services/lib only, single branch likely fine                     |
+| "Internal only, no API change"        | Core/lib only, single branch likely fine                         |
 | "Fix a bug in existing behaviour"     | Fix the failing layer; test the contract                         |
 | "The client should be able to do X"   | Start from the relevant client (pkg/go or pkg/js) and trace down |

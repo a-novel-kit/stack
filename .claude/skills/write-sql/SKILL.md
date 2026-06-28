@@ -391,7 +391,7 @@ making values round-trippable through Go's `time.Time` without drift. Never use 
 deployments.
 
 Never use `varchar(n)`. PostgreSQL has no performance advantage over `text`, and length
-constraints belong in the service layer unless they represent a true database invariant.
+constraints belong in the core layer unless they represent a true database invariant.
 
 ### Required Text Fields
 
@@ -483,7 +483,7 @@ WHERE
   pg_cron jobs first, then drop dependent indexes, then drop views, then drop tables.
 - **Missing `IF EXISTS` in down migrations.** Always guard drops with `IF EXISTS` so that a
   partial rollback does not fail.
-- **Using `varchar(n)`.** Use `text` instead; length constraints belong in the service layer.
+- **Using `varchar(n)`.** Use `text` instead; length constraints belong in the core layer.
 - **Using bare `timestamp` without timezone.** Always `timestamp(0) with time zone`.
 - **Using `NOW()` instead of `CURRENT_TIMESTAMP`.** Use `CURRENT_TIMESTAMP` for consistency.
 - **Generic pg_cron job names.** Use descriptive, service-scoped names (`refresh-active-keys`,

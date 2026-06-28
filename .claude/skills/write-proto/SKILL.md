@@ -268,8 +268,8 @@ message ClaimsSignRequest {
 ## Alignment with Go Layers
 
 Proto types are **handler-layer only**. They are generated into `internal/handlers/protogen/`
-and must never be imported by `services/`, `dao/`, or `config/`. Handlers own all conversions
-between proto types and service types.
+and must never be imported by `core/`, `dao/`, or `config/`. Handlers own all conversions
+between proto types and core types.
 
 | Proto element           | Generated Go                             | Used in                               |
 | ----------------------- | ---------------------------------------- | ------------------------------------- |
@@ -316,7 +316,7 @@ struct and registers with `protogen.Register<Name>Server` in `cmd/grpc/main.go`.
 - **Reusing a field number.** Once a number is removed, reserve it. Reusing a number from a
   deleted field causes silent data corruption for clients that still send the old field.
 - **Using proto types in services or DAO.** Proto types belong exclusively in handlers. Never
-  import `internal/handlers/protogen` from `internal/services` or `internal/dao`.
+  import `internal/handlers/protogen` from `internal/core` or `internal/dao`.
 - **Forgetting `pnpm format:proto` before `pnpm generate:go`.** buf formats source files in place;
   the generated output reflects the formatted source. Run format first, then generate.
 - **Renaming a field as a "safe" refactor.** Field renames are breaking at FILE level — buf will
