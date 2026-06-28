@@ -219,11 +219,35 @@ a-novel install
 CI's `generated-go` job runs `go generate ./...` and fails on diff —
 keeps proto bindings in sync.
 
+## The compose contract
+
+In **container** mode the daemon doesn't invent how to run a target — it defers
+to the compose file a service repo ships at `builds/podman-compose.yaml`.
+Discovery only works when that file mirrors the service's targets exactly, so the
+mirror is a contract every service repo upholds:
+
+- **One profile per target.** Each `cmd/<target>/` has a matching compose service
+  gated behind `--profile <target>`, so `a-novel run start <service>/<target>`
+  becomes `podman compose --profile <target> up`. A `cmd/` with no compose mirror
+  is invisible to container mode.
+- **Healthcheck ⇒ target kind.** A server (long-running, exposes an API) declares
+  a `HEALTHCHECK`; a job (one-shot) does not. The daemon reads that presence to
+  tell the two apart — a server is "ready" when its healthcheck passes, a job when
+  it exits 0.
+- **Complete `depends_on`.** Every dependency a target needs — infra such as
+  Postgres, and one-shot jobs such as migrations — is declared, with
+  `condition: service_healthy` for servers and `service_completed_successfully`
+  for jobs, so the daemon cascades start-up in the right order.
+- **`${VAR}` ports.** Host ports are `${VAR}` references, never hard-coded: the
+  daemon owns the port allocator and injects a free port per run, so two stacks —
+  or two targets — never collide.
+
+What a target, server, job, or infra _is_ belongs to
+[service anatomy](https://github.com/a-novel/.github/blob/master/CONTRIBUTING.md);
+this section is only how the daemon discovers it through compose.
+
 ## See also
 
-- Per-service `app/service-*/builds/podman-compose.yaml` — the compose
-  contract the daemon's discovery enforces (every `cmd/<target>/` has a
-  profile-matched compose mirror; long-runners declare healthchecks;
-  `depends_on` is complete; ports are `${VAR}` references the daemon
-  allocates).
+- Per-service `app/service-*/builds/podman-compose.yaml` — the compose mirror
+  each service ships; see [The compose contract](#the-compose-contract) above.
 - `.claude/skills/use-a-novel-cli/` — the full raw-command → CLI mapping.
