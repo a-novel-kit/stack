@@ -77,7 +77,7 @@ func TestApplyContentsWorkflowScope404(t *testing.T) {
 	t.Cleanup(func() { ghStdin = orig })
 
 	detail, err := applyContents("o", "r", branchMaster, repocfg.Op{
-		Method: "PUT", Path: "repos/o/r/contents/.github/workflows/codeql.yml", Content: "name: CodeQL\n",
+		Path: "repos/o/r/contents/.github/workflows/codeql.yml", Content: "name: CodeQL\n",
 	})
 	if err == nil {
 		t.Fatal("expected the 404 to surface as an error")
