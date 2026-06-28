@@ -27,8 +27,8 @@
 # Secret (one org-level secret per org, same name in each):
 #   AGENT_BOT_PRIVATE_KEY  this org's bot App private key, PEM
 # (a-novel -> anovelbot-agent, a-novel-kit -> anovelkitbot-agent.)
-# App IDs are public (visible in any App settings URL), so they are
-# inlined below.
+# Variable (one org-level variable per org, same name in each):
+#   AGENT_BOT_CLIENT_ID  this org's bot App client id (public).
 
 name: bot-comment
 
@@ -132,7 +132,7 @@ jobs:
         id: app
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ github.repository_owner == 'a-novel' && '3549319' || '3549379' }}
+          client-id: ${{ vars.AGENT_BOT_CLIENT_ID }}
           private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ inputs.repo }}
