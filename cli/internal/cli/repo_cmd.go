@@ -160,16 +160,23 @@ func visibility(private bool) string {
 
 func newRepoUpdateCmd() *cobra.Command {
 	var (
-		dryRun  bool
-		jsonOut bool
-		class   string
+		dryRun    bool
+		jsonOut   bool
+		class     string
+		fullReset bool
 	)
 	cmd := &cobra.Command{
 		Use:   "update",
 		Short: "Reconcile the current repository's config to its class template",
 		Long: `Run from inside a checked-out repo. Resolves the repo from its 'origin'
 remote, picks the repos/<org>_<repo>.yaml override or the --class preset,
-discovers required checks from the working tree, and reconciles config.`,
+discovers required checks from the working tree, and reconciles config.
+
+By default the master ruleset's required checks are reconciled: discovery's
+managed checks are rolled out while unmanaged live checks (manual additions,
+name-quirk derivations) are preserved. '--full' instead resets them to a plain
+rediscovery, dropping every check the working tree does not produce — use it to
+wipe a bad manual edit.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			wd, err := os.Getwd()
@@ -203,16 +210,23 @@ discovers required checks from the working tree, and reconciles config.`,
 			}
 
 			branch := repoDefaultBranch(org, repo)
+			// A --full reset ignores the live ruleset entirely, so don't bother
+			// reading it; otherwise fetch it to preserve unmanaged checks.
+			var live []repocfg.CheckRef
+			if !fullReset {
+				live = liveMasterChecks(org, repo)
+			}
 			target := &repocfg.RepoTarget{
-				Org:            org,
-				Repo:           repo,
-				DefaultBranch:  branch,
-				Class:          preset,
-				OrgProfile:     orgProfile,
-				Checks:         checks,
-				Discovered:     discovered,
-				MasterChecks:   liveMasterChecks(org, repo),
-				CodecovReports: codecovReports(org, repo, branch),
+				Org:              org,
+				Repo:             repo,
+				DefaultBranch:    branch,
+				Class:            preset,
+				OrgProfile:       orgProfile,
+				Checks:           checks,
+				Discovered:       discovered,
+				LiveMasterChecks: live,
+				ForceChecks:      fullReset,
+				CodecovReports:   codecovReports(org, repo, branch),
 			}
 			plan, err := repocfg.BuildPlan(target)
 			if err != nil {
@@ -223,9 +237,13 @@ discovers required checks from the working tree, and reconciles config.`,
 				return plan.RenderJSON(cmd.OutOrStdout())
 			}
 			if dryRun {
+				mode := "reconcile (preserve unmanaged live checks)"
+				if fullReset {
+					mode = "full reset (drop unmanaged live checks)"
+				}
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-					"# dry-run %s/%s — class %s\n# discovered checks: %s\n\n",
-					org, repo, preset.Class, strings.Join(checkContexts(discovered.Checks), ", "))
+					"# dry-run %s/%s — class %s — checks: %s\n# discovered checks: %s\n\n",
+					org, repo, preset.Class, mode, strings.Join(checkContexts(discovered.Checks), ", "))
 				return plan.Render(cmd.OutOrStdout())
 			}
 
@@ -250,6 +268,7 @@ discovers required checks from the working tree, and reconciles config.`,
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the API operations that would run, without applying")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "with --dry-run, emit the plan as a JSON array of operations")
 	cmd.Flags().StringVar(&class, "class", "", "class (service|library|workflows|meta); a repos/<org>_<repo>.yaml override wins")
+	cmd.Flags().BoolVar(&fullReset, "full", false, "reset the master ruleset's required checks to a plain rediscovery, dropping unmanaged (manual) live checks")
 	return cmd
 }
 

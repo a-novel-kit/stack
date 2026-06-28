@@ -276,6 +276,51 @@ func Detect(root string) ([]Target, error) {
 	return targets, nil
 }
 
+// ExistsUnder reports whether any of relPaths (slash-separated, relative to a
+// directory) exists at root or in any directory below it, using the same
+// bounded, pruned, gitignore-aware walk as Detect. It lets a caller detect a
+// signal file that lives in a sub-module directory — e.g. a go.mod or buf.yaml
+// under cli/ rather than at the repo root — without descending the gitignored
+// sibling checkouts (app/, kit/), node_modules, or hidden trees, and without
+// runaway depth. The walk short-circuits on the first match.
+func ExistsUnder(root string, relPaths []string) bool {
+	if len(relPaths) == 0 {
+		return false
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+
+	ignored := gitIgnoredDirs(absRoot)
+	found := false
+
+	_ = filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			// An unreadable subtree shouldn't abort the probe — skip it.
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		if skipDir(absRoot, path, d.Name(), ignored) {
+			return filepath.SkipDir
+		}
+		for _, rel := range relPaths {
+			if _, statErr := os.Stat(filepath.Join(path, filepath.FromSlash(rel))); statErr == nil {
+				found = true
+				return filepath.SkipAll
+			}
+		}
+		return nil
+	})
+
+	return found
+}
+
 // kindOrder fixes the group order in the menu: Go first, then pnpm, then
 // podman — cheapest/fastest builds first so feedback arrives sooner.
 func kindOrder(k Kind) int {

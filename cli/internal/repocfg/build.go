@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 )
 
@@ -55,12 +56,17 @@ type RepoTarget struct {
 	Checks                   *ChecksConfig
 	Discovered               *Discovered
 
-	// MasterChecks, when non-nil, is the authoritative required-check set
-	// for the master ruleset — used by `update` to PRESERVE the live
-	// ruleset's checks rather than overwrite them with discovery (which can
-	// only approximate names). Nil (e.g. on `create`) falls back to the
-	// discovered set.
-	MasterChecks []CheckRef
+	// LiveMasterChecks is the master ruleset's current required-check set,
+	// read from GitHub on `update` so reconciliation can preserve the checks
+	// the discovery map does not own. Nil (e.g. on `create`, or under a
+	// `--full` reset) means there is nothing to preserve and the result is the
+	// discovered set alone. See RepoTarget.ResolveMasterChecks.
+	LiveMasterChecks []CheckRef
+	// ForceChecks ignores LiveMasterChecks entirely and resets the master
+	// ruleset's required checks to a plain rediscovery — dropping even the
+	// unmanaged (manual) live checks. It backs `repo update --full`, so a bad
+	// manual edit can be wiped.
+	ForceChecks bool
 	// CodecovReports is whether Codecov posts a status on this repo. It
 	// gates `codecov: auto` — a coverage ruleset is only enforced where
 	// Codecov actually reports, so it never blocks PRs on a repo that has
@@ -122,11 +128,7 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 
 	// Rulesets, reconciled by name (POST when absent, PUT .../{id} when present).
 	if c.Rulesets.Master {
-		masterChecks := t.Discovered.Checks
-		if t.MasterChecks != nil {
-			masterChecks = t.MasterChecks // preserve live (lossless on update)
-		}
-		if op, err := rulesetOp(rulesetMaster, t, masterChecks); err != nil {
+		if op, err := rulesetOp(rulesetMaster, t, t.ResolveMasterChecks()); err != nil {
 			return nil, err
 		} else {
 			p.Ops = append(p.Ops, op)
@@ -198,6 +200,96 @@ func resolveCheckDefs(defs []CheckDef, cc *ChecksConfig) []CheckRef {
 		out = append(out, CheckRef{Context: cd.Context, IntegrationID: cc.Integrations[cd.Integration]})
 	}
 	return out
+}
+
+// ResolveMasterChecks computes the required status checks the master ruleset
+// will carry for this target. On `create` (no live set) or under a `--full`
+// reset (ForceChecks), it is exactly the discovered set — a plain rediscovery.
+// Otherwise it reconciles discovery with the live ruleset; see
+// reconcileMasterChecks. The CLI summary and the API plan both call this, so
+// what the human confirms is exactly what gets applied.
+func (t *RepoTarget) ResolveMasterChecks() []CheckRef {
+	return reconcileMasterChecks(t.Discovered.Checks, t.LiveMasterChecks, t.Checks, t.ForceChecks)
+}
+
+// reconcileMasterChecks merges discovery with the live ruleset for `update`.
+//
+// Discovery is authoritative for everything the map OWNS — its managed
+// namespace (see ChecksConfig.IsManaged). A newly-declared managed check rolls
+// out because discovery now emits it; a renamed or removed managed check is
+// dropped because its old name is in the managed namespace (the catalog, or
+// checks.yaml's `retired` list) yet is no longer discovered, so it is not
+// carried over. Live checks the map does NOT own — manual ruleset additions,
+// hand-authored docker job contexts like build-job-init — are "unmanaged"; they
+// are preserved on top so reconciliation never clobbers a hand-added gate.
+//
+// With force (or no live set), the live checks are ignored entirely and the
+// result is the discovered set alone: a plain rediscovery that also discards
+// unmanaged manual checks, so a bad manual edit can be reset.
+func reconcileMasterChecks(discovered, live []CheckRef, cc *ChecksConfig, force bool) []CheckRef {
+	out := append([]CheckRef(nil), discovered...)
+	seen := make(map[string]bool, len(discovered))
+	for _, c := range discovered {
+		seen[c.Context] = true
+	}
+	if !force {
+		for _, c := range live {
+			if seen[c.Context] || cc.IsManaged(c.Context) {
+				continue
+			}
+			out = append(out, c)
+			seen[c.Context] = true
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Context < out[j].Context })
+	return out
+}
+
+// IsManaged reports whether ctx is a status-check context the discovery map
+// (checks.yaml) owns by name: the catalog of contexts it can emit (always +
+// every language + every feature + codecov) plus the `retired` names it once
+// emitted. A context that is NOT managed is "unmanaged" — a manual ruleset
+// addition, or a name-quirk derivation the map cannot reproduce — which
+// `update` preserves rather than reconciling away.
+//
+// Docker build-<target> contexts are deliberately NOT classified managed by
+// pattern. Their CI job names are hand-authored and drift from the Dockerfile
+// name (init.Dockerfile yields the context "build-job-init", not "build-init"),
+// so matching them by a "build-" prefix would wrongly drop a live context that
+// discovery cannot reproduce. A docker check discovery DOES produce rides along
+// in the discovered set; a stale one is preserved until a `--full` reset — or an
+// explicit `retired` entry — removes it.
+func (cc *ChecksConfig) IsManaged(ctx string) bool {
+	_, ok := cc.managedContexts()[ctx]
+	return ok
+}
+
+// managedContexts is the managed namespace: every context the map can emit
+// (always + every language + every feature + codecov) plus the explicit
+// `retired` names. Docker contexts are not enumerated here — see IsManaged.
+func (cc *ChecksConfig) managedContexts() map[string]struct{} {
+	set := map[string]struct{}{}
+	add := func(defs []CheckDef) {
+		for _, d := range defs {
+			if d.Context != "" {
+				set[d.Context] = struct{}{}
+			}
+		}
+	}
+	add(cc.Always)
+	for _, lr := range cc.Languages {
+		add(lr.Checks)
+	}
+	for _, fr := range cc.Features {
+		add(fr.Checks)
+	}
+	add(cc.Codecov.Checks)
+	for _, ctx := range cc.Retired {
+		if ctx != "" {
+			set[ctx] = struct{}{}
+		}
+	}
+	return set
 }
 
 // BuildRuleset turns a ruleset template + org + discovered checks into the

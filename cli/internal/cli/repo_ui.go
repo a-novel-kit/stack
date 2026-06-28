@@ -113,12 +113,10 @@ func renderSummary(w io.Writer, t *repocfg.RepoTarget) {
 }
 
 // masterChecksFor returns the required-check contexts the master ruleset will
-// carry — the preserved live set if any, else the discovered set.
+// carry. It calls the same resolver the plan uses, so the summary the human
+// confirms is exactly what gets applied (reconciled, or reset under --full).
 func masterChecksFor(t *repocfg.RepoTarget) []string {
-	src := t.Discovered.Checks
-	if t.MasterChecks != nil {
-		src = t.MasterChecks
-	}
+	src := t.ResolveMasterChecks()
 	out := make([]string, len(src))
 	for i, c := range src {
 		out[i] = c.Context

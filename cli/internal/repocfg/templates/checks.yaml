@@ -22,7 +22,10 @@ languages:
     checks:
       - { context: "lint-go", integration: actions }
       - { context: "generated-go", integration: actions }
-      - { context: "test", integration: actions }
+      # The Go test job's check context is "test-go" fleet-wide (the shared
+      # go-actions/test-go action; stack inlines the same job id). A bare "test"
+      # never matches it and would sit "Expected" forever.
+      - { context: "test-go", integration: actions }
     codeql: ["go"]
   node:
     detect: ["package.json"]
@@ -48,7 +51,10 @@ features:
 
 # Docker/compose build targets -> one build-<target> check per detected
 # target (target names come from detect.Detect, e.g. rest, migrations,
-# database, job-init, standalone-rest).
+# database, standalone-rest). NOTE: some CI build jobs are hand-named and do
+# NOT match this derivation (init.Dockerfile -> the job "build-job-init", not
+# "build-init"). Those contexts are "unmanaged": `repo update` preserves a live
+# one rather than reconciling it away (only `--full` drops it). See IsManaged.
 docker:
   context_format: "build-%s"
   integration: actions
@@ -59,3 +65,13 @@ codecov:
   checks:
     - { context: "codecov/patch", integration: codecov }
     - { context: "codecov/project", integration: codecov }
+
+# Retired check contexts: names this map once emitted but has since renamed or
+# removed. They stay part of the managed namespace so `repo update` DROPS a
+# stale live check by one of these names (instead of preserving it as a manual
+# one). Add the OLD name here when you rename or remove a managed check.
+#   test -> renamed to test-go (the Go test job's actual context, matching
+#           lint-go / generated-go). Repos whose CI still emits a bare `test`
+#           must rename that job to `test-go` BEFORE `repo update` runs on them.
+retired:
+  - "test"
