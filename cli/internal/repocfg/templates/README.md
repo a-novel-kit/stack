@@ -35,7 +35,7 @@ are required unless noted.
 | `pages`                                                         | bool   | Enable a GitHub Pages site (build type: workflow).                                                          |
 | `codecov`                                                       | enum   | `auto` (on when the repo has tests), `enabled`, or `disabled`.                                              |
 | `code_quality`                                                  | bool   | Add the `code_quality` rule to the `master` ruleset.                                                        |
-| `rulesets.master` / `.require_approval`                         | bool   | Apply those rulesets.                                                                                       |
+| `rulesets.master` / `.require_approval` / `.tags`               | bool   | Apply those rulesets. `tags` locks tag (and release) creation to the agent bot + admins.                    |
 
 ## `orgs/<org>.yaml`
 
@@ -52,21 +52,21 @@ the `required_status_checks` list (from discovery) and concrete
 `bypass_actors` (from the `bypass` list below). On `update` of an existing
 ruleset, unmanaged bypass actors already present are preserved.
 
-| Field                                      | Type     | Meaning                                                                                                                            |
-| ------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `name`                                     | string   | Ruleset name (reconciled by name).                                                                                                 |
-| `target` / `enforcement`                   | string   | `branch` / `active`.                                                                                                               |
-| `conditions.ref_name.include` / `.exclude` | []string | Refs; `~DEFAULT_BRANCH` = the repo default.                                                                                        |
-| `bypass`                                   | []string | Generic actors (see below).                                                                                                        |
-| `rules.*`                                  | mixed    | Rule parameters. `required_status_checks.checks` is injected; `code_quality` is dropped when the class sets `code_quality: false`. |
+| Field                                      | Type     | Meaning                                                                                                                                                                                              |
+| ------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                                     | string   | Ruleset name (reconciled by name).                                                                                                                                                                   |
+| `target` / `enforcement`                   | string   | `branch` or `tag` / `active`.                                                                                                                                                                        |
+| `conditions.ref_name.include` / `.exclude` | []string | Refs; `~DEFAULT_BRANCH` = the repo default, `~ALL` = all refs of the target.                                                                                                                         |
+| `bypass`                                   | []string | Generic actors (see below).                                                                                                                                                                          |
+| `rules.*`                                  | mixed    | Rule parameters. `creation`/`update`/`deletion` restrict that ref op to bypassers; `required_status_checks.checks` is injected; `code_quality` is dropped when the class sets `code_quality: false`. |
 
 **Generic bypass actors** (`bypass:` entries):
 
 - `admins` — org admins + the admin repo role, always. Org/repo-independent.
 - `dependencies` / `agent` / `publish` — the org's three bot apps, resolved
-  per org from `orgs/<org>.yaml`. On `master` the bypass mode is `always`
-  (only `publish` is listed there — releases write to the default branch
-  directly, with no branch proxy); on the PR rulesets the mode is `exempt`.
+  per org from `orgs/<org>.yaml`. On the `master` and `tags` rulesets the bypass
+  mode is `always` — the bot writes directly (the version-bump commit, the
+  release tag), no branch proxy; on the PR rulesets the mode is `exempt`.
 
 The core team is intentionally **not** a bypass actor.
 

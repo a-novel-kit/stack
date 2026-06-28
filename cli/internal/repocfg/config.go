@@ -92,6 +92,7 @@ type CodeQLPreset struct {
 type ClassRulesets struct {
 	Master          bool `yaml:"master"`
 	RequireApproval bool `yaml:"require_approval"`
+	Tags            bool `yaml:"tags"`
 }
 
 // CodecovMode is auto | enabled | disabled (auto = on when the repo has
@@ -211,6 +212,8 @@ type RulesetConditions struct {
 // pull_request, copilot_code_review) are kept as maps so the template owns
 // their shape.
 type RulesetRules struct {
+	Creation             bool               `yaml:"creation"`
+	Update               bool               `yaml:"update"`
 	Deletion             bool               `yaml:"deletion"`
 	NonFastForward       bool               `yaml:"non_fast_forward"`
 	RequiredSignatures   bool               `yaml:"required_signatures"`

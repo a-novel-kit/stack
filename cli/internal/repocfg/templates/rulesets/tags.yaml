@@ -1,0 +1,25 @@
+# Release-tag protection — the server-side half of "releases come from CI only".
+# Only the agent bot (which cuts releases from the release workflow) and repo
+# admins may create, move or delete a tag; everyone else is blocked. So a tag —
+# and therefore a release — can only come from the release workflow or a
+# deliberate admin override, never a developer's `git push origin vX.Y.Z`. The
+# local `a-novel publish version` path is being removed in tandem.
+#
+# ~ALL covers every tag, not just v*, so no tag of any shape can be hand-pushed.
+# The agent bot bypasses with mode "always" (a direct write, no branch proxy),
+# resolved by the builder like the master ruleset's bots.
+name: tags
+target: tag
+enforcement: active
+conditions:
+  ref_name:
+    include: ["~ALL"]
+    exclude: []
+bypass:
+  - admins
+  - agent
+rules:
+  creation: true
+  update: true
+  deletion: true
+  non_fast_forward: true

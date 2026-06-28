@@ -27,3 +27,4 @@ code_quality: false
 rulesets:
   master: true
   require_approval: true
+  tags: true
