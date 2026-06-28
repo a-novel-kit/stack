@@ -58,7 +58,7 @@ func TestLoadChecks(t *testing.T) {
 
 func TestLoadRulesets(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"master", "require-approval", "codecov"} {
+	for _, name := range []string{"master", "require-approval", "codecov", "tags"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			r, err := LoadRuleset(name)
@@ -118,4 +118,48 @@ func TestBuildRulesetBypassResolution(t *testing.T) {
 			t.Fatalf("expected 3 bypass actors, got %d", len(rs.BypassActors))
 		}
 	})
+
+	t.Run("tags ruleset bot bypass is always-mode", func(t *testing.T) {
+		t.Parallel()
+		// The release bot creates the tag directly, so it must bypass with mode
+		// "always" — not the PR-only "exempt" used on the require-approval ruleset.
+		o := &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{"agent": 3549379}}
+		spec := &RulesetSpec{Name: rulesetTags, Target: "tag", Enforcement: "active", Bypass: []string{"agent"}}
+		rs, err := BuildRuleset(spec, o, nil)
+		if err != nil {
+			t.Fatalf("BuildRuleset: %v", err)
+		}
+		if len(rs.BypassActors) != 1 {
+			t.Fatalf("expected 1 bypass actor, got %d", len(rs.BypassActors))
+		}
+		if rs.BypassActors[0].BypassMode != modeAlways {
+			t.Fatalf("tags bot bypass mode = %q, want %q", rs.BypassActors[0].BypassMode, modeAlways)
+		}
+	})
+}
+
+// TestBuildRulesetCreationRule covers the creation/update rules added for the
+// release-tag lockdown — only those flags emit their API rule.
+func TestBuildRulesetCreationRule(t *testing.T) {
+	t.Parallel()
+	org := &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{"agent": 3549379}}
+	spec := &RulesetSpec{
+		Name: rulesetTags, Target: "tag", Enforcement: "active",
+		Bypass: []string{"agent"},
+		Rules:  RulesetRules{Creation: true, Update: true},
+	}
+	rs, err := BuildRuleset(spec, org, nil)
+	if err != nil {
+		t.Fatalf("BuildRuleset: %v", err)
+	}
+	got := map[string]bool{}
+	for _, r := range rs.Rules {
+		got[r.Type] = true
+	}
+	if !got["creation"] || !got["update"] {
+		t.Fatalf("expected creation+update rules, got rule types %v", got)
+	}
+	if got["deletion"] {
+		t.Fatalf("deletion rule emitted without the flag set")
+	}
 }

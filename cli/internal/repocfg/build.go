@@ -20,6 +20,11 @@ const (
 // mode "always" (they push to the default branch directly).
 const rulesetMaster = "master"
 
+// rulesetTags is the name of the release-tag ruleset. Like master, the release
+// bot writes to it directly (it creates the tag), so its bypass mode is "always"
+// rather than the PR-only "exempt".
+const rulesetTags = "tags"
+
 // APIBypassActor / APIRule / APIRuleset mirror the GitHub rulesets API
 // request body.
 type APIBypassActor struct {
@@ -134,6 +139,13 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 			p.Ops = append(p.Ops, op)
 		}
 	}
+	if c.Rulesets.Tags {
+		if op, err := rulesetOp(rulesetTags, t, nil); err != nil {
+			return nil, err
+		} else {
+			p.Ops = append(p.Ops, op)
+		}
+	}
 	if codecovEnabled(c, t) {
 		checks := resolveCheckDefs(t.Checks.Codecov.Checks, t.Checks)
 		if op, err := rulesetOp("codecov", t, checks); err != nil {
@@ -210,6 +222,12 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRu
 	}
 
 	r := spec.Rules
+	if r.Creation {
+		rs.Rules = append(rs.Rules, APIRule{Type: "creation"})
+	}
+	if r.Update {
+		rs.Rules = append(rs.Rules, APIRule{Type: "update"})
+	}
 	if r.Deletion {
 		rs.Rules = append(rs.Rules, APIRule{Type: "deletion"})
 	}
@@ -250,13 +268,14 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRu
 }
 
 // resolveBypass maps one generic bypass entry to concrete actors. Admins
-// always bypass with mode "always"; bots bypass with "always" on master
-// (direct writes) and "exempt" on PR rulesets. An entry that resolves to
+// always bypass with mode "always"; bots bypass with "always" on master and
+// tags (direct writes — the bump commit and the release tag) and "exempt" on
+// PR rulesets. An entry that resolves to
 // nothing is an error, not a silent drop — a typo in a ruleset template would
 // otherwise quietly strip a bypass actor and break the bot's automation.
 func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor, error) {
 	botMode := modeExempt
-	if rulesetName == rulesetMaster {
+	if rulesetName == rulesetMaster || rulesetName == rulesetTags {
 		botMode = modeAlways
 	}
 	switch entry {
