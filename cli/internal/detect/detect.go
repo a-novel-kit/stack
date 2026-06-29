@@ -18,7 +18,6 @@ package detect
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -53,10 +52,6 @@ const pkgAll = "./..."
 // testArg is the "test" token shared by `go test`, the canonical pnpm script
 // name, and the env-id environment — one constant, like buildArg.
 const testArg = "test"
-
-// generateArg is the "generate" token: the canonical pnpm codegen script name
-// and the node-generation check kind.
-const generateArg = "generate"
 
 // runArg is the "run" token: the pnpm `pnpm run <script>` subcommand, the
 // canonical "run"/"run:*" script name, and the run env id — one constant.
@@ -341,176 +336,6 @@ func walkRepoDirs(root string, visit func(absDir, relDir string) bool) {
 		}
 		return nil
 	})
-}
-
-// GoModuleDirs returns the repo-relative directories (slash-separated, "." for
-// the root) that contain a go.mod, found by the shared recursive walk. Used by
-// freeform-library discovery to name a module's checks by its location
-// (cli/go.mod → the "-cli" path segment).
-func GoModuleDirs(root string) []string {
-	var out []string
-	walkRepoDirs(root, func(absDir, relDir string) bool {
-		if fileExists(filepath.Join(absDir, "go.mod")) {
-			out = append(out, relDir)
-		}
-		return false
-	})
-	return out
-}
-
-// HasGoGenerate reports whether any .go file in the module rooted at moduleDir
-// carries a `//go:generate` directive — the signal that the module produces
-// generated code and so warrants a generated-go check. It does not descend into
-// nested modules, vendor, node_modules, or hidden dirs.
-func HasGoGenerate(moduleDir string) bool {
-	found := false
-	_ = filepath.WalkDir(moduleDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			if d != nil && d.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if d.IsDir() {
-			name := d.Name()
-			if path != moduleDir {
-				if name == "node_modules" || name == "vendor" || strings.HasPrefix(name, ".") {
-					return filepath.SkipDir
-				}
-				// A nested module is its own unit — don't attribute its
-				// directives to the parent.
-				if fileExists(filepath.Join(path, "go.mod")) {
-					return filepath.SkipDir
-				}
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") {
-			return nil
-		}
-		if b, readErr := os.ReadFile(path); readErr == nil && bytes.Contains(b, []byte("//go:generate")) {
-			found = true
-			return filepath.SkipAll
-		}
-		return nil
-	})
-	return found
-}
-
-// ProtoDirs returns the repo-relative directories containing a buf.yaml or
-// buf.gen.yaml (proto modules), found by the shared recursive walk.
-func ProtoDirs(root string) []string {
-	var out []string
-	walkRepoDirs(root, func(absDir, relDir string) bool {
-		if fileExists(filepath.Join(absDir, "buf.yaml")) || fileExists(filepath.Join(absDir, "buf.gen.yaml")) {
-			out = append(out, relDir)
-		}
-		return false
-	})
-	return out
-}
-
-// NodeScriptRoot is a pnpm package whose scripts define checks: its repo-relative
-// directory and which canonical script kinds it declares.
-type NodeScriptRoot struct {
-	RelDir string
-	Kinds  map[string]bool
-}
-
-// nodeScriptKinds are the canonical pnpm script names that map 1:1 to a node
-// check kind: lint→lint-js, test→test-js, build→build-js. `generate` is handled
-// separately (see pnpmScriptKinds) — it is lane-sensitive, since generate:go is
-// Go codegen gated by generated-go, not a node-side generation.
-var nodeScriptKinds = []string{"lint", "test", "build"}
-
-// NodeScriptRoots returns the pnpm "script roots" under root: package.json files
-// that own runnable scripts. In a pnpm workspace only the workspace root counts —
-// its scripts bundle the members' (a root "test" runs every sub-package test) —
-// so package.json files inside a workspace are skipped. A package.json with none
-// of the canonical script kinds is omitted. Used by freeform-library discovery
-// to derive js-lane checks (lint-js, test-js, build-js, generated-js).
-func NodeScriptRoots(root string) []NodeScriptRoot {
-	var workspaces []string
-	type pkgDir struct{ abs, rel string }
-	var pkgs []pkgDir
-	walkRepoDirs(root, func(absDir, relDir string) bool {
-		if fileExists(filepath.Join(absDir, "pnpm-workspace.yaml")) {
-			workspaces = append(workspaces, relDir)
-		}
-		if fileExists(filepath.Join(absDir, "package.json")) {
-			pkgs = append(pkgs, pkgDir{absDir, relDir})
-		}
-		return false
-	})
-
-	var out []NodeScriptRoot
-	for _, p := range pkgs {
-		if isWorkspaceMember(p.rel, workspaces) {
-			continue
-		}
-		kinds := pnpmScriptKinds(filepath.Join(p.abs, "package.json"))
-		if len(kinds) == 0 {
-			continue
-		}
-		out = append(out, NodeScriptRoot{RelDir: p.rel, Kinds: kinds})
-	}
-	return out
-}
-
-// isWorkspaceMember reports whether relDir sits inside a pnpm workspace whose
-// root is a different directory — i.e. its scripts belong to that root, not here.
-func isWorkspaceMember(relDir string, workspaces []string) bool {
-	for _, wr := range workspaces {
-		if wr == relDir {
-			continue
-		}
-		if wr == "." || strings.HasPrefix(relDir, wr+"/") {
-			return true
-		}
-	}
-	return false
-}
-
-// pnpmScriptKinds reads a package.json and returns the set of canonical script
-// kinds it declares (ignoring the CI-only ":ci" variants).
-func pnpmScriptKinds(pkgPath string) map[string]bool {
-	raw, err := os.ReadFile(pkgPath)
-	if err != nil {
-		return nil
-	}
-	var pkg packageJSON
-	if json.Unmarshal(raw, &pkg) != nil {
-		return nil
-	}
-	kinds := map[string]bool{}
-	for name := range pkg.Scripts {
-		for _, k := range nodeScriptKinds {
-			if pnpmScript(name, k) {
-				kinds[k] = true
-			}
-		}
-		// A "generate" script counts as a node-side generation ONLY for a
-		// non-go lane (generate:mjml, …). generate:go is Go codegen, already
-		// gated by generated-go (//go:generate); the bare umbrella "generate"
-		// just chains the per-lane scripts, so those are the real signal.
-		if strings.HasPrefix(name, generateArg+":") && name != generateArg+":go" && !strings.HasSuffix(name, ciSuffix) {
-			kinds[generateArg] = true
-		}
-	}
-	return kinds
-}
-
-// HasNodeGenerate reports whether any pnpm script root under root declares a
-// node-side generation — a non-go `generate:<lane>` script (e.g. generate:mjml).
-// It tells a repo that generates JS/assets (warranting generated-js /
-// generated-pnpm) apart from one whose only `generate` is Go codegen.
-func HasNodeGenerate(root string) bool {
-	for _, nr := range NodeScriptRoots(root) {
-		if nr.Kinds[generateArg] {
-			return true
-		}
-	}
-	return false
 }
 
 // kindOrder fixes the group order in the menu: Go first, then pnpm, then

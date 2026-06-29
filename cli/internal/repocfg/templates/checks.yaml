@@ -1,89 +1,41 @@
-# Semantic check-discovery map. The CLI probes the repo (via the `detect`
-# package) and assembles the `master` ruleset's required status checks +
-# the CodeQL/Dependabot languages from the signals below. Editing the
-# job<->signal mapping here needs no code change.
+# Required-status-check discovery for the master ruleset.
 #
-# integration is the GitHub App that posts the check (its id ends up in
-# the ruleset's required_status_checks[].integration_id).
+# Required checks = the `always` set + every job declared in a repo's
+# .github/workflows/main.yaml, MINUS the `exclude` rules below. A job's id IS
+# its check context, so there is nothing to derive and nothing to drift.
+# Workflow files are code (owned by skills / PRs), not by `repo update`; this
+# map only decides which of their jobs gate the default branch.
 
 integrations:
   actions: 15368
   gitguardian: 46505
   codecov: 254
 
-# Always required, regardless of class or languages.
+# Always required, regardless of repo or class.
 always:
   - { context: "GitGuardian Security Checks", integration: gitguardian }
 
-# CodeQL languages analyzed on every repo regardless of detection. `actions` has
-# no file signal (only the .github/ folder, which is not used for detection) and
-# gates nothing — it is just a CodeQL language, so it is always on.
-codeql_always: ["actions"]
+# main.yaml jobs are required by default, except those matching these rules:
+exclude:
+  # Job ids starting with one of these prefixes (reporting / post-merge jobs).
+  prefixes: ["report-"]
+  # Jobs whose `if:` contains one of these strings — master-only jobs never run
+  # on a PR, so they cannot gate one.
+  if_contains: ["github.ref == 'refs/heads/master'"]
 
-# NOTE: the languages / features / docker rules below drive the STRONG-SEMANTIC
-# classes (service / workflows / meta), whose structure and check names are
-# fixed. The freeform `library` class does NOT use them — it derives checks
-# generically from files + pnpm scripts (see discoverLibrary in discover.go).
+# CodeQL languages for the codeql.yml workflow (rendered by repo create/update).
+# This is the only file-based detection that remains: an always-on language
+# needs no signal; the rest are keyed to a canonical file.
+codeql:
+  always: ["actions"]
+  languages:
+    - { detect: ["go.mod"], lang: "go" }
+    - { detect: ["package.json"], lang: "javascript-typescript" }
 
-# Language detection -> checks + CodeQL languages + Dependabot ecosystems.
-languages:
-  go:
-    detect: ["go.mod"]
-    checks:
-      - { context: "lint-go", integration: actions }
-      - { context: "generated-go", integration: actions }
-      # The Go test job's check context is "test-go" fleet-wide (the shared
-      # go-actions/test-go action; stack inlines the same job id). A bare "test"
-      # never matches it and would sit "Expected" forever.
-      - { context: "test-go", integration: actions }
-    codeql: ["go"]
-  node:
-    detect: ["package.json"]
-    checks:
-      - { context: "lint-node", integration: actions }
-    codeql: ["javascript-typescript"]
-  proto:
-    detect: ["buf.yaml", "buf.gen.yaml"]
-    checks:
-      - { context: "lint-proto", integration: actions }
-
-# Sub-feature detection (more specific than language).
-features:
-  pkg-js:
-    detect: ["pkg/js"]
-    checks:
-      # generated-pnpm is NOT here: it gates a node-side generation, which is
-      # script-detected (a non-go `generate:<lane>` script), not assumed from
-      # pkg/js. A service whose only generate is Go (generate:go) does not need
-      # it. See discoverStrong / detect.HasNodeGenerate.
-      - { context: "test-pkg-js", integration: actions }
-      - { context: "build-js", integration: actions }
-
-# Docker/compose build targets -> one build-<target> check per detected
-# target (target names come from detect.Detect, e.g. rest, migrations,
-# database, standalone-rest). NOTE: some CI build jobs are hand-named and do
-# NOT match this derivation (init.Dockerfile -> the job "build-job-init", not
-# "build-init"). Those contexts are "unmanaged": `repo update` preserves a live
-# one rather than reconciling it away (only `--full` drops it). See IsManaged.
-docker:
-  context_format: "build-%s"
-  integration: actions
-
-# Presence of tests (detect.DetectTests) -> enable the codecov ruleset.
+# The codecov ruleset's checks. Codecov posts these statuses itself (they are
+# not main.yaml jobs), so they live in a separate ruleset that bots bypass.
 codecov:
   enable_when_tests: true
   checks:
     - { context: "codecov/patch", integration: codecov }
     - { context: "codecov/project", integration: codecov }
-
-# Retired check contexts: names this map once emitted but has since renamed or
-# removed. They stay part of the managed namespace so a normal `repo update`
-# DROPS a stale live check by one of these names (instead of preserving it as a
-# manual one). Add an OLD name here ONLY when it is unambiguous fleet-wide.
-#
-# `test` is deliberately NOT retired: it is overloaded. Go repos use it for the
-# Go test job (which should be renamed to `test-go`, matching lint-go /
-# generated-go), but nodelib uses `test` for its JS (vitest) gate — retiring it
-# would drop nodelib's real check. A Go repo migrates by renaming its CI job
-# `test` -> `test-go`, then running `repo update --full` to drop the old name.
-retired: []

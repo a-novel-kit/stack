@@ -145,49 +145,47 @@ type CheckDef struct {
 	Integration string `yaml:"integration"`
 }
 
-// LangRule maps a detected language to its checks + CodeQL languages.
-type LangRule struct {
-	Detect []string   `yaml:"detect"`
-	Checks []CheckDef `yaml:"checks"`
-	CodeQL []string   `yaml:"codeql"`
-}
-
-// FeatureRule maps a sub-feature (e.g. pkg/js) to extra checks.
-type FeatureRule struct {
-	Detect []string   `yaml:"detect"`
-	Checks []CheckDef `yaml:"checks"`
-}
-
-// DockerRule formats a build-<target> check per detected docker target.
-type DockerRule struct {
-	ContextFormat string `yaml:"context_format"`
-	Integration   string `yaml:"integration"`
-}
-
-// CodecovRule controls the codecov ruleset's auto-enable + its checks.
+// CodecovRule controls the codecov ruleset's auto-enable + its checks. Codecov
+// posts its own statuses (codecov/patch, codecov/project), so they are not
+// main.yaml jobs — they live in this separate, bot-bypassing ruleset.
 type CodecovRule struct {
 	EnableWhenTests bool       `yaml:"enable_when_tests"`
 	Checks          []CheckDef `yaml:"checks"`
 }
 
-// ChecksConfig is checks.yaml — the semantic discovery map.
+// ExcludeRules narrows the main.yaml jobs that become required checks. A job is
+// excluded when its id starts with any Prefix (reporting / post-merge jobs) or
+// its `if:` contains any IfContains string (e.g. master-only jobs, which never
+// run on a PR and so cannot gate one).
+type ExcludeRules struct {
+	Prefixes   []string `yaml:"prefixes"`
+	IfContains []string `yaml:"if_contains"`
+}
+
+// CodeQLRule is the only file-based detection left: the CodeQL workflow's
+// languages. Always-on languages need no signal (e.g. actions); the rest are
+// detected by a canonical file (go.mod → go, package.json → javascript).
+type CodeQLRule struct {
+	Always    []string         `yaml:"always"`
+	Languages []CodeQLLangRule `yaml:"languages"`
+}
+
+// CodeQLLangRule maps a detection signal to a CodeQL language.
+type CodeQLLangRule struct {
+	Detect []string `yaml:"detect"`
+	Lang   string   `yaml:"lang"`
+}
+
+// ChecksConfig is checks.yaml. Required checks are the jobs declared in a repo's
+// .github/workflows/main.yaml (minus Exclude), plus the Always set — there is no
+// per-class or per-file derivation. CodeQL languages (for the codeql.yml
+// workflow) and the Codecov ruleset's checks are the only other pieces here.
 type ChecksConfig struct {
-	Integrations map[string]int64       `yaml:"integrations"`
-	Always       []CheckDef             `yaml:"always"`
-	Languages    map[string]LangRule    `yaml:"languages"`
-	Features     map[string]FeatureRule `yaml:"features"`
-	Docker       DockerRule             `yaml:"docker"`
-	Codecov      CodecovRule            `yaml:"codecov"`
-	// CodeQLAlways are CodeQL languages analyzed on every repo regardless of
-	// detection — e.g. "actions": every repo has workflows, there is no file
-	// signal for them other than the .github/ folder (which is not used for
-	// detection), and they gate nothing (just the CodeQL language list).
-	CodeQLAlways []string `yaml:"codeql_always"`
-	// Retired lists check contexts the map once emitted but has since renamed
-	// or removed. They stay part of the managed namespace (see
-	// ChecksConfig.IsManaged) so `repo update` DROPS a stale live check by one
-	// of these names instead of mistaking it for a manual (unmanaged) one.
-	Retired []string `yaml:"retired"`
+	Integrations map[string]int64 `yaml:"integrations"`
+	Always       []CheckDef       `yaml:"always"`
+	Exclude      ExcludeRules     `yaml:"exclude"`
+	CodeQL       CodeQLRule       `yaml:"codeql"`
+	Codecov      CodecovRule      `yaml:"codecov"`
 }
 
 // LoadClass reads and parses classes/<class>.yaml.

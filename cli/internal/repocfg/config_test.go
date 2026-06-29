@@ -73,26 +73,27 @@ func TestLoadChecks(t *testing.T) {
 	if c.Integrations["actions"] == 0 {
 		t.Fatal("integrations.actions missing")
 	}
-	if _, ok := c.Languages["go"]; !ok {
-		t.Fatal("languages.go missing")
-	}
 	if len(c.Always) == 0 {
 		t.Fatal("always checks empty")
 	}
-
-	// The Go test check is the renamed test-go (matching lint-go/generated-go
-	// and the actual CI job context).
-	goChecks := contextsOf(resolveCheckDefs(c.Languages["go"].Checks, c))
-	if !slices.Contains(goChecks, "test-go") {
-		t.Errorf("languages.go.checks missing test-go; got %v", goChecks)
+	// main.yaml jobs are required by default; the exclusions drop reporting and
+	// master-only jobs.
+	if !slices.Contains(c.Exclude.Prefixes, "report-") {
+		t.Errorf("exclude.prefixes missing report-; got %v", c.Exclude.Prefixes)
 	}
-	if slices.Contains(goChecks, "test") {
-		t.Errorf("languages.go.checks still carries the bare test; got %v", goChecks)
+	if len(c.Exclude.IfContains) == 0 {
+		t.Error("exclude.if_contains empty (expected the master-only guard)")
 	}
-	// `test` is deliberately NOT retired: it is overloaded (Go's test job vs
-	// nodelib's JS test), so retiring it would drop nodelib's real gate.
-	if slices.Contains(c.Retired, "test") {
-		t.Errorf("test must not be retired (overloaded with nodelib's JS gate); got %v", c.Retired)
+	// CodeQL keeps a minimal file-based language detection for codeql.yml.
+	if !slices.Contains(c.CodeQL.Always, "actions") {
+		t.Errorf("codeql.always missing actions; got %v", c.CodeQL.Always)
+	}
+	if len(c.CodeQL.Languages) == 0 {
+		t.Error("codeql.languages empty")
+	}
+	// Codecov posts its own statuses (separate, bot-bypass ruleset).
+	if len(c.Codecov.Checks) == 0 {
+		t.Error("codecov.checks empty")
 	}
 }
 
