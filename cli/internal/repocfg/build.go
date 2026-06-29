@@ -250,9 +250,6 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRu
 	if r.PullRequest != nil {
 		rs.Rules = append(rs.Rules, APIRule{Type: "pull_request", Parameters: r.PullRequest})
 	}
-	if r.CopilotCodeReview != nil {
-		rs.Rules = append(rs.Rules, APIRule{Type: "copilot_code_review", Parameters: r.CopilotCodeReview})
-	}
 	if r.CodeQuality != nil {
 		rs.Rules = append(rs.Rules, APIRule{Type: "code_quality", Parameters: map[string]any{"severity": r.CodeQuality.Severity}})
 	}

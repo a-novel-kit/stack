@@ -237,8 +237,7 @@ type RulesetConditions struct {
 
 // RulesetRules holds every rule a template may set; absent ones stay nil/
 // false. Param blobs that pass straight through to the API (merge_queue,
-// pull_request, copilot_code_review) are kept as maps so the template owns
-// their shape.
+// pull_request) are kept as maps so the template owns their shape.
 type RulesetRules struct {
 	Creation             bool               `yaml:"creation"`
 	Update               bool               `yaml:"update"`
@@ -249,7 +248,6 @@ type RulesetRules struct {
 	MergeQueue           map[string]any     `yaml:"merge_queue"`
 	CodeQuality          *CodeQualityParams `yaml:"code_quality"`
 	PullRequest          map[string]any     `yaml:"pull_request"`
-	CopilotCodeReview    map[string]any     `yaml:"copilot_code_review"`
 }
 
 // RSCParams is the static part of a required_status_checks rule; the checks
