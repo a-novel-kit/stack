@@ -78,15 +78,37 @@ the CLI applies it via the `detect` package. Signals are matched by a bounded,
 gitignore-aware walk, so a module in a sub-directory (e.g. stack's Go module
 under `cli/`) is detected — not just one at the repo root.
 
-| Field                                             | Type     | Meaning                                                                                              |
-| ------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
-| `integrations`                                    | map      | App name → GitHub App id (the `integration_id` a check resolves to).                                 |
-| `always`                                          | list     | Checks required on every repo, regardless of language.                                               |
-| `languages.<lang>.detect` / `.checks` / `.codeql` | mixed    | Signal paths that detect the language → its required checks + CodeQL languages.                      |
-| `features.<feat>.detect` / `.checks`              | mixed    | More specific signal (e.g. `pkg/js`) → extra checks.                                                 |
-| `docker.context_format`                           | string   | `build-%s` per detected Dockerfile target. Some CI jobs are hand-named and do not match (see below). |
-| `codecov`                                         | mixed    | Test presence → the codecov ruleset's checks.                                                        |
-| `retired`                                         | []string | Check contexts this map once emitted but has renamed/removed — see below.                            |
+| Field                                             | Type     | Meaning                                                                                             |
+| ------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
+| `integrations`                                    | map      | App name → GitHub App id (the `integration_id` a check resolves to).                                |
+| `always`                                          | list     | Checks required on every repo, regardless of class or language.                                     |
+| `codeql_always`                                   | []string | CodeQL languages analyzed on every repo with no detection (e.g. `actions`).                         |
+| `languages.<lang>.detect` / `.checks` / `.codeql` | mixed    | (strong classes) Signal paths → required checks + CodeQL languages.                                 |
+| `features.<feat>.detect` / `.checks`              | mixed    | (strong classes) More specific signal (e.g. `pkg/js`) → extra checks.                               |
+| `docker.context_format`                           | string   | (strong classes) `build-%s` per detected Dockerfile target. Some CI jobs are hand-named; see below. |
+| `codecov`                                         | mixed    | Test presence → the codecov ruleset's checks.                                                       |
+| `retired`                                         | []string | Check contexts this map once emitted but has renamed/removed — see below.                           |
+
+### Class-aware discovery
+
+Discovery branches on the repo's class:
+
+- **Strong-semantic classes** (`service` / `workflows` / `meta`) have a known
+  structure and fixed check names, so they use the `languages` / `features` /
+  `docker` rules above (detection adapts to the repo's signals).
+- The **freeform `library` class** has no assumed structure, so it does **not**
+  use those rules. It derives checks generically (in code — see `discoverLibrary`),
+  with no folder heuristics:
+  - each `go.mod` → `lint-go`, `test-go`, and `generated-go` **iff** the module
+    carries a `//go:generate` directive;
+  - each pnpm **workspace-root** package.json → a check per canonical script
+    (`lint`→`lint-js`, `test`→`test-js`, `build`→`build-js`, `generate`→`generated-js`);
+  - each `buf.yaml` → `lint-proto`.
+
+  Every freeform check is **lane-suffixed** (`-go` / `-js` / `-proto`) and
+  **path-encoded** by its module's location: a module at the repo root has no
+  segment (`test-go`); one in a subdir appends its dashed path (`go.mod` in `cli/`
+  → `test-go-cli`; a package under `pkg/js/rest` → `test-js-pkg-js-rest`).
 
 ### Managed vs unmanaged checks (how `update` reconciles)
 

@@ -11,9 +11,19 @@ integrations:
   gitguardian: 46505
   codecov: 254
 
-# Always required, regardless of languages.
+# Always required, regardless of class or languages.
 always:
   - { context: "GitGuardian Security Checks", integration: gitguardian }
+
+# CodeQL languages analyzed on every repo regardless of detection. `actions` has
+# no file signal (only the .github/ folder, which is not used for detection) and
+# gates nothing — it is just a CodeQL language, so it is always on.
+codeql_always: ["actions"]
+
+# NOTE: the languages / features / docker rules below drive the STRONG-SEMANTIC
+# classes (service / workflows / meta), whose structure and check names are
+# fixed. The freeform `library` class does NOT use them — it derives checks
+# generically from files + pnpm scripts (see discoverLibrary in discover.go).
 
 # Language detection -> checks + CodeQL languages + Dependabot ecosystems.
 languages:
@@ -36,9 +46,6 @@ languages:
     detect: ["buf.yaml", "buf.gen.yaml"]
     checks:
       - { context: "lint-proto", integration: actions }
-  actions:
-    detect: [".github/workflows"]
-    codeql: ["actions"]
 
 # Sub-feature detection (more specific than language).
 features:

@@ -18,6 +18,7 @@ package detect
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -287,14 +288,30 @@ func ExistsUnder(root string, relPaths []string) bool {
 	if len(relPaths) == 0 {
 		return false
 	}
+	found := false
+	walkRepoDirs(root, func(absDir, _ string) bool {
+		for _, rel := range relPaths {
+			if _, statErr := os.Stat(filepath.Join(absDir, filepath.FromSlash(rel))); statErr == nil {
+				found = true
+				return true
+			}
+		}
+		return false
+	})
+	return found
+}
+
+// walkRepoDirs walks root with the bounded, pruned, gitignore-aware policy
+// shared by the detection probes — never descending the gitignored sibling
+// checkouts (app/, kit/), node_modules, hidden trees, or past the depth cap. It
+// invokes visit(absDir, relDir) for each surviving directory ("." for the root);
+// visit returns true to stop the walk early.
+func walkRepoDirs(root string, visit func(absDir, relDir string) bool) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
-		return false
+		return
 	}
-
 	ignored := gitIgnoredDirs(absRoot)
-	found := false
-
 	_ = filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			// An unreadable subtree shouldn't abort the probe — skip it.
@@ -309,16 +326,166 @@ func ExistsUnder(root string, relPaths []string) bool {
 		if skipDir(absRoot, path, d.Name(), ignored) {
 			return filepath.SkipDir
 		}
-		for _, rel := range relPaths {
-			if _, statErr := os.Stat(filepath.Join(path, filepath.FromSlash(rel))); statErr == nil {
-				found = true
-				return filepath.SkipAll
-			}
+		// path is always absRoot or a descendant, so the relative dir is a plain
+		// prefix trim ("." for the root) — no filepath.Rel error to handle.
+		rel := "."
+		if path != absRoot {
+			rel = filepath.ToSlash(strings.TrimPrefix(path, absRoot+string(filepath.Separator)))
+		}
+		if visit(path, rel) {
+			return filepath.SkipAll
 		}
 		return nil
 	})
+}
 
+// GoModuleDirs returns the repo-relative directories (slash-separated, "." for
+// the root) that contain a go.mod, found by the shared recursive walk. Used by
+// freeform-library discovery to name a module's checks by its location
+// (cli/go.mod → the "-cli" path segment).
+func GoModuleDirs(root string) []string {
+	var out []string
+	walkRepoDirs(root, func(absDir, relDir string) bool {
+		if fileExists(filepath.Join(absDir, "go.mod")) {
+			out = append(out, relDir)
+		}
+		return false
+	})
+	return out
+}
+
+// HasGoGenerate reports whether any .go file in the module rooted at moduleDir
+// carries a `//go:generate` directive — the signal that the module produces
+// generated code and so warrants a generated-go check. It does not descend into
+// nested modules, vendor, node_modules, or hidden dirs.
+func HasGoGenerate(moduleDir string) bool {
+	found := false
+	_ = filepath.WalkDir(moduleDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if path != moduleDir {
+				if name == "node_modules" || name == "vendor" || strings.HasPrefix(name, ".") {
+					return filepath.SkipDir
+				}
+				// A nested module is its own unit — don't attribute its
+				// directives to the parent.
+				if fileExists(filepath.Join(path, "go.mod")) {
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		if b, readErr := os.ReadFile(path); readErr == nil && bytes.Contains(b, []byte("//go:generate")) {
+			found = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
 	return found
+}
+
+// ProtoDirs returns the repo-relative directories containing a buf.yaml or
+// buf.gen.yaml (proto modules), found by the shared recursive walk.
+func ProtoDirs(root string) []string {
+	var out []string
+	walkRepoDirs(root, func(absDir, relDir string) bool {
+		if fileExists(filepath.Join(absDir, "buf.yaml")) || fileExists(filepath.Join(absDir, "buf.gen.yaml")) {
+			out = append(out, relDir)
+		}
+		return false
+	})
+	return out
+}
+
+// NodeScriptRoot is a pnpm package whose scripts define checks: its repo-relative
+// directory and which canonical script kinds it declares.
+type NodeScriptRoot struct {
+	RelDir string
+	Kinds  map[string]bool
+}
+
+// nodeScriptKinds are the canonical pnpm script names that map 1:1 to a check
+// kind (lint→lint, test→test, build→build, generate→generated). Their names are
+// consistent across package.json files, so script presence is the signal.
+var nodeScriptKinds = []string{"lint", "test", "build", "generate"}
+
+// NodeScriptRoots returns the pnpm "script roots" under root: package.json files
+// that own runnable scripts. In a pnpm workspace only the workspace root counts —
+// its scripts bundle the members' (a root "test" runs every sub-package test) —
+// so package.json files inside a workspace are skipped. A package.json with none
+// of the canonical script kinds is omitted. Used by freeform-library discovery
+// to derive js-lane checks (lint-js, test-js, build-js, generated-js).
+func NodeScriptRoots(root string) []NodeScriptRoot {
+	var workspaces []string
+	type pkgDir struct{ abs, rel string }
+	var pkgs []pkgDir
+	walkRepoDirs(root, func(absDir, relDir string) bool {
+		if fileExists(filepath.Join(absDir, "pnpm-workspace.yaml")) {
+			workspaces = append(workspaces, relDir)
+		}
+		if fileExists(filepath.Join(absDir, "package.json")) {
+			pkgs = append(pkgs, pkgDir{absDir, relDir})
+		}
+		return false
+	})
+
+	var out []NodeScriptRoot
+	for _, p := range pkgs {
+		if isWorkspaceMember(p.rel, workspaces) {
+			continue
+		}
+		kinds := pnpmScriptKinds(filepath.Join(p.abs, "package.json"))
+		if len(kinds) == 0 {
+			continue
+		}
+		out = append(out, NodeScriptRoot{RelDir: p.rel, Kinds: kinds})
+	}
+	return out
+}
+
+// isWorkspaceMember reports whether relDir sits inside a pnpm workspace whose
+// root is a different directory — i.e. its scripts belong to that root, not here.
+func isWorkspaceMember(relDir string, workspaces []string) bool {
+	for _, wr := range workspaces {
+		if wr == relDir {
+			continue
+		}
+		if wr == "." || strings.HasPrefix(relDir, wr+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// pnpmScriptKinds reads a package.json and returns the set of canonical script
+// kinds it declares (ignoring the CI-only ":ci" variants).
+func pnpmScriptKinds(pkgPath string) map[string]bool {
+	raw, err := os.ReadFile(pkgPath)
+	if err != nil {
+		return nil
+	}
+	var pkg packageJSON
+	if json.Unmarshal(raw, &pkg) != nil {
+		return nil
+	}
+	kinds := map[string]bool{}
+	for name := range pkg.Scripts {
+		for _, k := range nodeScriptKinds {
+			if pnpmScript(name, k) {
+				kinds[k] = true
+			}
+		}
+	}
+	return kinds
 }
 
 // kindOrder fixes the group order in the menu: Go first, then pnpm, then

@@ -178,6 +178,11 @@ type ChecksConfig struct {
 	Features     map[string]FeatureRule `yaml:"features"`
 	Docker       DockerRule             `yaml:"docker"`
 	Codecov      CodecovRule            `yaml:"codecov"`
+	// CodeQLAlways are CodeQL languages analyzed on every repo regardless of
+	// detection — e.g. "actions": every repo has workflows, there is no file
+	// signal for them other than the .github/ folder (which is not used for
+	// detection), and they gate nothing (just the CodeQL language list).
+	CodeQLAlways []string `yaml:"codeql_always"`
 	// Retired lists check contexts the map once emitted but has since renamed
 	// or removed. They stay part of the managed namespace (see
 	// ChecksConfig.IsManaged) so `repo update` DROPS a stale live check by one
