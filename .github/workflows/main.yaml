@@ -8,7 +8,7 @@ on:
       - "**"
 
 jobs:
-  generated-go:
+  generated-go-cli:
     # Ensures `go generate ./...` in cli/ produces no diff against what's
     # committed (proto bindings, mocks, etc.). Mirrors the per-service
     # generated-go job; gates lint-go so we don't waste a lint run on stale
@@ -29,7 +29,7 @@ jobs:
         with:
           fail_message: cli/ go generate definitions are not up-to-date, please run 'go generate ./...' inside cli/ and commit the changes
 
-  lint-proto:
+  lint-proto-cli:
     # buf lint over the cli/proto contract. Catches schema-style violations
     # (naming, field-number reuse, breaking-change patterns) before generated
     # code drifts from intent.
@@ -42,9 +42,9 @@ jobs:
         with:
           input: cli
 
-  lint-go:
+  lint-go-cli:
     runs-on: ubuntu-latest
-    needs: [generated-go]
+    needs: [generated-go-cli]
     permissions:
       contents: read
     steps:
@@ -54,7 +54,7 @@ jobs:
         with:
           working-directory: cli
 
-  lint-node:
+  lint-js:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -66,13 +66,13 @@ jobs:
           app_private_key: ${{ secrets.DEPENDENCY_BOT_PRIVATE_KEY }}
           client_id: ${{ vars.DEPENDENCY_BOT_CLIENT_ID }}
 
-  test-go:
+  test-go-cli:
     # Go unit tests for the cli/ module. Uses the same shared
     # gotestsum-based action every service runs so test reports and
     # coverage artifacts land in one consistent place. Gated on
     # generated-go so we don't waste runners on a stale proto-gen.
     runs-on: ubuntu-latest
-    needs: [generated-go]
+    needs: [generated-go-cli]
     permissions:
       contents: read
     defaults:
