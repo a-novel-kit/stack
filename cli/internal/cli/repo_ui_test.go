@@ -5,46 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
-
 	"github.com/a-novel-kit/stack/cli/internal/repocfg"
 )
-
-func TestSelectClass(t *testing.T) {
-	t.Parallel()
-	cases := map[string]struct {
-		in   string
-		want repocfg.Class
-		err  bool
-	}{
-		"by number":     {in: "1\n", want: repocfg.ClassService},
-		"by name":       {in: "library\n", want: repocfg.ClassLibrary},
-		"name any case": {in: "  Meta \n", want: repocfg.ClassMeta},
-		"out of range":  {in: "9\n", err: true},
-		"gibberish":     {in: "nope\n", err: true},
-	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			cmd := &cobra.Command{}
-			cmd.SetIn(strings.NewReader(tc.in))
-			cmd.SetOut(&bytes.Buffer{})
-			got, err := selectClass(cmd)
-			if tc.err {
-				if err == nil {
-					t.Fatalf("expected error for %q, got %q", tc.in, got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("selectClass(%q): %v", tc.in, err)
-			}
-			if got != tc.want {
-				t.Errorf("selectClass(%q) = %q, want %q", tc.in, got, tc.want)
-			}
-		})
-	}
-}
 
 func TestRenderSummary(t *testing.T) {
 	t.Parallel()

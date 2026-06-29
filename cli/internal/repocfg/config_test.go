@@ -21,6 +21,28 @@ func TestLoadAllClasses(t *testing.T) {
 	}
 }
 
+func TestDetectClass(t *testing.T) {
+	t.Parallel()
+	cases := map[string]Class{
+		"service-authentication": ClassService,
+		"service-json-keys":      ClassService,
+		"workflows":              ClassWorkflows,
+		".github":                ClassMeta,
+		"golib":                  ClassLibrary,
+		"stack":                  ClassLibrary,
+		"nodelib":                ClassLibrary,
+		"platform-web":           ClassLibrary, // platform not modelled yet → default
+	}
+	for repo, want := range cases {
+		t.Run(repo, func(t *testing.T) {
+			t.Parallel()
+			if got := DetectClass(repo); got != want {
+				t.Errorf("DetectClass(%q) = %q, want %q", repo, got, want)
+			}
+		})
+	}
+}
+
 func TestLoadOrgs(t *testing.T) {
 	t.Parallel()
 	for _, org := range []string{"a-novel", "a-novel-kit"} {
