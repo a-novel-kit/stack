@@ -52,7 +52,10 @@ features:
   pkg-js:
     detect: ["pkg/js"]
     checks:
-      - { context: "generated-pnpm", integration: actions }
+      # generated-pnpm is NOT here: it gates a node-side generation, which is
+      # script-detected (a non-go `generate:<lane>` script), not assumed from
+      # pkg/js. A service whose only generate is Go (generate:go) does not need
+      # it. See discoverStrong / detect.HasNodeGenerate.
       - { context: "test-pkg-js", integration: actions }
       - { context: "build-js", integration: actions }
 

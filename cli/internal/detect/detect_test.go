@@ -64,6 +64,31 @@ func TestExistsUnder_PrunesGitignored(t *testing.T) {
 	}
 }
 
+// TestHasNodeGenerate pins the lane-sensitivity of generate detection: only a
+// non-go generate script is a node-side generation; generate:go is Go codegen.
+func TestHasNodeGenerate(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		pkg  string
+		want bool
+	}{
+		{"GoOnly", `{"scripts":{"generate":"pnpm run generate:go","generate:go":"go generate ./..."}}`, false},
+		{"NonGo", `{"scripts":{"generate":"pnpm run generate:mjml","generate:mjml":"bash mjml.sh"}}`, true},
+		{"None", `{"scripts":{"build":"x","test":"y"}}`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			mustWrite(t, filepath.Join(root, "package.json"), tc.pkg)
+			if got := HasNodeGenerate(root); got != tc.want {
+				t.Errorf("HasNodeGenerate = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // mustWrite writes content to path, creating parent directories. It panics on
 // failure — a setup error, not a runtime outcome under test.
 func mustWrite(t *testing.T, path, content string) {
