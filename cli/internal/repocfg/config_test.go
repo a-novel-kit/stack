@@ -154,6 +154,37 @@ func TestBuildRulesetBypassResolution(t *testing.T) {
 			t.Fatalf("tags bot bypass mode = %q, want %q", rs.BypassActors[0].BypassMode, modeAlways)
 		}
 	})
+
+	t.Run("codecov ruleset exempts the agent (the release bump push)", func(t *testing.T) {
+		t.Parallel()
+		// The dispatched release pushes the version-bump commit straight to the
+		// default branch as the agent bot; codecov must exempt it or that push is
+		// rejected on required_status_checks. "exempt" is enough — the same mode on
+		// require-approval already lets the agent's direct push through.
+		spec, err := LoadRuleset("codecov")
+		if err != nil {
+			t.Fatalf("LoadRuleset(codecov): %v", err)
+		}
+		o := &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{
+			"dependencies": 1734926, "publish": 1734949, "agent": 3549379,
+		}}
+		rs, err := BuildRuleset(spec, o, nil)
+		if err != nil {
+			t.Fatalf("BuildRuleset(codecov): %v", err)
+		}
+		var agent *APIBypassActor
+		for i := range rs.BypassActors {
+			if rs.BypassActors[i].ActorID != nil && *rs.BypassActors[i].ActorID == 3549379 {
+				agent = &rs.BypassActors[i]
+			}
+		}
+		if agent == nil {
+			t.Fatal("codecov ruleset does not bypass the agent bot — the release bump push would be rejected")
+		}
+		if agent.BypassMode != modeExempt {
+			t.Fatalf("agent bypass mode = %q, want %q", agent.BypassMode, modeExempt)
+		}
+	})
 }
 
 // TestBuildRulesetCreationRule covers the creation/update rules added for the
