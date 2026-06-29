@@ -23,6 +23,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -45,6 +46,25 @@ const (
 // AllClasses is the ordered set of known classes (for the UI picker and
 // flag validation).
 var AllClasses = []Class{ClassService, ClassLibrary, ClassWorkflows, ClassMeta}
+
+// DetectClass infers a repo's class from its name, used when neither a
+// repos/<org>_<repo>.yaml override nor the --class flag is given. The
+// strong-semantic classes match exact names (workflows, .github); the service-*
+// family is the service class; everything else falls to the freeform library
+// default. platform-* frontends are not modelled yet — they fall to library or
+// need an explicit override until platform conventions exist.
+func DetectClass(repo string) Class {
+	switch {
+	case repo == "workflows":
+		return ClassWorkflows
+	case repo == ".github":
+		return ClassMeta
+	case strings.HasPrefix(repo, "service-"):
+		return ClassService
+	default:
+		return ClassLibrary
+	}
+}
 
 // OrgProfile is orgs/<org>.yaml — per-org bot ids and signing policy. A
 // ruleset's generic bot name (bots key) resolves to the app id here.

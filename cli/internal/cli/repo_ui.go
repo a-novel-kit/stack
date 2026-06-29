@@ -1,14 +1,11 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/repocfg"
 )
@@ -21,29 +18,6 @@ var (
 	repoOn    = lipgloss.NewStyle().Foreground(lipgloss.Color("#00AF84"))            // on / success
 	repoOff   = lipgloss.NewStyle().Foreground(lipgloss.Color("#6C757D"))            // off / muted
 )
-
-// selectClass prompts for a class when one was not supplied via --class or a
-// repos/<org>_<repo>.yaml override. Numeric pick over the known classes.
-func selectClass(cmd *cobra.Command) (repocfg.Class, error) {
-	out := cmd.OutOrStdout()
-	_, _ = fmt.Fprintln(out, repoHead.Render("Pick a class:"))
-	for i, c := range repocfg.AllClasses {
-		_, _ = fmt.Fprintf(out, "  %s %s\n", repoLabel.Render(strconv.Itoa(i+1)+")"), c)
-	}
-	_, _ = fmt.Fprint(out, "> ")
-	line, _ := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
-	choice := strings.TrimSpace(line)
-	// Accept either the number or the class name.
-	if n, err := strconv.Atoi(choice); err == nil && n >= 1 && n <= len(repocfg.AllClasses) {
-		return repocfg.AllClasses[n-1], nil
-	}
-	for _, c := range repocfg.AllClasses {
-		if strings.EqualFold(choice, string(c)) {
-			return c, nil
-		}
-	}
-	return "", fmt.Errorf("not a known class: %q", choice)
-}
 
 // renderSummary prints a readable, grouped overview of the desired config —
 // the human-facing alternative to the raw API ops dump, shown before the

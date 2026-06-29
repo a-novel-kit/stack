@@ -69,7 +69,7 @@ rulesets, Pages. Interactive (human-only); run it from anywhere.`,
 			if !stdinIsTTY() {
 				return errors.New("repo create is interactive (human-only); run it in a terminal")
 			}
-			preset, err := resolvePreset(cmd, org, name, class)
+			preset, err := resolvePreset(org, name, class)
 			if err != nil {
 				return err
 			}
@@ -192,7 +192,7 @@ wipe a bad manual edit.`,
 				return err
 			}
 
-			preset, err := resolvePreset(cmd, org, repo, class)
+			preset, err := resolvePreset(org, repo, class)
 			if err != nil {
 				return err
 			}
@@ -273,23 +273,17 @@ wipe a bad manual edit.`,
 }
 
 // resolvePreset prefers a repos/<org>_<repo>.yaml override, then the --class
-// flag; if neither is set it prompts interactively (or errors when there is
-// no terminal, e.g. --dry-run in CI).
-func resolvePreset(cmd *cobra.Command, org, repo, class string) (*repocfg.ClassPreset, error) {
+// flag, then auto-discovery from the repo name (repocfg.DetectClass). It always
+// resolves to a class — no interactive prompt — and the chosen class is shown in
+// the summary before the apply confirm.
+func resolvePreset(org, repo, class string) (*repocfg.ClassPreset, error) {
 	if p, ok, err := repocfg.LoadRepoOverride(org, repo); err != nil {
 		return nil, err
 	} else if ok {
 		return p, nil
 	}
 	if class == "" {
-		if !stdinIsTTY() {
-			return nil, fmt.Errorf("no repos/%s_%s.yaml override; pass --class (service|library|workflows|meta)", org, repo)
-		}
-		c, err := selectClass(cmd)
-		if err != nil {
-			return nil, err
-		}
-		class = string(c)
+		class = string(repocfg.DetectClass(repo))
 	}
 	return repocfg.LoadClass(repocfg.Class(class))
 }
