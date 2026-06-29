@@ -72,65 +72,29 @@ The core team is intentionally **not** a bypass actor.
 
 ## `checks.yaml`
 
-The semantic discovery map: detected signals → required check contexts +
-CodeQL languages + Dependabot ecosystems. See the inline comments there;
-the CLI applies it via the `detect` package. Signals are matched by a bounded,
-gitignore-aware walk, so a module in a sub-directory (e.g. stack's Go module
-under `cli/`) is detected — not just one at the repo root.
+Decides which CI jobs gate the default branch. The `master` ruleset's required
+checks are:
 
-| Field                                             | Type     | Meaning                                                                                             |
-| ------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
-| `integrations`                                    | map      | App name → GitHub App id (the `integration_id` a check resolves to).                                |
-| `always`                                          | list     | Checks required on every repo, regardless of class or language.                                     |
-| `codeql_always`                                   | []string | CodeQL languages analyzed on every repo with no detection (e.g. `actions`).                         |
-| `languages.<lang>.detect` / `.checks` / `.codeql` | mixed    | (strong classes) Signal paths → required checks + CodeQL languages.                                 |
-| `features.<feat>.detect` / `.checks`              | mixed    | (strong classes) More specific signal (e.g. `pkg/js`) → extra checks.                               |
-| `docker.context_format`                           | string   | (strong classes) `build-%s` per detected Dockerfile target. Some CI jobs are hand-named; see below. |
-| `codecov`                                         | mixed    | Test presence → the codecov ruleset's checks.                                                       |
-| `retired`                                         | []string | Check contexts this map once emitted but has renamed/removed — see below.                           |
+1. the **`always`** set — required on every repo regardless of class (today
+   GitGuardian); plus
+2. **every job declared in the repo's `.github/workflows/main.yaml`**, minus the
+   **`exclude`** rules.
 
-### Class-aware discovery
+A job's id is its check context, so there is nothing to derive and nothing to
+drift. Workflow files are code (owned by skills / PRs), not by `repo update`;
+this map only decides which of their jobs are required, and the set is applied
+**wholesale** (no reconcile, no preservation of manual checks).
 
-Discovery branches on the repo's class:
+| Field                 | Type     | Meaning                                                                                            |
+| --------------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `integrations`        | map      | App name → GitHub App id (the `integration_id` a check resolves to).                               |
+| `always`              | list     | Checks required on every repo, regardless of class.                                                |
+| `exclude.prefixes`    | []string | Job ids starting with one of these are not required (e.g. `report-`: reporting / post-merge jobs). |
+| `exclude.if_contains` | []string | Jobs whose `if:` contains one of these are not required (master-only jobs never run on a PR).      |
+| `codeql.always`       | []string | CodeQL languages analyzed with no detection (e.g. `actions`).                                      |
+| `codeql.languages`    | list     | `{ detect, lang }` — a CodeQL language keyed to a canonical file (the only file detection left).   |
+| `codecov`             | mixed    | The codecov ruleset's checks (see below).                                                          |
 
-- **Strong-semantic classes** (`service` / `workflows` / `meta`) have a known
-  structure and fixed check names, so they use the `languages` / `features` /
-  `docker` rules above (detection adapts to the repo's signals).
-- The **freeform `library` class** has no assumed structure, so it does **not**
-  use those rules. It derives checks generically (in code — see `discoverLibrary`),
-  with no folder heuristics:
-  - each `go.mod` → `lint-go`, `test-go`, and `generated-go` **iff** the module
-    carries a `//go:generate` directive;
-  - each pnpm **workspace-root** package.json → a check per canonical script
-    (`lint`→`lint-js`, `test`→`test-js`, `build`→`build-js`, `generate`→`generated-js`);
-  - each `buf.yaml` → `lint-proto`.
-
-  Every freeform check is **lane-suffixed** (`-go` / `-js` / `-proto`) and
-  **path-encoded** by its module's location: a module at the repo root has no
-  segment (`test-go`); one in a subdir appends its dashed path (`go.mod` in `cli/`
-  → `test-go-cli`; a package under `pkg/js/rest` → `test-js-pkg-js-rest`).
-
-### Managed vs unmanaged checks (how `update` reconciles)
-
-`a-novel repo update` reconciles the `master` ruleset's required checks rather
-than overwriting them. A check context is **managed** if this map owns it — the
-catalog it can emit (`always` + every language + every feature + `codecov`)
-plus the `retired` names. Everything else live is **unmanaged**: a manual
-ruleset addition, or a hand-named docker job context the map cannot reproduce
-(`init.Dockerfile` → the job `build-job-init`, not `build-init`).
-
-On `update` the result is **discovery ∪ (unmanaged live checks)**:
-
-- a newly-declared managed check rolls out on the next `update`;
-- a managed check the repo no longer produces is **dropped** (so stale required
-  checks don't linger and block PRs on a check that never reports);
-- unmanaged checks are **preserved** (a manual gate is never clobbered).
-
-`update --full` skips the union and resets to a plain rediscovery — dropping the
-unmanaged checks too, to wipe a bad manual edit.
-
-**`retired`** is how a _renamed or removed_ managed check gets dropped: its old
-name is no longer in the catalog, so without `retired` it would look unmanaged
-and be preserved forever. List the OLD name there (e.g. `test`, renamed to
-`test-go`). A repo whose CI still emits the old context must rename that job
-**before** `update` runs on it, or the new required check will sit "Expected".
+The codecov checks (`codecov/patch`, `codecov/project`) are **not** `main.yaml`
+jobs — Codecov posts them itself — so they live in a separate ruleset that bots
+bypass, gated on whether the repo actually uploads coverage.

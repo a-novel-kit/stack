@@ -1,16 +1,18 @@
 package repocfg
 
 import (
-	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/a-novel-kit/stack/cli/internal/detect"
 )
 
 // integrationActions is the checks.yaml key for the GitHub Actions app — the
-// poster of every CI-emitted check (lint-go, test-js, …).
+// poster of every job-emitted check.
 const integrationActions = "actions"
 
 // CheckRef is a required status check resolved to its posting app.
@@ -19,183 +21,113 @@ type CheckRef struct {
 	IntegrationID int64
 }
 
-// Discovered is what probing a repo tells us: the required checks, the
-// CodeQL languages, and whether the repo has tests (informational; the
-// codecov ruleset is gated on actual Codecov reporting, not this).
+// Discovered is what probing a repo tells us: the required checks (for the
+// master ruleset) and the CodeQL languages (for the codeql.yml workflow).
 type Discovered struct {
 	Checks      []CheckRef
 	CodeQLLangs []string
-	HasTests    bool
 }
 
-// Discover produces a repo's required checks + CodeQL languages, dispatching on
-// class: the freeform `library` class derives them generically from files and
-// pnpm scripts (see discoverLibrary); the strong-semantic classes use the fixed
-// checks.yaml rules (see discoverStrong).
-func Discover(repoPath string, class Class, cc *ChecksConfig) (*Discovered, error) {
-	if class == ClassLibrary {
-		return discoverLibrary(repoPath, cc)
-	}
-	return discoverStrong(repoPath, cc)
-}
-
-// discoverStrong applies the checks.yaml map (languages + features + docker) for
-// the strong-semantic classes (service / workflows / meta), whose structure is
-// known and whose check names are fixed. A signal is matched by
-// detect.ExistsUnder — a bounded, gitignore-aware walk — and detection adapts to
-// the repo's signals, so a docs/meta repo with only a package.json yields just
-// lint-node.
-func discoverStrong(repoPath string, cc *ChecksConfig) (*Discovered, error) {
+// Discover computes a repo's required checks and CodeQL languages.
+//
+// Required checks are the `always` set plus every job declared in the repo's
+// .github/workflows/main.yaml, minus cc.Exclude — the job id is the check
+// context, so there is no class- or file-based derivation to drift. A missing
+// main.yaml (e.g. a docs/meta repo) simply contributes no jobs.
+//
+// CodeQL languages are the one remaining file-based signal, used only to render
+// the codeql.yml workflow.
+func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 	d := &Discovered{}
 	seen := map[string]bool{}
-	addCheck := func(ctx string, integ int64) {
+	add := func(ctx string, integ int64) {
 		if ctx == "" || seen[ctx] {
 			return
 		}
 		seen[ctx] = true
 		d.Checks = append(d.Checks, CheckRef{Context: ctx, IntegrationID: integ})
 	}
-	addDefs := func(defs []CheckDef) {
-		for _, cd := range defs {
-			addCheck(cd.Context, cc.Integrations[cd.Integration])
-		}
-	}
 
-	addDefs(cc.Always)
-
-	for _, name := range sortedKeys(cc.Languages) {
-		lr := cc.Languages[name]
-		if detect.ExistsUnder(repoPath, lr.Detect) {
-			addDefs(lr.Checks)
-			d.CodeQLLangs = appendUnique(d.CodeQLLangs, lr.CodeQL...)
-		}
-	}
-
-	for _, name := range sortedFeatureKeys(cc.Features) {
-		fr := cc.Features[name]
-		if detect.ExistsUnder(repoPath, fr.Detect) {
-			addDefs(fr.Checks)
-		}
-	}
-
-	// generated-pnpm gates a node-side generation (e.g. generate:mjml); it is
-	// script-detected, so a service whose only generate is Go (generate:go,
-	// gated by generated-go) does not require it.
-	if detect.HasNodeGenerate(repoPath) {
-		addCheck("generated-pnpm", cc.Integrations[integrationActions])
-	}
-
-	if targets, err := detect.Detect(repoPath); err == nil {
-		for _, t := range targets {
-			if t.Kind == detect.KindPodman {
-				addCheck(fmt.Sprintf(cc.Docker.ContextFormat, dockerTargetName(t.Name)), cc.Integrations[cc.Docker.Integration])
-			}
-		}
-	}
-
-	if tests, err := detect.DetectTests(repoPath); err == nil {
-		d.HasTests = len(tests) > 0
-	}
-
-	d.CodeQLLangs = appendUnique(d.CodeQLLangs, cc.CodeQLAlways...)
-
-	sort.Slice(d.Checks, func(i, j int) bool { return d.Checks[i].Context < d.Checks[j].Context })
-	return d, nil
-}
-
-// discoverLibrary derives a freeform library's checks generically from files and
-// pnpm scripts — no folder heuristics, no assumed structure. Every check is
-// lane-suffixed (-go / -js / -proto) and path-encoded by its module's location
-// (a go.mod in cli/ → test-go-cli; a module at the root → test-go). Go modules
-// additionally get generated-go when they carry a //go:generate directive; node
-// packages derive checks from their workspace-root pnpm scripts (lint / test /
-// build / generate → lint-js / test-js / build-js / generated-js).
-func discoverLibrary(repoPath string, cc *ChecksConfig) (*Discovered, error) {
-	d := &Discovered{}
-	seen := map[string]bool{}
-	actions := cc.Integrations[integrationActions]
-	add := func(ctx string) {
-		if ctx == "" || seen[ctx] {
-			return
-		}
-		seen[ctx] = true
-		d.Checks = append(d.Checks, CheckRef{Context: ctx, IntegrationID: actions})
-	}
-
-	// Always-required checks (e.g. GitGuardian) keep their own integrations.
 	for _, cd := range cc.Always {
-		if cd.Context == "" || seen[cd.Context] {
+		add(cd.Context, cc.Integrations[cd.Integration])
+	}
+
+	jobs, err := workflowJobs(filepath.Join(repoPath, ".github", "workflows", "main.yaml"))
+	if err != nil {
+		return nil, err
+	}
+	for _, j := range jobs {
+		if cc.Exclude.excludes(j) {
 			continue
 		}
-		seen[cd.Context] = true
-		d.Checks = append(d.Checks, CheckRef{Context: cd.Context, IntegrationID: cc.Integrations[cd.Integration]})
+		add(j.Context, cc.Integrations[integrationActions])
 	}
 
-	for _, dir := range detect.GoModuleDirs(repoPath) {
-		suffix := pathSuffix(dir)
-		add("lint-go" + suffix)
-		add("test-go" + suffix)
-		if detect.HasGoGenerate(filepath.Join(repoPath, filepath.FromSlash(dir))) {
-			add("generated-go" + suffix)
-		}
-		d.CodeQLLangs = appendUnique(d.CodeQLLangs, "go")
-	}
-
-	nodeFound := false
-	for _, nr := range detect.NodeScriptRoots(repoPath) {
-		nodeFound = true
-		suffix := pathSuffix(nr.RelDir)
-		if nr.Kinds["lint"] {
-			add("lint-js" + suffix)
-		}
-		if nr.Kinds["test"] {
-			add("test-js" + suffix)
-		}
-		if nr.Kinds["build"] {
-			add("build-js" + suffix)
-		}
-		if nr.Kinds["generate"] {
-			add("generated-js" + suffix)
+	for _, lr := range cc.CodeQL.Languages {
+		if detect.ExistsUnder(repoPath, lr.Detect) {
+			d.CodeQLLangs = appendUnique(d.CodeQLLangs, lr.Lang)
 		}
 	}
-	if nodeFound {
-		d.CodeQLLangs = appendUnique(d.CodeQLLangs, "javascript-typescript")
-	}
-
-	for _, dir := range detect.ProtoDirs(repoPath) {
-		add("lint-proto" + pathSuffix(dir))
-	}
-
-	d.CodeQLLangs = appendUnique(d.CodeQLLangs, cc.CodeQLAlways...)
-
-	if tests, err := detect.DetectTests(repoPath); err == nil {
-		d.HasTests = len(tests) > 0
-	}
+	d.CodeQLLangs = appendUnique(d.CodeQLLangs, cc.CodeQL.Always...)
 
 	sort.Slice(d.Checks, func(i, j int) bool { return d.Checks[i].Context < d.Checks[j].Context })
 	return d, nil
 }
 
-// pathSuffix turns a module's repo-relative dir into a check-name segment: "" for
-// the root, else "-" + the dir with slashes replaced by dashes (pkg/js/rest →
-// "-pkg-js-rest").
-func pathSuffix(relDir string) string {
-	if relDir == "" || relDir == "." {
-		return ""
-	}
-	return "-" + strings.ReplaceAll(relDir, "/", "-")
+// workflowJob is one job parsed from a workflow file: its check context (the
+// job's `name` if set, else its id) and its `if:` guard.
+type workflowJob struct {
+	ID      string
+	Context string
+	If      string
 }
 
-// dockerTargetName turns a detect podman target ("rest.Dockerfile",
-// "standalone.rest.Dockerfile") into the CI job suffix ("rest",
-// "standalone-rest"). Note: a few CI jobs are not pure derivations of the
-// Dockerfile name (e.g. init -> job-init), so discovery cannot reproduce them.
-// Such a context is "unmanaged" — present live but outside the map's namespace —
-// and `update` preserves it rather than reconciling it away (see
-// reconcileMasterChecks); a `--full` reset, by contrast, drops it.
-func dockerTargetName(name string) string {
-	name = strings.TrimSuffix(name, ".Dockerfile")
-	return strings.ReplaceAll(name, ".", "-")
+// workflowJobs parses the `jobs:` of a workflow file, returning each job's
+// context and `if:`. A missing file yields no jobs (not an error) — not every
+// repo has a main.yaml. Jobs are returned sorted by id for determinism.
+func workflowJobs(path string) ([]workflowJob, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var wf struct {
+		Jobs map[string]struct {
+			Name string `yaml:"name"`
+			If   string `yaml:"if"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(raw, &wf); err != nil {
+		return nil, err
+	}
+	out := make([]workflowJob, 0, len(wf.Jobs))
+	for id, j := range wf.Jobs {
+		ctx := id
+		if j.Name != "" {
+			ctx = j.Name
+		}
+		out = append(out, workflowJob{ID: id, Context: ctx, If: j.If})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+// excludes reports whether a main.yaml job should NOT become a required check —
+// its id matches an excluded prefix, or its `if:` contains an excluded string.
+func (e ExcludeRules) excludes(j workflowJob) bool {
+	for _, p := range e.Prefixes {
+		if strings.HasPrefix(j.ID, p) {
+			return true
+		}
+	}
+	for _, s := range e.IfContains {
+		if s != "" && strings.Contains(j.If, s) {
+			return true
+		}
+	}
+	return false
 }
 
 func appendUnique(dst []string, vs ...string) []string {
@@ -212,22 +144,4 @@ func appendUnique(dst []string, vs ...string) []string {
 		}
 	}
 	return dst
-}
-
-func sortedKeys(m map[string]LangRule) []string {
-	ks := make([]string, 0, len(m))
-	for k := range m {
-		ks = append(ks, k)
-	}
-	sort.Strings(ks)
-	return ks
-}
-
-func sortedFeatureKeys(m map[string]FeatureRule) []string {
-	ks := make([]string, 0, len(m))
-	for k := range m {
-		ks = append(ks, k)
-	}
-	sort.Strings(ks)
-	return ks
 }
