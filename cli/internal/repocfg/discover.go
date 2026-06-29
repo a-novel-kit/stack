@@ -78,6 +78,13 @@ func discoverStrong(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 		}
 	}
 
+	// generated-pnpm gates a node-side generation (e.g. generate:mjml); it is
+	// script-detected, so a service whose only generate is Go (generate:go,
+	// gated by generated-go) does not require it.
+	if detect.HasNodeGenerate(repoPath) {
+		addCheck("generated-pnpm", cc.Integrations[integrationActions])
+	}
+
 	if targets, err := detect.Detect(repoPath); err == nil {
 		for _, t := range targets {
 			if t.Kind == detect.KindPodman {

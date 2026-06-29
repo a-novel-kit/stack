@@ -54,6 +54,10 @@ const pkgAll = "./..."
 // name, and the env-id environment — one constant, like buildArg.
 const testArg = "test"
 
+// generateArg is the "generate" token: the canonical pnpm codegen script name
+// and the node-generation check kind.
+const generateArg = "generate"
+
 // runArg is the "run" token: the pnpm `pnpm run <script>` subcommand, the
 // canonical "run"/"run:*" script name, and the run env id — one constant.
 const runArg = "run"
@@ -413,10 +417,11 @@ type NodeScriptRoot struct {
 	Kinds  map[string]bool
 }
 
-// nodeScriptKinds are the canonical pnpm script names that map 1:1 to a check
-// kind (lint→lint, test→test, build→build, generate→generated). Their names are
-// consistent across package.json files, so script presence is the signal.
-var nodeScriptKinds = []string{"lint", "test", "build", "generate"}
+// nodeScriptKinds are the canonical pnpm script names that map 1:1 to a node
+// check kind: lint→lint-js, test→test-js, build→build-js. `generate` is handled
+// separately (see pnpmScriptKinds) — it is lane-sensitive, since generate:go is
+// Go codegen gated by generated-go, not a node-side generation.
+var nodeScriptKinds = []string{"lint", "test", "build"}
 
 // NodeScriptRoots returns the pnpm "script roots" under root: package.json files
 // that own runnable scripts. In a pnpm workspace only the workspace root counts —
@@ -484,8 +489,28 @@ func pnpmScriptKinds(pkgPath string) map[string]bool {
 				kinds[k] = true
 			}
 		}
+		// A "generate" script counts as a node-side generation ONLY for a
+		// non-go lane (generate:mjml, …). generate:go is Go codegen, already
+		// gated by generated-go (//go:generate); the bare umbrella "generate"
+		// just chains the per-lane scripts, so those are the real signal.
+		if strings.HasPrefix(name, generateArg+":") && name != generateArg+":go" && !strings.HasSuffix(name, ciSuffix) {
+			kinds[generateArg] = true
+		}
 	}
 	return kinds
+}
+
+// HasNodeGenerate reports whether any pnpm script root under root declares a
+// node-side generation — a non-go `generate:<lane>` script (e.g. generate:mjml).
+// It tells a repo that generates JS/assets (warranting generated-js /
+// generated-pnpm) apart from one whose only `generate` is Go codegen.
+func HasNodeGenerate(root string) bool {
+	for _, nr := range NodeScriptRoots(root) {
+		if nr.Kinds[generateArg] {
+			return true
+		}
+	}
+	return false
 }
 
 // kindOrder fixes the group order in the menu: Go first, then pnpm, then
