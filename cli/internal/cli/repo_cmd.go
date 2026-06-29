@@ -110,7 +110,7 @@ rulesets, Pages. Interactive (human-only); run it from anywhere.`,
 			}
 			discovered := &repocfg.Discovered{}
 			if _, err := gh("repo", "clone", org+"/"+name, cloneDir); err == nil {
-				if d, derr := repocfg.Discover(cloneDir, checks); derr == nil {
+				if d, derr := repocfg.Discover(cloneDir, preset.Class, checks); derr == nil {
 					discovered = d
 				}
 			}
@@ -204,7 +204,7 @@ wipe a bad manual edit.`,
 			if err != nil {
 				return err
 			}
-			discovered, err := repocfg.Discover(root, checks)
+			discovered, err := repocfg.Discover(root, preset.Class, checks)
 			if err != nil {
 				return err
 			}
