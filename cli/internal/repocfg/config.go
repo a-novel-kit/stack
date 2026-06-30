@@ -215,6 +215,33 @@ func LoadChecks() (*ChecksConfig, error) {
 	return &c, nil
 }
 
+// LabelDef is one entry in the canonical label set — name, hex colour (no
+// leading '#', lower-case, as GitHub stores it) and description.
+type LabelDef struct {
+	Name        string `yaml:"name"`
+	Color       string `yaml:"color"`
+	Description string `yaml:"description"`
+}
+
+// LabelsConfig is governance/labels.yaml: the uniform label vocabulary every
+// repo carries, provisioned like CODEOWNERS. Ensure labels are upserted (created
+// when absent, recoloured / re-described when they drift); Retire labels are
+// deleted. A label in neither list is left untouched — apply never removes a
+// label it was not told about.
+type LabelsConfig struct {
+	Ensure []LabelDef `yaml:"ensure"`
+	Retire []string   `yaml:"retire"`
+}
+
+// LoadLabels reads and parses governance/labels.yaml.
+func LoadLabels() (*LabelsConfig, error) {
+	var l LabelsConfig
+	if err := loadTemplateYAML(path.Join("governance", "labels.yaml"), &l); err != nil {
+		return nil, fmt.Errorf("load labels.yaml: %w", err)
+	}
+	return &l, nil
+}
+
 // RulesetSpec is one rulesets/<name>.yaml base. The required-status-checks
 // list and concrete bypass actors are injected by the builder, not stored
 // here.

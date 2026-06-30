@@ -169,3 +169,57 @@ func TestContentSHA(t *testing.T) {
 		}
 	})
 }
+
+func TestApplyLabels(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam.
+	t.Run("reconcile create+update+retire", func(t *testing.T) {
+		calls := fakeGH(t, map[string]string{
+			// meta matches; documentation's colour has drifted; triage lingers.
+			"labels?per_page=100": `[
+				{"name":"meta","color":"bfd4f2","description":"No-PR work (manual ops / config); also marks Meta Epics"},
+				{"name":"documentation","color":"000000","description":"Improvements or additions to documentation"},
+				{"name":"triage","color":"fbca04","description":"old"}
+			]`,
+		})
+		op := repocfg.Op{Path: "repos/o/r/labels", Body: &repocfg.LabelsConfig{
+			Ensure: []repocfg.LabelDef{
+				{Name: "meta", Color: "bfd4f2", Description: "No-PR work (manual ops / config); also marks Meta Epics"},
+				{Name: "documentation", Color: "0075ca", Description: "Improvements or additions to documentation"},
+				{Name: "good first issue", Color: "7057ff", Description: "Good for newcomers"},
+			},
+			Retire: []string{"triage"},
+		}}
+
+		detail, err := applyLabels("o", "r", op)
+		if err != nil {
+			t.Fatalf("applyLabels: %v", err)
+		}
+		if detail != "1 created, 1 updated, 1 retired" {
+			t.Fatalf("summary = %q, want %q", detail, "1 created, 1 updated, 1 retired")
+		}
+
+		joined := strings.Join(*calls, "\n")
+		for _, w := range []string{
+			"repos/o/r/labels?per_page=100",                         // list existing
+			"api -X POST repos/o/r/labels --input -",                // create the missing one
+			"api -X PATCH repos/o/r/labels/documentation --input -", // recolour the drifted one
+			"api -X DELETE repos/o/r/labels/triage",                 // retire
+		} {
+			if !strings.Contains(joined, w) {
+				t.Errorf("expected a gh call containing %q; calls:\n%s", w, joined)
+			}
+		}
+		// meta matched the canonical set exactly — it must not be re-written.
+		if strings.Contains(joined, "labels/meta") {
+			t.Errorf("meta matched and must not be PATCHed; calls:\n%s", joined)
+		}
+	})
+
+	t.Run("bad body type is an error", func(t *testing.T) {
+		fakeGH(t, nil)
+		op := repocfg.Op{Path: "repos/o/r/labels", Body: map[string]any{"ensure": nil}}
+		if _, err := applyLabels("o", "r", op); err == nil {
+			t.Fatal("expected an error for a non-*LabelsConfig body")
+		}
+	})
+}

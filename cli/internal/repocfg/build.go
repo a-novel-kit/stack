@@ -113,6 +113,18 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		Content: codeowners,
 	})
 
+	// Labels: the uniform label vocabulary, provisioned to every repo like
+	// CODEOWNERS. Reconciled (ensure upserted, retire deleted) at apply time.
+	labels, err := LoadLabels()
+	if err != nil {
+		return nil, err
+	}
+	p.Ops = append(p.Ops, Op{
+		Method: http.MethodPut,
+		Path:   repoPath + "/labels",
+		Body:   labels,
+	})
+
 	if c.CodeQL.Enabled && len(t.Discovered.CodeQLLangs) > 0 {
 		content, err := RenderCodeQL(t.Discovered.CodeQLLangs, c.CodeQL.QuerySuite, t.DefaultBranch)
 		if err != nil {

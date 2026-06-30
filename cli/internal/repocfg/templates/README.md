@@ -21,6 +21,14 @@ Independent of class, `repo update` commits a uniform `.github/CODEOWNERS`
 requests route automatically, and removes any stray root `CODEOWNERS` so a repo
 never carries two (GitHub honours `.github/` over the root).
 
+It also reconciles a uniform **label set** (`governance/labels.yaml`) on every
+repo: `ensure` labels are upserted (created, or recoloured / re-described to
+match), `retire` labels are deleted, and labels in neither list are left
+untouched — apply never removes a label it was not told about. Kind
+(Epic / Feature / Task / Bug / Initiative) is an issue **type** and Priority /
+Size are **project fields**, so neither is a label here; the label set is the
+cross-cutting signals that sort work within a board status.
+
 ## `classes/<class>.yaml` and `repos/<org>_<repo>.yaml`
 
 Same schema. A `repos/` file is for a one-off repo and **replaces** the
