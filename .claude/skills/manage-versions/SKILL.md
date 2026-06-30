@@ -56,8 +56,9 @@ A release is cut **in CI**, not from a developer's working tree. A maintainer tr
 repo's **release workflow** and picks a **release type** (patch / minor / major); the
 `release-core` action then runs the end-to-end sequence — bump version files (workspace-aware),
 refresh doc refs (`prepublish:doc` / `a-novel publish stamp`), commit, tag `vX.Y.Z`, push commit
-+ tag, and create the GitHub Release (notes, Docker images, npm packages follow). The [Agent]
-bot performs the push.
+
+- tag, and create the GitHub Release (notes, Docker images, npm packages follow). The [Agent]
+  bot performs the push.
 
 There is **no local release command**, and no per-repo `publish.sh` or `publish:*` pnpm script —
 do not write or revive any of them. The bump is workspace-aware: `release-core` auto-detects

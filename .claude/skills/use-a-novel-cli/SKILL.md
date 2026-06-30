@@ -56,7 +56,7 @@ each repo's surface is exactly: `a-novel <verb>` + `pnpm <script>` + raw `go`/`g
 | `podman compose down`                           | `a-novel run service infra kill <service>`                        |
 | `podman logs -f <container>`                    | `a-novel run logs <service>/<target> --follow`                    |
 | `podman volume export` + manual tar             | `a-novel run volume backup <service>`                             |
-| `scripts/publish.sh patch` / `pnpm publish:*`   | release workflow in CI (release-core action) — no local verb       |
+| `scripts/publish.sh patch` / `pnpm publish:*`   | release workflow in CI (release-core action) — no local verb      |
 | `scripts/prepublish-version.sh <prefix> <file>` | `a-novel publish stamp <prefix> <file>`                           |
 | `make lint-go` (gone)                           | `pnpm lint:go` (not a CLI verb — see "When NOT to use")           |
 | `make format` (gone)                            | `pnpm format:go` / `pnpm format` / `pnpm format:proto`            |
