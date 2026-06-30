@@ -51,6 +51,45 @@ func TestRenderCodeQL(t *testing.T) {
 	})
 }
 
+func TestCODEOWNERS(t *testing.T) {
+	t.Parallel()
+	out, err := CODEOWNERS()
+	if err != nil {
+		t.Fatalf("CODEOWNERS: %v", err)
+	}
+	if strings.TrimSpace(out) != "* @kushuh" {
+		t.Errorf("CODEOWNERS = %q, want %q", out, "* @kushuh")
+	}
+}
+
+// TestBuildPlanProvisionsCODEOWNERS checks that the CODEOWNERS file is committed
+// to .github/ for every repo regardless of class — a minimal preset (everything
+// off) still emits the op.
+func TestBuildPlanProvisionsCODEOWNERS(t *testing.T) {
+	t.Parallel()
+	plan, err := BuildPlan(&RepoTarget{
+		Org:        "a-novel-kit",
+		Repo:       "example",
+		Class:      &ClassPreset{},
+		Discovered: &Discovered{},
+	})
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	var found bool
+	for _, op := range plan.Ops {
+		if op.Method == "PUT" && strings.HasSuffix(op.Path, "/contents/.github/CODEOWNERS") {
+			found = true
+			if !strings.Contains(op.Content, "* @kushuh") {
+				t.Errorf("CODEOWNERS op content = %q, want it to contain %q", op.Content, "* @kushuh")
+			}
+		}
+	}
+	if !found {
+		t.Errorf("BuildPlan emitted no .github/CODEOWNERS op; ops = %+v", plan.Ops)
+	}
+}
+
 // contextsOf extracts the context names from a CheckRef slice, preserving order.
 func contextsOf(checks []CheckRef) []string {
 	out := make([]string, len(checks))

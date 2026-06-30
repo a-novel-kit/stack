@@ -14,6 +14,13 @@ A repo's desired config is composed from three inputs:
 
 CLI flags and the interactive form override any field.
 
+## Always-provisioned files
+
+Independent of class, `repo update` commits a uniform `.github/CODEOWNERS`
+(`governance/CODEOWNERS` — a single owner today) to every repo so review
+requests route automatically, and removes any stray root `CODEOWNERS` so a repo
+never carries two (GitHub honours `.github/` over the root).
+
 ## `classes/<class>.yaml` and `repos/<org>_<repo>.yaml`
 
 Same schema. A `repos/` file is for a one-off repo and **replaces** the

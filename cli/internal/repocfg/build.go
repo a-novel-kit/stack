@@ -98,6 +98,20 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 
 	p.Ops = append(p.Ops, Op{Method: "PATCH", Path: repoPath, Body: SettingsBody(c)})
 
+	// CODEOWNERS is provisioned to every repo regardless of class, so review
+	// requests route automatically. Written to .github/ (GitHub honours that
+	// over a root copy); apply removes any stray root file so a repo never
+	// carries two.
+	codeowners, err := CODEOWNERS()
+	if err != nil {
+		return nil, err
+	}
+	p.Ops = append(p.Ops, Op{
+		Method:  "PUT",
+		Path:    repoPath + "/contents/.github/CODEOWNERS",
+		Content: codeowners,
+	})
+
 	if c.CodeQL.Enabled && len(t.Discovered.CodeQLLangs) > 0 {
 		content, err := RenderCodeQL(t.Discovered.CodeQLLangs, c.CodeQL.QuerySuite, t.DefaultBranch)
 		if err != nil {
@@ -317,6 +331,17 @@ func SecurityBlock(c *ClassPreset) map[string]any {
 		"secret_scanning_push_protection": st(c.Security.PushProtection),
 		"dependabot_security_updates":     st(c.Security.Dependabot),
 	}
+}
+
+// CODEOWNERS returns the uniform CODEOWNERS file provisioned to every repo.
+// It is static today — a single owner (`* @kushuh`) — so there is nothing to
+// render; lift it to an org/class config field if/when teams appear.
+func CODEOWNERS() (string, error) {
+	raw, err := ReadTemplate("governance/CODEOWNERS")
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
 }
 
 // RenderCodeQL fills the CodeQL advanced-setup workflow template.

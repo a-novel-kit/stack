@@ -98,13 +98,26 @@ func applyRuleset(org, repo string, op repocfg.Op) (string, error) {
 	return opCreated, nil
 }
 
-// applyContents commits a generated file (codeql.yml) to the default branch,
-// creating or updating it. CodeQL advanced setup is mutually exclusive with
-// default setup, so disable default setup first.
+// applyContents commits a managed file (codeql.yml, CODEOWNERS) to the default
+// branch, creating or updating it. CodeQL advanced setup is mutually exclusive
+// with default setup, so disable default setup first; CODEOWNERS is written to
+// .github/, so remove any stray root copy first.
 func applyContents(org, repo, branch string, op repocfg.Op) (string, error) {
 	if strings.Contains(op.Path, "/workflows/codeql.yml") {
 		// Best-effort: ignore the error when default setup is already off.
 		_, _ = gh("api", "-X", "PATCH", fmt.Sprintf("repos/%s/%s/code-scanning/default-setup", org, repo), "-f", "state=not-configured")
+	}
+	if strings.HasSuffix(op.Path, "/contents/.github/CODEOWNERS") {
+		// Remove a stray root CODEOWNERS so the repo never carries two. GitHub
+		// honours .github/ over root, so the write below wins regardless; this
+		// just clears the redundant copy. Best-effort — most repos have none.
+		rootPath := strings.Replace(op.Path, "/contents/.github/CODEOWNERS", "/contents/CODEOWNERS", 1)
+		if rootSHA, shaErr := contentSHA(rootPath); shaErr == nil && rootSHA != "" {
+			_, _ = gh("api", "-X", "DELETE", rootPath,
+				"-f", "message="+contentCommitMsg,
+				"-f", "sha="+rootSHA,
+				"-f", "branch="+branch)
+		}
 	}
 	sha, err := contentSHA(op.Path)
 	if err != nil {
@@ -112,7 +125,7 @@ func applyContents(org, repo, branch string, op repocfg.Op) (string, error) {
 	}
 	args := []string{
 		"api", "-X", "PUT", op.Path,
-		"-f", "message=ci: managed by a-novel repo",
+		"-f", "message=" + contentCommitMsg,
 		"-f", "content=" + base64.StdEncoding.EncodeToString([]byte(op.Content)),
 		"-f", "branch=" + branch,
 	}
@@ -126,10 +139,12 @@ func applyContents(org, repo, branch string, op repocfg.Op) (string, error) {
 	if _, err := gh(args...); err != nil {
 		// A missing `workflow` token scope surfaces here as either the worded
 		// scope error or a bare 404 — GitHub obscures the scope failure on a
-		// `.github/workflows/` write as Not Found. applyContents only ever writes
-		// codeql.yml under that path (and the repo demonstrably exists by now, its
-		// settings were just patched), so both mean the same thing: add the scope.
-		if isWorkflowScope(err) || isNotFound(err) {
+		// `.github/workflows/` write as Not Found. Only the codeql.yml write
+		// lives under that path (and the repo demonstrably exists by now, its
+		// settings were just patched), so attribute a bare 404 to the scope only
+		// for a workflows/ write; for other content (CODEOWNERS) it means
+		// something else and should surface as-is.
+		if isWorkflowScope(err) || (isNotFound(err) && strings.Contains(op.Path, "/workflows/")) {
 			return "needs the `workflow` token scope (gh auth refresh -s workflow)", err
 		}
 		return "", err
@@ -165,6 +180,10 @@ const (
 	opCreated = "created"
 	opUpdated = "updated"
 )
+
+// contentCommitMsg is the commit message for every managed-file write (and the
+// stray-root-CODEOWNERS removal) so they read uniformly in a repo's history.
+const contentCommitMsg = "ci: managed by a-novel repo"
 
 // ghJSON runs `gh api -X <method> <path> --input -` with body marshalled to
 // JSON on stdin.
