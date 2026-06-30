@@ -65,20 +65,44 @@ becomes a follow-up commit instead (or, for a cosmetic title fix, a PR-title adj
 the author can squash at merge time). For any earlier malformed commit — even if
 unpushed — ask the user before rewriting history.
 
-### 1.4 Local tests pass
+### 1.4 Basic CI passes locally
 
-Run the narrowest test target that covers the branch's layer — see `implement-feature` for
-the layer-to-target mapping. Typical:
+**Always run basic CI locally before pushing.** CI is not a debugger: a red push wastes a
+CI cycle and reviewer attention. Never push expecting "CI will tell me what's wrong".
+
+**Basic CI = lint + tests + build.** Scope each to what the branch actually changed — run
+the checks for the layers/languages you touched, and skip the ones nothing you changed can
+affect (e.g. don't rebuild the Dockerfile images if you touched no `builds/` file or the
+file structure they copy; don't run pnpm tests for a Go-only change).
 
 ```bash
+# 1. LINT — pnpm scripts (lint/format/generate are NOT a-novel CLI verbs):
+pnpm lint:go            # Go (golangci-lint); pnpm lint:proto for .proto, pnpm lint for JS/TS
+
+# 2. TESTS — a-novel CLI, narrowest target that covers the branch's layer
+#    (see implement-feature for the layer-to-target mapping):
 a-novel test --type=go -y       # Go internal + pkg/go
 a-novel test --type=pnpm -y     # pkg/js
 a-novel test -y                 # everything (final pre-push validation)
+
+# 3. BUILD — a-novel CLI, only the artifact kinds your change can break:
+a-novel build --type=go -y      # Go binaries
+a-novel build --type=pnpm -y    # pnpm build
+a-novel build --type=podman -y  # images — only if you touched builds/ or what they copy
 ```
 
-If tests fail locally, CI will fail too. Fix before pushing. Never push a red branch with
-the expectation that "CI will tell me what's wrong" — that wastes a CI cycle and reviewer
-attention.
+**Lint is not formatting.** `gofmt` / `gofumpt` / `gci` (and `pnpm format:go`) only check
+_formatting_ — they do **not** run the linters CI enforces (`goconst`, `usestdlibvars`,
+`errcheck`, `gocritic`, …). A format-clean diff can still fail the `lint-go` check, so run
+the linter, not just the formatter. If a repo exposes no local Go-lint runner (some repos
+have no `pnpm lint:go` script), invoke golangci-lint directly so you still catch what CI
+will, from the module directory:
+
+```bash
+go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run ./...
+```
+
+If lint, tests, or build fail locally, CI will fail too. Fix before pushing.
 
 ### 1.5 Generated files are in sync
 
@@ -354,7 +378,9 @@ bot-comment` only posts comments. PR create/edit/ready always run as the operato
   user token (Phase 5.0).
 - **Treating "PR opened" as task-done.** The task is not finished until `monitor-ci`
   reports CI green or an escalated/blocked state (Phase 7).
-- **Pushing before local tests pass.** CI is not a debugger. Run tests locally first.
+- **Pushing before basic CI passes locally.** CI is not a debugger. Run lint + tests +
+  build locally first (1.4), scoped to what you changed. A format-clean diff (`gofmt`/
+  `gofumpt`/`gci`) can still fail `lint-go` — run the linter, not just the formatter.
 - **Opening a PR from master.** Branch first, then PR.
 - **Closing and re-creating a PR to "fix" the title.** Use `gh pr edit --title` instead.
 - **Manual reviewer/assignee flags.** Automation handles these. (Tracking metadata — milestone,
@@ -373,14 +399,17 @@ bot-comment` only posts comments. PR create/edit/ready always run as the operato
 
 ## Quick Reference
 
-| Situation                           | Command                                                   |
-| ----------------------------------- | --------------------------------------------------------- |
-| First push                          | `git push -u origin <branch>`                             |
-| Push after rebase                   | `git push --force-with-lease`                             |
-| Check for existing PR               | `gh pr view --json number,state,url`                      |
-| Create ready PR                     | `gh pr create --title "..." --body "$(cat <<'EOF' ... )"` |
-| Create draft PR                     | `gh pr create --draft --title ...`                        |
-| Stacked PR (base is another branch) | `gh pr create --base feat/<parent-area>/... ...`          |
-| Update title on existing PR         | `gh pr edit --title "..."`                                |
-| Flip draft → ready                  | `gh pr ready`                                             |
-| Flip ready → draft                  | `gh pr ready --undo`                                      |
+| Situation                           | Command                                                                         |
+| ----------------------------------- | ------------------------------------------------------------------------------- |
+| Pre-flight: lint (scoped)           | `pnpm lint:go` / `go run …/golangci-lint/v2/cmd/golangci-lint@latest run ./...` |
+| Pre-flight: tests (scoped)          | `a-novel test --type=go -y` / `a-novel test -y`                                 |
+| Pre-flight: build (scoped)          | `a-novel build --type=go -y` (`--type=` matches changes)                        |
+| First push                          | `git push -u origin <branch>`                                                   |
+| Push after rebase                   | `git push --force-with-lease`                                                   |
+| Check for existing PR               | `gh pr view --json number,state,url`                                            |
+| Create ready PR                     | `gh pr create --title "..." --body "$(cat <<'EOF' ... )"`                       |
+| Create draft PR                     | `gh pr create --draft --title ...`                                              |
+| Stacked PR (base is another branch) | `gh pr create --base feat/<parent-area>/... ...`                                |
+| Update title on existing PR         | `gh pr edit --title "..."`                                                      |
+| Flip draft → ready                  | `gh pr ready`                                                                   |
+| Flip ready → draft                  | `gh pr ready --undo`                                                            |
