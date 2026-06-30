@@ -1,0 +1,43 @@
+# Canonical issue/PR label set, provisioned uniformly to every repo (like
+# governance/CODEOWNERS). `ensure` labels are upserted (created, or recoloured /
+# re-described to match); `retire` labels are deleted. Labels NOT listed here are
+# left untouched — apply never removes an unlisted label.
+#
+# What is NOT a label: kind (Epic / Feature / Task / Bug / Initiative) is an issue
+# TYPE, and Priority / Size are project fields. Labels here are cross-cutting
+# signals that sort work WITHIN a board status.
+ensure:
+  - name: documentation
+    color: "0075ca"
+    description: Improvements or additions to documentation
+  - name: duplicate
+    color: "cfd3d7"
+    description: This issue or pull request already exists
+  - name: good first issue
+    color: "7057ff"
+    description: Good for newcomers
+  - name: help wanted
+    color: "008672"
+    description: Extra attention is needed
+  - name: invalid
+    color: "e4e669"
+    description: This doesn't seem right
+  - name: question
+    color: "d876e3"
+    description: Further information is requested
+  - name: wontfix
+    color: "ffffff"
+    description: This will not be worked on
+  - name: dependencies
+    color: "ededed"
+    description: ""
+  - name: renovate
+    color: "ededed"
+    description: ""
+  - name: meta
+    color: "bfd4f2"
+    description: No-PR work (manual ops / config); also marks Meta Epics
+retire:
+  # Replaced by the `Triage` board status: a status is the action a task needs;
+  # labels only sort within a status. a-novel-kit/.github#56.
+  - triage

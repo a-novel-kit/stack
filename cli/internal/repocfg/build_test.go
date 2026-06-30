@@ -2,6 +2,7 @@ package repocfg
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -88,6 +89,47 @@ func TestBuildPlanProvisionsCODEOWNERS(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("BuildPlan emitted no .github/CODEOWNERS op; ops = %+v", plan.Ops)
+	}
+}
+
+// TestBuildPlanProvisionsLabels checks that the canonical label set is
+// provisioned to every repo regardless of class — like CODEOWNERS — and carries
+// the new `meta` label plus the `triage` retirement.
+func TestBuildPlanProvisionsLabels(t *testing.T) {
+	t.Parallel()
+	plan, err := BuildPlan(&RepoTarget{
+		Org:        "a-novel-kit",
+		Repo:       "example",
+		Class:      &ClassPreset{},
+		Discovered: &Discovered{},
+	})
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	var cfg *LabelsConfig
+	for _, op := range plan.Ops {
+		if op.Method == http.MethodPut && strings.HasSuffix(op.Path, "/labels") {
+			c, ok := op.Body.(*LabelsConfig)
+			if !ok {
+				t.Fatalf("labels op body = %T, want *LabelsConfig", op.Body)
+			}
+			cfg = c
+		}
+	}
+	if cfg == nil {
+		t.Fatalf("BuildPlan emitted no /labels op; ops = %+v", plan.Ops)
+	}
+	var hasMeta bool
+	for _, l := range cfg.Ensure {
+		if l.Name == "meta" {
+			hasMeta = true
+		}
+	}
+	if !hasMeta {
+		t.Error("labels op ensure set missing `meta`")
+	}
+	if !slices.Contains(cfg.Retire, "triage") {
+		t.Errorf("labels op retire set missing `triage`; got %v", cfg.Retire)
 	}
 }
 

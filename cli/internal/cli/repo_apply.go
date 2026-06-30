@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os/exec"
 	"strings"
 
@@ -42,6 +43,9 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 		case strings.HasSuffix(op.Path, "/pages"):
 			detail, err := applyPages(op)
 			note(err == nil, "pages", ternErr(err, detail))
+		case strings.HasSuffix(op.Path, "/labels"):
+			detail, err := applyLabels(org, repo, op)
+			note(err == nil, "labels", ternErr(err, detail))
 		default: // settings PATCH
 			err := applySettings(op)
 			note(err == nil, "settings ("+op.Method+" "+shortPath(op.Path)+")", errText(err))
@@ -165,6 +169,75 @@ func applyPages(op repocfg.Op) (string, error) {
 	return "enabled", nil
 }
 
+// applyLabels reconciles a repo's labels against the canonical set: every
+// `ensure` label is created, or PATCHed when its colour / description drifts;
+// every `retire` label is deleted. Labels in neither list are left untouched, so
+// a repo's incidental labels survive.
+func applyLabels(org, repo string, op repocfg.Op) (string, error) {
+	cfg, ok := op.Body.(*repocfg.LabelsConfig)
+	if !ok {
+		return "", fmt.Errorf("labels body is %T, want *repocfg.LabelsConfig", op.Body)
+	}
+	existing, err := listLabels(org, repo)
+	if err != nil {
+		return "", err
+	}
+	base := fmt.Sprintf("repos/%s/%s/labels", org, repo)
+	var created, updated, retired int
+	for _, l := range cfg.Ensure {
+		switch cur, found := existing[l.Name]; {
+		case !found:
+			if err := ghJSON("POST", base, map[string]any{
+				"name": l.Name, "color": l.Color, keyDescription: l.Description,
+			}); err != nil {
+				return "", err
+			}
+			created++
+		case cur.Color != l.Color || cur.Description != l.Description:
+			if err := ghJSON("PATCH", base+"/"+url.PathEscape(l.Name), map[string]any{
+				"new_name": l.Name, "color": l.Color, keyDescription: l.Description,
+			}); err != nil {
+				return "", err
+			}
+			updated++
+		}
+	}
+	for _, name := range cfg.Retire {
+		if _, found := existing[name]; found {
+			if _, err := gh("api", "-X", "DELETE", base+"/"+url.PathEscape(name)); err != nil {
+				return "", err
+			}
+			retired++
+		}
+	}
+	return fmt.Sprintf("%d created, %d updated, %d retired", created, updated, retired), nil
+}
+
+// ghLabel is the subset of a GitHub label object we reconcile against.
+type ghLabel struct {
+	Name        string `json:"name"`
+	Color       string `json:"color"`
+	Description string `json:"description"`
+}
+
+// listLabels returns a repo's current labels keyed by name. Repos carry far
+// fewer than 100 labels, so a single page is enough — no pagination.
+func listLabels(org, repo string) (map[string]ghLabel, error) {
+	out, err := gh("api", fmt.Sprintf("repos/%s/%s/labels?per_page=100", org, repo))
+	if err != nil {
+		return nil, err
+	}
+	var labels []ghLabel
+	if err := json.Unmarshal([]byte(out), &labels); err != nil {
+		return nil, fmt.Errorf("parse labels: %w", err)
+	}
+	m := make(map[string]ghLabel, len(labels))
+	for _, l := range labels {
+		m[l.Name] = l
+	}
+	return m, nil
+}
+
 // rulesetID returns the id of the named ruleset, or "" if none exists.
 func rulesetID(org, repo, name string) (string, error) {
 	out, err := gh("api", fmt.Sprintf("repos/%s/%s/rulesets", org, repo),
@@ -184,6 +257,10 @@ const (
 // contentCommitMsg is the commit message for every managed-file write (and the
 // stray-root-CODEOWNERS removal) so they read uniformly in a repo's history.
 const contentCommitMsg = "ci: managed by a-novel repo"
+
+// keyDescription is the JSON "description" field name, lifted to a constant so
+// the package's repeated use of it satisfies goconst.
+const keyDescription = "description"
 
 // ghJSON runs `gh api -X <method> <path> --input -` with body marshalled to
 // JSON on stdin.

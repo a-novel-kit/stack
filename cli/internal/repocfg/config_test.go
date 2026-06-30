@@ -97,6 +97,31 @@ func TestLoadChecks(t *testing.T) {
 	}
 }
 
+func TestLoadLabels(t *testing.T) {
+	t.Parallel()
+	l, err := LoadLabels()
+	if err != nil {
+		t.Fatalf("LoadLabels: %v", err)
+	}
+	// meta is the new no-PR / meta-epic label.
+	var meta *LabelDef
+	for i := range l.Ensure {
+		if l.Ensure[i].Name == "meta" {
+			meta = &l.Ensure[i]
+		}
+	}
+	if meta == nil {
+		t.Fatal("ensure set missing the `meta` label")
+	}
+	if meta.Color != "bfd4f2" {
+		t.Errorf("meta colour = %q, want %q", meta.Color, "bfd4f2")
+	}
+	// triage is retired in favour of the Triage board status.
+	if !slices.Contains(l.Retire, "triage") {
+		t.Errorf("retire set missing `triage`; got %v", l.Retire)
+	}
+}
+
 func TestLoadRulesets(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"master", "require-approval", "codecov", "tags"} {
