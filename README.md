@@ -116,12 +116,12 @@ a-novel run ps                                # what is running
 a-novel run kill  service-json-keys/rest
 ```
 
-**Release.** Cut a tag locally; CI's release workflow publishes from the pushed
-tag:
-
-```bash
-a-novel publish version 0.21.0        # or: patch / minor / major
-```
+**Release.** Releases are cut in CI: trigger the repo's release workflow and
+pick a release type (patch / minor / major). The `release-core` action bumps the
+version, refreshes doc refs, commits, tags `vX.Y.Z`, pushes, and creates the
+GitHub Release. There is no local release command; the only verb under
+`a-novel publish` is `stamp` (the doc-version stamper that `prepublish:doc`
+calls).
 
 Run `a-novel <verb> --help` for any command's full flags. The complete
 reference — command tree, daemon architecture, state directories, the compose
@@ -207,8 +207,9 @@ a-novel core bot-comment a-novel <repo> <number> --body "bot test"
 
 ## Security model
 
-Releases, merges and pushes to `master` are human-only. `a-novel publish
-version` refuses to run without a TTY, and the real boundary is server-side:
+Releases, merges and pushes to `master` are human-only. Releases run in CI (the
+`release-core` action, triggered from the repo's release workflow), never from a
+dev machine, and the real boundary is server-side:
 branch protection on `master`, tag protection on `v*`, and a comments-only bot
 whose signing keys live only in CI (never on a dev machine — see
 [GitHub access](#github-access)), reached through a per-org dispatcher workflow

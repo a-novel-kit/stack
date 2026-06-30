@@ -52,30 +52,21 @@ footer) and `implement-feature` (the layered-branch workflow these cross-repo pl
 
 ## Cutting a release
 
-A release is created **locally** by a developer with push rights, not by CI. The end-to-end
-sequence is: bump version files → commit → tag `vX.Y.Z` → push commit + tag. CI's `release`
-workflow then fires on the pushed tag and does the rest (GitHub Release notes, Docker images,
-npm packages).
+A release is cut **in CI**, not from a developer's working tree. A maintainer triggers the
+repo's **release workflow** and picks a **release type** (patch / minor / major); the
+`release-core` action then runs the end-to-end sequence — bump version files (workspace-aware),
+refresh doc refs (`prepublish:doc` / `a-novel publish stamp`), commit, tag `vX.Y.Z`, push commit
++ tag, and create the GitHub Release (notes, Docker images, npm packages follow). The [Agent]
+bot performs the push.
 
-**Use `a-novel publish version <new-version>`** for this; do not run the steps by hand, do not
-write a per-repo `publish.sh`, and do not add a `publish:*` pnpm script that just wraps it (a
-script mirroring a CLI capability is indirection — run the CLI directly). The CLI:
+There is **no local release command**, and no per-repo `publish.sh` or `publish:*` pnpm script —
+do not write or revive any of them. The bump is workspace-aware: `release-core` auto-detects
+whether the repo is a pnpm workspace (presence of `pnpm-workspace.yaml`) and runs the correct
+`pnpm version` form — `--recursive` for workspaces, `--no-git-tag-version` for single-package
+repos. The only verb under `a-novel publish` is `stamp`, the doc-version helper that
+`prepublish:doc` calls (see `use-a-novel-cli`).
 
-1. Auto-detects whether the repo is a pnpm workspace (presence of `pnpm-workspace.yaml`) and runs
-   the correct `pnpm version` form — `--recursive` for workspaces, `--no-git-tag-version` for
-   single-package repos. Hides the variance that previously made every per-repo `publish.sh`
-   drift.
-2. Runs a local preflight before any mutation: branch == `master`, working tree clean, HEAD ==
-   `origin/master`, `git push --dry-run origin master`. The dry-run surfaces a 403 from branch
-   protection without leaving the repo half-bumped.
-3. Bumps, commits with the version as the message, tags `vX.Y.Z`, pushes commit + tag.
-
-```bash
-# Pure consumer of the CLI; works for both kit libraries and services.
-a-novel publish version 0.21.0
-```
-
-**Who can actually publish is enforced server-side, not by the CLI.** Two GitHub settings stack:
+**Who can actually publish is enforced server-side.** Two GitHub settings stack:
 
 1. **Branch protection on `master`** — restricts who can push the version-bump commit.
 2. **Tag protection rule on `v*`** (Settings → Tags → New rule) — restricts who can create the
@@ -83,13 +74,13 @@ a-novel publish version 0.21.0
    without tag protection an unauthorized user can push a `v*` tag from any commit (even one not
    on `master`) and CI happily releases from it.
 
-Both must be configured for "only the release team can publish" to hold. The CLI's preflight is
-UX, not security. See [[reference-release-security]] for the full model.
+Only the [Agent] bot (and repo admins) can bypass these — which is why the release runs in CI
+under the bot, and a developer cannot hand-push a `v*` tag. See [[reference-release-security]]
+for the full model.
 
-**Releases are human-only.** `a-novel publish version` refuses to run without a TTY, so an agent
-or CI job cannot cut a release. The agent never publishes (or merges, or pushes to master); those
-are the human's actions, and the non-interactive token must lack the rights server-side. See
-[[feedback-non-interactive-token]].
+**Releases are human-triggered but bot-run.** A human starts the release workflow; the agent
+never decides to publish (or merge, or push to master) on its own, and a non-interactive token
+must lack those rights server-side. See [[feedback-non-interactive-token]].
 
 ---
 

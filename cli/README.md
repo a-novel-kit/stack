@@ -21,8 +21,7 @@ stack) for you. After setup, every new shell auto-starts the daemon
 a-novel
 ├── test          standalone — runs Go + pnpm tests in the working tree
 ├── build         standalone — builds Go binaries, pnpm bundles, Podman images
-├── publish       standalone — cut a release (bump, commit, tag vX.Y.Z, push)
-│   ├── version <new-version>           preflight + bump + commit + tag + push
+├── publish       standalone — release doc helpers (releases run in CI)
 │   └── stamp <prefix> <file>           refresh vX.Y.Z references in doc files
 ├── secrets       standalone — local, encrypted secrets manager (child-env only)
 │   ├── init                            create the local key + store dir
@@ -82,8 +81,9 @@ a-novel run volume clear <service> [--no-backup]
 # TUI
 a-novel run ui                                # ? for help, Esc for commands
 
-# Releases (local-only; CI release workflow fires on the pushed tag)
-a-novel publish version 0.21.0                # or: patch / minor / major
+# Releases run in CI (the release-core action); there is no local release verb.
+# publish stamp rewrites vX.Y.Z doc refs to the current version (run by prepublish:doc).
+a-novel publish stamp 'version: ' openapi.yaml
 
 # Secrets (local, encrypted; injected into the child env only)
 a-novel secrets init                          # one-time: create key + store
