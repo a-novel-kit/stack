@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 )
 
@@ -96,7 +97,7 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 
 	repoPath := fmt.Sprintf("repos/%s/%s", t.Org, t.Repo)
 
-	p.Ops = append(p.Ops, Op{Method: "PATCH", Path: repoPath, Body: SettingsBody(c)})
+	p.Ops = append(p.Ops, Op{Method: http.MethodPatch, Path: repoPath, Body: SettingsBody(c)})
 
 	// CODEOWNERS is provisioned to every repo regardless of class, so review
 	// requests route automatically. Written to .github/ (GitHub honours that
@@ -107,7 +108,7 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		return nil, err
 	}
 	p.Ops = append(p.Ops, Op{
-		Method:  "PUT",
+		Method:  http.MethodPut,
 		Path:    repoPath + "/contents/.github/CODEOWNERS",
 		Content: codeowners,
 	})
@@ -118,14 +119,14 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 			return nil, err
 		}
 		p.Ops = append(p.Ops, Op{
-			Method:  "PUT",
+			Method:  http.MethodPut,
 			Path:    repoPath + "/contents/.github/workflows/codeql.yml",
 			Content: content,
 		})
 	}
 
 	if c.Pages {
-		p.Ops = append(p.Ops, Op{Method: "POST", Path: repoPath + "/pages", Body: map[string]any{"build_type": "workflow"}})
+		p.Ops = append(p.Ops, Op{Method: http.MethodPost, Path: repoPath + "/pages", Body: map[string]any{"build_type": "workflow"}})
 	}
 
 	// Rulesets, reconciled by name (POST when absent, PUT .../{id} when present).

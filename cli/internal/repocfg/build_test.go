@@ -1,6 +1,7 @@
 package repocfg
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -78,7 +79,7 @@ func TestBuildPlanProvisionsCODEOWNERS(t *testing.T) {
 	}
 	var found bool
 	for _, op := range plan.Ops {
-		if op.Method == "PUT" && strings.HasSuffix(op.Path, "/contents/.github/CODEOWNERS") {
+		if op.Method == http.MethodPut && strings.HasSuffix(op.Path, "/contents/.github/CODEOWNERS") {
 			found = true
 			if !strings.Contains(op.Content, "* @kushuh") {
 				t.Errorf("CODEOWNERS op content = %q, want it to contain %q", op.Content, "* @kushuh")
