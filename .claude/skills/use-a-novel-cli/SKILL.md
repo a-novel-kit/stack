@@ -56,7 +56,7 @@ each repo's surface is exactly: `a-novel <verb>` + `pnpm <script>` + raw `go`/`g
 | `podman compose down`                           | `a-novel run service infra kill <service>`                        |
 | `podman logs -f <container>`                    | `a-novel run logs <service>/<target> --follow`                    |
 | `podman volume export` + manual tar             | `a-novel run volume backup <service>`                             |
-| `scripts/publish.sh patch` / `pnpm publish:*`   | `a-novel publish version patch`                                   |
+| `scripts/publish.sh patch` / `pnpm publish:*`   | release workflow in CI (release-core action) — no local verb      |
 | `scripts/prepublish-version.sh <prefix> <file>` | `a-novel publish stamp <prefix> <file>`                           |
 | `make lint-go` (gone)                           | `pnpm lint:go` (not a CLI verb — see "When NOT to use")           |
 | `make format` (gone)                            | `pnpm format:go` / `pnpm format` / `pnpm format:proto`            |
@@ -107,12 +107,6 @@ When you are an agent, a CI job, or a script, drive it like this:
   a-novel run ps --json
   a-novel run env <service> --format=json
   ```
-
-- **`publish version` is the deliberate exception — keep it interactive.** It
-  refuses without a TTY because a release pushes to `master` and a protected
-  `v*` tag, which are human-only. Never route around the refusal (piping input,
-  faking a PTY); the server-side boundary and the token will stop you anyway.
-  See [[feedback-non-interactive-token]].
 
 ---
 
@@ -174,31 +168,16 @@ a pass/fail report.
 
 ---
 
-## `a-novel publish` — cutting releases
+## `a-novel publish` — release doc helpers
 
-Releases are created locally by a developer with push rights, not by CI. The
-sequence is: bump version files → commit → tag `vX.Y.Z` → push commit + tag;
-CI's release workflow fires on the pushed tag. Covered in depth by
-`manage-versions` — the short form:
+Releases are cut **in CI**, not from a local working tree: trigger the repo's
+release workflow and pick a release type (patch / minor / major), and the
+`release-core` action (in `a-novel-kit/workflows`) bumps the version, refreshes
+doc refs, commits, tags `vX.Y.Z`, pushes, and creates the GitHub Release. The
+[Agent] bot performs the push. Covered in depth by `manage-versions`.
 
-```bash
-a-novel publish version 0.21.0        # explicit semver
-a-novel publish version patch         # or a pnpm increment keyword
-```
-
-The command is workspace-aware (`pnpm version --recursive` vs
-`--no-git-tag-version`), runs the repo's `prepublish:doc` script if present,
-and preflights before mutating anything: branch == master, clean tree,
-HEAD == origin/master, `git push --dry-run`.
-
-**`publish version` is interactive-only.** It refuses to run without a TTY,
-so an agent or CI job cannot cut a release — a release pushes to master and a
-protected `v*` tag, which are human-only actions. This terminal check is the
-cheap first gate; the real boundary is server-side (branch protection on
-master + tag protection on `v*`) plus the token: a non-interactive token must
-lack push-to-master and tag-create rights. Never try to route around the TTY
-refusal (piping input, faking a PTY) — that is cheating the security model,
-and the token should stop you anyway. See [[feedback-non-interactive-token]].
+There is **no local release command** — the only verb under `a-novel publish`
+is `stamp`:
 
 `a-novel publish stamp <prefix> <file>` is the doc-stamping helper the
 `prepublish:doc` pnpm scripts call — it rewrites `<prefix>vX.Y.Z` references
@@ -322,10 +301,10 @@ apply one rule:
 > the CLI itself invokes. A script that merely **mirrors a CLI capability** is
 > indirection and must be deleted; run the CLI directly instead.
 
-- **Delete** (pure mirrors): `publish:major|minor|patch` →
-  `a-novel publish version <bump>`. The script added nothing the CLI doesn't,
-  and it drifts (each copy diverged independently before the CLI existed). Cut
-  releases with `a-novel publish version` directly.
+- **Delete** (pure mirrors): `publish:major|minor|patch` — releases are cut in
+  CI by the release workflow (the `release-core` action), never a pnpm script or
+  a local command. These wrappers added nothing and drifted (each copy diverged
+  independently); delete them.
 - **Keep** (repo-specific constructs the CLI discovers or invokes):
   - `test` (`vitest run …`), `build:rest` (`vite build …`) — the concrete
     invocations `a-novel test` / `a-novel build` discover and run.
@@ -333,7 +312,7 @@ apply one rule:
     lint/format/generate have no CLI verb by design (see below); these are
     their canonical home.
   - `prepublish:doc` and its `prepublish:doc:readme` / `:openapi` children —
-    `a-novel publish version` runs `prepublish:doc` as a hook, and the
+    the release flow (`release-core`) runs `prepublish:doc` as a hook, and the
     children carry this repo's stamp prefix + file (`a-novel publish stamp
 '<prefix>' <file>`). The repo-specific args are exactly what justifies the
     script.

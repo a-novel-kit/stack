@@ -21,12 +21,13 @@ understand the current patterns.
 ## Out of Scope: Release / Publish Scripts
 
 **Do not write or revive a `scripts/publish.sh` or `scripts/prepublish-version.sh`** for any
-service or kit repo. The release flow — version bump (workspace-aware), commit, tag, push — lives
-in the `a-novel` CLI as `a-novel publish version <v>`. That command auto-detects whether the repo
-uses `pnpm-workspace.yaml` (recursive `pnpm version`) or not (root-only), runs a local preflight
-(branch == master, clean tree, HEAD == origin/master, `git push --dry-run`), then performs the
-bump-commit-tag-push sequence. The bash equivalents were deleted because each copy drifted
-independently (pnpm 10 → 11 broke two of three at once).
+service or kit repo. The release flow — version bump (workspace-aware), commit, tag, push, and
+GitHub Release — runs **in CI** in the `release-core` GitHub Action (`a-novel-kit/workflows`),
+triggered from the repo's release workflow with a release-type selector (patch / minor / major).
+It auto-detects whether the repo uses `pnpm-workspace.yaml` (recursive `pnpm version`) or not
+(root-only) and refreshes doc refs via `prepublish:doc` (`a-novel publish stamp`). The bash
+equivalents were deleted because each copy drifted independently (pnpm 10 → 11 broke two of
+three at once); there is no local release command to replace them.
 
 **The security model for who can publish is server-side**, not script-side: GitHub branch
 protection on `master` AND tag protection on `v*` are what actually enforce "only X can release."
@@ -50,8 +51,8 @@ bash -n scripts/my-script.sh
 
 Then run the script in a safe context (local env, no production credentials) to verify runtime
 behaviour. For test runs, always go through `a-novel test` (per the `use-a-novel-cli` rule) —
-the bash test-runner scripts it replaced no longer exist. Never run a release-flow command
-(e.g. `a-novel publish version`) to test — it pushes to the remote.
+the bash test-runner scripts it replaced no longer exist. Never trigger the release workflow
+to test — it cuts a real release (pushes a tag, creates a GitHub Release).
 
 ---
 
