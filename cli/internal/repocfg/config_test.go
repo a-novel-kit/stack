@@ -76,6 +76,23 @@ func TestLoadChecks(t *testing.T) {
 	if len(c.Always) == 0 {
 		t.Fatal("always checks empty")
 	}
+	// merge-gate (a-novel-kit/.github#50) is required via the [Agent] App, so the
+	// integration must resolve to that app id — not Actions.
+	if c.Integrations["agent"] != 3549379 {
+		t.Errorf("integrations.agent = %d, want 3549379 ([Agent] App)", c.Integrations["agent"])
+	}
+	var mergeGate *CheckDef
+	for i := range c.Always {
+		if c.Always[i].Context == "merge-gate" {
+			mergeGate = &c.Always[i]
+		}
+	}
+	if mergeGate == nil {
+		t.Fatal("always set missing merge-gate")
+	}
+	if mergeGate.Integration != "agent" {
+		t.Errorf("merge-gate integration = %q, want %q", mergeGate.Integration, "agent")
+	}
 	// main.yaml jobs are required by default; the exclusions drop reporting and
 	// master-only jobs.
 	if !slices.Contains(c.Exclude.Prefixes, "report-") {

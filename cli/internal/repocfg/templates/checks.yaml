@@ -10,10 +10,18 @@ integrations:
   actions: 15368
   gitguardian: 46505
   codecov: 254
+  # [Agent] App (id 3549379) — posts the merge-gate check-run via the Checks API.
+  agent: 3549379
 
 # Always required, regardless of repo or class.
 always:
   - { context: "GitGuardian Security Checks", integration: gitguardian }
+  # merge-gate (a-novel-kit/.github#50): the single "may this PR merge?" gate,
+  # posted by the [Agent] App (stable integration across stages) from the
+  # merge-gate.yaml workflow — hence integration `agent`, not `actions`. Stage-2
+  # skeleton always passes; the epic-atomicity / draft-review logic lands in
+  # Stage 3 without changing this entry.
+  - { context: "merge-gate", integration: agent }
 
 # main.yaml jobs are required by default, except those matching these rules:
 exclude:

@@ -133,6 +133,61 @@ func TestBuildPlanProvisionsLabels(t *testing.T) {
 	}
 }
 
+// TestBuildPlanProvisionsMergeGateWorkflows checks that the merge-enforcement
+// workflows ride along wherever the master ruleset gates merges — the merge-gate
+// runner and the admin approve-pr override — pinned to the workflows action, and
+// that a class WITHOUT the master ruleset gets neither.
+func TestBuildPlanProvisionsMergeGateWorkflows(t *testing.T) {
+	t.Parallel()
+
+	plan, err := BuildPlan(&RepoTarget{
+		Org:           "a-novel-kit",
+		Repo:          "example",
+		DefaultBranch: "master",
+		Class:         &ClassPreset{Rulesets: ClassRulesets{Master: true}},
+		OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{
+			"dependencies": 1734926, "publish": 1734949, "agent": 3549379,
+		}},
+		Discovered: &Discovered{},
+	})
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	want := map[string]string{
+		"/contents/.github/workflows/merge-gate.yaml": "generic-actions/merge-gate@",
+		"/contents/.github/workflows/approve-pr.yaml": "generic-actions/approve-pr@",
+	}
+	for suffix, ref := range want {
+		var op *Op
+		for i := range plan.Ops {
+			if plan.Ops[i].Method == http.MethodPut && strings.HasSuffix(plan.Ops[i].Path, suffix) {
+				op = &plan.Ops[i]
+			}
+		}
+		if op == nil {
+			t.Errorf("BuildPlan emitted no op for %s", suffix)
+			continue
+		}
+		if !strings.Contains(op.Content, ref) {
+			t.Errorf("%s content missing action ref %q", suffix, ref)
+		}
+	}
+
+	// A class without the master ruleset gets neither workflow.
+	bare, err := BuildPlan(&RepoTarget{
+		Org: "a-novel-kit", Repo: "example",
+		Class: &ClassPreset{}, Discovered: &Discovered{},
+	})
+	if err != nil {
+		t.Fatalf("BuildPlan(bare): %v", err)
+	}
+	for _, op := range bare.Ops {
+		if strings.Contains(op.Path, "merge-gate.yaml") || strings.Contains(op.Path, "approve-pr.yaml") {
+			t.Errorf("master-less class must not get merge-enforcement workflows; got %s", op.Path)
+		}
+	}
+}
+
 // contextsOf extracts the context names from a CheckRef slice, preserving order.
 func contextsOf(checks []CheckRef) []string {
 	out := make([]string, len(checks))

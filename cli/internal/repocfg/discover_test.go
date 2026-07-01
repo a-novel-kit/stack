@@ -50,11 +50,18 @@ jobs:
 		t.Fatalf("Discover: %v", err)
 	}
 
-	// always (GitGuardian) + the non-excluded main.yaml jobs.
+	// always (GitGuardian + merge-gate) + the non-excluded main.yaml jobs.
 	got := contextsOf(d.Checks)
-	want := []string{"GitGuardian Security Checks", "lint-go", "test-go"}
+	want := []string{"GitGuardian Security Checks", "lint-go", "merge-gate", "test-go"}
 	if !slices.Equal(got, want) {
 		t.Errorf("required checks = %v, want %v", got, want)
+	}
+	// merge-gate is posted by the [Agent] App, not Actions — the ruleset must
+	// require it against that integration id (a-novel-kit/.github#50).
+	for _, c := range d.Checks {
+		if c.Context == "merge-gate" && c.IntegrationID != 3549379 {
+			t.Errorf("merge-gate integration id = %d, want 3549379 ([Agent] App)", c.IntegrationID)
+		}
 	}
 	// report-* and master-only jobs must NOT be required.
 	for _, ex := range []string{"report-codecov", "publish-docs"} {
@@ -84,7 +91,7 @@ func TestDiscover_NoMainYaml(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if got, want := contextsOf(d.Checks), []string{"GitGuardian Security Checks"}; !slices.Equal(got, want) {
+	if got, want := contextsOf(d.Checks), []string{"GitGuardian Security Checks", "merge-gate"}; !slices.Equal(got, want) {
 		t.Errorf("checks = %v, want %v", got, want)
 	}
 }
