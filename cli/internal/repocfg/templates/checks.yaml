@@ -10,10 +10,17 @@ integrations:
   actions: 15368
   gitguardian: 46505
   codecov: 254
+  # The [Agent] App posts the merge-gate check-run, but its id is per-org
+  # (a-novel and a-novel-kit run separate Apps), so `agent` is injected from the
+  # org profile at discovery time — never hardcoded here. See ResolveBotIntegrations.
 
 # Always required, regardless of repo or class.
 always:
   - { context: "GitGuardian Security Checks", integration: gitguardian }
+  # merge-gate: the single "may this PR merge?" gate, posted by the [Agent] App
+  # (a stable integration id) from the merge-gate.yaml workflow — hence
+  # integration `agent`, not `actions`.
+  - { context: "merge-gate", integration: agent }
 
 # main.yaml jobs are required by default, except those matching these rules:
 exclude:

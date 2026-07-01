@@ -215,6 +215,21 @@ func LoadChecks() (*ChecksConfig, error) {
 	return &c, nil
 }
 
+// ResolveBotIntegrations fills the integration ids that belong to a per-org bot
+// rather than a global app. checks.yaml can't hardcode these: each org runs its
+// own [Agent] App with a distinct id (a-novel and a-novel-kit differ), and the
+// same checks.yaml is loaded for both. Call this with the target repo's org
+// profile before discovery so a check posted by the [Agent] App — the merge-gate
+// — is required against that org's App and can actually be satisfied.
+func (c *ChecksConfig) ResolveBotIntegrations(org *OrgProfile) {
+	if c.Integrations == nil {
+		c.Integrations = map[string]int64{}
+	}
+	if id := org.Bots["agent"]; id != 0 {
+		c.Integrations["agent"] = id
+	}
+}
+
 // LabelDef is one entry in the canonical label set — name, hex colour (no
 // leading '#', lower-case, as GitHub stores it) and description.
 type LabelDef struct {
