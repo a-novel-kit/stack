@@ -270,8 +270,10 @@ present tense. This rules out:
   stopped doing.
 - **Comparisons to deleted code**: "matches the old bash script", "the Go port of `foo.sh`", "same
   default the script used". The thing compared against is gone; the comparison points at nothing.
-- **Dangling pointers to transient docs**: "per spec §6.4", "see PLAN.md". A design doc that won't
-  outlive the branch is not a durable reference — fold the rationale into the comment itself.
+- **Dangling pointers to transient context**: "per spec §6.4", "see PLAN.md", "see #50", "the Stage-2
+  gate", "Gate-2 override". A design doc, issue, epic, or planning-stage label that won't outlive the
+  work is not a durable reference — a future editor reading the file has none of that context. Fold the
+  rationale into the comment itself and write it as if the plan that motivated the code never existed.
 - **Removal notes**: "placeholder removed — see above", or any comment whose only content is that
   something used to be here. Absence needs no monument.
 
@@ -280,6 +282,12 @@ Keep the rationale, drop the history. _"Uses `--no-deps` to avoid podman-compose
 not — same fact, but the second only parses for someone who remembers the old CLI. And the prior
 bar still applies: comment only when the code itself doesn't supply the context; a durable comment
 that merely restates the code is still noise.
+
+When the code itself is a **placeholder** pending planned work, that is the one case where the future
+is worth naming — but do it as a self-contained `TODO`/`FIXME` on the provisional line, describing what
+is missing in its own terms (_"TODO: always returns success; compute the real result"_), not a prose
+comment that only parses with the roadmap open. The surrounding doc still describes what the code does
+_today_, cleanly, as if the placeholder were the intended design.
 
 ---
 
@@ -315,6 +323,11 @@ Documentation is as much a liability as an asset when it's wrong. Every time you
 - Documenting obvious setters/getters unless there's a real invariant to explain.
 - Noise comments that just make the file longer without adding information.
 - Copying the same description from an interface down to the struct method — reference or omit instead.
+- **Tying a reusable component's docs to one caller's wiring**: an action input, exported function, or
+  library parameter documents the _contract_ — the capability it needs — not how a particular consumer
+  happens to supply it. _Bad_: _"the AGENT_BOT_CLIENT_ID secret"_. _Good_: _"a GitHub App with the
+  checks-write permission"_. Naming a specific secret or env var couples the general component to one
+  deployment and misleads the next caller.
 - **Enumerating anything in a list** — fields, parameters, behaviors, checks, steps, etc. Lists go stale
   as soon as any item changes, and they push implementation details into docs that should describe intent.
   _Bad_: _"It validates signature, expiry, issuer, audience, and subject against the config."_
