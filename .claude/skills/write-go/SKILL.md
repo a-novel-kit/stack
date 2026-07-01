@@ -84,6 +84,10 @@ a maintenance liability, a supply-chain surface, and a constraint on future choi
   what the standard library already does.
 - **Reuse before adding.** Prefer a package already in `go.mod`. A second library that overlaps
   one already present is almost never worth it.
+- **Mine what's already imported.** When implementing, don't re-research online practices — the
+  planning phase (`plan-feature`) already did that. Do read the **documentation of the libraries
+  already in `go.mod`** for the task at hand: a helper, option, or whole subsystem you didn't know a
+  present dependency offered is implementation time saved and code you neither write nor maintain.
 - **Vet candidates.** A new dependency must be: well-maintained (recent commits, responsive
   issue tracker, real test coverage); **owned by an organization, not a single personal
   account** — org ownership survives a maintainer losing interest; and **broad** — pick the
