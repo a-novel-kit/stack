@@ -402,6 +402,10 @@ items_ (Done > 2 weeks). **Keep the _auto-add_ workflows OFF** — both _Auto-ad
 and _Auto-add sub-issues to project_. The principle: automations may set **Status**, but **the skills
 add the items**. Every issue and sub-issue joins the board explicitly via `--project` on
 `gh issue create` (or `gh project item-add`), so board membership stays deliberate, not magic.
+`Item added → Backlog` is the landing for **planned** work; **Triage** is a _deliberate_ status a
+maintainer moves an un-assessed issue into — and where the deferred external-user intake will file
+incoming reports — so the _Triage_ view surfaces only work still needing assessment, not every newly
+added item.
 
 **Saved views worth having** (also UI-only): _Board by Status_; _Triage_ (`is:open status:Triage`);
 _My/agent items_ (`assignee:@me is:open`); _Roadmap_ grouped by Milestone; _Epics_ grouped by

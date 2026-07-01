@@ -118,7 +118,7 @@ Close the pass with a tight summary for the operator:
 
 | Action                        | Command                                                                                             |
 | ----------------------------- | --------------------------------------------------------------------------------------------------- |
-| List board items              | `gh project item-list <7\|1> --owner <org> --format json`                                           |
+| List board items              | `gh project item-list <7\|1> --owner <org> --format json --limit 200`                               |
 | Find the triage queue         | filter `gh project item-list` output to items with `Status == Triage`                               |
 | Set Priority / Size / Status  | `gh project item-edit --id <item> --project-id <proj> --field-id <f> --single-select-option-id <o>` |
 | Set a due date (Target date)  | `gh project item-edit --id <item> --project-id <proj> --field-id <date-field> --date YYYY-MM-DD`    |
