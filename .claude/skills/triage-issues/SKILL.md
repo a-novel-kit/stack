@@ -102,7 +102,26 @@ Move each item's **Status** to match reality (`Ready` when unblocked, `In progre
 `In review`, `Done`). Once the board's built-in automations are enabled (see `plan-feature` →
 _Operating the board_), `Done` is handled for you on merge/close — don't fight the automation.
 
-### 8. Report
+### 8. Shift the Stage field when a stage completes
+
+The `Stage` board field is a **relative** single-select — `Next Stage`, `Next Stage +1 … +5`,
+`Future Stage`, `Unscheduled` — so it encodes _distance from now_, not an absolute number, and has
+**no slot for a finished stage**. When a multi-stage milestone's current stage completes (its stage
+epic and all its children are terminal), two things must happen together or the board goes stale with
+a duplicate `Next Stage`:
+
+1. **Retire the finished stage's epic** — archive its board item (`archiveProjectV2Item`), and close
+   it once its children are closed. It leaves the relative scheme.
+2. **Shift every remaining stage down one** — `Next Stage +1` → `Next Stage`, `+2` → `+1`, and so on;
+   `Future Stage` / `Unscheduled` stay put. Set each via the project's single-select option ids.
+
+The shift is **purely mechanical** — the only judgment is _whether the stage is done_, a human call
+today that becomes automatic once the rollup engine can report "all of a stage's children are
+terminal." Do it by hand in this pass until the deterministic `a-novel` board command lands (tracked
+under the rollup work). A _new_ item's initial stage is always a human call — set at creation per the
+`plan-feature` field habit.
+
+### 9. Report
 
 Close the pass with a tight summary for the operator:
 
