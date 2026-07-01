@@ -102,24 +102,18 @@ Move each item's **Status** to match reality (`Ready` when unblocked, `In progre
 `In review`, `Done`). Once the board's built-in automations are enabled (see `plan-feature` →
 _Operating the board_), `Done` is handled for you on merge/close — don't fight the automation.
 
-### 8. Shift the Stage field when a stage completes
+### 8. Keep the Stage field accurate (absolute scheme)
 
-The `Stage` board field is a **relative** single-select — `Next Stage`, `Next Stage +1 … +5`,
-`Future Stage`, `Unscheduled` — so it encodes _distance from now_, not an absolute number, and has
-**no slot for a finished stage**. When a multi-stage milestone's current stage completes (its stage
-epic and all its children are terminal), two things must happen together or the board goes stale with
-a duplicate `Next Stage`:
+The `Stage` board field is **absolute** — `Stage 1 … Stage 5`, plus `Unscheduled` for work not yet
+placed in a stage. A staged milestone's epics and their child tasks each carry their stage's number,
+set once at creation (per the `plan-feature` field habit) and **never shifted**: an item at `Stage 3`
+stays `Stage 3` for good. "What's next" is a derivation, not a label — the lowest-numbered stage that
+is not yet done. A finished stage keeps its number; its epic follows the normal Done → archive
+lifecycle rather than being relabelled.
 
-1. **Retire the finished stage's epic** — archive its board item (`archiveProjectV2Item`), and close
-   it once its children are closed. It leaves the relative scheme.
-2. **Shift every remaining stage down one** — `Next Stage +1` → `Next Stage`, `+2` → `+1`, and so on;
-   `Future Stage` / `Unscheduled` stay put. Set each via the project's single-select option ids.
-
-The shift is **purely mechanical** — the only judgment is _whether the stage is done_, a human call
-today that becomes automatic once the rollup engine can report "all of a stage's children are
-terminal." Do it by hand in this pass until the deterministic `a-novel` board command lands (tracked
-under the rollup work). A _new_ item's initial stage is always a human call — set at creation per the
-`plan-feature` field habit.
+So this pass has nothing to shift. Check only that new items carry the right stage number — a human
+call about which stage the work belongs to — and that an epic and its tasks agree on it. The rollup
+engine surfaces the current stage from status; you never maintain it by hand.
 
 ### 9. Report
 
