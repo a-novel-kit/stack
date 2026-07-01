@@ -4,8 +4,8 @@ description: >
   The manual triage / grooming pass over the open GitHub issue set across the a-novel / a-novel-kit
   orgs, run from Claude Code during a planning session. Use it whenever the user asks to "run triage",
   "do a triage pass", "groom the backlog", "prioritise the issues", "prep the planning meeting", or to
-  review and refine open issues and drafts. It surveys both org "Tasks" boards, drains the `triage`
-  label queue, assigns and refines Priority and Size (weight), sets due dates on active issues and on
+  review and refine open issues and drafts. It surveys both org "Tasks" boards, drains the `Triage`
+  status queue, assigns and refines Priority and Size (weight), sets due dates on active issues and on
   milestones, advances Status, and firms up Backlog drafts that are about to enter production. Trigger
   it MANUALLY — it is not a scheduled job. Pairs with plan-feature (which creates the issues and owns
   their bodies), resolve-pr-feedback (issue / PR discussion), and manage-versions (cross-repo staging).
@@ -14,7 +14,7 @@ description: >
 # Triage & groom the issue set
 
 Planning creates issues; **triage keeps them honest**. Over time, priorities drift, scopes change,
-drafts pile up, active work loses its due date, and the `triage` queue fills with un-assessed reports.
+drafts pile up, active work loses its due date, and the `Triage` status fills with un-assessed reports.
 This skill is the recurring pass that fixes all of that — run **manually**, as a planning meeting with
 the operator, not on a timer. A weekly cadence is recommended, but the human pulls the trigger.
 
@@ -31,7 +31,7 @@ them honest **over time**.
 - **Lead with priority.** Work the set in Priority order (P0 → P4). The output of a pass is a clear
   "what's next": the P0/P1 items that aren't already moving.
 - **Keep the board honest.** The invariants a pass enforces: every actionable ticket has a **Type**, a
-  **Priority**, and a **Size**; no **active** issue lacks a **due date**; no stale `triage` labels;
+  **Priority**, and a **Size**; no **active** issue lacks a **due date**; no items lingering in `Triage`;
   no rotting drafts.
 
 ---
@@ -46,20 +46,20 @@ gh project item-list 1 --owner a-novel-kit --format json --limit 200
 ```
 
 For each item read: Type, Priority, Size, Status, Target date, Milestone, linked PRs, blocked-by,
-and sub-issue progress. The **`triage` queue** is every open issue still carrying the `triage`
-label (`gh search issues --owner a-novel --label triage --state open`, and likewise for
-`a-novel-kit`) — those are un-assessed.
+and sub-issue progress. The **Triage queue** is every board item sitting in the `Triage` **status** —
+an un-assessed incoming issue lands there; filter the item-list above by `Status == Triage`.
 
 ### 2. Drain the triage queue (un-assessed → assessed)
 
-For each `triage`-labelled issue, with the operator:
+For each item in the `Triage` status, with the operator:
 
 - Confirm or assign its **Type** (Epic / Feature / Task / Bug).
 - Assign **Priority** and **Size** (weight).
 - Add it to the org board if it isn't already (`gh project item-add`).
-- Set an initial **Status** (`Backlog` if not ready, `Ready` if it can be picked up).
-- **Drop the `triage` label** once assessed (`gh issue edit <n> --remove-label triage`). The empty
-  triage queue is the goal of every pass (the cli/cli "First Responder" model).
+- Assess it and move its **Status** out of `Triage` — `Backlog` for a not-yet-ready draft, `Ready`
+  when it can be picked up (`gh project item-edit`).
+- An empty `Triage` status is the goal of every pass — no item should linger un-assessed (the
+  cli/cli "First Responder" model).
 
 ### 3. Prioritise
 
@@ -129,16 +129,16 @@ Close the pass with a tight summary for the operator:
 
 ## gh quick reference
 
-| Action                       | Command                                                                                             |
-| ---------------------------- | --------------------------------------------------------------------------------------------------- |
-| List board items             | `gh project item-list <7\|1> --owner <org> --format json`                                           |
-| Find the triage queue        | `gh search issues --owner <org> --label triage --state open`                                        |
-| Set Priority / Size / Status | `gh project item-edit --id <item> --project-id <proj> --field-id <f> --single-select-option-id <o>` |
-| Set a due date (Target date) | `gh project item-edit --id <item> --project-id <proj> --field-id <date-field> --date YYYY-MM-DD`    |
-| Set a milestone due date     | `gh api repos/<o>/<r>/milestones/<n> -X PATCH -f due_on=<RFC3339>`                                  |
-| Drop the triage label        | `gh issue edit <n> --repo <o>/<r> --remove-label triage`                                            |
-| Promote a draft              | move Status `Backlog → Ready` via `gh project item-edit`                                            |
-| Delete an overtaken draft    | `gh issue delete <n> --repo <o>/<r> --yes`                                                          |
+| Action                        | Command                                                                                             |
+| ----------------------------- | --------------------------------------------------------------------------------------------------- |
+| List board items              | `gh project item-list <7\|1> --owner <org> --format json --limit 200`                               |
+| Find the triage queue         | filter `gh project item-list` output to items with `Status == Triage`                               |
+| Set Priority / Size / Status  | `gh project item-edit --id <item> --project-id <proj> --field-id <f> --single-select-option-id <o>` |
+| Set a due date (Target date)  | `gh project item-edit --id <item> --project-id <proj> --field-id <date-field> --date YYYY-MM-DD`    |
+| Set a milestone due date      | `gh api repos/<o>/<r>/milestones/<n> -X PATCH -f due_on=<RFC3339>`                                  |
+| Leave Triage (assess an item) | move Status `Triage → Backlog`/`Ready` via `gh project item-edit`                                   |
+| Promote a draft               | move Status `Backlog → Ready` via `gh project item-edit`                                            |
+| Delete an overtaken draft     | `gh issue delete <n> --repo <o>/<r> --yes`                                                          |
 
 Field / option / item IDs come from `gh project field-list <num> --owner <org>` and
 `gh project item-list`. Scopes: `repo` + `project` (see `plan-feature` → _Token scopes_); on an
@@ -165,7 +165,7 @@ triage-issues (recurring manual pass: prioritise · weigh · due-date · refine 
 
 - **Lead with priority.** A pass is judged by whether "what's next" is unambiguous afterwards.
 - **Honest invariants.** Every actionable ticket: Type + Priority + Size. Active ⇒ a due date. No
-  stale `triage` labels.
+  items lingering in `Triage`.
 - **Dates are for triage, not theatre.** They exist to make the next decision; a slip is information.
 - **Drafts are living.** Refine the ones about to go active; delete the ones the plan has overtaken.
 - **Propose, the operator commits.** Especially dates — triage is a conversation, not an edict.

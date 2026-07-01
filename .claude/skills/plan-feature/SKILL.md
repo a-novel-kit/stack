@@ -196,10 +196,11 @@ cross-repo Epics; per-repo work lives in the repo it touches.
 - **Body** = the plan, in the structure below. Markdown (same as PR descriptions). Iterate it with
   `gh issue edit <n> --body-file <file>`.
 
-- **Labels** — orthogonal axes only. Add `triage` on creation (drop it once assessed/prioritized).
-  Keep using `documentation`, `dependencies`/`renovate`, `go`/`javascript`, and the community
-  signals `good first issue` / `help wanted` where they apply. **Never** label kind (that's Type),
-  priority/effort (Project fields), or blocked state (native dependencies).
+- **Labels** — orthogonal axes only. Keep using `documentation`, `dependencies`/`renovate`,
+  `go`/`javascript`, and the community signals `good first issue` / `help wanted` where they apply.
+  There is **no `triage` label** — assessment state is the **Triage status** (below), not a label.
+  **Never** label kind (that's Type), priority/effort (Project fields), or blocked state (native
+  dependencies).
 
 - **Assignee** — assign every Epic and Task to its **creator** on creation (`--assignee "@me"`, the
   operator whose `gh` token authors it — not the bot). They may reassign later, but a default owner
@@ -208,14 +209,14 @@ cross-repo Epics; per-repo work lives in the repo it touches.
 - **Project board** — add the issue to the org's **"Tasks"** board (`a-novel` project #7,
   `a-novel-kit` project #1) and set its fields:
 
-  | Field           | Values                                                   | Meaning                                                                                                 |
-  | --------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-  | **Status**      | Backlog · Ready · In progress · In review · Done · Track | Workflow state. A not-yet-ready draft stage sits in **Backlog**; promote to **Ready** when unblocked.   |
-  | **Priority**    | P0 · P1 · P2 · P3 · P4                                   | P0 = drop-everything; P4 = nice-to-have.                                                                |
-  | **Size**        | XS · S · M · L · XL                                      | The **effort / weight** estimate. Every actionable ticket gets one.                                     |
-  | **Target date** | _date_                                                   | The **due date**. Set it once the issue goes **active** (see below).                                    |
-  | **Release**     | _free single-select_                                     | Cross-repo version grouping (the only release axis that spans repos).                                   |
-  | **Milestone**   | _per-repo_                                               | Optional. A repo's release train (e.g. `v1.3.0`); cannot span repos. Give it a **due date** (`due_on`). |
+  | Field           | Values                                                                                            | Meaning                                                                                                                                                                                                                                                      |
+  | --------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+  | **Status**      | Backlog · Triage · Tracking · Ready · In progress · In review · Done · Awaiting release · Applied | Workflow state. **Triage** = un-assessed incoming; **Backlog** = not-yet-ready draft; **Ready** = pickup-able; **Tracking** = an Initiative's active state; **Awaiting release** = merged, not yet released; **Applied** = terminal for a meta / no-PR task. |
+  | **Priority**    | P0 · P1 · P2 · P3 · P4                                                                            | P0 = drop-everything; P4 = nice-to-have.                                                                                                                                                                                                                     |
+  | **Size**        | XS · S · M · L · XL                                                                               | The **effort / weight** estimate. Every actionable ticket gets one.                                                                                                                                                                                          |
+  | **Stage**       | Stage 1 … Stage N · Unscheduled                                                                   | **Absolute** placement within a multi-stage milestone / initiative. "What's next" = the lowest-numbered stage not yet Done.                                                                                                                                  |
+  | **Target date** | _date_                                                                                            | The **due date**. Set it once the issue goes **active** (see below).                                                                                                                                                                                         |
+  | **Milestone**   | _per-repo_                                                                                        | Optional. A repo's release train (e.g. `v1.3.0`); cannot span repos. Give it a **due date** (`due_on`).                                                                                                                                                      |
 
 - **When to set each field — weight, priority, due dates.** Set **Size** (weight) and **Priority** at
   **creation when the scope is clear** — you usually know a planned Task's rough size and urgency — and
@@ -226,9 +227,10 @@ cross-repo Epics; per-repo work lives in the repo it touches.
   `gh api repos/<o>/<r>/milestones/<n> -X PATCH -f due_on=<RFC3339>` (or pass `-f due_on=…` to
   `... -f title=…` when first creating it). Both dates exist to make triage decisions, not decoration.
 
-- **Milestone vs Release.** Milestones are **per-repo and cannot span repos**, so use a milestone
-  for a single repo's release train and the board's **Release** field for a version that spans
-  repos. The Epic is the real cross-repo glue; milestones/Release are optional grouping on top.
+- **Cross-repo version grouping.** Milestones are **per-repo and cannot span repos**, so a single
+  repo's release train is one milestone. To group a version that spans repos, give each repo a
+  milestone with the **identical name** — the board's milestone view groups those together. The Epic
+  is the real cross-repo glue; milestones are optional grouping on top.
 
 ### Breakdown & staging — sub-issues and dependencies
 
@@ -358,17 +360,17 @@ stage; until those skills exist, plan platform work conservatively and flag the 
 IDs (project, field, single-select option) are discovered with `gh project field-list <num> --owner
 <org>` and `gh project item-list`; field values are then set with `gh project item-edit`.
 
-| Action                             | Command                                                                                                                                     |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Create an Epic (cross-repo)        | `gh issue create --repo <org>/.github --type Epic --title "..." --label triage --assignee "@me" --body-file <file>`                         |
-| Create a Task sub-issue            | `gh issue create --repo <org>/<repo> --type Task --parent <epic-#-or-url> --label triage --assignee "@me" --title "..." --body-file <file>` |
-| Add it to the board on creation    | append `--project "Tasks"` to `gh issue create`                                                                                             |
-| Add an existing issue to the board | `gh project item-add <num> --owner <org> --url <issue-url>`                                                                                 |
-| Sequence stages                    | `gh issue edit <m> --repo <org>/<repo> --add-blocked-by <n>`                                                                                |
-| Set Priority / Size / Status       | `gh project item-edit --id <item-id> --field-id <field-id> --project-id <proj-id> --single-select-option-id <opt-id>`                       |
-| Iterate the plan body              | `gh issue edit <n> --repo <org>/<repo> --body-file <file>`                                                                                  |
-| Discuss / open question (bot)      | `a-novel core bot-comment <org> <repo> <n> --body "..."`                                                                                    |
-| Delete a not-yet-started draft     | `gh issue delete <n> --repo <org>/<repo> --yes`                                                                                             |
+| Action                             | Command                                                                                                                      |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Create an Epic (cross-repo)        | `gh issue create --repo <org>/.github --type Epic --title "..." --assignee "@me" --body-file <file>`                         |
+| Create a Task sub-issue            | `gh issue create --repo <org>/<repo> --type Task --parent <epic-#-or-url> --assignee "@me" --title "..." --body-file <file>` |
+| Add it to the board on creation    | append `--project "Tasks"` to `gh issue create`                                                                              |
+| Add an existing issue to the board | `gh project item-add <num> --owner <org> --url <issue-url>`                                                                  |
+| Sequence stages                    | `gh issue edit <m> --repo <org>/<repo> --add-blocked-by <n>`                                                                 |
+| Set Priority / Size / Status       | `gh project item-edit --id <item-id> --field-id <field-id> --project-id <proj-id> --single-select-option-id <opt-id>`        |
+| Iterate the plan body              | `gh issue edit <n> --repo <org>/<repo> --body-file <file>`                                                                   |
+| Discuss / open question (bot)      | `a-novel core bot-comment <org> <repo> <n> --body "..."`                                                                     |
+| Delete a not-yet-started draft     | `gh issue delete <n> --repo <org>/<repo> --yes`                                                                              |
 
 (Board numbers: `a-novel` → project **#7** "Tasks"; `a-novel-kit` → project **#1** "Tasks".)
 
@@ -378,7 +380,7 @@ Issue work is core to this workflow, so the `gh` session **should always be able
 issue lifecycle** — create, read, update, delete, plus sub-issues, dependencies, labels, and
 milestones. That rides on the **`repo`** scope (deleting an issue additionally needs an owner/admin
 role on the repo, which org owners have). Reading and writing **board fields** (Priority / Size /
-Status / Release) needs the **`project`** scope. Managing the org-level **issue types** themselves
+Status / Stage) needs the **`project`** scope. Managing the org-level **issue types** themselves
 (adding / editing / removing a type such as `Epic`) needs **`admin:org`** — a one-time admin act, not
 part of day-to-day planning.
 
@@ -413,10 +415,14 @@ items_ (Done > 2 weeks). **Keep the _auto-add_ workflows OFF** — both _Auto-ad
 and _Auto-add sub-issues to project_. The principle: automations may set **Status**, but **the skills
 add the items**. Every issue and sub-issue joins the board explicitly via `--project` on
 `gh issue create` (or `gh project item-add`), so board membership stays deliberate, not magic.
+`Item added → Backlog` is the landing for **planned** work; **Triage** is a _deliberate_ status a
+maintainer moves an un-assessed issue into — and where the deferred external-user intake will file
+incoming reports — so the _Triage_ view surfaces only work still needing assessment, not every newly
+added item.
 
-**Saved views worth having** (also UI-only): _Board by Status_; _Triage_ (`is:open is:issue
-label:triage`); _My/agent items_ (`assignee:@me is:open`); _Roadmap_ grouped by Milestone or Release;
-_Epics_ grouped by **Parent issue** (or filtered `type:Epic`).
+**Saved views worth having** (also UI-only): _Board by Status_; _Triage_ (`is:open status:Triage`);
+_My/agent items_ (`assignee:@me is:open`); _Roadmap_ grouped by Milestone; _Epics_ grouped by
+**Parent issue** (or filtered `type:Epic`).
 
 **Recurring triage is its own skill.** Grooming the open-issue set — prioritising, assigning weights,
 setting due dates, refining drafts that are about to go active — is the `triage-issues` skill, run
