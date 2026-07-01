@@ -270,10 +270,12 @@ present tense. This rules out:
   stopped doing.
 - **Comparisons to deleted code**: "matches the old bash script", "the Go port of `foo.sh`", "same
   default the script used". The thing compared against is gone; the comparison points at nothing.
-- **Dangling pointers to transient context**: "per spec §6.4", "see PLAN.md", "see #50", "the Stage-2
-  gate", "Gate-2 override". A design doc, issue, epic, or planning-stage label that won't outlive the
-  work is not a durable reference — a future editor reading the file has none of that context. Fold the
-  rationale into the comment itself and write it as if the plan that motivated the code never existed.
+- **Pointers that send the reader outside the code**: "per spec §6.4", "see PLAN.md", "see #50", "the
+  Stage-2 gate", "Gate-2 override". Some of these are transient (a branch-scoped design doc rots when the
+  branch merges); others are durable (an issue or epic link persists) — but neither belongs in a code
+  comment. A durable link still forces the reader to leave the file to reconstruct the rationale, and a
+  planning label like "Stage 2" goes meaningless once the work ships. Fold the rationale into the comment
+  itself and write it as if the plan that motivated the code never existed.
 - **Removal notes**: "placeholder removed — see above", or any comment whose only content is that
   something used to be here. Absence needs no monument.
 
@@ -325,8 +327,8 @@ Documentation is as much a liability as an asset when it's wrong. Every time you
 - Copying the same description from an interface down to the struct method — reference or omit instead.
 - **Tying a reusable component's docs to one caller's wiring**: an action input, exported function, or
   library parameter documents the _contract_ — the capability it needs — not how a particular consumer
-  happens to supply it. _Bad_: _"the AGENT_BOT_CLIENT_ID secret"_. _Good_: _"a GitHub App with the
-  checks-write permission"_. Naming a specific secret or env var couples the general component to one
+  happens to supply it. _Bad_: _"the AGENT_BOT_CLIENT_ID secret"_. _Good_: _"a GitHub App with write
+  access to Checks"_. Naming a specific secret or env var couples the general component to one
   deployment and misleads the next caller.
 - **Enumerating anything in a list** — fields, parameters, behaviors, checks, steps, etc. Lists go stale
   as soon as any item changes, and they push implementation details into docs that should describe intent.
