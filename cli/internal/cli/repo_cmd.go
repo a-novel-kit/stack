@@ -107,15 +107,18 @@ rulesets, Pages. Interactive (human-only); run it from anywhere.`,
 			if err != nil {
 				return err
 			}
+			orgProfile, err := repocfg.LoadOrg(org)
+			if err != nil {
+				return err
+			}
+			// The [Agent] App id is per-org; inject it before discovery so the
+			// merge-gate required check resolves to this org's App.
+			checks.ResolveBotIntegrations(orgProfile)
 			discovered := &repocfg.Discovered{}
 			if _, err := gh("repo", "clone", org+"/"+name, cloneDir); err == nil {
 				if d, derr := repocfg.Discover(cloneDir, checks); derr == nil {
 					discovered = d
 				}
-			}
-			orgProfile, err := repocfg.LoadOrg(org)
-			if err != nil {
-				return err
 			}
 			branch := repoDefaultBranch(org, name)
 			target := &repocfg.RepoTarget{
@@ -198,6 +201,9 @@ always-required set — set wholesale.`,
 			if err != nil {
 				return err
 			}
+			// The [Agent] App id is per-org; inject it before discovery so the
+			// merge-gate required check resolves to this org's App.
+			checks.ResolveBotIntegrations(orgProfile)
 			discovered, err := repocfg.Discover(root, checks)
 			if err != nil {
 				return err

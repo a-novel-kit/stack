@@ -76,10 +76,11 @@ func TestLoadChecks(t *testing.T) {
 	if len(c.Always) == 0 {
 		t.Fatal("always checks empty")
 	}
-	// merge-gate is required via the [Agent] App, so the integration must resolve
-	// to that app id — not Actions.
-	if c.Integrations["agent"] != 3549379 {
-		t.Errorf("integrations.agent = %d, want 3549379 ([Agent] App)", c.Integrations["agent"])
+	// merge-gate is required via the [Agent] App, whose id is per-org — so it must
+	// NOT be hardcoded here; it's injected from the org profile (see
+	// TestResolveBotIntegrations).
+	if _, hardcoded := c.Integrations["agent"]; hardcoded {
+		t.Error("integrations.agent must not be hardcoded — the [Agent] app id is per-org")
 	}
 	var mergeGate *CheckDef
 	for i := range c.Always {
@@ -111,6 +112,32 @@ func TestLoadChecks(t *testing.T) {
 	// Codecov posts its own statuses (separate, bot-bypass ruleset).
 	if len(c.Codecov.Checks) == 0 {
 		t.Error("codecov.checks empty")
+	}
+}
+
+// TestResolveBotIntegrations pins the per-org [Agent] app id resolution: the two
+// orgs run separate Apps, so the merge-gate integration must come from each org's
+// profile, never a shared checks.yaml constant. A single hardcoded id would make
+// the required check unsatisfiable on one of the orgs.
+func TestResolveBotIntegrations(t *testing.T) {
+	t.Parallel()
+	cases := map[string]int64{"a-novel": 3549319, "a-novel-kit": 3549379}
+	for org, want := range cases {
+		t.Run(org, func(t *testing.T) {
+			t.Parallel()
+			c, err := LoadChecks()
+			if err != nil {
+				t.Fatalf("LoadChecks: %v", err)
+			}
+			o, err := LoadOrg(org)
+			if err != nil {
+				t.Fatalf("LoadOrg(%s): %v", org, err)
+			}
+			c.ResolveBotIntegrations(o)
+			if got := c.Integrations["agent"]; got != want {
+				t.Errorf("%s agent integration = %d, want %d", org, got, want)
+			}
+		})
 	}
 }
 

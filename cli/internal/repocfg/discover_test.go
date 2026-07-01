@@ -45,6 +45,10 @@ jobs:
 	if err != nil {
 		t.Fatalf("LoadChecks: %v", err)
 	}
+	// The [Agent] app id is per-org, injected before discovery. Use a sentinel id
+	// so the assertion below proves merge-gate resolves to the injected value, not
+	// a global constant.
+	cc.ResolveBotIntegrations(&OrgProfile{Bots: map[string]int64{"agent": 4242}})
 	d, err := Discover(root, cc)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
@@ -56,11 +60,10 @@ jobs:
 	if !slices.Equal(got, want) {
 		t.Errorf("required checks = %v, want %v", got, want)
 	}
-	// merge-gate is posted by the [Agent] App, not Actions — the ruleset must
-	// require it against that integration id.
+	// merge-gate must be required against the injected per-org [Agent] app id.
 	for _, c := range d.Checks {
-		if c.Context == "merge-gate" && c.IntegrationID != 3549379 {
-			t.Errorf("merge-gate integration id = %d, want 3549379 ([Agent] App)", c.IntegrationID)
+		if c.Context == "merge-gate" && c.IntegrationID != 4242 {
+			t.Errorf("merge-gate integration id = %d, want the injected 4242", c.IntegrationID)
 		}
 	}
 	// report-* and master-only jobs must NOT be required.
