@@ -188,6 +188,53 @@ func TestBuildPlanProvisionsMergeGateWorkflows(t *testing.T) {
 	}
 }
 
+// TestBuildPlanProvisionsAutoApprove checks that the dependency-bot auto-approval
+// workflow is pushed wherever require-approval is active, and nowhere else.
+func TestBuildPlanProvisionsAutoApprove(t *testing.T) {
+	t.Parallel()
+
+	plan, err := BuildPlan(&RepoTarget{
+		Org:           "a-novel-kit",
+		Repo:          "example",
+		DefaultBranch: "master",
+		Class:         &ClassPreset{Rulesets: ClassRulesets{RequireApproval: true}},
+		OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{
+			"dependencies": 1734926, "publish": 1734949, "agent": 3549379,
+		}},
+		Discovered: &Discovered{},
+	})
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	var op *Op
+	for i := range plan.Ops {
+		if plan.Ops[i].Method == http.MethodPut &&
+			strings.HasSuffix(plan.Ops[i].Path, "/contents/.github/workflows/auto-approve-dependabot.yaml") {
+			op = &plan.Ops[i]
+		}
+	}
+	if op == nil {
+		t.Fatal("BuildPlan emitted no auto-approve workflow op under require-approval")
+	}
+	if !strings.Contains(op.Content, "generic-actions/approve-bot@") {
+		t.Error("auto-approve content missing the approve-bot ref")
+	}
+
+	// Without require-approval, the auto-approve workflow is not pushed.
+	bare, err := BuildPlan(&RepoTarget{
+		Org: "a-novel-kit", Repo: "example",
+		Class: &ClassPreset{}, Discovered: &Discovered{},
+	})
+	if err != nil {
+		t.Fatalf("BuildPlan(bare): %v", err)
+	}
+	for _, op := range bare.Ops {
+		if strings.Contains(op.Path, "auto-approve") {
+			t.Errorf("auto-approve pushed without require-approval: %s", op.Path)
+		}
+	}
+}
+
 // contextsOf extracts the context names from a CheckRef slice, preserving order.
 func contextsOf(checks []CheckRef) []string {
 	out := make([]string, len(checks))

@@ -137,11 +137,11 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		})
 	}
 
-	// Merge-enforcement workflows (a-novel-kit/.github#50): the merge-gate check
-	// runner and the admin-only approve-pr override. Pushed wherever the master
-	// ruleset gates merges — the same repos the required `merge-gate` check
-	// applies to. Static files: the [Agent] creds are GitHub-expression refs
-	// resolved at run time, not repocfg substitutions.
+	// Merge-enforcement workflows: the merge-gate check runner and the admin-only
+	// approve-pr override. Pushed wherever the master ruleset gates merges — the
+	// same repos the required `merge-gate` check applies to. Static files: the
+	// [Agent] creds are GitHub-expression refs resolved at run time, not repocfg
+	// substitutions.
 	if c.Rulesets.Master {
 		for _, wf := range []string{"merge-gate.yaml", "approve-pr.yaml"} {
 			content, err := ReadTemplate("governance/" + wf)
@@ -154,6 +154,20 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 				Content: string(content),
 			})
 		}
+	}
+
+	// Auto-approve the trusted dependency bots' PRs so their version bumps don't
+	// wait on a human — pushed wherever require-approval would otherwise hold them.
+	if c.Rulesets.RequireApproval {
+		content, err := ReadTemplate("governance/auto-approve-dependabot.yaml")
+		if err != nil {
+			return nil, err
+		}
+		p.Ops = append(p.Ops, Op{
+			Method:  http.MethodPut,
+			Path:    repoPath + "/contents/.github/workflows/auto-approve-dependabot.yaml",
+			Content: string(content),
+		})
 	}
 
 	if c.Pages {
