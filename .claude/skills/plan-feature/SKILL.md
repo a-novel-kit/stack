@@ -85,10 +85,10 @@ explicit scope boundaries (what is in, what is deliberately out). If the request
 could be read several ways, resolve that **now**, before research: one focused clarifying question
 beats a plan built on a guess.
 
-### 2. Research — three axes, none optional
+### 2. Research — the three axes
 
-Never plan from assumptions. Cover all three when relevant, and cite what you relied on so the human
-can verify:
+Never plan from assumptions. Cover all three axes below; skip one only when it genuinely doesn't
+apply to the change, and say why. Cite what you relied on so the human can verify:
 
 - **a. Community standards & prior art — how the world already solves this.** For any non-trivial
   problem, search the web and read how it is handled _outside_ our walls: official docs and specs
