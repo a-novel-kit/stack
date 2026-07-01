@@ -1,0 +1,2 @@
+Scratch PR to validate Stage-2 merge enforcement (merge-gate + require-approval +
+approve-pr). Delete on close — not for merge.
