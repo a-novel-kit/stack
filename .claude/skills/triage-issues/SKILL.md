@@ -102,7 +102,20 @@ Move each item's **Status** to match reality (`Ready` when unblocked, `In progre
 `In review`, `Done`). Once the board's built-in automations are enabled (see `plan-feature` →
 _Operating the board_), `Done` is handled for you on merge/close — don't fight the automation.
 
-### 8. Report
+### 8. Keep the Stage field accurate (absolute scheme)
+
+The `Stage` board field is **absolute** — `Stage 1 … Stage 5`, plus `Unscheduled` for work not yet
+placed in a stage. A staged milestone's epics and their child tasks each carry their stage's number,
+set once at creation (per the `plan-feature` field habit) and **never shifted**: an item at `Stage 3`
+stays `Stage 3` for good. "What's next" is a derivation, not a label — the lowest-numbered stage that
+is not yet done. A finished stage keeps its number; its epic follows the normal Done → archive
+lifecycle rather than being relabelled.
+
+So this pass has nothing to shift. Check only that new items carry the right stage number — a human
+call about which stage the work belongs to — and that an epic and its tasks agree on it. The rollup
+engine surfaces the current stage from status; you never maintain it by hand.
+
+### 9. Report
 
 Close the pass with a tight summary for the operator:
 
