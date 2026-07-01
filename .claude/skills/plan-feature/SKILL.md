@@ -85,19 +85,32 @@ explicit scope boundaries (what is in, what is deliberately out). If the request
 could be read several ways, resolve that **now**, before research: one focused clarifying question
 beats a plan built on a guess.
 
-### 2. Research — code _and_ the internet
+### 2. Research — the three axes
 
-Never plan from assumptions. Two sources, both required when relevant:
+Never plan from assumptions. Cover all three axes below; skip one only when it genuinely doesn't
+apply to the change, and say why. Cite what you relied on so the human can verify:
 
-- **The codebase.** Read the production and test files in every layer the change could touch; the
-  tests document the contract. Identify which repos and which _repo kinds_ (see taxonomy below) are
-  involved. Use `Grep`/`Glob`/the `Explore` agent to find them — don't guess at signatures.
-- **The internet — do not stick to local knowledge.** For anything involving an external library,
-  protocol, API, standard, or unfamiliar technique, search the web and read **trusted sources**:
-  official docs and specs first, then the project's own repo/changelog, reputable standards bodies,
-  and well-regarded technical write-ups. Prefer recent, primary sources over blog hearsay; note the
-  source so the human can verify. Build-vs-buy and package-choice research is delegated to
-  `choose-dependency`.
+- **a. Community standards & prior art — how the world already solves this.** For any non-trivial
+  problem, search the web and read how it is handled _outside_ our walls: official docs and specs
+  first, then how **major public organizations** solve the same thing (their open-source repos,
+  engineering blogs, RFCs, conference talks), reputable standards bodies, and well-regarded
+  write-ups — informational posts included. Prefer recent, primary sources over hearsay. **Default to
+  the established community standard over inventing our own:** a widely-adopted pattern is
+  battle-tested, familiar to contributors, and cheaper to maintain. Deviate only with a thorough
+  justification, and even then derive the deviation _from_ a proven standard rather than from scratch
+  (the way we run a few **macro** services instead of micro/nano — a deliberate, defended departure,
+  not a bespoke invention).
+- **b. Our own code — how we already handle this.** Read the production and test files in every layer
+  the change could touch; the tests document the contract. If existing code already solves part of
+  the problem, study it and **extend the established pattern** rather than adding a second way to do
+  the same thing. Identify the repos and _repo kinds_ (see taxonomy) involved with `Grep`/`Glob`/the
+  `Explore` agent — don't guess at signatures.
+- **c. Internal tooling & libraries — what already exists to cut the work.** Before designing
+  anything from scratch, inventory what we can reuse: internal helpers and packages, and the
+  **already-imported** third-party libraries. **Read their documentation deeply** — a capability you
+  didn't know a dependency offered is implementation time saved and less surface to maintain.
+  Build-vs-buy and _new_ package selection is delegated to `choose-dependency`; this axis is about
+  fully exploiting what is already on hand.
 
 **Spikes are allowed.** If you need to edit code to explore or test a hypothesis, do it — then
 **revert** the exploratory changes before (or immediately after) you capture the plan. Planning
@@ -443,10 +456,13 @@ plan that is already agreed.
   bug). Once a name is frozen in the issue, use it identically everywhere: code, API, schema, DB,
   docs, and conversation. If a name proves wrong, change it everywhere in one deliberate pass — never
   let two names for one thing coexist.
-- **Prior art is input to surpass, not a template.** Existing code — ours or a reference — shows what
-  was tried, not what to copy. Be critical of it, name its flaws explicitly, and aim for the best
-  solution we can build (more efficient, more reliable, cleaner) rather than a blend of predecessors'
-  compromises. Max the quality, then stage delivery sensibly.
+- **Adopt proven standards; surpass weak instances.** Default to the established community pattern —
+  it is battle-tested, familiar, and cheap to maintain; reinventing it is a cost, not a virtue.
+  Deviate only with a thorough justification derived from a proven base (the way we run **macro**
+  services, not micro/nano). That is not in tension with being critical: when you study a _specific_
+  prior implementation — ours or a reference — it shows what was tried, not what to copy, so name its
+  flaws and aim past them. Embrace the standard, improve the instance; max the quality, then stage
+  delivery sensibly.
 - **Stage what can't ship at once.** Single-step delivery is preferred; when deployment forces
   incompatible stages, plan a backward-compatible step then a cleanup step — drafted ahead as
   `blocked-by` sub-issues — and hand the mechanics to `manage-versions`.
