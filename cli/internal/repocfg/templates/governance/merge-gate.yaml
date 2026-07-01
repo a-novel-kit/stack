@@ -4,9 +4,7 @@
 # to the default branch so the required `merge-gate` check always reports. The
 # check itself is posted by the [Agent] App via the Checks API (a stable
 # integration id the ruleset requires), so the job below is only the runner — its
-# id is deliberately NOT `merge-gate`, to avoid a duplicate check name. Stage-2
-# skeleton always passes; the epic-atomicity / draft-review logic lands in
-# Stage 3. See a-novel-kit/.github#50.
+# id is deliberately NOT `merge-gate`, to avoid a duplicate check name.
 name: merge-gate
 
 on:

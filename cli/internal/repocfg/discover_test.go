@@ -57,7 +57,7 @@ jobs:
 		t.Errorf("required checks = %v, want %v", got, want)
 	}
 	// merge-gate is posted by the [Agent] App, not Actions — the ruleset must
-	// require it against that integration id (a-novel-kit/.github#50).
+	// require it against that integration id.
 	for _, c := range d.Checks {
 		if c.Context == "merge-gate" && c.IntegrationID != 3549379 {
 			t.Errorf("merge-gate integration id = %d, want 3549379 ([Agent] App)", c.IntegrationID)

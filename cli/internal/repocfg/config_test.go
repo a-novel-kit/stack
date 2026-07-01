@@ -76,8 +76,8 @@ func TestLoadChecks(t *testing.T) {
 	if len(c.Always) == 0 {
 		t.Fatal("always checks empty")
 	}
-	// merge-gate (a-novel-kit/.github#50) is required via the [Agent] App, so the
-	// integration must resolve to that app id — not Actions.
+	// merge-gate is required via the [Agent] App, so the integration must resolve
+	// to that app id — not Actions.
 	if c.Integrations["agent"] != 3549379 {
 		t.Errorf("integrations.agent = %d, want 3549379 ([Agent] App)", c.Integrations["agent"])
 	}

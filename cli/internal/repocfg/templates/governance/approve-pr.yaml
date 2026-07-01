@@ -1,10 +1,9 @@
 # Managed by `a-novel repo update` — edit the template in stack, not this copy.
 #
-# Gate-2 override: an admin records the [Agent] approval a PR author cannot give
-# themselves. Manual and audited — an admin reviews the PR, then dispatches this
-# with the PR number. The action fails closed for anyone who is not a repo admin,
-# so `workflow_dispatch` being open to write-access users is not a hole. See
-# a-novel-kit/.github#50.
+# Lets a repo admin record the approval a PR author cannot give themselves. Manual
+# and audited — an admin reviews the PR, then dispatches this with the PR number.
+# The action fails closed for anyone who is not a repo admin, so workflow_dispatch
+# being open to write-access users is not a hole.
 name: approve-pr
 
 on:
