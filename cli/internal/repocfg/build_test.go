@@ -154,8 +154,9 @@ func TestBuildPlanProvisionsMergeGateWorkflows(t *testing.T) {
 		t.Fatalf("BuildPlan: %v", err)
 	}
 	want := map[string]string{
-		"/contents/.github/workflows/merge-gate.yaml": "generic-actions/merge-gate@",
-		"/contents/.github/workflows/approve-pr.yaml": "generic-actions/approve-pr@",
+		"/contents/.github/workflows/merge-gate.yaml":    "generic-actions/merge-gate@",
+		"/contents/.github/workflows/approve-pr.yaml":    "generic-actions/approve-pr@",
+		"/contents/.github/workflows/derive-status.yaml": "generic-actions/derive-status@",
 	}
 	for suffix, ref := range want {
 		var op *Op
@@ -182,7 +183,8 @@ func TestBuildPlanProvisionsMergeGateWorkflows(t *testing.T) {
 		t.Fatalf("BuildPlan(bare): %v", err)
 	}
 	for _, op := range bare.Ops {
-		if strings.Contains(op.Path, "merge-gate.yaml") || strings.Contains(op.Path, "approve-pr.yaml") {
+		if strings.Contains(op.Path, "merge-gate.yaml") || strings.Contains(op.Path, "approve-pr.yaml") ||
+			strings.Contains(op.Path, "derive-status.yaml") {
 			t.Errorf("master-less class must not get merge-enforcement workflows; got %s", op.Path)
 		}
 	}
