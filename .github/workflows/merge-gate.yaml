@@ -1,19 +1,9 @@
-# Managed by `a-novel repo update` — edit the template in stack, not this copy.
-#
-# The single required "may this PR merge?" gate. Runs on every PR to the default
-# branch, and on the merge queue's group, so the required `merge-gate` check
-# reports in both places — the queue validates required checks on the group, so
-# the gate must post there too or a queued PR waits out the timeout and drops. The
-# check itself is posted by the [Agent] App via the Checks API (a stable
-# integration id the ruleset requires), so the job below is only the runner — its
-# id is deliberately NOT `merge-gate`, to avoid a duplicate check name.
 name: merge-gate
-
+# Stage-4 landing coordinator — SPIKE caller, pins @master for pre-release validation.
+# Posts the merge-gate check and enables auto-merge on epic members so a set lands together.
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
-  # A review changing (approve/dismiss) can flip this PR's atomicity readiness, so
-  # re-evaluate the gate on review events too.
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, labeled, unlabeled]
   pull_request_review:
     types: [submitted, dismissed]
   merge_group:
@@ -21,11 +11,29 @@ on:
 jobs:
   evaluate:
     runs-on: ubuntu-latest
-    # The gate mints its own [Agent] token (checks:write) and never uses the
-    # default token, so it needs no repository permissions of its own.
-    permissions: {}
     steps:
-      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.8.2
+      - uses: a-novel-kit/workflows/generic-actions/merge-gate@master
         with:
           client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
           app_private_key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
+
+  auto-merge:
+    # Enable auto-merge on an epic member so it lands once its gate + approval go green.
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Is this an epic member?
+        id: m
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          if printf '%s' "$LABELS" | grep -qE '"epic:[0-9]+"'; then
+            echo "member=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: ${{ steps.m.outputs.member == 'true' }}
+        uses: a-novel-kit/workflows/generic-actions/enable-auto-merge@master
+        with:
+          pull_request_number: ${{ github.event.pull_request.number }}
+          client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
+          app_private_key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
+          dry_run: "false"
