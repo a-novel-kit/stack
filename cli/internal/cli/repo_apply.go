@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/url"
 	"os/exec"
+	"path"
 	"strconv"
 	"strings"
 
@@ -35,14 +36,22 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 		_, _ = fmt.Fprintln(out, line)
 	}
 
+	var staged []contentChange
 	for _, op := range plan.Ops {
 		switch {
 		case op.RulesetName != "":
 			detail, err := applyRuleset(org, repo, op)
 			note(err == nil, "ruleset "+op.RulesetName, ternErr(err, detail))
 		case op.Content != "":
-			detail, err := applyContents(org, repo, branch, op)
-			note(err == nil, shortPath(op.Path), ternErr(err, detail))
+			changes, unchanged, err := stageContents(org, repo, op)
+			if err != nil {
+				note(false, shortPath(op.Path), ternErr(err, ""))
+				continue
+			}
+			if unchanged {
+				note(true, shortPath(op.Path), opUnchanged)
+			}
+			staged = append(staged, changes...)
 		case strings.HasSuffix(op.Path, "/pages"):
 			detail, err := applyPages(op)
 			note(err == nil, "pages", ternErr(err, detail))
@@ -53,6 +62,19 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 			err := applySettings(op)
 			note(err == nil, "settings ("+op.Method+" "+shortPath(op.Path)+")", errText(err))
 		}
+	}
+
+	// Every staged change lands in one commit — one push, one CI run on the
+	// target repo. No staged change means no commit at all: the mutation would
+	// otherwise record an empty commit, exactly like the contents API.
+	if len(staged) > 0 {
+		detail, err := commitSync(org, repo, branch, staged)
+		if err == nil {
+			for _, change := range staged {
+				note(true, change.path, change.outcome)
+			}
+		}
+		note(err == nil, fmt.Sprintf("sync commit (%d files)", len(staged)), ternErr(err, detail))
 	}
 
 	if len(failures) > 0 {
@@ -105,63 +127,136 @@ func applyRuleset(org, repo string, op repocfg.Op) (string, error) {
 	return opCreated, nil
 }
 
-// applyContents commits a managed file (codeql.yml, CODEOWNERS) to the default
-// branch, creating or updating it. A file whose content already matches is
-// skipped — the contents API otherwise records a commit even for an identical
-// tree, leaving empty commits on the branch. CodeQL advanced setup is mutually
-// exclusive with default setup, so disable default setup first; CODEOWNERS is
-// written to .github/, so remove any stray root copy first.
-func applyContents(org, repo, branch string, op repocfg.Op) (string, error) {
+// contentChange is one staged managed-file write, applied as part of the
+// repo's single sync commit.
+type contentChange struct {
+	path    string // repo-relative file path
+	content string // new file text; unused for a deletion
+	outcome string // opCreated, opUpdated or opDeleted
+}
+
+// codeownersName is the CODEOWNERS file name, at the repo root (where a stray
+// copy is deleted from) and under .github/ (where the managed copy lives).
+const codeownersName = "CODEOWNERS"
+
+// stageContents turns a managed-file op into the changes the sync commit must
+// carry. unchanged reports that the file already matches the desired content —
+// nothing is staged for it, so a sync that changes nothing commits nothing.
+// CodeQL advanced setup is mutually exclusive with default setup, so default
+// setup is switched off before the workflow lands; a stray root CODEOWNERS is
+// staged as a deletion (GitHub honours the .github/ copy) even when the
+// .github/ copy itself is unchanged, so a repo never carries two.
+func stageContents(org, repo string, op repocfg.Op) ([]contentChange, bool, error) {
 	if strings.Contains(op.Path, "/workflows/codeql.yml") {
 		// Best-effort: ignore the error when default setup is already off.
 		_, _ = gh("api", "-X", "PATCH", fmt.Sprintf("repos/%s/%s/code-scanning/default-setup", org, repo), "-f", "state=not-configured")
 	}
-	if strings.HasSuffix(op.Path, "/contents/.github/CODEOWNERS") {
-		// Remove a stray root CODEOWNERS so the repo never carries two. GitHub
-		// honours .github/ over root, so the write below wins regardless; this
-		// just clears the redundant copy. Best-effort — most repos have none.
-		rootPath := strings.Replace(op.Path, "/contents/.github/CODEOWNERS", "/contents/CODEOWNERS", 1)
+	var changes []contentChange
+	if strings.HasSuffix(op.Path, "/contents/.github/"+codeownersName) {
+		rootPath := strings.Replace(op.Path, "/contents/.github/"+codeownersName, "/contents/"+codeownersName, 1)
 		if rootSHA, shaErr := contentSHA(rootPath); shaErr == nil && rootSHA != "" {
-			_, _ = gh("api", "-X", "DELETE", rootPath,
-				"-f", "message="+contentCommitMsg,
-				"-f", "sha="+rootSHA,
-				"-f", "branch="+branch)
+			changes = append(changes, contentChange{path: codeownersName, outcome: opDeleted})
 		}
 	}
 	sha, err := contentSHA(op.Path)
 	if err != nil {
-		return "", err
+		return nil, false, err
 	}
 	if sha == blobSHA(op.Content) {
-		return opUnchanged, nil
+		return changes, true, nil
 	}
-	args := []string{
-		"api", "-X", "PUT", op.Path,
-		"-f", "message=" + contentCommitMsg,
-		"-f", "content=" + base64.StdEncoding.EncodeToString([]byte(op.Content)),
-		"-f", "branch=" + branch,
-	}
+	outcome := opCreated
 	if sha != "" {
-		args = append(args, "-f", "sha="+sha)
+		outcome = opUpdated
 	}
-	verb := opCreated
-	if sha != "" {
-		verb = opUpdated
-	}
-	if _, err := gh(args...); err != nil {
-		// A missing `workflow` token scope surfaces here as either the worded
-		// scope error or a bare 404 — GitHub obscures the scope failure on a
-		// `.github/workflows/` write as Not Found. Only the codeql.yml write
-		// lives under that path (and the repo demonstrably exists by now, its
-		// settings were just patched), so attribute a bare 404 to the scope only
-		// for a workflows/ write; for other content (CODEOWNERS) it means
-		// something else and should surface as-is.
-		if isWorkflowScope(err) || (isNotFound(err) && strings.Contains(op.Path, "/workflows/")) {
-			return "needs the `workflow` token scope (gh auth refresh -s workflow)", err
+	return append(changes, contentChange{path: shortPath(op.Path), content: op.Content, outcome: outcome}), false, nil
+}
+
+// syncCommitQuery applies every staged change as a single commit on the
+// branch. createCommitOnBranch signs the commit as GitHub (verified) and
+// rejects the write with STALE_DATA when the branch tip no longer matches
+// expectedHeadOid.
+const syncCommitQuery = `mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }`
+
+// commitSync commits the staged changes to the branch in one
+// createCommitOnBranch mutation and returns the short commit id.
+func commitSync(org, repo, branch string, changes []contentChange) (string, error) {
+	headline, body := syncCommitMessage(changes)
+	var additions, deletions []map[string]string
+	for _, change := range changes {
+		if change.outcome == opDeleted {
+			deletions = append(deletions, map[string]string{"path": change.path})
+			continue
 		}
+		additions = append(additions, map[string]string{
+			"path":     change.path,
+			"contents": base64.StdEncoding.EncodeToString([]byte(change.content)),
+		})
+	}
+
+	// One retry when the branch tip moves between the oid read and the commit
+	// (STALE_DATA). repocfg is the only writer of the staged files, so a moved
+	// tip means unrelated commits landed — the staged content stays valid.
+	for attempt := 0; ; attempt++ {
+		oid, err := branchHeadOid(org, repo, branch)
+		if err != nil {
+			return "", err
+		}
+		payload, err := json.Marshal(map[string]any{
+			"query": syncCommitQuery,
+			"variables": map[string]any{"input": map[string]any{
+				"branch":          map[string]string{"repositoryNameWithOwner": org + "/" + repo, "branchName": branch},
+				"expectedHeadOid": oid,
+				"message":         map[string]string{"headline": headline, "body": body},
+				"fileChanges":     map[string]any{"additions": additions, "deletions": deletions},
+			}},
+		})
+		if err != nil {
+			return "", err
+		}
+		out, err := ghStdin(string(payload), "api", "graphql",
+			"--jq", ".data.createCommitOnBranch.commit.oid", "--input", "-")
+		switch {
+		case err == nil:
+			return shortOid(out), nil
+		case isStaleHead(out, err) && attempt == 0:
+			continue
+		case isWorkflowScope(err):
+			return "needs the `workflow` token scope (gh auth refresh -s workflow)", err
+		default:
+			return "", err
+		}
+	}
+}
+
+// syncCommitMessage derives the sync commit's headline and body from the
+// staged changes: the headline names the touched files (or counts them when
+// the names would overflow a 72-char subject), the body is the per-file
+// manifest plus a stable marker line history stays greppable by.
+func syncCommitMessage(changes []contentChange) (string, string) {
+	names := make([]string, len(changes))
+	for i, change := range changes {
+		names[i] = strings.TrimSuffix(path.Base(change.path), path.Ext(change.path))
+	}
+	headline := "ci: sync managed config (" + strings.Join(names, ", ") + ")"
+	if len(headline) > 72 {
+		headline = fmt.Sprintf("ci: sync managed config (%d files)", len(changes))
+	}
+	var body strings.Builder
+	for _, change := range changes {
+		fmt.Fprintf(&body, "%s %s\n", change.outcome, change.path)
+	}
+	body.WriteString("\nManaged by a-novel repo sync.")
+	return headline, body.String()
+}
+
+// branchHeadOid returns the commit id at the tip of the branch.
+func branchHeadOid(org, repo, branch string) (string, error) {
+	out, err := gh("api", fmt.Sprintf("repos/%s/%s/git/ref/heads/%s", org, repo, branch), "--jq", ".object.sha")
+	if err != nil {
 		return "", err
 	}
-	return verb, nil
+	return strings.TrimSpace(out), nil
 }
 
 // applyPages enables a Pages site; a 409 (or an "already exists" message)
@@ -256,16 +351,13 @@ func rulesetID(org, repo, name string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// outcome labels for create-or-update operations.
+// outcome labels for staged managed-file changes.
 const (
 	opCreated   = "created"
 	opUpdated   = "updated"
 	opUnchanged = "unchanged"
+	opDeleted   = "deleted"
 )
-
-// contentCommitMsg is the commit message for every managed-file write (and the
-// stray-root-CODEOWNERS removal) so they read uniformly in a repo's history.
-const contentCommitMsg = "ci: managed by a-novel repo"
 
 // keyDescription is the JSON "description" field name, lifted to a constant so
 // the package's repeated use of it satisfies goconst.
@@ -327,6 +419,22 @@ func blobSHA(content string) string {
 	//nolint:gosec // git object identity, not a cryptographic guarantee.
 	sum := sha1.Sum([]byte("blob " + strconv.Itoa(len(content)) + "\x00" + content))
 	return hex.EncodeToString(sum[:])
+}
+
+// shortOid abbreviates a commit id to the usual 7 characters for display.
+func shortOid(out string) string {
+	oid := strings.TrimSpace(out)
+	if len(oid) > 7 {
+		oid = oid[:7]
+	}
+	return oid
+}
+
+// isStaleHead reports the typed STALE_DATA error createCommitOnBranch returns
+// when the branch tip no longer matches expectedHeadOid.
+func isStaleHead(out string, err error) bool {
+	return err != nil && (strings.Contains(out, "STALE_DATA") ||
+		strings.Contains(err.Error(), "Expected branch to point to"))
 }
 
 func isNotFound(err error) bool {
