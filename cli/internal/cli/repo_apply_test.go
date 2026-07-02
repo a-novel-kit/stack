@@ -87,6 +87,37 @@ func TestApplyContentsWorkflowScope404(t *testing.T) {
 	}
 }
 
+// An unchanged managed file is skipped entirely — no PUT, so no empty commit.
+func TestApplyContentsUnchanged(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam.
+	content := "name: CodeQL\n"
+	calls := fakeGH(t, map[string]string{
+		"--jq .sha": blobSHA(content) + "\n",
+	})
+
+	detail, err := applyContents("o", "r", branchMaster, repocfg.Op{
+		Path: "repos/o/r/contents/.github/workflows/codeql.yml", Content: content,
+	})
+	if err != nil {
+		t.Fatalf("applyContents: %v", err)
+	}
+	if detail != opUnchanged {
+		t.Fatalf("detail = %q, want %q", detail, opUnchanged)
+	}
+	for _, c := range *calls {
+		if strings.Contains(c, "-X PUT") {
+			t.Errorf("unchanged content must not be written; got call %q", c)
+		}
+	}
+}
+
+func TestBlobSHA(t *testing.T) {
+	// Pinned against `printf 'test\n' | git hash-object --stdin`.
+	if got := blobSHA("test\n"); got != "9daeafb9864cf43055ae93beb0afd6c7d144bfa4" {
+		t.Fatalf("blobSHA = %q, want the git blob id", got)
+	}
+}
+
 func TestApplySettingsSignoffRetry(t *testing.T) {
 	var bodies []string
 	orig := ghStdin
