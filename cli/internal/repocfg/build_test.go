@@ -185,7 +185,7 @@ func TestBuildPlanProvisionsMergeGateWorkflows(t *testing.T) {
 	for _, op := range bare.Ops {
 		if strings.Contains(op.Path, "merge-gate.yaml") || strings.Contains(op.Path, "approve-pr.yaml") ||
 			strings.Contains(op.Path, "derive-status.yaml") {
-			t.Errorf("master-less class must not get merge-enforcement workflows; got %s", op.Path)
+			t.Errorf("master-less class must not get governance workflows; got %s", op.Path)
 		}
 	}
 }
