@@ -18,9 +18,10 @@ import (
 )
 
 // applyPlan executes every operation in a plan against GitHub via `gh`,
-// printing one line per op. It keeps going after a failed op (so one fiddly
-// step — e.g. CodeQL needing the `workflow` token scope — doesn't block the
-// rest) and returns a combined error if any failed.
+// printing one line per outcome (managed-file lines print once their sync
+// commit lands). It keeps going after a failed op (so one fiddly step — e.g.
+// CodeQL needing the `workflow` token scope — doesn't block the rest) and
+// returns a combined error if any failed.
 func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) error {
 	var failures []string
 	note := func(ok bool, label, detail string) {
@@ -74,7 +75,7 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 				note(true, change.path, change.outcome)
 			}
 		}
-		note(err == nil, fmt.Sprintf("sync commit (%d files)", len(staged)), ternErr(err, detail))
+		note(err == nil, "sync commit", ternErr(err, detail))
 	}
 
 	if len(failures) > 0 {
@@ -182,7 +183,9 @@ const syncCommitQuery = `mutation($input: CreateCommitOnBranchInput!) { createCo
 // createCommitOnBranch mutation and returns the short commit id.
 func commitSync(org, repo, branch string, changes []contentChange) (string, error) {
 	headline, body := syncCommitMessage(changes)
-	var additions, deletions []map[string]string
+	// Empty slices marshal as [], the shape the mutation provably accepts —
+	// nil would marshal as null.
+	additions, deletions := []map[string]string{}, []map[string]string{}
 	for _, change := range changes {
 		if change.outcome == opDeleted {
 			deletions = append(deletions, map[string]string{"path": change.path})
