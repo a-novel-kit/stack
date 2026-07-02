@@ -230,8 +230,7 @@ cross-repo Epics; per-repo work lives in the repo it touches.
 - **Set every field at creation — `--project` is not enough (recurring footgun).** Boarding an issue
   (`--project "Tasks"`) and setting its **milestone** and **board fields** are _independent_ actions:
   adding an issue to the board does **not** set its Milestone, Priority, Size, or Stage — those default
-  to empty. So treat each `gh issue create` as a two-part act: (1) create it **with** `--milestone
-"<name>"` for any issue that belongs to a milestone (a milestone can only be set by `--milestone` /
+  to empty. So treat each `gh issue create` as a two-part act: (1) create it **with** `--milestone` for any issue that belongs to a milestone (a milestone can only be set by `--milestone` /
   `gh issue edit --milestone`, never by `--project`), then (2) set **Priority / Size / Stage** in the
   same breath via `gh project item-edit`. Never leave an item half-fielded. **Verify after any batch
   create** with a one-line board scan — _a Stage-tagged item with no Milestone is the tell_ that
