@@ -31,8 +31,10 @@ them honest **over time**.
 - **Lead with priority.** Work the set in Priority order (P0 → P4). The output of a pass is a clear
   "what's next": the P0/P1 items that aren't already moving.
 - **Keep the board honest.** The invariants a pass enforces: every actionable ticket has a **Type**, a
-  **Priority**, and a **Size**; no **active** issue lacks a **due date**; no items lingering in `Triage`;
-  no rotting drafts.
+  **Priority**, and a **Size**; **every item that belongs to a milestone actually carries it** — boarding
+  an item (`--project`) never sets its Milestone, so scan for a **Stage-tagged item with an empty
+  Milestone** (the tell that `--milestone` was forgotten at creation) and add it; no **active** issue
+  lacks a **due date**; no items lingering in `Triage`; no rotting drafts.
 
 ---
 
