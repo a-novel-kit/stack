@@ -2,12 +2,15 @@ package cli
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/url"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/a-novel-kit/stack/cli/internal/repocfg"
@@ -103,9 +106,11 @@ func applyRuleset(org, repo string, op repocfg.Op) (string, error) {
 }
 
 // applyContents commits a managed file (codeql.yml, CODEOWNERS) to the default
-// branch, creating or updating it. CodeQL advanced setup is mutually exclusive
-// with default setup, so disable default setup first; CODEOWNERS is written to
-// .github/, so remove any stray root copy first.
+// branch, creating or updating it. A file whose content already matches is
+// skipped — the contents API otherwise records a commit even for an identical
+// tree, leaving empty commits on the branch. CodeQL advanced setup is mutually
+// exclusive with default setup, so disable default setup first; CODEOWNERS is
+// written to .github/, so remove any stray root copy first.
 func applyContents(org, repo, branch string, op repocfg.Op) (string, error) {
 	if strings.Contains(op.Path, "/workflows/codeql.yml") {
 		// Best-effort: ignore the error when default setup is already off.
@@ -126,6 +131,9 @@ func applyContents(org, repo, branch string, op repocfg.Op) (string, error) {
 	sha, err := contentSHA(op.Path)
 	if err != nil {
 		return "", err
+	}
+	if sha == blobSHA(op.Content) {
+		return opUnchanged, nil
 	}
 	args := []string{
 		"api", "-X", "PUT", op.Path,
@@ -250,8 +258,9 @@ func rulesetID(org, repo, name string) (string, error) {
 
 // outcome labels for create-or-update operations.
 const (
-	opCreated = "created"
-	opUpdated = "updated"
+	opCreated   = "created"
+	opUpdated   = "updated"
+	opUnchanged = "unchanged"
 )
 
 // contentCommitMsg is the commit message for every managed-file write (and the
@@ -308,6 +317,16 @@ func contentSHA(path string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(out), nil
+}
+
+// blobSHA returns the git blob object id of content — SHA-1 over the
+// "blob <len>\0" header plus the bytes — which is exactly the .sha the
+// contents API reports for an existing file, so an unchanged write is
+// detected without any extra API call.
+func blobSHA(content string) string {
+	//nolint:gosec // git object identity, not a cryptographic guarantee.
+	sum := sha1.Sum([]byte("blob " + strconv.Itoa(len(content)) + "\x00" + content))
+	return hex.EncodeToString(sum[:])
 }
 
 func isNotFound(err error) bool {
