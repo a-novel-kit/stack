@@ -227,6 +227,17 @@ cross-repo Epics; per-repo work lives in the repo it touches.
   `gh api repos/<o>/<r>/milestones/<n> -X PATCH -f due_on=<RFC3339>` (or pass `-f due_on=…` to
   `... -f title=…` when first creating it). Both dates exist to make triage decisions, not decoration.
 
+- **Set every field at creation — `--project` is not enough (recurring footgun).** Boarding an issue
+  (`--project "Tasks"`) and setting its **milestone** and **board fields** are _independent_ actions:
+  adding an issue to the board does **not** set its Milestone, Priority, Size, or Stage — those default
+  to empty. So treat each `gh issue create` as a two-part act: (1) create it **with** `--milestone
+"<name>"` for any issue that belongs to a milestone (a milestone can only be set by `--milestone` /
+  `gh issue edit --milestone`, never by `--project`), then (2) set **Priority / Size / Stage** in the
+  same breath via `gh project item-edit`. Never leave an item half-fielded. **Verify after any batch
+  create** with a one-line board scan — _a Stage-tagged item with no Milestone is the tell_ that
+  `--project` was passed but `--milestone` was forgotten. The same care applies to every field edit:
+  confirm the write landed rather than assuming it did.
+
 - **Cross-repo version grouping.** Milestones are **per-repo and cannot span repos**, so a single
   repo's release train is one milestone. To group a version that spans repos, give each repo a
   milestone with the **identical name** — the board's milestone view groups those together. The Epic
@@ -360,17 +371,18 @@ stage; until those skills exist, plan platform work conservatively and flag the 
 IDs (project, field, single-select option) are discovered with `gh project field-list <num> --owner
 <org>` and `gh project item-list`; field values are then set with `gh project item-edit`.
 
-| Action                             | Command                                                                                                                      |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Create an Epic (cross-repo)        | `gh issue create --repo <org>/.github --type Epic --title "..." --assignee "@me" --body-file <file>`                         |
-| Create a Task sub-issue            | `gh issue create --repo <org>/<repo> --type Task --parent <epic-#-or-url> --assignee "@me" --title "..." --body-file <file>` |
-| Add it to the board on creation    | append `--project "Tasks"` to `gh issue create`                                                                              |
-| Add an existing issue to the board | `gh project item-add <num> --owner <org> --url <issue-url>`                                                                  |
-| Sequence stages                    | `gh issue edit <m> --repo <org>/<repo> --add-blocked-by <n>`                                                                 |
-| Set Priority / Size / Status       | `gh project item-edit --id <item-id> --field-id <field-id> --project-id <proj-id> --single-select-option-id <opt-id>`        |
-| Iterate the plan body              | `gh issue edit <n> --repo <org>/<repo> --body-file <file>`                                                                   |
-| Discuss / open question (bot)      | `a-novel core bot-comment <org> <repo> <n> --body "..."`                                                                     |
-| Delete a not-yet-started draft     | `gh issue delete <n> --repo <org>/<repo> --yes`                                                                              |
+| Action                             | Command                                                                                                                                                                           |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create an Epic (cross-repo)        | `gh issue create --repo <org>/.github --type Epic --assignee "@me" --project "Tasks" --milestone "<name>" --title "..." --body-file <file>`                                       |
+| Create a Task sub-issue            | `gh issue create --repo <org>/<repo> --type Task --parent <epic-#-or-url> --assignee "@me" --project "Tasks" --milestone "<name>" --title "..." --body-file <file>`               |
+| ⚠ Board ≠ milestone ≠ fields       | `--project` only **boards** the item; it does **not** set the Milestone or any field. Pass `--milestone` at create-time, then set Priority/Size/Stage via `gh project item-edit`. |
+| Verify a batch create              | `gh project item-list <7\|1> --owner <org>` → scan for a Stage-tagged item with an empty Milestone (the tell that `--milestone` was forgotten)                                    |
+| Add an existing issue to the board | `gh project item-add <num> --owner <org> --url <issue-url>`                                                                                                                       |
+| Sequence stages                    | `gh issue edit <m> --repo <org>/<repo> --add-blocked-by <n>`                                                                                                                      |
+| Set Priority / Size / Status       | `gh project item-edit --id <item-id> --field-id <field-id> --project-id <proj-id> --single-select-option-id <opt-id>`                                                             |
+| Iterate the plan body              | `gh issue edit <n> --repo <org>/<repo> --body-file <file>`                                                                                                                        |
+| Discuss / open question (bot)      | `a-novel core bot-comment <org> <repo> <n> --body "..."`                                                                                                                          |
+| Delete a not-yet-started draft     | `gh issue delete <n> --repo <org>/<repo> --yes`                                                                                                                                   |
 
 (Board numbers: `a-novel` → project **#7** "Tasks"; `a-novel-kit` → project **#1** "Tasks".)
 
