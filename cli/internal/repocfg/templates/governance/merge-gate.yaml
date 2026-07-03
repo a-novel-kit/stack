@@ -15,7 +15,7 @@
 #   auto-merge — enables native auto-merge on an epic member so the whole set lands
 #                together once the gate + approval go green. Enabling is safe while the
 #                gate is still red — GitHub parks it and merges when green. Live at
-#                `dry_run: "false"` — auto-merge enables on epic members.
+#                `dry_run: "false"` — auto-merge is enabled for epic members.
 name: merge-gate
 
 on:
@@ -66,5 +66,5 @@ jobs:
           pull_request_number: ${{ github.event.pull_request.number }}
           client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
           app_private_key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
-          # Live: auto-merge enables on epic members (flipped from the read-only default).
+          # Live: auto-merge is enabled for epic members (flipped from the read-only default).
           dry_run: "false"
