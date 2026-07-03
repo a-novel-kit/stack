@@ -138,13 +138,13 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	}
 
 	// Governance workflows for the governed repos: the merge-gate check runner, the
-	// admin-only approve-pr override, and the board status deriver (a PR's lifecycle
-	// drives its linked Task's board Status). Pushed wherever the master ruleset gates
-	// merges — the same repos whose PRs feed the board. Static files: the [Agent] creds
-	// and the per-org board id are GitHub-expression refs resolved at run time, not
-	// repocfg substitutions.
+	// epic-freeze partial-landing check (the per-PR half of the detector), the admin-only
+	// approve-pr override, and the board status deriver (a PR's lifecycle drives its linked
+	// Task's board Status). Pushed wherever the master ruleset gates merges — the same repos
+	// whose PRs feed the board. Static files: the [Agent] creds and the per-org board id are
+	// GitHub-expression refs resolved at run time, not repocfg substitutions.
 	if c.Rulesets.Master {
-		for _, wf := range []string{"merge-gate.yaml", "approve-pr.yaml", "derive-status.yaml"} {
+		for _, wf := range []string{"merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml"} {
 			content, err := ReadTemplate("governance/" + wf)
 			if err != nil {
 				return nil, err
