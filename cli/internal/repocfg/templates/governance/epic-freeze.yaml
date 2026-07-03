@@ -1,36 +1,20 @@
 # Managed by `a-novel repo update` — edit the template in stack, not this copy.
 #
-# The required `epic-freeze` check — the per-PR half of the Stage-4 partial-landing detector.
-# ONE job, mirroring merge-gate.yaml's `evaluate` — deliberately its OWN workflow file, NOT a
-# job appended to merge-gate.yaml:
+# The required `epic-freeze` check: the per-PR half of the Stage-4 partial-landing detector.
+# It answers one question — "is this PR's epic frozen because it landed partially?" A standalone
+# PR, or a healthy epic member, passes; a member of a partially-landed epic fails, which blocks the
+# PR and (on a merge_group event) drops it from the queue. The sweep half runs on the
+# reconcile-board schedule and shares the same predicate, so the two can never disagree on a PR.
 #
-#   evaluate — posts the required `epic-freeze` check on every PR and on the merge queue's
-#              group (the queue re-evaluates required checks on the group head, so the check
-#              must post there too or a queued PR waits out the timeout and drops). epic-freeze
-#              answers a DIFFERENT question from merge-gate ("is this PR's Epic frozen for a
-#              partial landing?") and is a separate required check, so it lives apart for two
-#              reasons: an INDEPENDENT failure domain (a pre-step error in one workflow can never
-#              starve the other required check), and it must NEVER enable auto-merge (re-enabling
-#              would silently resume the very landing a human froze to inspect) — hence NO
-#              `auto-merge` job here. A standalone PR (no epic:<N> label) passes, classified from
-#              the event payload with no API call; an Epic member passes unless its Epic is a
-#              REST-confirmed partial landing, in which case `failure` blocks the PR and — on a
-#              merge_group event — dequeues the in-flight group. The check is posted by the
-#              [Agent] App via the Checks API (a stable integration id the ruleset requires), so
-#              the job id is deliberately NOT `epic-freeze`, to avoid a duplicate check name.
-#
-# The SWEEP half runs from the org's reconcile-board schedule (detect-partial-landing in sweep
-# mode: the level-triggered floor + roll-forward + freeze). Both writers share ONE predicate
-# (evaluate_epic), so the per-PR poster and the sweep cannot disagree on a head.
+# Why its own file, not a job on merge-gate.yaml: as a second required check it needs an independent
+# failure domain (a broken run here must not starve merge-gate, or vice versa), and it must never
+# carry an auto-merge job — re-enabling auto-merge would silently resume a landing a human froze.
 name: epic-freeze
 
 on:
-  # Mirror merge-gate.yaml verbatim. labeled/unlabeled are load-bearing (not just parity):
-  # adding/removing an epic:<N> label flips a PR between the standalone fast-path and the member
-  # predicate, so the check must re-post. ready_for_review/converted_to_draft: kept for mirror
-  # symmetry. pull_request_review: freeze depends on SIBLING landing, not this PR's own approval,
-  # so it is idempotent here — kept for exact trigger-parity with merge-gate. merge_group: a
-  # `failure` on the group head dequeues the in-flight group.
+  # Triggers mirror merge-gate.yaml. labeled/unlabeled matter: an `epic:<N>` label flips a PR
+  # between the standalone fast-path and the epic check. merge_group: a failure there drops the
+  # queued group, so the check must post on the group head too or a queued PR times out.
   pull_request:
     types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft]
   pull_request_review:
@@ -38,19 +22,19 @@ on:
   merge_group:
 
 jobs:
+  # Named `evaluate`, not `epic-freeze`: the [Agent] App posts that check-run itself, so a job of
+  # the same name would collide with it (same pattern as merge-gate.yaml).
   evaluate:
     runs-on: ubuntu-latest
-    # The detector mints its own [Agent] tokens and never uses the default token, so this job needs
-    # no permissions of its own. In per-PR mode it mints only a checks:write token (to post the
-    # epic-freeze check) plus read scopes — NOT the separate contents+pull-requests write token the
-    # sweep uses to roll a stray forward, so a per-PR run can never re-enqueue.
+    # No permissions of its own — the detector mints its own [Agent] tokens. In per-PR mode that is
+    # only checks:write + read scopes; the write token that rolls a stray forward is sweep-only, so
+    # a per-PR run can never re-enqueue.
     permissions: {}
     steps:
       - uses: a-novel-kit/workflows/generic-actions/detect-partial-landing@v1.10.0
         with:
           client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
           app_private_key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
-          # Read-only-first: logs "would post" without calling GitHub. Flip to "false" at rollout
-          # step 3 (mirrors how merge-gate.yaml flips its auto-merge live), AFTER a live sweep has
-          # primed every open head green — only THEN is epic-freeze added to checks.yaml `always`.
+          # Read-only-first: logs intended posts without calling GitHub. Flip to "false" once a live
+          # sweep has primed every open PR green — only then add epic-freeze to checks.yaml `always`.
           dry_run: "true"
