@@ -40,9 +40,10 @@ on:
 jobs:
   evaluate:
     runs-on: ubuntu-latest
-    # The detector mints its own [Agent] token (checks:write + issues/pull-requests read) and
-    # never uses the default token, so it needs no repository permissions of its own. In per-PR
-    # mode it mints NO write token — it can never re-enqueue.
+    # The detector mints its own [Agent] tokens and never uses the default token, so this job needs
+    # no permissions of its own. In per-PR mode it mints only a checks:write token (to post the
+    # epic-freeze check) plus read scopes — NOT the separate contents+pull-requests write token the
+    # sweep uses to roll a stray forward, so a per-PR run can never re-enqueue.
     permissions: {}
     steps:
       - uses: a-novel-kit/workflows/generic-actions/detect-partial-landing@v1.10.0
