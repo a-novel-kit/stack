@@ -721,7 +721,7 @@ func EnvUp(ctx context.Context, env []string, e *detect.ComposeEnv, out io.Write
 		return fmt.Errorf("environment %s failed to start: %w", e.ID, err)
 	}
 	// 180s: a fresh `--build` plus first-run postgres `initdb` can exceed
-	// 120s on slower machines / cold caches.
+	// the previous 120s budget on slower machines / cold caches.
 	if err := waitHealthy(ctx, out, env, e, 180*time.Second); err != nil {
 		return fmt.Errorf("environment %s not ready: %w", e.ID, err)
 	}

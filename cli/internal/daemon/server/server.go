@@ -172,7 +172,7 @@ func (s *Server) Status(_ context.Context, _ *connect.Request[anovelv1.StatusReq
 }
 
 // =============================================================================
-// Reinstall & shutdown
+// RPC handlers
 // =============================================================================
 
 // PrepareReinstall writes a checkpoint listing every running go-exec
