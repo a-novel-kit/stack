@@ -1,6 +1,6 @@
 // Package daemon owns the daemon's process lifecycle: socket listener,
-// graceful shutdown, signal handling, and (later) recovery of orphan
-// containers. The actual RPC handlers live in internal/daemon/server.
+// graceful shutdown, signal handling, and recovery of orphan containers.
+// The RPC handlers live in internal/daemon/server.
 package daemon
 
 import (
@@ -86,8 +86,8 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Discover every service in every registered stack before we start
 	// listening. Per-service classification errors are non-fatal — they
-	// surface via Status / startup logs — but a truly inaccessible stack
-	// path is fatal (recovery, §3.4).
+	// surface via Status and startup logs — but a stack path we can't
+	// read at all is fatal.
 	disc, err := discovery.DiscoverStacks(opts.Stacks)
 	if err != nil {
 		return fmt.Errorf("discover stacks: %w", err)
@@ -102,9 +102,9 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}
 
-	// Phase 4: port allocator + env builder. Allocator knows every
-	// service name so cross-service prefixes (SERVICE_X_VAR) resolve
-	// correctly to the owning service.
+	// Port allocator and env builder. The allocator needs every service
+	// name up front so cross-service prefixes (SERVICE_X_VAR) resolve to
+	// the owning service.
 	alloc := env.NewAllocator()
 	allNames := make([]string, 0)
 	for _, st := range disc {
@@ -115,29 +115,28 @@ func Run(ctx context.Context, opts Options) error {
 	alloc.SetServices(allNames)
 	builder := env.NewBuilder(alloc)
 
-	// Phase 3: the process / container supervisor. Empty at start; takes
-	// instances as RPCs come in. Shares the discovery snapshot so it can
-	// resolve target IDs without round-tripping through the server, and
-	// the env allocator so it can release refcounts on termination.
-	// Phase 5: log store. Per-target JSON-line files in $XDG_STATE_HOME/
-	// a-novel/logs/ with subscriber fan-out for live streaming.
+	// Log store: per-target JSON-line files under $XDG_STATE_HOME/a-novel/logs
+	// with subscriber fan-out for live streaming.
 	logStore := logs.New()
+	// The process/container supervisor, empty at start and populated as RPCs
+	// arrive. It shares the discovery snapshot to resolve target IDs without
+	// round-tripping through the server, and the env allocator to release
+	// port refcounts on termination.
 	run := runner.New(disc, alloc, builder, logStore)
 	srv := server.New(opts.Version, opts.SocketPath, opts.Stacks, disc, run, alloc, builder, logStore)
 
-	// Orphan adoption: scan podman for containers
-	// labeled with our adoption labels and reconstitute Instance +
-	// InfraSession records. Containers that survived a daemon
-	// restart (or kill -9) are picked up so the daemon's view matches
-	// reality. Logs streaming + watchers resume on adopted containers.
+	// Adopt orphan containers: scan podman for containers carrying our
+	// adoption labels and reconstitute their Instance and InfraSession
+	// records, so containers that outlived a daemon restart (or kill -9)
+	// rejoin the daemon's view. Log streaming and watchers resume on them.
 	if cN, tN := run.AdoptOrphanContainers(ctx); cN > 0 {
 		fmt.Fprintf(os.Stderr, "recovery: adopted %d orphan container(s), %d target(s)\n", cN, tN)
 	}
 
-	// Phase 8: reinstall handoff. If a checkpoint exists from a prior
-	// PrepareReinstall, replay the recorded go-exec targets and delete
-	// the checkpoint. Per-target failures don't block startup — they
-	// surface as "terminated, exit_reason=crashed" via the supervisor.
+	// Reinstall handoff: if a prior PrepareReinstall left a checkpoint,
+	// replay the recorded go-exec targets and delete it. A per-target
+	// relaunch failure doesn't block startup — it surfaces as
+	// "terminated, exit_reason=crashed" via the supervisor.
 	if cp, err := reinstall.Read(); err == nil && cp != nil {
 		fmt.Fprintf(os.Stderr, "reinstall: replaying %d go-exec target(s) from %s\n",
 			len(cp.GoExec), reinstall.Path())
@@ -157,7 +156,7 @@ func Run(ctx context.Context, opts Options) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	// Listen for SIGINT/SIGTERM AND the server's PrepareReinstall
+	// Listen for SIGINT/SIGTERM and the server's PrepareReinstall
 	// shutdown signal in parallel with ctx cancellation.
 	shutdownCtx, cancelShutdown := context.WithCancel(ctx)
 	defer cancelShutdown()

@@ -31,7 +31,8 @@ func DetectRun(root string) ([]Target, error) {
 	// Global mode: when run from a stack root that contains `app/service-*`
 	// checkouts, fan out across every service repo instead of scanning the
 	// stack itself (which has no service entrypoints; the CLI is the
-	// orchestrator). Single-repo behaviour is unchanged.
+	// orchestrator). Without such checkouts the scan stays within the single
+	// repo at root.
 	walkRoots := []string{absRoot}
 	if rs := globalServiceRoots(absRoot); len(rs) > 0 {
 		walkRoots = rs
@@ -53,7 +54,7 @@ func DetectRun(root string) ([]Target, error) {
 			}
 			// skipDir uses walkRoot as its "root" so the walk depth/ignore
 			// semantics are per-repo, but filepath.Rel for `pnpmRun` and
-			// `goRun`'s moduleRootOf bound use the OUTER absRoot — that is
+			// `goRun`'s moduleRootOf bound use the outer absRoot — that is
 			// how each service's modRel comes out as "app/service-X" instead
 			// of "." (which would collide across services in the compose
 			// project name).
@@ -204,7 +205,7 @@ func composeServiceFor(env *ComposeEnv, profile string) string {
 
 // containerTargets emits one KindContainer target per profile-guarded compose
 // service in walkRoot's run env. The Cmd/Args are pre-baked so the runner can
-// launch each target with the SAME exec path the live-mode targets use —
+// launch each target with the same exec path the live-mode targets use —
 // dispatch is by Target.Kind, not by a runner-side mode flag.
 func containerTargets(absRoot, walkRoot string) []Target {
 	rel, _ := filepath.Rel(absRoot, walkRoot)
@@ -227,7 +228,7 @@ func containerTargets(absRoot, walkRoot string) []Target {
 		// Three-step launch in one shell:
 		//   1. `compose --profile X up -d --build --no-deps > /dev/null`
 		//      — build + create + start the profile's container.
-		//      --no-deps is REQUIRED on podman-compose 1.5.0 (current
+		//      --no-deps is required on podman-compose 1.5.0 (current
 		//      stable): without it, compose's `depends_on:
 		//      service_healthy` wait machinery is broken and the `up`
 		//      hangs forever even though the dependency is healthy
@@ -236,7 +237,7 @@ func containerTargets(absRoot, walkRoot string) []Target {
 		//      the CLI's env-up has already brought every dependency up
 		//      via runner.waitHealthy before any target launches.
 		//      stdout is discarded — compose chatters about every
-		//      service it touches, but we only want the TARGET's logs.
+		//      service it touches, but only the target's logs matter.
 		//      stderr still flows so real errors surface.
 		//   2. Resolve the container ID via `podman ps` grep-by-name.
 		//      `compose ps -q SVC` would seem natural, but

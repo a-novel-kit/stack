@@ -1,6 +1,6 @@
 // Package env owns the daemon's environment-variable handling: port
 // allocation (with refcounting), value synthesis (HOST / URL for allocated
-// ports), cross-service propagation, and operator un-prefix —.
+// ports), cross-service propagation, and operator un-prefix.
 //
 // The package exposes two surfaces:
 //
@@ -11,8 +11,8 @@
 //	            services' allocations.
 //
 // The runner calls Builder.ForTarget at process spawn time and
-// Allocator.ReleaseForTarget when the process terminates. Server's
-// GetEnv RPC calls Builder.ForService for read-only inspection.
+// Allocator.Release when the process terminates. The server's GetEnv RPC
+// calls Builder.ForService for read-only inspection.
 package env
 
 import (

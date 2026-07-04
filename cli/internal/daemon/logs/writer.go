@@ -12,8 +12,7 @@ import (
 // per-target file, and fans out to every subscriber.
 //
 // A single Writer is shared by both the Stdout and Stderr views; each view
-// carries the actual stream tag. Per-stream partials live on streamWriter
-// (see below).
+// carries the actual stream tag. Per-stream partials live on streamWriter.
 type Writer struct {
 	ts *targetStream
 }
@@ -74,17 +73,12 @@ func (sw *streamWriter) Write(p []byte) (int, error) {
 }
 
 // flush writes one Line to the file and fans out to subscribers. The
-// target's mutex protects the file write AND the fanout. Holding it
-// during the fanout serializes against Subscribe/unsub: sending outside
-// the lock would race with unsubscribe — a goroutine could remove its sub
-// from the list, GC the receiver, and the writer would still try to send
-// to a channel nobody reads (it falls harmlessly through select-default,
-// but it's a smell). Holding the lock keeps the send window tied to
-// "still in the list."
-//
-// Cost: each fanout serializes Subscribe + unsub for ~O(N_subs ×
-// microseconds). Sends are non-blocking (select-default), so it's
-// bounded.
+// target's mutex guards both the file write and the fanout so the send
+// window stays tied to the subscriber list: sending outside the lock
+// would race unsubscribe, letting the writer send to a channel whose
+// reader is already gone. Sends are non-blocking (select-default), so
+// holding the lock across the fanout costs at most O(N_subs) quick,
+// bounded sends.
 func (sw *streamWriter) flush(ln Line) {
 	ts := sw.w.ts
 	ts.mu.Lock()

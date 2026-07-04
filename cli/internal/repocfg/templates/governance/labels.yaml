@@ -39,5 +39,5 @@ ensure:
     description: No-PR work (manual ops / config); also marks Meta Epics
 retire:
   # Replaced by the `Triage` board status: a status is the action a task needs;
-  # labels only sort within a status. a-novel-kit/.github#56.
+  # labels only sort within a status.
   - triage

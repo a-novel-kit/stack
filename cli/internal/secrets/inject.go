@@ -144,9 +144,9 @@ func readMapping(path string) (mapping, error) {
 	if err != nil {
 		return mapping{}, fmt.Errorf("secrets: read %s: %w", path, err)
 	}
-	// Decode strictly: an unknown top-level key — including the legacy `env:`
-	// map shape — is a hard error rather than a silent no-op, so a mistyped or
-	// outdated manifest fails loudly instead of injecting nothing.
+	// Decode strictly: an unknown top-level key is a hard error rather than a
+	// silent no-op, so a mistyped or outdated manifest fails loudly instead of
+	// injecting nothing.
 	dec := yaml.NewDecoder(bytes.NewReader(raw))
 	dec.KnownFields(true)
 	var m mapping

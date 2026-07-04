@@ -1,9 +1,12 @@
-// Package tui implements `a-novel run ui` — the daemon-backed
-// terminal UI. Built on Bubble Tea + Lip Gloss; every
-// action routes through the same RPC client the CLI uses, so the UI
-// and CLI are always observably consistent.
+// Package tui implements the terminal UI behind `a-novel run ui`, the
+// daemon-backed dashboard for the local service stack. It is built on
+// Bubble Tea and Lip Gloss, and every action routes through the same
+// RPC client the CLI uses, so the UI and CLI always observe the same
+// daemon state.
 //
-// First-cut layout (this chunk):
+// The screen is a two-column dashboard: a service navigator on the
+// left and a per-target detail-and-log pane on the right, with a
+// status bar and a footer hint below.
 //
 //	┌──────────────┬──────────────────────────────────────────────────┐
 //	│ Services     │ Tabs: [t1] [t2] [t3]                             │
@@ -16,10 +19,9 @@
 //	│              │ <footer hint>                          [Esc] cmd │
 //	└──────────────┴──────────────────────────────────────────────────┘
 //
-// Three-layer palette — first cut implements layers 1
-// (footer hint) and 3 (dedicated :help screen). Layer 2 (Esc
-// autocomplete palette) is a phase-13 polish addition; basic Esc opens
-// a single-line command input for now.
+// Commands reach the daemon through three surfaces: the always-visible
+// footer hint, an Esc-triggered command input with autocomplete, and a
+// dedicated help screen.
 package tui
 
 import (
@@ -46,13 +48,11 @@ func Run() error {
 		return err
 	}
 	m := newModel(c)
-	// NOTE: no tea.WithMouseCellMotion(). Mouse-cell capture would put
-	// the terminal into a mode where it forwards every mouse event to
-	// us — useful for click-to-focus, but it disables the terminal's
-	// own click-drag-to-select. Since this UI is keyboard-driven, the
-	// trade we want is "native text selection works" over "we could
-	// handle click events"; users routinely copy log lines out for
-	// grepping / pasting into issues.
+	// No tea.WithMouseCellMotion(): capturing mouse-cell motion makes
+	// the terminal forward every mouse event to us and disables its own
+	// click-drag text selection. This UI is keyboard-driven, so native
+	// selection — users copy log lines out to grep or paste into issues
+	// — is worth more than click-to-focus.
 	p := tea.NewProgram(m)
 	// Hand the program back into the model so background log-follow
 	// goroutines can Send messages via p.Send (Bubble Tea's
@@ -62,9 +62,9 @@ func Run() error {
 	return err
 }
 
-// tabKindInfra / tabKindTarget are the discriminator values
-// activeTabKind() returns. Hoisted into named constants so the dozen
-// string-equality sites across the TUI agree on a single source.
+// tabKindInfra and tabKindTarget are the discriminator values
+// activeTabKind returns; naming them keeps the string-equality sites
+// across the TUI agreed on a single source.
 const (
 	tabKindInfra  = "infra"
 	tabKindTarget = "target"
@@ -351,7 +351,7 @@ func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // clampLogScroll keeps logScroll inside [0, maxScroll] where maxScroll
-// is the largest offset that still leaves the visible window FULL — i.e.
+// is the largest offset that still leaves the visible window full — i.e.
 // `len(logLines) - contentHeight`. Without that ceiling the user could
 // page back until only one line of log shows above the indicator, which
 // looks like "logs paused" took over the pane.
@@ -383,7 +383,7 @@ func (m *model) clampLogScroll(n int) int {
 }
 
 // logViewportHeight mirrors the height arithmetic in renderRight so
-// pgup/pgdn jump by a true half-page. The constants here MUST match
+// pgup/pgdn jump by a true half-page. The constants here must match
 // renderRight: -4 chrome lines (status bar, footer, two borders), -5
 // for header+divider inside the right frame, minus the number of tab
 // rows we actually render.
@@ -424,9 +424,8 @@ func (m *model) handleCommandKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	// Printable input carries its characters in Key.Text — populated for runes
-	// and space, empty for modifier combos and special keys. Appending it both
-	// captures typed text and ignores chords, replacing v1's KeyRunes/KeySpace
-	// cases (the KeyType enum was removed in Bubble Tea v2).
+	// and space, empty for modifier combos and special keys. Appending it
+	// captures typed text while ignoring chords.
 	if txt := msg.Key().Text; txt != "" {
 		m.cmdInput += txt
 	}
@@ -453,7 +452,7 @@ func (m *model) tabCount() int {
 }
 
 // activeTabKind returns "infra", "target", or "" depending on which
-// section the selectedTab index falls into. Infras come FIRST in the
+// section the selectedTab index falls into. Infras come first in the
 // index so the right pane's two-row tab strip can render them on the
 // top row and target-row second — and ←/→ navigation walks the
 // concatenated sequence linearly.

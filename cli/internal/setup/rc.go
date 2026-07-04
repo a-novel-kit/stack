@@ -11,9 +11,9 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 )
 
-// Block markers used to locate / replace the managed section in the
-// user's shell rc.5 step 4 — the marker pattern is the
-// industry-standard "self-locating block" used by conda, pyenv, nvm, etc.
+// Block markers delimit the section this tool manages inside the user's
+// shell rc. The self-locating begin/end pair lets a re-run find and
+// replace its own block without disturbing the rest of the file.
 const (
 	beginMarker = "# >>> a-novel setup >>>"
 	endMarker   = "# <<< a-novel setup <<<"
@@ -85,18 +85,12 @@ func shellFromPath(p string) string {
 	}
 }
 
-// renderRCBlock builds the contents of the managed block from the
-// current stack list. The marker lines are emitted by upsertRCBlock;
-// this function returns just the in-block content.
-//
-// The block:
-//   - exports A_NOVEL_STACKS (if non-default or multi-stack)
-//   - sources cobra-generated shell completion (so `a-novel <TAB>`
-//     just works without the user installing _a-novel into fpath)
-//   - calls `a-novel core start`
-//
-// Idempotent — re-running setup with the same stack list + shell
-// produces byte-identical output.
+// renderRCBlock builds the in-block content from the current stack list:
+// it exports A_NOVEL_STACKS when the layout is non-default, sources
+// cobra's shell completion so `a-novel <TAB>` works without the user
+// installing it into fpath, and starts the daemon. upsertRCBlock supplies
+// the surrounding marker lines. Output is deterministic, so re-running
+// setup with the same stacks and shell produces a byte-identical block.
 func renderRCBlock(stk []stacks.Stack, shell string) string {
 	var b strings.Builder
 	b.WriteString("# Managed by `a-novel core setup` — do not edit between markers.\n")

@@ -7,11 +7,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// composeFile mirrors a podman-compose.yaml as we need to consume it. The
-// yaml.v3 unmarshaler is strict by default for unknown TOP-level keys, but
-// loose inside maps — we only declare fields we use, the rest is silently
-// ignored. That's fine: a compose file evolves with podman-compose, and we
-// only operate on the subset that satisfies the discovery contract.
+// composeFile mirrors only the slice of podman-compose.yaml that discovery
+// consumes. yaml.v3 silently ignores keys absent from the struct, so a
+// compose file can grow with podman-compose without breaking parsing: we
+// operate on the subset that satisfies the discovery contract and drop the
+// rest.
 type composeFile struct {
 	Services map[string]composeService `yaml:"services"`
 	Volumes  map[string]composeVolume  `yaml:"volumes"`

@@ -4,8 +4,8 @@
 # release bots are exempt too: they push the version-bump commit straight to
 # the default branch (see the master ruleset), and that push carries no
 # coverage status — without this it would be rejected by required_status_checks.
-# In the dispatched release flow the AGENT bot is the pusher; publish is kept
-# for the legacy tag-push flow during the migration.
+# In the dispatched release flow the agent bot is the pusher; the publish bot
+# covers the tag-push release flow.
 name: codecov
 target: branch
 enforcement: active

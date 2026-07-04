@@ -9,15 +9,11 @@ import (
 	"path/filepath"
 )
 
-// Socket returns the absolute path of the daemon's unix domain socket.
-//
-// Resolution priority (highest first):
-//  1. $XDG_RUNTIME_DIR/a-novel.sock — the canonical XDG location.
-//  2. /run/user/<uid>/a-novel.sock — the standard systemd-user runtime dir.
-//  3. /tmp/a-novel-<uid>.sock — the universal fallback.
-//
-// The fallback chain is deterministic so the daemon and clients always agree
-// without coordination through env vars or config files.
+// Socket returns the absolute path of the daemon's Unix domain socket. It
+// prefers $XDG_RUNTIME_DIR, then the systemd user runtime directory
+// /run/user/<uid>, and falls back to /tmp. The chain is deterministic so the
+// daemon and clients agree on the location without coordinating through env
+// vars or config files.
 func Socket() string {
 	if v := os.Getenv("XDG_RUNTIME_DIR"); v != "" {
 		return filepath.Join(v, "a-novel.sock")
@@ -56,10 +52,10 @@ func LogsRoot() string { return filepath.Join(State(), "logs") }
 // BackupsRoot is the per-stack volume-backups root (Data()/backups/).
 func BackupsRoot() string { return filepath.Join(Data(), "backups") }
 
-// SecretsRoot is the local secrets store root (Data()/secrets/). It holds the
-// AES-256-GCM local key and the encrypted store; both are created mode 0600
-// inside a 0700 directory by the secrets package. Honors $XDG_DATA_HOME
-// (through Data()), which the secrets tests override to a temp dir.
+// SecretsRoot is the local secrets store root (Data()/secrets/, so it follows
+// $XDG_DATA_HOME). It holds the AES-256-GCM local key and the encrypted store,
+// which the secrets package writes as owner-only files (0600) inside a 0700
+// directory.
 func SecretsRoot() string { return filepath.Join(Data(), "secrets") }
 
 // ReinstallCheckpoint is the path of the one-shot reinstall handoff file.

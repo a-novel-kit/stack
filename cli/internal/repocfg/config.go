@@ -115,13 +115,17 @@ type ClassRulesets struct {
 	Tags            bool `yaml:"tags"`
 }
 
-// CodecovMode is auto | enabled | disabled (auto = on when the repo has
-// tests). Kept a string, not a bool, to avoid the yaml off/on pitfall.
+// CodecovMode selects whether a repo enforces the Codecov coverage ruleset. It
+// is a string rather than a bool to sidestep YAML's off/on boolean coercion.
 type CodecovMode string
 
 const (
-	CodecovAuto     CodecovMode = "auto"
-	CodecovEnabled  CodecovMode = "enabled"
+	// CodecovAuto enforces the ruleset only where the repo has tests (Codecov
+	// actually reports), so the gate never blocks a repo that uploads no coverage.
+	CodecovAuto CodecovMode = "auto"
+	// CodecovEnabled always enforces the ruleset.
+	CodecovEnabled CodecovMode = "enabled"
+	// CodecovDisabled never enforces the ruleset.
 	CodecovDisabled CodecovMode = "disabled"
 )
 

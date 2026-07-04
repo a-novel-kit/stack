@@ -19,6 +19,8 @@ func targetIDFor(stack, service, target string) string {
 	return stack + "/" + service + "/" + target
 }
 
+// infraIDFor builds the stack/service/name ID that addresses an infra
+// container, mirroring targetIDFor for targets.
 func infraIDFor(stack, service, name string) string {
 	return stack + "/" + service + "/" + name
 }
@@ -175,7 +177,8 @@ func convertInfra(in *discovery.Infra) *anovelv1.Infra {
 		Name:    in.Name,
 		Service: in.Service,
 		Stack:   in.Stack,
-		// Phase / Health populated when infra-supervision lands (next chunk).
+		// Phase and Health stay zero here; convertInfraWithLive fills them
+		// from the live container state.
 	}
 }
 
@@ -184,7 +187,8 @@ func convertVolume(v *discovery.Volume) *anovelv1.Volume {
 		Name:    v.Name,
 		Service: v.Service,
 		Stack:   v.Stack,
-		// SizeBytes / BackupCount populated by phase 6 (volume ops).
+		// SizeBytes and BackupCount stay zero here; ListVolumes reports
+		// them separately via the volumes package.
 	}
 }
 

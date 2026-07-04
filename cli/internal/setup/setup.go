@@ -157,12 +157,12 @@ func Run(opts Options, w io.Writer, prompter Prompter) (*Result, error) {
 		}
 	}
 
-	// 6. Summary + next step. The hint is now context-sensitive: if we
-	// started the daemon, the user can run `a-novel run ui` right away;
-	// if we couldn't (skipped, or it failed), point at the manual path.
-	// In both daemon-up cases we also nudge the user to source the rc
-	// so shell completion (`a-novel <TAB>`) lights up in the CURRENT
-	// shell — the rc block is only auto-loaded by future shells.
+	// 6. Summary + next step. The hint is context-sensitive: with the
+	// daemon up the user can run `a-novel run ui` right away; otherwise
+	// point at the manual start path. When the rc was edited, also nudge
+	// the user to source it so shell completion (`a-novel <TAB>`) lights
+	// up in the CURRENT shell — the block is only auto-loaded by future
+	// shells.
 	_, _ = fmt.Fprintln(w, "")
 	_, _ = fmt.Fprintln(w, "Setup complete.")
 	switch {
@@ -230,9 +230,7 @@ func statusGlyph(status string) string {
 	}
 }
 
-// _ guards against package shape drift when callers expect filepath in
-// the import set (paths are constructed via paths.* helpers, so the
-// stdlib filepath import is only used inside private files — keep it
-// referenced here so future restructuring doesn't break this file's
-// imports silently).
+// Every path in this file is built via the paths.* helpers, so filepath
+// is otherwise unused here; reference filepath.Join to keep the import
+// valid.
 var _ = filepath.Join

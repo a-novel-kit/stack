@@ -242,6 +242,6 @@ func (r *Runner) transition(id string, phase anovelv1.Phase) {
 	r.emitPhase(ev)
 }
 
-// Silence "imported and not used: discovery" — we'll use it shortly for
-// container mode / dep resolution.
+// Keeps the discovery import referenced in this file; the package's other
+// files use it directly.
 var _ = discovery.TargetKindOneShot

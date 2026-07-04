@@ -295,8 +295,7 @@ func (b *Builder) buildInfraEnv(in *discovery.Infra, svc *discovery.Service, all
 func (b *Builder) resolveContext(env map[string]string, owner string, allServices []string, allocate bool, consumer string) (map[string]string, error) {
 	ctx := make(map[string]string)
 	// First, seed with constants (entries that contain no ${VAR}
-	// references). These are the inline-hardcoded values
-	// rule 4.
+	// references) so later substitutions can resolve against them.
 	for k, v := range env {
 		if len(extractRefs(v)) == 0 {
 			ctx[k] = v

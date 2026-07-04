@@ -29,8 +29,8 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
-// maxBackupsPerVolume retains the N most-recent backups per volume,
-// pruning older as new ones land. Spec §8.2.
+// maxBackupsPerVolume is how many of the most-recent backups to keep per
+// volume; older archives are pruned as new ones land.
 const maxBackupsPerVolume = 5
 
 // Volume is a list-row for `volume list`.
@@ -85,9 +85,8 @@ func List(svc *discovery.Service) ([]Volume, error) {
 // podmanVolumeSize returns (size-on-disk, exists). When the volume
 // doesn't exist yet, returns (0, false).
 func podmanVolumeSize(fullName string) (int64, bool) {
-	// `podman volume inspect <name>` returns JSON with Mountpoint;
-	// `du` on Mountpoint gives the size. Cheaper for first cut: just
-	// call `du -sb` on the mountpoint.
+	// Size comes from `du -sb` on the volume's mountpoint, which
+	// `podman volume inspect` reports.
 	mp, err := podmanVolumeMountpoint(fullName)
 	if err != nil || mp == "" {
 		return 0, false

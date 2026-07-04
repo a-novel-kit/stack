@@ -9,7 +9,7 @@ A repo's desired config is composed from three inputs:
 
 1. a **class** preset (`classes/<class>.yaml`) — or a **repo override**
    (`repos/<org>_<repo>.yaml`) which fully replaces the class for one repo;
-2. the **org** profile (`orgs/<org>.yaml`) — bot ids + signing policy;
+2. the **org** profile (`orgs/<org>.yaml`) — bot IDs + signing policy;
 3. **discovered** checks/languages (`checks.yaml` + the repo's contents).
 
 CLI flags and the interactive form override any field.
@@ -19,10 +19,10 @@ CLI flags and the interactive form override any field.
 Independent of class, `repo update` commits a uniform `.github/CODEOWNERS`
 (`governance/CODEOWNERS` — a single owner today) to every repo so review
 requests route automatically, and removes any stray root `CODEOWNERS` so a repo
-never carries two (GitHub honours `.github/` over the root).
+never carries two (GitHub honors `.github/` over the root).
 
 It also reconciles a uniform **label set** (`governance/labels.yaml`) on every
-repo: `ensure` labels are upserted (created, or recoloured / re-described to
+repo: `ensure` labels are upserted (created, or recolored / re-described to
 match), `retire` labels are deleted, and labels in neither list are left
 untouched — apply never removes a label it was not told about. Kind
 (Epic / Feature / Task / Bug / Initiative) is an issue **type** and Priority /
@@ -37,7 +37,7 @@ are required unless noted.
 
 | Field                                                           | Type   | Meaning                                                                                                     |
 | --------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------- |
-| `class`                                                         | string | Class id (`service`, `library`, `workflows`, `meta`).                                                       |
+| `class`                                                         | string | Class ID (`service`, `library`, `workflows`, `meta`).                                                       |
 | `features.issues` / `.wiki` / `.projects` / `.discussions`      | bool   | Repo feature toggles.                                                                                       |
 | `merge.squash` / `.merge_commit` / `.rebase`                    | bool   | Allowed merge methods (squash-only org-wide).                                                               |
 | `merge.auto_merge`                                              | bool   | Allow auto-merge.                                                                                           |
@@ -58,7 +58,7 @@ are required unless noted.
 | ------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------- |
 | `org`                                       | string | Org login (must match the filename).                                                                                      |
 | `signing_required`                          | bool   | Require signed + signed-off commits.                                                                                      |
-| `bots.dependencies` / `.agent` / `.publish` | int    | GitHub App ids of the three org bots; the CLI resolves a ruleset bypass entry like `publish` to the right id for the org. |
+| `bots.dependencies` / `.agent` / `.publish` | int    | GitHub App IDs of the three org bots; the CLI resolves a ruleset bypass entry like `publish` to the right ID for the org. |
 
 ## `rulesets/<name>.yaml`
 
@@ -95,14 +95,14 @@ checks are:
 2. **every job declared in the repo's `.github/workflows/main.yaml`**, minus the
    **`exclude`** rules.
 
-A job's id is its check context, so there is nothing to derive and nothing to
+A job's ID is its check context, so there is nothing to derive and nothing to
 drift. Workflow files are code (owned by skills / PRs), not by `repo update`;
 this map only decides which of their jobs are required, and the set is applied
 **wholesale** (no reconcile, no preservation of manual checks).
 
 | Field                 | Type     | Meaning                                                                                            |
 | --------------------- | -------- | -------------------------------------------------------------------------------------------------- |
-| `integrations`        | map      | App name → GitHub App id (the `integration_id` a check resolves to).                               |
+| `integrations`        | map      | App name → GitHub App ID (the `integration_id` a check resolves to).                               |
 | `always`              | list     | Checks required on every repo, regardless of class.                                                |
 | `exclude.prefixes`    | []string | Job ids starting with one of these are not required (e.g. `report-`: reporting / post-merge jobs). |
 | `exclude.if_contains` | []string | Jobs whose `if:` contains one of these are not required (master-only jobs never run on a PR).      |

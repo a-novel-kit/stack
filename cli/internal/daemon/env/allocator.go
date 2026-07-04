@@ -69,7 +69,7 @@ func (a *Allocator) Services() []string {
 
 // Acquire returns the host port for (owner, localVar), allocating a fresh
 // one if no slot exists. `consumer` is the target ID claiming this slot;
-// repeated calls with the same consumer are idempotent. Spec §6.2.
+// repeated calls with the same consumer are idempotent.
 func (a *Allocator) Acquire(owner, localVar, consumer string) (int, error) {
 	if !isAllocatedKind(localVar) {
 		return 0, fmt.Errorf("env: %s is not an allocated kind (only *_PORT)", localVar)
@@ -191,8 +191,8 @@ type Allocation struct {
 
 // pickFreePort asks the kernel for a free ephemeral port by binding to
 // :0 and reading back what was assigned. There's a small race window
-// between Close and the caller's bind — acceptable for local dev and
-// well-understood in the get-port-please ecosystem.
+// between Close and the caller's bind, where another process could grab
+// the same port — acceptable for local dev.
 func pickFreePort() (int, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

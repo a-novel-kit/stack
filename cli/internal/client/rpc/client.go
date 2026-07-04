@@ -53,13 +53,10 @@ func New(socketPath string) *Client {
 // messages.
 func (c *Client) SocketPath() string { return c.path }
 
-// =============================================================================
-// Daemon control
-// =============================================================================
-
-// Ping is the cheapest possible RPC — used to detect an already-running
-// daemon. Returns the connection error wrapped with a NotRunning helper so
-// callers can distinguish "daemon down" from "daemon errored".
+// Ping is the cheapest RPC, used to detect an already-running daemon. A
+// transport failure comes back as a [NotRunningError] (test it with
+// [IsNotRunning]) so callers can tell a down daemon from one that answered
+// with an error.
 func (c *Client) Ping(ctx context.Context) (*anovelv1.PingResponse, error) {
 	resp, err := c.core.Ping(ctx, connect.NewRequest(&anovelv1.PingRequest{}))
 	if err != nil {
@@ -134,9 +131,9 @@ func (c *Client) StartTarget(ctx context.Context, id string, mode anovelv1.Mode)
 	return resp.Msg, nil
 }
 
-// KillTarget stops the named instance with the requested SIGTERM grace.
-// `timeout` of 0 → daemon default (10s); for immediate SIGKILL, pass a
-// non-nil zero-duration; for any specific value, pass it.
+// KillTarget stops the named instance, using timeout as the SIGTERM grace
+// period. A timeout of 0 leaves the field unset so the daemon applies its own
+// default grace; any positive value overrides it.
 func (c *Client) KillTarget(ctx context.Context, id string, timeout time.Duration) (*anovelv1.KillTargetResponse, error) {
 	req := &anovelv1.KillTargetRequest{TargetId: id}
 	if timeout > 0 {
@@ -336,7 +333,7 @@ func (c *Client) Shutdown(ctx context.Context, force bool) (*anovelv1.ShutdownRe
 // Watch opens a server-streaming subscription to phase events. Filters:
 // empty stack means "any stack"; empty service means "any service in the
 // stack"; empty targetID means "every target". The returned stream
-// closes when the caller's context is cancelled or the daemon exits.
+// closes when the caller's context is canceled or the daemon exits.
 func (c *Client) Watch(ctx context.Context, stack, service, targetID string) (*connect.ServerStreamForClient[anovelv1.StateEvent], error) {
 	stream, err := c.core.Watch(ctx, connect.NewRequest(&anovelv1.WatchRequest{
 		Stack:    stack,

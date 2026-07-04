@@ -18,7 +18,7 @@ import "google/protobuf/timestamp.proto";
 // Enums
 // =============================================================================
 
-// Phase is a target instance's lifecycle position. See spec §5.1.
+// Phase is a target instance's lifecycle position.
 enum Phase {
   PHASE_UNSPECIFIED = 0;
   PHASE_PENDING     = 1; // client called start, daemon hasn't yet issued the launch
@@ -73,7 +73,7 @@ enum LogStream {
 // Core types
 // =============================================================================
 
-// Stack identifies one registered git checkout. See spec §10.
+// Stack identifies one registered git checkout.
 message Stack {
   string name      = 1; // "default", "agent-foo", ...
   string path      = 2; // absolute filesystem path

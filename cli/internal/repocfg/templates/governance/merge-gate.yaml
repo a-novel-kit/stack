@@ -66,5 +66,5 @@ jobs:
           pull_request_number: ${{ github.event.pull_request.number }}
           client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
           app_private_key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
-          # Live: auto-merge is enabled for epic members (flipped from the read-only default).
+          # Live: auto-merge is enabled for epic members.
           dry_run: "false"

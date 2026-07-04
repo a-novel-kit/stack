@@ -26,19 +26,20 @@ const rulesetMaster = "master"
 // rather than the PR-only "exempt".
 const rulesetTags = "tags"
 
-// APIBypassActor / APIRule / APIRuleset mirror the GitHub rulesets API
-// request body.
+// APIBypassActor is one bypass-actor entry in the GitHub rulesets API request body.
 type APIBypassActor struct {
 	ActorID    *int64 `json:"actor_id"`
 	ActorType  string `json:"actor_type"`
 	BypassMode string `json:"bypass_mode"`
 }
 
+// APIRule is one rule entry in the GitHub rulesets API request body.
 type APIRule struct {
 	Type       string         `json:"type"`
 	Parameters map[string]any `json:"parameters,omitempty"`
 }
 
+// APIRuleset is the GitHub rulesets API request body.
 type APIRuleset struct {
 	Name         string           `json:"name"`
 	Target       string           `json:"target"`
@@ -63,12 +64,10 @@ type RepoTarget struct {
 	CodecovReports bool
 }
 
-// Op is one API operation the plan would perform.
-//
-//   - settings/pages: Method + Path + Body.
-//   - contents (codeql/dependabot): Method PUT + Path + Content (file text).
-//   - ruleset: RulesetName set; reconciled by name at apply time (POST when
-//     absent, PUT .../{id} when present), Body is the ruleset payload.
+// Op is one API operation the plan performs — a small tagged union. Most ops
+// carry a Method, Path, and Body (or Content, for a file write). A ruleset op
+// instead sets RulesetName and is reconciled by name at apply time: POST when
+// the ruleset is absent, PUT .../{id} when it already exists.
 type Op struct {
 	Method      string `json:"method,omitempty"`
 	Path        string `json:"path,omitempty"`
@@ -320,9 +319,9 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRu
 // resolveBypass maps one generic bypass entry to concrete actors. Admins
 // always bypass with mode "always"; bots bypass with "always" on master and
 // tags (direct writes — the bump commit and the release tag) and "exempt" on
-// PR rulesets. An entry that resolves to
-// nothing is an error, not a silent drop — a typo in a ruleset template would
-// otherwise quietly strip a bypass actor and break the bot's automation.
+// PR rulesets. An entry that resolves to nothing is an error, not a silent
+// drop — a typo in a ruleset template would otherwise quietly strip a bypass
+// actor and break the bot's automation.
 func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor, error) {
 	botMode := modeExempt
 	if rulesetName == rulesetMaster || rulesetName == rulesetTags {

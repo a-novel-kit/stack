@@ -6,9 +6,9 @@
 // via connect-rpc.
 //
 // Dispatch is Cobra-based: every subcommand is a *cobra.Command attached to
-// the root. The existing `test` / `build` / `run` commands are wrapped via
-// internal/cli's LegacyHandlers so they keep working unchanged through the
-// transition; `run` is removed in phase 12 once parity is reached.
+// the root. The standalone `test` and `build` commands are wrapped via
+// internal/cli's LegacyHandlers because they run their own flag parsers rather
+// than Cobra's.
 package main
 
 import (
@@ -50,12 +50,9 @@ const (
 const cmdTest = "test"
 
 func main() {
-	// Cobra dispatch for every command. The standalone test/build commands
-	// are wrapped so they call the existing implementations in this file
-	// (Cobra can't directly own them because they have their own flag
-	// parsing). The legacy `run` command is intentionally gone — the
-	// `a-novel run <verb>` namespace now belongs to the daemon-backed
-	// proxy commands.
+	// The standalone test/build commands are wrapped so Cobra dispatches to
+	// their implementations in this file; they parse their own flags, which
+	// Cobra can't own directly.
 	root := anovelcli.NewRoot(anovelcli.LegacyHandlers{
 		Test:  legacyTest,
 		Build: legacyBuild,
@@ -85,10 +82,10 @@ func main() {
 	os.Exit(exitOK)
 }
 
-// legacyTest invokes the existing `test` capability path, including the
-// existing -h/--help interception. Wrapped this way so Cobra's command tree
-// (and its `--help` for the verb header) doesn't fight with the legacy
-// flag-parsing inside runCapability.
+// legacyTest runs the `test` capability path, including its own -h/--help
+// interception. Wrapping it this way keeps Cobra's command tree (and its
+// `--help` for the verb header) from fighting the flag parsing inside
+// runCapability.
 func legacyTest(args []string) int {
 	if wantsHelp(args) {
 		fmt.Println(ui.CommandHelpView(version.String(), cmdTest))
@@ -107,7 +104,7 @@ func legacyBuild(args []string) int {
 
 // wantsHelp reports whether a build/test invocation is a request for that
 // command's help. Help is always the -h/--help flag (the universal CLI
-// convention); the bare word form is intentionally NOT accepted — use
+// convention); the bare word form is intentionally not accepted — use
 // `a-novel help <command>` for the command-style entry point.
 func wantsHelp(args []string) bool {
 	for _, a := range args {
@@ -132,13 +129,11 @@ type buildOpts struct {
 }
 
 // parseBuildArgs hand-parses the small, fixed `build` flag set. A bespoke
-// parser (vs the stdlib flag package) keeps the short/long pairs — -C/--dir,
-// -t/--type, -y/--yes — first-class without flag's awkward dual registration.
+// parser keeps the short/long flag pairs first-class without the stdlib flag
+// package's awkward dual registration.
 func parseBuildArgs(args []string) (buildOpts, error) {
 	opts := buildOpts{dir: ".", timeout: 10 * time.Minute, coverage: true}
 
-	// next consumes the value for a flag, supporting both "--flag val" and
-	// "--flag=val" forms.
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		name, inlineVal, hasInline := a, "", false
@@ -153,6 +148,8 @@ func parseBuildArgs(args []string) (buildOpts, error) {
 			name, inlineVal, hasInline = a[:2], a[2:], true
 		}
 
+		// takeVal returns the flag's value from either "--flag=val" or
+		// "--flag val".
 		takeVal := func() (string, error) {
 			if hasInline {
 				return inlineVal, nil
@@ -301,8 +298,7 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 	// Wrap with a cancel that fires on every return path. Quitting the TUI
 	// with q/esc tears down the program but not the build goroutines; cancel()
 	// here propagates into exec.CommandContext so no subprocess outlives the
-	// CLI (Copilot review, #36). On a clean finish builds are already done, so
-	// this is a no-op.
+	// CLI. On a clean finish builds are already done, so this is a no-op.
 	ctx, cancel := context.WithCancel(sigCtx)
 	defer cancel()
 
@@ -461,8 +457,8 @@ func filterTypes(targets []detect.Target, types map[detect.Kind]bool) []detect.T
 }
 
 // covExclude matches package import paths that must not count toward coverage:
-// generated mocks, test-support trees, and generated protobuf code — the same
-// exclusions the hand-written test.sh applied (grep -v /mocks /test /protogen).
+// generated mocks, test-support trees, and generated protobuf code, none of
+// which represent product code whose coverage is meaningful.
 var covExclude = regexp.MustCompile(`/(mocks|test|protogen)(/|$)`)
 
 // withCoverage rewrites every Go test target for coverage mode: it expands the

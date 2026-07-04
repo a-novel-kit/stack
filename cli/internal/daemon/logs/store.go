@@ -71,8 +71,8 @@ type targetStream struct {
 	closed      bool        // once the proc terminates, no new lines
 }
 
-// New returns an empty Store. Subscriber maps populate on OpenForWrite /
-// Subscribe; nothing is touched on disk until a target actually emits.
+// New returns an empty Store. Its stream registry populates on
+// OpenForWrite; nothing is touched on disk until a target actually emits.
 func New() *Store {
 	return &Store{streams: make(map[string]*targetStream)}
 }
@@ -116,7 +116,7 @@ func (s *Store) OpenForWrite(targetID, stack, service, target string) (*Writer, 
 }
 
 // Subscribe adds a delivery channel for `targetID` and returns it
-// alongside an unsubscribe function the caller MUST defer-call on
+// alongside an unsubscribe function the caller must defer-call on
 // exit. Without that call, the subscriber channel stays in the
 // stream's fanout list until the target itself terminates — a leak
 // that grows linearly with disconnect rate for long-running targets.
@@ -217,9 +217,9 @@ func (s *Store) RunPath(stack, service, target, runID string) string {
 	return filepath.Join(paths.LogsRoot(), stack, service, target, "run-"+runID+".log")
 }
 
-// close terminates the stream: encodes any pending buffered lines (none
-// — the Writer flushes per write), closes the file, closes every
-// subscriber channel.
+// close terminates the stream: closes the file handle and every
+// subscriber channel. The Writer flushes per line, so nothing is
+// buffered here.
 func (ts *targetStream) close() {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()

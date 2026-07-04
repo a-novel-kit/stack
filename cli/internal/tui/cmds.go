@@ -92,8 +92,7 @@ type logsMsg struct {
 type tickMsg struct{}
 
 // refreshServicesCmd asks the daemon for a snapshot of every service in
-// the default stack (the UI is per-stack for the first cut; phase-13
-// adds --stack flag if needed).
+// the default stack. The UI is scoped to a single stack.
 func refreshServicesCmd(c *rpc.Client) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

@@ -73,14 +73,10 @@ func containerLabelArgs(stack, service, target string) string {
 }
 
 // StartContainer brings up `id` as a podman-compose container in the
-// target's declared profile, with: --no-deps to avoid the broken depends_on
-// wait machinery in podman-compose 1.5.0+, --label injection so adoption
-// works on the next daemon start, and env passthrough so compose's ${VAR}
-// substitution resolves to our allocated ports.
-//
-// Phase 3 chunk 2 first cut. The actual log streaming is deferred to
-// phase 5 (logs hub); for now container stdout/stderr stay in podman's
-// own journal.
+// target's declared profile, labeling it for adoption and passing the
+// synthesized env so compose's ${VAR} port substitution resolves. Uses
+// --no-deps to sidestep podman-compose 1.5.0's broken depends_on wait
+// machinery.
 func (r *Runner) StartContainer(ctx context.Context, id string, env []string, warnings []string) (*Instance, error) {
 	tgt, svc, err := r.resolveTarget(id)
 	if err != nil {
@@ -119,9 +115,7 @@ func (r *Runner) StartContainer(ctx context.Context, id string, env []string, wa
 
 	r.transition(id, anovelv1.Phase_PHASE_STARTING)
 
-	// Invoke `podman compose ... up -d --build --no-deps`.
-	// --no-deps is REQUIRED — see spec rationale + the long debug session
-	// we went through with podman-compose 1.5.0's broken
+	// --no-deps avoids podman-compose 1.5.0's broken
 	// depends_on: service_healthy wait machinery.
 	args := []string{
 		"compose",
@@ -272,8 +266,8 @@ type InfraState struct {
 
 // InfraStatesOf returns the live state of every infra container in the
 // given stack, keyed by "<service>/<infraName>". One podman call total
-// regardless of how many services / infras the stack has — drastically
-// faster than the prior per-infra approach (each podman invocation has
+// regardless of how many services / infras the stack has — far faster
+// than a per-infra scan (each podman invocation has
 // ~1s cold-start overhead on rootless WSL2 podman, so N infras serial
 // = N seconds, often exceeding the TUI's 2s poll cadence).
 //
@@ -441,18 +435,11 @@ func podmanInspect(ctx context.Context, cid string) (string, string, int, error)
 	return parts[0], parts[1], exitCode, nil
 }
 
-// updateContainerState mutates the runner's view of a container instance
-// to reflect the latest inspect result. Phase translations between
-// podman's status words and our PHASE enum:
-//
-//	"running"   → PHASE_RUNNING
-//	"created"   → PHASE_STARTING (container exists, no command running yet)
-//	"exited"    → PHASE_TERMINATED (set by the caller — we only get
-//	              here on running/created transitions)
-//	"stopping"  → PHASE_STOPPING
-//	"paused"    → PHASE_RUNNING (we don't model paused separately)
-//
-// Health: "healthy"|"unhealthy"|"starting"|"-" → our Health enum.
+// updateContainerState folds one inspect result into the runner's view of
+// a container instance, translating podman's status and health words into
+// our Phase and Health enums. A terminated instance is never revived, and
+// a stopping instance isn't bumped back to running; the exited state is
+// handled by watchContainer, not here.
 func (r *Runner) updateContainerState(id, phase, health string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

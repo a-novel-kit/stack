@@ -10,7 +10,7 @@ import (
 
 // EnsureDepsReady walks `t`'s compose `depends_on` chain and verifies
 // every upstream dependency is ready before allowing the target to
-// start. Spec §5.4 "ready" definition:
+// start. A dependency counts as ready when:
 //
 //	(phase=running AND (mode=go-exec OR health=healthy))
 //	  OR (phase=terminated AND exitReason=success)
@@ -63,11 +63,9 @@ func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *
 			}
 			continue
 		}
-		// Unknown dep — could be a cross-service reference (out of
-		// scope for phase 3: "Cross-service credential /
-		// token sharing. Deferred to a later API-keys spec."). For
-		// now we skip with a warning.
-		// TODO: when cross-service is spec'd, resolve here.
+		// Unknown dep — likely a cross-service reference, which the
+		// runner doesn't resolve yet. Skip it.
+		// TODO: resolve cross-service dependencies here.
 	}
 	return nil
 }

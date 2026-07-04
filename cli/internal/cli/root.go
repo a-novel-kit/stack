@@ -1,8 +1,7 @@
 // Package cli wires every subcommand the a-novel binary exposes. The
-// existing `test` / `build` / `run` commands are wrapped from
-// cmd/a-novel/main.go's legacy implementations; new daemon-backed verbs
-// (core, ps, start, kill, logs, env, volume, ...) are implemented here
-// directly against internal/client/rpc.
+// standalone `test` and `build` commands are wrapped from cmd/a-novel/main.go,
+// which owns their flag parsing; the daemon-backed verbs under `run` are
+// implemented here directly against the daemon's rpc client.
 package cli
 
 import (
@@ -23,6 +22,9 @@ type LegacyHandlers struct {
 	Build func(args []string) int
 }
 
+// NewRoot builds the root a-novel command with every subcommand attached. The
+// caller supplies the standalone test/build handlers, since their flag parsing
+// lives in the cmd/a-novel package.
 func NewRoot(legacy LegacyHandlers) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "a-novel",
@@ -60,7 +62,7 @@ for the full design.`,
 
 	// Standalone capabilities. These don't need the daemon — they scan the
 	// working tree, run go test / pnpm test / podman build, report results
-	// and exit. Kept verbatim through every phase; never deleted.
+	// and exit.
 	root.AddCommand(newLegacyCmd("test",
 		"Run tests (Go and pnpm) interactively or by selector",
 		`Discovers Go test packages and pnpm test scripts under the working tree, lets
@@ -152,12 +154,10 @@ inspection, volume management, exec/debug, and the TUI all live under
 	return cmd
 }
 
-// newLegacyCmd wraps a non-Cobra handler so the existing test/build/run
-// can be invoked via 'a-novel <verb> [args...]'. DisableFlagParsing means
-// Cobra hands args straight to the legacy handler — which has its own
-// flag parser — without interpreting flags itself. Important: this means
-// `-h` / `--help` are NOT intercepted by Cobra; the legacy handler must
-// handle them itself (the existing wantsHelp() in main.go does).
+// newLegacyCmd wraps a non-Cobra handler so test/build can be invoked via
+// 'a-novel <verb> [args...]'. DisableFlagParsing hands args straight to the
+// handler, which runs its own flag parser. As a result Cobra does not
+// intercept `-h` / `--help`; the handler must recognize them itself.
 func newLegacyCmd(verb, short, long string, fn func([]string) int) *cobra.Command {
 	return &cobra.Command{
 		Use:                verb,

@@ -145,11 +145,11 @@ const codeownersName = "CODEOWNERS"
 // nothing is staged for it, so a sync that changes nothing commits nothing.
 // CodeQL advanced setup is mutually exclusive with default setup, so default
 // setup is switched off before the workflow lands; a stray root CODEOWNERS is
-// staged as a deletion (GitHub honours the .github/ copy) even when the
+// staged as a deletion (GitHub honors the .github/ copy) even when the
 // .github/ copy itself is unchanged, so a repo never carries two.
 func stageContents(org, repo string, op repocfg.Op) ([]contentChange, bool, error) {
 	if strings.Contains(op.Path, "/workflows/codeql.yml") {
-		// Best-effort: ignore the error when default setup is already off.
+		// Default setup may already be off, in which case this errors harmlessly.
 		_, _ = gh("api", "-X", "PATCH", fmt.Sprintf("repos/%s/%s/code-scanning/default-setup", org, repo), "-f", "state=not-configured")
 	}
 	var changes []contentChange
@@ -276,7 +276,7 @@ func applyPages(op repocfg.Op) (string, error) {
 }
 
 // applyLabels reconciles a repo's labels against the canonical set: every
-// `ensure` label is created, or PATCHed when its colour / description drifts;
+// `ensure` label is created, or PATCHed when its color / description drifts;
 // every `retire` label is deleted. Labels in neither list are left untouched, so
 // a repo's incidental labels survive.
 func applyLabels(org, repo string, op repocfg.Op) (string, error) {

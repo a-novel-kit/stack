@@ -33,7 +33,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Phase is a target instance's lifecycle position. See spec §5.1.
+// Phase is a target instance's lifecycle position.
 type Phase int32
 
 const (
@@ -356,7 +356,7 @@ func (LogStream) EnumDescriptor() ([]byte, []int) {
 	return file_anovel_v1_core_proto_rawDescGZIP(), []int{5}
 }
 
-// Stack identifies one registered git checkout. See spec §10.
+// Stack identifies one registered git checkout.
 type Stack struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // "default", "agent-foo", ...

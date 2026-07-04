@@ -4,12 +4,7 @@
 // (mutual exclusion, dependency-walk gating, idempotency).
 //
 // The package exposes one type — Runner — and a set of typed methods. The
-// daemon's server package calls into it from the RPC handlers; the runner
-// in turn is split across files by concern:
-//
-//	runner.go    — Runner type, tracker, lifecycle invariants
-//	goexec.go    — go-exec spawn/wait/kill plumbing
-//	container.go — container mode (added in a follow-up chunk)
+// daemon's server package calls into it from the RPC handlers.
 //
 // Internal state is guarded by a single sync.RWMutex (Runner.mu). For local
 // dev with a handful of targets the contention is negligible and the

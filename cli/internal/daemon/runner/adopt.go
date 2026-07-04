@@ -18,7 +18,7 @@ import (
 // adoption labels (anovel.stack / anovel.service / anovel.target) and
 // reconstitutes runner.Instance records for every one. Called at daemon
 // startup so a `core kill` + `core start` cycle doesn't lose
-// container-mode supervision. Spec §3.4 step 3.
+// container-mode supervision.
 //
 // Per-service infra sessions are also re-flagged Up so the dep-walker
 // doesn't try to spin infra again when a target start follows
@@ -44,7 +44,7 @@ func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
 		ID      string            `json:"Id"`
 		Status  string            `json:"Status"`
 		Labels  map[string]string `json:"Labels"`
-		Created int64             `json:"Created"` // unix seconds, much nicer than "11 minutes ago"
+		Created int64             `json:"Created"` // unix seconds — parseable, unlike podman's "11 minutes ago" status text
 	}
 	if err := json.Unmarshal(out, &entries); err != nil {
 		return 0, 0

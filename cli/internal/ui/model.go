@@ -1,6 +1,7 @@
-// Package ui is the Bubble Tea front-end for `a-novel build`: a branded,
-// keyboard-driven flow of three phases — select targets, run them, read the
-// report. lipgloss handles all presentation; this file owns the state machine.
+// Package ui is the Bubble Tea front-end shared by `a-novel build`, `test`, and
+// `run`: a branded, keyboard-driven flow of three phases — select targets, run
+// them, read the report. lipgloss handles all presentation; this file owns the
+// state machine.
 package ui
 
 import (
@@ -45,7 +46,7 @@ type row struct {
 	// kind-grouping (build/test) it is the Kind string ("go"/"pnpm"/...). For
 	// service-grouping (run, multi-service) it is the service name. Both
 	// rowGroup (heading) and rowTarget (member) carry it, so toggling /
-	// counting / labelling all key off the same value regardless of mode.
+	// counting / labeling all key off the same value regardless of mode.
 	groupKey string
 	target   int // index into Model.targets when kind == rowTarget
 }
@@ -118,11 +119,9 @@ func New(ctx context.Context, version string, verb Verb, targets []detect.Target
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(colBrand)
 
-	// Default selection: everything on, with a small set of hand-curated
-	// exceptions when running globally (multi-service in scope). The user
-	// confirmed `service-template` belongs in this set — it is the
-	// boilerplate / fixture service, not something you want included in a
-	// stack-root run unless explicitly asked. Easy to extend.
+	// Default selection: everything on, minus a small hand-curated set of
+	// services that start off in a global (multi-service) run — see
+	// defaultOffByService.
 	distinctSvc := map[string]bool{}
 	for _, t := range targets {
 		distinctSvc[t.Service] = true
@@ -150,11 +149,10 @@ func New(ctx context.Context, version string, verb Verb, targets []detect.Target
 	return m
 }
 
-// defaultOffByService is the hardcoded set of run-mode services that should
-// start UNSELECTED when the picker is opened in global mode. There will be
-// very few of these — the user explicitly confirmed `service-template`
-// belongs (it is boilerplate / fixture, not something you want in a
-// stack-root run unless you ask for it). Add new exceptions here.
+// defaultOffByService lists the run-mode services that start UNSELECTED when
+// the picker opens in global mode. Kept small: service-template is boilerplate
+// / fixture, not something a stack-root run should include unless asked for
+// explicitly.
 var defaultOffByService = map[string]bool{
 	"service-template": true,
 }
@@ -579,8 +577,8 @@ func (m Model) viewSelect() string {
 		t := m.targets[r.target]
 		box := glyphUnchecked
 		// No build outcome yet at selection time, so the name uses the default
-		// terminal colour (bold when selected, dim when not) — never a kind
-		// colour, and never green/red which would falsely imply a result.
+		// terminal color (bold when selected, dim when not) — never a kind
+		// color, and never green/red which would falsely imply a result.
 		name := lipgloss.NewStyle().Bold(true).Render(t.Name)
 		if m.selected[t.ID()] {
 			box = styleSel.Render(glyphChecked)
@@ -683,7 +681,7 @@ func (m Model) viewRun() string {
 			m.spinner.View(),
 			m.verb.Ing,
 			kindTag(t.Kind),
-			t.Name, // in-flight: default colour, outcome not yet known
+			t.Name, // in-flight: default color, outcome not yet known
 			styleMuted.Render(relLabel(t.RelDir)),
 			elapsed,
 		)
@@ -738,7 +736,7 @@ func (m Model) viewReport() string {
 	cw := w - gutter
 
 	// A failed build is the one thing that must grab the eye immediately, so
-	// the headline uses the critical colour; the per-failure panels stay the
+	// the headline uses the critical color; the per-failure panels stay the
 	// calmer error orange.
 	headline := styleOK.Render("✓ " + m.verb.Upper + " PASSED")
 	lead := "Every selected target passed."
@@ -759,7 +757,7 @@ func (m Model) viewReport() string {
 	}
 	// indentBlock, not "  "+: the pill row is 3 lines tall, so a string
 	// prefix would only shift the top border and leave the box body at
-	// column 0 (the misalignment bug).
+	// column 0.
 	b.WriteString(indentBlock(pillRow(
 		pill("passed", strconv.Itoa(s.Passed), colOK),
 		pill("failed", strconv.Itoa(s.Failed), failColor),

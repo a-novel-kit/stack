@@ -54,6 +54,7 @@ type LiveLog struct {
 	m  map[string]string
 }
 
+// NewLiveLog returns an empty LiveLog ready for concurrent writes and reads.
 func NewLiveLog() *LiveLog { return &LiveLog{m: map[string]string{}} }
 
 func (l *LiveLog) set(id, line string) {
@@ -112,7 +113,7 @@ func (w *tailWriter) Write(p []byte) (int, error) {
 // PrepareEnv builds the process environment for a target: os.Environ() plus,
 // when the target has a compose env, Go-allocated host ports, their derived
 // URLs/DSN, standard local test creds for referenced vars, and finally
-// whatever scripts/setup-env.sh still defines (service constants). It is the
+// whatever scripts/setup-env.sh defines (service constants). It is the
 // single source of env truth shared by `build`/`test` (Run) and `run`. The
 // `── env ──` / `── setup-env ──` progress is written to out.
 func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, []string, error) {
@@ -151,7 +152,7 @@ func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, 
 		}
 	}
 
-	// Source scripts/setup-env.sh only for whatever else it still defines
+	// Source scripts/setup-env.sh only for whatever else it defines
 	// (service-specific constants like APP_MASTER_KEY). It sees the ports +
 	// URLs we already set, so its `${VAR:=…}` lines are inert (no node) and
 	// cannot override them. If there is no setup-env.sh, the ports + derived
@@ -277,10 +278,10 @@ func envDelta(final []string, baseline map[string]string) []string {
 }
 
 // ANSI SGR used by formatEnvBlock. build cannot import the ui/lipgloss layer
-// (import cycle: ui → build), so the palette is inlined as raw 256-colour
+// (import cycle: ui → build), so the palette is inlined as raw 256-color
 // escapes. They survive runner.SanitizeLine (SGR is kept) and are rendered by
 // the viewport; on a non-TTY they are harmless and match the rest of the
-// report, which is already coloured.
+// report, which is already colored.
 const (
 	envHdr = "\x1b[1;38;5;172m" // gold, bold — the header
 	envKey = "\x1b[38;5;37m"    // accent — variable names
@@ -289,7 +290,7 @@ const (
 )
 
 // formatEnvBlock renders the env vars the CLI injected as an aligned,
-// key-sorted, lightly-coloured list — one `KEY = value` per line under a
+// key-sorted, lightly-colored list — one `KEY = value` per line under a
 // header — instead of one unreadable space-joined blob. Local-only generic
 // creds, so values are shown verbatim (you need the real DSN/URL to curl
 // against the run).
@@ -358,11 +359,11 @@ func Run(ctx context.Context, t detect.Target, timeout time.Duration, live *Live
 	res := func() Result {
 		if t.Env != nil {
 			_, _ = fmt.Fprintf(out, "── env up: %s ──\n", t.Env.ID)
-			// Mirror scripts/test.sh exactly: --podman-build-args for docker
-			// manifest format, `up -d --build` WITHOUT --wait (the external
-			// podman-compose provider does not support --wait), then poll
-			// container health ourselves. down uses --volume (singular), as
-			// the scripts do, for the same provider compatibility.
+			// --podman-build-args forces docker manifest format; `up -d
+			// --build` omits --wait because the external podman-compose
+			// provider does not support it, so we poll container health
+			// ourselves. down uses --volume (singular) for that same
+			// provider's compatibility.
 			downArgs := []string{"down", "--volume"}
 			if err := compose(ctx, out, runEnv, t.Env,
 				[]string{"--podman-build-args=--format docker -q"},
@@ -453,9 +454,10 @@ func rel(base, p string) string {
 }
 
 // allocPorts binds an ephemeral TCP port for each var name, closes it, and
-// returns "NAME=port" entries. Same close-then-reuse window as
-// get-port-please, but pure Go (no node). Distinct binds within one call
-// never alias because each listener holds a different port until closed.
+// returns "NAME=port" entries. There is a small close-then-reuse race between
+// releasing the port and the container claiming it, accepted as unavoidable
+// for local runs. Distinct binds within one call never alias because each
+// listener holds a different port until closed.
 func allocPorts(names []string) ([]string, error) {
 	out := make([]string, 0, len(names))
 	for _, n := range names {
@@ -473,13 +475,15 @@ func allocPorts(names []string) ([]string, error) {
 	return out, nil
 }
 
-// stdTestEnv is the standard local test value for known compose vars. We are
-// local-only, so a fixed generic credential set is fine. Applied for any of
-// these the compose file references but that no host port produced — this is
-// what lets an internal-only postgres (no host port) still get credentials.
-// pgStd is the standard local postgres user/password/db name for tests.
+// pgStd is the standard local postgres user, password, and database name for
+// tests.
 const pgStd = "postgres"
 
+// stdTestEnv holds the standard local test values for known compose vars.
+// Being local-only, a fixed generic credential set is fine. A value is applied
+// for any of these the compose file references that no host port produced —
+// this is what lets an internal-only postgres (no host port) still get
+// credentials.
 var stdTestEnv = map[string]string{
 	"POSTGRES_HOST":     "localhost",
 	"POSTGRES_USER":     pgStd,
@@ -673,7 +677,7 @@ func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
 //     or may never have come up.
 //
 // Pod / network naming follows podman-compose's conventions:
-//   - Pod:     "pod_<project>"  (podman_compose.py resolve_pod_name, line 2087)
+//   - Pod:     "pod_<project>"  (podman-compose's resolve_pod_name convention)
 //   - Network: "<project>_api"  (matches every current service's compose
 //     `networks: { api: }` declaration; if a future service uses a
 //     different network name we'll need to read e.Networks instead).
@@ -701,7 +705,7 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 // global mode to skip services that duplicate a sibling already running from
 // its own repo.
 func EnvUp(ctx context.Context, env []string, e *detect.ComposeEnv, out io.Writer, services ...string) error {
-	// NOTE: we do NOT pass --remove-orphans here. podman-compose's
+	// We deliberately do not pass --remove-orphans here. podman-compose's
 	// interpretation of "orphan" relative to a positional `up <svc>` is
 	// inconsistent across versions — it can sweep services that ARE in the
 	// compose file but not in the positional list, including (in the
@@ -717,7 +721,7 @@ func EnvUp(ctx context.Context, env []string, e *detect.ComposeEnv, out io.Write
 		return fmt.Errorf("environment %s failed to start: %w", e.ID, err)
 	}
 	// 180s: a fresh `--build` plus first-run postgres `initdb` can exceed
-	// the previous 120s on slower machines / cold caches.
+	// 120s on slower machines / cold caches.
 	if err := waitHealthy(ctx, out, env, e, 180*time.Second); err != nil {
 		return fmt.Errorf("environment %s not ready: %w", e.ID, err)
 	}
@@ -729,8 +733,8 @@ func EnvUp(ctx context.Context, env []string, e *detect.ComposeEnv, out io.Write
 // A container is ready when it is running with a healthy (or absent)
 // healthcheck, or has exited 0 (a one-shot init/migration). A non-zero exit
 // fails fast; otherwise it polls until timeout — on timeout the offending
-// containers' tails are appended to the error so the user sees WHY they
-// never came up (the previous "timed out after Xs" message gave no clue).
+// containers' tails are appended to the error so the user sees why they
+// never came up.
 func waitHealthy(ctx context.Context, log io.Writer, env []string, e *detect.ComposeEnv, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	prefix := e.Project + "_"

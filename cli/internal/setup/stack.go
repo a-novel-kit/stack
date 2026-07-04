@@ -14,8 +14,7 @@ import (
 // to point at.
 const stackRemoteURL = "git@github.com:a-novel-kit/stack.git"
 
-// bootstrapStack runs the three-way check for one stack
-// step 3:
+// bootstrapStack runs the three-way check for one stack:
 //   - exists + valid (right repo + remote) → no-op
 //   - exists + invalid (wrong remote or not a repo) → refuse
 //   - missing → default: prompt; non-default: clone unconditionally
