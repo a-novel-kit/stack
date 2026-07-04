@@ -14,6 +14,27 @@ A repo's desired config is composed from three inputs:
 
 CLI flags and the interactive form override any field.
 
+## Org-level prerequisite: `AGENT_KILL_SWITCH`
+
+The governance workflows read one org-level Actions variable that the operator
+provisions **by hand** — repocfg threads it into every caller
+(`kill_switch: ${{ vars.AGENT_KILL_SWITCH }}`) but never creates or writes it.
+
+`AGENT_KILL_SWITCH` is the org-wide emergency halt for all [Agent] automation,
+and it is **fail-safe**: a run is RUNNING only when the value (lowercased,
+whitespace-stripped) is an explicit off-token — `off`, `false`, `no`,
+`disabled`, `0`, or the variable **absent** (an unset `vars.*` resolves to the
+empty string); **any other value halts**. A fat-fingered or garbage value
+therefore halts, by design (a kill-switch must fail toward halting).
+
+Create it in **both** orgs (`a-novel` and `a-novel-kit`) with the value **`off`**.
+A GitHub Actions variable cannot hold an empty string, so `off` — not empty — is
+the canonical resting token: equivalent to leaving the variable unset, but
+discoverable in the org settings and flippable in place. To **engage** the halt,
+set the value to `on` (or anything else the fail-safe does not treat as off); the
+next event or reconcile sweep then holds every PR org-wide. **Lift** it by setting
+the value back to `off`.
+
 ## Always-provisioned files
 
 Independent of class, `repo update` commits a uniform `.github/CODEOWNERS`
