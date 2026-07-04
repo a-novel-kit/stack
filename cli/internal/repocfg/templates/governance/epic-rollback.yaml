@@ -31,7 +31,12 @@ on:
         description: "true (default) = print the plan only; false = actually open + land the reverts."
         required: false
         default: "true"
-        type: string
+        # choice (not string): the UI + the dispatch API reject anything but these two values, so a
+        # fat-fingered "false " / "FALSE" can't silently run dry when the operator meant to go live.
+        type: choice
+        options:
+          - "true"
+          - "false"
 
 run-name: "⏮ ROLLBACK epic:#${{ inputs.epic_number }} requested by @${{ github.actor }} (dry_run=${{ inputs.dry_run }})"
 
@@ -56,8 +61,9 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          # Admin gate (copied from approve-pr/action.yaml): `|| echo ""` keeps a failed lookup
-          # from tripping `set -e` — an empty permission falls through and fails closed.
+          # Admin gate (copied from a-novel-kit/workflows' generic-actions/approve-pr/action.yaml):
+          # `|| echo ""` keeps a failed lookup from tripping `set -e` — an empty permission falls
+          # through and fails closed.
           perm=$(gh api "repos/${REPO_FULL}/collaborators/${ACTOR}/permission" -q '.permission' 2>/dev/null || echo "")
           if [ "$perm" != "admin" ]; then
             echo "::error::epic-rollback is admin-only; @${ACTOR} has permission '${perm:-none}'."
