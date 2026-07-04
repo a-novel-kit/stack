@@ -17,6 +17,12 @@ readers: `README.md`, `SECURITY.md`, `CONTRIBUTING.md`. These files are the firs
 visitors see; they set expectations for usage, security contact, and how to contribute. They
 must be accurate, scannable, and consistent across all Agora services.
 
+These files carry the **global picture** — the architecture, the layer split, the principles
+behind the shape of the system. That is by design: code comments defer here instead of
+re-explaining the whole system from inside one source file (see `document-code`). Keep the
+wide-angle view in README and CONTRIBUTING and keep it current, so the comments in the code can
+stay local and specific.
+
 The skill has two modes:
 
 - **Scaffold** — the file does not exist yet (new project). Generate from the templates in
@@ -272,6 +278,15 @@ genuinely needed (exact commands, names, links), they are reference material, no
 explanation: keep the explanatory prose general and push the specifics to where they
 belong — the relevant service's own `CONTRIBUTING.md`, a reference table, or a copy-paste
 code block.
+
+### 8. Plain language, plain sentences
+
+Write so a tired reader gets it on the first pass. Prefer the common word and the short one;
+reach for an advanced or technical word only when it earns its place — when it replaces a whole
+phrase or removes a real ambiguity, not for tone. State each point as a plain subject-verb-object
+sentence, not a label: "The service signs tokens server-side because the private key never leaves
+it," not "Why server-side: the private key." Rhetorical labels ("Why this matters:", "The
+reason:", "Note:") are ceremony — cut them and let the sentence stand.
 
 ---
 
