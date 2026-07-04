@@ -209,8 +209,8 @@ func (r *Runner) KillInfra(ctx context.Context, stack, service string, force boo
 		}
 	}
 	// `compose down` tears down infra + any orphaned containers in the
-	// project. We DO NOT pass --volume so postgres data survives —
-	// Only `volume clear` destroys volumes.
+	// project. It doesn't pass --volume, so postgres data survives; only
+	// `volume clear` destroys volumes.
 	project := composeProjectName(stack, service)
 	cmd := exec.CommandContext(ctx, "podman", "compose",
 		"-p", project, "-f", svc.ComposePath,

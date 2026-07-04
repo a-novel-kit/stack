@@ -1,9 +1,9 @@
-// Daemon-control subcommands (`a-novel core ...`).
-//
-// `core start` is the .zshrc-friendly entrypoint — silent on already-running,
-// detaches the daemon in the background, refuses with a hint on missing setup.
-// `core setup`, `core kill`, `core status`, `core prepare-reinstall` round out
-// the lifecycle.
+// Daemon-control subcommands (`a-novel core ...`): the lifecycle of the
+// long-lived background daemon. `core start` is the .zshrc-friendly
+// entrypoint — silent when the daemon is already running, detaches it into
+// the background, and refuses with a hint when setup is missing. The sibling
+// verbs stop it, report status, and drive the checkpoint flow that restarts
+// the daemon without losing its running targets.
 
 package cli
 
@@ -433,8 +433,8 @@ func startDetached() error {
 	if err := c.Start(); err != nil {
 		return fmt.Errorf("spawn daemon: %w", err)
 	}
-	// Poll briefly for the daemon to come up so the caller knows it
-	// worked. Spec §3.1: print socket path after listening.
+	// Poll briefly for the daemon to come up, then print its socket
+	// path so the caller knows it worked.
 	deadline := time.Now().Add(5 * time.Second)
 	rpcClient := rpc.New("")
 	for time.Now().Before(deadline) {

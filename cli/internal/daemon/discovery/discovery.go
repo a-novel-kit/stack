@@ -37,8 +37,8 @@ type Service struct {
 	Volumes     []*Volume
 	Networks    []string // network names declared at compose top-level
 	// Dependency edges, one per compose `depends_on` entry. Each edge
-	// connects two compose-service names (target or infra); resolution
-	// to *Target/*Infra is done by ResolveDeps at the daemon level.
+	// connects two compose-service names (target or infra); resolution to
+	// the concrete target or infra happens later, at the daemon level.
 	DependsOn map[string][]string // compose-service-name → [list of names it depends on]
 }
 
@@ -53,13 +53,13 @@ type Target struct {
 	CmdDir      string     // absolute path to cmd/<name>/
 	Dockerfile  string     // absolute path to the build's Dockerfile (may be "")
 	DependsOn   []string   // compose-service-names this target depends_on
-	Ports       []string   // raw "${VAR}:N" port mappings (parsed by phase 4)
+	Ports       []string   // raw "${VAR}:N" port mappings, resolved later
 	Environment map[string]string
 }
 
-// ID returns the canonical "<stack>/<service>/<target>" identifier the
-// daemon uses to address this target across every API. Single rule
-// matches runner.targetID and server.targetIDFor.
+// ID returns the canonical "<stack>/<service>/<target>" identifier the daemon
+// uses to address this target across every API. Every layer that names a
+// target derives it the same way, so the identifier stays stable end to end.
 func (t *Target) ID() string {
 	return t.Stack + "/" + t.Service + "/" + t.Name
 }
@@ -260,8 +260,8 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 
 		// Profile-tagged → target candidate.
 		if len(cs.Profiles) > 0 {
-			// We treat the first profile as canonical. The §11 convention
-			// is one profile per target with the same name.
+			// The first profile is canonical: by convention a target
+			// declares a single profile whose name matches its cmd dir.
 			profile := cs.Profiles[0]
 			cmdDir, hasCmd := cmdNames[profile]
 			if !hasCmd {
@@ -298,11 +298,10 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 			continue
 		}
 
-		// No profile → infrastructure. The classification §4.2 rule 3
-		// requires: a compose service with no profile must NOT also have
-		// a matching cmd/<csName>/ (that's an orphan). For infra naming
-		// like "postgres-json-keys", there's no cmd/postgres-json-keys/,
-		// so the check is naturally satisfied.
+		// No profile → infrastructure. A profile-less compose service must
+		// NOT also have a matching cmd/<csName>/: that pairing is an
+		// unprofiled target, which is an error. Infra names like
+		// "postgres-json-keys" have no cmd dir, so they pass naturally.
 		if _, hasCmd := cmdNames[csName]; hasCmd {
 			errs = append(errs, DiscoveryError{
 				Service: name,
@@ -329,8 +328,8 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 		})
 	}
 
-	// Any cmd/ entry NOT matched by a compose service is an orphan: spec
-	// §4.2 rule 3 says "cmd/X exists, no compose mirror → error".
+	// Any cmd/ entry NOT matched by a compose service is an orphan: a
+	// target with no compose mirror can't be run, so flag it.
 	for unmatchedCmd := range cmdNames {
 		errs = append(errs, DiscoveryError{
 			Service: name,

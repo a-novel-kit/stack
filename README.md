@@ -84,9 +84,9 @@ a-novel run ui
 ```
 
 It is a full-screen dashboard: a services list on the left, a tabbed detail and
-live log viewer on the right, and a command palette (press **Esc**) covering the
-entire CLI surface — `:start`, `:kill`, `:infra-start`, and so on. Press **?**
-for a searchable key and command reference; **q** quits.
+live log viewer on the right, and a command palette (press **Esc**) that covers
+the entire CLI surface, each command a `:verb` entry. Press **?** for a
+searchable key and command reference; **q** quits.
 
 The UI is a thin client over the same daemon as the command line, so anything
 you do in it is visible to the CLI and vice-versa. If you learn one command,
@@ -184,17 +184,21 @@ on the org with:
 - **Webhook**: disabled. The App is outbound-only.
 - Install the App on **all repositories** of the org.
 
-The **App ID** is public and inlined in
+Each App's **client ID** is public and lives in an organization-level Actions
+variable named `AGENT_BOT_CLIENT_ID`, not inlined in
 [`bot-comment.yaml`](.github/workflows/bot-comment.yaml); no Installation ID is
 needed — `create-github-app-token` resolves it from the org owner.
 
-**Dispatcher secret (once per org — never on a dev machine).** Generate a
-private key from each App's settings page (downloads a `.pem`) and store it as
-an **organization-level Actions secret** named `AGENT_BOT_PRIVATE_KEY` in that
-org (one in `a-novel` for `anovelbot-agent`, one in `a-novel-kit` for
-`anovelkitbot-agent`). Make sure its repository visibility includes that org's
-dispatcher repo. The workflow derives which key/App/owner to use from
-`github.repository_owner`, so the two copies are identical.
+**Dispatcher secret + client ID (once per org — never on a dev machine).**
+Generate a private key from each App's settings page (downloads a `.pem`) and
+store it as an **organization-level Actions secret** named
+`AGENT_BOT_PRIVATE_KEY` in that org (one in `a-novel` for `anovelbot-agent`, one
+in `a-novel-kit` for `anovelkitbot-agent`). Store the App's client ID alongside
+it as an organization-level Actions **variable** named `AGENT_BOT_CLIENT_ID` —
+public, so a variable rather than a secret. Make sure the secret's repository
+visibility includes that org's dispatcher repo. The workflow derives which
+key/App/owner to use from `github.repository_owner`, so the two copies are
+identical.
 
 Then grant each operator/agent `actions: write` on the dispatcher repo so they
 can dispatch. Verify end-to-end by commenting on a scratch PR or issue:

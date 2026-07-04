@@ -7,9 +7,9 @@ import (
 )
 
 // dockerfileHasHealthcheck reports whether the given Dockerfile contains a
-// non-NONE HEALTHCHECK instruction. Used as a fallback for classification
-// when the compose service itself doesn't declare a healthcheck (§11 rule 2
-// allows either location during the migration window).
+// non-NONE HEALTHCHECK instruction. It is the fallback for classifying a
+// target when the compose service itself declares no healthcheck, since the
+// check may legitimately live in either place.
 //
 // We do a structural scan rather than a full Dockerfile parse: we read line
 // by line, skipping continuations (`\` at EOL), and look for a top-level

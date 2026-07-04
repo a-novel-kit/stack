@@ -26,9 +26,9 @@ const helpHint = "Run `a-novel <command> --help` (or `a-novel help <command>`) "
 	"for a command's flags and examples."
 
 // Flag docs are composed per command from these fragments — each command
-// advertises only the flags it actually honours, so `run --help` never lists
+// advertises only the flags it actually honors, so `run --help` never lists
 // the test-only --no-cover and `build`/`test` never list the run-only
-// --recreate (the "wrong flag in help" bug).
+// --recreate.
 var (
 	flagDir      = flagDoc{"-C, --dir <path>", "Directory to scan (default: current directory)"}
 	flagType     = flagDoc{"-t, --type <kinds>", "Comma-separated kind filter: go,pnpm,podman (default: all)"}
@@ -41,7 +41,7 @@ var (
 	flagHelp     = flagDoc{"-h, --help", "Show this command's help"}
 )
 
-// buildFlags / testFlags are the exact, honoured flag sets. `test` omits the
+// buildFlags / testFlags are the exact, honored flag sets. `test` omits the
 // podman kind (there are no podman test targets) and adds --no-cover.
 var (
 	buildFlags = []flagDoc{flagDir, flagType, flagJobs, flagTimeout, flagYes, flagDryRun, flagHelp}

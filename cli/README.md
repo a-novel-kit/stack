@@ -23,6 +23,9 @@ a-novel
 ├── build         standalone — builds Go binaries, pnpm bundles, Podman images
 ├── publish       standalone — release doc helpers (releases run in CI)
 │   └── stamp <prefix> <file>           refresh vX.Y.Z references in doc files
+├── repo          standalone — GitHub repo configuration (interactive, human-only)
+│   ├── create <org> <name>             create a repo and apply its class config
+│   └── update                          reconcile the current repo to its class template
 ├── secrets       standalone — local, encrypted secrets manager (child-env only)
 │   ├── init                            create the local key + store dir
 │   ├── set <id>                        store a value (no echo); never printed
@@ -30,7 +33,7 @@ a-novel
 │   └── exec --env NAME=<id> -- <cmd>   run a command with secrets in its env
 ├── install       graceful binary upgrade (daemon handoff via checkpoint)
 ├── core          daemon control + workspace plumbing
-│   ├── start / setup / kill / status / prepare-reinstall
+│   ├── start / setup / kill / restart / status / prepare-reinstall
 │   ├── sync                            clone/ff-pull the curated workspace repos
 │   └── bot-comment <org> <repo> <n>    comment as the org bot (via dispatcher workflow)
 └── run           daemon-backed surface for operating on services/targets:
@@ -43,8 +46,8 @@ a-novel
     └── exec / debug                    inside-container shells
 ```
 
-`test`, `build`, `publish` and `secrets` don't need the daemon. Everything
-under `run` does.
+`test`, `build`, `publish`, `repo` and `secrets` don't need the daemon.
+Everything under `run` does.
 
 ## Quick reference
 
@@ -101,7 +104,7 @@ terminal, printed, logged, committed, or passed as a CLI argument.
 
 ```bash
 a-novel secrets init                 # create the local key + store dir (idempotent)
-a-novel secrets set <id>             # read a value with NO echo, store it encrypted
+a-novel secrets set <id>             # read a value with no echo, store it encrypted
 a-novel secrets ls                   # list secret ids (never values)
 a-novel secrets rm <id>              # delete a secret
 a-novel secrets exec --env NAME=<id> [--env ...] -- <cmd> [args...]
@@ -157,7 +160,7 @@ UI, so you know exactly what to provision.
 
 `a-novel` is a single binary that fronts a long-lived background daemon.
 Clients (CLI, TUI, future web UI) communicate with the daemon over a
-unix-domain socket using [connect-rpc](https://connectrpc.com/). The same
+Unix-domain socket using [connect-rpc](https://connectrpc.com/). The same
 daemon supervises every running target, owns the env/port allocator,
 streams logs, and manages volumes. Multiple clients see consistent state.
 
@@ -169,21 +172,23 @@ cli/
 ├── proto/anovel/v1/core.proto     connect-rpc contract
 └── internal/
     ├── daemon/                    daemon-side (server, runner, env, logs, volumes, ...)
-    ├── client/rpc/                unix-socket connect-rpc client
+    ├── client/rpc/                Unix-socket connect-rpc client
     ├── cli/                       Cobra command tree (test/build are wrapped legacy)
     ├── detect/                    working-tree discovery (test/build/run targets)
     ├── build/                     standalone test/build execution engine
+    ├── repocfg/                   GitHub repo config templates + apply engine
     ├── tui/                       Bubble Tea TUI
     ├── ui/                        interactive pickers + reports for test/build
     ├── setup/                     `core setup` bootstrap
     ├── secrets/                   local AES-256-GCM secrets store + env injection
+    ├── update/                    best-effort "newer version available" notice
     ├── version/                   build-version resolution (ldflags / buildinfo)
     └── shared/                    XDG paths, stacks parser
 ```
 
 ### Key invariants
 
-- **One daemon per user**, unix socket at `$XDG_RUNTIME_DIR/a-novel.sock`.
+- **One daemon per user**, Unix socket at `$XDG_RUNTIME_DIR/a-novel.sock`.
 - **Stateless recovery**: daemon doesn't checkpoint its own state —
   every restart rebuilds from podman labels + filesystem + env var. The
   reinstall checkpoint is the named exception, scoped to one handoff

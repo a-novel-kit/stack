@@ -1,6 +1,6 @@
 // Package detect discovers buildable targets under a directory tree.
 //
-// It recognises three kinds of build, matching the conventions used across the
+// It recognizes three kinds of build, matching the conventions used across the
 // a-novel / a-novel-kit repositories:
 //
 //   - [KindGo]     — any directory containing a go.mod (one target per module,
@@ -8,8 +8,8 @@
 //   - [KindPnpm]   — any package.json whose "scripts" map has one or more keys
 //     starting with "build" (one target per matching script).
 //   - [KindPodman] — any builds/ directory containing *.Dockerfile files (one
-//     target per Dockerfile). The image tag is derived heuristically; see
-//     docker.go.
+//     target per Dockerfile), with an image tag derived from the Dockerfile
+//     name and the sibling go.mod.
 //
 // Discovery is recursive from the scan root so nested modules and workspace
 // sub-packages are found, while vendored / generated trees (node_modules,
@@ -59,17 +59,16 @@ const runArg = "run"
 
 // InitOrder is the priority list of one-shot init Go entrypoints by Name.
 // Anything in this list, when selected, must run to completion BEFORE the
-// long-lived service targets — and IN this order (init seeds, migrations
+// long-lived service targets — and in this order (init seeds, migrations
 // applies schema, rotate-keys refreshes JWKs). Shared between detect (mode
 // filter), runner (launch barrier) and main (mode resolution) so the policy
 // lives in one place.
 var InitOrder = []string{"init", "migrations", "rotate-keys"}
 
-// IsInit reports whether t is one of the InitOrder entrypoints (a Go
-// `cmd/<name>` main). It is the same predicate used everywhere — the
-// container-mode picker keeps these alongside KindContainer targets, the
-// runner barriers on them, the picker auto-pull (migrations only) pulls
-// them.
+// IsInit reports whether t is one of the [InitOrder] entrypoints (a Go
+// `cmd/<name>` main). It is the shared predicate for that one-shot policy: the
+// picker groups these targets with the container targets, and the runner
+// barriers on them before it launches any long-lived service.
 func IsInit(t Target) bool {
 	if t.Kind != KindGo {
 		return false
@@ -103,7 +102,7 @@ type Target struct {
 
 	// Name is the unit's short identity within its directory, e.g. the module
 	// name (go), the script name "build:rest" (pnpm), or "rest.Dockerfile"
-	// (podman). It is NOT unique on its own — pair it with RelDir.
+	// (podman). It is not unique on its own — pair it with RelDir.
 	Name string
 
 	// Service is the owning repo/module short name (e.g. "service-json-keys").
@@ -132,9 +131,9 @@ type Target struct {
 	Env *ComposeEnv
 
 	// ComposeService is the compose service name that would run this target
-	// dockerised — populated by `run` detection when the target's name
+	// dockerized — populated by `run` detection when the target's name
 	// matches a profile in its env's compose file (e.g. "rest" →
-	// "service-json-keys-rest"). Empty means dockerised mode cannot run this
+	// "service-json-keys-rest"). Empty means dockerized mode cannot run this
 	// target (one-shots like migrations / rotate-keys / init have no compose
 	// service); the runner falls back to local exec for those.
 	ComposeService string
@@ -150,11 +149,10 @@ type ComposeEnv struct {
 	Project string
 	// ID is the parsed identifier, e.g. "go.internal" or "pnpm".
 	ID string
-	// Ports are the env-var names the compose file binds on the HOST side of
+	// Ports are the env-var names the compose file binds on the host side of
 	// a `ports:` mapping (e.g. POSTGRES_PORT, GRPC_PORT) — exactly the ports
 	// the host test process talks to. The runner allocates a free TCP port
-	// for each so parallel targets never collide, replacing setup-env.sh's
-	// node/get-port-please randomisation.
+	// for each so parallel targets never collide.
 	Ports []string
 	// Refs is every ${VAR} the compose file interpolates (host-exposed or
 	// not). The runner fills known test defaults (POSTGRES_USER/PASSWORD/DB/
@@ -164,7 +162,7 @@ type ComposeEnv struct {
 	// Profiles maps a compose `profiles: ["x"]` value to the service name
 	// that carries it (e.g. "rest" → "service-json-keys-rest"). `run` uses
 	// this to know which compose service to bring up when a target is
-	// requested in dockerised mode (`podman compose --profile x up <svc>`).
+	// requested in dockerized mode (`podman compose --profile x up <svc>`).
 	Profiles map[string]string
 	// Services lists every compose service declared under `services:`, in
 	// source order. The runner uses it to compute the set of services to

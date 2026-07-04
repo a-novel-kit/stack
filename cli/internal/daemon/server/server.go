@@ -1,7 +1,8 @@
-// Package server implements anovel.v1.CoreService. Phase 1 wires Ping and
-// Status as real handlers; everything else returns Unimplemented so the
-// connect-rpc surface is end-to-end-testable from day one. Each later phase
-// fills in the matching RPC group.
+// Package server implements the daemon-side handler for the
+// anovel.v1.CoreService connect-rpc API. The Server type holds the
+// long-lived daemon state — registered stacks, the target supervisor,
+// the env allocator and builder, and the log hub — and exposes each RPC
+// as a method that reads or mutates that state.
 package server
 
 import (
@@ -39,21 +40,20 @@ import (
 // the handler is caught immediately.
 var _ anovelv1connect.CoreServiceHandler = (*Server)(nil)
 
-// Server is the daemon's connect-rpc handler. It owns the daemon-side state
-// that survives across RPC calls: registered stacks, the per-target supervisor
-// (Runner — phase 3), the env allocator/builder (phase 4), the log hub
-// (phase 5), etc.
+// Server is the daemon's connect-rpc handler. It owns the daemon-side
+// state that survives across RPC calls: the registered stacks, the
+// per-target supervisor, the env allocator and builder, and the log hub.
 type Server struct {
 	mu         sync.RWMutex
 	version    string             // daemon binary version (from build info)
 	startedAt  time.Time          // for uptime calculation
 	socketPath string             // for Status responses
 	stacks     []stacks.Stack     // raw config from $A_NOVEL_STACKS
-	discovered []*discovery.Stack // phase 2: per-stack service tree
-	runner     *runner.Runner     // phase 3: process / container supervisor
-	envAlloc   *env.Allocator     // phase 4: port allocator + refcount
-	envBuilder *env.Builder       // phase 4: env block synthesis
-	logs       *logs.Store        // phase 5: per-target log files + streaming hub
+	discovered []*discovery.Stack // per-stack service tree
+	runner     *runner.Runner     // process / container supervisor
+	envAlloc   *env.Allocator     // port allocator + refcount
+	envBuilder *env.Builder       // env block synthesis
+	logs       *logs.Store        // per-target log files + streaming hub
 	// shutdownCh is closed by PrepareReinstall to signal the daemon's
 	// main loop to perform a clean exit. Use SignalShutdown() to fire;
 	// idempotent.
@@ -141,8 +141,7 @@ func (s *Server) findService(stackName, serviceName string) (*discovery.Service,
 // =============================================================================
 
 // Ping is the cheap handshake clients use to verify the daemon is alive.
-// Used by `core start` to detect an already-running instance before exiting
-// silently when one is already running.
+// `core start` uses it to detect an already-running instance.
 func (s *Server) Ping(_ context.Context, _ *connect.Request[anovelv1.PingRequest]) (*connect.Response[anovelv1.PingResponse], error) {
 	return connect.NewResponse(&anovelv1.PingResponse{
 		DaemonVersion: s.version,
@@ -173,13 +172,12 @@ func (s *Server) Status(_ context.Context, _ *connect.Request[anovelv1.StatusReq
 }
 
 // =============================================================================
-// Stubs — every other RPC. Filled in by subsequent phases. The Unimplemented
-// shape is identical across them so the dispatch table stays uniform.
+// RPC handlers
 // =============================================================================
 
 // PrepareReinstall writes a checkpoint listing every running go-exec
 // target (with its env, for relaunch), fsyncs it, then signals the
-// daemon to shut down. Containers are NOT included — they survive the
+// daemon to shut down. Containers are not included — they survive the
 // daemon's death independently.
 //
 // Concurrency: rejects a second PrepareReinstall if one is already
@@ -188,15 +186,10 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *connect.Request[anovelv1
 	if err := reinstall.EnsureSinglePending(); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
-	// Gather go-exec instances. Env lives on the Instance via the
-	// runner — phase 4's StartGoExec hands env in but we don't store
-	// it back; for now we capture it at relaunch time by re-running
-	// the env builder. That means the relaunch uses CURRENT env, not
-	// the env the target was started with. For our use case (port
-	// allocations survive within the daemon's lifetime — which is the
-	// wrong assumption across restart; ports re-allocate) this is
-	// acceptable: the relaunched target gets fresh ports, same as a
-	// manual restart would.
+	// Gather running go-exec instances. The env a target started with
+	// isn't stored back on its instance, so relaunch re-derives it from
+	// the env builder: the relaunched target gets freshly allocated
+	// ports, same as a manual restart would.
 	cp := reinstall.Checkpoint{}
 	for _, inst := range s.runner.AllInstances() {
 		if inst.Mode != runner.ModeGoExec {
@@ -245,7 +238,7 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *connect.Request[anovelv1
 
 // Shutdown is the no-checkpoint daemon stop. With force=false it SIGTERMs
 // every running go-exec target with a 10s grace each and leaves containers
-// alone. With force=true it ALSO calls KillInfra(force=true) on every
+// alone. With force=true it also calls KillInfra(force=true) on every
 // service that has an active infra session — cascade-killing any
 // remaining targets and tearing down infra containers.
 //
@@ -296,7 +289,7 @@ func (s *Server) Shutdown(ctx context.Context, req *connect.Request[anovelv1.Shu
 		GoExecKilled:          int32(len(goExecIDs)),
 		InfraServicesTornDown: int32(infraTorn),
 	}
-	// 4) Fire the shutdown signal AFTER the response is on the wire. Same
+	// 4) Fire the shutdown signal after the response is on the wire. Same
 	//    50ms defer trick PrepareReinstall uses — the runtime flushes the
 	//    response back to the client before the listener closes.
 	go func() {
@@ -307,9 +300,9 @@ func (s *Server) Shutdown(ctx context.Context, req *connect.Request[anovelv1.Shu
 	return connect.NewResponse(resp), nil
 }
 
+// ListStacks returns every registered stack. Stacks are fixed at startup,
+// so this reads them straight from state.
 func (s *Server) ListStacks(_ context.Context, _ *connect.Request[anovelv1.ListStacksRequest]) (*connect.Response[anovelv1.ListStacksResponse], error) {
-	// Stacks are known at startup; this is real even in phase 1 so `a-novel
-	// stacks` works the day the daemon ships.
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := &anovelv1.ListStacksResponse{
@@ -406,9 +399,8 @@ func (s *Server) GetTopology(_ context.Context, req *connect.Request[anovelv1.Ge
 	return connect.NewResponse(&anovelv1.GetTopologyResponse{Rendered: b.String()}), nil
 }
 
-// StartTarget brings up the named target in the requested mode (defaults
-// to go-exec). Phase 3+4 implement go-exec end-to-end with env synthesis;
-// container mode is in a follow-up.
+// StartTarget brings up the named target in the requested mode
+// (defaults to go-exec), synthesizing the target's env before launch.
 func (s *Server) StartTarget(ctx context.Context, req *connect.Request[anovelv1.StartTargetRequest]) (*connect.Response[anovelv1.StartTargetResponse], error) {
 	mode := req.Msg.GetMode()
 	if mode == anovelv1.Mode_MODE_UNSPECIFIED {
@@ -422,7 +414,7 @@ func (s *Server) StartTarget(ctx context.Context, req *connect.Request[anovelv1.
 	// Dependency-walk gating: ensure infra is up + one-shots
 	// satisfied before starting the target. Auto-triggers StartInfra
 	// (which cascades to one-shot auto-run). Refuses-with-hint for
-	// long-runner deps that aren't already running. Done BEFORE env
+	// long-runner deps that aren't already running. Done before env
 	// build so newly-allocated `${*_PORT}` slots (POSTGRES_PORT etc.)
 	// land in the snapshot the builder reads next.
 	depMode := convertModeFromProto(mode) // mode for any auto-run one-shots
@@ -432,7 +424,7 @@ func (s *Server) StartTarget(ctx context.Context, req *connect.Request[anovelv1.
 	if err := s.runner.EnsureDepsReady(ctx, tgt, svc, depMode, osEnviron()); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
-	// REBUILD env now that infra-up has allocated service-level ports.
+	// Rebuild env now that infra-up has allocated service-level ports.
 	// The builder's snapshot-fill picks up POSTGRES_PORT etc. from the
 	// allocator and synthesizes POSTGRES_DSN with localhost:<port>.
 	envEntries, warnings, err := s.envBuilder.ForTarget(tgt, s.allServiceNames())
@@ -557,7 +549,7 @@ func (s *Server) lookupTargetForInstance(inst *runner.Instance) *discovery.Targe
 
 // StartInfra brings up a service's infrastructure containers and auto-runs
 // every one-shot target whose successful completion the long-runners
-// depend on. Spec §5.5. Idempotent.
+// depend on. Idempotent.
 func (s *Server) StartInfra(ctx context.Context, req *connect.Request[anovelv1.StartInfraRequest]) (*connect.Response[anovelv1.StartInfraResponse], error) {
 	stack := req.Msg.GetStack()
 	if stack == "" && len(s.discovered) > 0 {
@@ -718,9 +710,9 @@ func (s *Server) StreamLogs(ctx context.Context, req *connect.Request[anovelv1.S
 	}
 	follow := req.Msg.GetFollow() && req.Msg.GetRunId() == ""
 
-	// Subscribe BEFORE reading the file when in --follow mode — so any
+	// Subscribe before reading the file when in --follow mode — so any
 	// line written between snapshot and subscribe doesn't get lost.
-	// The unsub MUST fire on handler exit so the subscriber slice on
+	// The unsub must fire on handler exit so the subscriber slice on
 	// the target's stream doesn't accumulate dead channels (one per
 	// disconnected client) over the target's lifetime.
 	var sub <-chan logs.Line
@@ -879,7 +871,7 @@ func (s *Server) GetEnv(_ context.Context, req *connect.Request[anovelv1.GetEnvR
 
 // osEnviron returns the daemon process's environment as a fresh slice
 // — used as the base layer for spawned target processes so PATH / HOME
-// / GOPATH etc. flow through. The synthesized env is layered ON TOP so
+// / GOPATH etc. flow through. The synthesized env is layered on top so
 // it overrides any inherited values with the same keys.
 func osEnviron() []string {
 	return append([]string(nil), os.Environ()...)
@@ -910,7 +902,7 @@ func (s *Server) ListVolumes(_ context.Context, req *connect.Request[anovelv1.Li
 }
 
 // BackupVolume writes a tar.zst snapshot per volume. Refuses if the
-// service is up unless --force (which cascade-kills first). Spec §8.3.
+// service is up unless --force (which cascade-kills first).
 func (s *Server) BackupVolume(ctx context.Context, req *connect.Request[anovelv1.BackupVolumeRequest]) (*connect.Response[anovelv1.BackupVolumeResponse], error) {
 	svc, err := s.findService(req.Msg.GetStack(), req.Msg.GetService())
 	if err != nil {
@@ -960,7 +952,7 @@ func (s *Server) ClearVolume(ctx context.Context, req *connect.Request[anovelv1.
 	return connect.NewResponse(&anovelv1.ClearVolumeResponse{ClearedVolumes: cleared}), nil
 }
 
-// ensureServiceDown is the §8.3 pre-check shared by every destructive
+// ensureServiceDown is the pre-check shared by every destructive
 // volume op. Refuses with a hint if any target/infra is up; with
 // force=true, cascade-kills targets + infra first.
 func (s *Server) ensureServiceDown(ctx context.Context, svc *discovery.Service, force bool, op string) error {
@@ -1012,7 +1004,7 @@ func runningNames(insts []runner.Instance) []string {
 //   - Go-exec mode: spawns the command in the target's working directory
 //     with the target's resolved env (POSTGRES_DSN, *_PORT etc.). Useful
 //     for `a-novel exec migrations psql` — psql gets the right DSN out
-//     of the box. Does NOT require the target to be running, just
+//     of the box. Does not require the target to be running, just
 //     discoverable — the env builder synthesises a fresh allocation if
 //     none is current (so `a-novel exec migrations psql` works on a cold
 //     stack with infra up).
@@ -1065,7 +1057,7 @@ func (s *Server) Exec(ctx context.Context, req *connect.Request[anovelv1.ExecReq
 			envList = append(envList, e.Key+"="+e.Value)
 		}
 		execCmd = exec.CommandContext(ctx, cmdv[0], cmdv[1:]...)
-		// Run in the SERVICE directory (one level up from cmd/<target>)
+		// Run in the service directory (one level up from cmd/<target>)
 		// so relative paths inside the cmd match what the target sees.
 		execCmd.Dir = filepath.Dir(filepath.Dir(tgt.CmdDir))
 		execCmd.Env = envList
@@ -1121,7 +1113,7 @@ func (s *Server) Exec(ctx context.Context, req *connect.Request[anovelv1.ExecReq
 }
 
 // Debug returns instructions for attaching Delve to a running go-exec
-// target. It does NOT spawn dlv itself — the user runs the printed
+// target. It does not spawn dlv itself — the user runs the printed
 // command in their own terminal so the dlv REPL is interactive and
 // disconnects don't kill the target. (Auto-spawning dlv would require
 // bidi streaming + raw-tty plumbing the daemon doesn't yet have.)
@@ -1260,7 +1252,6 @@ func unimplemented(rpc, phase string) error {
 // can't legally be named "infra" since target IDs come from compose
 // service names (which don't start with that word in any of our
 // services).
-// parseInfraLogID returns (stack, service, name, ok).
 func parseInfraLogID(id string) (string, string, string, bool) {
 	parts := strings.Split(id, "/")
 	if len(parts) != 4 || parts[2] != "infra" {

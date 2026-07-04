@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// Default stack name when none is specified.
+// DefaultName is the stack name used when A_NOVEL_STACKS is unset.
 const DefaultName = "default"
 
 // EnvVar is the env var name read at daemon start.

@@ -19,7 +19,7 @@ func checkPodman() error {
 	return nil
 }
 
-// checkGit verifies git is on PATH and at least 2.x.
+// checkGit verifies git is on PATH.
 func checkGit() error {
 	if _, err := exec.LookPath("git"); err != nil {
 		return errors.New("git not on PATH; install git first")

@@ -43,9 +43,8 @@ type Checkpoint struct {
 }
 
 // GoExecCheckpoint is one running go-exec target's relaunch payload.
-// Container targets are NOT recorded — podman keeps them alive across
-// daemon restarts, and adoption (a separate phase 3 follow-up) picks
-// them up.
+// Container targets aren't recorded — podman keeps them alive across
+// daemon restarts, and orphan adoption picks them up.
 type GoExecCheckpoint struct {
 	TargetID string   `json:"target_id"`
 	Env      []string `json:"env"`

@@ -14,13 +14,13 @@ import (
 )
 
 // Reusable lipgloss presentation primitives shared by the dry-run view and the
-// build report: a width helper, per-kind colour coding, stat "pills", titled
+// build report: a width helper, per-kind color coding, stat "pills", titled
 // bordered panels, and the two data tables. Keeping them here means the views
-// describe *what* to show; this file owns *how* it looks.
+// describe what to show; this file owns how it looks.
 
 // termWidth is the content width budget for static (non-TUI) output. The TUI
 // gets its width from tea.WindowSizeMsg; piped/CI output has no terminal to
-// ask, so honour $COLUMNS and otherwise fall back to a readable default,
+// ask, so honor $COLUMNS and otherwise fall back to a readable default,
 // clamped so tables never get absurdly narrow or wide.
 func termWidth() int {
 	if c := os.Getenv("COLUMNS"); c != "" {
@@ -31,7 +31,7 @@ func termWidth() int {
 	return 100
 }
 
-// Verb parameterises the screens shared by `build` and `test` so the same
+// Verb parameterizes the screens shared by `build` and `test` so the same
 // model/report/dry-run render the right wording for each.
 type Verb struct {
 	Base  string // "build" / "test"
@@ -67,7 +67,7 @@ func relLabel(rel string) string {
 }
 
 // gutter is the left margin (in spaces) every screen block sits under in the
-// TUI. Centralised so indentBlock and the width math (cw = w - gutter) agree.
+// TUI. Centralized so indentBlock and the width math (cw = w - gutter) agree.
 const gutter = 2
 
 // indentBlock left-pads every non-empty line of a multi-line block by the
@@ -95,7 +95,7 @@ func clamp(v, lo, hi int) int {
 	}
 }
 
-// rule is a full-width horizontal divider in the dim colour — the quiet
+// rule is a full-width horizontal divider in the dim color — the quiet
 // separator between major blocks.
 func rule(width int) string {
 	if width <= 0 {
@@ -104,7 +104,7 @@ func rule(width int) string {
 	return styleMuted.Render(strings.Repeat("─", width))
 }
 
-// section is a titled divider: a coloured, bold, upper-cased label followed by
+// section is a titled divider: a colored, bold, upper-cased label followed by
 // a dim rule that fills the rest of the width. It headlines a block of output
 // so the eye can find "RESULTS" / "FAILURES" without counting blank lines.
 func section(title string, c color.Color, width int) string {
@@ -120,8 +120,8 @@ func section(title string, c color.Color, width int) string {
 	return head + styleMuted.Render(strings.Repeat("─", fill))
 }
 
-// para word-wraps an explanatory sentence to width in the dim colour. Used
-// sparingly to tell the reader what a block *is* before showing it.
+// para word-wraps an explanatory sentence to width in the dim color. Used
+// sparingly to tell the reader what a block is before showing it.
 func para(text string, width int) string {
 	if width <= 0 {
 		width = termWidth()
@@ -136,9 +136,8 @@ func para(text string, width int) string {
 	return strings.Join(lines, "\n")
 }
 
-// kindColor gives each build kind its own palette colour so a glance at the
-// KIND column (or a badge) is enough to tell go/pnpm/podman apart: go = brand
-// blue, pnpm = gold accent, podman = brand purple.
+// kindColor gives each build kind its own palette color so a glance at the
+// KIND column (or a badge) is enough to tell go/pnpm/podman apart.
 func kindColor(k detect.Kind) color.Color {
 	switch k {
 	case detect.KindGo:
@@ -152,21 +151,21 @@ func kindColor(k detect.Kind) color.Color {
 	}
 }
 
-// kindTag is a fixed-width, colour-coded, upper-cased kind label (GO / PNPM /
+// kindTag is a fixed-width, color-coded, upper-cased kind label (GO / PNPM /
 // PODMAN). Padded to the longest name so a column of these stays aligned in
 // the live build list where there is no table to do it for us. The padding is
-// applied before colouring so it counts toward visible width.
+// applied before coloring so it counts toward visible width.
 func kindTag(k detect.Kind) string {
 	return lipgloss.NewStyle().Foreground(kindColor(k)).Bold(true).
 		Render(pad(strings.ToUpper(string(k)), 6))
 }
 
-// targetName colours a build target's name by outcome: green on success,
-// error-orange on failure. Deliberately NOT a kind colour and NOT the default
+// targetName colors a build target's name by outcome: green on success,
+// error-orange on failure. Deliberately NOT a kind color and NOT the default
 // foreground — once a result exists, the name itself should carry the verdict
 // (reinforcing the ✓/✗ glyph) without being mistaken for the kind palette.
 // Before a result exists (dry run, selection, in-flight) callers use the plain
-// default colour instead.
+// default color instead.
 func targetName(name string, ok bool) string {
 	c := colOK
 	if !ok {
@@ -175,7 +174,7 @@ func targetName(name string, ok bool) string {
 	return lipgloss.NewStyle().Foreground(c).Render(name)
 }
 
-// pill renders a rounded chip — "label value" — bordered and coloured by c.
+// pill renders a rounded chip — "label value" — bordered and colored by c.
 // Used in a row to give scannable headline stats (counts, pass/fail).
 func pill(label, value string, c color.Color) string {
 	inner := lipgloss.NewStyle().Foreground(colMuted).Render(label) + " " +
@@ -199,14 +198,14 @@ func pillRow(pills ...string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, spaced...)
 }
 
-// panel wraps body in a rounded muted border under a coloured title bar — a
+// panel wraps body in a rounded muted border under a colored title bar — a
 // titled card, bounded to width. lipgloss has no native bordered-title, so the
 // title is a separate accent line above the box (a common, clean compromise).
 //
 // width is the OUTER width budget: the box's content is hard-set to
 // width-4 (1 border + 1 padding each side) and lipgloss wraps long lines into
-// it, so a single 370-char build-log line no longer stretches the border off
-// the terminal.
+// it, so an over-long build-log line stays bounded by the border instead of
+// stretching it off the terminal.
 func panel(title string, c color.Color, body string, width int) string {
 	if width <= 0 {
 		width = termWidth()
@@ -242,7 +241,7 @@ func baseTable() *table.Table {
 }
 
 // targetsTable is the dry-run overview: every detected target as one row, the
-// KIND cell coloured, the COMMAND cell wrapped within the width budget so the
+// KIND cell colored, the COMMAND cell wrapped within the width budget so the
 // exact invocation is always fully visible (the whole point of a dry run).
 func targetsTable(targets []detect.Target) string {
 	t := baseTable().
@@ -254,8 +253,8 @@ func targetsTable(targets []detect.Target) string {
 		loc := relLabel(tg.RelDir)
 		kind := lipgloss.NewStyle().Foreground(kindColor(tg.Kind)).Bold(true).
 			Render(strings.ToUpper(string(tg.Kind)))
-		// TARGET cell is two lines: the name (default terminal colour — a dry
-		// run has no outcome, so no green/red and no kind colour), then its
+		// TARGET cell is two lines: the name (default terminal color — a dry
+		// run has no outcome, so no green/red and no kind color), then its
 		// location dimmed beneath it.
 		target := tg.Name + "\n" + styleMuted.Render("↳ "+loc)
 		cmd := lipgloss.NewStyle().Foreground(colMuted).
@@ -271,7 +270,7 @@ func targetsTable(targets []detect.Target) string {
 	return t.Render()
 }
 
-// resultsTable is the per-target build outcome grid: a coloured status badge,
+// resultsTable is the per-target build outcome grid: a colored status badge,
 // the target, its kind, and how long it took.
 func resultsTable(results []build.Result) string {
 	// KIND before TARGET: the kind is the strongest disambiguator, so it
@@ -315,7 +314,7 @@ func distinctServices(results []build.Result) int {
 	return len(seen)
 }
 
-// cleanOutput normalises captured subprocess output for display in a fixed
+// cleanOutput normalizes captured subprocess output for display in a fixed
 // box. Build tools (podman especially) emit CRLF and bare carriage returns for
 // in-place progress; rendered verbatim into a static panel those overprint and
 // shred the layout. Per line we keep only what survives the last '\r' (what a
@@ -335,7 +334,7 @@ func cleanOutput(s string) string {
 
 // failurePanel renders one failed build as a critical-bordered card, bounded
 // to width: the command that ran, the process error, then its captured output
-// (normalised + wrapped inside the border). tail > 0 keeps only the last N
+// (normalized + wrapped inside the border). tail > 0 keeps only the last N
 // output lines (the in-TUI preview); tail <= 0 keeps the full log (the
 // authoritative scrollback report).
 func failurePanel(r build.Result, tail, width int) string {

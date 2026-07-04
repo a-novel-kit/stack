@@ -1,9 +1,7 @@
-// Daemon-backed verbs. Phase 1 ships stubs that connect to the daemon and
-// invoke the (mostly Unimplemented) RPCs — so the help surface and the wire
-// path are testable today, with the per-command behavior filling in over
-// phases 2–9. Each stub's Short/Long/Example describes the COMPLETE behavior
-// so `a-novel help <verb>` is exhaustive even before the implementation
-// lands.
+// Daemon-backed verbs: the CLI surface that connects to the daemon over its
+// unix-socket RPC and renders the responses. Each command is a thin client
+// holding no supervision state of its own — the daemon owns the running
+// targets, their phases, and their logs.
 
 package cli
 
@@ -25,7 +23,7 @@ import (
 )
 
 // Shared string constants for the CLI surface. Mode values (`go-exec`,
-// `container`) appear in flag defaults, palette args, AND user-visible
+// `container`) appear in flag defaults, palette args, and user-visible
 // labels — same canonical token everywhere. Entity-kind values
 // (`target`, `infra`) discriminate the --kind filter and the
 // entity-ID parser's sentinel segment.
@@ -170,8 +168,6 @@ With --json, emits one JSON object per service for machine consumption
 }
 
 // renderPs prints services as a human-readable table or as JSON lines.
-// Pure-phase-2 — every target sits at phase=UNSPECIFIED until phase 3
-// wires supervision.
 func renderPs(w io.Writer, services []*anovelv1.Service, asJSON bool) {
 	if asJSON {
 		enc := json.NewEncoder(w)
@@ -192,7 +188,7 @@ func renderPs(w io.Writer, services []*anovelv1.Service, asJSON bool) {
 		// Targets first (the user's primary interaction surface),
 		// then infra. The 'kind' column ('1shot' / 'longr' / 'infra')
 		// + the trailing fully-qualified ID make the two
-		// distinguishable at a glance AND copy-pasteable into
+		// distinguishable at a glance and copy-pasteable into
 		// kill/restart/logs without manual reconstruction.
 		for _, t := range s.GetTargets() {
 			kindStr := targetKindShort(t.GetKind())
@@ -250,8 +246,8 @@ func targetStatusLabel(t *anovelv1.Target) string {
 	return phaseLabel(t.GetPhase())
 }
 
-// phaseLabel renders a Phase enum as a short human-readable token. Phase 3
-// will start populating real values; for now most rows show "idle".
+// phaseLabel renders a Phase enum as a short human-readable token; an
+// unspecified phase reads as "idle".
 func phaseLabel(p anovelv1.Phase) string {
 	switch p {
 	case anovelv1.Phase_PHASE_PENDING:
@@ -619,7 +615,7 @@ type entityRef struct {
 //	<service>/infra/<name>                  → infra shorthand
 //	<stack>/<service>/infra/<name>          → infra canonical
 //
-// The "infra" sentinel must appear as the SECOND-TO-LAST segment for
+// The "infra" sentinel must appear as the second-to-last segment for
 // the entry to count as infra — every other slot containing "infra"
 // is a target name that happens to overlap (none of our cmd/<dir>s
 // are literally named "infra" today, but the resolver is defensive).
@@ -1064,7 +1060,7 @@ Refuses while the service is up. --force cascade-stops first.`,
 }
 
 // matchGlob is a tiny glob matcher supporting * (any chars) — enough for
-// the `--only=PATTERN` filter on env keys. POSIX `path.Match` is fine for
+// the `--only=PATTERN` filter on env keys. `filepath.Match` is fine for
 // the simple shapes we care about ("REST*", "*_PORT", "POSTGRES_*").
 // Errors fall back to substring matching so a user typo still does
 // something reasonable.

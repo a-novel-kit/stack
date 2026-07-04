@@ -27,19 +27,19 @@ type PhaseEvent struct {
 	Ts         time.Time
 }
 
-// eventSub is one Watch subscriber. The runner snapshots `subs` under
-// `subsMu` whenever it emits, then drops into each channel non-blocking;
-// a slow subscriber loses events rather than stalling the runner.
+// eventSub is one Watch subscriber. emitPhase iterates the live subs under
+// `subsMu` and sends into each channel non-blocking; a slow subscriber
+// loses events rather than stalling the runner.
 //
-// `filter` returns true for events the subscriber wants. Empty filter
-// means "all events" — see SubscribePhases below.
+// `filter` returns true for events the subscriber wants. A nil filter
+// means every event — see SubscribePhases below.
 type eventSub struct {
 	ch     chan PhaseEvent
 	filter func(PhaseEvent) bool
 }
 
 // SubscribePhases registers a channel-based subscriber for phase events.
-// Returns the channel to read from + an unsubscribe func the caller MUST
+// Returns the channel to read from + an unsubscribe func the caller must
 // invoke on exit (typically deferred). `filter` is optional — pass nil to
 // receive every event.
 //
@@ -72,14 +72,13 @@ func (r *Runner) SubscribePhases(filter func(PhaseEvent) bool) (<-chan PhaseEven
 // markTerminated() so every subscriber sees the same view as Instance
 // readers.
 //
-// The fanout holds subsMu.RLock for the ENTIRE iteration rather than
-// snapshotting then sending outside the lock. The earlier
-// snapshot-then-send pattern races with unsub: unsub removes the sub
-// from the slice AND closes sub.ch under the write lock, but a
-// snapshot taken before the unsub still holds the *eventSub pointer
-// and would panic on `send on closed channel`. Holding the read lock
-// while sending serializes correctly against unsub's write lock
-// without any close-detection ceremony. The cost is bounded:
+// The fanout holds subsMu.RLock for the entire iteration rather than
+// snapshotting then sending outside the lock. Snapshotting would race
+// with unsub, which removes the sub from the slice AND closes sub.ch
+// under the write lock: a snapshot taken before the unsub still holds the
+// *eventSub pointer and would panic on `send on closed channel`. Holding
+// the read lock while sending serializes correctly against unsub's write
+// lock without any close-detection ceremony. The cost is bounded:
 // `select-default` makes every send non-blocking, so iteration is
 // O(N_subs × microseconds) — well below the time any caller of
 // emitPhase already spends inside the runner's `mu`.

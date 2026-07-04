@@ -9,13 +9,13 @@ import (
 
 // Palette.
 //
-// All semantic colours are the exact A-Novel values and so are fixed
+// All semantic colors are the exact A-Novel values and so are fixed
 // lipgloss.Color (not adaptive) — brand and status signalling must not drift
 // per terminal theme. Only colMuted/colWarn stay adaptive (pure dimming, no
 // brand meaning). Everything is foreground-only — no backgrounds, no pure
 // black/white — for consistent readability across terminal themes.
 //
-// The two brand colours (purple/blue) are the identity; colGold is a third,
+// The two brand colors (purple/blue) are the identity; colGold is a third,
 // non-brand accent used for structural chrome (section headings, counts) so
 // the UI does not read as an endless purple/blue stripe. colCrit is reserved
 // for the few things that demand the eye immediately (a failed build) — used
@@ -74,7 +74,7 @@ var wordmark = []string{
 // renderQuillLine two-tones a single wordmark row: the first visible glyph in
 // purple, everything after it in blue. Down the diagonal this paints a purple
 // leading edge with a blue body — a shadow/relief effect using only the two
-// trademark colours. Leading spaces (which carry the diagonal) stay uncoloured.
+// trademark colors. Leading spaces (which carry the diagonal) stay uncolored.
 func renderQuillLine() []string {
 	out := make([]string, len(wordmark))
 

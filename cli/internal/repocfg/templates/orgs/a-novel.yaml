@@ -1,6 +1,6 @@
 # Per-org config for a-novel. When a ruleset's bypass list names a generic
 # bot (dependencies | agent | publish), the CLI resolves it to the GitHub
-# App id below for this org's repos.
+# App ID below for this org's repos.
 org: a-novel
 signing_required: true
 bots:

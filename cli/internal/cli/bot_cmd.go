@@ -5,7 +5,7 @@
 // The bot's signing key never lives on a dev machine. Instead this
 // command hands the comment (body + target metadata) to the per-org
 // `bot-comment` workflow_dispatch (one dispatcher per org — see
-// botDispatchRepos), triggered with the OPERATOR's own gh token. The
+// botDispatchRepos), triggered with the operator's own gh token. The
 // workflow holds the App key, mints a scoped short-lived token, and
 // posts as <app-slug>[bot]. See .github/workflows/bot-comment.yaml.
 //
@@ -13,11 +13,10 @@
 //
 //   - No local app tokens. A user only needs gh + actions:write on the
 //     dispatcher repo; they never handle a .pem. Revocation is per-user.
-//   - Comment-only BY DESIGN. The workflow can only post a comment, so a
+//   - Comment-only by design. The workflow can only post a comment, so a
 //     compromised trigger cannot push, merge, or author a PR — there is
-//     no skeleton-key token locally to misuse. This replaces the old
-//     bot-gh deny-list (a soft wrapper guard) with a structural one.
-//   - Separation of duties. The trigger token cannot change WHAT the
+//     no skeleton-key token locally to misuse.
+//   - Separation of duties. The trigger token cannot change what the
 //     workflow does — that is code on the protected master branch.
 //
 // The command waits for each dispatched run synchronously (gh run watch
@@ -45,7 +44,7 @@ const (
 	// botWorkflowFile is the workflow_dispatch file, by basename.
 	botWorkflowFile = "bot-comment.yaml"
 	// botRunLookupTimeout bounds how long we wait for the dispatched run
-	// to register before giving up — dispatch returns no run id, so we
+	// to register before giving up — dispatch returns no run ID, so we
 	// poll the run list until our nonce shows up in a run-name.
 	botRunLookupTimeout = 60 * time.Second
 	// botMaxCommentsBytes caps the JSON size of one `comments` dispatch.
@@ -66,7 +65,7 @@ var botDispatchRepos = map[string]string{
 }
 
 // botBatchItem is one comment in a `--batch` payload: a target number, the
-// markdown body, and an optional inline review-comment id to reply to. The
+// markdown body, and an optional inline review-comment ID to reply to. The
 // JSON tags match an element of the dispatcher's `comments` array, so the
 // parsed items re-marshal straight into the dispatch input.
 type botBatchItem struct {
@@ -344,8 +343,8 @@ func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs
 }
 
 // waitForDispatchedRun polls the run list until a run whose name carries
-// our nonce appears, and returns its database id. workflow_dispatch does
-// not return a run id, and the run takes a moment to register, so we
+// our nonce appears, and returns its database ID. workflow_dispatch does
+// not return a run ID, and the run takes a moment to register, so we
 // poll with a bounded deadline.
 func waitForDispatchedRun(dispatchRepo, nonce string) (int64, error) {
 	deadline := time.Now().Add(botRunLookupTimeout)

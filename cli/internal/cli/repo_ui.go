@@ -11,7 +11,7 @@ import (
 )
 
 // Brand-aligned styles for the repo command's interactive output (the shared
-// ui package keeps its palette unexported, so mirror the few colours used).
+// ui package keeps its palette unexported, so mirror the few colors used).
 var (
 	repoHead  = lipgloss.NewStyle().Foreground(lipgloss.Color("#DC24FF")).Bold(true) // A-Novel purple
 	repoLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("#C38500")).Bold(true) // structural gold

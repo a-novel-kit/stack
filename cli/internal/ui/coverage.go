@@ -95,7 +95,7 @@ func nodeCoverageBlock(out string) string {
 }
 
 // CoverageView renders the COVERAGE report section: Go packages as a
-// colour-banded percentage list with a mean, and each pnpm target's native
+// color-banded percentage list with a mean, and each pnpm target's native
 // vitest table verbatim beneath it. Returns "" when nothing was measured
 // (flag off, or no coverage produced) so callers can drop it in
 // unconditionally.
@@ -149,7 +149,7 @@ func covHeading(s string) string {
 	return lipgloss.NewStyle().Foreground(colGold).Bold(true).Render("▌ " + s)
 }
 
-// covPct colours a coverage figure by the usual green/amber/red bands so a
+// covPct colors a coverage figure by the usual green/amber/red bands so a
 // thin package stands out at a glance.
 func covPct(p float64) string {
 	c := colErr

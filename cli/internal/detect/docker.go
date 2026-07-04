@@ -8,12 +8,11 @@ import (
 
 // jobBasenames are Dockerfile basenames that, by a-novel convention, produce a
 // one-shot "job" image rather than a long-lived server. Their tag is namespaced
-// under jobs/ and stripped of dashes (rotate-keys → jobs/rotatekeys), matching
-// the hand-written scripts/build.sh files in the service repos.
+// under jobs/ and stripped of dashes (rotate-keys → jobs/rotatekeys).
 //
-// This is the one piece of the heuristic that is NOT derivable from the
-// filename alone (why is "migrations" a job but "rest" not? — domain
-// knowledge). Extend this set when a new job kind appears.
+// Which basenames are jobs cannot be derived from the filename alone — it is
+// domain knowledge (migrations is a job, rest is not). Extend this set when a
+// new job kind appears.
 var jobBasenames = map[string]struct{}{
 	"migrations":  {},
 	"init":        {},
@@ -54,8 +53,8 @@ func detectPodman(dir, rel string) []Target {
 			Dir:    dir,
 			Detail: tag,
 			Cmd:    "podman",
-			// Mirrors scripts/build.sh exactly: docker-format manifest so the
-			// image is consumable by podman-compose without a registry push.
+			// docker-format manifest so the image is consumable by
+			// podman-compose without a registry push.
 			Args: []string{buildArg, "--format", "docker", "-f", dockerfileRel, "-t", tag, "."},
 		})
 	}
@@ -92,8 +91,8 @@ func registryBase(dir string) string {
 	return "ghcr.io/" + owner + "/" + repo
 }
 
-// imageName maps a Dockerfile filename to its image-name segment, matching the
-// conventions encoded in the service repos' scripts/build.sh:
+// imageName maps a Dockerfile filename to its image-name segment, following the
+// a-novel image-naming convention:
 //
 //	rest.Dockerfile            → rest
 //	standalone.grpc.Dockerfile → standalone-grpc      (dots → dashes)

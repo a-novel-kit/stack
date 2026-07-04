@@ -1,7 +1,7 @@
 # Required-status-check discovery for the master ruleset.
 #
 # Required checks = the `always` set + every job declared in a repo's
-# .github/workflows/main.yaml, MINUS the `exclude` rules below. A job's id IS
+# .github/workflows/main.yaml, minus the `exclude` rules below. A job's ID is
 # its check context, so there is nothing to derive and nothing to drift.
 # Workflow files are code (owned by skills / PRs), not by `repo update`; this
 # map only decides which of their jobs gate the default branch.
@@ -10,7 +10,7 @@ integrations:
   actions: 15368
   gitguardian: 46505
   codecov: 254
-  # The [Agent] App posts the merge-gate check-run, but its id is per-org
+  # The [Agent] App posts the merge-gate check-run, but its ID is per-org
   # (a-novel and a-novel-kit run separate Apps), so `agent` is injected from the
   # org profile at discovery time — never hardcoded here. See ResolveBotIntegrations.
 
@@ -24,7 +24,7 @@ always:
 
 # main.yaml jobs are required by default, except those matching these rules:
 exclude:
-  # Job ids starting with one of these prefixes (reporting / post-merge jobs).
+  # Job IDs starting with one of these prefixes (reporting / post-merge jobs).
   prefixes: ["report-"]
   # Jobs whose `if:` contains one of these strings — master-only jobs never run
   # on a PR, so they cannot gate one.

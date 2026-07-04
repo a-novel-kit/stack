@@ -177,8 +177,8 @@ func (m *model) renderRight(width, height int) string {
 	// empty infra line.
 	infraTabsRow := renderInfraTabs(svc, m.selectedTab)
 	targetTabsRow := renderTargetTabs(svc, m.selectedTab, len(svc.GetInfra()))
-	// Detail header — branches on kind. Targets keep the existing
-	// "name · mode · phase [pid] [container]" shape; infras get
+	// Detail header — branches on kind. Targets show
+	// "name · mode · phase [pid] [container]"; infras show
 	// "name · infra · phase healthy container=xxx".
 	var header string
 	switch m.activeTabKind() {
@@ -216,9 +216,8 @@ func (m *model) renderRight(width, height int) string {
 		sections = append(sections, targetTabsRow)
 		rowCount++
 	}
-	// Log pane shrinks by (rowCount-1) so adding the second tab row
-	// doesn't push log lines off the bottom (the original layout
-	// reserved space for 1 tab row).
+	// Log pane shrinks by (rowCount-1) so a second tab row doesn't push
+	// log lines off the bottom; the base height budgets for one tab row.
 	logsHeight := height - 5 - (rowCount - 1)
 	if logsHeight < 4 {
 		logsHeight = 4
@@ -280,7 +279,7 @@ func renderTargetTabs(svc *anovelv1.Service, selectedTab, infraOffset int) strin
 }
 
 // targetStatusDot returns the colored status glyph for one target.
-// Branches on TargetKind so one-shots reflect their LAST RUN outcome
+// Branches on TargetKind so one-shots reflect their last-run outcome
 // (✓ success / ✗ failure) instead of falling back to a dim ○ that
 // would look indistinguishable from "never started":
 //
@@ -371,11 +370,10 @@ func (m *model) renderLogs(width, height int) string {
 	return b.String()
 }
 
-// renderFooter is layer-1 of the three-layer palette:
-// always-visible hint of the most-relevant commands for the current
-// context. Single-line — action feedback now lives in the dedicated
-// status bar above (renderStatus). When the log pane is scrolled
-// back, the "scroll" hint adapts to advertise End/G as the way out.
+// renderFooter draws the always-visible hint of the most-relevant
+// commands for the current context. Single-line — action feedback
+// lives in the dedicated status bar above (renderStatus). When the log
+// pane is scrolled back, the hint advertises End/G as the way out.
 func (m *model) renderFooter() string {
 	scrollHint := styleCmd.Render("PgUp/PgDn") + " scroll logs"
 	if m.logScroll > 0 {
@@ -392,8 +390,8 @@ func (m *model) renderFooter() string {
 	return styleFooter.Render(strings.Join(hints, "  ·  "))
 }
 
-// renderHelp is layer 3 — full-screen help showing every command,
-// organized by category. Spec §14.3.
+// renderHelp draws the full-screen help listing every command, grouped
+// by category.
 func (m *model) renderHelp() string {
 	body := strings.Join([]string{
 		styleHeader.Render("a-novel run ui  —  command reference"),
@@ -441,8 +439,8 @@ func (m *model) renderHelp() string {
 }
 
 // renderTopology is the dedicated topology screen, populated by the
-// :topology palette command's response. Spec §14.4. Any keystroke
-// returns to viewMain.
+// :topology palette command's response. Any keystroke returns to
+// viewMain.
 func (m *model) renderTopology() string {
 	body := strings.Join([]string{
 		styleHeader.Render("Dependency topology"),
@@ -454,9 +452,9 @@ func (m *model) renderTopology() string {
 	return styleFrame.Width(m.width - 2).Height(m.height - 2).Render(body)
 }
 
-// overlayCommand draws the command input + autocomplete suggestions over
-// the bottom-most lines of the main view. Spec §14.3 layer 2: as the
-// user types, show matching commands with one-line descriptions.
+// overlayCommand draws the command input and autocomplete suggestions
+// over the bottom-most lines of the main view: as the user types, it
+// shows matching commands with one-line descriptions.
 func overlayCommand(main, input string) string {
 	cmd := styleCmd.Render(input) + styleDim.Render("█")
 	suggestions := suggestCommands(strings.TrimPrefix(input, ":"))
@@ -635,9 +633,9 @@ func computeNavWidth(svcs []*anovelv1.Service) int {
 }
 
 // serviceHasError reports whether any target in the service terminated
-// with a non-success exit. Used both by serviceStatusLine (to render
-// the red "● errored" line) and the inactive-row dim logic (an errored
-// row shouldn't dim — it needs attention).
+// with a non-success exit. Used by serviceTargetsLine to render the red
+// "● errored" line, and by the nav's inactive-row dimming — an errored
+// service shouldn't dim, it needs attention.
 func serviceHasError(svc *anovelv1.Service) bool {
 	for _, t := range svc.GetTargets() {
 		if t.GetPhase() == anovelv1.Phase_PHASE_TERMINATED &&

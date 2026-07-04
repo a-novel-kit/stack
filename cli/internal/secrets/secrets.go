@@ -1,7 +1,7 @@
 // Package secrets is a local, encrypted secrets manager for the a-novel CLI.
 //
 // Threat model. A developer (or an AI agent) runs `a-novel test`/`run`/`ui`
-// with API secrets (e.g. OPENAI_API_KEY) injected into the CHILD process env
+// with API secrets (e.g. OPENAI_API_KEY) injected into the child process env
 // only. The secret is never printed, logged, committed, or passed as a CLI
 // argument. The goal is to prevent accidental exposure, not to defend against a
 // local attacker who already has read access to the user's home directory.
@@ -61,7 +61,7 @@ type Store struct {
 }
 
 // Open loads (and, if missing, initializes) the local key and the encrypted
-// store under paths.SecretsRoot(). A first call materializes the key but NOT
+// store under paths.SecretsRoot(). A first call materializes the key but not
 // the store file — an empty store has no file on disk until the first Save.
 func Open() (*Store, error) {
 	return openAt(paths.SecretsRoot())

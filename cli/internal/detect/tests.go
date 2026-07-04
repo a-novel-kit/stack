@@ -80,7 +80,7 @@ type envFile struct {
 var composeNameRe = regexp.MustCompile(`^podman-compose\.([a-z0-9.]+)\.test\.yaml$`)
 
 // composeEnvs reads dir/builds and returns every test-env compose file it
-// recognises (parsed into env + dotted test path).
+// recognizes (parsed into env + dotted test path).
 func composeEnvs(dir string) []envFile {
 	entries, err := os.ReadDir(filepath.Join(dir, "builds"))
 	if err != nil {
@@ -180,7 +180,7 @@ var composeTopLevelRe = regexp.MustCompile(`^[a-zA-Z_]+:\s*(?:#.*)?$`)
 
 // composeServices lists every service name declared under `services:` in a
 // compose file, in source order. Used to drive the "skip duplicates" logic
-// in global-mode env-up (a service repo's compose may declare a containerised
+// in global-mode env-up (a service repo's compose may declare a containerized
 // sibling that is also running from its own repo).
 func composeServices(file string) []string {
 	raw, err := os.ReadFile(file)
@@ -206,7 +206,7 @@ func composeServices(file string) []string {
 
 // composeProfiles returns a profile-name → compose-service-name map for the
 // inline-list `profiles: ["x"]` form. Used to map a run-target name to the
-// compose service that would run it in dockerised mode.
+// compose service that would run it in dockerized mode.
 func composeProfiles(file string) map[string]string {
 	raw, err := os.ReadFile(file)
 	if err != nil {
