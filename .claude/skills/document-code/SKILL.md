@@ -56,6 +56,12 @@ Most code deserves none. A comment must clear one of two bars:
 2. **It explains an unusual behavior specific to this repo** — a constraint, workaround, or
    ordering the reader cannot extract from the code in front of them.
 
+Orientation is part of the first bar. In a long function or file, one line naming each logical
+movement lets a contributor grasp the shape before reading it — a map laid over the code. Pace
+those deliberately: one orienting line per movement, nothing inside it unless a line is genuinely
+surprising. This is why in-code comments are not the default and not evenly spread — clustered or
+line-by-line comments bury the signal as badly as none at all.
+
 Everything else is noise. In particular:
 
 - **Platform-wide conventions don't get repeated per repo.** If a behavior is unusual but holds
@@ -63,6 +69,11 @@ Everything else is noise. In particular:
   resolves them), it belongs ONCE in the tool that implements it or in the org-level documentation
   — never copy-pasted into each repo, where copies drift. If a reader could be surprised, fix the
   central doc, not the local file.
+- **The global picture belongs to the project docs, not to code comments.** The architecture, the
+  layer split, the reason the system is shaped this way — README and CONTRIBUTING own that (see
+  `write-project-docs`). A code comment that re-explains the wide-angle view duplicates a doc that
+  then drifts. Code comments carry the _local_ detail those files can't: the invariant at the line
+  that enforces it, why this call precedes that one. Defer to the concept; don't restate it.
 - **Nothing the code already says.** If reading the surrounding lines answers the question, the
   comment restates; delete it. `depends_on` already shows ordering — only the _why_ of a
   surprising dependency is comment-worthy.
@@ -85,6 +96,14 @@ that matters, in as few words as it takes, and stop.
 - Lead with _why_; the code already shows _what_.
 - Cut hedges, preambles, and ceremony ("note that", "in order to", "it is important to").
 - One precise sentence beats three approximate ones. If a comment reads well aloud, it ships.
+- **Default to plain words.** Prefer the common word and the short one. Reach for an advanced or
+  technical word only when it earns its place — when it replaces a whole clause or removes a real
+  ambiguity. A rare word chosen for its own sake slows the reader; a precise one that cuts five
+  words speeds them up.
+- **Write plain sentences, not labels.** State the point as a subject-verb-object sentence. Write
+  "This runs first because the cache is cold" — not "Why this runs first: the cache." The
+  rhetorical label ("The reason:", "Note:", "Why this matters:") is ceremony; delete it and let
+  the sentence carry the idea.
 
 This applies to every prose surface this skill touches — doc comments, package docs, README
 sections — and equally to PR descriptions (see `open-pull-request`).
@@ -349,6 +368,10 @@ Documentation is as much a liability as an asset when it's wrong. Every time you
 - **All-caps emphasis words**: avoid `MUST`, `SHOULD`, `OPTIONAL`, `NOT`, etc. in prose documentation.
   These are RFC-style terms that feel out of place in code docs; plain prose ("must", "only", "nil for...") is
   clearer and easier to read.
+- **Rhetorical labels standing in for a sentence**: `// Why this matters: ...`, `// Note: ...`,
+  `// The reason: ...`. The label is ceremony. State the point plainly instead:
+  `// Runs before the cache warms, so the first request sees fresh data.` — not
+  `// Why this runs first: the cache.`
 - **Change narrative and references to deleted code or transient docs**: "now that X is removed",
   "the new model", "matches the old script", "per spec §6.4". Document the code as it is, not the
   edit that produced it — see "Document the code as it is, not the change that produced it" above.
