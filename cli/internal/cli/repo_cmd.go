@@ -165,65 +165,44 @@ func newRepoUpdateCmd() *cobra.Command {
 		dryRun  bool
 		jsonOut bool
 		class   string
+		all     bool
+		exclude []string
+		rootDir string
 	)
 	cmd := &cobra.Command{
 		Use:   "update",
-		Short: "Reconcile the current repository's config to its class template",
+		Short: "Reconcile a repository's config to its class template",
 		Long: `Run from inside a checked-out repo. Resolves the repo from its 'origin'
 remote, picks the repos/<org>_<repo>.yaml override or the --class preset, and
 reconciles config. The master ruleset's required checks are the jobs declared in
 .github/workflows/main.yaml (minus reporting / master-only jobs) plus the
-always-required set — set wholesale.`,
+always-required set — set wholesale.
+
+--all reconciles every pulled workspace repo in one interactive pass instead:
+the stack repo plus each whitelisted checkout present under app/ or kit/ (the
+same set 'core sync' manages, auto-discovered from workspace-repos.yaml). Config
+is discovered from each working tree, so a repo carrying ongoing work — off its
+default branch or with uncommitted changes — is skipped untouched rather than
+reconciled from an in-progress checkout. --exclude drops named repos; a single
+confirm gates the whole batch.`,
+		Example: `  a-novel repo update                       # current repo
+  a-novel repo update --all                 # every pulled workspace repo
+  a-novel repo update --all --exclude=service-template
+  a-novel repo update --all --dry-run       # preview the whole batch`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if all {
+				return runRepoUpdateAll(cmd, rootDir, class, exclude, dryRun, jsonOut)
+			}
 			wd, err := os.Getwd()
 			if err != nil {
 				return err
 			}
-			org, repo, err := repoFromGitRemote(wd)
+			target, plan, err := buildRepoTarget(wd, class)
 			if err != nil {
 				return err
 			}
-			root, err := gitToplevel(wd)
-			if err != nil {
-				return err
-			}
-
-			preset, err := resolvePreset(org, repo, class)
-			if err != nil {
-				return err
-			}
-			orgProfile, err := repocfg.LoadOrg(org)
-			if err != nil {
-				return err
-			}
-			checks, err := repocfg.LoadChecks()
-			if err != nil {
-				return err
-			}
-			// The [Agent] App id is per-org; inject it before discovery so the
-			// merge-gate required check resolves to this org's App.
-			checks.ResolveBotIntegrations(orgProfile)
-			discovered, err := repocfg.Discover(root, checks)
-			if err != nil {
-				return err
-			}
-
-			branch := repoDefaultBranch(org, repo)
-			target := &repocfg.RepoTarget{
-				Org:            org,
-				Repo:           repo,
-				DefaultBranch:  branch,
-				Class:          preset,
-				OrgProfile:     orgProfile,
-				Checks:         checks,
-				Discovered:     discovered,
-				CodecovReports: codecovReports(org, repo, branch),
-			}
-			plan, err := repocfg.BuildPlan(target)
-			if err != nil {
-				return err
-			}
+			org, repo, branch := target.Org, target.Repo, target.DefaultBranch
 
 			if jsonOut {
 				return plan.RenderJSON(cmd.OutOrStdout())
@@ -231,7 +210,7 @@ always-required set — set wholesale.`,
 			if dryRun {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 					"# dry-run %s/%s — class %s\n# required checks: %s\n\n",
-					org, repo, preset.Class, strings.Join(checkContexts(discovered.Checks), ", "))
+					org, repo, target.Class.Class, strings.Join(checkContexts(target.Discovered.Checks), ", "))
 				return plan.Render(cmd.OutOrStdout())
 			}
 
@@ -254,9 +233,67 @@ always-required set — set wholesale.`,
 		},
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the API operations that would run, without applying")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "with --dry-run, emit the plan as a JSON array of operations")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "with --dry-run, emit the plan(s) as JSON")
 	cmd.Flags().StringVar(&class, "class", "", "class (service|library|workflows|meta); a repos/<org>_<repo>.yaml override wins")
+	cmd.Flags().BoolVar(&all, "all", false, "reconcile every pulled workspace repo (stack + app/ + kit/) in one run")
+	cmd.Flags().StringSliceVar(&exclude, "exclude", nil,
+		"with --all, skip these repos (<org>/<name> or bare <name>); may be repeated")
+	cmd.Flags().StringVar(&rootDir, "root", "",
+		"with --all, the workspace root containing kit/ and app/ (defaults like `core sync`)")
 	return cmd
+}
+
+// buildRepoTarget resolves the repository that owns the checkout at dir (dir may
+// be any path inside it), discovers its config from the working tree, and
+// returns the reconcile target plus the computed plan. It performs no writes —
+// callers gate the apply on --dry-run / a confirm. The org's [Agent] App id is
+// injected before discovery so the merge-gate required check resolves to this
+// org's App. Because discovery reads the working tree, callers reconciling in
+// bulk must first confirm the checkout is on its default branch and clean (see
+// runRepoUpdateAll) so the plan never reflects in-progress local state.
+func buildRepoTarget(dir, class string) (*repocfg.RepoTarget, *repocfg.Plan, error) {
+	org, repo, err := repoFromGitRemote(dir)
+	if err != nil {
+		return nil, nil, err
+	}
+	root, err := gitToplevel(dir)
+	if err != nil {
+		return nil, nil, err
+	}
+	preset, err := resolvePreset(org, repo, class)
+	if err != nil {
+		return nil, nil, err
+	}
+	orgProfile, err := repocfg.LoadOrg(org)
+	if err != nil {
+		return nil, nil, err
+	}
+	checks, err := repocfg.LoadChecks()
+	if err != nil {
+		return nil, nil, err
+	}
+	checks.ResolveBotIntegrations(orgProfile)
+	discovered, err := repocfg.Discover(root, checks)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	branch := repoDefaultBranch(org, repo)
+	target := &repocfg.RepoTarget{
+		Org:            org,
+		Repo:           repo,
+		DefaultBranch:  branch,
+		Class:          preset,
+		OrgProfile:     orgProfile,
+		Checks:         checks,
+		Discovered:     discovered,
+		CodecovReports: codecovReports(org, repo, branch),
+	}
+	plan, err := repocfg.BuildPlan(target)
+	if err != nil {
+		return nil, nil, err
+	}
+	return target, plan, nil
 }
 
 // resolvePreset prefers a repos/<org>_<repo>.yaml override, then the --class
