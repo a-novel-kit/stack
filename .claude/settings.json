@@ -2,7 +2,7 @@
   "outputStyle": "Explanatory",
   "statusLine": {
     "type": "command",
-    "command": "node \"$(git rev-parse --show-toplevel)/.claude/statusline.js\"",
+    "command": "node \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/statusline.js\"",
     "padding": 0
   },
   "permissions": {
