@@ -89,7 +89,9 @@ func runGit(t *testing.T, dir string, args ...string) {
 // TestComposeDependents guards the classifier that drives build.composeUpPhased:
 // a service is a "dependent" (second wave) iff it declares a depends_on: block.
 // Both the map and short-list forms count; a service with none is first-wave
-// infra. Source order is preserved so multi-level composes wave correctly.
+// infra. The result preserves source order — composeUpPhased itself splits into
+// only two waves, but the ordered list is what a deeper (multi-wave) scheduler
+// would build on.
 func TestComposeDependents(t *testing.T) {
 	t.Parallel()
 
