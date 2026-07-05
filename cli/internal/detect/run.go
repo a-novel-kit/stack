@@ -358,13 +358,14 @@ func runEnvFor(repoRoot, rel string) *ComposeEnv {
 			file := filepath.Join(buildsDir, name)
 			ports, refs := composeParse(file)
 			return &ComposeEnv{
-				File:     file,
-				Project:  composeProjectP("anovel-run-", rel, m[1]),
-				ID:       m[1],
-				Ports:    ports,
-				Refs:     refs,
-				Profiles: composeProfiles(file),
-				Services: composeServices(file),
+				File:       file,
+				Project:    composeProjectP("anovel-run-", rel, m[1]),
+				ID:         m[1],
+				Ports:      ports,
+				Refs:       refs,
+				Profiles:   composeProfiles(file),
+				Services:   composeServices(file),
+				Dependents: composeDependents(file),
 			}
 		}
 	}
@@ -373,12 +374,13 @@ func runEnvFor(repoRoot, rel string) *ComposeEnv {
 	}
 	ports, refs := composeParse(fallback)
 	return &ComposeEnv{
-		File:     fallback,
-		Project:  composeProjectP("anovel-run-", rel, runArg),
-		ID:       runArg,
-		Ports:    ports,
-		Refs:     refs,
-		Profiles: composeProfiles(fallback),
-		Services: composeServices(fallback),
+		File:       fallback,
+		Project:    composeProjectP("anovel-run-", rel, runArg),
+		ID:         runArg,
+		Ports:      ports,
+		Refs:       refs,
+		Profiles:   composeProfiles(fallback),
+		Services:   composeServices(fallback),
+		Dependents: composeDependents(fallback),
 	}
 }
