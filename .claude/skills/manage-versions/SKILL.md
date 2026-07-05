@@ -268,6 +268,26 @@ When a change spans repos:
 
 ---
 
+## When a cross-repo landing fails — the runbook
+
+The saga's recovery _mechanics_ (freeze, roll-forward, rollback, the release train) live in
+`coordinate-landing`. This is the **version-side** decision tree: what a stuck or bad cross-repo
+landing means for the pins and releases, and how to unwind it. The through-line — a published release
+is **immutable**, so cross-repo recovery is almost always **roll forward** (a new release that
+supersedes), not an attempt to rewrite history.
+
+| Symptom                                                 | What happened                                                                          | Do this                                                                                                                                                                                        |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Consumer PR red on **"released versions only"**         | Its `go.mod` still pins a pseudo-version (a dependency commit SHA), not a released tag | Wait for the dependency to release, re-pin the consumer to the released `vX.Y.Z`, push. Never merge on a pseudo-version.                                                                       |
+| **Dependency released, consumer stuck** in the Epic set | Publish-before-rollout half-done: dep shipped, consumer not re-pinned/merged           | Re-pin the consumer to the released tag; the merge-gate lands it with the set. The dep's release is immutable — roll forward, don't roll back.                                                 |
+| An Epic **partially landed**                            | INV-1 violated — a member left the queue                                               | The sweep freezes the survivors and rolls a landable stray forward within grace. If it can't land, fix it, or (last resort) `epic-rollback` the landed subset. See `coordinate-landing`.       |
+| A **bad version shipped** (released, then found broken) | A release is immutable — you can't un-publish                                          | Roll **forward**: cut a patch that reverts the change, or `epic-rollback` the Epic (it lands compensating reverts and _re-releases_). Never delete a published tag a consumer may already pin. |
+| The **release train left a repo un-released**           | A dispatch/approval failed mid-train                                                   | Re-dispatch the train — it resumes from live tags and re-cuts only the unshipped. A parked run (release-env approval) is pending; approve it, then re-dispatch to record the receipt.          |
+| A **contract-step removal broke a consumer**            | A consumer was missed in the expand→contract migration                                 | Its build is red against the new dep release. Fast-follow: migrate the missed consumer and release it; until then it pins the _previous_ dep release.                                          |
+
+`epic-rollback` is the one sanctioned "undo," and even it works by landing **new** compensating
+commits and then re-releasing — never by rewriting a tag.
+
 ## Common pitfalls
 
 - **`replace` directive to wire in a local/branch dependency.** Not used here — pin to a commit
