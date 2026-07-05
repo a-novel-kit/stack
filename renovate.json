@@ -1,5 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
   "packageRules": [
     {
       "matchManagers": ["npm"],
@@ -9,5 +10,14 @@
       }
     }
   ],
-  "extends": ["config:recommended"]
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Keep the a-novel-kit/workflows action pins in the repocfg governance caller templates current. Renovate's built-in github-actions manager only scans real .github/workflows/ files, not these CLI templates, so without this manager the pins go stale and `a-novel repo update` re-deploys an outdated (or load-broken) action version fleet-wide.",
+      "managerFilePatterns": ["cli/internal/repocfg/templates/governance/**"],
+      "matchStrings": ["a-novel-kit/workflows/[^@\\s]+@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "a-novel-kit/workflows",
+      "datasourceTemplate": "github-releases"
+    }
+  ]
 }

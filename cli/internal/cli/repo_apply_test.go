@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -140,6 +141,71 @@ func TestStageContents(t *testing.T) {
 			t.Fatalf("got (changes=%+v, unchanged=%v), want the root deletion only", changes, unchanged)
 		}
 	})
+
+	const gatePath = "repos/o/r/contents/.github/workflows/merge-gate.yaml"
+
+	t.Run("governance caller keeps a newer deployed pin (no downgrade, no-op)", func(t *testing.T) {
+		template := "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.14.0\n"
+		deployed := "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.15.0\n"
+		fakeGH(t, map[string]string{gatePath: contentsJSON(t, deployed)})
+
+		changes, unchanged, err := stageContents("o", "r", repocfg.Op{Path: gatePath, Content: template})
+		if err != nil {
+			t.Fatalf("stageContents: %v", err)
+		}
+		// The template pins v1.14.0 but the deployed caller is on v1.15.0 (Renovate
+		// bumped it); the sync must not write the older pin back.
+		if !unchanged || len(changes) != 0 {
+			t.Fatalf("got (changes=%+v, unchanged=%v); a newer deployed pin must not be downgraded", changes, unchanged)
+		}
+	})
+
+	t.Run("governance caller upgrades when the template pin is newer", func(t *testing.T) {
+		template := "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.16.0\n"
+		deployed := "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.15.0\n"
+		fakeGH(t, map[string]string{gatePath: contentsJSON(t, deployed)})
+
+		changes, unchanged, err := stageContents("o", "r", repocfg.Op{Path: gatePath, Content: template})
+		if err != nil || unchanged {
+			t.Fatalf("stageContents: (unchanged=%v, err=%v)", unchanged, err)
+		}
+		if len(changes) != 1 || changes[0].outcome != opUpdated || !strings.Contains(changes[0].content, "merge-gate@v1.16.0") {
+			t.Fatalf("changes = %+v, want an update carrying the newer template pin", changes)
+		}
+	})
+
+	t.Run("governance caller lands a template edit but keeps the newer pin", func(t *testing.T) {
+		template := "# refreshed comment\n      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.14.0\n"
+		deployed := "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.15.0\n"
+		fakeGH(t, map[string]string{gatePath: contentsJSON(t, deployed)})
+
+		changes, unchanged, err := stageContents("o", "r", repocfg.Op{Path: gatePath, Content: template})
+		if err != nil || unchanged {
+			t.Fatalf("stageContents: (unchanged=%v, err=%v)", unchanged, err)
+		}
+		// A genuine template change still lands, but the pin is not downgraded.
+		if len(changes) != 1 ||
+			!strings.Contains(changes[0].content, "# refreshed comment") ||
+			!strings.Contains(changes[0].content, "merge-gate@v1.15.0") {
+			t.Fatalf("update must land the template edit AND keep the newer pin; got %+v", changes)
+		}
+	})
+}
+
+// contentsJSON builds a GitHub contents-API response body for text with the
+// matching blob sha, so a stubbed `gh api <path>` returns what the real API
+// would for a deployed file.
+func contentsJSON(t *testing.T, text string) string {
+	t.Helper()
+	raw, err := json.Marshal(ghContent{
+		SHA:      blobSHA(text),
+		Content:  base64.StdEncoding.EncodeToString([]byte(text)),
+		Encoding: "base64",
+	})
+	if err != nil {
+		panic(err)
+	}
+	return string(raw)
 }
 
 func TestCommitSync(t *testing.T) {
@@ -307,6 +373,117 @@ func TestApplyRulesetBadBody(t *testing.T) {
 			t.Errorf("must not write a ruleset with a bad body; got call %q", c)
 		}
 	}
+}
+
+func TestPreserveNewerPins(t *testing.T) {
+	t.Parallel()
+
+	const (
+		gate    = "a-novel-kit/workflows/generic-actions/merge-gate@"
+		autoMrg = "a-novel-kit/workflows/generic-actions/enable-auto-merge@"
+	)
+
+	testCases := []struct {
+		name string
+
+		desired  string
+		deployed string
+
+		expect string
+	}{
+		{
+			name:     "Deployed newer is preserved",
+			desired:  gate + "v1.14.0",
+			deployed: gate + "v1.15.0",
+			expect:   gate + "v1.15.0",
+		},
+		{
+			name:     "Deployed older keeps the template",
+			desired:  gate + "v1.14.0",
+			deployed: gate + "v1.13.0",
+			expect:   gate + "v1.14.0",
+		},
+		{
+			name:     "Equal is unchanged",
+			desired:  gate + "v1.14.0",
+			deployed: gate + "v1.14.0",
+			expect:   gate + "v1.14.0",
+		},
+		{
+			name:     "Per-path — only the newer pin advances",
+			desired:  gate + "v1.14.0\n" + autoMrg + "v1.14.0",
+			deployed: gate + "v1.15.0\n" + autoMrg + "v1.14.0",
+			expect:   gate + "v1.15.0\n" + autoMrg + "v1.14.0",
+		},
+		{
+			name:     "Deployed has no pins — template kept",
+			desired:  gate + "v1.14.0",
+			deployed: "no workflows pins here",
+			expect:   gate + "v1.14.0",
+		},
+		{
+			// v1.10.0 > v1.2.0 by semver, though lexically the reverse — proves
+			// the comparison is semver, not string ordering.
+			name:     "Semver, not lexical, ordering",
+			desired:  gate + "v1.2.0",
+			deployed: gate + "v1.10.0",
+			expect:   gate + "v1.10.0",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			if got := preserveNewerPins(testCase.desired, testCase.deployed); got != testCase.expect {
+				t.Fatalf("preserveNewerPins() = %q, want %q", got, testCase.expect)
+			}
+		})
+	}
+}
+
+func TestContentText(t *testing.T) {
+	// Not parallel: sub-tests swap the package-level ghStdin seam.
+	t.Run("existing base64 file → decoded text and sha", func(t *testing.T) {
+		text := "hello: world\n"
+		fakeGH(t, map[string]string{"contents/x.yaml": contentsJSON(t, text)})
+
+		got, sha, err := contentText("repos/o/r/contents/x.yaml")
+		if err != nil || got != text || sha != blobSHA(text) {
+			t.Fatalf("got (%q, %q, %v), want (%q, %q, nil)", got, sha, err, text, blobSHA(text))
+		}
+	})
+
+	t.Run("missing file (404) → empty text and sha, nil", func(t *testing.T) {
+		orig := ghStdin
+		t.Cleanup(func() { ghStdin = orig })
+		ghStdin = func(_ string, _ ...string) (string, error) {
+			return "", errors.New("exit 1: HTTP 404: Not Found")
+		}
+		got, sha, err := contentText("repos/o/r/contents/missing.yaml")
+		if err != nil || got != "" || sha != "" {
+			t.Fatalf("404 should yield (\"\", \"\", nil); got (%q, %q, %v)", got, sha, err)
+		}
+	})
+
+	t.Run("non-404 error → propagated", func(t *testing.T) {
+		orig := ghStdin
+		t.Cleanup(func() { ghStdin = orig })
+		ghStdin = func(_ string, _ ...string) (string, error) {
+			return "", errors.New("exit 1: HTTP 401: Bad credentials")
+		}
+		if _, _, err := contentText("repos/o/r/contents/x.yaml"); err == nil {
+			t.Fatal("a non-404 error must propagate, not be swallowed")
+		}
+	})
+
+	t.Run("non-base64 encoding → sha only, safe no-splice fallback", func(t *testing.T) {
+		fakeGH(t, map[string]string{"contents/big.yaml": `{"sha":"deadbeef","content":"","encoding":"none"}`})
+
+		got, sha, err := contentText("repos/o/r/contents/big.yaml")
+		if err != nil || got != "" || sha != "deadbeef" {
+			t.Fatalf("got (%q, %q, %v), want (\"\", \"deadbeef\", nil)", got, sha, err)
+		}
+	})
 }
 
 func TestContentSHA(t *testing.T) {
