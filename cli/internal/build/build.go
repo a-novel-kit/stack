@@ -729,11 +729,15 @@ func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect
 		}
 	}
 
-	for i, wave := range [][]string{infra, dependents} {
+	// Label waves by execution order, not slice index — an empty infra wave (a
+	// subset of only dependents) must not make the first bring-up read "wave 2".
+	waveNum := 0
+	for _, wave := range [][]string{infra, dependents} {
 		if len(wave) == 0 {
 			continue
 		}
-		_, _ = fmt.Fprintf(out, "── env up (wave %d: %s) ──\n", i+1, strings.Join(wave, " "))
+		waveNum++
+		_, _ = fmt.Fprintf(out, "── env up (wave %d: %s) ──\n", waveNum, strings.Join(wave, " "))
 		args := append([]string{"up", "-d", "--build", "--no-deps"}, wave...)
 		if err := compose(ctx, out, env, e,
 			[]string{"--podman-build-args=--format docker -q"}, args...); err != nil {
