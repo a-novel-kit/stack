@@ -50,6 +50,17 @@ const (
 const cmdTest = "test"
 
 func main() {
+	// Pin the compose provider for every `podman compose` this CLI runs, so a
+	// machine that also has docker-compose installed never has it silently
+	// selected — `podman compose` prefers docker-compose when present, which
+	// would drag in the Docker-compatible socket. Scoped to this process tree,
+	// not the developer's shell: the daemon re-exec runs main() too (so it sets
+	// this in its own env) and every compose call builds its env from
+	// os.Environ. Also silence the provider banner so it doesn't clutter
+	// captured compose output.
+	_ = os.Setenv("PODMAN_COMPOSE_PROVIDER", "podman-compose")
+	_ = os.Setenv("PODMAN_COMPOSE_WARNING_LOGS", "false")
+
 	// The standalone test/build commands are wrapped so Cobra dispatches to
 	// their implementations in this file; they parse their own flags, which
 	// Cobra can't own directly.
