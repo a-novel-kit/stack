@@ -139,13 +139,14 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	// Governance workflows for the governed repos: the merge-gate check runner, the
 	// epic-freeze partial-landing check (the per-PR half of the detector), the admin-only
 	// approve-pr override, the board status deriver (a PR's lifecycle drives its linked
-	// Task's board Status), and the admin-only human-triggered epic-rollback escape hatch
-	// (workflow_dispatch — reverts a partially-landed Epic's siblings). Pushed wherever the
-	// master ruleset gates merges — the same repos whose PRs feed the board. Static files: the
-	// [Agent] creds and the per-org board id are GitHub-expression refs resolved at run time,
-	// not repocfg substitutions.
+	// Task's board Status), the admin-only human-triggered epic-rollback escape hatch
+	// (workflow_dispatch — reverts a partially-landed Epic's siblings), and the admin-only
+	// human-triggered release-train (workflow_dispatch — releases every repo a landed Epic
+	// touched). Pushed wherever the master ruleset gates merges — the same repos whose PRs
+	// feed the board. Static files: the [Agent] creds and the per-org board id are
+	// GitHub-expression refs resolved at run time, not repocfg substitutions.
 	if c.Rulesets.Master {
-		for _, wf := range []string{"merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml"} {
+		for _, wf := range []string{"merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml", "release-train.yaml"} {
 			content, err := ReadTemplate("governance/" + wf)
 			if err != nil {
 				return nil, err

@@ -157,6 +157,7 @@ func TestBuildPlanProvisionsMergeGateWorkflows(t *testing.T) {
 		"/contents/.github/workflows/merge-gate.yaml":    "generic-actions/merge-gate@",
 		"/contents/.github/workflows/approve-pr.yaml":    "generic-actions/approve-pr@",
 		"/contents/.github/workflows/derive-status.yaml": "generic-actions/derive-status@",
+		"/contents/.github/workflows/release-train.yaml": "generic-actions/release-train@",
 	}
 	for suffix, ref := range want {
 		var op *Op
