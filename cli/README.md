@@ -62,7 +62,7 @@ a-novel run ps                                # list services + target states
 a-novel run topology --service=service-X      # ASCII dependency tree
 a-novel run service status <service>          # one service in detail
 
-# Lifecycle (auto-cascades deps via compose `depends_on`)
+# Lifecycle (deps auto-cascade — infra + one-shots come up first)
 a-novel run start <service>/<target>          # go-exec by default
 a-novel run start <service>/<target> --mode=container
 a-novel run kill <service>/<target>
@@ -198,6 +198,16 @@ cli/
 - **Multi-stack** by default: configure via `A_NOVEL_STACKS=name1:path1,name2:path2`.
 - **Containers are labeled** (`anovel.stack`, `anovel.service`,
   `anovel.target`) so adoption + cleanup work across daemon restarts.
+- **The daemon owns dependency ordering and health-gating**, not compose. It
+  walks a target's deps itself — bringing infra up and waiting for health, then
+  running one-shots to success — before starting the target, and passes
+  `--no-deps` on every container `up`. Two reasons it can't delegate to compose:
+  the dependency graph crosses the container boundary (a go-exec host process
+  depending on a container's health), which compose has no way to express; and
+  podman-compose does not reliably enforce `depends_on` conditions — notably
+  one-shot completion, the gate that holds a server back until migrations
+  finish. The compose files still declare `depends_on` for readers and for a
+  direct `podman compose up`, but the daemon does not rely on it.
 
 ## State directories
 
