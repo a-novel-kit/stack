@@ -18,7 +18,7 @@ jobs:
       id-token: write
       security-events: read
     steps:
-      - uses: a-novel-kit/workflows/generic-actions/renovate@v1.11.0
+      - uses: a-novel-kit/workflows/generic-actions/renovate@v1.13.0
         with:
           allowed_commands: '["^go mod tidy && go generate .*", "^go mod tidy && go tool .*", "^go get -u .*", "^pnpm i --frozen-lockfile$"]'
           github_token: ${{ secrets.GITHUB_TOKEN }}
