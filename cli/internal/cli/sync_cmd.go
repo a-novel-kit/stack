@@ -1,16 +1,18 @@
 // `a-novel core sync` — clone or fast-forward-pull the curated set of
 // a-novel / a-novel-kit repositories that make up the local workspace.
 //
-// The repo set is an explicit whitelist (defaultRepos), not `gh repo list`
-// discovery: while the workspace is still narrow only the curated repos are
-// pulled, and `--allow`/`--ignore` subset that list. Git over SSH is the only
-// dependency.
+// The repo set is an explicit whitelist read from workspace-repos.yaml at the
+// workspace root (not `gh repo list` discovery): each `repos:` entry is an
+// "<org>/<repo>", and `--allow`/`--ignore` subset that list. The file is the
+// only source of truth — no baked-in default, so an absent file means nothing
+// to sync. Git over SSH is the only dependency.
 //
 // Behavior:
 //   - Skip the workspace's own repo (so kit/stack never appears as a
 //     duplicate of the dir the binary was launched from).
 //   - Existing repos: ff-only pull on the default branch, ref-update
-//     when off-branch, skip on divergence.
+//     when off-branch, skip on divergence. Never switches branches and
+//     never stashes — unstaged changes are left exactly as they are.
 //   - GIT_LFS_SKIP_SMUDGE=1 for every git invocation so LFS blobs
 //     don't get pulled.
 //   - Per-run summary at the end.
@@ -18,6 +20,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -26,6 +29,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 // repoEntry is one whitelisted repository.
@@ -57,20 +61,50 @@ const (
 	orgAnovelKit = "a-novel-kit"
 )
 
-// defaultRepos is the curated whitelist. Intentionally narrow — the
-// stack still discovers a lot of repos via `gh repo list`, but only
-// the repos below need to be cloned locally for current work. Extending
-// the list is one line; whittling it is the user's call.
-var defaultRepos = []repoEntry{
-	{Org: orgAnovelKit, Name: "workflows"},
-	{Org: orgAnovelKit, Name: "golib"},
-	{Org: orgAnovelKit, Name: "nodelib"},
-	{Org: orgAnovelKit, Name: ".github"},
-	{Org: orgAnovel, Name: ".github"},
-	{Org: orgAnovel, Name: "service-template"},
-	{Org: orgAnovel, Name: "service-json-keys"},
-	{Org: orgAnovel, Name: "service-authentication"},
-	{Org: orgAnovel, Name: "service-narrative-engine"},
+// repoWhitelistFile is the runtime whitelist, read from the workspace root.
+// It is the single source of truth for which repos `core sync` touches —
+// there is deliberately no baked-in default, so the list can be edited without
+// rebuilding the CLI.
+const repoWhitelistFile = "workspace-repos.yaml"
+
+// loadRepoWhitelist reads the curated repo list from <root>/workspace-repos.yaml.
+// A missing file is not an error — it yields an empty list, and the caller
+// reports "nothing to sync". Each `repos:` entry is an "<org>/<repo>" string;
+// the org must be one of the two the workspace routes (a-novel → app/,
+// a-novel-kit → kit/), so a typo fails loudly instead of misrouting a clone.
+func loadRepoWhitelist(root string) ([]repoEntry, error) {
+	data, err := os.ReadFile(filepath.Join(root, repoWhitelistFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", repoWhitelistFile, err)
+	}
+	var doc struct {
+		Repos []string `yaml:"repos"`
+	}
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", repoWhitelistFile, err)
+	}
+	entries := make([]repoEntry, 0, len(doc.Repos))
+	for _, raw := range doc.Repos {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		org, name, ok := strings.Cut(raw, "/")
+		if !ok || org == "" || name == "" {
+			return nil, fmt.Errorf("%s: invalid repo %q (want <org>/<name>)", repoWhitelistFile, raw)
+		}
+		switch org {
+		case orgAnovel, orgAnovelKit:
+		default:
+			return nil, fmt.Errorf("%s: unknown org %q in %q (want %s or %s)",
+				repoWhitelistFile, org, raw, orgAnovel, orgAnovelKit)
+		}
+		entries = append(entries, repoEntry{Org: org, Name: name})
+	}
+	return entries, nil
 }
 
 // syncCounts is the per-run summary buckets.
@@ -102,28 +136,29 @@ func newCoreSyncCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Clone or fast-forward-pull the curated workspace repos",
-		Long: `Clone or update each repo in the curated workspace whitelist:
+		Long: `Clone or update every repo listed in the workspace whitelist file
+(workspace-repos.yaml at the workspace root). The file is the single
+source of truth — there is no built-in default — so each entry under
+its ` + "`repos:`" + ` list is an "<org>/<repo>" cloned or fast-forwarded into:
 
-  a-novel-kit/workflows   → kit/workflows
-  a-novel-kit/golib       → kit/golib
-  a-novel-kit/nodelib     → kit/nodelib
-  a-novel-kit/.github     → kit/.github
-  a-novel/.github                  → app/.github
-  a-novel/service-template         → app/service-template
-  a-novel/service-json-keys        → app/service-json-keys
-  a-novel/service-authentication   → app/service-authentication
-  a-novel/service-narrative-engine → app/service-narrative-engine
+  a-novel-kit/<repo> → kit/<repo>
+  a-novel/<repo>     → app/<repo>
+
+Edit the file to add or drop a repo; no rebuild is needed. If the file
+is absent, sync has nothing to do.
 
 Existing repos are fast-forward pulled on the default branch (or have
-their default-branch ref updated when the user is on a feature
-branch); diverged defaults are left untouched. The workspace's own
-repo (the stack the CLI itself lives in) is automatically skipped to
-avoid a duplicate clone under kit/stack.
+their default-branch ref updated when you are on a feature branch).
+sync never switches branches and never stashes: unstaged changes are
+preserved — git refuses (and sync skips) rather than overwrite them,
+and diverged defaults are left untouched. The workspace's own repo
+(the stack the CLI itself lives in) is automatically skipped to avoid
+a duplicate clone under kit/stack.
 
 GIT_LFS_SKIP_SMUDGE=1 is forced on every invocation so large LFS
 blobs are not pulled.
 
---allow / --ignore both subset the default list. Both may be repeated.
+--allow / --ignore both subset the whitelist. Both may be repeated.
 --ignore wins over --allow when a repo appears in both.
 
 Sub-agents working out of a fresh stack should invoke this command
@@ -137,16 +172,25 @@ first to populate kit/ and app/ before any other work.`,
 			if err != nil {
 				return err
 			}
+			out := cmd.OutOrStdout()
+			repos, err := loadRepoWhitelist(root)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(out, "▸ Syncing workspace repos at %s\n", root)
+			if len(repos) == 0 {
+				_, _ = fmt.Fprintf(out, "  no %s found at %s — nothing to sync\n"+
+					"  create it with a `repos:` list of <org>/<name> entries.\n", repoWhitelistFile, root)
+				return nil
+			}
 			allow := normaliseFilter(allowFlags)
 			ignore := normaliseFilter(ignoreFlags)
 			selfURL := detectSelfRemote(root)
-			out := cmd.OutOrStdout()
-			_, _ = fmt.Fprintf(out, "▸ Syncing workspace repos at %s\n", root)
 			if selfURL != "" {
 				_, _ = fmt.Fprintf(out, "  (self-detected origin: %s — will be skipped)\n", selfURL)
 			}
 			counts := syncCounts{}
-			for _, r := range defaultRepos {
+			for _, r := range repos {
 				// Ignore-list wins over allow-list.
 				if _, no := ignore[r.FullName()]; no {
 					_, _ = fmt.Fprintf(out, "  ○ %s — ignored via --ignore\n", r.FullName())
@@ -216,8 +260,11 @@ func syncOne(out io.Writer, root string, r repoEntry, counts *syncCounts) {
 // updateExistingRepo performs the fetch-then-pull-or-update-ref dance
 // for a repo that's already present locally:
 //   - Off the default branch → `git fetch origin <def>:<def>` updates
-//     the local default-branch ref only if fast-forwardable.
-//   - On the default branch  → stash dirty work → ff-only pull → unstash.
+//     the local default-branch ref only if fast-forwardable, leaving
+//     HEAD and the working tree untouched.
+//   - On the default branch  → `git pull --ff-only` advances it in
+//     place; unstaged changes are preserved, and a pull that would
+//     overwrite them is skipped rather than stashed.
 //   - Divergence → skip.
 func updateExistingRepo(out io.Writer, target string, r repoEntry, counts *syncCounts) {
 	// Resolve the default branch from `origin/HEAD`, falling back to
@@ -246,28 +293,20 @@ func updateExistingRepo(out io.Writer, target string, r repoEntry, counts *syncC
 		return
 	}
 	if currentBranch == def {
-		// On the default branch — pull. Stash any uncommitted work
-		// first so the pull doesn't refuse on a dirty tree.
-		stashed := false
-		if dirty(target) {
-			if _, err := runGit(target, "stash", "push", "--include-untracked", "--quiet", "--message", "a-novel core sync auto-stash"); err == nil {
-				stashed = true
-			}
-		}
+		// On the default branch — fast-forward it in place. No stashing:
+		// `git pull --ff-only` advances HEAD without disturbing unstaged
+		// changes, and refuses outright when incoming commits would clobber
+		// a locally-modified file. We surface that refusal as a skip so the
+		// working tree is never rewritten behind the user's back.
 		if cmdOut, err := runGit(target, "pull", "--quiet", "--ff-only", "origin", def); err != nil {
-			if stashed {
-				_, _ = runGit(target, "stash", "pop", "--quiet")
+			if strings.Contains(cmdOut, "overwritten") {
+				_, _ = fmt.Fprintf(out, "  ⚠ %s: unstaged changes on %s would be overwritten — skipped (changes kept)\n%s\n", r.FullName(), def, cmdOut)
+				counts.add("skipped", r.FullName()+" (dirty "+def+")")
+				return
 			}
 			_, _ = fmt.Fprintf(out, "  ⚠ %s: %s diverged — skipped\n%s\n", r.FullName(), def, cmdOut)
 			counts.add("skipped", r.FullName()+" (diverged "+def+")")
 			return
-		}
-		if stashed {
-			if cmdOut, err := runGit(target, "stash", "pop", "--quiet"); err != nil {
-				_, _ = fmt.Fprintf(out, "  ⚠ %s: stash pop conflicted — resolve in this repo\n%s\n", r.FullName(), cmdOut)
-				counts.add("failed", r.FullName())
-				return
-			}
 		}
 	} else {
 		// Off the default branch — update its ref without touching HEAD.
@@ -334,19 +373,6 @@ func resolveSyncRoot(override string) (string, error) {
 		return "", fmt.Errorf("resolve cwd: %w", err)
 	}
 	return cwd, nil
-}
-
-// dirty reports whether the working tree at target has uncommitted
-// changes. `git diff --quiet` exits non-zero when there's a diff;
-// same for `--cached`. Either non-zero means "dirty."
-func dirty(target string) bool {
-	if _, err := runGit(target, "diff", "--quiet"); err != nil {
-		return true
-	}
-	if _, err := runGit(target, "diff", "--cached", "--quiet"); err != nil {
-		return true
-	}
-	return false
 }
 
 // runGit runs `git -C target <args...>` with LFS smudging disabled
