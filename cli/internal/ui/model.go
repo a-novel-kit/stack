@@ -71,10 +71,13 @@ type Model struct {
 	queue   []detect.Target // resolved selection, dispatch order
 	results []build.Result  // completion order (as each finishes)
 
-	// Parallel run state. maxPar bounds how many builds run at once;
-	// nextIdx is the next queue entry to dispatch; running maps an in-flight
-	// target's ID to when it started (for its live timer).
+	// Parallel run state. maxPar bounds how many builds run at once; procs is
+	// the GOMAXPROCS handed to each spawned target (NumCPU/maxPar) so the
+	// concurrent go-test targets share the machine rather than each grabbing
+	// every core; nextIdx is the next queue entry to dispatch; running maps an
+	// in-flight target's ID to when it started (for its live timer).
 	maxPar  int
+	procs   int
 	timeout time.Duration  // per-target deadline (0 = none)
 	live    *build.LiveLog // shared latest-line tail (pointer; survives value copies)
 	nextIdx int
@@ -106,15 +109,19 @@ type Model struct {
 // the common case is "build everything", and opting out is one keystroke.
 //
 // jobs is the maximum number of builds to run concurrently once the user
-// confirms; jobs <= 0 means runtime.NumCPU(). Parallelism is interactive-only;
-// the non-interactive path stays strictly sequential by design.
+// confirms; jobs <= 0 means the resource-aware default (see defaultJobs).
+// Parallelism is interactive-only; the non-interactive path stays strictly
+// sequential by design.
 func New(ctx context.Context, version string, verb Verb, targets []detect.Target, jobs int, timeout time.Duration) Model {
 	if jobs <= 0 {
-		jobs = runtime.NumCPU()
+		jobs = defaultJobs()
 	}
 	if jobs < 1 {
 		jobs = 1
 	}
+	// Split the machine's cores across the concurrent targets so N parallel
+	// `go test` runs use ≈ NumCPU threads in total instead of N × NumCPU.
+	procs := max(1, runtime.NumCPU()/jobs)
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(colBrand)
@@ -141,12 +148,23 @@ func New(ctx context.Context, version string, verb Verb, targets []detect.Target
 		spinner:  sp,
 		phase:    phaseSelect,
 		maxPar:   jobs,
+		procs:    procs,
 		timeout:  timeout,
 		live:     build.NewLiveLog(),
 		running:  map[string]time.Time{},
 	}
 	m.rows = m.buildRows()
 	return m
+}
+
+// defaultJobs is the resource-aware parallelism used when the user passes no
+// -j. NumCPU/4 (min 2) keeps a multi-target run from serializing on a big box
+// while leaving headroom: paired with the per-target GOMAXPROCS cap
+// (NumCPU/jobs) the concurrent go-test targets stay within ≈ NumCPU threads,
+// and only a handful boot their container constellations at once — a large
+// drop from the old NumCPU default (e.g. 8 not 32 on a 32-core machine).
+func defaultJobs() int {
+	return max(2, runtime.NumCPU()/4)
 }
 
 // defaultOffByService lists the run-mode services that start UNSELECTED when
@@ -280,8 +298,9 @@ func (m Model) buildCmd(t detect.Target) tea.Cmd {
 	ctx := m.ctx
 	timeout := m.timeout
 	live := m.live
+	procs := m.procs
 	return func() tea.Msg {
-		return buildDoneMsg{res: build.Run(ctx, t, timeout, live)}
+		return buildDoneMsg{res: build.Run(ctx, t, timeout, live, procs)}
 	}
 }
 

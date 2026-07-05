@@ -322,7 +322,13 @@ func formatEnvBlock(kv []string) string {
 // context so a timed-out target is always cleaned up. live (may be nil)
 // receives the most recent output line for the live TUI tail. It never panics
 // and never returns a partially-zero Result — every field is meaningful.
-func Run(ctx context.Context, t detect.Target, timeout time.Duration, live *LiveLog) Result {
+// maxProcs, when > 0, caps GOMAXPROCS for the spawned process. Under the
+// parallel interactive runner this is set to NumCPU/jobs so that N concurrent
+// `go test` targets share the machine's cores (≈ NumCPU threads total) instead
+// of each claiming all of them (N × NumCPU). 0 leaves GOMAXPROCS untouched —
+// used by the sequential non-interactive path, where a target has the box to
+// itself.
+func Run(ctx context.Context, t detect.Target, timeout time.Duration, live *LiveLog, maxProcs int) Result {
 	start := time.Now()
 
 	// Per-target deadline. Cancellation propagates into exec.CommandContext
@@ -352,6 +358,14 @@ func Run(ctx context.Context, t detect.Target, timeout time.Duration, live *Live
 			Output:   strings.TrimRight(buf.String(), "\n"),
 			Duration: time.Since(start),
 		}
+	}
+
+	// Cap the process' core count so parallel targets don't oversubscribe the
+	// CPU. GOMAXPROCS also bounds `go test`'s compile parallelism (it defaults
+	// -p to GOMAXPROCS), so it throttles both the build and the run. Skip it if
+	// the target already pins GOMAXPROCS.
+	if maxProcs > 0 && !has(runEnv, "GOMAXPROCS") {
+		runEnv = append(runEnv, fmt.Sprintf("GOMAXPROCS=%d", maxProcs))
 	}
 
 	// Inner closure so the deferred env-down runs (and appends its output)

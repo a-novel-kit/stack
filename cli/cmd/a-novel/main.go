@@ -134,7 +134,7 @@ type buildOpts struct {
 	yes      bool
 	dryRun   bool
 	help     bool
-	jobs     int           // max parallel builds (interactive only); 0 = NumCPU
+	jobs     int           // max parallel builds (interactive only); 0 = resource-aware default
 	timeout  time.Duration // per-target deadline; 0 = none, default 10m
 	coverage bool          // `test` only: coverage on by default; --no-cover disables
 }
@@ -371,7 +371,7 @@ func runNonInteractive(ctx context.Context, verb ui.Verb, targets []detect.Targe
 		}
 		kind := strings.ToUpper(string(t.Kind))
 		fmt.Printf("[%d/%d] %s %-6s %s (%s)\n", i+1, len(targets), verb.Ing, kind, t.Name, t.RelDir)
-		res := build.Run(ctx, t, timeout, nil) // non-interactive: no live tail
+		res := build.Run(ctx, t, timeout, nil, 0) // sequential: full cores, no live tail
 		results = append(results, res)
 		if res.Success {
 			fmt.Printf("      ok   %-6s %s\n", kind, t.Name)
