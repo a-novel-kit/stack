@@ -308,7 +308,11 @@ func goTests(dir, rel string, envs []envFile) []Target {
 		}
 	}
 
-	// No env files → a single self-contained `go test ./...` (kit libs).
+	// No env files → a single self-contained `go test ./...` (kit libs). These
+	// have no external state, so Go's test cache is safe and worth keeping: it
+	// tracks the sources plus the env vars / files each test consults, and
+	// re-runs when any of those change. Omitting -count=1 lets the tight
+	// edit→test loop hit that cache instead of re-executing every time.
 	if len(goEnvs) == 0 {
 		return []Target{{
 			Kind:   KindGo,
@@ -317,11 +321,14 @@ func goTests(dir, rel string, envs []envFile) []Target {
 			Dir:    dir,
 			Detail: "go test " + pkgAll,
 			Cmd:    string(KindGo),
-			Args:   []string{testArg, "-count=1", pkgAll},
+			Args:   []string{testArg, pkgAll},
 		}}
 	}
 
-	// One target per env file, scoped to the path it covers.
+	// One target per env file, scoped to the path it covers. These keep
+	// -count=1: their result depends on the Postgres state the compose env
+	// stands up, which Go's cache cannot see — a cached pass could hide a
+	// migration/schema change, so they must always re-execute.
 	targets := make([]Target, 0, len(goEnvs))
 	for _, e := range goEnvs {
 		sel := pkgAll
