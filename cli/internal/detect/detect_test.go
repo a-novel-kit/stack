@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -165,4 +166,44 @@ func TestComposeDependents(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGoTests_TestCacheByEnv locks in the -count=1 policy: env-less kit-lib
+// targets omit it (so Go's test cache serves the tight loop), while env-backed
+// targets keep it (their Postgres state is invisible to that cache).
+func TestGoTests_TestCacheByEnv(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "go.mod"), "module x\n\ngo 1.26.4\n")
+
+	t.Run("env-less target is cacheable", func(t *testing.T) {
+		targets := goTests(dir, ".", nil)
+		if len(targets) != 1 {
+			t.Fatalf("want 1 env-less target, got %d", len(targets))
+		}
+		if slices.Contains(targets[0].Args, "-count=1") {
+			t.Errorf("env-less target must omit -count=1; args=%v", targets[0].Args)
+		}
+		if targets[0].Env != nil {
+			t.Errorf("env-less target must have no compose env")
+		}
+	})
+
+	t.Run("env-backed target keeps -count=1", func(t *testing.T) {
+		compose := filepath.Join(dir, "compose.yaml")
+		mustWrite(t, compose, "services:\n  db:\n    image: postgres\n")
+		envs := []envFile{{env: string(KindGo), path: []string{"internal"}, file: compose, id: "go.internal"}}
+
+		targets := goTests(dir, ".", envs)
+		if len(targets) != 1 {
+			t.Fatalf("want 1 env-backed target, got %d", len(targets))
+		}
+		if !slices.Contains(targets[0].Args, "-count=1") {
+			t.Errorf("env-backed target must keep -count=1; args=%v", targets[0].Args)
+		}
+		if targets[0].Env == nil {
+			t.Errorf("env-backed target must carry its compose env")
+		}
+	})
 }

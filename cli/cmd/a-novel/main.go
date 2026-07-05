@@ -491,7 +491,16 @@ func withCoverage(targets []detect.Target) []detect.Target {
 			sel := pkgAllSelector(t.Args)
 			pkgs := goListFiltered(t.Dir, sel)
 			if len(pkgs) > 0 {
-				t.Args = append([]string{cmdTest, "-cover", "-count=1"}, pkgs...)
+				// Keep -count=1 only for env-backed targets (their Postgres
+				// state is invisible to Go's cache — see detect/tests.go);
+				// env-less coverage runs stay cacheable. -cover results cache
+				// just like plain runs.
+				base := []string{cmdTest, "-cover"}
+				if t.Env != nil {
+					base = append(base, "-count=1")
+				}
+				base = append(base, pkgs...)
+				t.Args = base
 				t.Detail = "go test -cover (" + strconv.Itoa(len(pkgs)) +
 					" pkg, excl. mocks/test/protogen)"
 			} else {
