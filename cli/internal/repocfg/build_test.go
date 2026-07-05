@@ -2,9 +2,11 @@ package repocfg
 
 import (
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestRenderCodeQL(t *testing.T) {
@@ -130,6 +132,30 @@ func TestBuildPlanProvisionsLabels(t *testing.T) {
 	}
 	if !slices.Contains(cfg.Retire, "triage") {
 		t.Errorf("labels op retire set missing `triage`; got %v", cfg.Retire)
+	}
+}
+
+// TestLabelsSatisfyGitHubConstraints guards the constraints GitHub enforces only
+// at apply time — the label reconcile runs against live GitHub, so CI never
+// exercises them otherwise. A `description` must be <= 100 characters and a color
+// a bare 6-hex string. A 312-char description once 422'd the label reconcile on
+// every repo (fixed in cli/v1.4.5); this keeps that class of failure at author
+// time instead of surfacing during `a-novel repo update`.
+func TestLabelsSatisfyGitHubConstraints(t *testing.T) {
+	t.Parallel()
+	labels, err := LoadLabels()
+	if err != nil {
+		t.Fatalf("LoadLabels: %v", err)
+	}
+	hexColor := regexp.MustCompile(`^[0-9a-fA-F]{6}$`)
+	for _, l := range labels.Ensure {
+		// GitHub counts characters (runes), not bytes — an em-dash is one char.
+		if n := utf8.RuneCountInString(l.Description); n > 100 {
+			t.Errorf("label %q: description is %d characters, GitHub's limit is 100 — shorten it and move the rationale to a YAML comment", l.Name, n)
+		}
+		if l.Color != "" && !hexColor.MatchString(l.Color) {
+			t.Errorf("label %q: color %q must be a bare 6-hex string (no leading #)", l.Name, l.Color)
+		}
 	}
 }
 
