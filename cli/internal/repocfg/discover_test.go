@@ -54,16 +54,16 @@ jobs:
 		t.Fatalf("Discover: %v", err)
 	}
 
-	// always (GitGuardian + merge-gate) + the non-excluded main.yaml jobs.
+	// always (GitGuardian + epic-freeze + merge-gate) + the non-excluded main.yaml jobs.
 	got := contextsOf(d.Checks)
-	want := []string{"GitGuardian Security Checks", "lint-go", "merge-gate", "test-go"}
+	want := []string{"GitGuardian Security Checks", "epic-freeze", "lint-go", "merge-gate", "test-go"}
 	if !slices.Equal(got, want) {
 		t.Errorf("required checks = %v, want %v", got, want)
 	}
-	// merge-gate must be required against the injected per-org [Agent] app id.
+	// merge-gate + epic-freeze must be required against the injected per-org [Agent] app id.
 	for _, c := range d.Checks {
-		if c.Context == "merge-gate" && c.IntegrationID != 4242 {
-			t.Errorf("merge-gate integration id = %d, want the injected 4242", c.IntegrationID)
+		if (c.Context == "merge-gate" || c.Context == "epic-freeze") && c.IntegrationID != 4242 {
+			t.Errorf("%s integration id = %d, want the injected 4242", c.Context, c.IntegrationID)
 		}
 	}
 	// report-* and master-only jobs must NOT be required.
@@ -94,7 +94,7 @@ func TestDiscover_NoMainYaml(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if got, want := contextsOf(d.Checks), []string{"GitGuardian Security Checks", "merge-gate"}; !slices.Equal(got, want) {
+	if got, want := contextsOf(d.Checks), []string{"GitGuardian Security Checks", "epic-freeze", "merge-gate"}; !slices.Equal(got, want) {
 		t.Errorf("checks = %v, want %v", got, want)
 	}
 }

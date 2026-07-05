@@ -21,6 +21,9 @@ always:
   # (a stable integration id) from the merge-gate.yaml workflow — hence
   # integration `agent`, not `actions`.
   - { context: "merge-gate", integration: agent }
+  # epic-freeze: the partial-landing detector's required check — success by default, failure on a
+  # PR whose Epic landed partially (posted by the [Agent] App from epic-freeze.yaml + the sweep).
+  - { context: "epic-freeze", integration: agent }
 
 # main.yaml jobs are required by default, except those matching these rules:
 exclude:
