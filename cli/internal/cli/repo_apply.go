@@ -11,8 +11,11 @@ import (
 	"net/url"
 	"os/exec"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
+
+	"golang.org/x/mod/semver"
 
 	"github.com/a-novel-kit/stack/cli/internal/repocfg"
 )
@@ -147,6 +150,11 @@ const codeownersName = "CODEOWNERS"
 // setup is switched off before the workflow lands; a stray root CODEOWNERS is
 // staged as a deletion (GitHub honors the .github/ copy) even when the
 // .github/ copy itself is unchanged, so a repo never carries two.
+//
+// For a governance caller (a file that pins a-novel-kit/workflows actions) the
+// deployed pins are preserved when they are newer than the template's, so a
+// template that lags a workflows release never downgrades a pin Renovate has
+// already advanced on the deployed caller (see preserveNewerPins).
 func stageContents(org, repo string, op repocfg.Op) ([]contentChange, bool, error) {
 	if strings.Contains(op.Path, "/workflows/codeql.yml") {
 		// Default setup may already be off, in which case this errors harmlessly.
@@ -159,18 +167,37 @@ func stageContents(org, repo string, op repocfg.Op) ([]contentChange, bool, erro
 			changes = append(changes, contentChange{path: codeownersName, outcome: opDeleted})
 		}
 	}
-	sha, err := contentSHA(op.Path)
-	if err != nil {
-		return nil, false, err
+
+	// A governance caller is compared against the deployed file so a newer
+	// deployed pin survives (one extra read, and only for pin-bearing files);
+	// everything else takes the cheaper sha-only path.
+	desired := op.Content
+	var sha string
+	if workflowsPinRe.MatchString(op.Content) {
+		deployed, deployedSHA, err := contentText(op.Path)
+		if err != nil {
+			return nil, false, err
+		}
+		if deployed != "" {
+			desired = preserveNewerPins(op.Content, deployed)
+		}
+		sha = deployedSHA
+	} else {
+		s, err := contentSHA(op.Path)
+		if err != nil {
+			return nil, false, err
+		}
+		sha = s
 	}
-	if sha == blobSHA(op.Content) {
+
+	if sha == blobSHA(desired) {
 		return changes, true, nil
 	}
 	outcome := opCreated
 	if sha != "" {
 		outcome = opUpdated
 	}
-	return append(changes, contentChange{path: shortPath(op.Path), content: op.Content, outcome: outcome}), false, nil
+	return append(changes, contentChange{path: shortPath(op.Path), content: desired, outcome: outcome}), false, nil
 }
 
 // syncCommitQuery applies every staged change as a single commit on the
@@ -412,6 +439,79 @@ func contentSHA(path string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(out), nil
+}
+
+// ghContent is the subset of the contents API's file object we read: the blob
+// sha and the base64-encoded content.
+type ghContent struct {
+	SHA      string `json:"sha"`
+	Content  string `json:"content"`
+	Encoding string `json:"encoding"`
+}
+
+// contentText returns the decoded text and blob sha of an existing file at
+// path, or ("", "", nil) when it does not exist yet (a 404). Like contentSHA,
+// any other error is propagated rather than misread as "create". The empty
+// text ("", sha, nil) is returned for an encoding the contents API doesn't
+// base64 (files >1MB use a separate blob endpoint); our managed files are a
+// few KB, so that path is a safe no-splice fallback rather than an error.
+func contentText(path string) (string, string, error) {
+	out, err := gh("api", path)
+	if err != nil {
+		if isNotFound(err) {
+			return "", "", nil
+		}
+		return "", "", err
+	}
+	var obj ghContent
+	if err := json.Unmarshal([]byte(out), &obj); err != nil {
+		return "", "", fmt.Errorf("parse contents %s: %w", path, err)
+	}
+	if obj.Encoding != "base64" {
+		return "", obj.SHA, nil
+	}
+	// The contents API wraps its base64 at 60 columns; strip the newlines the
+	// standard decoder rejects.
+	raw, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(obj.Content, "\n", ""))
+	if err != nil {
+		return "", "", fmt.Errorf("decode contents %s: %w", path, err)
+	}
+	return string(raw), obj.SHA, nil
+}
+
+// workflowsPinRe matches an a-novel-kit/workflows action pin, capturing the
+// action sub-path and the exact vX.Y.Z tag: e.g.
+// `a-novel-kit/workflows/generic-actions/merge-gate@v1.14.0` →
+// ("generic-actions/merge-gate", "v1.14.0").
+var workflowsPinRe = regexp.MustCompile(`a-novel-kit/workflows/([^@\s"']+)@(v\d+\.\d+\.\d+)`)
+
+// preserveNewerPins rewrites each a-novel-kit/workflows pin in desired to the
+// version the deployed file already carries, whenever that deployed version is
+// a higher semver — matched by action sub-path. This stops `repo update` from
+// downgrading a pin Renovate has already advanced on the deployed caller while
+// the CLI template lags a workflows release (the two would otherwise fight, and
+// a stale template would re-deploy an outdated action). It only ever bumps a
+// pin forward, never back, and leaves every other byte of the template intact,
+// so a genuine template edit still lands.
+func preserveNewerPins(desired, deployed string) string {
+	deployedVers := map[string]string{}
+	for _, m := range workflowsPinRe.FindAllStringSubmatch(deployed, -1) {
+		subpath, ver := m[1], m[2]
+		if cur, ok := deployedVers[subpath]; !ok || semver.Compare(ver, cur) > 0 {
+			deployedVers[subpath] = ver
+		}
+	}
+	if len(deployedVers) == 0 {
+		return desired
+	}
+	return workflowsPinRe.ReplaceAllStringFunc(desired, func(pin string) string {
+		m := workflowsPinRe.FindStringSubmatch(pin)
+		subpath, ver := m[1], m[2]
+		if dv, ok := deployedVers[subpath]; ok && semver.Compare(dv, ver) > 0 {
+			return "a-novel-kit/workflows/" + subpath + "@" + dv
+		}
+		return pin
+	})
 }
 
 // blobSHA returns the git blob object id of content — SHA-1 over the
