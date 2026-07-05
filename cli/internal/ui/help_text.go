@@ -33,7 +33,7 @@ var (
 	flagDir      = flagDoc{"-C, --dir <path>", "Directory to scan (default: current directory)"}
 	flagType     = flagDoc{"-t, --type <kinds>", "Comma-separated kind filter: go,pnpm,podman (default: all)"}
 	flagTypeTest = flagDoc{"-t, --type <kinds>", "Comma-separated kind filter: go,pnpm (default: all)"}
-	flagJobs     = flagDoc{"-j, --jobs <n>", "Max targets run in parallel, interactive only (default: CPU count)"}
+	flagJobs     = flagDoc{"-j, --jobs <n>", "Max targets run in parallel, interactive only (default: NumCPU/4, min 2)"}
 	flagTimeout  = flagDoc{"-T, --timeout <dur>", "Per-target deadline, e.g. 10m / 30s / 0 to disable (default: 10m)"}
 	flagYes      = flagDoc{"-y, --yes", "Skip the menu; run everything non-interactively & sequentially (CI-safe)"}
 	flagNoCover  = flagDoc{"--no-cover", "Skip coverage (it is collected & reported by default)"}

@@ -118,3 +118,42 @@ func TestPrepareEnv_MissingSecretWarns(t *testing.T) {
 		t.Errorf("expected a descriptive missing-secret warning, got:\n%s", got)
 	}
 }
+
+// TestRun_GOMAXPROCSCap verifies Run injects GOMAXPROCS from its maxProcs
+// argument (the per-target CPU cap the parallel runner uses), and leaves it
+// untouched when maxProcs is 0 (the sequential path).
+func TestRun_GOMAXPROCSCap(t *testing.T) {
+	// The child echoes its inherited GOMAXPROCS; ensure it isn't already set in
+	// this process, so we observe only what Run injects.
+	if orig, ok := os.LookupEnv("GOMAXPROCS"); ok {
+		_ = os.Unsetenv("GOMAXPROCS")
+		t.Cleanup(func() { _ = os.Setenv("GOMAXPROCS", orig) })
+	}
+
+	tests := []struct {
+		name     string
+		maxProcs int
+		want     string // expected value of $GOMAXPROCS in the child ("" = unset)
+	}{
+		{name: "caps when positive", maxProcs: 3, want: "3"},
+		{name: "untouched when zero", maxProcs: 0, want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tgt := detect.Target{
+				Kind: detect.KindGo,
+				Name: "echo-gomaxprocs",
+				Dir:  t.TempDir(),
+				Cmd:  "sh",
+				Args: []string{"-c", `printf 'GMP=[%s]' "$GOMAXPROCS"`},
+			}
+			res := Run(t.Context(), tgt, 0, nil, tt.maxProcs)
+			if !res.Success {
+				t.Fatalf("target failed: %v\n%s", res.ExitErr, res.Output)
+			}
+			if want := "GMP=[" + tt.want + "]"; !strings.Contains(res.Output, want) {
+				t.Errorf("output %q does not contain %q", res.Output, want)
+			}
+		})
+	}
+}
