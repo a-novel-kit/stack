@@ -178,6 +178,13 @@ var profilesItemRe = regexp.MustCompile(`"([^"]+)"|'([^']+)'|([A-Za-z0-9_-]+)`)
 // services block in the lightweight YAML scan.
 var composeTopLevelRe = regexp.MustCompile(`^[a-zA-Z_]+:\s*(?:#.*)?$`)
 
+// dependsOnHeadRe matches a service's `depends_on:` key at the canonical
+// 4-space indent (one level under the 2-space service heading). It keys on the
+// heading only, not the body, so it catches both the map form
+// (`depends_on:\n  svc:\n    condition: …`) and the short-list form
+// (`depends_on:\n  - svc`).
+var dependsOnHeadRe = regexp.MustCompile(`^    depends_on:`)
+
 // composeServices lists every service name declared under `services:` in a
 // compose file, in source order. Used to drive the "skip duplicates" logic
 // in global-mode env-up (a service repo's compose may declare a containerized
@@ -199,6 +206,40 @@ func composeServices(file string) []string {
 		}
 		if m := profilesHeadRe.FindStringSubmatch(line); m != nil {
 			out = append(out, m[1])
+		}
+	}
+	return out
+}
+
+// composeDependents lists the services that declare a `depends_on:` block, in
+// source order. build.composeUpPhased uses it to bring a test env up in
+// dependency waves — dependency-free services first, then dependents — so
+// ordering never relies on the external provider's `depends_on` wait. Uses the
+// same lightweight services-block scan as composeServices.
+func composeDependents(file string) []string {
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	var svc string
+	inServices := false
+	for _, line := range strings.Split(string(raw), "\n") {
+		if composeTopLevelRe.MatchString(line) {
+			inServices = strings.HasPrefix(line, "services:")
+			svc = ""
+			continue
+		}
+		if !inServices {
+			continue
+		}
+		if m := profilesHeadRe.FindStringSubmatch(line); m != nil {
+			svc = m[1]
+			continue
+		}
+		if svc != "" && dependsOnHeadRe.MatchString(line) {
+			out = append(out, svc)
+			svc = "" // record each service once, even if the scan continues
 		}
 	}
 	return out
@@ -240,11 +281,13 @@ func composeProfiles(file string) map[string]string {
 func (f envFile) toEnv(rel string) *ComposeEnv {
 	ports, refs := composeParse(f.file)
 	return &ComposeEnv{
-		File:    f.file,
-		Project: composeProject(rel, f.id),
-		ID:      f.id,
-		Ports:   ports,
-		Refs:    refs,
+		File:       f.file,
+		Project:    composeProject(rel, f.id),
+		ID:         f.id,
+		Ports:      ports,
+		Refs:       refs,
+		Services:   composeServices(f.file),
+		Dependents: composeDependents(f.file),
 	}
 }
 

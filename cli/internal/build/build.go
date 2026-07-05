@@ -359,32 +359,21 @@ func Run(ctx context.Context, t detect.Target, timeout time.Duration, live *Live
 	res := func() Result {
 		if t.Env != nil {
 			_, _ = fmt.Fprintf(out, "── env up: %s ──\n", t.Env.ID)
-			// --podman-build-args forces docker manifest format; `up -d
-			// --build` omits --wait because the external podman-compose
-			// provider does not support it, so we poll container health
-			// ourselves. down uses --volume (singular) for that same
-			// provider's compatibility.
-			downArgs := []string{"down", "--volume"}
-			if err := compose(ctx, out, runEnv, t.Env,
-				[]string{"--podman-build-args=--format docker -q"},
-				"up", "-d", "--build"); err != nil {
-				_, _ = fmt.Fprint(out, "── env down ──\n")
-				_ = compose(context.WithoutCancel(ctx), out, runEnv, t.Env, nil, downArgs...)
-				return Result{Target: t, ExitErr: fmt.Errorf(
-					"environment %s failed to start: %w", t.Env.ID, err)}
-			}
-			// down always runs, even on ctx cancellation mid-test — detach the
-			// context so cleanup itself is never cancelled.
+			// down always runs — even on a mid-bring-up failure (wave 1 up,
+			// wave 2 fails) or ctx cancellation mid-test — so register it before
+			// the up. Detach the context so cleanup itself is never cancelled.
+			// --volume (singular) is the form the external podman-compose
+			// provider accepts.
 			defer func() {
 				_, _ = fmt.Fprint(out, "── env down ──\n")
-				_ = compose(context.WithoutCancel(ctx), out, runEnv, t.Env, nil, downArgs...)
+				_ = compose(context.WithoutCancel(ctx), out, runEnv, t.Env, nil, "down", "--volume")
 			}()
-			// Wait for the env's containers to become healthy (or running with
-			// no healthcheck) before running the tests against it.
-			_, _ = fmt.Fprint(out, "── env wait ──\n")
-			if err := waitHealthy(ctx, out, runEnv, t.Env, 120*time.Second); err != nil {
+			// Bring the env up in dependency waves and wait for each to become
+			// healthy before running the tests — ordering never relies on the
+			// provider's depends_on wait.
+			if err := composeUpPhased(ctx, out, runEnv, t.Env, 120*time.Second); err != nil {
 				return Result{Target: t, ExitErr: fmt.Errorf(
-					"environment %s not ready: %w", t.Env.ID, err)}
+					"environment %s failed to start: %w", t.Env.ID, err)}
 			}
 			_, _ = fmt.Fprintf(out, "── %s ──\n", t.Name)
 		}
@@ -695,35 +684,82 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	return err
 }
 
-// EnvUp brings a compose env up (build, detached) using the given env, then
+// composeUpPhased brings a compose env up WITHOUT relying on the external
+// provider's `depends_on` wait — which hangs on podman-compose ≤1.5.x and
+// silently no-ops on setups without systemd (health stays "starting"). It
+// starts services in two waves: dependency-free services first, then the ones
+// that declare `depends_on:` (e.Dependents), waiting for each wave to become
+// healthy (waitHealthy) before starting the next. --no-deps stops the provider
+// from doing any ordering of its own. This mirrors the `run` daemon path
+// (infra-up → healthy → target). The test composes are flat (infra + one
+// standalone SUT), so two waves suffice; a deeper chain would need more.
+//
+// services, when non-empty, restricts the bring-up to that subset (global-mode
+// duplicate skipping) and is partitioned into the same two waves. When the
+// service list is unknown (empty scan), it falls back to a single whole-env
+// `up` — the pre-existing behavior — rather than bringing nothing up.
+//
+// --remove-orphans is intentionally omitted: podman-compose's orphan handling
+// relative to a positional `up <svc>` is inconsistent across versions and can
+// sweep services it just created. TearDown owns orphan removal.
+func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect.ComposeEnv, healthTimeout time.Duration, services ...string) error {
+	want := services
+	if len(want) == 0 {
+		want = e.Services
+	}
+	if len(want) == 0 {
+		// Unknown service list — bring the whole env up at once (legacy path).
+		if err := compose(ctx, out, env, e,
+			[]string{"--podman-build-args=--format docker -q"}, "up", "-d", "--build"); err != nil {
+			return err
+		}
+		return waitHealthy(ctx, out, env, e, healthTimeout)
+	}
+
+	dependent := make(map[string]bool, len(e.Dependents))
+	for _, s := range e.Dependents {
+		dependent[s] = true
+	}
+	var infra, dependents []string
+	for _, s := range want {
+		if dependent[s] {
+			dependents = append(dependents, s)
+		} else {
+			infra = append(infra, s)
+		}
+	}
+
+	for i, wave := range [][]string{infra, dependents} {
+		if len(wave) == 0 {
+			continue
+		}
+		_, _ = fmt.Fprintf(out, "── env up (wave %d: %s) ──\n", i+1, strings.Join(wave, " "))
+		args := append([]string{"up", "-d", "--build", "--no-deps"}, wave...)
+		if err := compose(ctx, out, env, e,
+			[]string{"--podman-build-args=--format docker -q"}, args...); err != nil {
+			return err
+		}
+		_, _ = fmt.Fprint(out, "── env wait ──\n")
+		if err := waitHealthy(ctx, out, env, e, healthTimeout); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// EnvUp brings a compose env up (build, detached) in dependency waves, then
 // waits for it to become healthy — the `run` counterpart of the env handling
-// Run does inline. Mirrors scripts/test.sh (no --wait on the external
-// podman-compose provider). Progress streams to out.
+// Run does inline. Progress streams to out.
 //
 // services, when non-empty, is a positional list of compose service names to
 // bring up (instead of every profile-less service). The runner uses it in
 // global mode to skip services that duplicate a sibling already running from
 // its own repo.
 func EnvUp(ctx context.Context, env []string, e *detect.ComposeEnv, out io.Writer, services ...string) error {
-	// We deliberately do not pass --remove-orphans here. podman-compose's
-	// interpretation of "orphan" relative to a positional `up <svc>` is
-	// inconsistent across versions — it can sweep services that ARE in the
-	// compose file but not in the positional list, including (in the
-	// no-positional case) the very services it just created. TearDown owns
-	// orphan removal in its explicit cleanup; per-target container `up`
-	// uses --force-recreate to displace stale containers by name.
-	args := make([]string, 0, 3+len(services))
-	args = append(args, "up", "-d", "--build")
-	args = append(args, services...)
-	if err := compose(ctx, out, env, e,
-		[]string{"--podman-build-args=--format docker -q"},
-		args...); err != nil {
+	// 180s: a fresh `--build` plus first-run postgres `initdb` can exceed the
+	// 120s budget on slower machines / cold caches.
+	if err := composeUpPhased(ctx, out, env, e, 180*time.Second, services...); err != nil {
 		return fmt.Errorf("environment %s failed to start: %w", e.ID, err)
-	}
-	// 180s: a fresh `--build` plus first-run postgres `initdb` can exceed
-	// the previous 120s budget on slower machines / cold caches.
-	if err := waitHealthy(ctx, out, env, e, 180*time.Second); err != nil {
-		return fmt.Errorf("environment %s not ready: %w", e.ID, err)
 	}
 	return nil
 }

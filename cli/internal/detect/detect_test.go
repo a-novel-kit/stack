@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -82,5 +83,84 @@ func runGit(t *testing.T, dir string, args ...string) {
 	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
 	if err != nil {
 		panic(string(out))
+	}
+}
+
+// TestComposeDependents guards the classifier that drives build.composeUpPhased:
+// a service is a "dependent" (second wave) iff it declares a depends_on: block.
+// Both the map and short-list forms count; a service with none is first-wave
+// infra. Source order is preserved so multi-level composes wave correctly.
+func TestComposeDependents(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		yaml string
+		want []string
+	}{
+		{
+			name: "MapFormLongCondition",
+			yaml: `services:
+  postgres-x:
+    image: postgres
+  service-x:
+    build:
+      context: ..
+    depends_on:
+      postgres-x:
+        condition: service_healthy
+`,
+			want: []string{"service-x"},
+		},
+		{
+			name: "ShortListForm",
+			yaml: `services:
+  postgres-x:
+    image: postgres
+  mailserver:
+    image: mailpit
+  service-x:
+    depends_on:
+      - postgres-x
+      - mailserver
+`,
+			want: []string{"service-x"},
+		},
+		{
+			name: "DBOnlyNoDependents",
+			yaml: `services:
+  postgres-x:
+    image: postgres
+    ports:
+      - "${POSTGRES_PORT}:5432"
+`,
+			want: nil,
+		},
+		{
+			name: "MultipleDependentsInSourceOrder",
+			yaml: `services:
+  postgres-x:
+    image: postgres
+  seed-x:
+    depends_on:
+      postgres-x:
+        condition: service_healthy
+  service-x:
+    depends_on:
+      seed-x:
+        condition: service_completed_successfully
+`,
+			want: []string{"seed-x", "service-x"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := filepath.Join(t.TempDir(), "podman-compose.test.yaml")
+			mustWrite(t, f, tc.yaml)
+			if got := composeDependents(f); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("composeDependents = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

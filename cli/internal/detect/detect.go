@@ -169,6 +169,12 @@ type ComposeEnv struct {
 	// bring up at env-up time — in global mode it skips any sibling service
 	// that is also being run from its own repo (avoiding duplicates).
 	Services []string
+	// Dependents lists the services that declare a `depends_on:` block. The
+	// test env-up path brings an env up in two waves — dependency-free services
+	// first, then dependents — so startup ordering never relies on the external
+	// compose provider's `depends_on` wait, which is broken on podman-compose
+	// ≤1.5.x and on setups without systemd. See build.composeUpPhased.
+	Dependents []string
 }
 
 // ID is a stable, unique key for a target (used as a selection-map key and to
