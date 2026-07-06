@@ -37,6 +37,7 @@ var (
 	flagTimeout  = flagDoc{"-T, --timeout <dur>", "Per-target deadline, e.g. 10m / 30s / 0 to disable (default: 10m)"}
 	flagYes      = flagDoc{"-y, --yes", "Skip the menu; run everything non-interactively & sequentially (CI-safe)"}
 	flagNoCover  = flagDoc{"--no-cover", "Skip coverage (it is collected & reported by default)"}
+	flagKeep     = flagDoc{"--keep", "Leave the test env up afterwards; the next run reuses it (skips postgres init)"}
 	flagDryRun   = flagDoc{"--dry-run", "List detected targets (and their envs) and exit without running"}
 	flagHelp     = flagDoc{"-h, --help", "Show this command's help"}
 )
@@ -45,7 +46,7 @@ var (
 // podman kind (there are no podman test targets) and adds --no-cover.
 var (
 	buildFlags = []flagDoc{flagDir, flagType, flagJobs, flagTimeout, flagYes, flagDryRun, flagHelp}
-	testFlags  = []flagDoc{flagDir, flagTypeTest, flagJobs, flagTimeout, flagYes, flagNoCover, flagDryRun, flagHelp}
+	testFlags  = []flagDoc{flagDir, flagTypeTest, flagJobs, flagTimeout, flagYes, flagNoCover, flagKeep, flagDryRun, flagHelp}
 )
 
 // commandDocs holds the banner-style help for the two standalone capability
