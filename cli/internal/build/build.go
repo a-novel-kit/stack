@@ -328,7 +328,13 @@ func formatEnvBlock(kv []string) string {
 // of each claiming all of them (N × NumCPU). 0 leaves GOMAXPROCS untouched —
 // used by the sequential non-interactive path, where a target has the box to
 // itself.
-func Run(ctx context.Context, t detect.Target, timeout time.Duration, live *LiveLog, maxProcs int) Result {
+//
+// keep, when true, leaves the target's compose env UP after the run instead of
+// tearing it down — so a repeat run reuses the same containers and volume
+// (skipping postgres initdb). The leftover env is adopted by the next run's
+// preflight. Caller's responsibility: a reused env keeps its prior schema, so
+// don't pass keep across a migration change.
+func Run(ctx context.Context, t detect.Target, timeout time.Duration, live *LiveLog, maxProcs int, keep bool) Result {
 	start := time.Now()
 
 	// Per-target deadline. Cancellation propagates into exec.CommandContext
@@ -377,11 +383,17 @@ func Run(ctx context.Context, t detect.Target, timeout time.Duration, live *Live
 			// wave 2 fails) or ctx cancellation mid-test — so register it before
 			// the up. Detach the context so cleanup itself is never cancelled.
 			// --volume (singular) is the form the external podman-compose
-			// provider accepts.
-			defer func() {
-				_, _ = fmt.Fprint(out, "── env down ──\n")
-				_ = compose(context.WithoutCancel(ctx), out, runEnv, t.Env, nil, "down", "--volume")
-			}()
+			// provider accepts. Skipped under --keep: the env is left up (with
+			// its volume) so the next run reuses it instead of re-initialising
+			// postgres; the next run's preflight adopts the leftover.
+			if !keep {
+				defer func() {
+					_, _ = fmt.Fprint(out, "── env down ──\n")
+					_ = compose(context.WithoutCancel(ctx), out, runEnv, t.Env, nil, "down", "--volume")
+				}()
+			} else {
+				_, _ = fmt.Fprint(out, "── env kept up (--keep) ──\n")
+			}
 			// Bring the env up in dependency waves and wait for each to become
 			// healthy before running the tests — ordering never relies on the
 			// provider's depends_on wait.

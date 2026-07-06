@@ -137,6 +137,7 @@ type buildOpts struct {
 	jobs     int           // max parallel builds (interactive only); 0 = resource-aware default
 	timeout  time.Duration // per-target deadline; 0 = none, default 10m
 	coverage bool          // `test` only: coverage on by default; --no-cover disables
+	keep     bool          // reuse a still-healthy test env across runs (skip teardown, no re-initdb)
 }
 
 // parseBuildArgs hand-parses the small, fixed `build` flag set. A bespoke
@@ -192,6 +193,8 @@ func parseBuildArgs(args []string) (buildOpts, error) {
 			opts.yes = true
 		case "--no-cover":
 			opts.coverage = false
+		case "--keep":
+			opts.keep = true
 		case "-j", "--jobs":
 			v, err := takeVal()
 			if err != nil {
@@ -318,12 +321,12 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 	interactive := !opts.yes && term.IsTerminal(os.Stdout.Fd())
 
 	// Fail-safe: never run on top of a test env left up by an aborted run.
-	if code := preflight(ctx, verb, targets, interactive && term.IsTerminal(os.Stdin.Fd())); code >= 0 {
+	if code := preflight(ctx, verb, targets, interactive && term.IsTerminal(os.Stdin.Fd()), opts.keep); code >= 0 {
 		return code
 	}
 
 	if !interactive {
-		return runNonInteractive(ctx, verb, targets, opts.timeout)
+		return runNonInteractive(ctx, verb, targets, opts.timeout, opts.keep)
 	}
 
 	// Run the whole interactive flow in the alternate screen buffer. On quit
@@ -332,7 +335,7 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 	// we print below to the normal buffer. Without alt-screen, Bubble Tea
 	// leaves its final frame on screen and we'd print the report a second
 	// time underneath it (the "results appear twice" bug).
-	model := ui.New(ctx, version.String(), verb, targets, opts.jobs, opts.timeout)
+	model := ui.New(ctx, version.String(), verb, targets, opts.jobs, opts.timeout, opts.keep)
 	final, err := tea.NewProgram(model).Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "a-novel %s: ui error: %v\n", verb.Base, err)
@@ -357,7 +360,7 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 // runNonInteractive runs every target sequentially, streaming a terse progress
 // line per target, then prints the full text report. Used for -y and for any
 // non-TTY context.
-func runNonInteractive(ctx context.Context, verb ui.Verb, targets []detect.Target, timeout time.Duration) int {
+func runNonInteractive(ctx context.Context, verb ui.Verb, targets []detect.Target, timeout time.Duration, keep bool) int {
 	fmt.Println(ui.Banner(version.String()))
 	fmt.Println()
 
@@ -371,7 +374,7 @@ func runNonInteractive(ctx context.Context, verb ui.Verb, targets []detect.Targe
 		}
 		kind := strings.ToUpper(string(t.Kind))
 		fmt.Printf("[%d/%d] %s %-6s %s (%s)\n", i+1, len(targets), verb.Ing, kind, t.Name, t.RelDir)
-		res := build.Run(ctx, t, timeout, nil, 0) // sequential: full cores, no live tail
+		res := build.Run(ctx, t, timeout, nil, 0, keep) // sequential: full cores, no live tail
 		results = append(results, res)
 		if res.Success {
 			fmt.Printf("      ok   %-6s %s\n", kind, t.Name)
@@ -407,9 +410,20 @@ func runNonInteractive(ctx context.Context, verb ui.Verb, targets []detect.Targe
 // "Clean" and "abort" both tear down ONLY the conflicting projects (scoped
 // `compose down --volume`, never a global podman wipe); clean continues,
 // abort stops. Non-interactive can't ask, so it self-cleans and aborts.
-func preflight(ctx context.Context, verb ui.Verb, targets []detect.Target, canPrompt bool) int {
+func preflight(ctx context.Context, verb ui.Verb, targets []detect.Target, canPrompt, keep bool) int {
 	conflicts := build.EnvConflicts(ctx, targets)
 	if len(conflicts) == 0 {
+		return -1
+	}
+
+	if keep {
+		// --keep: a leftover env is expected and desired, not a conflict —
+		// adopt it so this run reuses its warm containers + volume (no postgres
+		// re-init). composeUpPhased is idempotent, so it reconciles anything
+		// that drifted. The prior schema/data persists (the --keep trade-off).
+		fmt.Fprintln(os.Stderr, ui.EnvNote(
+			"Reusing the existing test environment (--keep); its data and schema "+
+				"persist from the previous run."))
 		return -1
 	}
 

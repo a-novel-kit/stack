@@ -78,6 +78,7 @@ type Model struct {
 	// in-flight target's ID to when it started (for its live timer).
 	maxPar  int
 	procs   int
+	keep    bool           // leave env-backed targets' compose envs up after the run
 	timeout time.Duration  // per-target deadline (0 = none)
 	live    *build.LiveLog // shared latest-line tail (pointer; survives value copies)
 	nextIdx int
@@ -112,7 +113,7 @@ type Model struct {
 // confirms; jobs <= 0 means the resource-aware default (see defaultJobs).
 // Parallelism is interactive-only; the non-interactive path stays strictly
 // sequential by design.
-func New(ctx context.Context, version string, verb Verb, targets []detect.Target, jobs int, timeout time.Duration) Model {
+func New(ctx context.Context, version string, verb Verb, targets []detect.Target, jobs int, timeout time.Duration, keep bool) Model {
 	if jobs <= 0 {
 		jobs = defaultJobs()
 	}
@@ -149,6 +150,7 @@ func New(ctx context.Context, version string, verb Verb, targets []detect.Target
 		phase:    phaseSelect,
 		maxPar:   jobs,
 		procs:    procs,
+		keep:     keep,
 		timeout:  timeout,
 		live:     build.NewLiveLog(),
 		running:  map[string]time.Time{},
@@ -191,7 +193,7 @@ func defaultOffInGlobal(verb Verb, multiService bool, t detect.Target) bool {
 // processes itself. `runMode` ("container" / "live" / "") is displayed in
 // the picker title so the user can tell at a glance which list this is.
 func NewSelect(version string, verb Verb, runMode string, targets []detect.Target) Model {
-	m := New(context.Background(), version, verb, targets, 1, 0)
+	m := New(context.Background(), version, verb, targets, 1, 0, false)
 	m.selectOnly = true
 	m.runModeLabel = runMode
 	return m
@@ -299,8 +301,9 @@ func (m Model) buildCmd(t detect.Target) tea.Cmd {
 	timeout := m.timeout
 	live := m.live
 	procs := m.procs
+	keep := m.keep
 	return func() tea.Msg {
-		return buildDoneMsg{res: build.Run(ctx, t, timeout, live, procs)}
+		return buildDoneMsg{res: build.Run(ctx, t, timeout, live, procs, keep)}
 	}
 }
 
