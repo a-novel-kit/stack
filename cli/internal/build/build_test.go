@@ -147,7 +147,7 @@ func TestRun_GOMAXPROCSCap(t *testing.T) {
 				Cmd:  "sh",
 				Args: []string{"-c", `printf 'GMP=[%s]' "$GOMAXPROCS"`},
 			}
-			res := Run(t.Context(), tgt, 0, nil, tt.maxProcs)
+			res := Run(t.Context(), tgt, 0, nil, tt.maxProcs, false)
 			if !res.Success {
 				t.Fatalf("target failed: %v\n%s", res.ExitErr, res.Output)
 			}
