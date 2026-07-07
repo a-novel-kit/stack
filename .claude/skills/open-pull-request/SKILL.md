@@ -270,6 +270,15 @@ Rules:
 
 - **Summary** is 1–3 bullets describing what changed _and why_. Readers see the diff; they
   need the intent.
+- **Linked issues — close a planning issue with the FULL cross-repo ref.** A PR that
+  implements a planning issue must close it in the body so merging advances the board.
+  Planning issues (Epic / Feature / Task) live in the org **`.github`** repos
+  (`a-novel-kit/.github`, `a-novel/.github`) while this PR lives in another repo, so a bare
+  `Closes #<n>` resolves to _this_ repo and links **nothing** — the issue then freezes on the
+  board (e.g. a Feature stuck at Backlog though its PR merged). Use the full cross-repo form:
+  `Closes a-novel-kit/.github#<n>` (or `a-novel/.github#<n>`). Only that form lands in the
+  PR's `closingIssuesReferences`, which is the sole signal `derive-status` reads to move the
+  issue's board **Status**. A Task filed in _this same_ repo keeps the bare `Closes #<n>`.
 - **Layers changed** lists only the layers actually touched. Omit the section entirely if
   only one layer is affected and the title already conveys it.
 - **Breaking changes** is either `None.` or an itemized list with migration steps. Never
@@ -390,6 +399,9 @@ bot-comment` only posts comments. PR create/edit/ready always run as the operato
 - **Missing `BREAKING CHANGE:` footer.** If any commit on the branch is breaking, the PR
   body's Breaking Changes section must list it. Mismatches between commits and PR body are
   bugs — readers trust the body.
+- **Bare `Closes #<n>` for a planning issue that lives in a `.github` repo.** It resolves to
+  _this_ repo and links nothing, so `derive-status` never moves the issue and it freezes on
+  the board. Use the cross-repo ref `Closes a-novel-kit/.github#<n>` (see 5.3).
 - **PR title that does not match the primary commit scope.** If the branch is `feat/dao/*`,
   the PR title scope should be `dao`, not `services`.
 - **Linking the wrong base branch on a stacked PR.** If the parent is already merged, rebase
@@ -409,6 +421,7 @@ bot-comment` only posts comments. PR create/edit/ready always run as the operato
 | Check for existing PR               | `gh pr view --json number,state,url`                                            |
 | Create ready PR                     | `gh pr create --title "..." --body "$(cat <<'EOF' ... )"`                       |
 | Create draft PR                     | `gh pr create --draft --title ...`                                              |
+| Close a cross-repo planning issue   | PR body: `Closes a-novel-kit/.github#<n>` (bare `#<n>` won't link it — see 5.3) |
 | Stacked PR (base is another branch) | `gh pr create --base feat/<parent-area>/... ...`                                |
 | Update title on existing PR         | `gh pr edit --title "..."`                                                      |
 | Flip draft → ready                  | `gh pr ready`                                                                   |
