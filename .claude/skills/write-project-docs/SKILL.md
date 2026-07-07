@@ -364,6 +364,15 @@ stays with you, because each part explains why the next one follows. This princi
 shape of a guide; the others refine the prose inside it. It does not apply to a `README.md`, which is
 a reference entrypoint, not a guide (see the scope note under Editorial Principles).
 
+### 13. Name a concept once, concretely, and keep the name
+
+Give a recurring concept one concrete name and use that exact name every time. An abstract label
+earns its place only when it is tied to something the reader can hold: "the intention" is vague until
+it is "the specification behind your idea." Name it that, then carry "specification" through; do not
+drift to "description" a line later. Every synonym for one thing makes the reader stop to check
+whether it is the same thing. One steady name goes unnoticed, and the reader thinks about the idea,
+not the words.
+
 ---
 
 ## Phase 1: Collect Required Inputs

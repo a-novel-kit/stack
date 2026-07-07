@@ -105,6 +105,8 @@ that matters, in as few words as it takes, and stop.
   "This runs first because the cache is cold" — not "Why this runs first: the cache." The
   rhetorical label ("The reason:", "Note:", "Why this matters:") is ceremony; delete it and let
   the sentence carry the idea.
+- **Name a thing once, and keep the name.** Use one term for one concept. Do not alternate synonyms
+  ("the cache," then "the store") for the same thing, or the reader stops to check whether they differ.
 
 This applies to every prose surface this skill touches — doc comments, package docs, README
 sections — and equally to PR descriptions (see `open-pull-request`).
