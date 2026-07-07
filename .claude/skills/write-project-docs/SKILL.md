@@ -307,8 +307,10 @@ reason:", "Note:") are ceremony; cut them and let the sentence stand.
 
 Prefer basic structure to clever construction. If the same meaning fits a simpler word and a
 plainer sentence, use them: "hands most of the automation" reads better than "hands you the
-automation for the rest," at no cost to meaning. Two short sentences beat one long one spliced
-together. Avoid the em-dash that cuts a sentence in half, and the enumeration that only restates
+automation for the rest," at no cost to meaning. Keep the plain word order, subject then verb then
+object: "It tracks everything in between for you," not "Everything between them, it tracks for you." A
+fronted object, an inversion, or a "that is where…" cleft makes the reader unpack a sentence before
+reading it. Two short sentences beat one long one spliced together. Avoid the em-dash that cuts a sentence in half, and the enumeration that only restates
 what you just wrote. When a draft feels dense, revise for plainness before shipping; the plain
 version is the finished one, not a step toward it.
 
