@@ -47,6 +47,17 @@ ensure:
   - name: "automation:paused"
     color: "d93f0b"
     description: "Pauses this Epic's [Agent] automation (best-effort; org kill-switch is the hard halt)"
+  # escalation — the umbrella label the escalate action puts on every escalation ticket, so humans get
+  # one board filter for all open escalations. Color + description MATCH the escalate action's own
+  # `gh label create --force` (generic-actions/escalate) so the two never recolor each other.
+  - name: escalation
+    color: "b60205"
+    description: "Automated governance escalation (escalate action)."
+  # hotfix-reconcile — on a hotfix's per-hotfix cleanup Task: the fix must be forward-ported to the
+  # default branch or a later minor would reintroduce the bug. Matches hotfix.yaml's own ensure.
+  - name: hotfix-reconcile
+    color: "fbca04"
+    description: "Tracks a hotfix's forward-port to the default branch."
 retire:
   # Replaced by the `Triage` board status: a status is the action a task needs;
   # labels only sort within a status.
