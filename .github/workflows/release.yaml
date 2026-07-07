@@ -51,7 +51,7 @@ jobs:
       tag: ${{ steps.core.outputs.tag }}
     steps:
       - id: core
-        uses: a-novel-kit/workflows/publish-actions/release-core@v1.17.0
+        uses: a-novel-kit/workflows/publish-actions/release-core@v1.19.0
         with:
           release_type: ${{ inputs.release_type }}
           dry_run: ${{ inputs.dry_run }}
@@ -60,7 +60,7 @@ jobs:
       # Everything on the default branch just shipped — clear this repo's
       # awaiting-release items off the board. Skipped on a dry run.
       - if: ${{ !inputs.dry_run }}
-        uses: a-novel-kit/workflows/generic-actions/archive-board-items@v1.17.0
+        uses: a-novel-kit/workflows/generic-actions/archive-board-items@v1.19.0
         with:
           client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
           app_private_key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
