@@ -349,7 +349,10 @@ Deferred ideas worth remembering.
 The old "keep the plan file from rotting" discipline is now mostly automatic:
 
 - Each Task closes when its PR merges (`Closes #<task>`); the Epic's **sub-issue progress** advances
-  on its own.
+  on its own. When the PR lives in a different repo than the planning issue (a Feature/Task filed in a
+  `.github` repo, closed by a service PR), the close ref must be the **full cross-repo form**
+  `Closes a-novel-kit/.github#<n>` or `derive-status` never moves it and it freezes on the board — see
+  `open-pull-request`.
 - Move the board **Status** as work flows (Ready → In progress → In review → Done).
 - Keep the Epic open until every stage has landed, then close it. A closed Epic with its closed
   sub-issues _is_ the durable record — no summary rewrite needed.
