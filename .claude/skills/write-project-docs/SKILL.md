@@ -299,11 +299,36 @@ code block.
 ### 9. Plain language, plain sentences
 
 Write so a tired reader gets it on the first pass. Prefer the common word and the short one;
-reach for an advanced or technical word only when it earns its place — when it replaces a whole
+reach for an advanced or technical word only when it earns its place, when it replaces a whole
 phrase or removes a real ambiguity, not for tone. State each point as a plain subject-verb-object
 sentence, not a label: "The service signs tokens server-side because the private key never leaves
 it," not "Why server-side: the private key." Rhetorical labels ("Why this matters:", "The
-reason:", "Note:") are ceremony — cut them and let the sentence stand.
+reason:", "Note:") are ceremony; cut them and let the sentence stand.
+
+Prefer basic structure to clever construction. If the same meaning fits a simpler word and a
+plainer sentence, use them: "hands most of the automation" reads better than "hands you the
+automation for the rest," at no cost to meaning. Two short sentences beat one long one spliced
+together. Avoid the em-dash that cuts a sentence in half, and the enumeration that only restates
+what you just wrote. When a draft feels dense, revise for plainness before shipping; the plain
+version is the finished one, not a step toward it.
+
+### 10. Show the flow, don't announce it
+
+Let the reader absorb the model by reading, not by being told its shape. A section named "The big
+picture" or "The design" announces your structure instead of teaching the subject; drop the label
+and let the content be the picture. Headings should name what the reader is doing or learning at
+that point ("When the board needs you"), not the role the section plays in your outline.
+
+Prefer showing to telling. A worked path teaches the model better than a list of definitions: an
+idea becomes a Task, the Task becomes a Pull Request, the Pull Request merges and ships. When a
+sequence of states is the point, a small text diagram beats a paragraph; keep it visual and sparse,
+a few words per node, and mark what matters, like who acts or where a gate falls.
+
+### 11. Keep it self-contained, no links to ephemeral work items
+
+Never point a doc at a specific issue, epic, or PR, by number or by link. They close, archive, and
+get renumbered, so "see #46" rots and leads nowhere. If a rationale is worth keeping, write it into
+the doc itself. Commit messages and PR descriptions may reference issues; docs may not.
 
 ---
 
