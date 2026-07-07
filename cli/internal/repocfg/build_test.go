@@ -180,10 +180,14 @@ func TestBuildPlanProvisionsMergeGateWorkflows(t *testing.T) {
 		t.Fatalf("BuildPlan: %v", err)
 	}
 	want := map[string]string{
-		"/contents/.github/workflows/merge-gate.yaml":    "generic-actions/merge-gate@",
+		// Factorized: the thin caller references the reusable *-run.yaml engine, not the action.
+		"/contents/.github/workflows/merge-gate.yaml":    "merge-gate-run.yaml@",
+		"/contents/.github/workflows/release-train.yaml": "release-train-run.yaml@",
+		"/contents/.github/workflows/hotfix.yaml":        "hotfix-run.yaml@",
+		"/contents/.github/workflows/epic-rollback.yaml": "epic-rollback-run.yaml@",
+		// Not factorized (already thin): still call the action directly.
 		"/contents/.github/workflows/approve-pr.yaml":    "generic-actions/approve-pr@",
 		"/contents/.github/workflows/derive-status.yaml": "generic-actions/derive-status@",
-		"/contents/.github/workflows/release-train.yaml": "generic-actions/release-train@",
 	}
 	for suffix, ref := range want {
 		var op *Op
@@ -245,8 +249,8 @@ func TestBuildPlanProvisionsAutoApprove(t *testing.T) {
 	if op == nil {
 		t.Fatal("BuildPlan emitted no auto-approve workflow op under require-approval")
 	}
-	if !strings.Contains(op.Content, "generic-actions/approve-bot@") {
-		t.Error("auto-approve content missing the approve-bot ref")
+	if !strings.Contains(op.Content, "auto-approve-dependabot-run.yaml@") {
+		t.Error("auto-approve content missing the reusable-workflow ref")
 	}
 
 	// Without require-approval, the auto-approve workflow is not pushed.
