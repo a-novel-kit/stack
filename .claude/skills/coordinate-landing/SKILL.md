@@ -172,6 +172,15 @@ dispatches each repo's `release.yaml` with `dry_run=true` and cuts nothing), the
   approve the run, then re-dispatch to record the receipt. A **botched cut** (tag pushed, Release
   missing) is flagged loudly for manual repair, never silently skipped.
 
+### Cross-repo hotfix
+
+A bug on a released line that spans several repos is **not** a special "hotfix train" — it is a
+**standard Epic, run fast**: label the fix PRs `epic:<N>`, let the merge-gate land them atomically, and
+release with the release train. There is deliberately **no cross-repo hotfix orchestrator** — the Epic
+machinery already gives atomicity + a coordinated release, so a second one would be redundant surface.
+The _single-repo_ hotfix path (`hotfix.yaml`: baseline → ephemeral → cut → reconcile → cleanup Task) and
+its vocabulary live in `manage-versions`.
+
 ---
 
 ## Version coordination — the two rules `manage-versions` owns
