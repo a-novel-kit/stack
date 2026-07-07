@@ -85,6 +85,49 @@ must lack those rights server-side. See [[feedback-non-interactive-token]].
 
 ---
 
+## Hotfixing a released line
+
+Sometimes a bug must be fixed on an already-released line **without** waiting for — or dragging in —
+whatever has since landed on the default branch. That is a **hotfix**: patch the released tag, cut a new
+patch on that line, then forward-port the fix to the default branch so a later release can't reintroduce
+it. It is a single-repo path; a bug spanning several repos is a fast **Epic**, not a hotfix (see
+`coordinate-landing`).
+
+**Vocabulary** (single-repo hotfix — freeze it here):
+
+- **baseline** — the latest live tag on the target `X.Y` line (e.g. `v1.4.2` for line `1.4`). The hotfix
+  cuts from the baseline, never from the default branch.
+- **ephemeral branch** — `hotfix/vX.Y.x`, cut from the baseline, carrying the fix; pushed so the cut can
+  build it, then deleted. Never long-lived.
+- **cut** — `release-core-hotfix` bumps the patch, tags `vX.Y.(Z+1)` (tag-only, `--latest=false`, **no
+  default-branch commit**), and creates the Release. It does not touch the default branch.
+- **reconcile** — forward-porting the fix _diff_ (never the version bump) to the default branch, as a
+  squash `hotfix-reconcile/*` PR. A conflict degrades to a **draft** PR for a human to finish.
+- **cleanup Task** — the per-hotfix tracking issue (label `hotfix-reconcile`) the reconcile PR `Closes`.
+  While it stays open, the fix has **not** reconciled — the watchdog escalates a rotting one.
+- **retract** — for a Go module, a `retract vX.Y.Z` directive (added in a later release) marks a
+  pulled/bad version so `go get` skips it. The tag stays (immutable); `retract` is the "don't use this"
+  signal downstream.
+
+**Cut a hotfix.** Dispatch the repo's **`hotfix.yaml`** from the UI (admin + protected-`release`-env
+gated, like `release.yaml`; `dry_run` defaults on). Pick the `X.Y` **line** and the **`fix_ref`** — the
+commit or `A..B` range carrying the fix, cherry-picked onto the baseline (empty = a drill that just
+re-cuts the baseline). Rehearse with `dry_run=true`, then run live: it cuts `vX.Y.(Z+1)`, opens the
+cleanup Task, and opens the reconcile PR automatically. **Review + merge the reconcile PR** — until it
+lands, the cleanup Task stays open and the fix is not yet on the default branch. A hotfix is deliberately
+**exempt from `AGENT_KILL_SWITCH`**: the emergency patch path must stay open even when normal automation
+is halted (it is human-gated by admin + the `release` env instead).
+
+**Security hotfix (embargoed).** When the fix can't be public before release: work it under a **draft
+GHSA advisory** in a **temporary private fork** — a private fork inherits none of the org secrets or
+runners, so there is **no CI there** and nothing leaks — coordinate the disclosure, then cut the hotfix
+and publish the advisory together, and `retract` the vulnerable version(s) in the follow-up. The
+**forward-port must land** (the receipt-gated reconcile), never "the next upgrade will fix it" — a later
+minor cut from the unreconciled line silently re-ships the hole. Outward policy (contact, disclosure
+window) lives in `SECURITY.md`; the mechanics live here.
+
+---
+
 ## Working a cross-repo change on a branch
 
 You're changing repo **A** (the dependency — e.g. `golib`) and repo **B** (the consumer — e.g. a
