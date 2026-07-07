@@ -146,7 +146,7 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	// feed the board. Static files: the [Agent] creds and the per-org board id are
 	// GitHub-expression refs resolved at run time, not repocfg substitutions.
 	if c.Rulesets.Master {
-		for _, wf := range []string{"merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml", "release-train.yaml"} {
+		for _, wf := range []string{"merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml", "release-train.yaml", "hotfix.yaml"} {
 			content, err := ReadTemplate("governance/" + wf)
 			if err != nil {
 				return nil, err
