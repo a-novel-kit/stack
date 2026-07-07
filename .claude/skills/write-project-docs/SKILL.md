@@ -358,6 +358,12 @@ motif thread through and pay off later (the point where the work "waits for a hu
 very thing to pay attention to). Vary the sentence length, and land the important beat on a short
 one.
 
+A story is the order of ideas, not extra words. Keep each beat as tight as principle 9 demands: "Task
+being the smallest unit" beats "the smallest, the one that turns straight into code." The same chain
+must hold inside a paragraph, not only across sections: each sentence follows from the one before, so
+the reader can trace the logic. A paragraph that packs several ideas and leaves the links implicit
+reads as dense, not concise; make each link explicit, or split it.
+
 The trap is the appliance manual: "There is a wash cycle and a rinse cycle. Press start. If it
 beeps, open the door." Flat, listed, no momentum. Tell the same content as a story and the reader
 stays with you, because each part explains why the next one follows. This principle governs the
@@ -372,6 +378,10 @@ it is "the specification behind your idea." Name it that, then carry "specificat
 drift to "description" a line later. Every synonym for one thing makes the reader stop to check
 whether it is the same thing. One steady name goes unnoticed, and the reader thinks about the idea,
 not the words.
+
+This holds against your own flourishes. When the domain already has a precise term, use it, and resist
+paraphrasing it for warmth or variety: "the second human-gated stage" beats "the work waits for a human
+a second time." A motif (principle 12) may echo a term, but it must never replace it.
 
 ---
 
