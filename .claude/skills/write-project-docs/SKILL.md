@@ -330,6 +330,24 @@ Never point a doc at a specific issue, epic, or PR, by number or by link. They c
 get renumbered, so "see #46" rots and leads nowhere. If a rationale is worth keeping, write it into
 the doc itself. Commit messages and PR descriptions may reference issues; docs may not.
 
+### 12. Tell a story, not a spec
+
+A guide is a narrative with an arc, not a catalog of facts. The arc that carries a reader: what
+this document is, then what they will do, then how it works, then what to pay attention to, then
+the edge cases, then the machinery underneath. Each part earns the next, so the reader is led
+through, never dropped into a list.
+
+Pacing does the leading. Set up what is coming, then move through it with real transitions ("It
+starts with the intention," "Then comes the code," "Now it is a maintainer's turn"), and let a
+motif thread through and pay off later (the point where the work "waits for a human" becomes the
+very thing to pay attention to). Vary the sentence length, and land the important beat on a short
+one.
+
+The trap is the appliance manual: "There is a wash cycle and a rinse cycle. Press start. If it
+beeps, open the door." Flat, listed, no momentum. Tell the same content as a story and the reader
+stays with you, because each part explains why the next one follows. This principle governs the
+shape of the whole document; the others refine the prose inside it.
+
 ---
 
 ## Phase 1: Collect Required Inputs
