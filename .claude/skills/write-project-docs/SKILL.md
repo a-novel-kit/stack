@@ -23,6 +23,12 @@ re-explaining the whole system from inside one source file (see `document-code`)
 wide-angle view in README and CONTRIBUTING and keep it current, so the comments in the code can
 stay local and specific.
 
+They are not the same kind of document, though. `README.md` is a reference **entrypoint**: how to
+install, configure, and call the project, plus the global picture the code comments defer to. It is
+closer to an extension of those comments than to a guide, and it follows the section order below
+rather than a narrative. `CONTRIBUTING.md` and `SECURITY.md` are **guides**: they walk a reader
+through a process, as do the pages they link (onboarding, a board-lifecycle walkthrough).
+
 The skill has two modes:
 
 - **Scaffold** — the file does not exist yet (new project). Generate from the templates in
@@ -178,6 +184,13 @@ service role there.
 
 These come before the templates. The templates implement them; if a generated file looks
 right but violates a principle, the principle wins.
+
+Most apply to every file. The narrative ones are the exception. Principle 12 (tell a story) shapes
+the **guides** (`CONTRIBUTING.md`, `SECURITY.md`, and the pages they link), not `README.md`: a README
+is a reference entrypoint, not a guide, so it follows the section order below instead of an arc.
+Principle 10's natural headings likewise give way to that fixed order in a README, though its
+show-over-tell holds anywhere. Everything else, the plain-language principles most of all, applies to
+every file, the README and the `document-code` comments alike.
 
 ### 1. Audience-first — name the reader before writing the section
 
@@ -348,7 +361,8 @@ one.
 The trap is the appliance manual: "There is a wash cycle and a rinse cycle. Press start. If it
 beeps, open the door." Flat, listed, no momentum. Tell the same content as a story and the reader
 stays with you, because each part explains why the next one follows. This principle governs the
-shape of the whole document; the others refine the prose inside it.
+shape of a guide; the others refine the prose inside it. It does not apply to a `README.md`, which is
+a reference entrypoint, not a guide (see the scope note under Editorial Principles).
 
 ---
 

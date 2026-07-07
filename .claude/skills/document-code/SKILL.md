@@ -100,7 +100,8 @@ that matters, in as few words as it takes, and stop.
   technical word only when it earns its place — when it replaces a whole clause or removes a real
   ambiguity. A rare word chosen for its own sake slows the reader; a precise one that cuts five
   words speeds them up.
-- **Write plain sentences, not labels.** State the point as a subject-verb-object sentence. Write
+- **Write plain sentences, not labels.** State the point as a subject-verb-object sentence, and keep
+  that order; a fronted object or a cleft makes the reader unpack it first. Write
   "This runs first because the cache is cold" — not "Why this runs first: the cache." The
   rhetorical label ("The reason:", "Note:", "Why this matters:") is ceremony; delete it and let
   the sentence carry the idea.
