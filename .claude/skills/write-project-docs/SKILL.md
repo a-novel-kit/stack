@@ -216,7 +216,24 @@ A good role section answers:
 If the answer is "I don't know" for any of those, find out before drafting — the role
 section _is_ the doc.
 
-### 3. Verify every factual claim against the source
+### 3. Open with what the document is about, not with a mechanism
+
+The first sentence of a guide (a README role paragraph, a CONTRIBUTING page, any standalone doc) says
+**what the document is about**, in plain purpose terms: "This document is about how a feature is planned,
+built, and shipped." The reader gets the frame before any concrete detail.
+
+Never open with an implementation fact. "Every piece of work is a GitHub issue" drops the reader into the
+mechanism with no context. It reads like a machine stating a fact, not a person explaining a thing. State
+the purpose first, then let the concrete pieces arrive as its answer. The unit ("an issue") lands on its
+own once the reader knows why it exists: to turn an idea into buildable work.
+
+Guide, don't assert. "This document is about…" orients the reader. "We plan before we build" commands
+them. Prescriptive, first-person openers read as manifesto, not guide.
+
+Test it on the first two sentences alone. A stranger should know what the doc covers and why, and should
+not yet have met one implementation term without a reason for it.
+
+### 4. Verify every factual claim against the source
 
 A README that says "AES-GCM" when the code uses NaCl secretbox is worse than a README
 that says nothing about encryption. Before describing any of:
@@ -231,7 +248,7 @@ that says nothing about encryption. Before describing any of:
 the code changes one of these things, the doc update belongs in the same change, not a
 follow-up.
 
-### 4. Show the canonical, link or table the variants
+### 5. Show the canonical, link or table the variants
 
 When a service has several deployment shapes (REST × gRPC × standalone × split = four
 combinations), do not paste four near-identical compose blocks in sequence. The reader
@@ -243,7 +260,7 @@ lead with production, relegate the dev one-liner to "Running locally") — show 
 list the other shapes in a table or collapse them under a `<details>` block. The principle generalizes: any time two blocks
 differ by one line, the second belongs in a diff, table, or collapsible block, not in line.
 
-### 5. Reference, don't enumerate
+### 6. Reference, don't enumerate
 
 Comprehensive lists of fields, methods, env vars, etc. are reference material. They go in
 a dedicated section (or in generated reference docs like the OpenAPI viewer or godoc),
@@ -255,7 +272,7 @@ For client packages, the README example shows the **minimum viable call** — in
 construct, one real operation. That is enough to unblock someone. The full surface is what
 intellisense, `pkg.go.dev`, or the published API reference is for.
 
-### 6. Edit in place; preserve unknown content
+### 7. Edit in place; preserve unknown content
 
 In update mode, treat existing custom sections (architecture diagrams, team notes,
 release call-outs that are not in the template) as data, not noise. Read the whole file,
@@ -263,7 +280,7 @@ identify the section the user is changing, edit only that section. A "rewrite" i
 from the user is the only override — and even then, surface anything that looks like
 deliberate custom content before discarding it.
 
-### 7. Explain by rationale, not by example
+### 8. Explain by rationale, not by example
 
 A doc earns its keep with a clear, well-phrased explanation of what a thing is, why it
 exists, and how to approach it — not with examples. Case-specific examples (a particular
@@ -279,7 +296,7 @@ explanation: keep the explanatory prose general and push the specifics to where 
 belong — the relevant service's own `CONTRIBUTING.md`, a reference table, or a copy-paste
 code block.
 
-### 8. Plain language, plain sentences
+### 9. Plain language, plain sentences
 
 Write so a tired reader gets it on the first pass. Prefer the common word and the short one;
 reach for an advanced or technical word only when it earns its place — when it replaces a whole
@@ -468,7 +485,7 @@ Pin every image to the same release tag — see the [latest release](https://git
 ## Using the client packages
 
 <!-- One minimum-viable example per client (Go, JS). Link the API reference / pkg.go.dev;
-     do not enumerate the full surface (Principle 5). -->
+     do not enumerate the full surface (Principle 6). -->
 
 ## Running locally
 
@@ -646,7 +663,7 @@ Concretely, this means:
      semantics, transaction scoping rules, materialized-view refresh requirements).
    - Cryptographic flows (which algorithm, where the key comes from, what gets sealed).
    - Config schemas the contributor will actually edit, with field names taken from the
-     code. Subject to Editorial Principle 3 — verify field names against the source.
+     code. Subject to Editorial Principle 4 — verify field names against the source.
    - Scheduled-job semantics if the service has them.
    - Surface table (gRPC services / REST endpoints) as a quick orientation, not a full
      API spec — link to the proto file or OpenAPI doc for that.
@@ -751,7 +768,7 @@ Agora service:
   conversation that produced the doc. Explain by rationale; reach for an example only as an
   analogy for a genuinely hard concept, and push concrete specifics (commands, names,
   links) to a service's own `CONTRIBUTING.md`, a reference table, or a code block. See
-  Editorial Principle 7.
+  Editorial Principle 8.
 - **Do not embed secrets.** The codecov graph token is fine (public). API keys, passwords,
   real `APP_MASTER_KEY` values, npm auth tokens are not.
 - **Do not link to internal-only dashboards.** Anything linked in the README is
@@ -762,7 +779,7 @@ Agora service:
   shapes, RPC names, REST paths, lifecycle states — every factual claim about the
   codebase gets verified against the source at the same SHA as the doc commit. A
   README that says "AES-GCM" when the code uses NaCl secretbox is worse than a README
-  that does not mention encryption at all. See Editorial Principle 3.
+  that does not mention encryption at all. See Editorial Principle 4.
 - **Do not duplicate content across README and CONTRIBUTING.** If a fact lives in one,
   the other links to it. Common offenders: client install snippets, env-var tables,
   service role description. Pick one home; link from the other. See Editorial Principle 1.
