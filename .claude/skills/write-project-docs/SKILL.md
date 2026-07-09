@@ -396,6 +396,15 @@ doc, linked to rather than stamped in. And detail only some readers need, like a
 its own or an advanced path, gets its own section with a line up front saying who it is for. The main
 narrative stays simple and universal; whoever needs more follows the link.
 
+### 15. A link rides on the prose, never the other way around
+
+Anchor a link to a phrase that already earns its place in the sentence; never write a clause, a sentence,
+or a stacked list just to hold one. "Taking time to refine it makes the [whole planning process](…)
+smooth" reads as prose; "refine it, and [planning](…) walks through it" reads as a footnote bolted on.
+When a phrase needs several URLs at once, such as the same view in two orgs, a short parenthetical on it
+carries them ("the Roadmap view ([a-novel](…), [a-novel-kit](…))"); a sentence built around the link does
+not. If a link has nowhere natural to sit, rework the prose or drop the link.
+
 ---
 
 ## Phase 1: Collect Required Inputs
