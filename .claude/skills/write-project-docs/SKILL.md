@@ -383,6 +383,19 @@ This holds against your own flourishes. When the domain already has a precise te
 paraphrasing it for warmth or variety: "the second human-gated stage" beats "the work waits for a human
 a second time." A motif (principle 12) may echo a term, but it must never replace it.
 
+### 14. Start simple: the global picture first, then the details
+
+Give the reader the whole shape in its simplest form before any detail. Someone new should grasp how the
+thing works from the opening, then meet the specifics, then the edge cases, each layer resting on the one
+before. Do not open a section with an exception or a corner case; open with the common path, and let the
+rare and the deep follow. This orders the document as a whole and every section inside it.
+
+The same instinct decides what a document carries at all. A process or lifecycle doc holds the generic
+shape; the language, the stack, and the specific tooling belong in the repository's or language's own
+doc, linked to rather than stamped in. And detail only some readers need, like a step an agent handles on
+its own or an advanced path, gets its own section with a line up front saying who it is for. The main
+narrative stays simple and universal; whoever needs more follows the link.
+
 ---
 
 ## Phase 1: Collect Required Inputs
