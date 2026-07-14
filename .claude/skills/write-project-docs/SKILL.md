@@ -411,6 +411,16 @@ When a phrase needs several URLs at once, such as the same view in two orgs, a s
 carries them ("the Roadmap view ([a-novel](…), [a-novel-kit](…))"); a sentence built around the link does
 not. If a link has nowhere natural to sit, rework the prose or drop the link.
 
+### 16. Lead with the do; keep the don't a footnote
+
+Guidance is what a reader should carry away, so lead with the instruction, plain and given the most room:
+"make the spec sharp; it is the foundation." The failure it guards against is a transient warning, there
+only to make the instruction land, so give it less space and set it apart, after: "a vague one builds the
+wrong thing." Do not lead with the failure, weld a caveat onto it, or bury the do at the tail: "build from
+a vague one and you build the wrong thing, however clean the code, so make it sharp" does all three, hiding
+the instruction behind the warning meant to drive it home. Separate the two, and let the do carry the
+weight.
+
 ---
 
 ## Phase 1: Collect Required Inputs
