@@ -396,6 +396,11 @@ thing works from the opening, then meet the specifics, then the edge cases, each
 before. Do not open a section with an exception or a corner case; open with the common path, and let the
 rare and the deep follow. This orders the document as a whole and every section inside it.
 
+The same order binds a concept to the rules about it: introduce a type before any rule that leans on it. A
+crisp rule about one concept ("an Epic lands whole") invites use as an early capstone, but placed before
+the reader has met the concept it rests on nothing, so it belongs no earlier than the section that defines
+the term.
+
 The same instinct decides what a document carries at all. A process or lifecycle doc holds the generic
 shape; the language, the stack, and the specific tooling belong in the repository's or language's own
 doc, linked to rather than stamped in. And detail only some readers need, like a step an agent handles on
