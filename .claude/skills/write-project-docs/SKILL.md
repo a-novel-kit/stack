@@ -358,6 +358,12 @@ hierarchy, each issue planned and gated before its children, top-down, say it on
 title its home for the whole hierarchy. "Planning an issue" fits; "Planning a task" strands the rule under
 the smallest case it governs.
 
+Subheadings help a section the reader scans, not one they read through. A reference block that answers
+many separate questions — the issue types, choosing one, linking to code, how status rolls up — reads
+far better broken under headings a reader can jump between; an argument or a story, built paragraph on
+paragraph, only fragments under them. Add them by whether the reader hunts or follows, and leave the
+sections that already stratify through bold lead-ins alone.
+
 Prefer showing to telling. A worked path teaches the model better than a list of definitions: an
 idea becomes a Task, the Task becomes a Pull Request, the Pull Request merges and ships. When a
 sequence of states is the point, a small text diagram beats a paragraph; keep it visual and sparse,
