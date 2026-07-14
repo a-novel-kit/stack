@@ -299,21 +299,27 @@ identify the section the user is changing, edit only that section. A "rewrite" i
 from the user is the only override — and even then, surface anything that looks like
 deliberate custom content before discarding it.
 
-### 8. Explain by rationale, not by example
+### 8. Lead with rationale; dose examples to disambiguate
 
-A doc earns its keep with a clear, well-phrased explanation of what a thing is, why it
-exists, and how to approach it — not with examples. Case-specific examples (a particular
-provider, key, service, or value) go stale as the system changes, break the reading
-rhythm, and usually carry no information the surrounding prose doesn't already give. In
-particular, **never import an example from the conversation that produced the doc** — it
-was an aid for the author, not the reader, and lands as arbitrary and dated later.
+A doc earns its keep with a clear explanation of what a thing is, why it exists, and how to
+approach it. That rationale leads and carries the weight; an example never stands in for it. An
+example left to do the explaining goes stale as the system changes, breaks the reading rhythm, and
+usually carries nothing the prose does not. In particular, **never import an example from the
+conversation that produced the doc** — it aided the author, not the reader, and lands as arbitrary
+and dated later.
 
-The one legitimate example is an **analogy that makes a genuinely hard concept click** —
-reach for it only then. Otherwise state the concept directly. When concrete specifics are
-genuinely needed (exact commands, names, links), they are reference material, not
-explanation: keep the explanatory prose general and push the specifics to where they
-belong — the relevant service's own `CONTRIBUTING.md`, a reference table, or a copy-paste
-code block.
+An example is not forbidden, though. Once the rationale is on the page, a short one pins down the part
+that prose alone leaves fuzzy: an inline pairing ("named for its goal, not its version"), or, where the
+point is isolated enough to earn it, a compact do / don't table or a code block. Dose them — short,
+few, and only where the explanation genuinely needs it. Where the prose already lands, add none; an
+example there is noise. Judge per point: a concept can be subtle enough to need one (the altitude a
+title is named from) and plain enough to need none (which branch a Task is).
+
+When concrete specifics run long (exact commands, names, links), they are reference material, not
+explanation: keep the prose general and push them where reference belongs — a table, a code block, or
+the relevant service's own `CONTRIBUTING.md`. And an analogy that makes a genuinely hard concept click
+is its own kind of example; reach for it when the concept is hard, and state the concept directly
+otherwise.
 
 ### 9. Plain language, plain sentences
 
@@ -897,8 +903,8 @@ Agora service:
   bullet lists, and runnable code blocks beat paragraphs.
 - **Do not put case-specific examples in generic prose.** A particular provider, key, or
   value dates fast and rarely adds understanding; never import an example from the
-  conversation that produced the doc. Explain by rationale; reach for an example only as an
-  analogy for a genuinely hard concept, and push concrete specifics (commands, names,
+  conversation that produced the doc. Lead with rationale, and let a short example only pin down a
+  fuzzy point, never carry the explanation; push concrete specifics (commands, names,
   links) to a service's own `CONTRIBUTING.md`, a reference table, or a code block. See
   Editorial Principle 8.
 - **Do not embed secrets.** The codecov graph token is fine (public). API keys, passwords,
