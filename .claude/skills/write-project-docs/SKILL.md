@@ -255,6 +255,8 @@ that says nothing about encryption. Before describing any of:
 - Configuration field names and shapes (YAML keys, env var names)
 - API surface (RPC names, REST paths, status codes)
 - Lifecycle states (active / expired / deleted)
+- What a named thing _is_ in the platform (a GitHub Milestone is a grouping feature, not an issue type;
+  a label is not a status)
 - File paths referenced in prose
 
 …open the source and confirm. The doc commit must reflect the code at the same SHA. When
@@ -272,6 +274,10 @@ Pick one canonical block — the **production / expected shape** (per the Fleet 
 lead with production, relegate the dev one-liner to "Running locally") — show it inline, then
 list the other shapes in a table or collapse them under a `<details>` block. The principle generalizes: any time two blocks
 differ by one line, the second belongs in a diff, table, or collapsible block, not in line.
+
+The same holds for any set of parallel items, a catalog of types or a matrix of options: in a reference
+or in-depth section, a table reads faster than a run of paragraphs, while the narrative up front stays
+prose. Go harder on presentation the deeper into the document you are.
 
 ### 6. Reference, don't enumerate
 
