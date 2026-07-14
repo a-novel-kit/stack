@@ -207,6 +207,12 @@ A section that doesn't answer one of those questions doesn't belong. A section t
 answers the same question for the same reader twice (in two files, or in two places in
 one file) gets cut to one location and linked.
 
+Naming the reader also means writing at their knowledge, not yours — the curse of knowledge is the
+default failure. A term or convention you use daily reads as obvious to you and as jargon to them: a
+`Closes` line, an issue number, a Pull Request description all need defining for a first-time contributor,
+however plain they feel to a maintainer. When a passage only parses because _you_ already know the tool,
+it is written for the wrong reader; define what you assumed, on first use.
+
 `README.md` serves operators and integrators only. `CONTRIBUTING.md` serves contributors
 only. **Never duplicate** content across them — link instead. If the JS client install
 snippet is in `README.md`, `CONTRIBUTING.md` says "see the README" rather than copying it.
