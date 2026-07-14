@@ -507,7 +507,9 @@ same explanation in two places is not reinforcement but two copies to keep in sy
 it twice at the same depth wonders what changed between them. A repeat earns its place only when the
 second pass goes materially deeper: the overview names a mechanism, the deep section takes it apart. When
 two passages say nearly the same thing at the same altitude, keep the one in its natural home — the
-mechanism with the machinery, the practice with the workflow — and cut the other.
+mechanism with the machinery, the practice with the workflow — and cut the other. When a passage carries a
+fresh point wrapped around restated material, keep the point and link the rest rather than re-describe it:
+a philosophy recap can state the philosophy and point at the mechanism it rests on, not re-explain it.
 
 ---
 
