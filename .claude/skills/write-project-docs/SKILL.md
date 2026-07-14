@@ -361,8 +361,10 @@ the smallest case it governs.
 Subheadings help a section the reader scans, not one they read through. A reference block that answers
 many separate questions — the issue types, choosing one, linking to code, how status rolls up — reads
 far better broken under headings a reader can jump between; an argument or a story, built paragraph on
-paragraph, only fragments under them. Add them by whether the reader hunts or follows, and leave the
-sections that already stratify through bold lead-ins alone.
+paragraph, only fragments under them. Add them by whether the reader hunts or follows, and match the
+anchor's weight to the need: a heading is the heaviest, for a section the reader jumps around; bold
+lead-ins, or even a distinctive topic sentence per paragraph, carry a lighter scan without one; a pure
+read-through needs nothing. Over-anchoring a rarely-visited explanation costs more than it gives.
 
 Prefer showing to telling. A worked path teaches the model better than a list of definitions: an
 idea becomes a Task, the Task becomes a Pull Request, the Pull Request merges and ships. When a
