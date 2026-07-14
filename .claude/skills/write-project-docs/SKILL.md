@@ -351,6 +351,14 @@ idea becomes a Task, the Task becomes a Pull Request, the Pull Request merges an
 sequence of states is the point, a small text diagram beats a paragraph; keep it visual and sparse,
 a few words per node, and mark what matters, like who acts or where a gate falls.
 
+When the thing you are picturing changes or sits behind a login (a board, a pipeline, a console), a text
+diagram beats a screenshot: it diffs in review, renders in the reader's own theme, tracks the concepts
+rather than the pixels, and keeps private data out of a public repo. A snapshot of a live UI rots the
+moment the UI moves. Keep one diagram per idea, too: when a richer one subsumes an earlier diagram,
+delete the earlier rather than let two pictures of the same states restate each other. And a diagram is a
+claim, so its shorthand must stay true: a label that sweeps a human gate into "the board does it" is a
+bug, not a simplification.
+
 ### 11. Keep it self-contained, no links to ephemeral work items
 
 Never point a doc at a specific issue, epic, or PR, by number or by link. They close, archive, and
