@@ -268,7 +268,9 @@ expect it to grow into. "An Epic ships one per release" is fiction until release
 An option the platform merely offers is not part of the taxonomy either: an enabled type nobody uses (a
 Feature type carrying zero issues) is configured, not real, so check usage, not just the config. When a
 rule holds only under a condition, name the condition ("only for Epics under one Initiative or
-Milestone"); a rule stated unscoped will be read as universal.
+Milestone"); a rule stated unscoped will be read as universal. And a workaround a current limitation
+forces should read as temporary, marked as such ("for now, a Milestone is tied to one repository"): left
+unmarked it hardens into apparent design, and no one revisits it when the limitation lifts.
 
 ### 5. Show the canonical, link or table the variants
 
