@@ -416,6 +416,11 @@ the board. Name the category — the Tracking status, the Roadmap view, the meta
 is never mistaken for the ordinary word it is spelled like. A name the reader already met, once framed,
 can be used bare after; it is the first, unframed use that misleads.
 
+When one concept spans several concrete forms, name the umbrella too: calling the intention a "feature"
+lets the doc say "feature" where it would otherwise recite "Task, Epic, or Initiative." Once a word is
+reserved for a concept, keep it there, and do not also use it in its ordinary sense a line later, where "a
+GitHub feature" beside "a feature is the intention" makes two things of one word.
+
 ### 14. Start simple: the global picture first, then the details
 
 Give the reader the whole shape in its simplest form before any detail. Someone new should grasp how the
