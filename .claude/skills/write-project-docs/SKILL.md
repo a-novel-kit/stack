@@ -407,6 +407,11 @@ doc, linked to rather than stamped in. And detail only some readers need, like a
 its own or an advanced path, gets its own section with a line up front saying who it is for. The main
 narrative stays simple and universal; whoever needs more follows the link.
 
+A concept with behavior of its own — its own lifecycle, flow, or failure modes — earns a section too,
+never an aside on a neighbor. "A Bug is like a Task, for a defect," tucked into a table cell, under-serves
+a thing that carries its own hotfix path; the aside is a sign the concept has outgrown its host and needs
+its own space.
+
 ### 15. A link rides on the prose, never the other way around
 
 Anchor a link to a phrase that already earns its place in the sentence; never write a clause, a sentence,
