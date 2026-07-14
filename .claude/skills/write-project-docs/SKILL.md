@@ -330,6 +330,11 @@ few, and only where the explanation genuinely needs it. Where the prose already 
 example there is noise. Judge per point: a concept can be subtle enough to need one (the altitude a
 title is named from) and plain enough to need none (which branch a Task is).
 
+When a do/don't set spans a series, thread one running example through the whole of it rather than a fresh
+case per row: the reader tracks a single thing, and the entries can cross-reference (an Epic's good title
+is the Initiative's too-broad don't). And a don't teaches only with its reason attached — pair each wrong
+example with why it is wrong, or it is a second example, not a lesson.
+
 When concrete specifics run long (exact commands, names, links), they are reference material, not
 explanation: keep the prose general and push them where reference belongs — a table, a code block, or
 the relevant service's own `CONTRIBUTING.md`. And an analogy that makes a genuinely hard concept click
