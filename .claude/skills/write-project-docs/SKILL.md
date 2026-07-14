@@ -468,6 +468,14 @@ have followed a single Task" beats "the journey followed a single Task," a word 
 that walkthrough. An abstract handle earns its place only after you have plainly attached it to the thing;
 until then, point with a plain description of what you mean.
 
+### 18. State what is, not what is not
+
+Describe what the system has and does, and leave out what it lacks. The reader holds only what you put in
+front of them, so "there is no tier between Task and Epic" or "we do not use a Feature type" summons a
+thing into their mind for the sole purpose of denying it: pure noise. The absence you feel the urge to
+explain is usually one only you can see, because you just removed it or argued it away. Cut it; the plain
+list of what exists says everything the reader needs.
+
 ---
 
 ## Phase 1: Collect Required Inputs
