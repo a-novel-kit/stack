@@ -353,6 +353,11 @@ picture" or "The design" announces your structure instead of teaching the subjec
 and let the content be the picture. Headings should name what the reader is doing or learning at
 that point ("When the board needs you"), not the role the section plays in your outline.
 
+A heading must also match the scope of what it covers. When a gate or rule recurs at every level of a
+hierarchy, each issue planned and gated before its children, top-down, say it once as the general rule and
+title its home for the whole hierarchy. "Planning an issue" fits; "Planning a task" strands the rule under
+the smallest case it governs.
+
 Prefer showing to telling. A worked path teaches the model better than a list of definitions: an
 idea becomes a Task, the Task becomes a Pull Request, the Pull Request merges and ships. When a
 sequence of states is the point, a small text diagram beats a paragraph; keep it visual and sparse,
