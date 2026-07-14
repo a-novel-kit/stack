@@ -366,6 +366,10 @@ anchor's weight to the need: a heading is the heaviest, for a section the reader
 lead-ins, or even a distinctive topic sentence per paragraph, carry a lighter scan without one; a pure
 read-through needs nothing. Over-anchoring a rarely-visited explanation costs more than it gives.
 
+A heading level is a claim of sameness, so let the levels mirror the kinds: peers should be the same sort
+of thing. Six flat headings covering a type, a grouping, a label, and three practices read as a pile;
+grouped by kind, the board's objects and then the practices for working with them, they read as a map.
+
 Prefer showing to telling. A worked path teaches the model better than a list of definitions: an
 idea becomes a Task, the Task becomes a Pull Request, the Pull Request merges and ships. When a
 sequence of states is the point, a small text diagram beats a paragraph; keep it visual and sparse,
