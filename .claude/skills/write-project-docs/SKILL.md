@@ -265,7 +265,9 @@ follow-up.
 
 A process still taking shape is not a fact yet: state what the system does today, not the policy you
 expect it to grow into. "An Epic ships one per release" is fiction until releases actually work that way.
-When a rule holds only under a condition, name the condition ("only for Epics under one Initiative or
+An option the platform merely offers is not part of the taxonomy either: an enabled type nobody uses (a
+Feature type carrying zero issues) is configured, not real, so check usage, not just the config. When a
+rule holds only under a condition, name the condition ("only for Epics under one Initiative or
 Milestone"); a rule stated unscoped will be read as universal.
 
 ### 5. Show the canonical, link or table the variants
