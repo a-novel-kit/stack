@@ -427,7 +427,10 @@ not the words.
 
 This holds against your own flourishes. When the domain already has a precise term, use it, and resist
 paraphrasing it for warmth or variety: "the second human-gated stage" beats "the work waits for a human
-a second time." A motif (principle 12) may echo a term, but it must never replace it.
+a second time." A motif (principle 12) may echo a term, but it must never replace it. A warm paraphrase
+can even carry a false connotation the precise term rules out: a "convoy" may lose stragglers and still be
+one, while an "atomic landing" is all-or-none by name. Prefer the word that carries the invariant over the
+image beside it.
 
 When a name doubles as a common word, say what kind of thing it is, or the reader takes it for prose.
 "Sitting in Tracking" reads as an activity; "sitting in a dedicated Tracking status" reads as a place on
