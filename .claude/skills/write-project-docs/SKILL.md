@@ -451,6 +451,16 @@ a vague one and you build the wrong thing, however clean the code, so make it sh
 the instruction behind the warning meant to drive it home. Separate the two, and let the do carry the
 weight.
 
+### 17. Make every reference land on something the reader already holds
+
+A pronoun or a back-reference points somewhere, and the target must be right there and unmistakable. Keep
+a pronoun beside its one possible antecedent: "comprehension and judgment are the whole job, so spend your
+attention there" beats "so spend them there," where "them" reaches back past "the whole job" for its noun.
+And name earlier content concretely, not with an abstract label the reader has to decode: "until now we
+have followed a single Task" beats "the journey followed a single Task," a word the doc never pinned to
+that walkthrough. An abstract handle earns its place only after you have plainly attached it to the thing;
+until then, point with a plain description of what you mean.
+
 ---
 
 ## Phase 1: Collect Required Inputs
