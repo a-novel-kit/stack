@@ -500,6 +500,15 @@ thing into their mind for the sole purpose of denying it: pure noise. The absenc
 explain is usually one only you can see, because you just removed it or argued it away. Cut it; the plain
 list of what exists says everything the reader needs.
 
+### 19. State each thing once; duplicate only to go deeper
+
+Give each fact, rule, or mechanism a single home, and refer to it from anywhere else that needs it. The
+same explanation in two places is not reinforcement but two copies to keep in sync, and a reader who meets
+it twice at the same depth wonders what changed between them. A repeat earns its place only when the
+second pass goes materially deeper: the overview names a mechanism, the deep section takes it apart. When
+two passages say nearly the same thing at the same altitude, keep the one in its natural home — the
+mechanism with the machinery, the practice with the workflow — and cut the other.
+
 ---
 
 ## Phase 1: Collect Required Inputs
