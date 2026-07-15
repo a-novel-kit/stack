@@ -362,7 +362,11 @@ automation for the rest," at no cost to meaning. Keep the plain word order, subj
 object: "It tracks everything in between for you," not "Everything between them, it tracks for you." A
 fronted object, an inversion, or a "that is where…" cleft makes the reader unpack a sentence before
 reading it. Two short sentences beat one long one spliced together. Avoid the em-dash that cuts a sentence in half, and the enumeration that only restates
-what you just wrote. When a draft feels dense, revise for plainness before shipping; the plain
+what you just wrote. Get the conjunction comma right: put one before and, but, or so only when a full
+clause with its own subject follows ("the board runs itself, and you barely notice it"), never before a
+compound predicate sharing the subject ("easier to write and far easier to review"). "So" meaning
+"therefore" takes the comma; a restrictive "because" does not. When a draft feels dense, revise for
+plainness before shipping; the plain
 version is the finished one, not a step toward it.
 
 ### 10. Show the flow, don't announce it
