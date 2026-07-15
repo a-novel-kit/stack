@@ -335,6 +335,12 @@ case per row: the reader tracks a single thing, and the entries can cross-refere
 is the Initiative's too-broad don't). And a don't teaches only with its reason attached — pair each wrong
 example with why it is wrong, or it is a second example, not a lesson.
 
+An example must also instantiate the rule it illustrates, not a cousin of it. Explaining an Epic's atomic
+landing (its Tasks merging as a unit) with a cross-repo dependency — which is really the stages rule, one
+piece released before another can use it — teaches a false model and hides that two distinct rules were
+braided under one heading. If an example only holds under a different rule, it belongs under that rule, and
+the muddle is usually the signal to split the section in two.
+
 When concrete specifics run long (exact commands, names, links), they are reference material, not
 explanation: keep the prose general and push them where reference belongs — a table, a code block, or
 the relevant service's own `CONTRIBUTING.md`. And an analogy that makes a genuinely hard concept click
