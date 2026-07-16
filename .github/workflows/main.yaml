@@ -18,7 +18,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7.0.0
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: "cli/go.mod"
       - name: go generate
@@ -82,7 +82,7 @@ jobs:
         working-directory: cli
     steps:
       - uses: actions/checkout@v7.0.0
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: "cli/go.mod"
       - name: download go packages
