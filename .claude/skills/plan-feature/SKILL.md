@@ -432,15 +432,21 @@ GitHub's own model is **one project, many saved views**. Do **not** add per-area
 The one real limit: a project **cannot span two orgs**, which is the other reason the two orgs keep
 separate boards (cross-org epics are tracked by reference — see "Where the issue lives").
 
-**Enable the built-in _status_ automations** (one-time, in each board's `⋯` → Workflows — not
-settable via the API): _Item added → Backlog_, _Item closed → Done_, _Pull request merged → Done_,
-_Pull request linked to issue → In progress_ (this is what flips an issue to **active**, which arms
-the due-date rule in `triage-issues`), _Auto-close issue_ (when Status → Done), and _Auto-archive
-items_ (Done > 2 weeks). **Keep the _auto-add_ workflows OFF** — both _Auto-add to project_ (repo)
-and _Auto-add sub-issues to project_. The principle: automations may set **Status**, but **the skills
-add the items**. Every issue and sub-issue joins the board explicitly via `--project` on
+**Status is written by the board's bot, not by GitHub's built-in workflows.** The bot derives every
+status from what happened to a Pull Request (draft → _In progress_, ready → _In review_, approved →
+_Done_, merged → _Awaiting release_) and a sweep re-asserts it, so a manual edit will not stick. Leave
+the built-in workflows that derive status **from Pull Request state** off: they cannot see the board's
+own statuses (_Awaiting release_, _Tracking_, _Applied_), and GitHub's _Pull request merged → Done_
+directly contradicts the bot's _merged → Awaiting release_. The one built-in that stays **on** is
+_Item added to project → Triage_. At add-time there is no Pull Request to read from, so the bot has no
+opinion yet: this seeds a status, and anything boarded outside the skills lands in the Triage queue
+instead of sitting status-less and unseen — including an item whose field edits were forgotten (see
+the footgun above). Planned work never lingers there, because the skills set its real status in the
+same breath. **Keep the _auto-add_ workflows OFF** too — both _Auto-add to
+project_ (repo) and _Auto-add sub-issues to project_. The principle: **the bot sets Status, the skills
+add the items.** Every issue and sub-issue joins the board explicitly via `--project` on
 `gh issue create` (or `gh project item-add`), so board membership stays deliberate, not magic.
-`Item added → Backlog` is the landing for **planned** work; **Triage** is a _deliberate_ status a
+**Backlog** is the landing for **planned** work; **Triage** is a _deliberate_ status a
 maintainer moves an un-assessed issue into — and where the deferred external-user intake will file
 incoming reports — so the _Triage_ view surfaces only work still needing assessment, not every newly
 added item.

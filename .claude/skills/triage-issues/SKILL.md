@@ -103,24 +103,26 @@ grooming as they approach activation:
 - **Delete drafts the plan has overtaken** (`gh issue delete <n> --yes`) — a not-yet-started draft is
   cheap to discard, and a stale one is worse than none. Don't let drafts rot.
 
-### 7. Advance Status
+### 7. Status is single-writer
 
-Move each item's **Status** to match reality (`Ready` when unblocked, `In progress` when a PR opens,
-`In review`, `Done`). Once the board's built-in automations are enabled (see `plan-feature` →
-_Operating the board_), `Done` is handled for you on merge/close — don't fight the automation.
+The board's bot derives Status from what happened to a Pull Request, so `In progress`, `In review`, and
+`Awaiting release` are not yours to set: a manual edit will not stick. Your part is the `Triage → Ready`
+move from the drain above, plus a **meta task**'s final `Applied`, which has no Pull Request to read
+from. Everything else follows the work, so don't fight it.
 
 ### 8. Keep the Stage field accurate (absolute scheme)
 
-The `Stage` board field is **absolute** — `Stage 1 … Stage 5`, plus `Unscheduled` for work not yet
-placed in a stage. A staged milestone's epics and their child tasks each carry their stage's number,
+The `Stage` board field is **absolute** — `Stage 1 … Stage N` (six on the board today), plus
+`Unscheduled` for work not yet placed in a stage. A staged milestone's epics and their child tasks each carry their stage's number,
 set once at creation (per the `plan-feature` field habit) and **never shifted**: an item at `Stage 3`
 stays `Stage 3` for good. "What's next" is a derivation, not a label — the lowest-numbered stage that
 is not yet done. A finished stage keeps its number; its epic follows the normal Done → archive
 lifecycle rather than being relabelled.
 
 So this pass has nothing to shift. Check only that new items carry the right stage number — a human
-call about which stage the work belongs to — and that an epic and its tasks agree on it. The rollup
-engine surfaces the current stage from status; you never maintain it by hand.
+call about which stage the work belongs to — and that an epic and its tasks agree on it. For now no
+automation reads the field: you set it by hand at creation, and you read "what's next" off the numbers
+yourself.
 
 ### 9. Report
 
