@@ -435,9 +435,14 @@ separate boards (cross-org epics are tracked by reference — see "Where the iss
 **Status is written by the board's bot, not by GitHub's built-in workflows.** The bot derives every
 status from what happened to a Pull Request (draft → _In progress_, ready → _In review_, approved →
 _Done_, merged → _Awaiting release_) and a sweep re-asserts it, so a manual edit will not stick. Leave
-the built-in **status** workflows **off**: they cannot see the board's own statuses (_Awaiting
-release_, _Tracking_, _Applied_), and GitHub's _Pull request merged → Done_ directly contradicts the
-bot's _merged → Awaiting release_. **Keep the _auto-add_ workflows OFF** too — both _Auto-add to
+the built-in workflows that derive status **from Pull Request state** off: they cannot see the board's
+own statuses (_Awaiting release_, _Tracking_, _Applied_), and GitHub's _Pull request merged → Done_
+directly contradicts the bot's _merged → Awaiting release_. The one built-in that stays **on** is
+_Item added to project → Triage_. At add-time there is no Pull Request to read from, so the bot has no
+opinion yet: this seeds a status, and anything boarded outside the skills lands in the Triage queue
+instead of sitting status-less and unseen — including an item whose field edits were forgotten (see
+the footgun above). Planned work never lingers there, because the skills set its real status in the
+same breath. **Keep the _auto-add_ workflows OFF** too — both _Auto-add to
 project_ (repo) and _Auto-add sub-issues to project_. The principle: **the bot sets Status, the skills
 add the items.** Every issue and sub-issue joins the board explicitly via `--project` on
 `gh issue create` (or `gh project item-add`), so board membership stays deliberate, not magic.
