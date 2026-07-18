@@ -493,6 +493,13 @@ plan that is already agreed.
   bug). Once a name is frozen in the issue, use it identically everywhere: code, API, schema, DB,
   docs, and conversation. If a name proves wrong, change it everywhere in one deliberate pass — never
   let two names for one thing coexist.
+- **Cut on results, not activities.** An area, Epic, or module earns its own boundary only when it
+  owns a distinct _result_ the others consume rather than produce — draw the line where ownership of an
+  output changes hands, not where the work merely looks different. Forking a story looks like its own
+  feature, but its result is a story, so it belongs to whoever owns stories, not to a separate
+  "forking" area; publishing consumes a finished story yet produces a new thing it alone owns — the
+  published release — so it stands apart. A boundary that only separates two activities on the same
+  result is a false one, and undoing it later costs a network hop or a migration.
 - **Adopt proven standards; surpass weak instances.** Default to the established community pattern —
   it is battle-tested, familiar, and cheap to maintain; reinventing it is a cost, not a virtue.
   Deviate only with a thorough justification derived from a proven base (the way we run **macro**
