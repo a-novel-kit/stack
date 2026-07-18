@@ -8,6 +8,11 @@
         "commands": ["pnpm i --frozen-lockfile"],
         "executionMode": "branch"
       }
+    },
+    {
+      "description": "Run `go mod tidy` after a cli/ Go bump so go.sum gets the module-content (h1:) hashes, not just the /go.mod hashes. Without it Renovate updates cli/go.mod but leaves go.sum incomplete, and any job that compiles cli/ fails with `missing go.sum entry` — notably generated-go-cli, which builds the buf tool via `go generate`. gomodTidy runs in the module's own directory, so it needs no path handling. Mirrors the a-novel service repos.",
+      "matchFileNames": ["cli/go.mod"],
+      "postUpdateOptions": ["gomodTidy"]
     }
   ],
   "customManagers": [
