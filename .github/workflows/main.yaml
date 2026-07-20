@@ -17,7 +17,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
       - uses: actions/setup-go@v7
         with:
           go-version-file: "cli/go.mod"
@@ -37,7 +37,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
       - uses: bufbuild/buf-action@v1
         with:
           input: cli
@@ -81,7 +81,7 @@ jobs:
         # checkout-and-setup steps assume the workdir contains go.mod.
         working-directory: cli
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
       - uses: actions/setup-go@v7
         with:
           go-version-file: "cli/go.mod"
