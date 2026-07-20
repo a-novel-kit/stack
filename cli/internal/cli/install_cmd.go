@@ -125,10 +125,11 @@ running before.`,
 	return cmd
 }
 
-// defaultCLISource returns "<default-stack-path>/cli" from the first
-// registered stack. Errors only when stack parsing itself fails — a
-// missing path on disk is caught later by the go.mod stat.
-func defaultCLISource() (string, error) {
+// defaultStackPath returns the filesystem root of the default stack — the
+// first entry of $A_NOVEL_STACKS, per the stacks.Parse contract. Errors only
+// when parsing itself fails; whether the path exists on disk is the caller's
+// question to ask, since each one has a better error to give for it.
+func defaultStackPath() (string, error) {
 	stk, err := stacks.ParseEnv()
 	if err != nil {
 		return "", err
@@ -136,8 +137,17 @@ func defaultCLISource() (string, error) {
 	if len(stk) == 0 {
 		return "", errors.New("no stacks registered")
 	}
-	// First entry is always the default per stacks.Parse contract.
-	return filepath.Join(stk[0].Path, "cli"), nil
+	return stk[0].Path, nil
+}
+
+// defaultCLISource returns "<default-stack-path>/cli". A missing path on disk
+// is caught later by the go.mod stat.
+func defaultCLISource() (string, error) {
+	root, err := defaultStackPath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "cli"), nil
 }
 
 // waitDaemonGone polls the socket until Ping fails — i.e., the daemon

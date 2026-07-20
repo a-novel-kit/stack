@@ -31,6 +31,7 @@ a-novel
 │   ├── set <id>                        store a value (no echo); never printed
 │   ├── ls / rm <id>                    list ids / delete a secret
 │   └── exec --env NAME=<id> -- <cmd>   run a command with secrets in its env
+├── claude        standalone — launch Claude Code from the stack root
 ├── install       graceful binary upgrade (daemon handoff via checkpoint)
 ├── core          daemon control + workspace plumbing
 │   ├── start / setup / kill / restart / status / prepare-reinstall
@@ -46,8 +47,8 @@ a-novel
     └── exec / debug                    inside-container shells
 ```
 
-`test`, `build`, `publish`, `repo` and `secrets` don't need the daemon.
-Everything under `run` does.
+`test`, `build`, `publish`, `repo`, `secrets` and `claude` don't need the
+daemon. Everything under `run` does.
 
 ## Quick reference
 
@@ -93,6 +94,10 @@ a-novel secrets init                          # one-time: create key + store
 a-novel secrets set OPENAI_KEY                # reads value with no echo
 a-novel secrets ls                            # ids only, never values
 a-novel secrets exec --env OPENAI_API_KEY=OPENAI_KEY -- python main.py
+
+# Claude Code, always rooted at the stack (args forward verbatim)
+a-novel claude
+a-novel claude --continue
 ```
 
 ## Secrets
