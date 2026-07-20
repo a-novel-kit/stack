@@ -68,7 +68,7 @@ its own with nothing in between.`,
 			// after this line runs — including main's update-notice and exit-
 			// code handling, which now belong to claude. argv[0] is the
 			// resolved path by convention.
-			return syscall.Exec(bin, append([]string{bin}, args...), os.Environ()) //nolint:gosec // args are the user's own claude flags
+			return syscall.Exec(bin, append([]string{bin}, args...), os.Environ())
 		},
 	}
 }
