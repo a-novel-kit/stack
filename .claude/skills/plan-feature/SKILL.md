@@ -73,6 +73,9 @@ eventually traces to an issue; for now, the table above is the gate for the full
 - **Speak to the reader.** Issues are read by busy people, sometimes non-technical. Be concise,
   concrete, and pedagogical: justify choices in plain language, define jargon, lead with the
   decision. A technical reviewer reads the same issue before execution — make it serve both.
+  An issue body is a prose surface, so `document-code`'s **Prose economy** section governs it —
+  most of all "write the choice, not the rejected alternative". Record what we decided; the
+  alternatives you weighed belong in the discussion comments, where the reader can skip them.
 
 ---
 

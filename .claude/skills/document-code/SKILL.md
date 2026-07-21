@@ -107,9 +107,17 @@ that matters, in as few words as it takes, and stop.
   the sentence carry the idea.
 - **Name a thing once, and keep the name.** Use one term for one concept. Do not alternate synonyms
   ("the cache," then "the store") for the same thing, or the reader stops to check whether they differ.
+- **Write the choice, not the rejected alternative.** State what holds and stop. The contrast form
+  ("X is this, not that", "we use A rather than B", "A is fine, but B") spends a clause on something
+  the reader was never going to do, and leaves the rejected idea sitting in their head next to the
+  real one. Write "Values are stored as JSONB" — not "Values are stored as JSONB, never EAV". Keep a
+  counter-example only where the wrong path is the one a reader would otherwise take and naming it
+  saves them the mistake; then give it once, plainly. Documentation is mostly do's, and the rare
+  don't earns its place.
 
-This applies to every prose surface this skill touches — doc comments, package docs, README
-sections — and equally to PR descriptions (see `open-pull-request`).
+This applies to every prose surface we write — doc comments, package docs, README sections, PR
+descriptions (see `open-pull-request`), and planning issues (see `plan-feature`). Load this section
+before writing prose on any of them, including surfaces this skill does not otherwise own.
 
 ---
 
@@ -371,6 +379,11 @@ Documentation is as much a liability as an asset when it's wrong. Every time you
 - **All-caps emphasis words**: avoid `MUST`, `SHOULD`, `OPTIONAL`, `NOT`, etc. in prose documentation.
   These are RFC-style terms that feel out of place in code docs; plain prose ("must", "only", "nil for...") is
   clearer and easier to read.
+- **Contrastive framing where the positive alone would do**: `// Stored, not derived`,
+  `// We use X rather than Y`, `// This is not a cache`. The negative half doubles the length and
+  plants the idea it rejects. State the choice: `// Stored at publish time.` Reserve the contrast
+  for a wrong path the reader would otherwise take — see "Write the choice, not the rejected
+  alternative" above.
 - **Rhetorical labels standing in for a sentence**: `// Why this matters: ...`, `// Note: ...`,
   `// The reason: ...`. The label is ceremony. State the point plainly instead:
   `// Runs before the cache warms, so the first request sees fresh data.` — not
