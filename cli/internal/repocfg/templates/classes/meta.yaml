@@ -25,7 +25,6 @@ security:
 codeql:
   enabled: false
 pages: false
-codecov: disabled
 code_quality: false
 rulesets:
   master: true

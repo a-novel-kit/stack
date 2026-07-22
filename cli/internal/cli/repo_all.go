@@ -226,9 +226,6 @@ func renderCompactSummary(w io.Writer, t *repocfg.RepoTarget) {
 	if t.Class.Rulesets.RequireApproval {
 		rs = append(rs, "require-approval")
 	}
-	if codecovWanted(t.Class, t) {
-		rs = append(rs, "codecov")
-	}
 	header := fmt.Sprintf("  %s %s — class %s",
 		repoOn.Render("▸"), repoHead.Render(t.Org+"/"+t.Repo), t.Class.Class)
 	if len(rs) > 0 {

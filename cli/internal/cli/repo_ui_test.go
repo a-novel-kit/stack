@@ -19,14 +19,12 @@ func TestRenderSummary(t *testing.T) {
 			Merge:    repocfg.Merge{Squash: true, AutoMerge: true, SignoffRequired: true},
 			Security: repocfg.SecurityToggles{SecretScanning: true, PushProtection: true, Dependabot: true},
 			CodeQL:   repocfg.CodeQLPreset{Enabled: true, QuerySuite: "security-and-quality"},
-			Codecov:  repocfg.CodecovAuto,
 			Rulesets: repocfg.ClassRulesets{Master: true, RequireApproval: true},
 		},
 		Discovered: &repocfg.Discovered{
 			Checks:      []repocfg.CheckRef{{Context: "lint-go"}, {Context: "test"}},
 			CodeQLLangs: []string{"go"},
 		},
-		CodecovReports: true, // gates codecov: auto on
 	}
 
 	var buf bytes.Buffer
@@ -37,7 +35,6 @@ func TestRenderSummary(t *testing.T) {
 		"a-novel/service-auth", "class service",
 		"Features", "squash", "auto-merge", "signoff",
 		"CodeQL", "go (security-and-quality)",
-		"codecov",           // auto + reports → enforced
 		"lint-go, test (2)", // discovered checks
 	} {
 		if !strings.Contains(got, want) {
@@ -46,21 +43,23 @@ func TestRenderSummary(t *testing.T) {
 	}
 }
 
-func TestRenderSummaryCodecovAutoNoReports(t *testing.T) {
+// TestRenderSummaryOmitsRetiredRulesets guards the summary against announcing a
+// ruleset repocfg no longer applies. The summary is what an operator reads before
+// confirming a reconcile, so listing a retired gate would describe protection the
+// plan is in fact about to delete — the most misleading thing this view could say.
+func TestRenderSummaryOmitsRetiredRulesets(t *testing.T) {
 	t.Parallel()
 	target := &repocfg.RepoTarget{
 		Org: orgAnovel, Repo: "lib-x",
 		Class: &repocfg.ClassPreset{
 			Class:    repocfg.ClassLibrary,
-			Codecov:  repocfg.CodecovAuto,
-			Rulesets: repocfg.ClassRulesets{Master: true},
+			Rulesets: repocfg.ClassRulesets{Master: true, RequireApproval: true, Tags: true},
 		},
-		Discovered:     &repocfg.Discovered{},
-		CodecovReports: false, // auto but no reports → no codecov ruleset
+		Discovered: &repocfg.Discovered{},
 	}
 	var buf bytes.Buffer
 	renderSummary(&buf, target)
 	if strings.Contains(buf.String(), "codecov") {
-		t.Errorf("codecov should be absent when auto + no reports:\n%s", buf.String())
+		t.Errorf("summary still lists the retired codecov ruleset:\n%s", buf.String())
 	}
 }

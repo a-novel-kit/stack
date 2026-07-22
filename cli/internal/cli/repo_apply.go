@@ -109,8 +109,23 @@ func applySettings(op repocfg.Op) error {
 
 // applyRuleset reconciles a ruleset by name: PUT when one with the same name
 // already exists, POST otherwise (so we never duplicate a ruleset and never
-// touch one we don't manage).
+// touch one we don't manage). A retire op instead DELETES the named ruleset,
+// and treats its absence as success — retirement is a standing assertion, so it
+// re-runs on every reconcile long after the one that removed it.
 func applyRuleset(org, repo string, op repocfg.Op) (string, error) {
+	if op.Retire {
+		id, err := rulesetID(org, repo, op.RulesetName)
+		if err != nil {
+			return "", err
+		}
+		if id == "" {
+			return opAbsent, nil
+		}
+		if _, err := gh("api", "-X", "DELETE", fmt.Sprintf("repos/%s/%s/rulesets/%s", org, repo, id)); err != nil {
+			return "", err
+		}
+		return opDeleted, nil
+	}
 	body, ok := op.Body.(*repocfg.APIRuleset)
 	if !ok {
 		return "", fmt.Errorf("ruleset body is %T, want *repocfg.APIRuleset", op.Body)
@@ -387,6 +402,9 @@ const (
 	opUpdated   = "updated"
 	opUnchanged = "unchanged"
 	opDeleted   = "deleted"
+	// opAbsent reports a retirement that found nothing to remove — the ordinary
+	// steady state once a retired ruleset has been swept from every repo.
+	opAbsent = "already absent"
 )
 
 // keyDescription is the JSON "description" field name, lifted to a constant so

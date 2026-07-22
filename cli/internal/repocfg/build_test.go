@@ -276,3 +276,56 @@ func contextsOf(checks []CheckRef) []string {
 	}
 	return out
 }
+
+// TestBuildPlanRetiresRulesets pins the half of a removal that is easy to forget.
+// Apply reconciles rulesets BY NAME — PUT when one exists, POST when it does not —
+// so deleting a template only stops repocfg from MANAGING that ruleset. Whatever is
+// already live keeps enforcing, unreviewed, on every repo that carries it. The plan
+// must therefore carry an explicit delete for each retired name.
+func TestBuildPlanRetiresRulesets(t *testing.T) {
+	t.Parallel()
+	plan, err := BuildPlan(&RepoTarget{
+		Org:        "a-novel-kit",
+		Repo:       "example",
+		Class:      &ClassPreset{},
+		Discovered: &Discovered{},
+	})
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	retired, err := LoadRetired()
+	if err != nil {
+		t.Fatalf("LoadRetired: %v", err)
+	}
+	if len(retired.Rulesets) == 0 {
+		t.Fatal("retired.rulesets is empty — every assertion below would pass vacuously")
+	}
+	for _, name := range retired.Rulesets {
+		var op *Op
+		for i := range plan.Ops {
+			if plan.Ops[i].RulesetName == name && plan.Ops[i].Retire {
+				op = &plan.Ops[i]
+			}
+		}
+		if op == nil {
+			t.Errorf("no retire op for ruleset %q — the live one would survive every reconcile", name)
+			continue
+		}
+		if op.Path != "repos/a-novel-kit/example/rulesets" {
+			t.Errorf("retire op path = %q, want the repo's rulesets collection", op.Path)
+		}
+		if op.Body != nil {
+			t.Errorf("retire op for %q carries a body; a delete must not send one", name)
+		}
+		if !strings.HasPrefix(op.Title(), "DELETE ") {
+			t.Errorf("retire op title = %q, want it to read as a deletion", op.Title())
+		}
+	}
+	// A name must never be both applied and retired in one plan: the two ops would
+	// race, and whichever ran last would decide whether the gate survived.
+	for _, op := range plan.Ops {
+		if !op.Retire && op.RulesetName != "" && slices.Contains(retired.Rulesets, op.RulesetName) {
+			t.Errorf("ruleset %q is both applied and retired in the same plan", op.RulesetName)
+		}
+	}
+}

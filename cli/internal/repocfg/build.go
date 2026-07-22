@@ -56,29 +56,29 @@ type RepoTarget struct {
 	OrgProfile               *OrgProfile
 	Checks                   *ChecksConfig
 	Discovered               *Discovered
-
-	// CodecovReports is whether Codecov posts a status on this repo. It
-	// gates `codecov: auto` — a coverage ruleset is only enforced where
-	// Codecov actually reports, so it never blocks PRs on a repo that has
-	// no coverage upload.
-	CodecovReports bool
 }
 
 // Op is one API operation the plan performs — a small tagged union. Most ops
 // carry a Method, Path, and Body (or Content, for a file write). A ruleset op
 // instead sets RulesetName and is reconciled by name at apply time: POST when
-// the ruleset is absent, PUT .../{id} when it already exists.
+// the ruleset is absent, PUT .../{id} when it already exists. Setting Retire
+// inverts that — the named ruleset is DELETED where it exists, and its absence
+// is success, not an error.
 type Op struct {
 	Method      string `json:"method,omitempty"`
 	Path        string `json:"path,omitempty"`
 	Body        any    `json:"body,omitempty"`
 	Content     string `json:"content,omitempty"`
 	RulesetName string `json:"ruleset,omitempty"`
+	Retire      bool   `json:"retire,omitempty"`
 }
 
 // Title is a one-line human label for the op.
 func (o Op) Title() string {
 	if o.RulesetName != "" {
+		if o.Retire {
+			return fmt.Sprintf("DELETE ruleset %q (%s)", o.RulesetName, o.Path)
+		}
 		return fmt.Sprintf("PUT|POST ruleset %q (%s)", o.RulesetName, o.Path)
 	}
 	return o.Method + " " + o.Path
@@ -201,13 +201,21 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 			p.Ops = append(p.Ops, op)
 		}
 	}
-	if codecovEnabled(c, t) {
-		checks := resolveCheckDefs(t.Checks.Codecov.Checks, t.Checks)
-		if op, err := rulesetOp("codecov", t, checks); err != nil {
-			return nil, err
-		} else {
-			p.Ops = append(p.Ops, op)
-		}
+
+	// Retirements come last, so a repo is first brought up to the current config
+	// and only then stripped of what governance no longer ships. Ordering matters
+	// on the one path that could otherwise leave a gap: retiring a ruleset whose
+	// checks moved into a ruleset applied above.
+	retired, err := LoadRetired()
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range retired.Rulesets {
+		p.Ops = append(p.Ops, Op{
+			RulesetName: name,
+			Retire:      true,
+			Path:        fmt.Sprintf("repos/%s/%s/rulesets", t.Org, t.Repo),
+		})
 	}
 
 	return p, nil
@@ -232,27 +240,6 @@ func rulesetOp(name string, t *RepoTarget, checks []CheckRef) (Op, error) {
 		Path:        fmt.Sprintf("repos/%s/%s/rulesets", t.Org, t.Repo),
 		Body:        body,
 	}, nil
-}
-
-func codecovEnabled(c *ClassPreset, t *RepoTarget) bool {
-	switch c.Codecov {
-	case CodecovEnabled:
-		return true
-	case CodecovAuto:
-		// Only enforce coverage where Codecov actually reports, so the gate
-		// never blocks PRs on a repo that uploads no coverage.
-		return t.CodecovReports
-	default:
-		return false
-	}
-}
-
-func resolveCheckDefs(defs []CheckDef, cc *ChecksConfig) []CheckRef {
-	out := make([]CheckRef, 0, len(defs))
-	for _, cd := range defs {
-		out = append(out, CheckRef{Context: cd.Context, IntegrationID: cc.Integrations[cd.Integration]})
-	}
-	return out
 }
 
 // BuildRuleset turns a ruleset template + org + discovered checks into the
