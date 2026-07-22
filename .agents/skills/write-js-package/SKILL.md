@@ -1,17 +1,16 @@
 ---
 name: write-js-package
 description: >
-  Write, review, and maintain the JavaScript/TypeScript REST client package for the JSON-keys
-  service. Use this skill whenever creating or editing files under pkg/js/ — the published
-  library (pkg/js/rest/), integration tests (pkg/js/test/rest/), or package/build config.
-  Covers new API methods, type definitions, exports, and integration test cases.
+  Maintain the JavaScript/TypeScript REST client package (pkg/js) for the JSON-keys service. Use
+  whenever creating or editing files under pkg/js/ — the published library (pkg/js/rest/),
+  integration tests (pkg/js/test/rest/), or package/build config. Covers API methods, type
+  definitions, exports, and test cases.
 ---
 
 # JS Package Writing Skill
 
-This skill governs how to write and maintain the TypeScript REST client package at `pkg/js/`.
-The package is the public JS surface for the JSON-keys service — it must mirror the OpenAPI spec
-exactly and stay synchronized with the REST handlers.
+The TypeScript REST client package at `pkg/js/` is the public JS surface for the JSON-keys service:
+it mirrors the OpenAPI spec exactly and stays synchronized with the REST handlers.
 
 **Before editing any file**, read the file first. Patterns are consistent by design — follow them
 exactly. Read the OpenAPI spec (`openapi.yaml`) for every endpoint you touch; the client contract
@@ -42,23 +41,22 @@ pkg/js/
     └── tsconfig.json
 ```
 
-New resource domains follow the same split: one `<domain>.ts` source file, one `<domain>.test.ts`
+A new resource domain follows the same split: one `<domain>.ts` source file, one `<domain>.test.ts`
 test file. Never merge unrelated domains into a single file.
 
 ---
 
 ## After Every Edit
 
-Run these two targets before declaring the work done:
+Run both targets before the work is done:
 
 ```bash
 pnpm lint      # check format (Prettier) + lint (ESLint + TypeScript typecheck)
 a-novel test --type=pnpm -y    # integration tests against a live containerised service
 ```
 
-`pnpm lint` checks formatting and runs all linters — run it first so type errors surface
-before the heavier integration suite. If Prettier reports issues, fix them with `pnpm format`
-first, then re-run `pnpm lint`.
+Run `pnpm lint` first, so type errors surface before the heavier integration suite. Fix any Prettier
+issue it reports with `pnpm format`, then re-run it.
 
 `a-novel test --type=pnpm -y` orchestrates the full integration environment (container startup, port
 allocation, readiness wait) via `scripts/test.pkg.js.sh`. Never run vitest directly for the
@@ -79,8 +77,8 @@ When you edit any one of these:
 | JS client       | OpenAPI spec (verify parity), Go handlers if behaviour changed |
 | Go REST handler | OpenAPI spec, JS client                                        |
 
-A PR that updates only one of the three without updating the others must justify the omission
-explicitly. Divergence between the spec, the client, and the handlers is a bug.
+A PR that updates one of the three without the others must justify the omission explicitly.
+Divergence between the spec, the client, and the handlers is a bug.
 
 ---
 
@@ -98,13 +96,13 @@ async fetchVoid(input: string, init?: RequestInit): Promise<void>
 async fetch<T>(input: string, init?: RequestInit): Promise<T>
 ```
 
-Domain functions always delegate to one of these two. They never call the global `fetch` directly.
+Domain functions always delegate to one of these two, never to the global `fetch` — a direct `fetch`
+call bypasses base-URL composition and error handling.
 
 System endpoints (`/ping`, `/healthcheck`) live in `api.ts` as methods on the class. Resource
-endpoints (`/jwks`, `/jwk`) live in separate domain files as standalone functions.
-
-Do not add new methods to `JsonKeysApi` for resource endpoints — always add standalone functions
-in a domain file instead. The class is intentionally minimal.
+endpoints (`/jwks`, `/jwk`) live in separate domain files as standalone functions. The class is
+intentionally minimal: a resource endpoint always becomes a standalone function in a domain file,
+never a new `JsonKeysApi` method.
 
 ### Domain Files (e.g., `jwk.ts`)
 
@@ -152,26 +150,27 @@ export * from "./api";
 export * from "./jwk";
 ```
 
-Never import from a file other than `index.ts` in consumers or tests — always import from the
-package root (`@a-novel/service-json-keys-rest`). `index.ts` is the single public surface.
+`index.ts` is the single public surface: consumers and tests import from the package root
+(`@a-novel/service-json-keys-rest`), never from a file inside it.
 
-When adding a new domain file, add a corresponding `export * from "./<domain>";` line to
-`index.ts`.
+A new domain file needs a corresponding `export * from "./<domain>";` line in `index.ts`, or
+consumers will not see it.
 
 ### TypeScript Rules
 
 - Strict mode is on. All types must be explicit — no `any`. The `Jwk` type uses
   `[key: string]: unknown` for algorithm-specific fields; that is `unknown`, not `any`.
-- Use `type` imports (`import type { ... }`) for types that are only used in type positions.
-- Use `type` for domain object shapes — all domain types in this package are sealed contracts,
-  not designed for inheritance. Use `type` for unions, intersections, and type aliases too.
+- Use `type` imports (`import type { ... }`) for types used only in type positions.
+- Use `type` for domain object shapes, unions, intersections, and aliases — the domain types are
+  sealed contracts, not designed for inheritance.
 - ES modules only — no CommonJS (`require`, `module.exports`).
 - Target: ESNext. No polyfills; the published package targets Node ≥ 23 and modern browsers.
 
 ### JSDoc
 
-Every exported type, class, method, and function must have a JSDoc comment. The comment must
-explain _what it does and why_, not just restate the name. Include:
+Every exported type, class, method, and function needs a JSDoc comment explaining _what it does and
+why_. The published package is consumed by other services, and these tooltips are their first
+documentation. Include:
 
 - A first-line summary sentence (shown in IDE tooltips).
 - Descriptions for every non-obvious parameter.
@@ -196,8 +195,8 @@ returns a promise").
 
 ### Structure
 
-Tests are integration tests against a live service. There are no unit tests or mocks in this
-package — the whole point is to verify the real HTTP contract.
+These are integration tests against a live service. The package holds no unit tests and no mocks —
+the point is to verify the real HTTP contract.
 
 Each test file mirrors a library source file:
 
@@ -215,8 +214,8 @@ import { expectStatus } from "@a-novel-kit/nodelib-test/http";
 import { JsonKeysApi, jwkGet, jwkList } from "@a-novel/service-json-keys-rest";
 ```
 
-Always import from the published package name (`@a-novel/service-json-keys-rest`), not from
-relative paths. The workspace symlink resolves this during testing.
+Always import from the published package name (`@a-novel/service-json-keys-rest`), never from
+relative paths: the workspace symlink that resolves it is part of what these tests verify.
 
 ### Test File Layout
 
@@ -237,12 +236,13 @@ describe("jwkGet", () => {
 });
 ```
 
-Test names use plain sentences, not the `"Success"` / `"Error/X"` convention used in Go tests.
-Describe the observable behaviour: `"returns keys for a known usage"`, `"returns 404 for non-existent key"`.
+Test names are plain sentences describing the observable behaviour — `"returns keys for a known
+usage"`, `"returns 404 for non-existent key"` — not the `"Success"` / `"Error/X"` convention used in
+Go tests.
 
 ### Instantiation
 
-Always construct `JsonKeysApi` from `process.env.REST_URL!` — this is set by the test script:
+Always construct `JsonKeysApi` from `process.env.REST_URL!`, which the test script sets:
 
 ```typescript
 const api = new JsonKeysApi(process.env.REST_URL!);
@@ -258,8 +258,8 @@ usages defined in `internal/config/jwks.config.yaml`:
 - `"auth"` — short-lived access token keys (EdDSA)
 - `"auth-refresh"` — long-lived refresh token keys (EdDSA)
 
-Tests that need actual key data must pass one of these usages. Calling `jwkList(api)` without a
-usage always returns `[]` because the server queries `WHERE usage = ""`.
+Tests needing actual key data must pass one of these usages. `jwkList(api)` without a usage always
+returns `[]`, because the server queries `WHERE usage = ""`.
 
 ### Asserting Success
 
@@ -289,20 +289,19 @@ const key = await jwkGet(api, keys[0].kid);
 expect(key.kid).toBe(keys[0].kid);
 ```
 
-Do not guard with early returns like `if (keys.length === 0) return` after seeding keys via a
-known usage — those guard clauses silently skip all assertions if the container failed to seed,
-hiding real failures. Assert `length > 0` explicitly.
+Assert `length > 0` explicitly rather than guarding with an early return like
+`if (keys.length === 0) return`: such a guard silently skips every assertion when the container
+failed to seed, hiding a real failure.
 
 ### Asserting HTTP Errors
 
-Use `expectStatus` from `@a-novel-kit/nodelib-test/http` for expected HTTP error codes:
+`expectStatus` from `@a-novel-kit/nodelib-test/http` is the canonical way to assert an expected HTTP
+error code — never `try/catch` with manual status inspection:
 
 ```typescript
 await expectStatus(jwkGet(api, "not-a-uuid"), 400);
 await expectStatus(jwkGet(api, "00000000-0000-0000-0000-000000000000"), 404);
 ```
-
-Do not use `try/catch` with manual status inspection — `expectStatus` is the canonical way.
 
 ### What to Test
 
@@ -320,20 +319,13 @@ contract: what goes in, what comes out, which HTTP errors are surfaced.
 
 ## Common Pitfalls
 
-- **Importing from relative paths in tests.** Tests must import from `@a-novel/service-json-keys-rest`,
-  not from `../../rest/src/...`. The workspace symlink is the integration point being tested.
-- **Running vitest directly.** Always use `a-novel test --type=pnpm -y` — running `pnpm test` alone skips
-  container setup and the tests will fail due to missing `REST_URL`.
-- **Adding a new domain file without updating `index.ts`.** Every new file must be re-exported
-  from `index.ts` or consumers will not see it.
-- **Diverging from the OpenAPI spec.** URL paths, query parameter names, response field names, and
-  HTTP methods must match the spec exactly. If the spec says `GET /jwks?usage=...`, the client
-  must use `GET /jwks?usage=...`.
-- **Calling global `fetch` directly.** Domain functions must always go through `api.fetch` or
-  `api.fetchVoid`. Direct `fetch` calls bypass base-URL composition and error handling.
-- **Skipping JSDoc on exported symbols.** Every public export needs a JSDoc comment — the
-  published package is consumed by other services, and IDE tooltips are the first line of
-  documentation.
-- **Using `any` types.** Never use `any` in this package. The `Jwk` type carries an
-  `[key: string]: unknown` index signature for algorithm-specific fields — that is `unknown`,
-  not `any`. Everywhere else, types must be fully explicit.
+Every entry is stated in full above; this list is the review checklist.
+
+- Importing from a relative path in a test instead of `@a-novel/service-json-keys-rest`.
+- Running vitest directly: `pnpm test` alone skips container setup and fails on a missing `REST_URL`.
+- Adding a domain file without its `export *` line in `index.ts`.
+- Diverging from the OpenAPI spec on URL paths, query parameter names, response field names, or HTTP
+  methods — they must match it exactly.
+- Calling global `fetch` instead of `api.fetch` / `api.fetchVoid`.
+- Skipping JSDoc on an exported symbol.
+- Using `any` (the `Jwk` index signature is `unknown`, and every other type is explicit).

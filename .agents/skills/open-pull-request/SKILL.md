@@ -1,19 +1,18 @@
 ---
 name: open-pull-request
 description: >
-  Push the current branch and open a GitHub pull request for Agora backend services.
-  Use this skill whenever preparing to ship work — new features, fixes, refactors, chores.
-  Covers pre-flight checks, base branch selection, title and body formation, draft mode,
-  and updating an existing PR instead of re-creating it. Pairs with git-conventions for
-  commit/branch format and monitor-ci for post-push CI handling.
+  Push a branch and open a GitHub pull request for Agora backend services. Use whenever
+  shipping work — features, fixes, refactors, chores. Covers pre-flight checks, base branch,
+  PR title and body, draft mode, and updating an existing PR instead of re-creating it.
+  Pairs with git-conventions (commit/branch format) and monitor-ci (post-push CI).
 ---
 
 # Open Pull Request
 
 This skill governs how Claude pushes a branch and opens a pull request. Opening a PR is a
 publishing action — it notifies reviewers, triggers CI, and creates visible history. Never
-open one without the user's explicit go-ahead, and never open one from a branch that is not
-ready for review.
+open one without the user's explicit go-ahead, and never from a branch that is not ready
+for review.
 
 Every PR in this repo follows the same contract: Conventional-Commits title, structured
 body, correct base, and no manual reviewer/assignee assignment (workflows handle that).
@@ -23,7 +22,7 @@ body, correct base, and no manual reviewer/assignee assignment (workflows handle
 ## Phase 1: Pre-Flight Checks
 
 Before any push or PR creation, verify all of the following. If any check fails, stop and
-surface the problem to the user rather than pushing.
+surface the problem to the user instead of pushing.
 
 ### 1.1 You are on a feature branch
 
@@ -46,12 +45,11 @@ Must return empty. Uncommitted changes mean the branch is not ready. Either comm
 ### 1.3 Commits follow Conventional Commits
 
 ```bash
-# Replace <base> with master for a normal branch, or with the parent feature branch
-# name for a stacked PR (see Phase 2.3). Using master for a stacked branch would
-# include the parent's commits and validate/rewrite commits that aren't this
-# branch's responsibility.
-# %s emits the commit subject only — no abbreviated hash prefix — so each output
-# line is directly comparable against the Conventional Commits grammar below.
+# <base> is master, or the parent feature branch for a stacked PR (see Phase 2.3):
+# master there would pull in the parent's commits and validate/rewrite commits that
+# aren't this branch's responsibility.
+# %s emits the commit subject only — no hash prefix — so each line is directly
+# comparable against the Conventional Commits grammar below.
 git log <base>..HEAD --format=%s
 ```
 
@@ -59,21 +57,21 @@ Every line must parse as a `git-conventions`-compliant Conventional Commit: eith
 `<type>(<scope>): <description>` or, for genuinely cross-cutting commits where scope is
 intentionally omitted, `<type>: <description>`. If any commit is malformed, fix it
 **before the branch's first push**. Use `git commit --amend` only when the malformed
-commit is the last one on the branch _and_ it has not yet been pushed; after the branch
-is pushed, `git-conventions`' "never amend a pushed commit" rule applies and the fix
-becomes a follow-up commit instead (or, for a cosmetic title fix, a PR-title adjustment
-the author can squash at merge time). For any earlier malformed commit — even if
-unpushed — ask the user before rewriting history.
+commit is the last one on the branch _and_ unpushed; once the branch is pushed,
+`git-conventions`' "never amend a pushed commit" rule applies and the fix becomes a
+follow-up commit (or, for a cosmetic title fix, a PR-title adjustment the author can
+squash at merge time). For any earlier malformed commit — even if unpushed — ask the
+user before rewriting history.
 
 ### 1.4 Basic CI passes locally
 
 **Always run basic CI locally before pushing.** CI is not a debugger: a red push wastes a
 CI cycle and reviewer attention. Never push expecting "CI will tell me what's wrong".
 
-**Basic CI = lint + tests + build.** Scope each to what the branch actually changed — run
-the checks for the layers/languages you touched, and skip the ones nothing you changed can
-affect (e.g. don't rebuild the Dockerfile images if you touched no `builds/` file or the
-file structure they copy; don't run pnpm tests for a Go-only change).
+**Basic CI = lint + tests + build.** Scope each to what the branch changed — run the checks
+for the layers/languages you touched, and skip the ones your change cannot affect (no
+`builds/` file or copied file structure touched → no image rebuild; a Go-only change → no
+pnpm tests).
 
 ```bash
 # 1. LINT — pnpm scripts (lint/format/generate are NOT a-novel CLI verbs):
@@ -94,13 +92,15 @@ a-novel build --type=podman -y  # images — only if you touched builds/ or what
 **Lint is not formatting.** `gofmt` / `gofumpt` / `gci` (and `pnpm format:go`) only check
 _formatting_ — they do **not** run the linters CI enforces (`goconst`, `usestdlibvars`,
 `errcheck`, `gocritic`, …). A format-clean diff can still fail the `lint-go` check, so run
-the linter, not just the formatter. If a repo exposes no local Go-lint runner (some repos
-have no `pnpm lint:go` script), invoke golangci-lint directly so you still catch what CI
-will, from the module directory:
+the linter, not just the formatter. Where a repo exposes no local Go-lint runner (no
+`pnpm lint:go` script), invoke golangci-lint directly from the module directory:
 
 ```bash
-go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run ./...
+go tool -modfile=golangci-lint.mod golangci-lint run ./...
 ```
+
+That form resolves the version the repo pins, so local and CI run the identical linter. Pulling
+`@latest` instead invites a disagreement that is pure version drift.
 
 If lint, tests, or build fail locally, CI will fail too. Fix before pushing.
 
@@ -114,11 +114,10 @@ git status --porcelain
 ```
 
 Any newly-modified files under `internal/handlers/protogen/`, `internal/handlers/mocks/`, or
-`internal/core/mocks/` belong with the source change that caused them. Before the
-branch's first push, amend them into the relevant commit. After the branch has been
-pushed, do not rewrite published history — add a follow-up `chore(gen): ...` commit
-instead (per `monitor-ci`). CI has a `generated-go` job that will fail if these are
-stale.
+`internal/core/mocks/` belong with the source change that caused them. Before the branch's
+first push, amend them into the relevant commit. Once pushed, do not rewrite published
+history — add a follow-up `chore(gen): ...` commit instead (per `monitor-ci`). CI's
+`generated-go` job fails when these are stale.
 
 ---
 
@@ -130,7 +129,7 @@ stale.
 git push -u origin $(git rev-parse --abbrev-ref HEAD)
 ```
 
-The `-u` flag sets the upstream so subsequent `git push` / `git pull` need no arguments.
+`-u` sets the upstream so later `git push` / `git pull` need no arguments.
 
 ### 2.2 Subsequent push
 
@@ -151,7 +150,7 @@ Never use plain `--force`. Never force-push to `master` or `main`.
 
 If this branch depends on another open PR (e.g., `feat/core/jwk-revoke` depends on
 `feat/dao/jwk-revoke`), the base of the PR must be the parent branch, not master. Push the
-parent first and make sure its PR is already open.
+parent first and make sure its PR is open.
 
 ---
 
@@ -160,10 +159,10 @@ parent first and make sure its PR is already open.
 Open as **draft** when any of these apply:
 
 - The developer explicitly said "draft" or "WIP"
-- The branch is one of several stacked branches still being built — only the tip branch
-  is typically ready for review
-- The branch intentionally omits tests, docs, or a related layer that is coming later
-- The developer wants early feedback on direction before committing to a full review
+- The branch is one of several stacked branches still being built — usually only the tip
+  branch is ready for review
+- The branch intentionally omits tests, docs, or a related layer coming later
+- The developer wants early feedback on direction before a full review
 
 Otherwise open as **ready for review** (default).
 
@@ -194,22 +193,16 @@ gh pr view --json number,state,url 2>/dev/null
 
 ### 5.0 PR authoring runs as the operator — the bot can only comment
 
-`gh pr create` (and every `gh pr edit` / `gh pr ready` in this skill) runs with the
-plain `gh` credential, i.e. the operator's **user token**. The opened PR is authored by
-the operator, so the `auto-assign-author` workflow can assign them and `CODEOWNERS`
-routing works. PR authoring is never a bot action.
+`gh pr create` (and every `gh pr edit` / `gh pr ready` in this skill) runs with the plain
+`gh` credential, the operator's **user token**. The operator authors the PR, so the
+`auto-assign-author` workflow can assign them and `CODEOWNERS` routing works.
 
-You cannot author a PR as the bot, by construction. There is no local bot token, and the
-only bot entry point — `a-novel core bot-comment <org> <repo> <number> --body …` — does
-exactly one thing: trigger the centralized dispatcher workflow, which _posts a comment_
-and nothing else. So `pr create|edit|ready|merge|close` are always operator actions;
-commenting (top-level PR/issue comments and review-thread replies in `resolve-pr-feedback`)
-is the only thing that ever attributes to `<app-slug>[bot]`. See [[feedback-bot-attribution]].
-
-```bash
-# Author the PR as yourself (operator user token).
-gh pr create ...
-```
+Authoring a PR as the bot is impossible by construction. There is no local bot token, and
+the only bot entry point — `a-novel core bot-comment <org> <repo> <number> --body …` —
+does one thing: trigger the centralized dispatcher workflow, which _posts a comment_. So
+`pr create|edit|ready|merge|close` are always operator actions; commenting (top-level
+PR/issue comments and review-thread replies in `resolve-pr-feedback`) is the only thing
+that attributes to `<app-slug>[bot]`.
 
 If a `gh pr create`/`edit`/`ready` call fails with an auth/permission error, surface it
 to the user — there is no bot fallback to route around it.
@@ -234,9 +227,8 @@ The title is a Conventional-Commits line matching the primary commit on the bran
 feat(dao): add soft-delete repository for key revocation
 ```
 
-When the branch has multiple commits touching one scope, use the scope that best describes
-the branch's goal. When the commits are genuinely cross-cutting (rename across layers), omit
-the scope.
+With multiple commits touching one scope, use the scope that best describes the branch's
+goal. When the commits are genuinely cross-cutting (rename across layers), omit the scope.
 
 ### 5.3 Body
 
@@ -270,48 +262,47 @@ Rules:
 
 - **Summary** is 1–3 bullets describing what changed _and why_. Readers see the diff; they
   need the intent.
-- **Linked issues — close a planning issue with the FULL cross-repo ref.** A PR that
-  implements a planning issue must close it in the body so merging advances the board.
-  Planning issues (Epic / Feature / Task) live in the org **`.github`** repos
-  (`a-novel-kit/.github`, `a-novel/.github`) while this PR lives in another repo, so a bare
-  `Closes #<n>` resolves to _this_ repo and links **nothing** — the issue then freezes on the
-  board (e.g. a Feature stuck at Backlog though its PR merged). Use the full cross-repo form:
-  `Closes a-novel-kit/.github#<n>` (or `a-novel/.github#<n>`). Only that form lands in the
-  PR's `closingIssuesReferences`, which is the sole signal `derive-status` reads to move the
-  issue's board **Status**. A Task filed in _this same_ repo keeps the bare `Closes #<n>`.
+- **Linked issues — close a planning issue with the FULL cross-repo ref.** A PR implementing
+  a planning issue must close it in the body so merging advances the board. Planning issues
+  (Epic / Feature / Task) live in the org **`.github`** repos (`a-novel-kit/.github`,
+  `a-novel/.github`), so from another repo a bare `Closes #<n>` resolves to _this_ repo and
+  links **nothing** — the issue then freezes on the board (a Feature stuck at Backlog though
+  its PR merged). Use `Closes a-novel-kit/.github#<n>` (or `a-novel/.github#<n>`): only that
+  form lands in the PR's `closingIssuesReferences`, the sole signal `derive-status` reads to
+  move the issue's board **Status**. A Task filed in _this same_ repo keeps the bare
+  `Closes #<n>`.
 - **Layers changed** lists only the layers actually touched. Omit the section entirely if
   only one layer is affected and the title already conveys it.
 - **Breaking changes** is either `None.` or an itemized list with migration steps. Never
-  leave this section as "TBD" or blank — reviewers should not have to hunt.
+  leave it "TBD" or blank — reviewers should not have to hunt.
 - **Test plan** is a checklist. Check the boxes you have already verified locally; leave
   `CI green` unchecked (monitor-ci will mark it).
 
 **Writing style — rationale-dense, zero filler.** The body's job is what the diff cannot say:
 why the change, what tradeoff was taken, what a reviewer should scrutinize. Never narrate the
 diff — file lists, mechanical renames, and "updated X to Y" bullets restate what review tooling
-already shows. Maximize meaning per word: every sentence either carries rationale or gets cut.
-Exhaustive on decisions, silent on mechanics. The same bar applies to PR thread comments
-(`resolve-pr-feedback`), where prose may lean more technical.
+already shows. Exhaustive on decisions, silent on mechanics. The same bar applies to PR thread
+comments (`resolve-pr-feedback`), where prose may lean more technical.
 
 ### 5.4 Do NOT pass these flags
 
 - `--assignee` / `--reviewer` — the `auto-assign-author` workflow handles assignees; the
-  repo decides reviewers via its `CODEOWNERS` file (at repo root) or team routing. Do not
-  set reviewers manually unless the user explicitly requests a specific person; manual
-  assignment duplicates or conflicts with that automation.
-- `--label` — labels are derived from the title's Conventional-Commits type by downstream
-  automation. Do not add them manually unless the user requests a specific one.
+  repo decides reviewers via its `CODEOWNERS` file (at repo root) or team routing. Manual
+  assignment duplicates or conflicts with that automation, so set reviewers only when the
+  user asks for a specific person.
+- `--label` — downstream automation derives labels from the title's Conventional-Commits
+  type. Add one manually only when the user requests it.
 - `--milestone` / project board / **Priority** / **Size** / tracking labels — **not** left to humans:
   a **ready** PR mirrors the milestone, project board, its board fields (Priority, Size), and labels
   of the issue it closes. See [Tracking metadata](#55-tracking-metadata--match-the-linked-issue).
 
 ### 5.5 Tracking metadata — match the linked issue
 
-A PR that is **ready for review** (not a draft) should be as trackable as the planning issue it
-closes: add it to the org **"Tasks"** board and give it the **same milestone**, the **same board
-fields (Priority, Size)**, and the relevant **tracking labels** as that issue — so a glance at the
-board shows the work whether you look at the issue or its PR. A draft skips this; apply it when
-opening ready, or at the **draft → ready** flip (Phase 6).
+A PR that is **ready for review** should be as trackable as the planning issue it closes: add it
+to the org **"Tasks"** board and give it the **same milestone**, the **same board fields
+(Priority, Size)**, and the relevant **tracking labels** as that issue — so a glance at the board
+shows the work whether you look at the issue or its PR. A draft skips this; apply it when opening
+ready, or at the **draft → ready** flip (Phase 6).
 
 ```bash
 gh pr edit <n> --repo <org>/<repo> --add-label <label> --milestone "<milestone-title>"
@@ -327,8 +318,8 @@ from the title, and from assignee/reviewer (still automation's job, see 5.4).
 
 ### 5.6 Capture the PR URL
 
-The `gh pr create` command prints the PR URL on success. Surface it to the user in the
-final message so they can jump to it.
+`gh pr create` prints the PR URL on success. Surface it in the final message so the user can
+jump to it.
 
 ---
 
@@ -361,20 +352,19 @@ close and re-open a PR to change its code; that loses review comments and CI his
 ## Phase 7: Hand-Off to monitor-ci (mandatory — gates task completion)
 
 After `gh pr create` or `git push` succeeds, CI starts. **Opening the PR does not
-finish the task.** You must invoke `monitor-ci` and follow it through to a terminal
-state. The task is complete only once you have reported one of:
+finish the task.** Invoke `monitor-ci` and follow it to a terminal state. The task is
+complete only once you have reported one of:
 
 - **CI green** — every gating check `completed` + `success`, reported to the user, OR
 - **A blocked/escalated state** — `monitor-ci`'s retry budget exhausted or an escalate
   condition hit, with the failing job(s), root-cause hypothesis, and what was tried
   surfaced to the user (per `monitor-ci` Phase 4).
 
-Never end the turn at "PR opened, CI running" and consider the work done — that leaves
-the result unverified. Carry the CI watch to a reported conclusion before closing out.
+Never end the turn at "PR opened, CI running" — that leaves the result unverified. Carry
+the CI watch to a reported conclusion before closing out.
 
-While CI runs you are not idle: use the wait windows to perform a **self-review** of the
-branch's diff (see `monitor-ci` Phase 1.2). Surface anything the self-review turns up
-alongside the CI result.
+While CI runs, use the wait windows for a **self-review** of the branch's diff (see
+`monitor-ci` Phase 1.2). Surface anything it turns up alongside the CI result.
 
 Do not merge — merges are a developer decision unless explicitly delegated.
 
@@ -382,26 +372,22 @@ Do not merge — merges are a developer decision unless explicitly delegated.
 
 ## Common Mistakes
 
-- **Trying to author a PR as the bot.** There is no bot path for it — `a-novel core
-bot-comment` only posts comments. PR create/edit/ready always run as the operator's
-  user token (Phase 5.0).
-- **Treating "PR opened" as task-done.** The task is not finished until `monitor-ci`
-  reports CI green or an escalated/blocked state (Phase 7).
-- **Pushing before basic CI passes locally.** CI is not a debugger. Run lint + tests +
-  build locally first (1.4), scoped to what you changed. A format-clean diff (`gofmt`/
-  `gofumpt`/`gci`) can still fail `lint-go` — run the linter, not just the formatter.
+- **Trying to author a PR as the bot.** There is no bot path — `a-novel core bot-comment`
+  only posts comments (5.0).
+- **Treating "PR opened" as task-done.** Carry `monitor-ci` through to CI green or an
+  escalated/blocked state (Phase 7).
+- **Pushing before basic CI passes locally.** Run lint + tests + build first, scoped to what
+  you changed; the formatter is not the linter (1.4).
 - **Opening a PR from master.** Branch first, then PR.
 - **Closing and re-creating a PR to "fix" the title.** Use `gh pr edit --title` instead.
-- **Manual reviewer/assignee flags.** Automation handles these. (Tracking metadata — milestone,
-  project board, Priority/Size, and issue-matching labels — is the exception: a ready PR carries
-  them, per 5.5.)
+- **Manual reviewer/assignee flags.** Automation handles these (5.4); tracking metadata is
+  the exception a ready PR carries (5.5).
 - **`--force` without `--lease`.** Always `--force-with-lease` after a rebase.
 - **Missing `BREAKING CHANGE:` footer.** If any commit on the branch is breaking, the PR
   body's Breaking Changes section must list it. Mismatches between commits and PR body are
   bugs — readers trust the body.
-- **Bare `Closes #<n>` for a planning issue that lives in a `.github` repo.** It resolves to
-  _this_ repo and links nothing, so `derive-status` never moves the issue and it freezes on
-  the board. Use the cross-repo ref `Closes a-novel-kit/.github#<n>` (see 5.3).
+- **Bare `Closes #<n>` for a planning issue in a `.github` repo.** It links nothing, so the
+  issue freezes on the board. Use `Closes a-novel-kit/.github#<n>` (5.3).
 - **PR title that does not match the primary commit scope.** If the branch is `feat/dao/*`,
   the PR title scope should be `dao`, not `services`.
 - **Linking the wrong base branch on a stacked PR.** If the parent is already merged, rebase
@@ -411,18 +397,18 @@ bot-comment` only posts comments. PR create/edit/ready always run as the operato
 
 ## Quick Reference
 
-| Situation                           | Command                                                                         |
-| ----------------------------------- | ------------------------------------------------------------------------------- |
-| Pre-flight: lint (scoped)           | `pnpm lint:go` / `go run …/golangci-lint/v2/cmd/golangci-lint@latest run ./...` |
-| Pre-flight: tests (scoped)          | `a-novel test --type=go -y` / `a-novel test -y`                                 |
-| Pre-flight: build (scoped)          | `a-novel build --type=go -y` (`--type=` matches changes)                        |
-| First push                          | `git push -u origin <branch>`                                                   |
-| Push after rebase                   | `git push --force-with-lease`                                                   |
-| Check for existing PR               | `gh pr view --json number,state,url`                                            |
-| Create ready PR                     | `gh pr create --title "..." --body "$(cat <<'EOF' ... )"`                       |
-| Create draft PR                     | `gh pr create --draft --title ...`                                              |
-| Close a cross-repo planning issue   | PR body: `Closes a-novel-kit/.github#<n>` (bare `#<n>` won't link it — see 5.3) |
-| Stacked PR (base is another branch) | `gh pr create --base feat/<parent-area>/... ...`                                |
-| Update title on existing PR         | `gh pr edit --title "..."`                                                      |
-| Flip draft → ready                  | `gh pr ready`                                                                   |
-| Flip ready → draft                  | `gh pr ready --undo`                                                            |
+| Situation                           | Command                                                                       |
+| ----------------------------------- | ----------------------------------------------------------------------------- |
+| Pre-flight: lint (scoped)           | `pnpm lint:go` / `go tool -modfile=golangci-lint.mod golangci-lint run ./...` |
+| Pre-flight: tests (scoped)          | `a-novel test --type=go -y` / `a-novel test -y`                               |
+| Pre-flight: build (scoped)          | `a-novel build --type=go -y` (`--type=` matches changes)                      |
+| First push                          | `git push -u origin <branch>`                                                 |
+| Push after rebase                   | `git push --force-with-lease`                                                 |
+| Check for existing PR               | `gh pr view --json number,state,url`                                          |
+| Create ready PR                     | `gh pr create --title "..." --body "$(cat <<'EOF' ... )"`                     |
+| Create draft PR                     | `gh pr create --draft --title ...`                                            |
+| Close a cross-repo planning issue   | PR body: `Closes a-novel-kit/.github#<n>` (see 5.3)                           |
+| Stacked PR (base is another branch) | `gh pr create --base feat/<parent-area>/... ...`                              |
+| Update title on existing PR         | `gh pr edit --title "..."`                                                    |
+| Flip draft → ready                  | `gh pr ready`                                                                 |
+| Flip ready → draft                  | `gh pr ready --undo`                                                          |

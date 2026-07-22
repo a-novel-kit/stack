@@ -1,34 +1,26 @@
 ---
 name: coordinate-landing
 description: >
-  The vocabulary, invariants, and operator runbook for the cross-repo **landing saga** — how a
-  multi-repo Epic lands atomically, recovers from a partial landing, rolls back, and releases across
-  the a-novel / a-novel-kit governance automation (the `a-novel-kit/workflows` actions: merge-gate,
-  epic-freeze / partial-landing detector, epic-rollback, release-train, plus the reconcile sweep and
-  the AGENT_KILL_SWITCH halt). Load this skill whenever a change spans several repos under one Epic and
-  you need to reason about how it lands or ships together — driving or rehearsing a release train,
-  interpreting a held or frozen PR, recovering a partial landing, rolling an Epic back, or halting the
-  automation during an incident. It owns the shared saga vocabulary (freeze it here, use it everywhere)
-  and the **Epic Atomicity Rule**; it defers the git/version mechanics of a staged rollout
-  (expand→contract, publish-before-rollout, `go.mod` pins) to `manage-versions`, and the per-repo
-  release mechanics to `prepare-release` / the release workflow. Pairs with `plan-feature` (which
-  creates the Epic), `implement-feature` (per-repo branches), `manage-versions` (cross-repo staging +
-  the landing-failed runbook), and `resolve-pr-feedback` (the held/frozen-PR conversation).
+  Vocabulary, invariants, and operator runbook for the cross-repo **landing saga**: how a multi-repo
+  Epic lands atomically, recovers from a partial landing, rolls back, and releases through the
+  `a-novel-kit/workflows` actions (merge-gate, epic-freeze, epic-rollback, release-train, the
+  AGENT_KILL_SWITCH halt). Load it when a change spans several repos under one Epic. It owns the
+  saga vocabulary and the **Epic Atomicity Rule**, and defers version mechanics to
+  `manage-versions`, per-repo release mechanics to `prepare-release`.
 ---
 
 # The landing saga
 
-A single feature often spans several repos — a `golib` change plus the two services that consume it,
-or a proto change and every client. Under the a-novel model those repos are **independently versioned
-and independently merged**, so "land them together" is not free: it is a **saga** — a coordinated
-sequence with compensating actions when a step fails. This skill is the map of that saga: what the
-pieces are called, the one invariant they all serve, and the operator procedures when something needs
-a human.
+A single feature often spans several repos — a `golib` change plus the two services that consume it.
+Under the a-novel model those repos are **independently versioned and independently merged**, so
+"land them together" is not free: it is a **saga**, a coordinated sequence with compensating actions
+when a step fails. This skill maps that saga: what the pieces are called, the one invariant they all
+serve, and the operator procedures that need a human.
 
-The contributor-facing half of this — what a held or frozen Pull Request means to the person who
-opened it — is published in
+The contributor-facing half — what a held or frozen Pull Request means to the person who opened it —
+is published in
 [`a-novel-kit/.github` › docs/board-lifecycle.md](https://github.com/a-novel-kit/.github/blob/master/docs/board-lifecycle.md).
-This skill is the operator's view: the vocabulary, the invariant, and the procedures that need a human.
+This skill is the operator's view.
 
 The saga is enforced by the `a-novel-kit/workflows` governance actions, driven by two triggers: the
 per-PR / per-merge-group events, and a **reconcile sweep** that runs every ~15 minutes as a
@@ -46,7 +38,8 @@ An Epic is a planning issue; its member PRs each carry the `epic:<N>` label. INV
 the whole saga exists to protect: a consumer must never merge while the dependency it needs is still
 unmerged (or vice-versa), because that leaves a repo un-buildable. Every mechanism below is either an
 _enforcer_ of INV-1 (merge-gate, the merge queue) or a _compensator_ for a violation of it
-(epic-freeze recovers, epic-rollback undoes).
+(epic-freeze recovers, epic-rollback undoes). When a saga decision is unclear, ask which side of
+INV-1 it serves.
 
 INV-1 is what makes the release train safe to run in **any order**: once an Epic has landed
 atomically, its repos are mutually consistent, so releasing them is order-independent. Cross-**Epic**
@@ -57,7 +50,7 @@ ordering — Epic B depends on Epic A's release — is _not_ INV-1's job; that i
 ## Vocabulary — freeze it here, use it everywhere
 
 Use these terms identically in code, PRs, issues, and conversation. No synonyms; never one word for
-two things.
+two things. The vocabulary is a contract, and a reused name is a future bug.
 
 | Term                                       | Meaning                                                                                                                                                                                                                                                            |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -86,8 +79,8 @@ two things.
 ## Why membership freezes
 
 Before landing starts, membership is the live `epic:<N>` label search. That works until a member is
-de-labelled mid-landing: GitHub indexes no "ever carried label X", so the PR simply vanishes from the
-set, and the detector reads the survivors as a clean landing while a member sits abandoned. The set is
+de-labelled mid-landing: GitHub indexes no "ever carried label X", so the PR vanishes from the set,
+and the detector reads the survivors as a clean landing while a member sits abandoned. The set is
 therefore captured into the Epic body once it has held merge-ready long enough for the label index to
 settle, and from that point the snapshot is the authority.
 
@@ -104,20 +97,20 @@ Two consequences worth knowing before operating an Epic:
 ## What a merge group is not
 
 A queued PR is validated as a **merge group** — a synthetic `gh-readonly-queue/<base>/pr-<N>-<sha>`
-ref — and not as the pull request. That group has no author and no labels, so every PR-level
-exemption evaporates there. A ruleset `bypass_actors` entry is a pull-request-level exemption, so a
-bot allowance that lets a dependency PR merge does not survive its trip through the queue, and the
-base branch's required checks come back as hard requirements. Never assume a bypass covers the queue.
+ref — not as the pull request. The group has no author and no labels, so every PR-level exemption
+evaporates there. A ruleset `bypass_actors` entry is one: a bot allowance that lets a dependency PR
+merge does not survive the queue, and the base branch's required checks come back as hard
+requirements. Never assume a bypass covers the queue.
 
 GitHub offers no way to scope a required status check to pull requests only. A flaky third party
-therefore cannot be exempted for the queue, and the only fix is to stop making it a required check
-and read its result from inside a check you control.
+therefore cannot be exempted for the queue; the fix is to drop it as a required check and read its
+result from inside a check you control.
 
-When a group sits pending, separate the two failure modes before diagnosing:
-`commits/<sha>/check-runs` (Actions jobs) and `commits/<sha>/status` (third-party commit statuses)
-are different APIs. A green job list beside an empty status list means your upload job worked and the
-provider never reported back — so the group waits on a status that will never arrive, and it blocks
-every PR queued behind it, not only its own, until the queue's check-response timeout expires.
+When a group sits pending, separate the two failure modes first: `commits/<sha>/check-runs` (Actions
+jobs) and `commits/<sha>/status` (third-party commit statuses) are different APIs. A green job list
+beside an empty status list means your upload job worked and the provider never reported back. The
+group then waits on a status that will never arrive, blocking every PR queued behind it until the
+queue's check-response timeout expires.
 
 ---
 
@@ -136,8 +129,8 @@ author → LAND (merge-gate + queue, atomic) → DETECT (reconcile sweep)
 3. **Detect.** The reconcile sweep (every ~15 min, level-triggered) re-derives each open Epic's state
    from live GitHub truth — it never trusts a stored flag, so it self-heals after any missed webhook.
 4. **Recover.** On a detected partial landing it **freezes** the surviving siblings and **rolls
-   forward** any landable stray within the grace window. Recovery is forward-first; a frozen sibling
-   holds (its required check goes red) until the Epic is whole again or a human intervenes.
+   forward** any landable stray within the grace window. A frozen sibling holds (its required check
+   goes red) until the Epic is whole again or a human intervenes.
 5. **Release.** Once whole, the **release train** releases the Epic's repos from one admin dispatch and
    records a tag receipt per repo.
 6. **Archive.** Each repo's `release.yaml` clears its awaiting-release board items after it ships.
@@ -180,8 +173,8 @@ within grace. Intervene only when:
   (their required check is red) — fix the stray and let it re-enter the queue, or escalate to a
   rollback if the landed subset is genuinely broken.
 - **The freeze is very wide** (blast-cap tripwire fired: a loud red sweep). A freeze spanning more
-  distinct repos than the cap is almost certainly a mis-scoped Epic — the freeze still posts (fail
-  toward freezing), but investigate the Epic's membership before doing anything else.
+  distinct repos than the cap is almost certainly a mis-scoped Epic — it still posts (fail toward
+  freezing), but investigate the Epic's membership first.
 
 ### Roll back an Epic (INV-1 genuinely violated)
 
@@ -193,8 +186,8 @@ per-repo reverts and does no writes. Then run live:
   each squash **newest-first**, opens one revert PR per repo, and groups them under a **fresh**
   rollback-Epic `epic:<M>` through the unchanged merge-gate.
 - The App authored the reverts, and **GitHub 422s a self-approval**, so the wave **PARKS pending a
-  human approval** — this is forced four-eyes on a destructive op, not a choice. Review + approve each
-  revert PR; the gate then greens and the wave lands in reverse, atomically.
+  human approval** — forced four-eyes on a destructive op. Review + approve each revert PR; the gate
+  then greens and the wave lands in reverse, atomically.
 - A revert conflict opens a **HELD draft** placeholder that holds the whole wave (no partial rollback);
   finish it by hand. The blast-cap **aborts loud** above the cap (a rollback that wide is opt-in — fail
   toward NOT reverting).
@@ -222,9 +215,9 @@ dispatches each repo's `release.yaml` with `dry_run=true` and cuts nothing), the
 A bug on a released line that spans several repos is **not** a special "hotfix train" — it is a
 **standard Epic, run fast**: label the fix PRs `epic:<N>`, let the merge-gate land them atomically, and
 release with the release train. There is deliberately **no cross-repo hotfix orchestrator** — the Epic
-machinery already gives atomicity + a coordinated release, so a second one would be redundant surface.
-The _single-repo_ hotfix path (`hotfix.yaml`: baseline → ephemeral → cut → reconcile → cleanup Task) and
-its vocabulary live in `manage-versions`.
+machinery already gives atomicity plus a coordinated release. The _single-repo_ hotfix path
+(`hotfix.yaml`: baseline → ephemeral → cut → reconcile → cleanup Task) and its vocabulary live in
+`manage-versions`.
 
 ---
 
@@ -261,8 +254,7 @@ plan-feature (creates the Epic + Task sub-issues)
              └─ release-train releases the Epic's repos → archive
 ```
 
-- **Enforcer skills:** none of the saga is bespoke — it is the merge queue + required checks +
-  check-runs + a dispatch action. Read the `a-novel-kit/workflows` actions for the ground truth.
+- **Enforcer skills:** none — read the `a-novel-kit/workflows` actions for the ground truth.
 - **`resolve-pr-feedback`** for the conversation on a **held or frozen** PR — explain _why_ it is held
   (waiting on its Epic set / frozen by a partial landing), not just _that_ it is.
 - **`manage-versions`** for anything version-shaped in the rollout.
@@ -271,13 +263,11 @@ plan-feature (creates the Epic + Task sub-issues)
 
 ## Principles
 
+The mechanisms are described above; these are the judgment calls they encode.
+
 - **INV-1 is the north star.** Every mechanism enforces "land together or not at all," or compensates
-  for a violation. When in doubt about a saga decision, ask which side of INV-1 it serves.
-- **Recover forward before you roll back.** A frozen partial landing that a roll-forward can finish is
-  cheaper and safer than a revert wave. Rollback is the last resort, and it is human-approved.
-- **The sweep is the floor, level-triggered.** State is re-derived from live GitHub truth every pass,
-  never trusted from a stored flag — so a missed webhook self-heals. Don't add a stateful shortcut.
-- **Halt is fail-safe and cooperative.** The kill-switch fails toward halting; it is an in-action flag,
-  not a security control. Revoke the App for a real compromise.
-- **Freeze constant, use it consistently.** The vocabulary above is the contract; a reused name is a
-  future bug.
+  for a violation.
+- **Recover forward before you roll back.** Rollback is the last resort, and it is human-approved.
+- **The sweep is the floor, level-triggered.** Add no stateful shortcut.
+- **Halt is fail-safe and cooperative.** Revoke the App for a real compromise.
+- **Freeze the vocabulary, use it consistently.**

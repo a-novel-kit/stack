@@ -1,17 +1,11 @@
 ---
 name: prepare-release
 description: >
-  Run BEFORE a repo is released, to size the release and write its migration guide. It reads the
-  unpublished diff (commits since the last tag) and (1) proposes the semver bump from the
-  conventional-commit history — `fix`→patch, `feat`→minor, `BREAKING CHANGE`/`!`→major — and (2) drafts
-  a per-version migration guide (`docs/migrations/vX.Y.Z.md`) when the release warrants one: a breaking
-  change, a deprecation, or a change consumers should follow (a new preferred input, a moved path, a new
-  recommended pattern). Use it whenever you are about to cut a release, are asked "is this patch / minor
-  / major?", "what changed since the last release?", or "does this need a migration guide?", or when a
-  change adds/deprecates something consumers depend on. It is ADVISORY: it proposes the version and
-  writes the guide; the human cuts the actual release (the UI release workflow). Pairs with
-  `manage-versions` (versioning mechanics + staged rollouts), `git-conventions` (the commit→bump
-  mapping), and the release workflow (`release-core`). It does not publish, tag, or push.
+  Run BEFORE cutting a release: it reads the commits since the last tag, proposes the semver bump
+  (`fix`→patch, `feat`→minor, `BREAKING CHANGE`/`!`→major), and drafts the per-version migration
+  guide (`docs/migrations/vX.Y.Z.md`) when consumers must act. Use it when asked "is this patch /
+  minor / major?", "what changed since the last release?", or "does this need a migration guide?".
+  ADVISORY — the human cuts the release; this never tags, pushes, or publishes.
 ---
 
 # Prepare a release — size it, and write its migration guide
@@ -22,8 +16,8 @@ A release has two questions this skill answers before anyone clicks "Run":
 2. **What must a consumer do to adopt it?** — captured as a **migration guide** that ships with the
    code and lives forever, so the answer is never lost in a PR description or a Slack thread.
 
-You are advisory. You read the diff, propose the version, and draft the guide; the human reviews and
-cuts the release from the Actions tab. You never tag, push, or publish — releases are human-only (see
+You are advisory: read the diff, propose the version, draft the guide. The human reviews and cuts the
+release from the Actions tab. You never tag, push, or publish — releases are human-only (see
 `manage-versions`).
 
 > This skill is the manual stand-in for a future agent that runs it automatically before every
@@ -46,8 +40,8 @@ deprecate, the **body/footers** (`BREAKING CHANGE:`). A squash-merge repo has on
 subjects are the PR titles — usually enough; open the PR/diff when a subject is ambiguous about consumer
 impact.
 
-If the repo has **no prior tag**, this is the first release (`v0.1.0` or `v1.0.0` per the team's call) —
-there's nothing to migrate _from_, so a guide is rarely needed.
+With **no prior tag**, this is the first release (`v0.1.0` or `v1.0.0` per the team's call) — there is
+nothing to migrate _from_, so a guide is rarely needed.
 
 ---
 
@@ -83,19 +77,18 @@ A guide documents **consumer action**, not a changelog. Use this gate:
 | Patch (bug/perf/internal)                                                                  | No              |
 
 The middle row is the subtle one: a backward-compatible release can still _ask_ consumers to move
-(a new recommended input, a renamed-but-aliased field, a new pattern). That's a **recommended** guide —
-the change isn't forced, but the migration is real and worth writing down once. When in doubt for a
-minor, ask: _"is there anything a consumer should change to fully benefit, even though nothing breaks?"_
-If yes, write the guide.
+(a new recommended input, a renamed-but-aliased field, a new pattern). Nothing forces the change, but
+the migration is real and worth writing down once. When in doubt for a minor, ask: _"is there anything
+a consumer should change to fully benefit, even though nothing breaks?"_ If yes, write the guide.
 
 ---
 
 ## 4. Write the guide
 
-**One immutable file per version**, never a single growing `UPGRADING.md`. This is the convention
-every mature migration system uses (Flyway `V1__…`, Rails / GitLab timestamped migrations) for the same
-reason: a single appended file is a merge-conflict magnet across parallel release branches and blurs
-which change maps to which release. Per-version files are additive (no conflicts) and map 1:1 to a tag.
+**One immutable file per version**, never a single growing `UPGRADING.md` — the convention every mature
+migration system uses (Flyway `V1__…`, Rails / GitLab timestamped migrations). A single appended file is
+a merge-conflict magnet across parallel release branches and blurs which change maps to which release;
+per-version files are additive (no conflicts) and map 1:1 to a tag.
 
 - **Path:** `docs/migrations/vX.Y.Z.md`, named by the version that introduces the change. (A sub-dir Go
   module — e.g. `cli/` — keys the file by its version too; a repo releases one module, so the version
@@ -148,7 +141,7 @@ Anything optional, related follow-ups, or pointers to a larger effort this is pa
 ```
 
 Lead with **"Do I need to act?"** — most readers want exactly that, and a clear "No" for a safe minor is
-a feature, not a cop-out. Keep each change section to _what changed → why → before/after → caveats_.
+a feature. Keep each change section to _what changed → why → before/after → caveats_.
 
 ---
 
@@ -166,13 +159,12 @@ and defer.
 
 ## Principles
 
-- **The guide is consumer-facing, not a changelog.** Release notes list _what changed_; the guide says
-  _what to do about it_. If a change needs no consumer action, it belongs in the notes, not the guide.
-- **One file per version, immutable.** Additive, conflict-free, 1:1 with a tag. Never rewrite a shipped
-  guide.
-- **Derive, don't guess, the version.** The bump comes from the commit history; if the history is wrong
-  (a `feat` mislabeled `fix`), fix the discipline (`git-conventions`), don't override the math silently.
-- **Advisory, never the trigger.** You propose; the human releases. No tagging, pushing, or publishing.
+- **The guide is consumer-facing.** Release notes list _what changed_; the guide says _what to do about
+  it_. A change needing no consumer action belongs in the notes.
+- **One file per version, immutable.** Additive, conflict-free, 1:1 with a tag.
+- **Derive the version from the commit history.** If the history is wrong (a `feat` mislabeled `fix`),
+  fix the discipline (`git-conventions`) rather than silently overriding the math.
+- **Advisory, never the trigger.** You propose; the human releases.
 
 ---
 

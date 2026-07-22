@@ -1,40 +1,32 @@
 ---
 name: write-project-docs
 description: >
-  Write, review, and maintain the root-level project documentation — README.md, SECURITY.md,
-  CONTRIBUTING.md — for any repo across the a-novel / a-novel-kit orgs (backend services, the
-  golib Go library, the nodelib JS packages, the workflows Actions repo, the stack CLI). Use this skill whenever scaffolding a new
-  project's docs, updating an existing README/SECURITY/CONTRIBUTING (new env var, new badge,
-  new client section, security contact change), or adding sections like client usage or
-  Docker examples. Does NOT cover CODE_OF_CONDUCT.md (standard Contributor Covenant, copy
-  verbatim) or in-source code comments (use document-code).
+  Write and maintain root-level project docs — README.md, SECURITY.md, CONTRIBUTING.md — for any
+  a-novel / a-novel-kit repo (services, golib, nodelib, workflows, stack CLI). Use it when
+  scaffolding a new project's docs or updating one: new env var, badge, client or Docker section,
+  security contact. Not CODE_OF_CONDUCT.md or in-source comments (document-code).
 ---
 
 # Project Docs
 
 This skill governs the three root-level Markdown files that describe a project to external
-readers: `README.md`, `SECURITY.md`, `CONTRIBUTING.md`. These files are the first thing
-visitors see; they set expectations for usage, security contact, and how to contribute. They
-must be accurate, scannable, and consistent across all Agora services.
+readers: `README.md`, `SECURITY.md`, `CONTRIBUTING.md`. They are the first thing visitors see,
+setting expectations for usage, security contact, and how to contribute, so they must be accurate,
+scannable, and consistent across all Agora services.
 
-These files carry the **global picture** — the architecture, the layer split, the principles
-behind the shape of the system. That is by design: code comments defer here instead of
-re-explaining the whole system from inside one source file (see `document-code`). Keep the
-wide-angle view in README and CONTRIBUTING and keep it current, so the comments in the code can
-stay local and specific.
+They carry the **global picture** — the architecture, the layer split, the principles behind the
+shape of the system. Code comments defer here instead of re-explaining the whole system from inside
+one source file (see `document-code`). Keep that wide-angle view current, so the comments in the
+code can stay local and specific.
 
-They are not the same kind of document, though. `README.md` is a reference **entrypoint**: how to
+The three are not the same kind of document. `README.md` is a reference **entrypoint**: how to
 install, configure, and call the project, plus the global picture the code comments defer to. It is
 closer to an extension of those comments than to a guide, and it follows the section order below
 rather than a narrative. `CONTRIBUTING.md` and `SECURITY.md` are **guides**: they walk a reader
 through a process, as do the pages they link (onboarding, a board-lifecycle walkthrough).
 
-The skill has two modes:
-
-- **Scaffold** — the file does not exist yet (new project). Generate from the templates in
-  this skill, substituting project-specific inputs.
-- **Update** — the file exists. Edit the relevant section in place. Never overwrite a whole
-  file when the ask is to change one section.
+The skill has two modes, detected in Phase 2: **scaffold** generates a missing file from the
+templates here, **update** edits the relevant section of an existing one in place.
 
 Separate concerns:
 
@@ -92,8 +84,8 @@ services + `nodelib` report coverage; `golib`, `workflows`, `stack` do not.
 ### Section order — ONE order, every repo
 
 Every README uses the same five slots in the same order. Only the _content_ of each slot
-changes with repo type; **the order never does.** Readers scroll as little as possible —
-frequently-referenced material first, rarely-needed material last.
+changes with repo type; **the order never does.** Frequently-referenced material comes first,
+rarely-needed material last, so readers scroll as little as possible.
 
 | #   | Slot             | Always contains                                                                                                                                          |
 | --- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -131,18 +123,14 @@ locally`, the LAST section before Contributing. `### Configuration` lives inside
    once, in its slot-4 reference table; duplicating it in prose breaks rhythm and creates a second
    place to maintain. Rule of thumb: four-plus comma-separated items belong in a table, not a
    sentence. Lead with the plain-English purpose; let the table, intellisense, or the API
-   reference carry the inventory. Keep it tight — cut every word that does not add information.
-   Prefer the precise word over a long phrase and short sentences over long ones; the right noun
-   or verb often replaces a whole clause. Boilerplate ("if you have questions or run into issues",
-   "check existing issues") is filler — drop it. Concision is careful word choice, not dropped
-   grammar — keep sentences fully formed (subject + verb), not terse fragments. And cutting filler
-   is not the same as cutting explanation: when a concept is unfamiliar or a rationale is
+   reference carry the inventory. Never pause an explanation to catalog its members — enumerate
+   separately, in its own section, and where the list already lives in a catalog or table
+   elsewhere, point there instead of repeating it. Keep it tight: cut every word that does not add
+   information, and drop boilerplate ("if you have questions or run into issues", "check existing
+   issues"). Concision is careful word choice, not dropped grammar — keep sentences fully formed
+   (subject + verb). It is also not cut explanation: when a concept is unfamiliar or a rationale
    non-obvious, spend the words to make it clear, in plain language. A doc that is short but
-   cryptic has failed — clarity beats brevity. And don't pause an explanation to catalog its
-   members: lead with the concept, and enumerate separately (its own section) only if the list
-   adds value. If that list already lives in a catalog or table elsewhere — the README's, a
-   reference table — point there instead of repeating it. A catalog dropped mid-explanation is
-   verbose, breaks rhythm, isn't memorable, and drifts out of sync over time.
+   cryptic has failed.
 5. **Contribution rules live in `CONTRIBUTING.md`, not the README.** The README Contributing
    section is only the two links. The "what belongs here / bar for additions" policy, review
    norms, and any other contributor guidance go in CONTRIBUTING.md, phrased naturally.
@@ -170,9 +158,11 @@ Every repo ends with a short `## Contributing` section that points at TWO things
    canonical onboarding doc for BOTH orgs.
 2. The repo's own `./CONTRIBUTING.md` for repo-specific concepts.
 
-There is **no** org-level `CONTRIBUTING.md` in either `.github` repo. Older docs linked
-`a-novel/.github/.../CONTRIBUTING.md` or `a-novel-kit/.github/.../contributing/readme.md` —
-both 404. Always use the onboarding-guide URL above.
+Each org's `.github` repo does carry a `CONTRIBUTING.md` — the **concepts** doc holding what is true
+of every repo of a kind (see `contributing-doc-dedup` in practice: the layer model, service anatomy,
+the libraries/tooling taxonomy). Link it when a repo doc needs a concept rather than restating it.
+Platform **setup** is the onboarding guide above, which is a different document. The legacy
+`a-novel-kit/.github/.../contributing/readme.md` path 404s — never link it.
 
 `CONTRIBUTING.md` itself: intro (link the onboarding guide + "read the README first") →
 repo-specific concepts → `## Questions?` (issues link). Never restate platform setup or the
@@ -182,20 +172,20 @@ service role there.
 
 ## Editorial Principles
 
-These come before the templates. The templates implement them; if a generated file looks
+These come before the templates. The templates implement them; when a generated file looks
 right but violates a principle, the principle wins.
 
-Most apply to every file. The narrative ones are the exception. Principle 12 (tell a story) shapes
+Most apply to every file; the narrative ones are the exception. Principle 12 (tell a story) shapes
 the **guides** (`CONTRIBUTING.md`, `SECURITY.md`, and the pages they link), not `README.md`: a README
-is a reference entrypoint, not a guide, so it follows the section order below instead of an arc.
-Principle 10's natural headings likewise give way to that fixed order in a README, though its
-show-over-tell holds anywhere. Everything else, the plain-language principles most of all, applies to
-every file, the README and the `document-code` comments alike.
+is a reference entrypoint, so it follows the section order below instead of an arc. Principle 10's
+natural headings likewise give way to that fixed order in a README, though its show-over-tell holds
+anywhere. Everything else, the plain-language principles most of all, applies to every file, the
+README and the `document-code` comments alike.
 
 ### 1. Audience-first — name the reader before writing the section
 
-Every section in `README.md` and `CONTRIBUTING.md` answers a question that a specific
-reader is holding. Three readers exist:
+Every section in `README.md` and `CONTRIBUTING.md` answers a question a specific reader
+is holding. Three readers exist:
 
 | Reader                | What they want                                     | File              |
 | --------------------- | -------------------------------------------------- | ----------------- |
@@ -203,26 +193,23 @@ reader is holding. Three readers exist:
 | **Client integrator** | "How do I call this service from another service?" | `README.md`       |
 | **Contributor**       | "How do I work on this codebase locally?"          | `CONTRIBUTING.md` |
 
-A section that doesn't answer one of those questions doesn't belong. A section that
-answers the same question for the same reader twice (in two files, or in two places in
-one file) gets cut to one location and linked.
+A section that doesn't answer one of those questions doesn't belong. **Never duplicate**: a question
+answered twice for the same reader, in two files or in two places in one file, is cut to one location
+and linked. If the JS client install snippet is in `README.md`, `CONTRIBUTING.md` says "see the
+README" rather than copying it.
 
 Naming the reader also means writing at their knowledge, not yours — the curse of knowledge is the
-default failure. A term or convention you use daily reads as obvious to you and as jargon to them: a
-`Closes` line, an issue number, a Pull Request description all need defining for a first-time contributor,
-however plain they feel to a maintainer. When a passage only parses because _you_ already know the tool,
-it is written for the wrong reader; define what you assumed, on first use.
-
-`README.md` serves operators and integrators only. `CONTRIBUTING.md` serves contributors
-only. **Never duplicate** content across them — link instead. If the JS client install
-snippet is in `README.md`, `CONTRIBUTING.md` says "see the README" rather than copying it.
+default failure. A term you use daily reads as jargon to them: a `Closes` line, an issue number, a
+Pull Request description all need defining for a first-time contributor, however plain they feel to a
+maintainer. When a passage only parses because _you_ already know the tool, define what you assumed,
+on first use.
 
 ### 2. Lead with the role, not the runbook
 
 The first text after the badges in `README.md` is **what the service does and why it
 exists** — one to three short paragraphs. Not "what stack it's built on", not "how to
 deploy it", not the table of contents. A reader who cannot tell what the service does
-from the first paragraph will not find that out by scrolling further.
+from the first paragraph will not find out by scrolling further.
 
 A good role section answers:
 
@@ -241,13 +228,13 @@ The first sentence of a guide (a README role paragraph, a CONTRIBUTING page, any
 **what the document is about**, in plain purpose terms: "This document is about how a feature is planned,
 built, and shipped." The reader gets the frame before any concrete detail.
 
-Never open with an implementation fact. "Every piece of work is a GitHub issue" drops the reader into the
-mechanism with no context. It reads like a machine stating a fact, not a person explaining a thing. State
-the purpose first, then let the concrete pieces arrive as its answer. The unit ("an issue") lands on its
-own once the reader knows why it exists: to turn an idea into buildable work.
+Never open with an implementation fact. "Every piece of work is a GitHub issue" drops the reader into
+the mechanism with no context. State the purpose first, and the concrete pieces arrive as its answer:
+the unit ("an issue") lands on its own once the reader knows why it exists, to turn an idea into
+buildable work.
 
-Guide, don't assert. "This document is about…" orients the reader. "We plan before we build" commands
-them. Prescriptive, first-person openers read as manifesto, not guide.
+Guide, don't assert. "This document is about…" orients the reader; "We plan before we build" commands
+them. Prescriptive, first-person openers read as manifesto.
 
 Test it on the first two sentences alone. A stranger should know what the doc covers and why, and should
 not yet have met one implementation term without a reason for it.
@@ -270,24 +257,23 @@ the code changes one of these things, the doc update belongs in the same change,
 follow-up.
 
 A process still taking shape is not a fact yet: state what the system does today, not the policy you
-expect it to grow into. "An Epic ships one per release" is fiction until releases actually work that way.
-An option the platform merely offers is not part of the taxonomy either: an enabled type nobody uses (a
-Feature type carrying zero issues) is configured, not real, so check usage, not just the config. When a
-rule holds only under a condition, name the condition ("only for Epics under one Initiative or
-Milestone"); a rule stated unscoped will be read as universal. And a workaround a current limitation
-forces should read as temporary, marked as such ("for now, a Milestone is tied to one repository"): left
-unmarked it hardens into apparent design, and no one revisits it when the limitation lifts.
+expect it to grow into. "An Epic ships one per release" is fiction until releases work that way. An
+option the platform merely offers is not part of the taxonomy either: an enabled type nobody uses (a
+Feature type carrying zero issues) is configured, not real, so check usage, not just the config. When
+a rule holds only under a condition, name the condition ("only for Epics under one Initiative or
+Milestone"); an unscoped rule reads as universal. Mark a workaround a current limitation forces as
+temporary ("for now, a Milestone is tied to one repository"): left unmarked it hardens into apparent
+design, and no one revisits it when the limitation lifts.
 
 ### 5. Show the canonical, link or table the variants
 
 When a service has several deployment shapes (REST × gRPC × standalone × split = four
-combinations), do not paste four near-identical compose blocks in sequence. The reader
-who wants the simplest path is forced to scan past three blocks they will not use, and
-the duplication turns any future update into a four-place edit.
+combinations), do not paste four near-identical compose blocks in sequence: the reader who wants the
+simplest path scans past three they will not use, and any future update becomes a four-place edit.
 
 Pick one canonical block — the **production / expected shape** (per the Fleet standard above:
 lead with production, relegate the dev one-liner to "Running locally") — show it inline, then
-list the other shapes in a table or collapse them under a `<details>` block. The principle generalizes: any time two blocks
+list the other shapes in a table or collapse them under a `<details>` block. Any time two blocks
 differ by one line, the second belongs in a diff, table, or collapsible block, not in line.
 
 The same holds for any set of parallel items, a catalog of types or a matrix of options: in a reference
@@ -299,8 +285,7 @@ prose. Go harder on presentation the deeper into the document you are.
 Comprehensive lists of fields, methods, env vars, etc. are reference material. They go in
 a dedicated section (or in generated reference docs like the OpenAPI viewer or godoc),
 **after** the canonical example, never interleaved with prose. Readers who need the
-reference jump to it; readers who don't are not forced to scroll past it to find the next
-thing they came for.
+reference jump to it; readers who don't are not made to scroll past it.
 
 For client packages, the README example shows the **minimum viable call** — install,
 construct, one real operation. That is enough to unblock someone. The full surface is what
@@ -311,83 +296,80 @@ intellisense, `pkg.go.dev`, or the published API reference is for.
 In update mode, treat existing custom sections (architecture diagrams, team notes,
 release call-outs that are not in the template) as data, not noise. Read the whole file,
 identify the section the user is changing, edit only that section. A "rewrite" instruction
-from the user is the only override — and even then, surface anything that looks like
+from the user is the only override, and even then, surface anything that looks like
 deliberate custom content before discarding it.
 
 ### 8. Lead with rationale; dose examples to disambiguate
 
-A doc earns its keep with a clear explanation of what a thing is, why it exists, and how to
-approach it. That rationale leads and carries the weight; an example never stands in for it. An
-example left to do the explaining goes stale as the system changes, breaks the reading rhythm, and
-usually carries nothing the prose does not. In particular, **never import an example from the
-conversation that produced the doc** — it aided the author, not the reader, and lands as arbitrary
-and dated later.
+A doc earns its keep by explaining what a thing is, why it exists, and how to approach it. That
+rationale leads and carries the weight; an example never stands in for it. An example left to do the
+explaining goes stale, breaks the rhythm, and carries nothing the prose does not.
+**Never import an example from the conversation that produced the doc** — it aided the author, not
+the reader, and lands as arbitrary and dated later.
 
-An example is not forbidden, though. Once the rationale is on the page, a short one pins down the part
-that prose alone leaves fuzzy: an inline pairing ("named for its goal, not its version"), or, where the
-point is isolated enough to earn it, a compact do / don't table or a code block. Dose them — short,
-few, and only where the explanation genuinely needs it. Where the prose already lands, add none; an
-example there is noise. Judge per point: a concept can be subtle enough to need one (the altitude a
-title is named from) and plain enough to need none (which branch a Task is).
+Examples are not forbidden. Once the rationale is on the page, a short one pins down what prose alone
+leaves fuzzy: an inline pairing ("named for its goal, not its version"), or, where the point is
+isolated enough, a compact do / don't table or a code block. Dose them — short, few, and only where
+the explanation needs it; where the prose already lands, an example is noise. Judge per point: a
+concept can be subtle enough to need one (the altitude a title is named from) and plain enough to
+need none (which branch a Task is).
 
-When a do/don't set spans a series, thread one running example through the whole of it rather than a fresh
+When a do/don't set spans a series, thread one running example through all of it rather than a fresh
 case per row: the reader tracks a single thing, and the entries can cross-reference (an Epic's good title
-is the Initiative's too-broad don't). And a don't teaches only with its reason attached — pair each wrong
+is the Initiative's too-broad don't). A don't teaches only with its reason attached — pair each wrong
 example with why it is wrong, or it is a second example, not a lesson.
 
-An example must also instantiate the rule it illustrates, not a cousin of it. Explaining an Epic's atomic
-landing (its Tasks merging as a unit) with a cross-repo dependency — which is really the stages rule, one
-piece released before another can use it — teaches a false model and hides that two distinct rules were
-braided under one heading. If an example only holds under a different rule, it belongs under that rule, and
+An example must instantiate the rule it illustrates, not a cousin of it. Explaining an Epic's atomic
+landing (its Tasks merging as a unit) with a cross-repo dependency — really the stages rule, one
+piece released before another can use it — teaches a false model and hides two distinct rules braided
+under one heading. An example that only holds under a different rule belongs under that rule, and
 the muddle is usually the signal to split the section in two.
 
-When concrete specifics run long (exact commands, names, links), they are reference material, not
+Concrete specifics that run long (exact commands, names, links) are reference material, not
 explanation: keep the prose general and push them where reference belongs — a table, a code block, or
-the relevant service's own `CONTRIBUTING.md`. And an analogy that makes a genuinely hard concept click
+the relevant service's own `CONTRIBUTING.md`. An analogy that makes a genuinely hard concept click
 is its own kind of example; reach for it when the concept is hard, and state the concept directly
 otherwise.
 
 ### 9. Plain language, plain sentences
 
 Write so a tired reader gets it on the first pass. Prefer the common word and the short one;
-reach for an advanced or technical word only when it earns its place, when it replaces a whole
-phrase or removes a real ambiguity, not for tone. State each point as a plain subject-verb-object
+reach for an advanced or technical word only when it earns its place, replacing a whole phrase or
+removing a real ambiguity, never for tone. State each point as a plain subject-verb-object
 sentence, not a label: "The service signs tokens server-side because the private key never leaves
 it," not "Why server-side: the private key." Rhetorical labels ("Why this matters:", "The
 reason:", "Note:") are ceremony; cut them and let the sentence stand.
 
-Prefer basic structure to clever construction. If the same meaning fits a simpler word and a
-plainer sentence, use them: "hands most of the automation" reads better than "hands you the
-automation for the rest," at no cost to meaning. Keep the plain word order, subject then verb then
-object: "It tracks everything in between for you," not "Everything between them, it tracks for you." A
-fronted object, an inversion, or a "that is where…" cleft makes the reader unpack a sentence before
-reading it. Two short sentences beat one long one spliced together. Avoid the em-dash that cuts a sentence in half, and the enumeration that only restates
-what you just wrote. Get the conjunction comma right: put one before and, but, or so only when a full
-clause with its own subject follows ("the board runs itself, and you barely notice it"), never before a
-compound predicate sharing the subject ("easier to write and far easier to review"). "So" meaning
-"therefore" takes the comma; a restrictive "because" does not. When a draft feels dense, revise for
-plainness before shipping; the plain
-version is the finished one, not a step toward it.
+Prefer basic structure to clever construction, and keep the plain word order, subject then verb
+then object: "It tracks everything in between for you," not "Everything between them, it tracks
+for you." A fronted object, an inversion, or a "that is where…" cleft makes the reader unpack
+a sentence before reading it. Two short sentences beat one long one spliced together. Avoid the
+em-dash that cuts a sentence in half, and the enumeration that only restates what you just wrote. Get
+the conjunction comma right: put one before and, but, or so only when a full clause with its own
+subject follows ("the board runs itself, and you barely notice it"), never before a compound
+predicate sharing the subject ("easier to write and far easier to review"). "So" meaning "therefore"
+takes the comma; a restrictive "because" does not. When a draft feels dense, revise for plainness
+before shipping; the plain version is the finished one, not a step toward it.
 
 ### 10. Show the flow, don't announce it
 
 Let the reader absorb the model by reading, not by being told its shape. A section named "The big
-picture" or "The design" announces your structure instead of teaching the subject; drop the label
-and let the content be the picture. Headings should name what the reader is doing or learning at
-that point ("When the board needs you"), not the role the section plays in your outline.
+picture" or "The design" announces your structure instead of teaching the subject; drop the label.
+Headings name what the reader is doing or learning at that point ("When the board needs you"), not
+the role the section plays in your outline.
 
 A heading must also match the scope of what it covers. When a gate or rule recurs at every level of a
-hierarchy, each issue planned and gated before its children, top-down, say it once as the general rule and
-title its home for the whole hierarchy. "Planning an issue" fits; "Planning a task" strands the rule under
-the smallest case it governs.
+hierarchy — each issue planned and gated before its children, top-down — state it once as the general
+rule and title its home for the whole hierarchy. "Planning an issue" fits; "Planning a task" strands
+the rule under the smallest case it governs.
 
-Subheadings help a section the reader scans, not one they read through. A reference block that answers
+Subheadings help a section the reader scans, not one they read through. A reference block answering
 many separate questions — the issue types, choosing one, linking to code, how status rolls up — reads
-far better broken under headings a reader can jump between; an argument or a story, built paragraph on
-paragraph, only fragments under them. Add them by whether the reader hunts or follows, and match the
+far better broken under headings a reader can jump between; an argument or a story only fragments
+under them. Add them by whether the reader hunts or follows, and match the
 anchor's weight to the need: a heading is the heaviest, for a section the reader jumps around; bold
-lead-ins, or even a distinctive topic sentence per paragraph, carry a lighter scan without one; a pure
-read-through needs nothing. Over-anchoring a rarely-visited explanation costs more than it gives.
+lead-ins, or a distinctive topic sentence per paragraph, carry a lighter scan; a pure read-through
+needs nothing. Over-anchoring a rarely-visited explanation costs more than it gives.
 
 A heading level is a claim of sameness, so let the levels mirror the kinds: peers should be the same sort
 of thing. Six flat headings covering a type, a grouping, a label, and three practices read as a pile;
@@ -401,8 +383,8 @@ a few words per node, and mark what matters, like who acts or where a gate falls
 When the thing you are picturing changes or sits behind a login (a board, a pipeline, a console), a text
 diagram beats a screenshot: it diffs in review, renders in the reader's own theme, tracks the concepts
 rather than the pixels, and keeps private data out of a public repo. A snapshot of a live UI rots the
-moment the UI moves. Keep one diagram per idea, too: when a richer one subsumes an earlier diagram,
-delete the earlier rather than let two pictures of the same states restate each other. And a diagram is a
+moment the UI moves. Keep one diagram per idea: when a richer diagram subsumes an earlier one,
+delete the earlier rather than let two pictures of the same states restate each other. A diagram is a
 claim, so its shorthand must stay true: a label that sweeps a human gate into "the board does it" is a
 bug, not a simplification.
 
@@ -420,10 +402,9 @@ the edge cases, then the machinery underneath. Each part earns the next, so the 
 through, never dropped into a list.
 
 Pacing does the leading. Set up what is coming, then move through it with real transitions ("It
-starts with the intention," "Then comes the code," "Now it is a maintainer's turn"), and let a
-motif thread through and pay off later (the point where the work "waits for a human" becomes the
-very thing to pay attention to). Vary the sentence length, and land the important beat on a short
-one.
+starts with the intention," "Then comes the code," "Now it is a maintainer's turn"). Let a motif
+thread through and pay off later: the point where the work "waits for a human" becomes the very
+thing to pay attention to. Vary the sentence length, and land the important beat on a short one.
 
 A story is the order of ideas, not extra words. Keep each beat as tight as principle 9 demands: "Task
 being the smallest unit" beats "the smallest, the one that turns straight into code." The same chain
@@ -434,8 +415,8 @@ reads as dense, not concise; make each link explicit, or split it.
 The trap is the appliance manual: "There is a wash cycle and a rinse cycle. Press start. If it
 beeps, open the door." Flat, listed, no momentum. Tell the same content as a story and the reader
 stays with you, because each part explains why the next one follows. This principle governs the
-shape of a guide; the others refine the prose inside it. It does not apply to a `README.md`, which is
-a reference entrypoint, not a guide (see the scope note under Editorial Principles).
+shape of a guide; the others refine the prose inside it. It does not apply to a `README.md`, a
+reference entrypoint (see the scope note under Editorial Principles).
 
 ### 13. Name a concept once, concretely, and keep the name
 
@@ -443,33 +424,32 @@ Give a recurring concept one concrete name and use that exact name every time. A
 earns its place only when it is tied to something the reader can hold: "the intention" is vague until
 it is "the specification behind your idea." Name it that, then carry "specification" through; do not
 drift to "description" a line later. Every synonym for one thing makes the reader stop to check
-whether it is the same thing. One steady name goes unnoticed, and the reader thinks about the idea,
-not the words.
+whether it is the same thing.
 
-This holds against your own flourishes. When the domain already has a precise term, use it, and resist
-paraphrasing it for warmth or variety: "the second human-gated stage" beats "the work waits for a human
-a second time." A motif (principle 12) may echo a term, but it must never replace it. A warm paraphrase
-can even carry a false connotation the precise term rules out: a "convoy" may lose stragglers and still be
-one, while an "atomic landing" is all-or-none by name. Prefer the word that carries the invariant over the
-image beside it.
+This holds against your own flourishes: when the domain has a precise term, use it, and resist
+paraphrasing it for warmth or variety ("the second human-gated stage" beats "the work waits for a
+human a second time"). A motif (principle 12) may echo a term, but never replace it. A warm
+paraphrase can even carry a false connotation the precise term rules out: a "convoy" may lose
+stragglers and still be one, while an "atomic landing" is all-or-none by name. Prefer the word that
+carries the invariant over the image beside it.
 
 When a name doubles as a common word, say what kind of thing it is, or the reader takes it for prose.
 "Sitting in Tracking" reads as an activity; "sitting in a dedicated Tracking status" reads as a place on
 the board. Name the category — the Tracking status, the Roadmap view, the meta label — so a proper noun
 is never mistaken for the ordinary word it is spelled like. A name the reader already met, once framed,
-can be used bare after; it is the first, unframed use that misleads.
+can be used bare after; the first, unframed use is the one that misleads.
 
 When one concept spans several concrete forms, name the umbrella too: calling the intention a "feature"
 lets the doc say "feature" where it would otherwise recite "Task, Epic, or Initiative." Once a word is
-reserved for a concept, keep it there, and do not also use it in its ordinary sense a line later, where "a
+reserved for a concept, keep it there. Never use it in its ordinary sense a line later, where "a
 GitHub feature" beside "a feature is the intention" makes two things of one word.
 
 ### 14. Start simple: the global picture first, then the details
 
-Give the reader the whole shape in its simplest form before any detail. Someone new should grasp how the
-thing works from the opening, then meet the specifics, then the edge cases, each layer resting on the one
-before. Do not open a section with an exception or a corner case; open with the common path, and let the
-rare and the deep follow. This orders the document as a whole and every section inside it.
+Give the reader the whole shape in its simplest form before any detail: someone new grasps how the
+thing works from the opening, then meets the specifics, then the edge cases, each layer resting on the
+one before. Do not open a section with an exception or a corner case; open with the common path, and
+let the rare and the deep follow. This orders the document as a whole and every section inside it.
 
 The same order binds a concept to the rules about it: introduce a type before any rule that leans on it. A
 crisp rule about one concept ("an Epic lands whole") invites use as an early capstone, but placed before
@@ -478,14 +458,14 @@ the term.
 
 The same instinct decides what a document carries at all. A process or lifecycle doc holds the generic
 shape; the language, the stack, and the specific tooling belong in the repository's or language's own
-doc, linked to rather than stamped in. And detail only some readers need, like a step an agent handles on
+doc, linked to rather than stamped in. Detail only some readers need, like a step an agent handles on
 its own or an advanced path, gets its own section with a line up front saying who it is for. The main
 narrative stays simple and universal; whoever needs more follows the link.
 
 A concept with behavior of its own — its own lifecycle, flow, or failure modes — earns a section too,
 never an aside on a neighbor. "A Bug is like a Task, for a defect," tucked into a table cell, under-serves
-a thing that carries its own hotfix path; the aside is a sign the concept has outgrown its host and needs
-its own space.
+a thing that carries its own hotfix path; the aside signals that the concept has outgrown its host and
+needs its own space.
 
 ### 15. A link rides on the prose, never the other way around
 
@@ -498,20 +478,19 @@ not. If a link has nowhere natural to sit, rework the prose or drop the link.
 
 ### 16. Lead with the do; keep the don't a footnote
 
-Guidance is what a reader should carry away, so lead with the instruction, plain and given the most room:
-"make the spec sharp; it is the foundation." The failure it guards against is a transient warning, there
-only to make the instruction land, so give it less space and set it apart, after: "a vague one builds the
-wrong thing." Do not lead with the failure, weld a caveat onto it, or bury the do at the tail: "build from
-a vague one and you build the wrong thing, however clean the code, so make it sharp" does all three, hiding
-the instruction behind the warning meant to drive it home. Separate the two, and let the do carry the
-weight.
+Lead with the instruction, plain and given the most room: "make the spec sharp; it is the
+foundation." The failure it guards against is a transient warning, there only to make the
+instruction land. Give it less space, and set it apart after the do: "a vague one builds the wrong
+thing." Do not lead with the failure, weld a caveat onto it, or bury the do at the tail. "Build from
+a vague one and you build the wrong thing, however clean the code, so make it sharp" does all three,
+hiding the instruction behind the warning meant to drive it home.
 
 ### 17. Make every reference land on something the reader already holds
 
 A pronoun or a back-reference points somewhere, and the target must be right there and unmistakable. Keep
 a pronoun beside its one possible antecedent: "comprehension and judgment are the whole job, so spend your
 attention there" beats "so spend them there," where "them" reaches back past "the whole job" for its noun.
-And name earlier content concretely, not with an abstract label the reader has to decode: "until now we
+Name earlier content concretely, not with an abstract label the reader has to decode: "until now we
 have followed a single Task" beats "the journey followed a single Task," a word the doc never pinned to
 that walkthrough. An abstract handle earns its place only after you have plainly attached it to the thing;
 until then, point with a plain description of what you mean.
@@ -522,7 +501,7 @@ Describe what the system has and does, and leave out what it lacks. The reader h
 front of them, so "there is no tier between Task and Epic" or "we do not use a Feature type" summons a
 thing into their mind for the sole purpose of denying it: pure noise. The absence you feel the urge to
 explain is usually one only you can see, because you just removed it or argued it away. Cut it; the plain
-list of what exists says everything the reader needs.
+list of what exists says all the reader needs.
 
 ### 19. State each thing once; duplicate only to go deeper
 
@@ -532,17 +511,16 @@ it twice at the same depth wonders what changed between them. A repeat earns its
 second pass goes materially deeper: the overview names a mechanism, the deep section takes it apart. When
 two passages say nearly the same thing at the same altitude, keep the one in its natural home — the
 mechanism with the machinery, the practice with the workflow — and cut the other. When a passage carries a
-fresh point wrapped around restated material, keep the point and link the rest rather than re-describe it:
-a philosophy recap can state the philosophy and point at the mechanism it rests on, not re-explain it.
+fresh point wrapped around restated material, keep the point and link the rest: a philosophy recap states
+the philosophy and points at the mechanism it rests on, rather than re-explaining it.
 
 ---
 
 ## Phase 1: Collect Required Inputs
 
-Before scaffolding a new file, ask the user for the inputs below. When running in **update**
-mode, only ask for the inputs that are relevant to the section being edited.
-
-Collect them in a single message rather than asking one question at a time.
+Before scaffolding a new file, ask the user for the inputs below, in a single message rather than
+one question at a time. In **update** mode, ask only for the inputs relevant to the section being
+edited.
 
 ### 1.1 Always required
 
@@ -561,8 +539,8 @@ Collect them in a single message rather than asking one question at a time.
 | Twitter handle      | `agorastoryverse`                                         | `agorastoryverse`                                                                                        |
 | Discord invite ID   | numeric ID `1315240114691248138` + invite code `rp4Qr8cA` | same as existing services                                                                                |
 
-The codecov graph token is **public** — it only controls badge/graph rendering, not repo
-access. Safe to commit. The private upload token lives in CI secrets, never in docs.
+The codecov graph token is **public** — it controls badge/graph rendering only, not repo access,
+so committing it is safe (see [Badge Catalog](#badge-catalog)).
 
 ### 1.3 Required for SECURITY.md
 
@@ -609,8 +587,8 @@ ls README.md SECURITY.md CONTRIBUTING.md 2>/dev/null
 - File present → update mode: read it first, edit the relevant section only (Phase 5)
 
 Never overwrite an existing file with the full template. Users may have added custom
-sections (architecture diagrams, org-specific footers, release notes) that are not in the
-template — replacing the file silently drops them.
+sections (architecture diagrams, org-specific footers, release notes) that the template lacks;
+replacing the file silently drops them.
 
 ---
 
@@ -624,7 +602,7 @@ location where the value belongs. Format:
 ```
 
 HTML comments do not render in GitHub's Markdown preview, so the file still looks clean to
-visitors, but grep finds them instantly:
+visitors, while grep finds them instantly:
 
 ```bash
 grep -rn "TODO(project-docs)" .
@@ -640,16 +618,15 @@ Examples:
 Report security bugs by emailing the lead maintainer at <!-- TODO(project-docs): security contact email -->.
 ```
 
-**Do not** invent values. A fake email or a placeholder like `YOUR_TOKEN_HERE` that a
-reader might mistake for real content is worse than a visible TODO.
+**Do not** invent values. A fake email or a `YOUR_TOKEN_HERE` placeholder that a reader might
+mistake for real content is worse than a visible TODO.
 
 ---
 
 ## Phase 4: Scaffold Templates
 
-All three templates below use `{{variable}}` placeholders. Substitute every placeholder
-with the inputs from Phase 1 before writing the file. Do not leave `{{…}}` in the output
-— unresolved placeholders are a bug.
+All three templates below use `{{variable}}` placeholders. Substitute every placeholder with the
+inputs from Phase 1 before writing the file; an unresolved `{{…}}` in the output is a bug.
 
 ### 4.1 README.md template
 
@@ -673,14 +650,11 @@ with the inputs from Phase 1 before writing the file. Do not leave `{{…}}` in 
 
 ## What it does
 
-<!-- Mandatory role section per Editorial Principle 2. One to three short paragraphs that
-     answer:
-       - what does this service own (the entity, the noun)
-       - who does it serve and how (the verb)
-       - what's the surface (REST? gRPC? both? public? internal?)
-     Then, if relevant, a one-line note on related concepts (e.g. "Authentication and
-     identity live in service-authentication; this service only manages signing keys").
--->
+<!-- Mandatory role section per Editorial Principle 2. One to three short paragraphs: what this
+     service owns (the entity, the noun), who it serves and how (the verb), and the surface
+     (REST? gRPC? both? public? internal?). Then, if relevant, a one-line note on related
+     concepts (e.g. "Authentication and identity live in service-authentication; this service
+     only manages signing keys"). -->
 
 ## Deploying
 
@@ -739,23 +713,21 @@ This scaffold only fills slot content; it never reorders the slots.
   order shown there (socials, then `<hr />`, then the type's tech badges, then the Codecov
   sunburst only when the repo reports coverage). Deviating breaks the visual rhythm across the
   fleet.
-- The `<hr />` literal (not `---`) separates the social badges from the repo metrics —
-  this matches the existing Agora convention.
-- Docker compose examples pin images by an explicit release tag, never `:latest`. In PROSE, link
-  the latest release (`…/releases/latest`) rather than hard-coding a `(current: vX.Y.Z)` string
-  that goes stale; reserve concrete tags for inside the compose blocks (where the publish stamp
-  keeps them current).
-- The config-vars tables use `<br/>` to stack multiple image names in a single cell —
-  keeps the table narrow.
+- The `<hr />` literal (not `---`) separates the social badges from the repo metrics, matching
+  the existing Agora convention.
+- Docker compose examples pin images by an explicit release tag, never `:latest`. In prose, link
+  the latest release (`…/releases/latest`) instead of a `(current: vX.Y.Z)` string that goes stale
+  — see Fleet-standard hard rule 7.
+- The config-vars tables use `<br/>` to stack multiple image names in a single cell, keeping the
+  table narrow.
 - The role section ("What it does") must name the entity, the consumers, and the
   surfaces (REST/gRPC, public/internal). If you cannot fill in those three, stop and
   collect them — see Principle 2.
 
 ### 4.2 SECURITY.md template
 
-This file is near-boilerplate. Only `{{org-label}}` and `{{security-email}}` are
-substituted. Do not rewrite the boilerplate to "improve" it — consistency across Agora
-services matters more than prose polish.
+This file is near-boilerplate: only `{{org-label}}` and `{{security-email}}` are substituted. Do
+not rewrite it to "improve" it — consistency across Agora services matters more than prose polish.
 
 ```markdown
 # Security Policies and Procedures
@@ -848,12 +820,10 @@ documents what is specific to {{project-display-name}}.
 [Open an issue](https://github.com/{{repo-path}}/issues) — include logs and environment details.
 ```
 
-**Note on the template body that used to live here:** earlier versions of this skill
-generated a Prerequisites list, an install block, and a Common Commands table
-inside CONTRIBUTING. Those were moved out — they belong in the org-wide contribution
-guide that the intro paragraph already links to. Duplicating them per repo creates a
-second source of truth that drifts. If you are working on a repo that still has them,
-remove them as part of the next CONTRIBUTING edit.
+**Note on the template body that used to live here:** earlier versions of this skill generated a
+Prerequisites list, an install block, and a Common Commands table inside CONTRIBUTING. They belong
+in the org-wide contribution guide that the intro paragraph already links to, so a repo that still
+carries them loses them in the next CONTRIBUTING edit.
 
 <!-- The template above intentionally has gaps. Phase 5 (update mode) is the common case
      for CONTRIBUTING — a real CONTRIBUTING.md is mostly the bespoke "service-specific
@@ -863,20 +833,18 @@ remove them as part of the next CONTRIBUTING edit.
 
 **CONTRIBUTING structure and audience:**
 
-CONTRIBUTING serves contributors only — people who will edit this codebase. It does **not**
-serve operators (they read the README) or integrators (they also read the README). A
-section that an operator or integrator would want is in the wrong file.
-
-Concretely, this means:
+CONTRIBUTING serves contributors only — people who will edit this codebase (Principle 1). A
+section an operator or integrator would want is in the wrong file. Concretely:
 
 - The "What it does" / role description belongs in the README, not here. Contributors are
   expected to have read the README first.
 - Contributors already know the stack, so do NOT re-document the framework or platform itself
   (GitHub Actions mechanics, the Go clean-architecture layering, the pnpm workspace model, etc.).
   Link its official docs and spend the words only on what is specific to THIS repo — its
-  conventions, directory layout, and build/release model.
-- Client install snippets, deployment compose blocks, and the env-var reference tables
-  belong in the README. CONTRIBUTING refers to them with a link.
+  conventions, directory layout, and build/release model. Generic Go layering diagrams
+  (DAO → service → handler) live in the `write-go-service` skill, not in per-project docs.
+- Client install snippets and published-client code examples, deployment compose blocks, and the
+  env-var reference tables belong in the README. CONTRIBUTING refers to them with a link.
 - Platform-wide setup (prerequisites, generic `a-novel`/`pnpm` commands, lint/test/format) belongs
   in the org-level contribution guide that the intro paragraph already links to. When
   that link exists, **omit Prerequisites and Common Commands from CONTRIBUTING entirely**
@@ -885,28 +853,13 @@ Concretely, this means:
 **What CONTRIBUTING should contain:**
 
 1. **Intro paragraph + link to the org-wide contribution guide.** One short paragraph.
-2. **Quick local interactions.** A handful of curl / grpcurl examples that hit the live
-   service after `a-novel run start <service>/<target>`. This is the pragmatic on-ramp for a contributor who has the
-   service running and wants to poke at it.
-3. **Service-specific concepts.** The bespoke section. Examples of what belongs here:
-   - Domain invariants that aren't obvious from the code (e.g., main-vs-legacy key
-     semantics, transaction scoping rules, materialized-view refresh requirements).
-   - Cryptographic flows (which algorithm, where the key comes from, what gets sealed).
-   - Config schemas the contributor will actually edit, with field names taken from the
-     code. Subject to Editorial Principle 4 — verify field names against the source.
-   - Scheduled-job semantics if the service has them.
-   - Surface table (gRPC services / REST endpoints) as a quick orientation, not a full
-     API spec — link to the proto file or OpenAPI doc for that.
+2. **Quick local interactions.** curl / grpcurl examples that hit the live service after
+   `a-novel run start <service>/<target>` — the on-ramp for a contributor who has the service
+   running and wants to poke at it.
+3. **Service-specific concepts.** The bespoke section; the template comment above lists what
+   belongs there. Config field names are subject to Editorial Principle 4 — verify against the
+   source.
 4. **Questions.** Identical across services. Where to file issues, how to ask.
-
-What does NOT belong:
-
-- Architecture diagrams of generic Go layering (DAO → service → handler) — that's in the
-  `write-go-service` skill, not in per-project docs.
-- Code examples for the published client packages — that's README integrator content.
-- Prerequisites and command tables — those live in the org-wide contributing
-  guide.
-- Restating the role of the service — that's the README.
 
 ---
 
@@ -943,7 +896,7 @@ section that needs changing. Do not rewrite the file.
 ## Badge Catalog
 
 Copy these patterns verbatim — the exact URL format matters (shields.io is strict about
-path segments). Parameters are clearly marked with `{{…}}`.
+path segments). Parameters are marked with `{{…}}`.
 
 | Badge                    | Markdown pattern                                                                                                                                                                                                                     |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -958,7 +911,7 @@ path segments). Parameters are clearly marked with `{{…}}`.
 | Codecov sunburst         | Default (no token): `![Coverage graph](https://codecov.io/gh/{{repo-path}}/graphs/sunburst.svg)` — add `?token={{codecov-graph-token}}` to the image URL only when a tokenized variant is required                                   |
 
 **Codecov graph token — not a secret.** It is the public badge token from
-`codecov.io/gh/<repo>/settings > Badge`. Committing it is intentional. The private upload
+`codecov.io/gh/<repo>/settings > Badge`, and committing it is intentional. The private upload
 token (used by the CI `report-codecov` job) lives in repo secrets, never here.
 
 ---
@@ -985,10 +938,10 @@ Agora service:
 2. In the new repo, invoke the skill (Claude picks it up once the file exists). Phase 1
    will collect the new project's inputs.
 
-3. The templates are intentionally Agora-flavoured (mentions of `a-novel` verbs, podman,
-   `.github/CONTRIBUTING.md`, etc.). That is a feature, not a bug — it keeps docs consistent
-   across services. When a new project legitimately deviates (different tooling, different
-   org), update the templates in place rather than forking them.
+3. The templates are intentionally Agora-flavoured (`a-novel` verbs, podman,
+   `.github/CONTRIBUTING.md`, etc.), which keeps docs consistent across services. When a new
+   project legitimately deviates (different tooling, different org), update the templates in
+   place rather than forking them.
 
 ---
 
@@ -1001,25 +954,19 @@ Agora service:
 - **Do not write long prose.** README and CONTRIBUTING are reference documents. Tables,
   bullet lists, and runnable code blocks beat paragraphs.
 - **Do not put case-specific examples in generic prose.** A particular provider, key, or
-  value dates fast and rarely adds understanding; never import an example from the
-  conversation that produced the doc. Lead with rationale, and let a short example only pin down a
-  fuzzy point, never carry the explanation; push concrete specifics (commands, names,
-  links) to a service's own `CONTRIBUTING.md`, a reference table, or a code block. See
-  Editorial Principle 8.
+  value dates fast and rarely adds understanding. See Editorial Principle 8.
 - **Do not embed secrets.** The codecov graph token is fine (public). API keys, passwords,
   real `APP_MASTER_KEY` values, npm auth tokens are not.
 - **Do not link to internal-only dashboards.** Anything linked in the README is
   publicly visible once the repo is public.
 - **Do not invent version numbers or email addresses** to fill placeholders. Use the TODO
   comment pattern.
-- **Do not describe code from memory.** Algorithm names, env var names, config field
-  shapes, RPC names, REST paths, lifecycle states — every factual claim about the
-  codebase gets verified against the source at the same SHA as the doc commit. A
-  README that says "AES-GCM" when the code uses NaCl secretbox is worse than a README
-  that does not mention encryption at all. See Editorial Principle 4.
-- **Do not duplicate content across README and CONTRIBUTING.** If a fact lives in one,
-  the other links to it. Common offenders: client install snippets, env-var tables,
-  service role description. Pick one home; link from the other. See Editorial Principle 1.
+- **Do not describe code from memory.** Every factual claim about the codebase — algorithm
+  names, env var names, config field shapes, RPC names, REST paths, lifecycle states — gets
+  verified against the source at the same SHA as the doc commit. See Editorial Principle 4.
+- **Do not duplicate content across README and CONTRIBUTING.** Common offenders: client install
+  snippets, env-var tables, service role description. Pick one home; link from the other. See
+  Editorial Principle 1.
 
 ---
 

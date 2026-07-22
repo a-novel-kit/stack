@@ -1,23 +1,19 @@
 ---
 name: write-go
 description: >
-  Foundational Go conventions shared by EVERY Go repository in the a-novel and a-novel-kit
-  organizations — naming, error handling, dependency policy, context rules, the format/lint
-  discipline, time handling, and secrets hygiene. Load this skill for ANY Go work (writing,
-  reviewing, refactoring) in either org: it is the base layer that `write-go-service` (clean-
-  architecture backend services under the a-novel org) and `write-go-kit` (shared libraries
-  under the a-novel-kit org — golib, jwt, …) build on, so load the matching repo-kind skill
-  ALONGSIDE this one. Pairs with `write-go-tests` (test conventions) and `document-code` (doc
-  comments). Does NOT cover JS/TS, SQL (`write-sql`), Protobuf (`write-proto`), Dockerfiles
+  Base Go conventions for EVERY Go repo in the a-novel and a-novel-kit orgs — naming, error
+  handling, dependency policy, context, the format/lint discipline, time, and secrets. Load it for
+  ANY Go work in either org, alongside the matching repo-kind skill: `write-go-service` (a-novel
+  services) or `write-go-kit` (a-novel-kit libraries — `golib`, `jwt`). Pairs with `write-go-tests`
+  and `document-code`. Not JS/TS, SQL (`write-sql`), Protobuf (`write-proto`), Dockerfiles
   (`write-dockerfiles`), or shell scripts (`write-bash-scripts`).
 ---
 
 # Go Conventions (common)
 
-This is the base layer for Go in every a-novel / a-novel-kit repository. Rules here hold
-**regardless of repo kind** — a backend service under the `a-novel` org, a shared library under
-the `a-novel-kit` org (`golib`, `jwt`, …), or a one-off tool. Repo-kind-specific rules live in
-two companion skills; load the one that matches where you are working **in addition to** this
+This is the base layer for Go in every a-novel / a-novel-kit repository. The rules hold
+**whatever the repo kind** — a backend service, a shared library, or a one-off tool. Repo-kind
+rules live in two companion skills; load the one matching where you work **in addition to** this
 one:
 
 - **`write-go-service`** — clean-architecture services under `a-novel` (`app/service-*`,
@@ -31,16 +27,15 @@ one:
 When work spans repos and needs versions kept in sync to merge cleanly, also load
 **`manage-versions`**.
 
-**Before touching any file, read it.** Before touching a package, read its siblings, the
-interfaces it depends on, and the interfaces it exposes. These codebases are deliberately
-consistent — coherence with the surrounding code outranks personal preference every time. When
-two existing files disagree, the newer one and the one closest to your change usually win; if it
-is genuinely unclear, ask rather than guess.
+**Before touching any file, read it.** Before touching a package, read its siblings and the
+interfaces it depends on and exposes. These codebases are deliberately consistent — coherence with
+the surrounding code outranks personal preference. When two files disagree, the newer one and the
+one closest to your change usually win; when it is genuinely unclear, ask.
 
-**Look up the API before you use it.** Before writing or changing code that touches an external
-package or a non-trivial stdlib API, check the official `pkg.go.dev` docs and the package's
-README / release notes. APIs evolve and the first approach that comes to mind is often not the
-idiomatic one. Seconds of reading prevents subtle misuse — do it before the code, not after.
+**Look up the API before you use it.** Before writing code that touches an external package or a
+non-trivial stdlib API, check the official `pkg.go.dev` docs and the package's README / release
+notes. APIs evolve, and the first approach that comes to mind is often not the idiomatic one.
+Seconds of reading prevent subtle misuse.
 
 ---
 
@@ -56,23 +51,21 @@ pnpm lint:go       # always
 
 `pnpm format:go` / `pnpm lint:go` exist in every Go repo (they wrap `go mod tidy` and a pinned
 `golangci-lint` invoked through `golangci-lint.mod`); never skip them. If `lint` flags something
-you did not introduce, fix it anyway while you are in the file — leave it cleaner than you found
-it.
+you did not introduce, fix it anyway while you are in the file.
 
 **When local lint fails and CI is green on the same commit, clean the cache before you believe it.**
-The pinned version comes from the repo's own `golangci-lint.mod`, so local and CI run the identical
-linter and a disagreement is environmental, not a config gap — chasing version drift is wasted
-effort. A stale analyzer cache is the usual cause: facts about the standard library go stale across
-toolchain bumps, and once `staticcheck` can no longer prove `(*testing.T).Fatalf` terminates, every
-`if x == nil { t.Fatalf(…) }` followed by a deref of `x` reads as a nil dereference. CI never sees it
-because its runners always start cold.
+`golangci-lint.mod` pins the version, so local and CI run the identical linter and a disagreement is
+environmental — chasing version drift is wasted effort. A stale analyzer cache is the usual cause:
+facts about the standard library go stale across toolchain bumps, and once `staticcheck` can no
+longer prove `(*testing.T).Fatalf` terminates, every `if x == nil { t.Fatalf(…) }` followed by a
+deref of `x` reads as a nil dereference. CI never sees it because its runners start cold.
 
 ```bash
 go tool -modfile=golangci-lint.mod golangci-lint cache clean
 ```
 
-Re-run after cleaning. Findings that survive a cold run are real; editing code to appease the ones
-that do not is churn against a false positive.
+Re-run after cleaning. Findings that survive a cold run are real; editing code to appease the rest
+is churn against a false positive.
 
 Then, before the change is done:
 
@@ -101,14 +94,13 @@ a maintenance liability, a supply-chain surface, and a constraint on future choi
   one already present is almost never worth it.
 - **Mine what's already imported.** When implementing, don't re-research online practices — the
   planning phase (`plan-feature`) already did that. Do read the **documentation of the libraries
-  already in `go.mod`** for the task at hand: a helper, option, or whole subsystem an
-  already-imported dependency turns out to provide is implementation time saved — code you neither
-  write nor maintain.
+  already in `go.mod`** for the task at hand: a helper, option, or whole subsystem an imported
+  dependency already provides is code you neither write nor maintain.
 - **Vet candidates.** A new dependency must be: well-maintained (recent commits, responsive
   issue tracker, real test coverage); **owned by an organization, not a single personal
   account** — org ownership survives a maintainer losing interest; and **broad** — pick the
-  library that covers the most of the surrounding problem space, so one dependency replaces
-  three. A narrow utility from an individual's account is the worst combination.
+  library covering the most of the surrounding problem space, so one dependency replaces three.
+  A narrow utility from an individual's account is the worst combination.
 - **Ask first — always.** Introducing a package not already in `go.mod` requires explicit
   developer approval. No exceptions, not even a small utility. (`a-novel-kit` repos hold this bar
   even higher — see `write-go-kit`; `a-novel` services keep their `internal/lib/` as close to
@@ -182,24 +174,23 @@ Treat any `new(T)` you find as cleanup-on-sight when the file is already in scop
   package). Map an upstream/library error onto your own sentinel by _joining_ it — `err =
 errors.Join(err, ErrUserNotFound)` — so callers keep both identities.
 - **One vocabulary per concept.** If the type is `Jwk`, every error message that refers to it
-  says `"jwk …"` — never `"key not found"` in one file and `"jwk not found"` in another. Drift in
-  error wording is one of the easiest sources of low-level entropy and one of the hardest to
-  dashboard around. Pick the term used in the type name and propagate it everywhere the error
-  surfaces.
+  says `"jwk …"` — never `"key not found"` in one file and `"jwk not found"` in another. Wording
+  drift is easy to create and hard to dashboard around. Take the term from the type name and use
+  it everywhere the error surfaces.
 - **Wrap with context and `%w`**: `fmt.Errorf("search users: %w", err)`. Always `%w`, never
   `%v`, so callers keep `errors.Is` / `errors.As` identity. The message chain should let a reader
-  trace the call path on its own.
+  trace the call path.
 - **Never silently discard an error.** If one truly can be dropped, write `_ = ...` with a
   comment saying why.
 
 ### Reporting errors on spans / telemetry — the layer-relative rule
 
-When a function instruments itself with a span (or any other per-operation telemetry), reporting
-follows one rule: **every layer that has a span records, on its own span, every error it sees —
-whether it raises it, propagates it, or maps it to a transport response.** The forbidden moves
-are: _suppressing_ reporting based on the error's _identity_ at a propagating layer, and `return
-nil, ErrXxx` bare from a layer that has a span. "Expected" is never a property the error value
-carries, and never something one layer guesses on a caller's behalf.
+When a function instruments itself with a span (or any other per-operation telemetry), one rule
+governs reporting: **every layer that has a span records, on its own span, every error it sees —
+whether it raises it, propagates it, or maps it to a transport response.** Two moves are forbidden:
+_suppressing_ reporting based on the error's _identity_ at a propagating layer, and a bare `return
+nil, ErrXxx` from a layer that has a span. "Expected" is never a property the error value carries,
+nor something one layer guesses on a caller's behalf.
 
 - A layer that _raises_ an error (a DAO hitting `sql.ErrNoRows`, a validator producing
   `ErrInvalidRequest`, a service detecting a mismatch) → `otel.ReportError(span, err)`.
@@ -209,19 +200,19 @@ carries, and never something one layer guesses on a caller's behalf.
 - The handler that maps the error to a transport response → still reports. `golib/httpf.HandleError`
   calls `otel.ReportError` unconditionally before writing the HTTP status, so the REST handler span
   records the error whatever status it maps to; the gRPC manual mapping should do the same by hand
-  (`_ = otel.ReportError(span, err)` before `status.Error(...)`). The handler span shows which
-  error a request ended on — that is the point of having it.
+  (`_ = otel.ReportError(span, err)` before `status.Error(...)`). The handler span exists to show
+  which error a request ended on.
 - **Anti-pattern**: a helper that suppresses reporting based on the error's _identity_ at a layer
   that still propagates or surfaces it (a `reportUnexpected(span, err)` keyed on a list of "known"
   sentinels). It couples the layer to an error registry and silently drops real signal. The
   layer-local question is just "did I see this error?" — if yes, report it.
 
-Spans are independent — a child span ending `Error` does not taint the parent. So the DAO span,
-the service span, _and_ the handler span all say "no row" for a 404, while the "is the service
-broken" view is built on the **HTTP status code** (recorded by the otel HTTP instrumentation) and
-counts the 404 as a 404, not a 500 — span status answers "did an error occur in processing", which
-is `true` even for a deliberate 404, and that is fine. For bulk-anomaly visibility on a specific
-security sentinel, use a counter / audit log / dedicated event — not `span.status`. The helpers
+Spans are independent — a child span ending `Error` does not taint the parent. So the DAO, service,
+_and_ handler spans all say "no row" for a 404, while the "is the service broken" view is built on
+the **HTTP status code** (recorded by the otel HTTP instrumentation), which counts a 404 as a 404.
+Span status answers "did an error occur in processing", which is `true` even for a deliberate 404,
+and that is fine. For bulk-anomaly visibility on a specific security sentinel, use a counter, an
+audit log, or a dedicated event rather than `span.status`. The helpers
 `otel.ReportError` / `otel.ReportSuccess` / `otel.ReportSuccessNoContent` live in `golib/otel`;
 `ReportError` only sets `RecordError` + `SetStatus(Error)` — it does **not** end the span (a
 `defer span.End()` does), and returning a sentinel with no `Report*` call leaves the span `Unset`,
@@ -243,8 +234,7 @@ span-per-operation rule.
 ## Time capture
 
 When an operation derives more than one timestamp from "now" — `created_at` + `expires_at`,
-`start` + `deadline`, paired audit fields — capture `now := time.Now()` **once** at the top and
-reuse it:
+`start` + `deadline`, any paired audit fields — capture `now := time.Now()` **once** and reuse it:
 
 ```go
 // WRONG — two wall-clock reads; expires_at - created_at is not exactly the TTL, and a test can't freeze it.
@@ -264,8 +254,8 @@ computing an elapsed duration).
 
 - **Never log, trace, or put in span attributes**: passwords, tokens, API keys, private keys,
   key ciphertexts, signed JWTs, or any other credential material. Record identifiers only
-  (`user.id`, `key.id`), never the secret itself. A redacted `"*****"` of the same length still
-  leaks the input length over every trace — don't do that either.
+  (`user.id`, `key.id`). A redacted `"*****"` of the same length still leaks the input length over
+  every trace — don't do that either.
 - **Never return secret material in an error message or a transport response.** Errors get
   logged; responses get cached and indexed.
 - **Compare secrets in constant time** — `crypto/subtle.ConstantTimeCompare`, never `==` or
@@ -278,8 +268,8 @@ computing an elapsed duration).
 ## Loop variable scope
 
 These codebases target Go 1.22+, where `for` loop variables are per-iteration; a closure captures
-the right value with no extra copy. Remove any `current := item` shadow copies inside `for range`
-loops when you encounter them — they are dead code on this minimum version.
+the right value with no extra copy. Remove any `current := item` shadow copy inside a `for range`
+loop when you encounter one — it is dead code on this minimum version.
 
 ---
 
@@ -289,9 +279,8 @@ loops when you encounter them — they are dead code on this minimum version.
 - **A new dependency added without asking.** Explicit developer approval, every time.
 - **Logging / tracing secret material.** Identifiers only — never the secret.
 - **Multiple `time.Now()` for timestamps that should share one instant.** Capture once, reuse.
-- **Suppressing span reporting for an error.** Every span'd layer reports every error it sees —
-  raised, propagated, or mapped to a transport status. No identity-keyed `reportUnexpected`
-  helpers; no bare `return nil, ErrXxx` from a layer that has a span.
+- **Suppressing span reporting for an error.** Every span'd layer reports every error it sees — no
+  identity-keyed `reportUnexpected` helper, no bare `return nil, ErrXxx` from a layer with a span.
 - **`new(T)` in a constructor.** Use `&T{}`.
 - **snake_case or run-together multi-word file names.** camelCase.
 - **Discarding an error without `_ =` and a why-comment.**

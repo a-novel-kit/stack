@@ -1,17 +1,16 @@
 ---
 name: write-bash-scripts
 description: >
-  Write, review, and maintain Bash shell scripts for Agora backend services. Use this skill
-  whenever creating or editing any .sh file — test runners, build scripts, publish scripts,
-  entrypoints, and env setup files. Covers error handling, cleanup traps, argument validation,
-  service readiness waits, and cross-platform portability.
+  Write, review, and maintain Bash shell scripts for Agora backend services. Use whenever creating
+  or editing any .sh file — test runners, build or publish scripts, entrypoints, env setup. Covers
+  error handling, cleanup traps, argument validation, service readiness waits, and portability.
 ---
 
 # Bash Script Writing Skill
 
-This skill governs how to write and maintain shell scripts in Agora backend services. All scripts
-live in `scripts/` (developer tooling) or `builds/` (container entrypoints). Read the relevant
-section for the task at hand; the conventions at the end apply to every script.
+Shell scripts in Agora backend services live in `scripts/` (developer tooling) or `builds/`
+(container entrypoints). Read the relevant section for the task at hand; the conventions at the end
+apply to every script.
 
 **Before writing or editing any script**, read the existing scripts in `scripts/` and `builds/` to
 understand the current patterns.
@@ -27,17 +26,15 @@ triggered from the repo's release workflow with a release-type selector (patch /
 It auto-detects whether the repo uses `pnpm-workspace.yaml` (recursive `pnpm version`) or not
 (root-only) and refreshes doc refs via `prepublish:doc` (`a-novel publish stamp`). The bash
 equivalents were deleted because each copy drifted independently (pnpm 10 → 11 broke two of
-three at once); there is no local release command to replace them.
+three at once); no local release command replaces them.
 
 **The security model for who can publish is server-side**, not script-side: GitHub branch
-protection on `master` AND tag protection on `v*` are what actually enforce "only X can release."
-The CLI's preflight is UX — it surfaces a 403 before any local mutation — but it is not a
-boundary. See [[reference-release-security]] and [[project-publish-cli-verb]] in the memory
-index for the full design.
+protection on `master` AND tag protection on `v*` enforce "only X can release." The CLI's preflight
+is UX — it surfaces a 403 before any local mutation — but it is not a boundary.
 
-In-container release steps (Docker image builds, npm publish on a pushed tag) are not in this
-skill's scope either — they live in the `a-novel-kit/workflows/` composite GitHub Actions and run
-on CI, not on a developer machine. Do not duplicate that logic in a bash script.
+In-container release steps (Docker image builds, npm publish on a pushed tag) are out of scope too —
+they live in the `a-novel-kit/workflows/` composite GitHub Actions and run on CI, not on a developer
+machine. Do not duplicate that logic in a bash script.
 
 ---
 
@@ -52,7 +49,7 @@ bash -n scripts/my-script.sh
 Then run the script in a safe context (local env, no production credentials) to verify runtime
 behaviour. For test runs, always go through `a-novel test` (per the `use-a-novel-cli` rule) —
 the bash test-runner scripts it replaced no longer exist. Never trigger the release workflow
-to test — it cuts a real release (pushes a tag, creates a GitHub Release).
+to test: it cuts a real release (pushes a tag, creates a GitHub Release).
 
 ---
 
@@ -72,8 +69,8 @@ set -e  # Exit immediately if any command returns non-zero.
 # ... body ...
 ```
 
-**`set -e`** is mandatory on every script. It ensures a failed command (e.g., a container that
-failed to build) stops execution immediately rather than silently continuing with broken state.
+**`set -e`** is mandatory on every script. A failed command (a container that failed to build, say)
+then stops execution immediately instead of continuing with broken state.
 
 **`#!/bin/bash`** — always use bash, not `/bin/sh`. The scripts use bash-specific features
 (`$OSTYPE`, `[[`, process substitution) and must not silently degrade under sh.
@@ -98,19 +95,18 @@ trap cleanup INT EXIT
 **Key rules:**
 
 - Register on `EXIT` and `INT` only — not `ERR`. With `set -e`, a failing command exits the shell,
-  which triggers `EXIT`. Adding `ERR` causes the cleanup to fire twice (once from ERR, once from
-  EXIT), producing spurious error messages.
-- Name the function `cleanup` (not `int_handler` or similar) — the name should describe what it
-  does, not when it is called.
-- Register the trap before sourcing env files or starting any processes, so cleanup is armed as
-  early as possible.
+  which triggers `EXIT`; adding `ERR` fires the cleanup twice and prints spurious errors.
+- Name the function `cleanup` (not `int_handler` or similar) — the name describes what it does, not
+  when it is called.
+- Register the trap before sourcing env files or starting any process, so cleanup is armed as early
+  as possible.
 - At the end of normal execution, let the `EXIT` trap handle teardown — do not call `down` twice.
 
 ---
 
 ## Argument Validation
 
-Every script that takes arguments must validate them at the top, before doing any work:
+Every script that takes arguments validates them at the top, before doing any work:
 
 ```bash
 if [ $# -ne 1 ]; then
@@ -122,8 +118,7 @@ fi
 - Use `printf` (not `echo`) for error messages — `echo` behaviour with flags (`-e`, `-n`) differs
   between implementations.
 - Write error messages to stderr (`>&2`).
-- Use `$0` for the script name so error messages are correct regardless of how the script is
-  invoked.
+- Use `$0` for the script name, so the message stays correct however the script was invoked.
 
 ---
 
@@ -139,8 +134,8 @@ sed -i -E "s|pattern|replace|g" $2
 sed -i -E "s|pattern|replace|g" "$2"
 ```
 
-**Exceptions**: intentionally word-split variables (e.g., a space-separated list of Go packages
-passed as separate arguments to `gotestsum`) must be left unquoted and suppressed with
+**Exceptions**: a deliberately word-split variable (a space-separated list of Go packages passed as
+separate arguments to `gotestsum`, say) stays unquoted, suppressed with
 `# shellcheck disable=SC2046`:
 
 ```bash
@@ -173,14 +168,14 @@ done
 
 - Use a 30–60s timeout depending on how long the service takes to start (60s for standalone images
   that run migrations and key rotation before starting the server).
-- The container name format is `${APP_NAME}_${service_name}_1` where `APP_NAME` is the compose
+- The container name format is `${APP_NAME}_${service_name}_1`, where `APP_NAME` is the compose
   project name and `service_name` is the service key in the compose file.
 - Redirect `podman inspect` stderr to `/dev/null` — the container might not exist yet at the
   first poll.
 
 ### Waiting for an HTTP endpoint (REST server)
 
-Use `curl -sf` (suppress progress, fail on HTTP error) to poll the health endpoint:
+Poll the health endpoint with `curl -sf` (suppress progress, fail on HTTP error):
 
 ```bash
 elapsed=0
@@ -202,10 +197,9 @@ done
 
 ## Environment Variables
 
-Port and URL allocation is the `a-novel` daemon's job now (`a-novel run env <service>`);
-the old `scripts/setup-env.sh` files that hand-rolled random ports are gone. If a script
-genuinely needs an env file, use the assign-if-unset pattern so pre-exported values are
-preserved:
+Port and URL allocation is the `a-novel` daemon's job (`a-novel run env <service>`); the old
+`scripts/setup-env.sh` files that hand-rolled random ports are gone. A script that genuinely needs
+an env file uses the assign-if-unset pattern, so pre-exported values survive:
 
 ```bash
 POSTGRES_PORT="${POSTGRES_PORT:=5432}"
@@ -233,34 +227,32 @@ case "$OSTYPE" in
 esac
 ```
 
-GNU `sed` takes `-i` with no argument for in-place editing. BSD `sed` (macOS) requires `-i ''`.
-Using `$OSTYPE` is reliable in bash on both platforms.
+GNU `sed` takes `-i` with no argument for in-place editing; BSD `sed` (macOS) requires `-i ''`.
+`$OSTYPE` is reliable in bash on both platforms.
 
 Other portability notes:
 
-- `printf` instead of `echo` for formatted output — behaviour is consistent across platforms.
+- `printf` instead of `echo` for formatted output — its behaviour is consistent across platforms.
 - `[ ... ]` (POSIX test) instead of `[[ ... ]]` in conditionals unless bash-specific features
-  (regex, `&&`, `||` inside test) are needed — both work in bash but `[` is clearer about intent.
-- Avoid `timeout <N> <cmd>` — not available on macOS without Homebrew coreutils. Use a polling
-  loop with an elapsed counter instead.
-- Avoid `readlink -f` — not available on macOS. Use `realpath` if available, or compute absolute
-  paths relative to `$PWD` or `$0`.
+  (regex, `&&`, `||` inside test) are needed — both work in bash, but `[` states the intent.
+- Avoid `timeout <N> <cmd>` — absent on macOS without Homebrew coreutils. Use a polling loop with an
+  elapsed counter instead.
+- Avoid `readlink -f` — absent on macOS. Use `realpath` if available, or compute absolute paths
+  relative to `$PWD` or `$0`.
 
 ---
 
 ## Output Formatting and Colors
 
-**The first question for any new user-facing script is "does this belong in the
-a-novel CLI instead?"** The stack's bash inventory shrunk to near-zero when
-sync-repos and bot-token were ported to `a-novel core sync` and
-`a-novel core bot-comment`. New tooling should prefer Cobra subcommands
-under `cli/internal/cli/` over a fresh `scripts/*.sh` — Go gives us testable
-flag parsing, real error types, and consistent help output. The only scripts
-that stay in bash are tiny shims (often consumed by CI) where adding a Cobra
-command would be heavier than the script itself.
+**The first question for any new user-facing script is "does this belong in the a-novel CLI
+instead?"** New tooling belongs in a Cobra subcommand under `cli/internal/cli/` rather than a fresh
+`scripts/*.sh` — Go gives us testable flag parsing, real error types, and consistent help output.
+The stack's bash inventory shrunk to near-zero when sync-repos and bot-token became
+`a-novel core sync` and `a-novel core bot-comment`. Only tiny shims (often consumed by CI), where a
+Cobra command would outweigh the script itself, stay in bash.
 
-For the rare remaining bash, keep formatting minimal: plain `printf`, no shared
-helper library, and honor `NO_COLOR` if you emit colors at all.
+For that rare bash, keep formatting minimal: plain `printf`, no shared helper library, and honor
+`NO_COLOR` if you emit colors at all.
 
 ```bash
 # Honor NO_COLOR up front; everything else can branch on $RED/$RESET etc.
@@ -278,42 +270,37 @@ printf "%s✗%s %s\n" "${RED}"   "${RESET}" "remote unreachable" >&2
 
 - Errors and warnings go to stderr (`>&2`). Successes and progress go to stdout.
 - Use `printf '%s\n'` over `echo` for portability.
-- Colors: green = success, yellow = warning, red = error. Never set backgrounds;
-  avoid bright-white / bright-black — they vanish on light or dark themes.
-- Honor `NO_COLOR` (set → never emit escapes). Don't gate on `FORCE_COLOR` unless a
-  caller asks for it — keep the scaffolding small.
-- Do not use `tr ' ' '─'` to build separator lines — `tr` is byte-oriented and will
-  corrupt the multi-byte UTF-8 sequence (`0xE2 0x94 0x80`) by replacing each space
-  with only `0xE2`. Use a pure-bash loop or pre-built constant string.
+- Colors: green = success, yellow = warning, red = error. Never set backgrounds; avoid bright-white
+  and bright-black — they vanish on light or dark themes.
+- Honor `NO_COLOR` (set → never emit escapes). Don't gate on `FORCE_COLOR` unless a caller asks for
+  it — keep the scaffolding small.
+- Never build separator lines with `tr ' ' '─'`. `tr` is byte-oriented, so it corrupts the
+  multi-byte UTF-8 sequence (`0xE2 0x94 0x80`) by replacing each space with only `0xE2`, and
+  terminals render the invalid output as garbled `??` glyphs. Use a pure-bash loop, `printf -v`, or
+  a pre-built constant string.
 
-Long-lived interactive UX (rich progress, multi-phase banners, spinners) is the
-Go CLI's job, not bash's. If a bash script is growing a banner/log_step framework,
-that's a signal it should move under `a-novel` instead.
+Long-lived interactive UX (rich progress, multi-phase banners, spinners) is the Go CLI's job. A bash
+script growing a banner/log_step framework should move under `a-novel` instead.
 
 ---
 
 ## Common Pitfalls
 
-- **Missing `set -e`.** Without it, a failed `podman compose up --build` is silently ignored and
-  subsequent commands (migrations, tests) run against nonexistent containers, producing confusing
-  "connection refused" errors instead of a clear build failure.
-- **`trap cleanup INT EXIT ERR`.** Adding `ERR` to the trap fires cleanup twice when `set -e`
-  triggers an exit (ERR fires, then EXIT fires). Use `INT EXIT` only.
-- **No readiness wait after `compose up -d`.** The `-d` flag returns immediately after containers
-  are created, not when they're healthy. Always poll for health before running tests or migrations.
-- **Unquoted `$1` / `$2` in function calls.** Breaks on paths or version strings containing
-  spaces. Quote all variable expansions unless intentionally word-splitting.
-- **`echo` for error messages.** Use `printf "...\n" >&2` — `echo` behaviour with `-e` and `-n`
-  is implementation-defined.
-- **Running node twice for the same value.** If `node -p "require('./package.json').version"` is
-  called multiple times, cache the result in a variable:
+Most entries are stated in full in the sections above; this list is the review checklist.
+
+- **Missing `set -e`.** A failed `podman compose up --build` is then ignored, and the migrations and
+  tests that follow run against nonexistent containers — a confusing "connection refused" instead of
+  a clear build failure.
+- **`trap cleanup INT EXIT ERR`.** Use `INT EXIT` only; `ERR` fires the cleanup twice.
+- **No readiness wait after `compose up -d`.** Poll for health before running tests or migrations.
+- **Unquoted `$1` / `$2` in function calls.** Breaks on paths and version strings containing spaces.
+- **`echo` for error messages.** Use `printf "...\n" >&2`.
+- **Missing argument validation.** Check `$#` at the top and print usage to stderr.
+- **Running node twice for the same value.** Cache the result of a repeated
+  `node -p "require('./package.json').version"` in a variable:
   ```bash
   VERSION="$(node -p "require('./package.json').version")"
   ```
-- **Missing argument validation.** A script called with wrong arity produces a confusing error
-  from deep inside the script body. Always check `$#` at the top and print usage to stderr.
 - **`source` instead of `.`.** Both work in bash, but `.` is POSIX. Use `.` for consistency.
-- **`tr ' ' '─'` for separator lines.** `tr` operates on bytes, so a multi-byte
-  UTF-8 character like `─` (`0xE2 0x94 0x80`) gets reduced to its first byte and
-  the output is invalid UTF-8 (terminals render it as garbled `??` glyphs). Build
-  Unicode-rule strings with a pure-bash loop or `printf -v` instead.
+- **`tr ' ' '─'` for separator lines.** It corrupts the multi-byte UTF-8 character; build the rule
+  with a pure-bash loop or `printf -v`.

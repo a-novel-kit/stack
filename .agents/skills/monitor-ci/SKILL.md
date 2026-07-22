@@ -1,32 +1,30 @@
 ---
 name: monitor-ci
 description: >
-  Monitor GitHub Actions CI runs on a pushed branch or open PR, classify failures, and apply
-  autonomous fixes where safe. Use this skill whenever waiting on CI, investigating a failing
-  check, deciding whether a failure is real or flaky, or iterating a branch toward green.
-  Covers the CI job map for Agora backend services and the retry/fix loop. Pairs with
-  open-pull-request (which hands off here after a push) and git-conventions (for fix commits).
+  Monitor GitHub Actions CI runs on a pushed branch or open PR, classify failures, and fix them
+  where safe. Use whenever waiting on CI, investigating a failing check, judging a failure real or
+  flaky, or iterating a branch to green. Covers the Agora CI job map and the retry/fix loop.
+  Pairs with open-pull-request (the post-push handoff) and git-conventions.
 ---
 
 # Monitor CI
 
-This skill governs how Claude watches CI after pushing to a branch, classifies failures, and
-applies fixes. CI is the final gate before review — failures must be resolved, not ignored.
-But CI is also long-running and noisy, and unstructured polling burns context. This skill
-codifies which commands to run, how often, and how to act on each failure type.
+CI is the final gate before review, and every failure must be resolved. It is also long-running
+and noisy, and unstructured polling burns context, so this skill fixes which commands to run, how
+often, and how to act on each failure type.
 
-The loop is: **observe → classify → fix → re-push → re-observe**, with a retry budget. When
+The loop is **observe → classify → fix → re-push → re-observe**, with a retry budget. When
 the budget runs out, stop and escalate.
 
 ---
 
 ## CI Job Map (typical Agora service repo)
 
-The `main` workflow on Agora service repos under `a-novel/service-*` runs on every push
-to any branch. The job set varies by repo — the table below captures the common surface
-across those services. For the actual jobs on the current checkout, run `gh pr checks
-<n>` (or read `.github/workflows/main.yaml`) and intersect with the rows below; jobs
-that aren't listed here are either repo-specific or downstream of a base table entry.
+The `main` workflow on Agora service repos under `a-novel/service-*` runs on every push to any
+branch. The job set varies by repo; the table below is the common surface across those services.
+For the jobs on the current checkout, run `gh pr checks <n>` (or read
+`.github/workflows/main.yaml`) and intersect with the rows below; anything unlisted is
+repo-specific or downstream of a base table entry.
 
 | CI Job                        | What it checks                             | Local equivalent              | Typical failure                                                              |
 | ----------------------------- | ------------------------------------------ | ----------------------------- | ---------------------------------------------------------------------------- |
@@ -49,14 +47,13 @@ that aren't listed here are either repo-specific or downstream of a base table e
 | `report-codecov`              | Coverage upload, runs on **every branch**  | (none)                        | Upload failure can still mark the run failed in PR checks; usually transient |
 
 `test` blocks most application `build-*` jobs (`build-grpc`, `build-rest`,
-`build-standalone-*`, `build-job-rotate-keys`). When `test` fails those downstream jobs
-are cancelled — fix `test` first before looking at them. However, `build-database` does
-**not** depend on `test`, and `build-migrations` depends only on `build-database`, so
-failures in those two surface independently and need their own diagnosis.
+`build-standalone-*`, `build-job-rotate-keys`); when it fails they are cancelled, so fix `test`
+first. `build-database` does **not** depend on `test`, and `build-migrations` depends only on
+`build-database`, so failures in those two surface independently and need their own diagnosis.
 
 **Name a new job by its lane.** A check context is always lane-suffixed — `test-go`, `test-node`,
-`lint-go`, `lint-node`, `lint-proto`, `generated-go` — and never a bare verb. A repo holding both Go
-and JS cannot have two jobs called `test`, and the repo-config discovery map cannot tell which lane a
+`lint-go`, `lint-node`, `lint-proto`, `generated-go` — never a bare verb. A repo holding both Go and
+JS cannot have two jobs called `test`, and the repo-config discovery map cannot tell which lane a
 bare `test` belongs to. The bare `test` above is legacy, still emitted by repos not yet migrated.
 
 ---
@@ -88,10 +85,10 @@ Possible states:
 
 ### 1.2 Polling pattern — do NOT use `gh run watch`
 
-`gh run watch` blocks the terminal until the run finishes. In a Claude session it blocks the
-whole turn, which is both inefficient and wastes context if the run takes 10+ minutes.
+`gh run watch` blocks the terminal until the run finishes, which in a Claude session blocks the
+whole turn and burns context on a 10+ minute run.
 
-Instead, use the Bash tool's `run_in_background` parameter for the wait, then re-check:
+Use the Bash tool's `run_in_background` parameter for the wait, then re-check:
 
 ```bash
 # Start a background sleep matched to expected remaining time.
@@ -104,29 +101,25 @@ Run that with `run_in_background=true`, then on the next turn issue `gh pr check
 
 #### Use the wait window for a self-review
 
-CI waits are dead time otherwise — spend them reviewing your own work, so issues are
-caught (and ideally fixed) before a reviewer sees them rather than after. While a
-background wait is in flight, read the branch's own diff and check it critically:
+Spend the wait reviewing your own work, so issues are caught and fixed before a reviewer sees
+them. While a background wait is in flight, read the branch's own diff and check it critically:
 
 ```bash
 git diff master...HEAD          # or the stacked parent branch
 ```
 
-Look for: leftover debug/print statements, commented-out code, TODOs that should be
-resolved, missing or thin test coverage for the changed lines, error paths that don't
-report (see the every-span'd-layer rule), naming/layering drift from the relevant
-`write-*` skill, and anything the PR body claims that the diff doesn't actually do.
+Look for: leftover debug/print statements, commented-out code, unresolved TODOs, missing or
+thin test coverage for the changed lines, error paths that don't report (see the
+every-span'd-layer rule), naming/layering drift from the relevant `write-*` skill, and
+anything the PR body claims but the diff doesn't do.
 
-- If you find a clear defect, fix it like any CI finding (Phase 3): local-verify, new
-  follow-up commit, push — the push starts a fresh run, so the self-review and the CI
-  loop converge rather than compete.
-- If you find something arguable (a design trade-off, a deferred concern), don't
-  silently rewrite it — note it and surface it with the final CI report so the user
-  decides.
+- A clear defect is fixed like any CI finding (Phase 3): local-verify, follow-up commit,
+  push. The push starts a fresh run, so the self-review and the CI loop converge.
+- Something arguable (a design trade-off, a deferred concern) is surfaced, not silently
+  rewritten: note it and raise it in the final CI report so the user decides.
 
-Do the self-review once per branch (not on every poll); re-review only the new diff
-after a fix commit. This is a review of the change, not a re-audit of the whole repo —
-keep it scoped to `git diff`.
+Do the self-review once per branch, not on every poll; after a fix commit re-review only
+the new diff. Keep it scoped to `git diff` — this reviews the change, not the whole repo.
 
 Rule of thumb for sleep durations:
 
@@ -146,7 +139,7 @@ gh run view <run-id> --json jobs \
   --jq '.jobs[] | select(.conclusion=="failure") | {name, databaseId, conclusion}'
 ```
 
-This lists only the failing jobs by name and ID — the minimum needed to decide what to fix.
+That lists the failing jobs by name and ID, the minimum needed to decide what to fix.
 
 ### 1.4 Read ONLY the failed step logs
 
@@ -157,8 +150,8 @@ failing steps:
 gh run view <run-id> --log-failed --job <job-id>
 ```
 
-If the `--log-failed` output is still too large (sometimes thousands of lines for a test
-crash), pipe through `tail` or `grep` to narrow:
+If `--log-failed` is still too large (thousands of lines for a test crash), narrow it
+with `tail` or `grep`:
 
 ```bash
 gh run view <run-id> --log-failed --job <job-id> | tail -n 200
@@ -171,19 +164,17 @@ Never read the full run log unprefiltered. Never fetch logs for passing jobs.
 
 ## Phase 2: Classify
 
-Once you have the failed-step log, map the failure to one of these categories. The category
-determines the fix path.
+Map the failed-step log to one of these categories; the category determines the fix path.
 
 ### 2.1 `generated-go` failure
 
 **Symptom**: job fails with a message like `go generate definitions are not up-to-date`.
 
-**Root cause**: a `.proto` file or Go interface (used by a mock) changed without `make
-generate` being run afterward.
+**Root cause**: a `.proto` file or Go interface (used by a mock) changed without
+`pnpm generate:go` being run afterward.
 
-**Fix**: the original commit is already pushed, so a new commit is the only option —
-`git-conventions` forbids amending pushed history. The regenerated files land as their
-own follow-up:
+**Fix**: the original commit is already pushed and `git-conventions` forbids amending
+pushed history, so the regenerated files land as their own follow-up:
 
 ```bash
 pnpm generate:go
@@ -193,10 +184,10 @@ git commit -m "chore(gen): regenerate Go bindings for <scope>"
 git push
 ```
 
-This produces two commits for what would ideally be one (the proto/interface change
-plus its regen), but that is the cost of noticing after push. The "generated files
-belong in the same commit" guidance in `git-conventions` is a structure preference;
-the "never amend a pushed commit" rule is categorical and wins here.
+That splits the proto/interface change and its regen across two commits, the cost of
+noticing after push. The "generated files belong in the same commit" guidance in
+`git-conventions` is a structure preference; the "never amend a pushed commit" rule is
+categorical and wins here.
 
 ### 2.2 `lint-go` / `lint-proto` / `lint-node` failure
 
@@ -215,10 +206,9 @@ git push
 ```
 
 Use a `fix(<scope>): resolve lint findings` commit for trivial mechanical changes and a
-`refactor` or `fix` commit for more invasive rewrites. A noisy `fix(lint): ...` follow-up
-on a pushed branch is still better than an amend — `git-conventions` forbids amending
-pushed commits unconditionally, and the lint-fix commit can be squashed or absorbed by
-the PR author at merge time if the branch uses squash-merge.
+`refactor` or `fix` commit for invasive rewrites. `git-conventions` forbids amending pushed
+commits unconditionally, so a noisy `fix(lint): ...` follow-up is the right call; under
+squash-merge the PR author squashes or absorbs it at merge time.
 
 ### 2.3 `test` (Go unit) failure
 
@@ -235,18 +225,17 @@ the PR author at merge time if the branch uses squash-merge.
    a-novel test --type=go -y
    ```
 
-2. Read the failure carefully. Decide: **is the test wrong, or is the code wrong?**
+2. Decide from the failure: **is the test wrong, or is the code wrong?**
    - New test for behaviour the code doesn't yet implement → fix the code
    - Existing test that used to pass → fix the new code that broke it
    - Test assertion out of date vs. new intended behaviour → fix the test
    - Follow `write-go-service` / `write-go-tests` for the actual fix
 
-3. Re-run until green locally, then commit. `monitor-ci` always runs on an
-   already-pushed branch, so `git-conventions`' "never amend a pushed commit" rule
-   applies unconditionally:
-   - If the fix belongs with the feature: add a follow-up commit on the branch —
-     squash-merge at PR merge time (if configured) will collapse it.
-   - If it's a genuine separate fix: new `fix(<scope>)` commit.
+3. Re-run until green locally, then commit. This skill always runs on an already-pushed
+   branch, so `git-conventions`' "never amend a pushed commit" rule applies unconditionally:
+   - A fix belonging with the feature: follow-up commit on the branch, collapsed by
+     squash-merge at PR merge time (if configured).
+   - A genuine separate fix: new `fix(<scope>)` commit.
 
 4. Push and go back to Phase 1.
 
@@ -279,7 +268,7 @@ flake and investigate as real.
    a-novel test --type=pnpm -y    # starts REST standalone
    ```
 
-2. The failure usually means a contract mismatch between handlers and client:
+2. The failure usually means a contract mismatch between handler and client:
    - `test-pkg` failing → gRPC handler vs. `pkg/go` client drift — check `write-proto`
    - `test-pkg-js` failing → REST handler vs. `openapi.yaml` vs. `pkg/js/rest/` drift —
      all three must match, see `implement-feature`'s OpenAPI / REST / JS sync rule
@@ -292,15 +281,14 @@ flake and investigate as real.
 
 - **Go compilation error** in the image's entrypoint binary → the real failure is in Go
   source; fix via Phase 2.3 approach (edit, `go build ./...`, commit). The `build-*`
-  failure is a downstream symptom, not the root.
+  failure is a downstream symptom.
 - **Dockerfile syntax / COPY path wrong** → follow `write-dockerfiles` to fix
 - **Base image pull failure** → usually transient; retry with `gh run rerun --failed`
 - **Migration init script failure** (`build-database`, `build-migrations`) → follow
   `write-sql` for migration fixes
 
-Always read the `--log-failed` output before guessing. If the Go build fails, you'll see
-`undefined: Foo` or `type Bar has no field Baz` — those are Go issues to fix in source,
-not Dockerfile issues.
+Always read the `--log-failed` output before guessing. `undefined: Foo` or `type Bar has no
+field Baz` is a Go source issue, not a Dockerfile one.
 
 ### 2.6 `build-js` failure
 
@@ -322,26 +310,25 @@ After applying a fix:
 1. Re-run the relevant local target to confirm green (`a-novel test --type=go -y`, `pnpm lint:go`,
    `pnpm generate:go`, etc.)
 2. Create a new fix commit per `git-conventions`. Do not amend or rewrite history on
-   this already-pushed branch — doing so strands CI run logs and review threads
-   anchored to the old SHAs.
+   this already-pushed branch — an amend strands CI run logs and review threads anchored
+   to the old SHAs.
 3. Push. A push to the branch automatically triggers a new CI run.
 4. Return to Phase 1.
 
-Never push a fix without local verification. The goal of this loop is to use CI as
-confirmation, not as a test runner.
+Never push a fix without local verification. CI confirms the fix; it is not the test runner.
 
 ---
 
 ## Phase 4: Retry Budget and Escalation
 
-**Retry budget**: at most **3 fix attempts for the same root cause** before stopping and
-escalating to the user. If the same test keeps failing after two real fixes, the diagnosis
-is wrong — more guesses will waste time.
+**Retry budget**: at most **3 fix attempts for the same root cause**, then stop and escalate to
+the user. A test still failing after two real fixes means the diagnosis is wrong, and more
+guesses waste time.
 
 **Flake retry budget**: at most **2 reruns via `gh run rerun --failed`** for the same
-suspected-flaky job before treating it as real. If `test-pkg-js` fails three times with
-"connection refused" across three reruns, that's a genuine problem (container startup
-regression, service crash at boot) — switch to Phase 2.4 "real" investigation.
+suspected-flaky job before treating it as real. A `test-pkg-js` that fails all three times with
+"connection refused" — the original run plus both reruns — is a genuine problem (container startup
+regression, service crash at boot); switch to Phase 2.4 "real" investigation.
 
 **Escalate immediately (do not spend retry budget) when:**
 
@@ -350,33 +337,31 @@ regression, service crash at boot) — switch to Phase 2.4 "real" investigation.
   editing workflow files
 - The failure is on a master-only reporting job (`publish-docs`, `report-grc`) that does
   not gate merges — surface but do not fix unless asked
-- The failure is on `report-codecov` — it runs on every branch and can make the workflow
-  run appear failed in PR checks even when branch protection does not gate on it. Surface
-  it; investigate only if the user asks, or if the same failure reproduces across
-  consecutive runs (a real upload or config regression rather than a transient)
+- The failure is on `report-codecov` — it runs on every branch and can make the run appear
+  failed in PR checks even when branch protection does not gate on it. Surface it; investigate
+  only if the user asks, or if it reproduces across consecutive runs (a real upload or config
+  regression rather than a transient)
 - CI is failing _only on master_ after a merge — something slipped past review;
   surface immediately, never push an autonomous fix to master
 - The same fix would require editing files outside the current branch's scope — stop and
   ask
 
-**What escalation looks like**: surface to the user with (a) the failing job(s), (b) the
-root-cause hypothesis, (c) what has been tried, (d) why further attempts are not
-confidence-building.
+**What escalation looks like**: surface (a) the failing job(s), (b) the root-cause
+hypothesis, (c) what has been tried, (d) why further attempts are not confidence-building.
 
 ---
 
 ## Phase 5: When CI is Green
 
-- If this was a push to a feature branch without a PR → hand off to `open-pull-request`
-  if the user wants to open one
-- If this was a push to an open PR → surface the all-green state and stop. Merging is a
-  developer decision unless explicitly delegated.
-- Never merge autonomously. Never add `--auto-merge` flags without an explicit instruction.
+- Push to a feature branch without a PR → hand off to `open-pull-request` if the user
+  wants one opened
+- Push to an open PR → surface the all-green state and stop. Merging is a developer
+  decision unless explicitly delegated (see Safety Rules).
 
 This green report is the **terminal state that completes the task** when CI was reached
-via `open-pull-request` Phase 7 — do not consider that task done until you have reported
-it (or, per Phase 4, reported an escalated/blocked state instead). Include in the report
-anything the Phase 1.2 self-review surfaced that you did not fix yourself.
+via `open-pull-request` Phase 7 — that task is not done until you have reported it (or,
+per Phase 4, an escalated/blocked state instead). Include anything the Phase 1.2
+self-review surfaced that you did not fix yourself.
 
 ---
 
@@ -386,13 +371,13 @@ anything the Phase 1.2 self-review surfaced that you did not fix yourself.
   via the PR branch.
 - **Never `gh workflow run` or `gh run cancel`** without explicit user permission — those
   affect shared CI state.
-- **Never skip pre-commit hooks** (`--no-verify`) to make CI pass. If a local hook blocks
-  a commit, the same check will block CI; fix the underlying issue.
-- **Never `gh pr merge`** unless the user explicitly says to merge.
-- **Never edit `.github/workflows/*.yaml` to silence a failure** — if a check is genuinely
-  obsolete, that's a separate conversation with the user.
-- **Never autonomously re-run a failing job more than twice.** Beyond that, the failure
-  is not a flake.
+- **Never skip pre-commit hooks** (`--no-verify`) to make CI pass. A local hook that blocks
+  a commit blocks CI too; fix the underlying issue.
+- **Never `gh pr merge`**, and never add an `--auto-merge` flag, unless the user explicitly
+  says to merge.
+- **Never edit `.github/workflows/*.yaml` to silence a failure** — a genuinely obsolete check
+  is a separate conversation with the user.
+- **Never autonomously re-run a failing job more than twice** (the Phase 4 flake retry budget).
 
 ---
 

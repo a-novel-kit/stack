@@ -1,24 +1,21 @@
 ---
 name: write-sql
 description: >
-  Write, review, and maintain SQL files for Agora backend services. Use this skill whenever
-  creating or editing SQL files — DAO query files (internal/dao/*.sql), schema migrations
-  (internal/models/migrations/*.sql), or any raw SQL statement embedded in Go. Applies to
-  all PostgreSQL-targeting SQL: SELECT/INSERT/UPDATE/DELETE queries, DDL (tables, views,
-  indexes, constraints), materialized views, and scheduled pg_cron jobs.
+  Write, review, and maintain PostgreSQL SQL for Agora backend services. Use whenever creating
+  or editing SQL — DAO query files (internal/dao/*.sql), schema migrations
+  (internal/models/migrations/*.sql), or raw SQL embedded in Go: SELECT/INSERT/UPDATE/DELETE
+  queries, DDL (tables, views, indexes, constraints), materialized views, pg_cron jobs.
 ---
 
 # SQL Writing Skill
 
-This skill governs how to write and maintain SQL files in Agora backend services. SQL appears
-in two distinct contexts — **DAO query files** and **schema migrations** — each with its own
-lifecycle and risk profile. Read the relevant section for the task at hand; the PostgreSQL
-conventions at the end apply to both.
+SQL appears in two contexts — **DAO query files** and **schema migrations** — each with its own
+lifecycle and risk profile. Read the section for the task at hand; the PostgreSQL conventions at
+the end apply to both.
 
-**Before writing any SQL**, read the existing files in the same directory. DAO queries and
-migrations follow established patterns — follow them exactly. For migrations in particular,
-also read the most recent `.up.sql` and `.down.sql` to understand the current schema state
-before changing it.
+**Before writing any SQL**, read the existing files in the same directory and follow their
+patterns exactly. For migrations, also read the most recent `.up.sql` and `.down.sql` to learn
+the current schema state before changing it.
 
 ---
 
@@ -32,16 +29,13 @@ pnpm format:go  # only when the SQL change rippled into Go files
 pnpm lint:go    # catches any Go-level issues introduced by the SQL change
 ```
 
-**`pnpm format` is the one that matters for SQL.** SQL files are formatted by Prettier
-(via `prettier-plugin-sql`), which lives behind `pnpm format`. The Go-only `pnpm format:go`
-script does not touch SQL — running just that after a SQL edit will leave indentation,
-comment, and whitespace drift in place. CI's `lint-node` stage runs `prettier --check`,
-which will fail on the unformatted file even when Go lint is clean. If you edited any
-`.sql` file, you must run `pnpm format` before pushing.
+**`pnpm format` is the one that matters for SQL.** The Go-only `pnpm format:go` does not touch
+`.sql`, so running just that after a SQL edit leaves indentation, comment, and whitespace drift
+in place. CI's `lint-node` stage runs `prettier --check` and fails on the unformatted file even
+when Go lint is clean. Run `pnpm format` before pushing any `.sql` edit.
 
-After formatting and linting, invoke the **`write-go-tests` skill** to verify (or update) the
-DAO test for the changed query. SQL changes often affect query results in ways that existing
-test fixtures will surface.
+Then invoke the **`write-go-tests` skill** to verify or update the DAO test for the changed
+query. SQL changes often shift query results in ways existing fixtures surface.
 
 ---
 
@@ -52,8 +46,7 @@ the companion Go file with `//go:embed` and executed via bun's parameterized que
 
 ### File Naming
 
-DAO SQL files follow the same naming convention as the Go file they serve, with `.sql`
-replacing `.go`:
+DAO SQL files mirror the Go file they serve, with `.sql` replacing `.go`:
 
 | Go file             | SQL file             |
 | ------------------- | -------------------- |
@@ -65,7 +58,7 @@ One SQL file per DAO operation. Never combine multiple queries in one file.
 
 ### Embedding
 
-The SQL file is embedded at package level in the companion `.go` file using an unexported
+The SQL file is embedded at package level in the companion `.go` file with an unexported
 variable:
 
 ```go
@@ -74,7 +67,9 @@ var jwkSearchQuery string
 ```
 
 The `//go:embed` directive and its variable must be at package level — never inside a function.
-Never inline SQL as a raw Go string literal.
+Never inline DAO SQL as a raw Go string literal, and never build SQL with `fmt.Sprintf`. Short,
+parameterless maintenance SQL in `cmd/` entry points (e.g. `REFRESH MATERIALIZED VIEW`) may stay
+an inline raw string, being a one-time operational command rather than a reusable query.
 
 ### Parameterization
 
@@ -99,8 +94,7 @@ tx.NewRaw(jwkSearchQuery, request.Usage, KeysMaxBatchSize).Scan(ctx, &entities)
 ```
 
 Never use PostgreSQL's native `$1`, `$2`, ... syntax in DAO files — that is the `pgx` driver
-convention and is not substituted by bun's `NewRaw`. Never build SQL by concatenating strings
-or using `fmt.Sprintf`.
+convention and is not substituted by bun's `NewRaw`. Never build SQL by concatenating strings.
 
 ### Return Patterns
 
@@ -110,7 +104,12 @@ or using `fmt.Sprintf`.
   `RETURNING *`:
 
   ```sql
-  INSERT INTO keys (id, private_key, ...) VALUES (?0, ?1, ...) RETURNING *;
+  INSERT INTO
+    keys (id, private_key, created_at)
+  VALUES
+    (?0, ?1, ?2)
+  RETURNING
+    *;
   ```
 
   ```sql
@@ -152,17 +151,15 @@ go through a migration — no out-of-band DDL.
 YYYYMMDDHHMMSS_<description>.<up|down>.sql
 ```
 
-The timestamp is the current wall-clock time **down to the second**. Always run
-`date '+%Y%m%d%H%M%S'` immediately before creating the files to get the exact value. Never
-truncate to minutes, never guess, never reuse an existing timestamp.
+The timestamp is the current wall-clock time **down to the second**: run
+`date '+%Y%m%d%H%M%S'` immediately before creating the files. Never truncate to minutes, guess,
+or reuse an existing timestamp.
 
 The description uses underscores and is as specific as possible:
 
 ```
 20250113182800_keys_table.up.sql
 20250113182800_keys_table.down.sql
-20250713173700_improve_expiry_management.up.sql
-20250713173700_improve_expiry_management.down.sql
 20260416152344_add_user_soft_delete.up.sql
 20260416152344_add_user_soft_delete.down.sql
 ```
@@ -172,19 +169,18 @@ The description uses underscores and is as specific as possible:
 **Every migration requires a paired `.up.sql` and `.down.sql`.** The down migration must
 fully reverse the up migration so that a rollback restores the exact prior schema state.
 
-When reversal is inherently destructive (e.g., the down migration drops a table and loses
-all data), that is expected — document it with a comment and use `IF EXISTS` guards.
+When reversal is inherently destructive (the down migration drops a table and loses all its
+data), that is expected — document it with a comment and use `IF EXISTS` guards.
 
-If a change is genuinely irreversible (e.g., dropping a column that held data), still write
-the best approximation of a reversal (e.g., re-add the column without its data) and add a
-comment acknowledging the limitation.
+If a change is irreversible (dropping a column that held data), still write the closest
+approximation of a reversal — re-add the column without its data — and comment on the
+limitation.
 
 ### Immutability of Committed Up Migrations
 
 **Never modify a `.up.sql` file that has been merged to `master`.** Migrations are applied
-once, in order, and are never re-run. Editing an applied migration has no effect on any
-environment where it already ran, and silently creates a divergence between the codebase
-and the actual schema.
+once, in order, and are never re-run. Editing an applied migration has no effect where it
+already ran, and silently diverges the codebase from the actual schema.
 
 Permitted exceptions — changes with no runtime effect:
 
@@ -199,13 +195,13 @@ may be edited freely**, since they have not yet been applied to any shared envir
 
 #### Exception: `service-template` edits its initial migrations in place
 
-**`a-novel/service-template` is exempt from the immutability rule.** It is a template: nothing is
-ever published from it and nothing is ever deployed from it, so there is no environment where a
-migration has already been applied and no divergence to create. The rule's entire premise is absent.
+**`a-novel/service-template` is exempt from the immutability rule.** Nothing is ever published or
+deployed from a template, so no environment has already applied its migrations and there is no
+divergence to create. The rule's entire premise is absent.
 
 In that repo, change the schema by **editing the initial migration directly** — do not add a new one.
-A template's migration set is boilerplate every generated service inherits, and a second migration
-that only exists to patch the first is boilerplate with no purpose, propagated forever.
+Every generated service inherits the template's migration set, so a second migration that only
+patches the first is propagated forever with no purpose.
 
 ```sql
 -- service-template: edit 20250306000000_items_table.up.sql in place
@@ -223,9 +219,9 @@ deployed environments and follows the immutability rule above without exception.
 
 ### Statement Splitting: `--bun:split`
 
-bun's migration runner executes each file as a single database round-trip by default. When
-a migration contains statements that must execute sequentially (where B depends on A having
-committed), separate them with `--bun:split`:
+bun's migration runner executes each file as a single database round-trip by default. When a
+migration holds statements that must run sequentially (B depends on A having committed),
+separate them with `--bun:split`:
 
 ```sql
 -- Step 1: drop the old plain view
@@ -246,10 +242,9 @@ REFRESH MATERIALIZED VIEW active_keys;
 SELECT cron.schedule('refresh-active-keys', '0 * * * *', $$...$$);
 ```
 
-Statements that form one logical unit and have no ordering dependency (e.g., `CREATE TABLE`
-followed by `CREATE INDEX` on that table) do not need splitting — PostgreSQL handles multiple
-DDL statements in one round-trip. Use `--bun:split` only when a later statement genuinely
-requires an earlier one to have committed first.
+Statements with no ordering dependency (`CREATE TABLE` then `CREATE INDEX` on that table) need
+no split — PostgreSQL handles multiple DDL statements in one round-trip. Split only when a later
+statement requires an earlier one to have committed first.
 
 ### Down Migration Ordering
 
@@ -278,8 +273,8 @@ CREATE VIEW active_keys AS (...);
 
 ### Guard Clauses in Down Migrations
 
-In down migrations, always use `IF EXISTS` so that a partial rollback or a re-application
-does not fail on missing objects:
+In down migrations, always use `IF EXISTS` so a partial rollback or a re-application does not
+fail on missing objects:
 
 ```sql
 DROP TABLE IF EXISTS keys;
@@ -291,10 +286,10 @@ DROP VIEW IF EXISTS active_keys;
 DROP MATERIALIZED VIEW IF EXISTS active_keys;
 ```
 
-In up migrations, use `IF NOT EXISTS` only when the migration is explicitly designed to be
-idempotent (e.g., adding a standalone index that is safe to re-apply). Do not use it for
-table creation — the timestamp uniqueness makes re-application impossible under normal
-operation, and masking accidental re-application is worse than surfacing it as an error.
+In up migrations, use `IF NOT EXISTS` only where the migration is designed to be idempotent
+(adding a standalone index that is safe to re-apply). Do not use it for table creation — the
+timestamp uniqueness makes re-application impossible under normal operation, and masking an
+accidental re-application is worse than surfacing it as an error.
 
 ### pg_cron Scheduled Jobs
 
@@ -315,9 +310,8 @@ SELECT
   cron.unschedule ('refresh-active-keys');
 ```
 
-Job names are global within the PostgreSQL instance. Use a descriptive, service-scoped
-name: `refresh-active-keys`, not `refresh`. Avoid generic names that could collide with
-jobs from other services.
+Job names are global within the PostgreSQL instance, so a generic name collides with jobs from
+other services. Use a descriptive, service-scoped one: `refresh-active-keys`, not `refresh`.
 
 ### Materialized Views
 
@@ -332,14 +326,14 @@ CREATE UNIQUE INDEX active_keys_id_idx ON active_keys (id);
 
 PostgreSQL does not inherit constraints or indexes from the source table into a materialized
 view. Without the unique index, `REFRESH MATERIALIZED VIEW CONCURRENTLY` silently fails at
-runtime (the scheduler's hourly job runs but does nothing). Always add the unique index in
-the same migration that creates the view, or immediately follow with a separate migration if
-the view already exists.
+runtime (the scheduler's hourly job runs but does nothing). Add the unique index in the same
+migration that creates the view, or in an immediate follow-up migration if the view already
+exists.
 
 ### Migration Comments
 
-Explain the **why**, not the **what**. The SQL already says what it does; comments should
-explain why the change was necessary or why a particular approach was chosen:
+Explain **why** — the SQL already says what it does. Comment on why the change was necessary or
+why a particular approach was chosen:
 
 ```sql
 -- Converts active_keys from a plain view to a materialized view for read performance,
@@ -414,8 +408,8 @@ making values round-trippable through Go's `time.Time` without drift. Never use 
 (no timezone) — timezone-naive timestamps cause subtle bugs in multi-region or DST-affected
 deployments.
 
-Never use `varchar(n)`. PostgreSQL has no performance advantage over `text`, and length
-constraints belong in the core layer unless they represent a true database invariant.
+Never use `varchar(n)`: PostgreSQL gains no performance from it over `text`, and length
+constraints belong in the core layer unless they are a true database invariant.
 
 ### Required Text Fields
 
@@ -467,9 +461,9 @@ database queries can still access them for auditing.
 
 ### Time References
 
-Use `CURRENT_TIMESTAMP` for the current time in both queries and DDL. Never use `NOW()` —
-it is equivalent but `CURRENT_TIMESTAMP` is the SQL standard form and is used consistently
-throughout this codebase:
+Use `CURRENT_TIMESTAMP` for the current time in both queries and DDL. Never use `NOW()` — the
+two are equivalent, but `CURRENT_TIMESTAMP` is the SQL standard form used throughout this
+codebase:
 
 ```sql
 WHERE
@@ -480,35 +474,19 @@ WHERE
 
 ## Common Pitfalls
 
-- **Modifying a committed up migration.** Create a new migration instead. The only permitted
-  changes are comments and whitespace.
-- **Missing down migration.** Every `.up.sql` requires a paired `.down.sql` that fully reverses
-  the schema change.
-- **Wrong timestamp.** Run `date '+%Y%m%d%H%M%S'` to get the exact current time before naming
-  a new migration pair. Never guess or truncate to minutes.
-- **Using `$1` in DAO query files.** bun's `NewRaw` uses `?0`, `?1`, ... (zero-indexed). The
-  `$1` syntax is for `pgx`-style drivers and is not substituted by bun.
-- **Inlining SQL in DAO Go files.** All DAO query SQL lives in `.sql` files embedded with
-  `//go:embed` at package level. No raw string literals, no `fmt.Sprintf` in `internal/dao/`.
-  Short, parameterless maintenance SQL in `cmd/` entry points (e.g., `REFRESH MATERIALIZED VIEW`)
-  is acceptable as an inline raw string, since it is a one-time operational command rather than a
-  reusable query.
-- **Reading from `keys` in a DAO query.** Always read from `active_keys`. The view enforces
-  expiry and soft-delete filtering automatically.
-- **Missing `RETURNING *` on mutating queries.** INSERT, UPDATE, and DELETE that return the
-  affected row use `RETURNING *`. The caller scans the result into the model struct.
-- **Missing `--bun:split` between dependent statements.** When statement B cannot execute
-  until statement A has committed (e.g., `REFRESH MATERIALIZED VIEW` after `CREATE`), add
-  `--bun:split` between them.
-- **Materialized view without a unique index.** `REFRESH MATERIALIZED VIEW CONCURRENTLY`
-  silently fails without a unique index on the view. Add `CREATE UNIQUE INDEX` in the same
-  migration that creates the view.
-- **Unordered down migration statements.** Drop objects in reverse creation order: unschedule
-  pg_cron jobs first, then drop dependent indexes, then drop views, then drop tables.
-- **Missing `IF EXISTS` in down migrations.** Always guard drops with `IF EXISTS` so that a
-  partial rollback does not fail.
-- **Using `varchar(n)`.** Use `text` instead; length constraints belong in the core layer.
-- **Using bare `timestamp` without timezone.** Always `timestamp(0) with time zone`.
-- **Using `NOW()` instead of `CURRENT_TIMESTAMP`.** Use `CURRENT_TIMESTAMP` for consistency.
-- **Generic pg_cron job names.** Use descriptive, service-scoped names (`refresh-active-keys`,
-  not `refresh`) to avoid collisions with jobs from other services sharing the same database.
+The rules above, as a pre-push checklist:
+
+- Modifying a committed up migration instead of writing a new one.
+- Shipping an `.up.sql` with no paired `.down.sql`.
+- Guessing or truncating a migration timestamp.
+- Using `$1` where bun expects `?0`.
+- Inlining DAO SQL in Go instead of `//go:embed`-ing a `.sql` file.
+- Reading from `keys` instead of `active_keys`.
+- Omitting `RETURNING *` on a mutating query whose row the caller needs.
+- Omitting `--bun:split` between statements that must commit in order.
+- Creating a materialized view without the unique index `REFRESH ... CONCURRENTLY` requires.
+- Dropping objects out of reverse creation order in a down migration.
+- Omitting `IF EXISTS` in a down migration.
+- `varchar(n)` over `text`, bare `timestamp` over `timestamp(0) with time zone`, `NOW()` over
+  `CURRENT_TIMESTAMP`.
+- Generic pg_cron job names that collide across services.

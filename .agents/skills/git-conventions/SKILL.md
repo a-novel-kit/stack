@@ -2,18 +2,16 @@
 name: git-conventions
 description: >
   Git workspace hygiene (clean-tree pre-flight, pruning a scratch stack), branch naming, commit
-  message format, and workflow conventions for Agora backend services. Use this skill whenever
-  starting or finishing work in a checkout, creating a branch, writing a commit message, or
-  deciding how to group changes. Referenced by implement-feature and any other skill that touches
-  git.
+  message format, and workflow conventions for Agora backend services. Use it whenever starting or
+  finishing work in a checkout, creating a branch, writing a commit message, or grouping changes.
+  Referenced by implement-feature and any other skill that touches git.
 ---
 
 # Git Conventions
 
 This skill governs workspace state, branch naming, and commit messages across all Agora backend
-services. Every
-branch and commit produced by Claude must follow these conventions exactly — they drive automation
-(Renovate, CI tagging, changelogs) and signal intent to reviewers at a glance.
+services. Every branch and commit produced by Claude follows these conventions exactly — they drive
+automation (Renovate, CI tagging, changelogs) and signal intent to reviewers at a glance.
 
 ---
 
@@ -43,9 +41,8 @@ All commits use the [Conventional Commits](https://www.conventionalcommits.org/)
 | `ci`       | CI/CD pipeline changes only                                   |
 | `revert`   | Reverting a previous commit                                   |
 
-Never mix types in one commit. A commit that adds a handler AND its test is still `feat` — the
-test is bundled because it's part of the same deliverable. A commit that only adds tests for
-existing code is `test`.
+Never mix types in one commit. A commit that adds a handler AND its test is still `feat` — the test
+ships as part of the same deliverable. A commit that only adds tests for existing code is `test`.
 
 ### Scopes
 
@@ -69,8 +66,8 @@ The scope is the area of the codebase affected. Use the layer name, not the feat
 | `deps`       | Dependency bumps (go.mod, package.json)         |
 | `skills`     | Skill documents (`.agents/skills/`)             |
 
-When a commit touches multiple scopes of the same weight, pick the primary one. When the commit
-is genuinely cross-cutting (e.g., a rename that touches every layer), omit the scope.
+When a commit touches several scopes of the same weight, pick the primary one. When the commit is
+genuinely cross-cutting (e.g., a rename that touches every layer), omit the scope.
 
 ### Description
 
@@ -79,8 +76,8 @@ is genuinely cross-cutting (e.g., a rename that touches every layer), omit the s
 - No period at the end
 - Describes the _what_, not the _how_ — readers see the diff; they need the intent
 
-The subject line carries the message. It is what `git blame`, `git log --oneline`, and the
-release notes show, and in practice it is as far as most readers get. Spend the effort there.
+The subject line carries the message. It is what `git blame`, `git log --oneline`, and the release
+notes show, and as far as most readers get. Spend the effort there.
 
 ### Body
 
@@ -95,11 +92,11 @@ show**:
 
 - A constraint that forced a non-obvious approach — the thing a future reader would otherwise
   "clean up" and break.
-- The failure a `fix` repairs, when the symptom is not visible in the diff (a race, a CI-only
-  break, a bug in a dependency).
+- The failure a `fix` repairs, when the symptom is invisible in the diff (a race, a CI-only break,
+  a bug in a dependency).
 
-When it does, keep it to one or two sentences — three lines wrapped at 72 characters is the
-ceiling. Never restate the subject at greater length, summarise the diff, or list touched files.
+Then keep it to one or two sentences — three lines wrapped at 72 characters is the ceiling. Never
+restate the subject at greater length, summarise the diff, or list touched files.
 
 Footers (`BREAKING CHANGE:`, `Closes`, `Co-Authored-By:`) are not prose and are never trimmed.
 
@@ -153,24 +150,23 @@ it can destroy hours of work that exists nowhere else. Leave it untouched and ta
 your own.
 
 **A clean pre-flight expires immediately.** It proves the checkout was free at that instant, and a
-checkout has exactly one HEAD with nothing holding it: a parallel session that runs `git checkout`
-between your `checkout -b` and your `commit` lands your commit on whatever branch it moved you to,
-and its own `reset` can then unlink it. For anything longer than a couple of commands, work in a
-worktree of your own instead — git refuses to check out a branch already checked out elsewhere, so
-the branch cannot be taken from you mid-task, and the shared object store keeps every commit you
-have already made.
+checkout has one HEAD that nothing holds: a parallel session running `git checkout` between your
+`checkout -b` and your `commit` lands your commit on whatever branch it moved you to, and its own
+`reset` can then unlink it. For anything longer than a couple of commands, work in a worktree of
+your own — git refuses to check out a branch already checked out elsewhere, so the branch cannot be
+taken from you mid-task, and the shared object store keeps every commit you have made.
 
 ```bash
 git worktree add <path-outside-the-repo> <branch>
 ```
 
-If a collision already happened, nothing is lost: the commit is unreferenced, not deleted. Find it
-in `git reflog`, point your branch at it with `git branch -f <branch> <sha>`, and put local `master`
-back with `git branch -f master origin/master`. Clear your own stray files out of the shared tree so
-the other session does not commit them, and leave everything of theirs alone.
+After a collision nothing is lost: the commit is unreferenced, not deleted. Find it in `git reflog`,
+point your branch at it with `git branch -f <branch> <sha>`, and put local `master` back with
+`git branch -f master origin/master`. Clear your own stray files out of the shared tree so the other
+session does not commit them, and leave everything of theirs alone.
 
-The daemon manages as many stacks as the machine supports. `A_NOVEL_STACKS` is its source of
-truth, formatted `name:/path,name:/path` with the first entry as the default; unset means a single
+The daemon manages as many stacks as the machine supports. `A_NOVEL_STACKS` is its source of truth,
+formatted `name:/path,name:/path` with the first entry as the default; unset means a single
 `default` stack at `~/git-projects/a-novel`.
 
 ```bash
@@ -180,12 +176,11 @@ a-novel core sync --root=<new-root>  # populate it with the whitelisted repos
 ```
 
 `stacks new` puts the checkout under the OS temp directory unless `--root` says otherwise, so a
-stack nobody prunes expires instead of accumulating. Add the printed entry to `A_NOVEL_STACKS`
-and `a-novel core restart` so daemon-backed verbs (`a-novel run …`) reach it, then work from
-there — see `use-a-novel-cli`.
+stack nobody prunes expires instead of accumulating. Add the printed entry to `A_NOVEL_STACKS` and
+`a-novel core restart` so daemon-backed verbs (`a-novel run …`) reach it, then work from there —
+see `use-a-novel-cli`.
 
-Resuming a branch **you** created earlier in the same session is your own work, not this case.
-Carry on with it.
+Resuming a branch **you** created earlier in the same session is your own work; carry on with it.
 
 ### When you are done
 
@@ -194,15 +189,14 @@ session mistakes for real work, plus containers and volumes that outlive the mac
 
 **Prune it when development ends: every change reviewed and approved.** Not at push, and not at
 green CI — review turns up work, and rebuilding a stack to answer one comment costs more than
-keeping it a few hours longer. Approval is the first moment nothing further is expected of the
-checkout.
+keeping it a few hours longer. Approval is the first moment the checkout is no longer needed.
 
 ```bash
 a-novel core stacks list           # what each stack is still holding
 a-novel core stacks prune <name>   # kill its targets + infra, clear its volumes, remove its files
 ```
 
-Prune covers all three of a stack's allocations. Deleting the root by hand covers one of them: the
+Prune covers all three of a stack's allocations. Deleting the root by hand covers one: the
 containers keep running on their host ports and the volumes stay in the container store, because
 neither ever lived in the stack directory.
 
@@ -230,20 +224,15 @@ exists to prevent.
 
 ```
 feat/proto/add-key-revoke-rpc
-feat/migrations/add-revoked-keys-table
-feat/dao/jwk-revoke
-feat/core/jwk-revoke
 feat/handlers/grpc-jwk-revoke
 fix/dao/search-returns-deleted-keys
 refactor/core/extract-key-rotation-logic
-chore/builds/add-rotate-keys-dockerfile
 chore/skills/feature-workflow
 docs/pkg/update-client-examples
-feat/pkg-js/add-rotate-endpoint
 ```
 
-Branch names are lowercase kebab-case only. No underscores, no slashes inside a segment, no
-version numbers unless it's a release branch.
+Branch names are lowercase kebab-case only. No underscores, no slashes inside a segment, no version
+numbers unless it's a release branch.
 
 ---
 
@@ -269,13 +258,13 @@ EOF
 ### Rules
 
 - **A commit is its subject line.** Add a body only when it says something the subject and the
-  diff cannot, and keep it to a sentence or two — see [Body](#body).
-- **One logical unit per commit.** A DAO file + its test = one commit. A handler + its test = one
-  commit. A migration file = one commit. Never combine DAO + service in a single commit.
-- **Generated files belong in the same commit as the change that necessitated them.** Proto Go
-  bindings (`internal/models/proto/gen/`) and mock files (`internal/handlers/mocks/`,
-  `internal/core/mocks/`) are generated artifacts. Do not commit them separately — stage them
-  together with the `.proto` or interface change that required `pnpm generate:go`.
+  diff cannot — see [Body](#body).
+- **One logical unit per commit.** A DAO file + its test = one commit; a migration file = one
+  commit. Never combine DAO + service in a single commit.
+- **Generated files belong in the same commit as the change that required them.** Proto Go bindings
+  (`internal/models/proto/gen/`) and mocks (`internal/handlers/mocks/`, `internal/core/mocks/`)
+  never get their own commit — stage them with the `.proto` or interface change that required
+  `pnpm generate:go`.
 - **Never commit secrets.** .env files, APP_MASTER_KEY values, real credentials.
 - **Never skip hooks** (`--no-verify`) unless explicitly asked.
 - **Never amend a pushed commit.** Create a new commit instead.
@@ -285,7 +274,7 @@ EOF
 
 ## Pull Request Description
 
-When opening a PR (via `gh pr create`), use this template:
+Open a PR (via `gh pr create`) from this template:
 
 ```
 gh pr create --title "<type>(<scope>): <description>" --body "$(cat <<'EOF'
@@ -315,6 +304,6 @@ EOF
 )"
 ```
 
-- Keep the title under 70 characters and follow Conventional Commits format.
+- Keep the title under 70 characters and in Conventional Commits format.
 - Be explicit about breaking changes — reviewers should not have to hunt for them.
-- Skip layers that were not affected rather than writing "no change" for all of them.
+- Skip the layers that were not affected rather than writing "no change" for each.

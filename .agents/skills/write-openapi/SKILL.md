@@ -2,22 +2,20 @@
 name: write-openapi
 description: >
   Write, review, and maintain the OpenAPI 3.1 specification for Agora backend services.
-  Use this skill whenever editing openapi.yaml — adding endpoints, parameters, schemas,
-  responses, or updating descriptions and examples. Applies to the REST public API only;
-  gRPC contracts are governed by the write-proto skill.
+  Use whenever editing openapi.yaml — adding endpoints, parameters, schemas, responses,
+  or updating descriptions and examples. Covers the REST public API only; gRPC contracts
+  belong to the write-proto skill.
 ---
 
 # OpenAPI Specification Skill
 
-This skill governs how to write and maintain `openapi.yaml` in Agora backend services.
-The spec is the public contract for the REST API — it is consumed by documentation
-generators, client code generators, and API testing tools. Treat every field name,
-type, and status code as a durable commitment once published.
+`openapi.yaml` is the public contract for the REST API, consumed by documentation generators,
+client code generators, and API testing tools. Every field name, type, and status code is a
+durable commitment once published.
 
-**Before touching `openapi.yaml`**, read the entire file. Read the Go handler code for
-every endpoint you are about to change — the spec must match exactly what the server
-actually returns, not what you think it should return. When in doubt, look at the
-handler source.
+**Before touching `openapi.yaml`**, read the entire file, and read the Go handler code for
+every endpoint you are about to change. The spec must match exactly what the server returns,
+not what you think it should return.
 
 ---
 
@@ -30,11 +28,11 @@ pnpm format         # runs Prettier over all files
 pnpm lint:openapi   # validates the spec with Redocly
 ```
 
-Never ship a change that fails `pnpm lint:openapi`. Warnings are not errors, but
-document any known, intentional warnings (see the Suppressed Warnings section below).
+Never ship a change that fails `pnpm lint:openapi`. Warnings are not errors, but document
+any known, intentional one (see Suppressed Warnings).
 
-Then check the JS client in `pkg/js/rest/src/` to see if any TypeScript types need
-updating to reflect the spec change. Run `pnpm lint:typecheck` to confirm.
+Then update the TypeScript types in the JS client `pkg/js/rest/src/` to match the spec
+change, and run `pnpm lint:typecheck` to confirm.
 
 ---
 
@@ -45,8 +43,8 @@ openapi.yaml         # The single-file OpenAPI 3.1 spec (edit this)
 pkg/js/rest/src/     # JS client that must stay in sync with the spec
 ```
 
-There is no multi-file splitting — everything lives in `openapi.yaml`. Use `$ref` to
-reference reusable components defined under `components/` in the same file:
+Everything lives in `openapi.yaml`; there is no multi-file splitting. Use `$ref` for
+reusable components defined under `components/` in the same file:
 
 ```yaml
 $ref: "#/components/schemas/jwk"
@@ -58,12 +56,11 @@ $ref: "#/components/parameters/jwkID"
 
 ## Toolchain
 
-Linting is done with **Redocly CLI** via `pnpm redocly lint openapi.yaml`. A `redocly.yaml`
-at the project root extends the `recommended` ruleset with project-specific overrides.
-The `recommended` ruleset is opinionated but not maximally strict — some rules produce warnings
-rather than errors.
+Linting runs **Redocly CLI** via `pnpm redocly lint openapi.yaml`. A `redocly.yaml` at the
+project root extends the `recommended` ruleset with project-specific overrides; `recommended`
+is opinionated but not maximally strict, and some of its rules warn rather than error.
 
-To change rule overrides, edit `redocly.yaml`:
+Rule overrides live in `redocly.yaml`:
 
 ```yaml
 extends: [recommended]
@@ -76,14 +73,15 @@ rules:
 ## Versioning
 
 The spec version (`info.version`) must match `package.json` `"version"` and is updated
-automatically by the publish scripts. **Never change `info.version` by hand.**
+automatically by the publish scripts. **Never change `info.version` by hand** — a manual
+edit diverges the YAML from `package.json`.
 
 ---
 
 ## Breaking vs Non-Breaking Changes
 
-The REST API is public. Any change that breaks existing callers is a breaking change,
-which requires a major version bump and coordination across consuming services.
+The REST API is public, so any change that breaks existing callers needs a major version
+bump and coordination across consuming services.
 
 ### Breaking — never do without a major version bump
 
@@ -122,8 +120,7 @@ Key differences from 3.0 that affect writing this spec:
 
 ### Nullable fields
 
-Do **not** use `nullable: true` — that is a 3.0 extension removed in 3.1. Use type
-unions instead:
+Do **not** use `nullable: true`, a 3.0 extension removed in 3.1. Use type unions instead:
 
 ```yaml
 # WRONG (3.0 style):
@@ -138,9 +135,9 @@ type: [string, "null"]
 
 Three placement options exist, from most to least specific:
 
-1. **Media-type level** (`content.{media}.examples`) — named examples object; most
-   flexible; Redocly renders all of them. Use when you need multiple named examples for
-   an operation response.
+1. **Media-type level** (`content.{media}.examples`) — named examples object, the most
+   flexible; Redocly renders all of them. Use for multiple named examples on an operation
+   response.
 
    ```yaml
    content:
@@ -153,8 +150,7 @@ Three placement options exist, from most to least specific:
    ```
 
 2. **Schema level** (`schema.examples`) — JSON Schema array; only the first item is
-   typically rendered. Use for property-level inline examples or when a single example
-   is sufficient.
+   typically rendered. Use for property-level inline examples, or when one example is enough.
 
    ```yaml
    schema:
@@ -194,7 +190,7 @@ Default is `true` (any extra properties allowed). Be explicit:
 
 **Typed `additionalProperties` for dynamic-key objects.** When a response is a map whose keys
 are dynamic but whose values all share a single shape, use a `$ref` (or inline schema) as the
-value of `additionalProperties`. This tells generators the value type without listing every key:
+value of `additionalProperties`. Generators then know the value type without every key listed:
 
 ```yaml
 health:
@@ -208,9 +204,8 @@ health:
 ```
 
 The `properties` block calls out the key that must always be present (matched by `required`);
-`additionalProperties` covers any future keys added without a spec change. This pattern avoids
-the common mistake of listing `additionalProperties: true` on a map that actually has typed
-values — generators treat `true` as `any`, losing type safety.
+`additionalProperties` covers future keys added without a spec change. On a map with typed
+values, `additionalProperties: true` reads as `any` to generators and loses type safety.
 
 ---
 
@@ -232,18 +227,22 @@ Use `camelCase`. Follows the pattern `<entity><Operation>` for resource operatio
 | Ping        | `ping`        |
 | Healthcheck | `healthcheck` |
 
-`operationId` values must be unique across the entire spec. They are used by code
-generators to name functions — treat them like function names.
+`operationId` values must be unique across the entire spec. Code generators use them to name
+functions, so treat them like function names. Renaming one is breaking; add a new operation
+instead if a rename is truly needed.
 
 ### Schema names
 
-`PascalCase` for reusable schemas under `components/schemas`:
+`camelCase` for reusable schemas under `components/schemas`, matching the `$ref` keys the fleet's
+specs already use:
 
 | Name           | Use                           |
 | -------------- | ----------------------------- |
-| `Jwk`          | A public JSON Web Key         |
-| `JwkId`        | The UUID identifier of a key  |
-| `HealthStatus` | Status of a single dependency |
+| `jwk`          | A public JSON Web Key         |
+| `jwkID`        | The UUID identifier of a key  |
+| `healthStatus` | Status of a single dependency |
+
+An initialism keeps its casing after the first segment (`jwkID`, not `jwkId`).
 
 ### Parameter names
 
@@ -297,12 +296,12 @@ Every element must be documented. No exceptions.
 **Summary vs description:**
 
 - `summary` — one sentence, no markdown, shown in navigation/tooling.
-- `description` — markdown allowed; used for nuance, caveats, and edge-case behavior.
+- `description` — markdown allowed; carries nuance, caveats, and edge-case behavior.
   Always use a YAML block scalar (`|`) for multi-line descriptions.
 
-**Examples** — every schema property that has a known range of values must include
-`examples`. Parameters that accept a finite set of identifiers (like `usage`) must
-show real values from the server config, not placeholder values.
+**Examples** — every schema property with a known range of values must include `examples`.
+Parameters that accept a finite set of identifiers (like `usage`) must show real values from
+the server config, not placeholders.
 
 ---
 
@@ -317,7 +316,8 @@ The spec must exactly mirror what the Go handlers return. Rules:
 - Parameter `required: true` must match whether the handler actually validates and
   rejects missing inputs with 400.
 - The `usage` parameter values documented as examples must match the registered usages
-  in `internal/config/jwks.config.yaml` (`auth`, `auth-refresh`).
+  in `internal/config/jwks.config.yaml` (`auth`, `auth-refresh`). Those are named signing
+  configuration identifiers, not JWK `use` values (`sig`, `enc`).
 
 **The spec does not define handler behavior — it describes it.** If the spec and the
 handler disagree, fix the spec (or the handler if it is wrong), but never let them drift.
@@ -328,8 +328,8 @@ handler disagree, fix the spec (or the handler if it is wrong), but never let th
 
 ### Error responses
 
-Use a `default` response for any status code not explicitly listed. Use specific 4xx
-responses only for error conditions the handler explicitly checks and returns.
+Use specific 4xx responses only for error conditions the handler explicitly checks and
+returns; everything else falls to the `default` response.
 
 ```yaml
 responses:
@@ -344,19 +344,18 @@ responses:
 ```
 
 Do not document a 4xx response unless the handler code has an explicit path that returns
-it. A 400 from `/jwk` (invalid UUID) is a real handler path. A 400 from `/jwks` does
-not exist — the handler accepts any string for `usage` and returns an empty list if
-there are no matching keys.
+it. A 400 from `/jwk` (invalid UUID) is a real handler path; a 400 from `/jwks` does not
+exist (see Suppressed Warnings).
 
 ### The `default` response
 
-Every operation must have a `default` response. It catches any status code not
-explicitly listed — it represents internal errors and unexpected conditions.
+Every operation must have a `default` response. It catches any status code not explicitly
+listed: internal errors and unexpected conditions.
 
 ### Reuse response components
 
-Do not inline response schemas. Define all responses under `components/responses` and
-reference them:
+Define all responses under `components/responses` and reference them; never inline a
+response schema:
 
 ```yaml
 responses:
@@ -376,7 +375,7 @@ openapi.yaml: Operation must have at least one `4XX` response. [operation-4xx-re
 Affected: /ping GET, /healthcheck GET, /jwks GET
 ```
 
-**Reason:** none of these handlers return 4xx responses by design:
+None of these handlers returns a 4xx, by design:
 
 - `/ping` — always returns 200 (liveness check only).
 - `/healthcheck` — always returns 200 regardless of dependency status (callers read the body to assess health).
@@ -385,7 +384,7 @@ Affected: /ping GET, /healthcheck GET, /jwks GET
 Do not add spurious 4xx responses to silence these warnings — that would document behavior
 the server does not have.
 
-These warnings are suppressed by the `redocly.yaml` at the project root:
+The suppression in the root `redocly.yaml`:
 
 ```yaml
 extends: [recommended]
@@ -397,24 +396,16 @@ rules:
 
 ## Common Pitfalls
 
-- **Using `nullable: true`.** This is a 3.0 extension. In 3.1, use `type: [string, "null"]`.
-- **Wrong `usage` examples.** The `usage` parameter takes named signing configuration
-  identifiers (`auth`, `auth-refresh`), NOT JWK `use` values (`sig`, `enc`). Always
-  verify examples match the keys in `internal/config/jwks.config.yaml`.
-- **Documenting 4xx responses the handler cannot return.** Check the handler code before
-  adding any error status code to the spec.
-- **Inline response schemas instead of `$ref`.** Always extract reusable schemas to
-  `components/` and reference them.
-- **Changing `operationId`.** JS and Go client generators depend on these names. Renaming
-  is breaking. Add a new operation instead if a rename is truly needed.
-- **Using 3.0 `example` (singular) on new schemas.** Use the 3.1 `examples` array form.
-- **Forgetting to update `pkg/js/rest/src/` types** after changing a response schema.
-  Run `pnpm lint:typecheck` to catch drift.
-- **Adding a required parameter to an existing endpoint.** This is a breaking change
-  even if it has a sensible default — old callers that omit it will now receive errors.
-- **Bumping `info.version` manually.** The publish scripts manage this. Editing it by
-  hand causes the YAML and `package.json` to diverge.
-- **Single-item `enum` instead of `const`.** In 3.1, `const: sig` is cleaner and more
-  semantically correct than `enum: [sig]`.
-- **Omitting `additionalProperties` on closed schemas.** Generators assume `true` by
-  default; set `false` explicitly on schemas where extra fields should never appear.
+Each of these is covered above; run the list as a checklist before shipping an edit.
+
+- `nullable: true` instead of a 3.1 type union
+- `usage` examples taken from JWK `use` values instead of `internal/config/jwks.config.yaml`
+- A 4xx documented on a path the handler never returns
+- An inline response schema instead of a `components/responses` `$ref`
+- A renamed `operationId`
+- 3.0 singular `example` on a new schema
+- `pkg/js/rest/src/` types left stale after a response-schema change
+- A new required parameter on an existing endpoint
+- A hand-edited `info.version`
+- Single-item `enum` where `const` fits
+- `additionalProperties` omitted on a closed schema

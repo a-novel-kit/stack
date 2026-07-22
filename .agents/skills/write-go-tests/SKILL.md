@@ -2,34 +2,30 @@
 name: write-go-tests
 description: >
   Test conventions for ALL Go code in the a-novel and a-novel-kit organizations — file/function
-  naming, the table-driven structure, mockery usage, assertions, parallelism, cross-package
-  fixtures, helpers, and coverage. Load this skill whenever writing or modifying a Go test file
-  (new tests, regression coverage, mock wiring, or updating tests after a refactor) in a backend
-  service OR a shared library. Pairs with `write-go` (base Go conventions); the layer-specific
-  test patterns for clean-architecture services (the Postgres transactional harness for DAO
-  tests, REST/gRPC handler test shapes, …) live in `write-go-service`. Does NOT apply to JS/TS
-  tests.
+  naming, table-driven structure, mockery, assertions, parallelism, cross-package fixtures,
+  helpers, coverage. Load it whenever writing or modifying a Go test file in a backend service OR
+  a shared library. Pairs with `write-go`; layer-specific patterns live in `write-go-service`.
+  Does NOT apply to JS/TS tests.
 ---
 
 # Go Test Conventions
 
-This skill governs how to write Go tests across every a-novel / a-novel-kit repository — backend
-services and shared libraries alike. Tests define behavior, document contracts, and guard against
-regressions; they must be clear, isolated, and exhaustive for the paths they cover. Load it
-alongside `write-go` (base Go conventions) and the repo-kind skill — `write-go-service` or
-`write-go-kit`.
+This skill governs Go tests across every a-novel / a-novel-kit repository, services and shared
+libraries alike. Tests define behavior, document contracts, and guard against regressions; they
+must be clear, isolated, and exhaustive for the paths they cover. Load it alongside `write-go`
+(base Go conventions) and the repo-kind skill, `write-go-service` or `write-go-kit`.
 
 **Before writing any test**, read the existing tests in the same package. Patterns are consistent
-by design — follow them exactly. Read the production code being tested too; do not guess at
-behavior or signatures.
+by design — follow them exactly. Read the production code under test too; do not guess at behavior
+or signatures.
 
-**Look up the testing libraries online.** When using `testify`, `httptest`, `mockery`, or any other
-test helper, check the official documentation and real-world usage examples before writing. This is
-especially important for mock assertion patterns (`EXPECT`, `.Once()`, `mock.MatchedBy`) and for
-JSON comparison utilities. Correct usage prevents subtle false-positives or missed failures in tests.
+**Look up the testing libraries online.** Check the official docs and real usage of `testify`,
+`httptest`, `mockery`, or any other helper before writing — above all for mock assertion patterns
+(`EXPECT`, `.Once()`, `mock.MatchedBy`) and JSON comparison utilities. Misuse yields silent
+false-positives and missed failures.
 
 **Never remove existing tests** unless the feature they cover is fully deprecated and removed from
-the codebase. Stale or failing tests must be fixed, not deleted.
+the codebase. Fix a stale or failing test; do not delete it.
 
 ---
 
@@ -45,16 +41,15 @@ a-novel test -y             # add pnpm too (services with pkg/js)
 go test ./internal/dao/... -run TestJwkSelect
 ```
 
-During incremental work, scope with `--type=go` (or raw `go test ./<pkg>/...` for one package) —
-reserve the full `a-novel test -y` for the final pre-commit validation. CI does not use the CLI;
-its composite actions invoke `gotestsum` directly.
+During incremental work, scope with `--type=go` (or raw `go test ./<pkg>/...` for one package);
+reserve the full `a-novel test -y` for final pre-commit validation. CI does not use the CLI — its
+composite actions invoke `gotestsum` directly.
 
 ---
 
 ## Test File Naming
 
-Test files follow the same naming convention as the production files they cover, with a `_test.go`
-suffix:
+Test files take the name of the production file they cover, plus a `_test.go` suffix:
 
 | Production file           | Test file                  |
 | ------------------------- | -------------------------- |
@@ -63,21 +58,20 @@ suffix:
 | `grpc.orderCreate.go`     | `grpc.orderCreate_test.go` |
 | `userSearch.go` (service) | `userSearch_test.go`       |
 
-**Underscore, not dot.** The Go toolchain only excludes files ending in `_test.go` (with an
+**Underscore, not dot.** The Go toolchain excludes only files ending in `_test.go` (with an
 underscore) from production builds. A file named `something.test.go` (with a dot) is **compiled
-into the production binary** — the `.test.` part is just text in the filename, not a build-tag
-signal. If you find a file with that shape carrying test-only globals, it has leaked from the
-test surface into the shipped binary and must be moved (see "Cross-package test fixtures" below).
+into the production binary** — `.test.` is text in the filename, not a build-tag signal. Such a
+file carrying test-only globals has leaked into the shipped binary and must be moved (see
+"Cross-package test fixtures" below).
 
 ---
 
 ## Cross-Package Test Fixtures
 
-Some test fixtures need to be shared across packages — for example, a Postgres preset reused by
-both `dao_test` and `handlers_test`. Because Go's `_test.go` rule is per-package (a `_test.go`
-file in package X cannot be imported from a `_test.go` file in package Y), these shared fixtures
-have to live in regular `.go` files. The risk: regular `.go` files are compiled into production
-binaries.
+Some fixtures are shared across packages — a Postgres preset reused by both `dao_test` and
+`handlers_test`, say. Go's `_test.go` rule is per-package (package X's `_test.go` cannot be
+imported from package Y's), so a shared fixture has to live in a regular `.go` file, which is
+compiled into production binaries.
 
 **Always isolate cross-package fixtures into a dedicated subpackage.** Name the directory and
 package after the layer plus the suffix `test`, mirroring Go stdlib conventions like
@@ -110,13 +104,12 @@ postgres.NewContext(ctx, configtest.PostgresPreset)
 **Never:**
 
 - Define test fixtures in the production package (e.g., `internal/config/postgres.config.go`)
-  guarded only by a `Test` prefix on the variable. The variable is exported and compiled in,
-  and a future change can wire it into a production code path without a single review flag.
-- Use `.test.go` (with a dot) as a substitute for `_test.go`. As covered above, the dot is not
-  recognized by the Go toolchain — the file is compiled into the production binary.
-- Reuse the bare name `testutils` for multiple fixture subpackages in the same project. Two
-  imports of `testutils` from different paths force aliasing at every call site, which is the
-  same kind of low-level entropy this skill exists to prevent. Use the layer-prefixed name
+  guarded only by a `Test` prefix on the variable. The variable is exported and compiled in, and a
+  future change can wire it into a production code path without a single review flag.
+- Use `.test.go` (with a dot) as a substitute for `_test.go` — the Go toolchain does not recognize
+  the dot, so the file is compiled into the production binary.
+- Reuse the bare name `testutils` for several fixture subpackages in one project. Two imports of
+  `testutils` from different paths force aliasing at every call site. Use the layer-prefixed name
   (`configtest`, `libtest`) so each fixture subpackage has a unique, descriptive name.
 
 ---
@@ -140,9 +133,9 @@ Examples:
 | `GrpcClaimsSign` | `TestGrpcClaimsSign` |
 | `JwkSearch`      | `TestJwkSearch`      |
 
-One test function per exported type. Never name a test after a behavior, scenario, or action
-("TestWhenUserIsNotFound", "TestReturnsErrorOnBadInput") — the name identifies what is under test,
-not what the test does. Scenarios are sub-tests (see below).
+One test function per exported type. The name identifies what is under test, never what the test
+does: no "TestWhenUserIsNotFound", no "TestReturnsErrorOnBadInput". Scenarios are sub-tests (see
+below).
 
 ---
 
@@ -157,7 +150,7 @@ package dao_test
 package lib_test
 ```
 
-This prevents tests from relying on unexported internals, which keeps them honest about the public API.
+This keeps tests off unexported internals, and honest about the public API.
 
 ---
 
@@ -214,11 +207,11 @@ func TestGrpcJwkGet(t *testing.T) {
 
 - Call `t.Parallel()` at the top of the outer test function.
 - Call `t.Parallel()` at the top of every sub-test body.
-- Exception: if the test genuinely cannot be parallelized (e.g., it mutates global state or
-  uses a non-parallelizable resource), suppress the linter with `//nolint:paralleltest` on the
-  outer function and `//nolint:tparallel` inside sub-tests — and add a comment explaining why.
+- Exception: when the test genuinely cannot be parallelized (it mutates global state, or uses a
+  non-parallelizable resource), suppress the linter with `//nolint:paralleltest` on the outer
+  function and `//nolint:tparallel` inside sub-tests — and add a comment explaining why.
 - Define inline mock structs (`type serviceMock struct{...}`) inside the test function, not at
-  package level. This keeps each test self-contained.
+  package level, so each test stays self-contained.
 - Use `errors.New("foo")` (typically named `errFoo`) as a sentinel for generic internal error
   paths that need a non-nil, non-sentinel error.
 
@@ -259,12 +252,12 @@ service.EXPECT().
 ```
 
 - Use `mock.Anything` for the `ctx` argument — context identity is not meaningful to assert.
-- Use concrete expected values for all other arguments. This is the contract being enforced.
-- Add `.Once()` when the same mock method is registered multiple times in a loop (e.g., for each
+- Use concrete expected values for all other arguments. They are the contract being enforced.
+- Add `.Once()` when the same mock method is registered several times in a loop (e.g., for each
   item in a slice).
 
-**Nil-mock pattern**: declare mock fields as pointers in the test case struct. When nil, the mock
-should not be called at all — simply skip registering the expectation:
+**Nil-mock pattern**: declare mock fields as pointers in the test case struct. A nil field means
+the mock must not be called at all, so skip registering the expectation:
 
 ```go
 if testCase.serviceMock != nil {
@@ -279,13 +272,13 @@ service.AssertExpectations(t)
 repository.AssertExpectations(t)
 ```
 
-This verifies that every registered expectation was actually called.
+It verifies every registered expectation was called.
 
 ---
 
 ## Assertions
 
-Use `require` everywhere, not `assert`. Sub-tests stop on the first failure; continuing after a
+Use `require` everywhere, not `assert`. A sub-test stops on the first failure; continuing after a
 failed assertion produces misleading output and may panic.
 
 ```go
@@ -315,24 +308,24 @@ lifetime to the test, so in-flight operations are cancelled when the test ends.
 
 ## Layer-specific test patterns
 
-How DAO tests run against a real Postgres in a rolled-back transaction, how service tests wire
-layered mocks, how REST and gRPC handler tests are structured, how `lib` and `pkg/go` tests
-differ — that is all clean-architecture-service detail and lives in **`write-go-service`**. Load
-that skill when writing tests inside an `a-novel` service. Shared libraries under `a-novel-kit`
-have no such layers: see **`write-go-kit`** for their coverage expectations and `Example_xxx`
-doc-test conventions.
+DAO tests against a real Postgres in a rolled-back transaction, service tests wiring layered mocks,
+REST and gRPC handler test shapes, how `lib` and `pkg/go` tests differ — that is
+clean-architecture-service detail, and it lives in **`write-go-service`**. Load that skill when
+writing tests inside an `a-novel` service. Shared libraries under `a-novel-kit` have no such
+layers: see **`write-go-kit`** for their coverage expectations and `Example_xxx` doc-test
+conventions.
 
 ---
 
 ## Test Helpers
 
-Shared test utilities belong in a `utils_test.go` file (or a dedicated `test/` subpackage for
-helpers that need to be shared across packages). Every helper must:
+Shared test utilities belong in a `utils_test.go` file (or a dedicated `test/` subpackage when they
+are shared across packages). Every helper must:
 
 - Accept `t *testing.T` as its first argument.
 - Call `t.Helper()` as its first statement, so failure attribution points at the caller.
-- Use `panic` (not `require`) for setup errors that should be impossible in practice — panics
-  surface clearly in test output and signal a bug in the test setup, not a runtime error.
+- Use `panic` (not `require`) for setup errors that should be impossible in practice — a panic
+  surfaces clearly in test output and signals a bug in the test setup, not a runtime error.
 
 ```go
 func mustEncryptBase64Value(ctx context.Context, t *testing.T, data any) string {
@@ -349,42 +342,38 @@ func mustEncryptBase64Value(ctx context.Context, t *testing.T, data any) string 
 
 ## Coverage
 
-Track coverage as a signal, not a target. The goal is meaningful tests, not a high percentage.
-Coverage gaps in trivial glue code or wired-up constructors are acceptable; gaps in business logic,
-error paths, or protocol translations are not. Adding a test just to bump a number produces noise,
-not confidence. When evaluating what to test, ask: "would a bug here be caught by this test?"
-If the answer is no, the test is not worth writing.
+Track coverage as a signal, not a target. Gaps in trivial glue code or wired-up constructors are
+acceptable; gaps in business logic, error paths, or protocol translations are not. A test written
+to bump a number produces noise, not confidence. Ask of each test: "would a bug here be caught by
+it?" If not, it is not worth writing.
 
 ---
 
 ## Common Pitfalls
 
-- **Removing tests.** Never delete a test unless its feature is fully removed. Fix it instead.
-- **Misnamed test functions.** The test function name must match the type under test exactly:
-  `TestGrpcJwkGet` not `TestJwkGet`, `TestPgJwkSearch` not `TestJwkSearch`.
-- **Missing `t.Parallel()`.** Every test function and every sub-test must call it unless there
-  is a documented reason they cannot.
-- **`//nolint:paralleltest` without a real reason.** This annotation suppresses the linter but
-  can mask data races. Before adding it, verify there is an actual reason (global mutation,
-  non-parallelizable resource). If the only reason is that a previous author was unsure, remove
-  it and fix the underlying issue.
-- **Data races in parallel sub-test closures.** When sub-tests run with `t.Parallel()`, their
-  closures execute concurrently. Any assignment to a variable declared _outside_ the closure is
-  a data race. Use `:=` (short declaration) inside the closure to declare a new local variable,
-  not `=` (assignment) to write to an outer one. This applies especially to `err` variables
-  shared between setup code and the table loop.
+- **Removing tests.** Delete a test only once its feature is gone; otherwise fix it.
+- **Misnamed test functions.** The name must match the type under test exactly: `TestGrpcJwkGet`,
+  not `TestJwkGet`.
+- **Missing `t.Parallel()`.** Every test function and every sub-test calls it, absent a documented
+  reason it cannot.
+- **`//nolint:paralleltest` without a real reason.** It suppresses the linter and can mask a data
+  race. Verify the reason is real (global mutation, non-parallelizable resource); if it is only a
+  previous author's uncertainty, remove it and fix the underlying issue.
+- **Data races in parallel sub-test closures.** Parallel sub-test closures run concurrently, so any
+  assignment to a variable declared _outside_ the closure is a data race. Declare a new local with
+  `:=` inside the closure instead of writing to an outer one with `=` — above all for `err`
+  variables shared between setup code and the table loop.
 - **`assert` instead of `require`.** Always use `require` in test bodies.
 - **`context.Background()` in test bodies.** Use `t.Context()` instead.
 - **Hard-coding mock expectations for context.** Always use `mock.Anything` for `ctx`.
-- **Skipping `AssertExpectations`.** Always call it for every mock, even if only the happy path
-  was reached — it catches unexpected calls too.
-- **Asserting response body on error paths.** For REST handlers, only assert the status code on
+- **Skipping `AssertExpectations`.** Call it for every mock, even when only the happy path was
+  reached — it catches unexpected calls too.
+- **Asserting response body on error paths.** For REST handlers, assert only the status code on
   error cases. The body is an implementation detail.
 - **Mocking the database in DAO tests.** DAO tests always use a real database via
   `postgres.RunIsolatedTransactionalTest`. Mocks belong in service and handler tests.
-- **Using DAO sentinels in handler tests.** Handler tests must not import `dao`. The service mock
-  in a handler test should return the _core-layer_ sentinel (e.g., `core.ErrJwkNotFound`),
-  not the DAO sentinel (`dao.ErrJwkSelectNotFound`). This mirrors what the real service returns
-  after translation, and keeps the test honest about the handler's actual contract.
-- **Running the full suite during incremental work.** Use `a-novel test --type=go -y` (or raw
-  `go test` on the one package you're iterating on) to avoid running everything on every change.
+- **Using DAO sentinels in handler tests.** Handler tests must not import `dao`. Their service mock
+  returns the _core-layer_ sentinel (e.g., `core.ErrJwkNotFound`), not the DAO one
+  (`dao.ErrJwkSelectNotFound`), mirroring what the real service returns after translation and
+  keeping the test honest about the handler's contract.
+- **Running the full suite during incremental work.** Scope it — see "After every edit".
