@@ -109,6 +109,7 @@ func runRepoUpdateAll(cmd *cobra.Command, rootDir, class string, exclude []strin
 	if dryRun {
 		for _, p := range eligible {
 			_, _ = fmt.Fprintf(progress, "\n# dry-run %s — class %s\n", p.cand.fullName(), p.target.Class.Class)
+			renderPruneImpact(progress, p.target.Org, p.target.Repo, p.plan)
 			if renderErr := p.plan.Render(out); renderErr != nil {
 				return renderErr
 			}

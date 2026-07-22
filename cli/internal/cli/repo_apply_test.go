@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -673,6 +674,57 @@ func TestPruneRulesets(t *testing.T) {
 		}
 		if deletes != 0 {
 			t.Errorf("issued %d delete(s) after a failed listing — must be 0", deletes)
+		}
+	})
+}
+
+// TestRenderPruneImpact covers the preview an operator confirms a destructive
+// reconcile from. The plan is computed offline and can only state what SURVIVES,
+// so this is the only place the deletions are visible — and a read failure must
+// never render as "none", which reads as safe and gets waved through.
+func TestRenderPruneImpact(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam.
+	plan := &repocfg.Plan{Ops: []repocfg.Op{
+		{RulesetName: "master"},
+		{PruneRulesets: true, KeepRulesets: []string{"master", "require-approval", "tags"}},
+	}}
+
+	t.Run("names every ruleset that would go", func(t *testing.T) {
+		fakeGH(t, map[string]string{"--jq": "master\t1\ntags\t2\ncodecov\t3\nCopilot review\t4\n"})
+		var buf bytes.Buffer
+		renderPruneImpact(&buf, "a-novel", "service-auth", plan)
+		got := buf.String()
+		for _, want := range []string{"DELETE", "codecov", "Copilot review"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("preview %q missing %q", got, want)
+			}
+		}
+		if strings.Contains(got, "master") {
+			t.Errorf("preview %q names a ruleset that survives", got)
+		}
+	})
+
+	t.Run("says none when nothing would go", func(t *testing.T) {
+		fakeGH(t, map[string]string{"--jq": "master\t1\ntags\t2\n"})
+		var buf bytes.Buffer
+		renderPruneImpact(&buf, "a-novel", "service-auth", plan)
+		if got := buf.String(); !strings.Contains(got, "none") {
+			t.Errorf("preview = %q, want it to say none", got)
+		}
+	})
+
+	t.Run("a failed read is UNRESOLVED, never none", func(t *testing.T) {
+		orig := ghStdin
+		ghStdin = func(string, ...string) (string, error) { return "", errors.New("gh: rate limited") }
+		t.Cleanup(func() { ghStdin = orig })
+		var buf bytes.Buffer
+		renderPruneImpact(&buf, "a-novel", "service-auth", plan)
+		got := buf.String()
+		if !strings.Contains(got, "UNRESOLVED") {
+			t.Errorf("preview = %q, want UNRESOLVED", got)
+		}
+		if strings.Contains(got, "none") {
+			t.Errorf("preview = %q reports none after a failed read — reads as safe when it is unknown", got)
 		}
 	})
 }

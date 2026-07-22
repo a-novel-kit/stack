@@ -436,6 +436,40 @@ func pruneRulesets(org, repo string, op repocfg.Op) (string, error) {
 	return opDeleted + " " + strings.Join(dropped, ", "), nil
 }
 
+// renderPruneImpact names the rulesets a plan's prune op would DELETE.
+//
+// The plan is computed offline, so the op itself can only state what SURVIVES —
+// and "keep only: master, require-approval, tags" reads exactly the same whether
+// it removes nothing or strips a repo of every protection it has. A preview of
+// the one destructive operation has to name its casualties, so this resolves
+// them live. A read failure is reported as UNRESOLVED rather than as "none": an
+// operator who sees "none" will confirm without looking.
+func renderPruneImpact(w io.Writer, org, repo string, plan *repocfg.Plan) {
+	for _, op := range plan.Ops {
+		if !op.PruneRulesets {
+			continue
+		}
+		live, err := liveRulesets(org, repo)
+		if err != nil {
+			_, _ = fmt.Fprintf(w, "# rulesets to delete: UNRESOLVED — %v\n", err)
+			return
+		}
+		drop := make([]string, 0, len(live))
+		for name := range live {
+			if !slices.Contains(op.KeepRulesets, name) {
+				drop = append(drop, name)
+			}
+		}
+		if len(drop) == 0 {
+			_, _ = fmt.Fprintln(w, "# rulesets to delete: none")
+			return
+		}
+		slices.Sort(drop)
+		_, _ = fmt.Fprintf(w, "# rulesets to DELETE: %s\n", strings.Join(drop, ", "))
+		return
+	}
+}
+
 // outcome labels for staged managed-file changes.
 const (
 	opCreated   = "created"

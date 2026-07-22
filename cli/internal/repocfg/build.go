@@ -446,6 +446,12 @@ func (p *Plan) Render(w io.Writer) error {
 			_, _ = fmt.Fprint(w, op.Content)
 			continue
 		}
+		// A prune carries no request body; encoding the nil one would print "null"
+		// under the single operation that DELETES live configuration — the last place
+		// the preview should look like it lost track of what it is doing.
+		if op.PruneRulesets {
+			continue
+		}
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(op.Body); err != nil {

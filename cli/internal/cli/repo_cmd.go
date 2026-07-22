@@ -208,8 +208,10 @@ confirm gates the whole batch.`,
 			}
 			if dryRun {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-					"# dry-run %s/%s — class %s\n# required checks: %s\n\n",
+					"# dry-run %s/%s — class %s\n# required checks: %s\n",
 					org, repo, target.Class.Class, strings.Join(checkContexts(target.Discovered.Checks), ", "))
+				renderPruneImpact(cmd.ErrOrStderr(), org, repo, plan)
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr())
 				return plan.Render(cmd.OutOrStdout())
 			}
 
