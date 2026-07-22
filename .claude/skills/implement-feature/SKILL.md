@@ -32,6 +32,12 @@ A later section covers recovery when an earlier branch needs to change.
 
 ## Phase 0: Before Writing Any Code
 
+**Check the workspace is yours.** Every checkout the task will touch must be on `master` with a
+clean tree — see `git-conventions` › Workspace Hygiene. A dirty tree or a foreign unmerged branch
+means another session is already working there: allocate your own stack with
+`a-novel core stacks new <name>` rather than building on top of their work, and prune it at the
+end of the lifecycle (3.6).
+
 **Clarify ambiguous requests first.** If the request is broad ("improve the service", "refactor
 this area") or could be interpreted multiple ways, ask one focused question before reading any code.
 A plan built on a misunderstood requirement wastes both read and write effort.
@@ -221,6 +227,23 @@ git commit -m "feat(dao): add revoke repository"
 - The test result
 - Any decisions made (e.g., "I chose to add ErrJwkRevokeNotFound rather than reuse ErrJwkDeleteNotFound because…")
 - Any open questions or deferred work
+
+### 3.6 Give the workspace back
+
+Once **every** branch is reviewed and approved — the last one included — a stack you allocated in
+Phase 0 has nothing left to do. Prune it:
+
+```bash
+a-novel core stacks prune <name>
+```
+
+Approval is the trigger, not a green pipeline: review produces work, and a stack rebuilt to answer
+one comment costs more than one kept a few hours longer. `prune` refuses while any checkout still
+holds unpushed or uncommitted work, so running it early is safe — it tells you what is unsaved
+instead of discarding it.
+
+Skip this entirely when you worked in the default stack. That one is the workspace, and `prune`
+refuses it by design.
 
 ---
 

@@ -1,14 +1,17 @@
 ---
 name: git-conventions
 description: >
-  Git branch naming, commit message format, and workflow conventions for Agora backend services.
-  Use this skill whenever creating a branch, writing a commit message, or deciding how to group
-  changes. Referenced by implement-feature and any other skill that touches git.
+  Git workspace hygiene (clean-tree pre-flight, pruning a scratch stack), branch naming, commit
+  message format, and workflow conventions for Agora backend services. Use this skill whenever
+  starting or finishing work in a checkout, creating a branch, writing a commit message, or
+  deciding how to group changes. Referenced by implement-feature and any other skill that touches
+  git.
 ---
 
 # Git Conventions
 
-This skill governs branch naming and commit messages across all Agora backend services. Every
+This skill governs workspace state, branch naming, and commit messages across all Agora backend
+services. Every
 branch and commit produced by Claude must follow these conventions exactly — they drive automation
 (Renovate, CI tagging, changelogs) and signal intent to reviewers at a glance.
 
@@ -126,6 +129,73 @@ Flag any change that:
 - Removes or renames an exported TypeScript type or function in `pkg/js`
 - Removes or changes the semantics of a REST endpoint path or response shape
 - Changes a database column type or removes a column
+
+---
+
+## Workspace Hygiene
+
+### Before you start
+
+**Start every task from `master`, with a clean tree, in a checkout that is yours.** Check this
+before the first edit — in the stack root and in each `app/` or `kit/` checkout the task will
+touch, since those are independent repos with independent states:
+
+```bash
+git -C <checkout> status --porcelain            # empty
+git -C <checkout> rev-parse --abbrev-ref HEAD   # master
+git -C <checkout> branch --no-merged master     # nothing you did not create
+```
+
+Uncommitted changes, or an unmerged branch you did not create, mean **someone else is working in
+this checkout** — the operator in another terminal, or a parallel agent session. Their
+work-in-progress is invisible to you, and `stash`, `reset`, `checkout -f`, or branching on top of
+it can destroy hours of work that exists nowhere else. Leave it untouched and take a checkout of
+your own.
+
+The daemon manages as many stacks as the machine supports. `A_NOVEL_STACKS` is its source of
+truth, formatted `name:/path,name:/path` with the first entry as the default; unset means a single
+`default` stack at `~/git-projects/a-novel`.
+
+```bash
+a-novel core stacks list             # which stacks exist, and what they hold
+a-novel core stacks new <name>       # clone the workspace into a fresh root
+a-novel core sync --root=<new-root>  # populate it with the whitelisted repos
+```
+
+`stacks new` puts the checkout under the OS temp directory unless `--root` says otherwise, so a
+stack nobody prunes expires instead of accumulating. Add the printed entry to `A_NOVEL_STACKS`
+and `a-novel core restart` so daemon-backed verbs (`a-novel run …`) reach it, then work from
+there — see `use-a-novel-cli`.
+
+Resuming a branch **you** created earlier in the same session is your own work, not this case.
+Carry on with it.
+
+### When you are done
+
+A stack synced for one task is scratch space. Left behind it becomes a stale checkout the next
+session mistakes for real work, plus containers and volumes that outlive the machine's reboot.
+
+**Prune it when development ends: every change reviewed and approved.** Not at push, and not at
+green CI — review turns up work, and rebuilding a stack to answer one comment costs more than
+keeping it a few hours longer. Approval is the first moment nothing further is expected of the
+checkout.
+
+```bash
+a-novel core stacks list           # what each stack is still holding
+a-novel core stacks prune <name>   # kill its targets + infra, clear its volumes, remove its files
+```
+
+Prune covers all three of a stack's allocations. Deleting the root by hand covers one of them: the
+containers keep running on their host ports and the volumes stay in the container store, because
+neither ever lived in the stack directory.
+
+`prune` refuses the default stack, and refuses any stack still holding work that exists nowhere
+else — so run it without rehearsing the state first. It reports the `A_NOVEL_STACKS` entry to drop
+rather than editing your shell config.
+
+**Never reach for `a-novel core kill --force` as cleanup.** It tears down every service's infra
+across every registered stack, the operator's included — the exact harm the pre-flight above
+exists to prevent.
 
 ---
 
