@@ -37,6 +37,24 @@ type Options struct {
 // is cancelled or a shutdown signal arrives, then cleans up the socket file.
 // Blocks until the daemon exits — callers wanting a background daemon must
 // fork the process themselves (see cli/core/start).
+// registeredAndDiscovered narrows the configured stacks to those discovery
+// actually kept, preserving the configured order (and therefore which entry is
+// default). It is the daemon's answer to "which stacks do I manage?" — the
+// registration list alone over-answers it once a vanished stack is skipped.
+func registeredAndDiscovered(configured []stacks.Stack, disc []*discovery.Stack) []stacks.Stack {
+	kept := make(map[string]bool, len(disc))
+	for _, st := range disc {
+		kept[st.Name] = true
+	}
+	out := make([]stacks.Stack, 0, len(disc))
+	for _, s := range configured {
+		if kept[s.Name] {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 func Run(ctx context.Context, opts Options) error {
 	if opts.SocketPath == "" {
 		opts.SocketPath = paths.Socket()
@@ -86,12 +104,17 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Discover every service in every registered stack before we start
 	// listening. Per-service classification errors are non-fatal — they
-	// surface via Status and startup logs — but a stack path we can't
-	// read at all is fatal.
+	// surface via Status and startup logs — and a non-default stack whose
+	// path has vanished is skipped, so a swept scratch checkout cannot keep
+	// the daemon down. Only an unreadable DEFAULT stack is fatal.
 	disc, err := discovery.DiscoverStacks(opts.Stacks)
 	if err != nil {
 		return fmt.Errorf("discover stacks: %w", err)
 	}
+	// The server reports the stacks it manages, which after the skip above is
+	// no longer every registered entry. Handing it the raw config would let
+	// ListStacks advertise a stack that every other RPC then refuses.
+	opts.Stacks = registeredAndDiscovered(opts.Stacks, disc)
 	// Log any per-service discovery errors to stderr so the user sees
 	// them at daemon-start. The daemon keeps running — operations on
 	// well-formed services still work; operations on broken services
