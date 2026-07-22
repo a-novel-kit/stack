@@ -17,3 +17,4 @@ repos:
   - a-novel/service-json-keys
   - a-novel/service-authentication
   - a-novel/service-narrative-engine
+  - a-novel/service-jobs
