@@ -26,7 +26,8 @@ jobs:
           allowed_commands: >-
             ["^go mod tidy && go generate .*", "^go mod tidy && go tool .*", "^go get -u .*",
             "^pnpm i --frozen-lockfile$", "^rm -f cli/[a-z0-9-]+\\.sum$",
-            "^go -C cli get -modfile=[a-z0-9-]+\\.mod -tool [^;&|]+$"]
+            "^go -C cli get -modfile=[a-z0-9-]+\\.mod -tool [^;&|]+$",
+            "^rm -rf cli/proto/gen$", "^go -C cli tool -modfile=buf\\.mod buf generate$"]
           github_token: ${{ secrets.GITHUB_TOKEN }}
           app_private_key: ${{ secrets.DEPENDENCY_BOT_PRIVATE_KEY }}
           client_id: ${{ vars.DEPENDENCY_BOT_CLIENT_ID }}

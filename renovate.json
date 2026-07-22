@@ -33,6 +33,21 @@
       }
     },
     {
+      "description": "Keep cli/buf.mod on its own branch, and regenerate the proto stubs after a bump. buf is a generator, never imported: the emitted code links google.golang.org/protobuf, which stays in cli/go.mod, while buf's own graph does not.",
+      "matchFileNames": ["cli/buf.mod"],
+      "additionalBranchPrefix": "buf-",
+      "goGetDirs": ["."],
+      "postUpgradeTasks": {
+        "commands": [
+          "rm -f cli/buf.sum",
+          "go -C cli get -modfile=buf.mod -tool github.com/bufbuild/buf/cmd/buf",
+          "rm -rf cli/proto/gen",
+          "go -C cli tool -modfile=buf.mod buf generate"
+        ],
+        "executionMode": "branch"
+      }
+    },
+    {
       "description": "Tidy cli/go.mod after a Go bump so go.sum gets the module-content (h1:) hashes, not just the /go.mod hashes; without it any job that compiles cli/ fails with `missing go.sum entry`. This works because each Go modfile has its own branch (see the rules above), so cli/go.mod is the only upgrade on its branch and the option reaches it. Do not merge those branches back together: a Renovate artifact update reads the branch config, which is inherited from whichever upgrade sorts first.",
       "matchFileNames": ["cli/go.mod"],
       "postUpdateOptions": ["gomodTidy"]
@@ -49,6 +64,11 @@
     }
   ],
   "gomod": {
-    "managerFilePatterns": ["/(^|/)go\\.mod$/", "/(^|/)golangci-lint\\.mod$/", "/(^|/)gotestsum\\.mod$/"]
+    "managerFilePatterns": [
+      "/(^|/)go\\.mod$/",
+      "/(^|/)golangci-lint\\.mod$/",
+      "/(^|/)gotestsum\\.mod$/",
+      "/(^|/)buf\\.mod$/"
+    ]
   }
 }

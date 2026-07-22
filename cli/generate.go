@@ -5,4 +5,4 @@ package cli
 // Generate proto stubs (Go bindings + connect-rpc handlers).
 //
 //go:generate rm -rf proto/gen
-//go:generate go tool buf generate
+//go:generate go tool -modfile=buf.mod buf generate

@@ -60,7 +60,13 @@ change done.
 ## Toolchain
 
 This project uses [buf](https://buf.build) v2, not `protoc` directly. All buf operations run
-through `go tool buf` (pinned in `go.mod` as a tool dependency).
+through `go tool -modfile=buf.mod buf`.
+
+buf is pinned in its **own** `buf.mod`, not in `go.mod`. It is a generator, never imported: the
+emitted stubs link `google.golang.org/protobuf`, which stays a direct require of the service, while
+buf's own dependency graph — more than half of `go.mod` before the split — stays out of the module
+the service ships. The same holds for every tool: one modfile each, and each with its own Renovate
+branch prefix.
 
 **`buf.yaml`** (linting and breaking-change rules):
 
