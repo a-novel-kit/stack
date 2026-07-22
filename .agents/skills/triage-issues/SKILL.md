@@ -67,6 +67,18 @@ blocked-by, and sub-issue progress. The **Triage queue** is every board item sit
 **status** — an un-assessed incoming issue lands there; filter the item-list above by
 `Status == Triage`.
 
+`item-list` is a scan, not evidence. It has returned a single item for a populated board even at
+`--limit 1200`, which reads as "everything else was archived" when nothing was. Before concluding
+an item is missing or archived, confirm against the issue itself:
+
+```bash
+gh api graphql -f query='query { repository(owner:"<org>", name:"<repo>") {
+  issue(number: <n>) { id projectItems(first:10, includeArchived:true) {
+    nodes { id isArchived project { number title } } } } } }'
+```
+
+Read the fields off that item node (`ProjectV2ItemFieldSingleSelectValue`).
+
 ### 2. Drain the triage queue (un-assessed → assessed)
 
 For each item in the `Triage` status, with the operator:
@@ -126,6 +138,14 @@ The board's bot derives Status from what happened to a Pull Request, so `In prog
 `Awaiting release` are not yours to set: a manual edit will not stick. Your part is the `Triage → Ready`
 move from the drain above, plus a **meta task**'s final `Applied`, which has no Pull Request to read
 from. Everything else follows the work, so don't fight it.
+
+**Check for siblings before closing a child.** Sub-issue progress of 1 of 1 is indistinguishable from
+"all children done", so closing an Epic or Initiative's only sub-issue derives the parent as complete:
+Status moves to Done, the auto-close workflow closes it, and it disappears from the board looking
+lost. Either hold the child open until siblings exist, or expect the close and reopen the parent
+straight after — `gh issue reopen <parent>`, then set its Status again by hand, since reopening does
+not restore board fields the automation overwrote. A parent with several children is safe; this bites
+only at the start of a plan, when the first child is the only child.
 
 ### 8. Keep the Stage field accurate (absolute scheme)
 

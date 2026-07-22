@@ -150,6 +150,10 @@ and survive context resets. The issue body — not chat, not a local file — is
 Set its **type**, **labels**, **project**, and **fields** on creation; break it into **sub-issues**
 and **dependencies** when it has stages.
 
+Open it **early**, while the design is still moving, and refine the body in place as it firms up.
+A wrong Epic costs one click to close; a session that ends before anything was written down takes
+every decision with it. Err toward creating the issue too soon.
+
 ### 5. Iterate to agreement
 
 Walk the human through it, take feedback, refine the **issue body**. Park open questions and
@@ -359,6 +363,28 @@ The old "keep the plan file from rotting" discipline is now mostly automatic:
 - Move the board **Status** as work flows (Ready → In progress → In review → Done).
 - Keep the Epic open until every stage has landed, then close it. A closed Epic with its closed
   sub-issues _is_ the durable record — no summary rewrite needed.
+
+### Side quests — file them, don't absorb them
+
+A good analysis surfaces more work than the plan should carry. File each find as an **orphan
+issue**: no parent, no milestone, boarded on the org "Tasks" project with **Status = Triage**, the
+un-assessed incoming queue `triage-issues` drains. Backlog is for planned-but-not-ready work, so it
+is the wrong queue here. Folding the find into the current Epic instead bloats its scope and delays
+it, and leaving it in chat loses it at the next context reset.
+
+File it in the repo it would land in, typed normally, and verify it against the code before filing —
+an inferred defect that turns out to be already fixed costs whoever picks it up their whole slot. The
+body still earns its keep: what was spotted, the evidence, and why it matters, written to survive
+without the conversation that produced it.
+
+When a pass surfaces a **batch** meant to be picked up as one unit, give them a shared goal-named
+milestone — still no parent, still Triage. A milestone cannot span repos, so use the identical name
+in each repo and let the board's milestone view group them. Without one, a parallel session has no
+single handle to pick the batch up by.
+
+Batch the filing at the end of the pass rather than interrupting the analysis, and name the side
+quests in the plan's own "Out of scope / future" section so a reader knows they were considered
+rather than missed.
 
 ---
 
