@@ -45,6 +45,12 @@ pnpm format:go      # goimports on the newly generated files
 pnpm lint:go        # catch any issues in handler code using new types
 ```
 
+**Every edit** includes a comment-only one. `protoc-gen-go` copies leading comments into the generated
+Go, so rewording a `message` or `field` doc changes `protogen/` as surely as adding a field does, and
+the `generated-go` job fails on the drift. Commit the regenerated output as its own `chore(gen)`
+commit — `git-conventions` forbids mixing commit types, and a `docs` commit carrying generated files
+hides why they changed.
+
 Run these in order. `pnpm format:proto` must come before `pnpm generate:go` — buf formats the source
 files in place, and the generated output reflects the formatted source.
 
