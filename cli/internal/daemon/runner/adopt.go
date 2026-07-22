@@ -26,7 +26,6 @@ import (
 //
 // It returns the number of containers and of targets adopted.
 func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
-	var containers, targets int
 	// `--format json` is the parseable contract: `{{.Labels}}` renders Go's
 	// `map[k:v k:v]`, which has no documented parser and breaks on values
 	// holding spaces or colons, such as image tags.
@@ -36,15 +35,27 @@ func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
 	if err != nil {
 		return 0, 0
 	}
-	var entries []struct {
-		ID      string            `json:"Id"`
-		Status  string            `json:"Status"`
-		Labels  map[string]string `json:"Labels"`
-		Created int64             `json:"Created"` // unix seconds — parseable, unlike podman's "11 minutes ago" status text
-	}
+	var entries []podmanEntry
 	if err := json.Unmarshal(out, &entries); err != nil {
 		return 0, 0
 	}
+
+	return r.adoptEntries(ctx, entries)
+}
+
+// podmanEntry is the slice of `podman ps -a --format json` adoption reads.
+type podmanEntry struct {
+	ID      string            `json:"Id"`
+	Status  string            `json:"Status"`
+	Labels  map[string]string `json:"Labels"`
+	Created int64             `json:"Created"` // unix seconds — parseable, unlike podman's "11 minutes ago" status text
+}
+
+// adoptEntries reconstitutes state from a scan's entries, separated from the scan itself so the
+// decisions it makes can be exercised against a fixture.
+func (r *Runner) adoptEntries(ctx context.Context, entries []podmanEntry) (int, int) {
+	var containers, targets int
+
 	for _, e := range entries {
 		cid := e.ID
 		status := e.Status
@@ -57,9 +68,13 @@ func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
 		}
 		containers++
 
-		// At least one container of this stack and service is alive, so the
-		// infra session counts as Up.
-		r.markInfraSessionUp(stack, service)
+		// `podman ps -a` lists exited containers too, and an infra session marked Up short-circuits
+		// EnsureDepsReady: the target then starts against a database that is not running. Only a
+		// container podman reports as running counts.
+		phase, health := translatePodmanStatus(status)
+		if phase == anovelv1.Phase_PHASE_RUNNING {
+			r.markInfraSessionUp(stack, service)
+		}
 
 		if target == "" {
 			// An infra container carries no target label and needs no
@@ -79,7 +94,6 @@ func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
 			// for a manual `podman rm`.
 			continue
 		}
-		phase, health := translatePodmanStatus(status)
 		startedAt := time.Unix(e.Created, 0)
 		inst := &Instance{
 			ID:          tgt.ID(),
