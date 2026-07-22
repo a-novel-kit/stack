@@ -101,6 +101,26 @@ Two consequences worth knowing before operating an Epic:
 
 ---
 
+## What a merge group is not
+
+A queued PR is validated as a **merge group** — a synthetic `gh-readonly-queue/<base>/pr-<N>-<sha>`
+ref — and not as the pull request. That group has no author and no labels, so every PR-level
+exemption evaporates there. A ruleset `bypass_actors` entry is a pull-request-level exemption, so a
+bot allowance that lets a dependency PR merge does not survive its trip through the queue, and the
+base branch's required checks come back as hard requirements. Never assume a bypass covers the queue.
+
+GitHub offers no way to scope a required status check to pull requests only. A flaky third party
+therefore cannot be exempted for the queue, and the only fix is to stop making it a required check
+and read its result from inside a check you control.
+
+When a group sits pending, separate the two failure modes before diagnosing:
+`commits/<sha>/check-runs` (Actions jobs) and `commits/<sha>/status` (third-party commit statuses)
+are different APIs. A green job list beside an empty status list means your upload job worked and the
+provider never reported back — so the group waits on a status that will never arrive, and it blocks
+every PR queued behind it, not only its own, until the queue's check-response timeout expires.
+
+---
+
 ## The saga lifecycle
 
 ```

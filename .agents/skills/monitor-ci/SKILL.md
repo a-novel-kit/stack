@@ -54,6 +54,11 @@ are cancelled — fix `test` first before looking at them. However, `build-datab
 **not** depend on `test`, and `build-migrations` depends only on `build-database`, so
 failures in those two surface independently and need their own diagnosis.
 
+**Name a new job by its lane.** A check context is always lane-suffixed — `test-go`, `test-node`,
+`lint-go`, `lint-node`, `lint-proto`, `generated-go` — and never a bare verb. A repo holding both Go
+and JS cannot have two jobs called `test`, and the repo-config discovery map cannot tell which lane a
+bare `test` belongs to. The bare `test` above is legacy, still emitted by repos not yet migrated.
+
 ---
 
 ## Phase 1: Observe

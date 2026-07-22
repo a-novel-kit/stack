@@ -59,6 +59,21 @@ pnpm lint:go       # always
 you did not introduce, fix it anyway while you are in the file — leave it cleaner than you found
 it.
 
+**When local lint fails and CI is green on the same commit, clean the cache before you believe it.**
+The pinned version comes from the repo's own `golangci-lint.mod`, so local and CI run the identical
+linter and a disagreement is environmental, not a config gap — chasing version drift is wasted
+effort. A stale analyzer cache is the usual cause: facts about the standard library go stale across
+toolchain bumps, and once `staticcheck` can no longer prove `(*testing.T).Fatalf` terminates, every
+`if x == nil { t.Fatalf(…) }` followed by a deref of `x` reads as a nil dereference. CI never sees it
+because its runners always start cold.
+
+```bash
+go tool -modfile=golangci-lint.mod golangci-lint cache clean
+```
+
+Re-run after cleaning. Findings that survive a cold run are real; editing code to appease the ones
+that do not is churn against a false positive.
+
 Then, before the change is done:
 
 1. Invoke **`write-go-tests`** — write or update tests for every file you created or modified, and
