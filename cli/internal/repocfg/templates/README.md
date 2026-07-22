@@ -12,8 +12,9 @@ A repo's desired config is composed from three inputs:
 2. the **org** profile (`orgs/<org>.yaml`) — bot IDs + signing policy;
 3. **discovered** checks/languages (`checks.yaml` + the repo's contents).
 
-Anything a previous version provisioned and this one no longer ships is removed
-only if `retired.yaml` names it — see below.
+Those three are the _only_ inputs. A repo's config is **derived**, never
+accumulated: what they do not produce, `repo update` removes — see
+[Derived, not accumulated](#derived-not-accumulated).
 
 CLI flags and the interactive form override any field.
 
@@ -140,23 +141,28 @@ and then never posted its status therefore stalled the queue behind an otherwise
 green build. Coverage is still uploaded, reported and visible; it is advisory, and
 the old gate is listed in `retired.yaml`.
 
-## `retired.yaml`
+## Derived, not accumulated
 
-Governance an earlier version of repocfg installed, and this one must actively
-**remove**.
+A repo's **rulesets are a set, and the plan names all of it.** Every ruleset comes
+from the class preset, the org profile and code-driven discovery, so anything else
+live on the repo is drift — whether it was dropped from these templates or added
+by hand in the UI — and `repo update` **deletes it**.
 
-Deleting a template only stops `repo update` from _managing_ a thing. Rulesets are
-reconciled **by name** — PUT the one that exists, POST the one that does not — so
-an unshipped ruleset keeps enforcing on every repo that already carries it,
-unreviewed and now invisible to the templates. Apply also never removes what it
-was not told about, deliberately: governed repos carry rulesets and labels that
-are not ours to touch. Retirement is therefore explicit, exactly as it is for
-labels.
+That is a deliberate constraint, not a convenience. The alternative is an
+ever-growing list of things to un-apply, and a live configuration that is the
+templates plus an unreviewable history of whatever each repo happened to be given.
+With the set derived, these files are the whole truth: what you can read here is
+what governs the repos, and a reconcile is enough to prove it.
 
-| Field      | Type     | Meaning                                                 |
-| ---------- | -------- | ------------------------------------------------------- |
-| `rulesets` | []string | Ruleset names to delete from every repo, where present. |
+Two consequences worth stating plainly:
 
-Retiring an absent ruleset is a no-op, so an entry is a standing assertion rather
-than a one-shot migration — leave it in place. Only drop one once every governed
-repo has certainly been reconciled since it was added.
+- **Removing a template removes the ruleset.** Nothing further is needed, and no
+  migration list records that it once existed.
+- **The UI is not a place to configure a governed repo.** A ruleset added there
+  survives until the next reconcile and no longer. Anything genuinely wanted
+  belongs in `rulesets/` and a class preset, where every repo gets it and a
+  reviewer can see it.
+
+Variance between repos is legitimate only where it is _computed_ — the `master`
+ruleset's required checks differ per repo because they are read out of that repo's
+`main.yaml`, not because someone set them differently.

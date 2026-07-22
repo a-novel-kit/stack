@@ -61,24 +61,31 @@ type RepoTarget struct {
 // Op is one API operation the plan performs — a small tagged union. Most ops
 // carry a Method, Path, and Body (or Content, for a file write). A ruleset op
 // instead sets RulesetName and is reconciled by name at apply time: POST when
-// the ruleset is absent, PUT .../{id} when it already exists. Setting Retire
-// inverts that — the named ruleset is DELETED where it exists, and its absence
-// is success, not an error.
+// the ruleset is absent, PUT .../{id} when it already exists.
+//
+// PruneRulesets marks the one op that reconciles the ruleset SET rather than a
+// single ruleset: KeepRulesets is the complete desired list, and apply deletes
+// every live ruleset outside it.
 type Op struct {
-	Method      string `json:"method,omitempty"`
-	Path        string `json:"path,omitempty"`
-	Body        any    `json:"body,omitempty"`
-	Content     string `json:"content,omitempty"`
-	RulesetName string `json:"ruleset,omitempty"`
-	Retire      bool   `json:"retire,omitempty"`
+	Method        string   `json:"method,omitempty"`
+	Path          string   `json:"path,omitempty"`
+	Body          any      `json:"body,omitempty"`
+	Content       string   `json:"content,omitempty"`
+	RulesetName   string   `json:"ruleset,omitempty"`
+	PruneRulesets bool     `json:"prune_rulesets,omitempty"`
+	KeepRulesets  []string `json:"keep_rulesets,omitempty"`
 }
 
 // Title is a one-line human label for the op.
 func (o Op) Title() string {
-	if o.RulesetName != "" {
-		if o.Retire {
-			return fmt.Sprintf("DELETE ruleset %q (%s)", o.RulesetName, o.Path)
+	if o.PruneRulesets {
+		keep := "nothing"
+		if len(o.KeepRulesets) > 0 {
+			keep = strings.Join(o.KeepRulesets, ", ")
 		}
+		return fmt.Sprintf("PRUNE rulesets (%s) — keep only: %s", o.Path, keep)
+	}
+	if o.RulesetName != "" {
 		return fmt.Sprintf("PUT|POST ruleset %q (%s)", o.RulesetName, o.Path)
 	}
 	return o.Method + " " + o.Path
@@ -180,43 +187,43 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	// Rulesets, reconciled by name (POST when absent, PUT .../{id} when present).
 	// The master ruleset gates exactly the discovered checks (always + the
 	// repo's main.yaml jobs, minus exclusions) — set wholesale, no reconcile.
-	if c.Rulesets.Master {
-		if op, err := rulesetOp(rulesetMaster, t, t.Discovered.Checks); err != nil {
-			return nil, err
-		} else {
-			p.Ops = append(p.Ops, op)
-		}
+	wanted := []struct {
+		name   string
+		on     bool
+		checks []CheckRef
+	}{
+		{rulesetMaster, c.Rulesets.Master, t.Discovered.Checks},
+		{"require-approval", c.Rulesets.RequireApproval, nil},
+		{rulesetTags, c.Rulesets.Tags, nil},
 	}
-	if c.Rulesets.RequireApproval {
-		if op, err := rulesetOp("require-approval", t, nil); err != nil {
-			return nil, err
-		} else {
-			p.Ops = append(p.Ops, op)
+	keep := make([]string, 0, len(wanted))
+	for _, w := range wanted {
+		if !w.on {
+			continue
 		}
-	}
-	if c.Rulesets.Tags {
-		if op, err := rulesetOp(rulesetTags, t, nil); err != nil {
+		op, err := rulesetOp(w.name, t, w.checks)
+		if err != nil {
 			return nil, err
-		} else {
-			p.Ops = append(p.Ops, op)
 		}
+		p.Ops = append(p.Ops, op)
+		keep = append(keep, w.name)
 	}
 
-	// Retirements come last, so a repo is first brought up to the current config
-	// and only then stripped of what governance no longer ships. Ordering matters
-	// on the one path that could otherwise leave a gap: retiring a ruleset whose
-	// checks moved into a ruleset applied above.
-	retired, err := LoadRetired()
-	if err != nil {
-		return nil, err
-	}
-	for _, name := range retired.Rulesets {
-		p.Ops = append(p.Ops, Op{
-			RulesetName: name,
-			Retire:      true,
-			Path:        fmt.Sprintf("repos/%s/%s/rulesets", t.Org, t.Repo),
-		})
-	}
+	// A repo's ruleset SET is derived, never accumulated. Everything above follows
+	// from the class preset, the org profile, and code-driven discovery — so any
+	// ruleset this plan does not name is drift, whether it was dropped from the
+	// templates or added by hand in the UI, and apply deletes it. Without this the
+	// only way to remove a ruleset would be an ever-growing list of things to
+	// un-apply, and the live config would be the templates plus an unreviewable
+	// history of what each repo happened to be given.
+	//
+	// Pruning runs last, once every desired ruleset has been written, so a repo is
+	// never momentarily left ungoverned.
+	p.Ops = append(p.Ops, Op{
+		PruneRulesets: true,
+		KeepRulesets:  keep,
+		Path:          repoPath + "/rulesets",
+	})
 
 	return p, nil
 }

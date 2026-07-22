@@ -243,7 +243,7 @@ func TestBuildRulesetBypassResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("the codecov ruleset is retired, not merely unshipped", func(t *testing.T) {
+	t.Run("no coverage ruleset ships", func(t *testing.T) {
 		t.Parallel()
 		// Coverage was a required status check on the default branch, with the bot Apps
 		// exempt so dependency PRs were not blocked on it. A ruleset bypass exempts the
@@ -252,18 +252,10 @@ func TestBuildRulesetBypassResolution(t *testing.T) {
 		// exactly the point dependency PRs relied on it, and a coverage provider that
 		// accepted an upload without posting its status stalled the entire queue.
 		//
-		// Deleting the template is only half of removing it: apply reconciles rulesets BY
-		// NAME, so an unshipped ruleset keeps enforcing on every repo that already carries
-		// one. These two assertions are the two halves, and they must not drift apart.
+		// Removing the template is the whole removal, because the ruleset SET is derived:
+		// what a plan does not name, apply prunes (see TestBuildPlanPrunesUnknownRulesets).
 		if _, err := LoadRuleset("codecov"); err == nil {
-			t.Error("rulesets/codecov.yaml still ships — it must be deleted, not merely left unused")
-		}
-		r, err := LoadRetired()
-		if err != nil {
-			t.Fatalf("LoadRetired: %v", err)
-		}
-		if !slices.Contains(r.Rulesets, "codecov") {
-			t.Errorf("retired.rulesets missing codecov (got %v) — the live ruleset would never be removed", r.Rulesets)
+			t.Error("rulesets/codecov.yaml still ships — coverage must not gate a merge")
 		}
 	})
 }

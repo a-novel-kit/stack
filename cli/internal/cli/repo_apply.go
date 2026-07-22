@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -43,6 +44,9 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 	var staged []contentChange
 	for _, op := range plan.Ops {
 		switch {
+		case op.PruneRulesets:
+			detail, err := pruneRulesets(org, repo, op)
+			note(err == nil, "rulesets (prune)", ternErr(err, detail))
 		case op.RulesetName != "":
 			detail, err := applyRuleset(org, repo, op)
 			note(err == nil, "ruleset "+op.RulesetName, ternErr(err, detail))
@@ -108,24 +112,11 @@ func applySettings(op repocfg.Op) error {
 }
 
 // applyRuleset reconciles a ruleset by name: PUT when one with the same name
-// already exists, POST otherwise (so we never duplicate a ruleset and never
-// touch one we don't manage). A retire op instead DELETES the named ruleset,
-// and treats its absence as success — retirement is a standing assertion, so it
-// re-runs on every reconcile long after the one that removed it.
+// already exists, POST otherwise, so we never duplicate one. Removing a ruleset
+// is not this function's job — the plan's prune op owns the SET (see
+// pruneRulesets), which is what keeps a repo's rulesets derived rather than
+// accumulated.
 func applyRuleset(org, repo string, op repocfg.Op) (string, error) {
-	if op.Retire {
-		id, err := rulesetID(org, repo, op.RulesetName)
-		if err != nil {
-			return "", err
-		}
-		if id == "" {
-			return opAbsent, nil
-		}
-		if _, err := gh("api", "-X", "DELETE", fmt.Sprintf("repos/%s/%s/rulesets/%s", org, repo, id)); err != nil {
-			return "", err
-		}
-		return opDeleted, nil
-	}
 	body, ok := op.Body.(*repocfg.APIRuleset)
 	if !ok {
 		return "", fmt.Errorf("ruleset body is %T, want *repocfg.APIRuleset", op.Body)
@@ -396,15 +387,61 @@ func rulesetID(org, repo, name string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// liveRulesets maps the repo's current ruleset names to their ids.
+func liveRulesets(org, repo string) (map[string]string, error) {
+	out, err := gh("api", fmt.Sprintf("repos/%s/%s/rulesets", org, repo),
+		"--jq", `.[]|"\(.name)\t\(.id)"`)
+	if err != nil {
+		return nil, err
+	}
+	live := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		name, id, ok := strings.Cut(line, "\t")
+		if !ok {
+			continue
+		}
+		live[name] = id
+	}
+	return live, nil
+}
+
+// pruneRulesets reconciles the repo's ruleset SET: every live ruleset the plan
+// did not name is deleted.
+//
+// This is what makes repo config DERIVED rather than accumulated. The desired
+// set follows entirely from the class preset, the org profile and code-driven
+// discovery, so anything else on the repo is drift — a ruleset this version no
+// longer ships, or one added by hand in the UI — and neither is allowed to
+// outlive a reconcile. The alternative is an ever-growing list of things to
+// un-apply, and a live config nobody can read off the templates.
+func pruneRulesets(org, repo string, op repocfg.Op) (string, error) {
+	live, err := liveRulesets(org, repo)
+	if err != nil {
+		return "", err
+	}
+	dropped := make([]string, 0, len(live))
+	for name, id := range live {
+		if slices.Contains(op.KeepRulesets, name) {
+			continue
+		}
+		if _, err := gh("api", "-X", "DELETE", fmt.Sprintf("repos/%s/%s/rulesets/%s", org, repo, id)); err != nil {
+			return "", fmt.Errorf("delete ruleset %q: %w", name, err)
+		}
+		dropped = append(dropped, name)
+	}
+	if len(dropped) == 0 {
+		return opUnchanged, nil
+	}
+	slices.Sort(dropped)
+	return opDeleted + " " + strings.Join(dropped, ", "), nil
+}
+
 // outcome labels for staged managed-file changes.
 const (
 	opCreated   = "created"
 	opUpdated   = "updated"
 	opUnchanged = "unchanged"
 	opDeleted   = "deleted"
-	// opAbsent reports a retirement that found nothing to remove — the ordinary
-	// steady state once a retired ruleset has been swept from every repo.
-	opAbsent = "already absent"
 )
 
 // keyDescription is the JSON "description" field name, lifted to a constant so

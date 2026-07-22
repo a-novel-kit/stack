@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -568,6 +569,110 @@ func TestApplyLabels(t *testing.T) {
 		op := repocfg.Op{Path: "repos/o/r/labels", Body: map[string]any{"ensure": nil}}
 		if _, err := applyLabels("o", "r", op); err == nil {
 			t.Fatal("expected an error for a non-*LabelsConfig body")
+		}
+	})
+}
+
+// TestPruneRulesets covers the one operation in repocfg that DESTROYS live
+// configuration. The desired ruleset set is derived from the templates plus
+// code-driven discovery, so anything else on the repo is drift — but that makes
+// the keep-list the only thing standing between a reconcile and a repo's
+// protection, and a bug here is silent until a merge that should have been
+// gated goes through.
+func TestPruneRulesets(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam.
+	const listed = "master\t1\nrequire-approval\t2\ntags\t3\ncodecov\t4\nCode Quality Copilot review for default branch\t5\n"
+
+	deletedIDs := func(calls []string) []string {
+		var out []string
+		for _, c := range calls {
+			if strings.Contains(c, "-X DELETE") {
+				out = append(out, c[strings.LastIndex(c, "/")+1:])
+			}
+		}
+		return out
+	}
+
+	t.Run("deletes only what the plan does not name", func(t *testing.T) {
+		calls := fakeGH(t, map[string]string{"--jq": listed})
+		detail, err := pruneRulesets("a-novel", "service-auth", repocfg.Op{
+			PruneRulesets: true,
+			KeepRulesets:  []string{"master", "require-approval", "tags"},
+		})
+		if err != nil {
+			t.Fatalf("pruneRulesets: %v", err)
+		}
+		got := deletedIDs(*calls)
+		slices.Sort(got)
+		if want := []string{"4", "5"}; !slices.Equal(got, want) {
+			t.Errorf("deleted ids %v, want %v (codecov + the hand-made Copilot ruleset)", got, want)
+		}
+		for _, id := range got {
+			if id == "1" || id == "2" || id == "3" {
+				t.Errorf("deleted a ruleset the plan asked to keep (id %s)", id)
+			}
+		}
+		if !strings.Contains(detail, "codecov") {
+			t.Errorf("detail = %q, want it to name what was removed", detail)
+		}
+	})
+
+	t.Run("keeping everything deletes nothing", func(t *testing.T) {
+		calls := fakeGH(t, map[string]string{"--jq": listed})
+		detail, err := pruneRulesets("a-novel", "service-auth", repocfg.Op{
+			PruneRulesets: true,
+			KeepRulesets: []string{
+				"master", "require-approval", "tags", "codecov",
+				"Code Quality Copilot review for default branch",
+			},
+		})
+		if err != nil {
+			t.Fatalf("pruneRulesets: %v", err)
+		}
+		if got := deletedIDs(*calls); len(got) != 0 {
+			t.Errorf("deleted %v, want nothing", got)
+		}
+		if detail != opUnchanged {
+			t.Errorf("detail = %q, want %q", detail, opUnchanged)
+		}
+	})
+
+	t.Run("an empty keep set prunes the repo bare", func(t *testing.T) {
+		// A class that declares no rulesets genuinely wants none — this must not be
+		// special-cased into "keep everything", or an ungoverned class would silently
+		// inherit whatever it was given by hand.
+		calls := fakeGH(t, map[string]string{"--jq": listed})
+		if _, err := pruneRulesets("a-novel", "docs", repocfg.Op{PruneRulesets: true}); err != nil {
+			t.Fatalf("pruneRulesets: %v", err)
+		}
+		if got := deletedIDs(*calls); len(got) != 5 {
+			t.Errorf("deleted %d ruleset(s), want all 5", len(got))
+		}
+	})
+
+	t.Run("a listing failure prunes nothing", func(t *testing.T) {
+		// Fail CLOSED: a read error must never be read as "the repo has no rulesets",
+		// which would delete every one of them.
+		orig := ghStdin
+		var deletes int
+		ghStdin = func(_ string, args ...string) (string, error) {
+			joined := strings.Join(args, " ")
+			if strings.Contains(joined, "--jq") {
+				return "", errors.New("gh: API rate limit exceeded")
+			}
+			if strings.Contains(joined, "-X DELETE") {
+				deletes++
+			}
+			return "", nil
+		}
+		t.Cleanup(func() { ghStdin = orig })
+		if _, err := pruneRulesets("a-novel", "service-auth", repocfg.Op{
+			PruneRulesets: true, KeepRulesets: []string{"master"},
+		}); err == nil {
+			t.Error("want an error when the ruleset listing fails")
+		}
+		if deletes != 0 {
+			t.Errorf("issued %d delete(s) after a failed listing — must be 0", deletes)
 		}
 	})
 }

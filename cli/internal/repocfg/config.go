@@ -236,26 +236,6 @@ func LoadLabels() (*LabelsConfig, error) {
 	return &l, nil
 }
 
-// RetiredConfig is retired.yaml: governance an earlier version of repocfg
-// installed and this one must actively delete. Dropping a template only stops
-// apply from MANAGING a thing — what is already live keeps enforcing — and apply
-// never removes what it was not told about, since governed repos also carry
-// rulesets that are not ours to touch. So retiring is explicit, as it is for
-// labels. Retiring an absent ruleset is a no-op, which makes each entry a
-// standing assertion rather than a one-shot migration.
-type RetiredConfig struct {
-	Rulesets []string `yaml:"rulesets"`
-}
-
-// LoadRetired reads and parses retired.yaml.
-func LoadRetired() (*RetiredConfig, error) {
-	var r RetiredConfig
-	if err := loadTemplateYAML("retired.yaml", &r); err != nil {
-		return nil, fmt.Errorf("load retired.yaml: %w", err)
-	}
-	return &r, nil
-}
-
 // RulesetSpec is one rulesets/<name>.yaml base. The required-status-checks
 // list and concrete bypass actors are injected by the builder, not stored
 // here.

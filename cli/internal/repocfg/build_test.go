@@ -277,55 +277,100 @@ func contextsOf(checks []CheckRef) []string {
 	return out
 }
 
-// TestBuildPlanRetiresRulesets pins the half of a removal that is easy to forget.
-// Apply reconciles rulesets BY NAME — PUT when one exists, POST when it does not —
-// so deleting a template only stops repocfg from MANAGING that ruleset. Whatever is
-// already live keeps enforcing, unreviewed, on every repo that carries it. The plan
-// must therefore carry an explicit delete for each retired name.
-func TestBuildPlanRetiresRulesets(t *testing.T) {
+// TestBuildPlanPrunesUnknownRulesets pins the invariant that makes repo config
+// derived rather than accumulated: the plan names the COMPLETE set of rulesets a
+// repo may carry, and apply deletes everything else. Without it the only way to
+// remove a ruleset would be an ever-growing list of things to un-apply, and a
+// ruleset added by hand in the UI would outlive every reconcile.
+func TestBuildPlanPrunesUnknownRulesets(t *testing.T) {
 	t.Parallel()
-	plan, err := BuildPlan(&RepoTarget{
-		Org:        "a-novel-kit",
-		Repo:       "example",
-		Class:      &ClassPreset{},
-		Discovered: &Discovered{},
-	})
-	if err != nil {
-		t.Fatalf("BuildPlan: %v", err)
+
+	build := func(t *testing.T, rs ClassRulesets) *Plan {
+		t.Helper()
+		plan, err := BuildPlan(&RepoTarget{
+			Org:        "a-novel-kit",
+			Repo:       "example",
+			Class:      &ClassPreset{Rulesets: rs},
+			OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{"agent": 1, "publish": 2, "dependencies": 3}},
+			Checks:     &ChecksConfig{},
+			Discovered: &Discovered{},
+		})
+		if err != nil {
+			t.Fatalf("BuildPlan: %v", err)
+		}
+		return plan
 	}
-	retired, err := LoadRetired()
-	if err != nil {
-		t.Fatalf("LoadRetired: %v", err)
-	}
-	if len(retired.Rulesets) == 0 {
-		t.Fatal("retired.rulesets is empty — every assertion below would pass vacuously")
-	}
-	for _, name := range retired.Rulesets {
-		var op *Op
-		for i := range plan.Ops {
-			if plan.Ops[i].RulesetName == name && plan.Ops[i].Retire {
-				op = &plan.Ops[i]
+
+	prunes := func(t *testing.T, plan *Plan) Op {
+		t.Helper()
+		var found []Op
+		for _, op := range plan.Ops {
+			if op.PruneRulesets {
+				found = append(found, op)
 			}
 		}
-		if op == nil {
-			t.Errorf("no retire op for ruleset %q — the live one would survive every reconcile", name)
-			continue
+		if len(found) != 1 {
+			t.Fatalf("want exactly 1 prune op, got %d", len(found))
 		}
-		if op.Path != "repos/a-novel-kit/example/rulesets" {
-			t.Errorf("retire op path = %q, want the repo's rulesets collection", op.Path)
-		}
-		if op.Body != nil {
-			t.Errorf("retire op for %q carries a body; a delete must not send one", name)
-		}
-		if !strings.HasPrefix(op.Title(), "DELETE ") {
-			t.Errorf("retire op title = %q, want it to read as a deletion", op.Title())
-		}
+		return found[0]
 	}
-	// A name must never be both applied and retired in one plan: the two ops would
-	// race, and whichever ran last would decide whether the gate survived.
-	for _, op := range plan.Ops {
-		if !op.Retire && op.RulesetName != "" && slices.Contains(retired.Rulesets, op.RulesetName) {
-			t.Errorf("ruleset %q is both applied and retired in the same plan", op.RulesetName)
+
+	t.Run("keeps exactly what the plan applies", func(t *testing.T) {
+		t.Parallel()
+		plan := build(t, ClassRulesets{Master: true, RequireApproval: true, Tags: true})
+		var applied []string
+		for _, op := range plan.Ops {
+			if op.RulesetName != "" {
+				applied = append(applied, op.RulesetName)
+			}
 		}
-	}
+		keep := prunes(t, plan).KeepRulesets
+		slices.Sort(applied)
+		slices.Sort(keep)
+		if !slices.Equal(applied, keep) {
+			t.Errorf("keep set %v != applied rulesets %v — a ruleset would be written then immediately deleted", keep, applied)
+		}
+	})
+
+	t.Run("prunes last, so the repo is never briefly ungoverned", func(t *testing.T) {
+		t.Parallel()
+		plan := build(t, ClassRulesets{Master: true, RequireApproval: true, Tags: true})
+		lastApply := -1
+		pruneAt := -1
+		for i, op := range plan.Ops {
+			if op.RulesetName != "" {
+				lastApply = i
+			}
+			if op.PruneRulesets {
+				pruneAt = i
+			}
+		}
+		if pruneAt < lastApply {
+			t.Errorf("prune op at %d precedes the last ruleset apply at %d", pruneAt, lastApply)
+		}
+	})
+
+	t.Run("a class with no rulesets keeps none", func(t *testing.T) {
+		t.Parallel()
+		plan := build(t, ClassRulesets{})
+		if keep := prunes(t, plan).KeepRulesets; len(keep) != 0 {
+			t.Errorf("keep = %v, want empty — an ungoverned class must not retain rulesets", keep)
+		}
+	})
+
+	t.Run("coverage is never kept", func(t *testing.T) {
+		t.Parallel()
+		keep := prunes(t, build(t, ClassRulesets{Master: true, RequireApproval: true, Tags: true})).KeepRulesets
+		if slices.Contains(keep, "codecov") {
+			t.Errorf("codecov is still in the keep set %v — it would survive the prune", keep)
+		}
+	})
+
+	t.Run("the prune op reads as a deletion", func(t *testing.T) {
+		t.Parallel()
+		title := prunes(t, build(t, ClassRulesets{Master: true})).Title()
+		if !strings.Contains(title, "PRUNE") || !strings.Contains(title, "master") {
+			t.Errorf("prune title = %q, want it to name the operation and what survives", title)
+		}
+	})
 }
