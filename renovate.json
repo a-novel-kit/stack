@@ -3,6 +3,29 @@
   "extends": ["config:recommended"],
   "packageRules": [
     {
+      "description": "Keep cli/golangci-lint.mod on its own branch. A Renovate artifact update receives the whole branch config, inherited from whichever upgrade sorts first, so a shared branch would let this modfile impose its goGetDirs on cli/go.mod \u2014 and would run only one modfile's post-upgrade task. One branch per modfile keeps every rule pointed at the file it names.",
+      "matchFileNames": ["cli/golangci-lint.mod"],
+      "additionalBranchPrefix": "golangci-lint-",
+      "goGetDirs": ["."],
+      "postUpgradeTasks": {
+        "commands": [
+          "rm -f cli/golangci-lint.sum",
+          "go -C cli get -modfile=golangci-lint.mod -tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
+        ],
+        "executionMode": "branch"
+      }
+    },
+    {
+      "description": "Keep cli/gotestsum.mod on its own branch. A Renovate artifact update receives the whole branch config, inherited from whichever upgrade sorts first, so a shared branch would let this modfile impose its goGetDirs on cli/go.mod \u2014 and would run only one modfile's post-upgrade task. One branch per modfile keeps every rule pointed at the file it names.",
+      "matchFileNames": ["cli/gotestsum.mod"],
+      "additionalBranchPrefix": "gotestsum-",
+      "goGetDirs": ["."],
+      "postUpgradeTasks": {
+        "commands": ["rm -f cli/gotestsum.sum", "go -C cli get -modfile=gotestsum.mod -tool gotest.tools/gotestsum"],
+        "executionMode": "branch"
+      }
+    },
+    {
       "matchManagers": ["npm"],
       "postUpgradeTasks": {
         "commands": ["pnpm i --frozen-lockfile"],
@@ -10,7 +33,7 @@
       }
     },
     {
-      "description": "Run `go mod tidy` after a cli/ Go bump so go.sum gets the module-content (h1:) hashes, not just the /go.mod hashes. Without it Renovate updates cli/go.mod but leaves go.sum incomplete, and any job that compiles cli/ fails with `missing go.sum entry` — notably generated-go-cli, which builds the buf tool via `go generate`. gomodTidy runs in the module's own directory, so it needs no path handling. Mirrors the a-novel service repos.",
+      "description": "Tidy cli/go.mod after a Go bump so go.sum gets the module-content (h1:) hashes, not just the /go.mod hashes; without it any job that compiles cli/ fails with `missing go.sum entry`. This works because each Go modfile has its own branch (see the rules above), so cli/go.mod is the only upgrade on its branch and the option reaches it. Do not merge those branches back together: a Renovate artifact update reads the branch config, which is inherited from whichever upgrade sorts first.",
       "matchFileNames": ["cli/go.mod"],
       "postUpdateOptions": ["gomodTidy"]
     }
@@ -24,5 +47,8 @@
       "depNameTemplate": "a-novel-kit/workflows",
       "datasourceTemplate": "github-releases"
     }
-  ]
+  ],
+  "gomod": {
+    "managerFilePatterns": ["/(^|/)go\\.mod$/", "/(^|/)golangci-lint\\.mod$/", "/(^|/)gotestsum\\.mod$/"]
+  }
 }

@@ -20,7 +20,13 @@ jobs:
     steps:
       - uses: a-novel-kit/workflows/generic-actions/renovate@v1.20.1
         with:
-          allowed_commands: '["^go mod tidy && go generate .*", "^go mod tidy && go tool .*", "^go get -u .*", "^pnpm i --frozen-lockfile$"]'
+          # The cli/ tool modfiles regenerate their own sum after a bump: `go get` only ever adds to
+          # a .sum, so the delete is what keeps stale hashes from accumulating. `go mod tidy` is
+          # deliberately not used on them — it prunes requires, which silently drops linters.
+          allowed_commands: >-
+            ["^go mod tidy && go generate .*", "^go mod tidy && go tool .*", "^go get -u .*",
+            "^pnpm i --frozen-lockfile$", "^rm -f cli/[a-z0-9-]+\\.sum$",
+            "^go -C cli get -modfile=[a-z0-9-]+\\.mod -tool [^;&|]+$"]
           github_token: ${{ secrets.GITHUB_TOKEN }}
           app_private_key: ${{ secrets.DEPENDENCY_BOT_PRIVATE_KEY }}
           client_id: ${{ vars.DEPENDENCY_BOT_CLIENT_ID }}
