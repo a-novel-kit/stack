@@ -148,6 +148,16 @@ func Backup(svc *discovery.Service, tag string) ([]string, error) {
 		if err := backupOne(full, dest); err != nil {
 			return archives, fmt.Errorf("backup volume %s: %w", v.Name, err)
 		}
+		// Read the archive back before calling it a backup. The check already
+		// existed but ran only on restore — at the far end of the lifecycle, so a
+		// truncated archive was discovered on the day it was needed. Clear destroys
+		// the volume on the strength of this return value, so it has to be earned
+		// here.
+		if err := validateArchive(dest); err != nil {
+			_ = os.Remove(dest)
+
+			return archives, fmt.Errorf("verify backup of volume %s: %w", v.Name, err)
+		}
 		archives = append(archives, dest)
 		// Prune past the retention limit AFTER successful backup, so a
 		// failed backup doesn't trigger a prune that loses recovery
@@ -159,25 +169,101 @@ func Backup(svc *discovery.Service, tag string) ([]string, error) {
 
 // backupOne runs `podman volume export <name>` and pipes through zstd
 // into `dest`. Stream-oriented — the volume's bytes never sit in memory.
+//
+// A failed backup leaves no file behind. Clear reads a successful backup as
+// licence to destroy the volume, and a truncated archive left on disk would
+// also be offered by `restore --previous` — so a partial write is worse than
+// no write at all.
 func backupOne(volumeName, dest string) error {
+	if err := writeBackup(volumeName, dest); err != nil {
+		_ = os.Remove(dest)
+
+		return err
+	}
+
+	return nil
+}
+
+// writeBackup exports the volume into dest, compressed.
+//
+// The closes are the crux rather than bookkeeping: zstd.Encoder.Close writes
+// the final block and the frame checksum, so it is precisely the call that can
+// fail after everything else has looked fine — a full disk surfaces here, not
+// in cmd.Run, whose bytes were only accepted into the encoder's buffer.
+// Discarding it reports a truncated archive as a successful backup.
+func writeBackup(volumeName, dest string) error {
 	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", dest, err)
 	}
-	defer func() { _ = out.Close() }()
-	enc, err := zstd.NewWriter(out)
+	// Guards the early returns only; the success path closes explicitly below so
+	// the error is reported rather than dropped.
+	closed := false
+
+	defer func() {
+		if !closed {
+			_ = out.Close()
+		}
+	}()
+
+	cmd := exec.Command("podman", "volume", "export", volumeName)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("podman volume export: stdout pipe: %w", err)
+	}
+
+	var stderr strings.Builder
+
+	cmd.Stderr = &stderr
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("podman volume export: %w (stderr: %s)", err, stderr.String())
+	}
+
+	if err := compressTo(out, stdout); err != nil {
+		_ = cmd.Wait()
+
+		return err
+	}
+
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("podman volume export: %w (stderr: %s)", err, stderr.String())
+	}
+
+	// Reach the platter before reporting success: an archive still in the page
+	// cache is not one the volume can be destroyed against.
+	if err := out.Sync(); err != nil {
+		return fmt.Errorf("fsync %s: %w", dest, err)
+	}
+
+	closed = true
+
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", dest, err)
+	}
+
+	return nil
+}
+
+// compressTo streams src into dst through zstd, reporting the flush that
+// completes the frame.
+func compressTo(dst io.Writer, src io.Reader) error {
+	enc, err := zstd.NewWriter(dst)
 	if err != nil {
 		return fmt.Errorf("zstd writer: %w", err)
 	}
-	defer func() { _ = enc.Close() }()
 
-	cmd := exec.Command("podman", "volume", "export", volumeName)
-	cmd.Stdout = enc
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("podman volume export: %w (stderr: %s)", err, stderr.String())
+	if _, err := io.Copy(enc, src); err != nil {
+		_ = enc.Close()
+
+		return fmt.Errorf("compress volume: %w", err)
 	}
+
+	if err := enc.Close(); err != nil {
+		return fmt.Errorf("flush zstd frame: %w", err)
+	}
+
 	return nil
 }
 
