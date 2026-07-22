@@ -278,6 +278,9 @@ func (r *Runner) markTerminated(id string, reason anovelv1.ExitReason, errMsg st
 		inst.LastErr = errMsg
 	}
 	inst.cmd = nil
+	// Held to close outside the lock. The watch and log-stream goroutines run on the context this
+	// closes, and a container that outlives its instance keeps both polling.
+	cancel := inst.cancel
 	inst.cancel = nil
 	ev := PhaseEvent{
 		TargetID:   inst.ID,
@@ -288,6 +291,10 @@ func (r *Runner) markTerminated(id string, reason anovelv1.ExitReason, errMsg st
 		ExitReason: reason,
 	}
 	r.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
 	// Release the allocator refcounts outside the runner's lock, so the two
 	// locks never interleave.
 	if r.alloc != nil {
