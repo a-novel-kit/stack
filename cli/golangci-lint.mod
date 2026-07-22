@@ -1,6 +1,6 @@
 module github.com/a-novel-kit/stack/cli/golangci-lint
 
-go 1.26.3
+go 1.26.5
 
 tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 
