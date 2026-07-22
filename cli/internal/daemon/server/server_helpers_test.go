@@ -1,6 +1,9 @@
 package server
 
 import (
+	"errors"
+	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -150,5 +153,38 @@ func TestUnimplementedCarriesPhaseLabel(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Foo") || !strings.Contains(err.Error(), "phase 99") {
 		t.Errorf("unimplemented label missing pieces: %q", err.Error())
+	}
+}
+
+// TestExecExitCode covers the wait-error → exit-status mapping the Exec stream's terminal
+// message carries. The distinction that matters is the third case: a wait failure yields no
+// status at all, and reporting 0 there would be indistinguishable from a clean exit.
+func TestExecExitCode(t *testing.T) {
+	// Real *exec.ExitError values, since ExitCode() reads the platform ProcessState
+	// rather than anything we could construct by hand.
+	runExit := func(code int) error {
+		return exec.Command("sh", "-c", "exit "+strconv.Itoa(code)).Run() //nolint:gosec
+	}
+
+	cases := []struct {
+		name    string
+		in      error
+		want    int32
+		wantErr bool
+	}{
+		{"clean exit", nil, 0, false},
+		{"non-zero exit", runExit(3), 3, false},
+		// Not an *exec.ExitError: the child's status was never obtained.
+		{"wait failure", errors.New("pipe closed"), 0, true},
+	}
+	for _, c := range cases {
+		got, err := execExitCode(c.in)
+		if (err != nil) != c.wantErr {
+			t.Errorf("execExitCode(%s): got err %v want wantErr=%v", c.name, err, c.wantErr)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("execExitCode(%s): got %d want %d", c.name, got, c.want)
+		}
 	}
 }
