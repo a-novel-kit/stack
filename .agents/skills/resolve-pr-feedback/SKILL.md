@@ -534,6 +534,15 @@ Classify it with the Phase 2 buckets exactly as you would a review comment, then
 decisions into the body, keep discussing the unsure ones, and push back (once, with a reason) where
 you disagree. The body converges on the agreed plan; the comment stream records how you got there.
 
+**An answered comment is permanent history.** Post the follow-up as a new comment and leave the
+answered one in place, so the human's reply keeps the context it was written against. Replacing a
+comment in place is right only while it is still **unanswered** — a list of open questions that a
+design reshape has made obsolete, where leaving the stale list would mislead. Once even one item has
+an answer, the whole comment stays. Deleting it strands the reply: it goes on referencing headings
+that exist nowhere, and the reasoning behind each answer becomes unreadable. Permission to replace a
+comment is granted against its unanswered state and does not carry forward past the first answer, so
+check for a reply before any `gh api -X DELETE .../issues/comments/<id>`.
+
 ---
 
 ## Common pitfalls

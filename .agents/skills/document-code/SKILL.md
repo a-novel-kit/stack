@@ -79,7 +79,12 @@ Everything else is noise. In particular:
   surprising dependency is comment-worthy.
 - **No external dependencies.** A comment must stay meaningful from the git history alone. Never
   reference a PR, review thread, or temporary plan document. The one exception: linking an issue
-  for a patch or temporary workaround, where the issue _is_ the tracking artifact.
+  for a patch or temporary workaround, where the issue _is_ the tracking artifact. Write that link
+  as the full URL — `https://github.com/<org>/<repo>/issues/<n>` — and keep the marker short, ending
+  it with `Tracked in <url>`. In source, a bare `#N` is not a hyperlink and does not say which repo
+  it belongs to; a full URL pastes straight from the editor into a browser, which is how a reader
+  reaches it. (A comment posted on GitHub is the other case — there `#N` auto-links, so this is
+  specifically about code.)
 
 The test, combined with "document the code as it is" below: a new contributor with only this repo
 checked out, today — does the comment teach them something true, local, and not already on their
