@@ -5,11 +5,9 @@ import (
 	"time"
 )
 
-// Tests for the infra-state cache + generation-counter invalidation.
-// We can't actually exercise InfraStatesOf without podman, but the
-// cache-management primitives (InvalidateInfraStateCache + the
-// generation counter the long scan checks before writing) are pure
-// in-memory state we CAN test in isolation.
+// Tests for the infra-state cache and its generation-counter invalidation.
+// InfraStatesOf needs podman, but the cache primitives it relies on are pure
+// in-memory state and stand on their own here.
 
 func newRunnerForCache() *Runner {
 	r := &Runner{
@@ -44,20 +42,19 @@ func TestCache_InvalidateClearsEntries(t *testing.T) {
 	}
 }
 
-// TestCache_GenCheckSkipsStaleWrite simulates the race the generation
-// counter fixes: the cache write at the end of a long InfraStatesOf
-// scan must be skipped if InvalidateInfraStateCache fired during the
-// scan. We can't run the real podman scan, but we can simulate the
-// "I snapshotted gen=X, did work, now compare-and-write" logic.
+// TestCache_GenCheckSkipsStaleWrite covers the race the generation counter
+// closes: the cache write ending a long InfraStatesOf scan is skipped when
+// InvalidateInfraStateCache fired mid-scan. Standing in for the podman scan, it
+// replays the snapshot-work-compare-and-write sequence.
 func TestCache_GenCheckSkipsStaleWrite(t *testing.T) {
 	r := newRunnerForCache()
-	// Pretend we're about to do a scan — snapshot the generation.
+	// Snapshot the generation, as a scan about to start would.
 	r.infraStateMu.Lock()
 	startGen := r.infraStateGen
 	r.infraStateMu.Unlock()
-	// Concurrent invalidation during our "scan".
+	// An invalidation lands during the scan.
 	r.InvalidateInfraStateCache()
-	// Now we'd write the cache. Mirror the runtime check.
+	// The cache write then mirrors the runtime check.
 	scanResult := map[string]InfraState{"x/y": {ContainerID: "stale"}}
 	r.infraStateMu.Lock()
 	if r.infraStateGen == startGen {
@@ -70,8 +67,8 @@ func TestCache_GenCheckSkipsStaleWrite(t *testing.T) {
 }
 
 func TestCache_GenCheckAllowsCleanWrite(t *testing.T) {
-	// Inverse: with no concurrent Invalidate, the gen match holds and
-	// the write proceeds.
+	// Without a concurrent invalidation the generation still matches, so the
+	// write proceeds.
 	r := newRunnerForCache()
 	r.infraStateMu.Lock()
 	startGen := r.infraStateGen

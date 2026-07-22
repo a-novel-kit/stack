@@ -106,11 +106,11 @@ func composeEnvs(dir string) []envFile {
 	return out
 }
 
-// composeProject builds a podman-safe (lowercase, [a-z0-9-]) project name that
-// is unique per (location, env id) so concurrent test targets never share a
-// compose project.
 var nonProjectChar = regexp.MustCompile(`[^a-z0-9]+`)
 
+// composeProject builds a podman-safe (lowercase, [a-z0-9-]) project name that
+// is unique per (location, env id), so concurrent test targets never share a
+// compose project.
 func composeProject(rel, id string) string {
 	return composeProjectP("anovel-test-", rel, id)
 }
@@ -165,8 +165,7 @@ func composeParse(file string) ([]string, []string) {
 var profilesHeadRe = regexp.MustCompile(`^  ([a-zA-Z0-9_-]+):\s*(?:#.*)?$`)
 
 // profilesLineRe matches the inline-list profile line this codebase uses:
-// `    profiles: ["rest"]`. Multi-line YAML profile lists are not supported
-// (none in this codebase).
+// `    profiles: ["rest"]`. The multi-line YAML list form is unsupported.
 var profilesLineRe = regexp.MustCompile(`^    profiles:\s*\[(.+?)\]\s*(?:#.*)?$`)
 
 // profilesItemRe extracts individual profile names from the inline list,
@@ -186,9 +185,9 @@ var composeTopLevelRe = regexp.MustCompile(`^[a-zA-Z_]+:\s*(?:#.*)?$`)
 var dependsOnHeadRe = regexp.MustCompile(`^    depends_on:`)
 
 // composeServices lists every service name declared under `services:` in a
-// compose file, in source order. Used to drive the "skip duplicates" logic
-// in global-mode env-up (a service repo's compose may declare a containerized
-// sibling that is also running from its own repo).
+// compose file, in source order. Global-mode env-up skips duplicates from it,
+// since a service repo's compose may declare a containerized sibling that is
+// also running from its own repo.
 func composeServices(file string) []string {
 	raw, err := os.ReadFile(file)
 	if err != nil {
@@ -212,10 +211,10 @@ func composeServices(file string) []string {
 }
 
 // composeDependents lists the services that declare a `depends_on:` block, in
-// source order. build.composeUpPhased uses it to bring a test env up in
-// dependency waves — dependency-free services first, then dependents — so
-// ordering never relies on the external provider's `depends_on` wait. Uses the
-// same lightweight services-block scan as composeServices.
+// source order, using the same lightweight services-block scan as
+// composeServices. build.composeUpPhased brings a test env up in dependency
+// waves from it — dependency-free services first, dependents second — so
+// ordering never relies on the external provider's `depends_on` wait.
 func composeDependents(file string) []string {
 	raw, err := os.ReadFile(file)
 	if err != nil {
@@ -308,11 +307,11 @@ func goTests(dir, rel string, envs []envFile) []Target {
 		}
 	}
 
-	// No env files → a single self-contained `go test ./...` (kit libs). These
-	// have no external state, so Go's test cache is safe and worth keeping: it
-	// tracks the sources plus the env vars / files each test consults, and
-	// re-runs when any of those change. Omitting -count=1 lets the tight
-	// edit→test loop hit that cache instead of re-executing every time.
+	// No env files means a single self-contained `go test ./...` (kit libs).
+	// These have no external state, so Go's test cache is safe: it tracks the
+	// sources plus the env vars and files each test consults, and re-runs when
+	// any of those change. Omitting -count=1 lets the tight edit-test loop hit
+	// that cache.
 	if len(goEnvs) == 0 {
 		return []Target{{
 			Kind:   KindGo,
@@ -327,8 +326,8 @@ func goTests(dir, rel string, envs []envFile) []Target {
 
 	// One target per env file, scoped to the path it covers. These keep
 	// -count=1: their result depends on the Postgres state the compose env
-	// stands up, which Go's cache cannot see — a cached pass could hide a
-	// migration/schema change, so they must always re-execute.
+	// stands up, which Go's cache cannot see, so a cached pass could hide a
+	// migration or schema change.
 	targets := make([]Target, 0, len(goEnvs))
 	for _, e := range goEnvs {
 		sel := pkgAll

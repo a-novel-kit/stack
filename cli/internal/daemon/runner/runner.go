@@ -1,14 +1,3 @@
-// Package runner owns the daemon-side process supervision: spawning targets
-// in either go-exec or container mode, tracking each instance's lifecycle
-// (phase / exit-reason / health), and enforcing the lifecycle invariants
-// (mutual exclusion, dependency-walk gating, idempotency).
-//
-// The package exposes one type — Runner — and a set of typed methods. The
-// daemon's server package calls into it from the RPC handlers.
-//
-// Internal state is guarded by a single sync.RWMutex (Runner.mu). For local
-// dev with a handful of targets the contention is negligible and the
-// reasoning is simple (last-write-wins per target).
 package runner
 
 import (
@@ -72,25 +61,23 @@ type Instance struct {
 	cancel context.CancelFunc
 }
 
-// Runner supervises every spawned target across every stack.
+// Runner supervises every spawned target across every stack. A single RWMutex
+// guards the instance map, making per-target state last-write-wins.
 type Runner struct {
 	mu        sync.RWMutex
 	instances map[string]*Instance // keyed by Instance.ID
 
-	// discovery is queried to translate a target ID into a discovery.Target
-	// at start time (we need the cmd dir, dockerfile path, deps, etc.).
+	// discovery translates a target ID into a discovery.Target at start time.
 	discovery []*discovery.Stack
-	// alloc is the port allocator. The runner calls alloc.Release(id)
-	// when an instance terminates so refcounted slots free correctly.
-	// nil-safe: if no allocator is passed, releases are skipped (useful
-	// for tests).
+	// alloc is the port allocator. The runner releases an instance's
+	// refcounted slots when it terminates. A nil allocator skips those
+	// releases, which tests rely on.
 	alloc *env.Allocator
-	// builder synthesizes env blocks per target. Used by the infra path
-	// (StartInfra auto-runs one-shots, each of which needs an env).
+	// builder synthesizes env blocks per target, for the infra path where
+	// StartInfra auto-runs one-shots that each need an env.
 	builder *env.Builder
-	// logs is the per-target log store. The runner pipes go-exec
-	// stdout/stderr through it; container mode currently leaves logs in
-	// podman's journal (the container-log-piping is a phase-5 follow-up).
+	// logs is the per-target log store. The runner pipes go-exec stdout and
+	// stderr through it; container logs stay in podman's journal.
 	logs *logs.Store
 
 	// sessMu guards infraSessions. Separate from mu so the (sometimes
@@ -105,21 +92,17 @@ type Runner struct {
 	subsMu sync.RWMutex
 	subs   []*eventSub
 
-	// infraStateCache memoizes InfraStatesOf per stack. Without this,
-	// every ListServices RPC pays ~1s for podman's cold-start scan,
-	// which makes the TUI's 2-second poll feel laggy and back-to-back
-	// CLI `ps` calls slow. TTL is chosen LONGER than the TUI's poll
-	// interval (2s) so consecutive polls hit cache; mutating RPCs
-	// (KillInfra, StartInfra, KillInfraContainer, …) invalidate via
-	// InvalidateInfraStateCache so user-initiated changes surface
-	// immediately. See infraStateCacheTTL.
+	// infraStateCache memoizes InfraStatesOf per stack, sparing every
+	// ListServices RPC podman's ~1s cold-start scan, which otherwise makes the
+	// TUI's 2-second poll feel laggy and back-to-back CLI `ps` calls slow. Any
+	// RPC that mutates infra state calls InvalidateInfraStateCache, so a
+	// user-initiated change surfaces at once.
 	infraStateMu    sync.Mutex
 	infraStateCache map[string]infraStateCacheEntry // keyed by stack
 	// infraStateGen bumps on every InvalidateInfraStateCache call.
-	// InfraStatesOf snapshots it before its (long) podman scan and
-	// only writes the cache if the generation is still the same on
-	// completion — otherwise the scan's data is older than the
-	// invalidation and would resurrect the just-killed state.
+	// InfraStatesOf snapshots it before its long podman scan and writes the
+	// cache only when the generation still matches, so a scan older than an
+	// invalidation cannot resurrect just-killed state.
 	infraStateGen uint64
 }
 
@@ -129,17 +112,15 @@ type infraStateCacheEntry struct {
 	states map[string]InfraState
 }
 
-// infraStateCacheTTL is the freshness window for the batched podman
-// scan. Picked at 2.5s so the TUI's 2-second poll cadence hits cache
-// every other iteration without ever serving data older than ~one
-// poll. CLI single-shot users see the first call cold (~1s) and
-// subsequent calls within the window come back essentially instant.
+// infraStateCacheTTL is the freshness window for the batched podman scan. At
+// 2.5s the TUI's 2-second poll hits cache every other iteration while never
+// serving data older than roughly one poll, and a CLI caller pays the cold
+// ~1s scan only on its first call.
 const infraStateCacheTTL = 2500 * time.Millisecond
 
-// New returns an empty Runner with the discovery snapshot it'll resolve
-// target IDs against, the env allocator for refcount release on
-// termination, the env builder for one-shot env synthesis, and the log
-// store for capturing target stdout/stderr.
+// New returns an empty Runner wired to the discovery snapshot it resolves
+// target IDs against, the env allocator and builder, and the log store that
+// captures target output.
 func New(disc []*discovery.Stack, alloc *env.Allocator, builder *env.Builder, logStore *logs.Store) *Runner {
 	return &Runner{
 		instances:       make(map[string]*Instance),
@@ -152,11 +133,9 @@ func New(disc []*discovery.Stack, alloc *env.Allocator, builder *env.Builder, lo
 	}
 }
 
-// InvalidateInfraStateCache drops cached InfraStatesOf entries — call
-// after any user-initiated state-change (KillInfra, StartInfra,
-// KillInfraContainer, RestartInfraContainer) so the next ListServices
-// reflects reality instantly. Cheap; safe to call when nothing is
-// cached.
+// InvalidateInfraStateCache drops the cached InfraStatesOf entries. Every RPC
+// that changes infra state calls it, so the next ListServices reflects reality
+// at once. It is safe to call when nothing is cached.
 func (r *Runner) InvalidateInfraStateCache() {
 	r.infraStateMu.Lock()
 	r.infraStateCache = make(map[string]infraStateCacheEntry)
@@ -164,9 +143,8 @@ func (r *Runner) InvalidateInfraStateCache() {
 	r.infraStateMu.Unlock()
 }
 
-// Instance returns the live record for id, or false if no instance is
-// known for it. Caller does not need to hold the lock — the method copies
-// the relevant fields before returning so the caller has a stable snapshot.
+// Instance returns the live record for id, or false when the runner knows none.
+// The returned copy is a stable snapshot, so the caller needs no lock.
 func (r *Runner) Instance(id string) (Instance, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -208,11 +186,11 @@ func (r *Runner) resolveTarget(id string) (*discovery.Target, *discovery.Service
 }
 
 // canStart enforces the start-time invariants:
-//   - already-running in the same mode → idempotent (return existing)
-//   - already-running in a different mode → refuse with hint
-//   - currently stopping → refuse (caller should wait or use restart)
+//   - running in the same mode is idempotent and returns the existing instance
+//   - running in a different mode is refused, with a hint
+//   - a stopping instance is refused; the caller waits or restarts
 //
-// Returns (existing-instance, true, nil) when the call is a no-op.
+// It returns (existing-instance, true, nil) when the call is a no-op.
 func (r *Runner) canStart(id string, mode Mode) (*Instance, bool, error) {
 	r.mu.RLock()
 	inst, ok := r.instances[id]
@@ -264,14 +242,13 @@ func (r *Runner) Kill(ctx context.Context, id string, grace time.Duration) error
 		return nil
 	}
 	r.mu.Unlock()
-	// transition() emits the *→STOPPING PhaseEvent so Watch subscribers
-	// can show "stopping" momentarily before the eventual TERMINATED.
+	// transition emits the *→STOPPING PhaseEvent, so Watch subscribers can show
+	// "stopping" briefly before the eventual TERMINATED.
 	r.transition(id, anovelv1.Phase_PHASE_STOPPING)
 	r.mu.RLock()
 	inst = r.instances[id]
 	r.mu.RUnlock()
 
-	// Mode-specific stop dispatch.
 	switch inst.Mode {
 	case ModeGoExec:
 		return r.killGoExec(ctx, id, grace)
@@ -282,11 +259,10 @@ func (r *Runner) Kill(ctx context.Context, id string, grace time.Duration) error
 	}
 }
 
-// markTerminated transitions the instance into PHASE_TERMINATED with the
-// supplied reason. Idempotent — calling on an already-terminated instance
-// is a no-op so the watch goroutine racing kill() doesn't corrupt state.
-// Also releases the instance's env-allocation refcounts and emits the
-// terminal PhaseEvent (with ExitReason populated) to Watch subscribers.
+// markTerminated moves the instance into PHASE_TERMINATED with the supplied
+// reason, releases its env-allocation refcounts, and emits the terminal
+// PhaseEvent to Watch subscribers. It is idempotent, so a watch goroutine
+// racing kill() cannot corrupt the state.
 func (r *Runner) markTerminated(id string, reason anovelv1.ExitReason, errMsg string) {
 	r.mu.Lock()
 	inst, ok := r.instances[id]
@@ -312,8 +288,8 @@ func (r *Runner) markTerminated(id string, reason anovelv1.ExitReason, errMsg st
 		ExitReason: reason,
 	}
 	r.mu.Unlock()
-	// Release allocator refcounts OUTSIDE the runner's lock — the
-	// allocator has its own lock and we don't want to interleave them.
+	// Release the allocator refcounts outside the runner's lock, so the two
+	// locks never interleave.
 	if r.alloc != nil {
 		r.alloc.Release(id)
 	}

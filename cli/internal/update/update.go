@@ -1,9 +1,9 @@
 // Package update implements a best-effort "a newer version is available" notice
-// for the a-novel CLI. It is deliberately non-fatal: every failure (offline,
-// proxy down, unparseable data, unwritable cache) is swallowed, because a
-// version check must never disrupt or slow a command. The latest version is
-// cached so the network is hit at most once per checkInterval, not on every
-// invocation; in between, the cached value drives the notice.
+// for the a-novel CLI. Every failure — offline, proxy down, unparseable data,
+// unwritable cache — is swallowed, because a version check must never disrupt
+// or slow a command. The latest version is cached, so the network is hit at
+// most once per checkInterval and the cached value drives the notice between
+// fetches.
 package update
 
 import (
@@ -86,9 +86,9 @@ func shouldNotify(current, latest string) bool {
 // Returns "" on any failure.
 func latestVersion() string {
 	path := filepath.Join(paths.State(), cacheFile)
-	// Require the cached version to be valid, not just fresh — otherwise a
-	// corrupt / hand-edited cache with a recent timestamp would suppress the
-	// check for the whole interval instead of triggering a re-fetch.
+	// The cached version must be valid as well as fresh: a corrupt or
+	// hand-edited cache with a recent timestamp would otherwise suppress the
+	// check for the whole interval.
 	if entry, err := readCache(path); err == nil &&
 		time.Since(entry.LastCheck) < checkInterval && semver.IsValid(entry.Latest) {
 		return entry.Latest

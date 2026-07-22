@@ -9,11 +9,10 @@ import (
 )
 
 // TestDiscoverStacksSkipsVanishedScratch pins the asymmetry that keeps the
-// daemon startable: a scratch stack's default home is a directory the OS
-// reclaims, so its files can disappear while its $A_NOVEL_STACKS entry lives on
-// in a shell config. Failing discovery over that would take down the whole
-// daemon — including the workspace the operator is actually using — every time
-// a temp sweep ran.
+// daemon startable: a scratch stack lives in a directory the OS reclaims, so
+// its files can disappear while its $A_NOVEL_STACKS entry lives on in a shell
+// config. Failing discovery over that would take the whole daemon down, and
+// with it the workspace the operator is actually using, on every temp sweep.
 func TestDiscoverStacksSkipsVanishedScratch(t *testing.T) {
 	t.Parallel()
 
@@ -33,7 +32,7 @@ func TestDiscoverStacksSkipsVanishedScratch(t *testing.T) {
 }
 
 // TestDiscoverStacksFailsOnVanishedDefault is the other half: the default stack
-// IS the workspace, so its absence is a real misconfiguration and must be loud.
+// is the workspace, so its absence is a real misconfiguration and must be loud.
 func TestDiscoverStacksFailsOnVanishedDefault(t *testing.T) {
 	t.Parallel()
 
@@ -47,7 +46,7 @@ func TestDiscoverStacksFailsOnVanishedDefault(t *testing.T) {
 }
 
 // TestDiscoverStacksSkipsNonDirectory covers the same skip for a path that
-// exists but is a file — equally unusable, equally not worth a dead daemon.
+// exists as a file: just as unusable, and just as far from worth a dead daemon.
 func TestDiscoverStacksSkipsNonDirectory(t *testing.T) {
 	t.Parallel()
 

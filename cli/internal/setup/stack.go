@@ -93,10 +93,10 @@ func isValidStackRepo(path string) bool {
 		url == "https://github.com/a-novel-kit/stack"
 }
 
-// CloneStack clones the canonical stack repo into path. LFS disabled
-// + partial blob filter (fast clone, no large assets). Exported so the
-// stack-creation verb allocates a new workspace the same way setup
-// bootstraps a registered one — one clone shape, not two.
+// CloneStack clones the canonical stack repo into path, with LFS disabled and a
+// partial blob filter for a fast, asset-free clone. It is exported so the
+// stack-creation verb allocates a new workspace through the same clone shape
+// setup uses to bootstrap a registered one.
 func CloneStack(path string) error {
 	// Ensure parent dir exists; clone creates the leaf.
 	parent := filepath.Dir(path)

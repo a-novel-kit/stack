@@ -1,12 +1,10 @@
 // `a-novel claude` — launch Claude Code from the stack root.
 //
-// Why this exists: an agent session is only as good as what it can see. The
-// stack root is the one directory from which `app/`, `kit/` and `cli/` are all
-// reachable, so a session started anywhere else silently loses half the
-// workspace — and the `a-novel` verbs the agent reaches for (`test`, `build`,
-// `run …`) resolve their targets relative to the working tree. Rather than
-// remembering to `cd` first, this verb makes the correct working directory the
-// only possible one.
+// The stack root is the one directory from which `app/`, `kit/` and `cli/` are
+// all reachable, and the `a-novel` verbs an agent reaches for (`test`, `build`,
+// `run …`) resolve their targets relative to the working tree. Starting a
+// session anywhere else silently loses half the workspace, so this verb makes
+// the correct working directory the only possible one.
 
 package cli
 
@@ -53,8 +51,8 @@ its own with nothing in between.`,
 			if err != nil {
 				return fmt.Errorf("resolve stack root: %w", err)
 			}
-			// Resolve before chdir so a missing binary is reported from a
-			// PATH lookup, not from a half-applied launch.
+			// Resolve before chdir, so a missing binary is reported from the
+			// PATH lookup and no directory change is left half-applied.
 			bin, err := exec.LookPath(claudeBin)
 			if err != nil {
 				return fmt.Errorf(

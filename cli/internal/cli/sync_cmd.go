@@ -2,19 +2,18 @@
 // a-novel / a-novel-kit repositories that make up the local workspace.
 //
 // The repo set is an explicit whitelist read from workspace-repos.yaml at the
-// workspace root (not `gh repo list` discovery): each `repos:` entry is an
-// "<org>/<repo>", and `--allow`/`--ignore` subset that list. The file is the
-// only source of truth — no baked-in default, so an absent file means nothing
-// to sync. Git over SSH is the only dependency.
+// workspace root: each `repos:` entry is an "<org>/<repo>", and
+// `--allow`/`--ignore` subset that list. The file is the only source of truth,
+// so an absent file means nothing to sync. Git over SSH is the only dependency.
 //
 // Behavior:
-//   - Skip the workspace's own repo (so kit/stack never appears as a
-//     duplicate of the dir the binary was launched from).
+//   - Skip the workspace's own repo, so kit/stack never appears as a
+//     duplicate of the dir the binary was launched from.
 //   - Existing repos: ff-only pull on the default branch, ref-update
-//     when off-branch, skip on divergence. Never switches branches and
-//     never stashes — unstaged changes are left exactly as they are.
-//   - GIT_LFS_SKIP_SMUDGE=1 for every git invocation so LFS blobs
-//     don't get pulled.
+//     when off-branch, skip on divergence. Branches are never switched and
+//     nothing is ever stashed; unstaged changes are left exactly as they are.
+//   - GIT_LFS_SKIP_SMUDGE=1 on every git invocation, so LFS blobs stay
+//     unfetched.
 //   - Per-run summary at the end.
 
 package cli
@@ -52,26 +51,24 @@ func (r repoEntry) TargetSubdir() string {
 	return "app"
 }
 
-// orgAnovel / orgAnovelKit are the two GitHub organizations the stack
-// orchestrates. Hoisted to constants so the goconst sweep doesn't
-// complain about the dozen places these literals appear across the
-// CLI surface (sync whitelist, bot config map, root help text, etc.).
+// The two GitHub organizations the stack orchestrates. They are constants
+// because the literals appear across the whole CLI surface, which goconst
+// flags.
 const (
 	orgAnovel    = "a-novel"
 	orgAnovelKit = "a-novel-kit"
 )
 
-// repoWhitelistFile is the runtime whitelist, read from the workspace root.
-// It is the single source of truth for which repos `core sync` touches —
-// there is deliberately no baked-in default, so the list can be edited without
-// rebuilding the CLI.
+// repoWhitelistFile is the runtime whitelist, read from the workspace root and
+// the single source of truth for which repos `core sync` touches. There is no
+// baked-in default, so the list can be edited without rebuilding the CLI.
 const repoWhitelistFile = "workspace-repos.yaml"
 
 // loadRepoWhitelist reads the curated repo list from <root>/workspace-repos.yaml.
-// A missing file is not an error — it yields an empty list, and the caller
-// reports "nothing to sync". Each `repos:` entry is an "<org>/<repo>" string;
-// the org must be one of the two the workspace routes (a-novel → app/,
-// a-novel-kit → kit/), so a typo fails loudly instead of misrouting a clone.
+// A missing file yields an empty list and no error, and the caller reports
+// "nothing to sync". Each `repos:` entry is an "<org>/<repo>" string; the org
+// must be one of the two the workspace routes (a-novel → app/, a-novel-kit →
+// kit/), so a typo fails loudly instead of misrouting a clone.
 func loadRepoWhitelist(root string) ([]repoEntry, error) {
 	data, err := os.ReadFile(filepath.Join(root, repoWhitelistFile))
 	if errors.Is(err, os.ErrNotExist) {
@@ -267,8 +264,6 @@ func syncOne(out io.Writer, root string, r repoEntry, counts *syncCounts) {
 //     overwrite them is skipped rather than stashed.
 //   - Divergence → skip.
 func updateExistingRepo(out io.Writer, target string, r repoEntry, counts *syncCounts) {
-	// Resolve the default branch from `origin/HEAD`, falling back to
-	// "master" only if the symref is missing.
 	def := resolveDefaultBranch(target)
 	// Refresh refs.
 	if cmdOut, err := runGit(target, "fetch", "--quiet", "--tags", "--prune", "origin"); err != nil {
@@ -278,10 +273,8 @@ func updateExistingRepo(out io.Writer, target string, r repoEntry, counts *syncC
 	}
 	current, _ := runGit(target, "symbolic-ref", "--quiet", "--short", "HEAD")
 	currentBranch := strings.TrimSpace(current)
-	// Ensure a local branch tracking origin/<def> exists. Without this,
-	// the off-default-branch path's `git fetch origin a:b` would create
-	// a fresh local ref unconditionally — fine — but on-default-branch
-	// path's `git pull` needs an existing local branch.
+	// Ensure a local branch tracking origin/<def> exists: the
+	// on-default-branch path's `git pull` needs one.
 	if _, err := runGit(target, "rev-parse", "--verify", "--quiet", "refs/heads/"+def); err != nil {
 		_, _ = runGit(target, "branch", "--quiet", "--track", def, "origin/"+def)
 	}
@@ -293,11 +286,11 @@ func updateExistingRepo(out io.Writer, target string, r repoEntry, counts *syncC
 		return
 	}
 	if currentBranch == def {
-		// On the default branch — fast-forward it in place. No stashing:
-		// `git pull --ff-only` advances HEAD without disturbing unstaged
-		// changes, and refuses outright when incoming commits would clobber
-		// a locally-modified file. We surface that refusal as a skip so the
-		// working tree is never rewritten behind the user's back.
+		// On the default branch, fast-forward it in place. `git pull
+		// --ff-only` advances HEAD without disturbing unstaged changes, and
+		// refuses when incoming commits would clobber a locally-modified
+		// file; that refusal surfaces as a skip, so the working tree is
+		// never rewritten behind the user's back.
 		if cmdOut, err := runGit(target, "pull", "--quiet", "--ff-only", "origin", def); err != nil {
 			if strings.Contains(cmdOut, "overwritten") {
 				_, _ = fmt.Fprintf(out, "  ⚠ %s: unstaged changes on %s would be overwritten — skipped (changes kept)\n%s\n", r.FullName(), def, cmdOut)
@@ -386,9 +379,8 @@ func runGit(target string, args ...string) (string, error) {
 	return string(out), err
 }
 
-// appendLFSEnv returns a fresh slice with GIT_LFS_SKIP_SMUDGE=1 layered
-// on. Applied per-git-invocation rather than process-wide so the caller's
-// env stays clean.
+// appendLFSEnv returns a fresh slice with GIT_LFS_SKIP_SMUDGE=1 layered on.
+// Applied per git invocation, so the caller's env stays clean.
 func appendLFSEnv(env []string) []string {
 	return append(env, "GIT_LFS_SKIP_SMUDGE=1")
 }

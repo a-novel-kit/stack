@@ -18,9 +18,9 @@ security:
   secret_scanning: true
   push_protection: true
   # Dependabot security updates are redundant with the node-audit workflow and
-  # fail on private @a-novel-kit deps (no registry token for Dependabot). This
-  # toggles dependabot_security_updates only; Dependabot alerts (advisory
-  # detection) are a separate setting, unaffected here.
+  # fail on private @a-novel-kit deps, which Dependabot has no registry token
+  # for. This toggles dependabot_security_updates only; Dependabot alerts are
+  # a separate setting.
   dependabot: false
 codeql:
   enabled: false

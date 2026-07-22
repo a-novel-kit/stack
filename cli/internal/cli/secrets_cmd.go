@@ -22,11 +22,11 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
 )
 
-// secretsStdinIsTTY reports whether stdin is an interactive terminal. A package
-// var (not a direct call) so the `secrets set` non-interactive refusal is
-// testable without a real PTY — the same seam the publish command uses. Setting
-// a secret reads a no-echo value from the terminal, so it is human-only: an
-// agent or CI run (no TTY) is refused rather than silently reading nothing.
+// secretsStdinIsTTY reports whether stdin is an interactive terminal. It is a
+// package var so the `secrets set` non-interactive refusal is testable without
+// a real PTY, the same seam the publish command uses. Setting a secret reads a
+// no-echo value from the terminal, so it is human-only: an agent or CI run with
+// no TTY is refused outright.
 var secretsStdinIsTTY = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 
 // readPassword reads a line from the terminal with echo disabled. A package var

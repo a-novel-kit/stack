@@ -14,9 +14,9 @@ import (
 // servicesMsg carries a fresh ListServices snapshot from the daemon.
 type servicesMsg struct{ services []*anovelv1.Service }
 
-// errMsg surfaces a non-fatal error to the model (e.g., transient RPC
-// failure during refresh). Lands in m.err; rendered in the nav panel
-// when the service list is empty.
+// errMsg surfaces a non-fatal error, such as a transient RPC failure
+// during refresh. It lands in m.err, which the nav panel renders when
+// the service list is empty.
 type errMsg struct{ err error }
 
 // statusMsg sets the status bar to a given entry. Used for transient
@@ -24,10 +24,10 @@ type errMsg struct{ err error }
 // involve an RPC round trip ("no active target").
 type statusMsg struct{ entry statusEntry }
 
-// actionResultMsg carries the outcome of a daemon-backed action so
-// Update can render the right info/error in the status bar AND trigger
-// a state refresh. actionLabel is the short verb-phrase used to
-// prefix the error message ("start service-template/grpc").
+// actionResultMsg carries the outcome of a daemon-backed action, so
+// Update can render info or error in the status bar and trigger a state
+// refresh. actionLabel is the short verb-phrase that prefixes the error
+// message ("start service-template/grpc").
 type actionResultMsg struct {
 	actionLabel string
 	successText string
@@ -73,16 +73,15 @@ func runAction(busyText, successText, actionLabel string, do func() error) tea.C
 	)
 }
 
-// logsMsg carries log lines from a follower goroutine into the
-// model. `gen` is the follower-generation tag — Update drops any
-// message whose gen doesn't match m.followGen, which handles the
-// cancel-then-start race where the prior follower's in-flight
-// messages would otherwise mix with the new follower's stream.
+// logsMsg carries log lines from a follower goroutine into the model.
+// `gen` is the follower-generation tag: Update drops any message whose
+// gen does not match m.followGen, covering the cancel-then-start race
+// where the prior follower's in-flight messages would mix into the new
+// stream.
 //
-// Lines are always appended: the server's follow=true mode delivers
-// history-then-tail in one stream, so there is no separate snapshot path
-// (combining a snapshot with a follower would make every historical line
-// appear twice).
+// Lines are always appended. The server's follow=true mode delivers
+// history then tail in one stream, so pairing a snapshot with a follower
+// would show every historical line twice.
 type logsMsg struct {
 	lines []*anovelv1.LogLine
 	gen   int
@@ -111,15 +110,13 @@ func tickEvery(d time.Duration) tea.Cmd {
 }
 
 // followSelectedLogs starts a log-streaming subscription on the
-// currently-selected target. Spawns a background goroutine that follows
-// new lines and pushes them via p.Send. The goroutine is bound to
-// m.followCancel so a target-switch cleanly cancels the previous
-// follower.
+// currently-selected target. It spawns a background goroutine that
+// follows new lines and pushes them via p.Send, bound to m.followCancel
+// so a target switch cleanly cancels the previous follower.
 //
-// Returns tea.Cmd (always nil today) so callers can plug it straight
-// into tea.Batch alongside other commands — the Cmd-returning shape
-// keeps the call sites idiomatic even though the work itself happens
-// out-of-band on the goroutine.
+// The returned tea.Cmd is always nil; the shape lets callers plug the
+// call straight into tea.Batch even though the work happens out-of-band
+// on the goroutine.
 //
 //nolint:unparam // tea.Cmd shape is intentional; see comment.
 func (m *model) followSelectedLogs() tea.Cmd {
@@ -127,9 +124,8 @@ func (m *model) followSelectedLogs() tea.Cmd {
 	if id == "" {
 		return nil
 	}
-	// Cancel the prior follower and bump the generation tag — any
-	// late messages still in flight from that follower will now have
-	// a stale gen and get dropped by Update on arrival.
+	// Cancel the prior follower and bump the generation tag, so any of
+	// its late messages carry a stale gen and Update drops them.
 	if m.followCancel != nil {
 		m.followCancel()
 		m.followCancel = nil
@@ -139,9 +135,9 @@ func (m *model) followSelectedLogs() tea.Cmd {
 	if m.program == nil {
 		return nil
 	}
-	// Single follower stream — server's follow=true mode delivers
-	// history first then tails new lines, so a separate snapshot
-	// call would double-stream the history.
+	// One follower stream: the server's follow=true mode delivers history
+	// first and then tails new lines, so a separate snapshot call would
+	// stream the history twice.
 	ctx, cancel := context.WithCancel(context.Background())
 	m.followCancel = cancel
 	go func() {
@@ -183,11 +179,9 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 	case "refresh":
 		return tea.Batch(refreshServicesCmd(m.c), m.followSelectedLogs())
 	case "start":
-		// :start only addresses targets — a single infra container
-		// can't be cold-started in isolation (it might have
-		// dependencies on other infra). Use :infra-start for the
-		// service-level bring-up; use :restart for a single
-		// already-existing infra container.
+		// :start addresses targets only: a single infra container cannot
+		// be cold-started in isolation, since it may depend on other
+		// infra.
 		if m.activeTabKind() == tabKindInfra {
 			return setStatusCmd(statusError,
 				":start only works on targets. For infra: use :infra-start (whole service) or :restart (this container)")
@@ -214,10 +208,9 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 			},
 		)
 	case "kill":
-		// Dispatch on active tab kind — targets call KillTarget,
-		// infra entries call KillInfraContainer (podman stop just
-		// that container, leaves the rest of the service's infra +
-		// any running targets alone).
+		// Targets call KillTarget; infra entries call
+		// KillInfraContainer, which stops that one container and leaves
+		// the rest of the service's infra and targets alone.
 		switch m.activeTabKind() {
 		case tabKindTarget:
 			label := "kill " + t.GetName()
@@ -335,9 +328,7 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 			},
 		)
 	case "topology":
-		// :topology — fetches the GetTopology RPC for the active
-		// service (or all if none selected) and switches to the
-		// dedicated topology view.
+		// An empty service name asks for the whole stack.
 		svcName := ""
 		if svc != nil {
 			svcName = svc.GetName()

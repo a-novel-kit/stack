@@ -17,11 +17,9 @@ type Stack struct {
 	Path     string
 	Default  bool
 	Services []*Service
-	// Errors collected during discovery for this stack. Non-fatal —
-	// surfaced via Status / startup logs so the user can fix them without
-	// the daemon refusing to start outright. Strict-failure cases (the
-	// stack path doesn't exist at all) are returned as the function's
-	// error, not added here.
+	// Errors holds this stack's non-fatal discovery problems, surfaced through
+	// Status and the startup logs so the daemon still starts. A stack path that
+	// does not exist is returned as the function's error instead.
 	Errors []DiscoveryError
 }
 
@@ -36,9 +34,9 @@ type Service struct {
 	Infra       []*Infra
 	Volumes     []*Volume
 	Networks    []string // network names declared at compose top-level
-	// Dependency edges, one per compose `depends_on` entry. Each edge
-	// connects two compose-service names (target or infra); resolution to
-	// the concrete target or infra happens later, at the daemon level.
+	// Dependency edges, one per compose `depends_on` entry, connecting two
+	// compose-service names. Resolving them to a concrete target or infra
+	// happens later, at the daemon level.
 	DependsOn map[string][]string // compose-service-name → [list of names it depends on]
 }
 
@@ -58,8 +56,8 @@ type Target struct {
 }
 
 // ID returns the canonical "<stack>/<service>/<target>" identifier the daemon
-// uses to address this target across every API. Every layer that names a
-// target derives it the same way, so the identifier stays stable end to end.
+// uses to address this target across every API. Every layer derives it the same
+// way, so the identifier stays stable end to end.
 func (t *Target) ID() string {
 	return t.Stack + "/" + t.Service + "/" + t.Name
 }
@@ -90,8 +88,8 @@ type TargetKind int
 
 const (
 	TargetKindUnknown    TargetKind = iota
-	TargetKindOneShot               // no HEALTHCHECK in compose OR Dockerfile
-	TargetKindLongRunner            // has HEALTHCHECK in compose OR Dockerfile
+	TargetKindOneShot               // no healthcheck in compose or the Dockerfile
+	TargetKindLongRunner            // healthcheck in compose or the Dockerfile
 )
 
 // String renders the kind in the shape the proto enum uses.
@@ -106,11 +104,10 @@ func (k TargetKind) String() string {
 	}
 }
 
-// DiscoveryError is a non-fatal classification problem (orphan compose
-// service, missing compose mirror for a cmd/X, etc.). Collected per stack
-// and surfaced via Status so the user can fix them without preventing
-// daemon startup. Truly fatal errors (can't read the stack path) bubble
-// up as the function's error.
+// A DiscoveryError is a non-fatal classification problem, such as a compose
+// service with no matching cmd directory. They are collected per stack and
+// surfaced through Status, so the daemon still starts. An unreadable stack path
+// bubbles up as the function's error instead.
 type DiscoveryError struct {
 	Service string // service name within the stack
 	Path    string // file or directory path the error points at
@@ -128,21 +125,19 @@ func (e DiscoveryError) Error() string {
 // Discovery
 // =============================================================================
 
-// DiscoverStacks parses every service in every registered stack. Returns one
-// Stack per input, with Services populated and DiscoveryErrors collected
-// per stack. A truly inaccessible stack path returns an error (no Stack
-// entry for it); a stack with malformed individual services returns the
-// Stack with the bad services represented in Errors.
+// DiscoverStacks parses every service in every registered stack, returning one
+// Stack per input with its services populated and its problems collected in
+// Errors. An inaccessible stack path returns an error and no Stack entry, while
+// a stack with malformed services still comes back with them listed in Errors.
 func DiscoverStacks(stk []stacks.Stack) ([]*Stack, error) {
 	out := make([]*Stack, 0, len(stk))
 	for _, s := range stk {
 		info, err := os.Stat(s.Path)
 		if err != nil {
-			// A scratch stack is disposable, and its default home is a
-			// directory the OS reclaims — so its files can vanish while the
-			// $A_NOVEL_STACKS entry lives on in a shell config. Skipping it
-			// costs that one stack; failing here costs the whole daemon,
-			// including the workspace the operator is actually using.
+			// A scratch stack lives in a directory the OS reclaims, so its
+			// files can vanish while the $A_NOVEL_STACKS entry lives on in a
+			// shell config. Skipping it costs one stack; failing here would
+			// cost the whole daemon.
 			if !s.IsDefault {
 				continue
 			}
@@ -158,9 +153,8 @@ func DiscoverStacks(stk []stacks.Stack) ([]*Stack, error) {
 		discoverStack(st)
 		out = append(out, st)
 	}
-	// Validate compose env-var references — non-fatal warnings appended
-	// to each stack's Errors so the daemon's startup log surfaces every
-	// unresolvable `${VAR}` reference.
+	// Validate compose env-var references, appending non-fatal warnings to each
+	// stack's Errors so the startup log surfaces every unresolvable `${VAR}`.
 	ValidateEnvRefs(out)
 	return out, nil
 }
@@ -173,19 +167,17 @@ func discoverStack(st *Stack) {
 	appDir := filepath.Join(st.Path, "app")
 	entries, err := os.ReadDir(appDir)
 	if err != nil {
-		// No app/ dir → no services. Not necessarily an error (a stack
-		// can be freshly cloned and not yet populated), so we record it
-		// without failing.
+		// No app/ directory means no services. A freshly cloned stack looks
+		// like this, so record it without failing.
 		st.Errors = append(st.Errors, DiscoveryError{
 			Path:   appDir,
 			Reason: "no app/ directory under stack root",
 		})
 		return
 	}
-	// Sort for stable output. Skip the *-template scaffolds: they're
-	// design-time references that don't model a runnable service —
-	// listing them in `ps` or the TUI sidebar invites users to start
-	// them by accident and creates noise in the env namespace.
+	// Skip the *-template scaffolds: they are design-time references with
+	// nothing runnable behind them, and listing them in `ps` or the TUI sidebar
+	// invites an accidental start. The sort keeps the output stable.
 	names := make([]string, 0, len(entries))
 	for _, e := range entries {
 		if !e.IsDir() || !strings.HasPrefix(e.Name(), "service-") {
@@ -215,9 +207,8 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 	composePath := filepath.Join(dir, "builds", "podman-compose.yaml")
 	cf, err := parseComposeFile(composePath)
 	if err != nil {
-		// Missing or malformed compose file is fatal-per-service: we
-		// can't classify anything. Return nil Service so it doesn't
-		// appear in the list, plus an error so the user knows why.
+		// A missing or malformed compose file leaves nothing to classify, so
+		// the service drops out of the list with an error explaining why.
 		return nil, []DiscoveryError{{Service: name, Path: composePath, Reason: err.Error()}}
 	}
 	svc := &Service{
@@ -235,8 +226,8 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 		if !e.IsDir() {
 			continue
 		}
-		// Only count it if cmd/<name>/main.go exists — a stray empty dir
-		// shouldn't be classified as a target.
+		// Require cmd/<name>/main.go, so a stray empty directory never counts
+		// as a target.
 		mainPath := filepath.Join(dir, "cmd", e.Name(), "main.go")
 		if _, err := os.Stat(mainPath); err == nil {
 			cmdNames[e.Name()] = filepath.Join(dir, "cmd", e.Name())
@@ -245,14 +236,13 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 
 	var errs []DiscoveryError
 
-	// Now classify each compose service.
+	// Classify each compose service.
 	for csName, cs := range cf.Services {
 		// Resolve the dockerfile path for healthcheck inspection.
 		dockerfileAbs := ""
 		if cs.Build != nil && cs.Build.Dockerfile != "" {
-			// Compose's `context: ..` is relative to the compose file
-			// directory (i.e., builds/). The Dockerfile field is then
-			// relative to context. We resolve to an absolute path.
+			// Compose resolves `context:` against the compose file's directory,
+			// and the Dockerfile field against that context.
 			ctxDir := filepath.Dir(composePath)
 			if cs.Build.Context != "" {
 				ctxDir = filepath.Join(ctxDir, cs.Build.Context)
@@ -303,16 +293,16 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 				Ports:       cs.Ports,
 				Environment: map[string]string(cs.Environment),
 			})
-			// Mark this cmd as matched so we can detect orphan cmd/ dirs
-			// below.
+			// Mark this cmd as matched, leaving only orphans behind for the
+			// check below.
 			delete(cmdNames, profile)
 			continue
 		}
 
-		// No profile → infrastructure. A profile-less compose service must
-		// NOT also have a matching cmd/<csName>/: that pairing is an
-		// unprofiled target, which is an error. Infra names like
-		// "postgres-json-keys" have no cmd dir, so they pass naturally.
+		// No profile means infrastructure. A profile-less compose service with
+		// a matching cmd/<csName>/ is an unprofiled target, which is an error;
+		// infra names like "postgres-json-keys" have no cmd dir and pass
+		// naturally.
 		if _, hasCmd := cmdNames[csName]; hasCmd {
 			errs = append(errs, DiscoveryError{
 				Service: name,
@@ -339,8 +329,8 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 		})
 	}
 
-	// Any cmd/ entry NOT matched by a compose service is an orphan: a
-	// target with no compose mirror can't be run, so flag it.
+	// A cmd/ entry left unmatched is an orphan: without a compose mirror it
+	// cannot run.
 	for unmatchedCmd := range cmdNames {
 		errs = append(errs, DiscoveryError{
 			Service: name,

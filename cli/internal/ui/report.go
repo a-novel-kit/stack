@@ -9,18 +9,16 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/build"
 )
 
-// RenderTextReport produces the authoritative, scrollback-safe build report.
+// RenderTextReport produces the authoritative, scrollback-safe build report. It
+// never truncates failure output, so it is the copy a user pastes into an issue.
 //
 // It is printed two ways:
-//   - after the interactive TUI tears down, so the FULL failing logs survive
-//     (the in-TUI report only shows a tail);
+//   - after the interactive TUI tears down, so the full failing logs survive
+//     the tail the in-TUI report shows;
 //   - as the entire output of non-interactive mode (`a-novel build -y`).
 //
-// Unlike the TUI views it never truncates failure output — this is the copy a
-// user pastes into an issue or scrolls back through.
-// elapsed is the real wall-clock run time tracked by the runner; it is shown
-// as "took". Summary.CumulativeDuration is deliberately NOT used here — under
-// parallelism it overstates how long the user actually waited.
+// elapsed is the real wall-clock run time tracked by the runner, shown as
+// "took". Summary.CumulativeDuration overstates the wait under parallelism.
 func RenderTextReport(results []build.Result, aborted bool, elapsed time.Duration, verb Verb) string {
 	s := build.Summarize(results)
 	w := termWidth()

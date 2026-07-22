@@ -6,10 +6,9 @@
 // Restore reverses: zstd-decompress + `podman volume import`. Clear is
 // auto-backup (unless --no-backup) + `podman volume rm -f`.
 //
-// Every destructive op (backup, restore, clear) pre-checks that the
-// service's infra + targets are all down — running ops on a live
-// volume produces inconsistent state. --force overrides
-// after cascade-killing the service first.
+// A destructive operation runs only against a service whose infra and targets
+// are down, since working on a live volume produces inconsistent state. The
+// daemon's handlers enforce that, and --force cascade-kills the service first.
 package volumes
 
 import (
@@ -60,9 +59,8 @@ func BackupDir(stack, service, volume string) string {
 // List
 // =============================================================================
 
-// List returns one Volume entry per compose-declared volume on the
-// service. Existence + size come from `podman volume inspect`; backup
-// count comes from the backups dir.
+// List returns one Volume entry per compose-declared volume on the service.
+// Existence and size come from podman, the backup count from the backups dir.
 func List(svc *discovery.Service) ([]Volume, error) {
 	out := make([]Volume, 0, len(svc.Volumes))
 	for _, v := range svc.Volumes {
@@ -82,11 +80,11 @@ func List(svc *discovery.Service) ([]Volume, error) {
 	return out, nil
 }
 
-// podmanVolumeSize returns (size-on-disk, exists). When the volume
-// doesn't exist yet, returns (0, false).
+// podmanVolumeSize returns the volume's size on disk and whether it exists at
+// all, reporting (0, false) for one that does not.
 func podmanVolumeSize(fullName string) (int64, bool) {
-	// Size comes from `du -sb` on the volume's mountpoint, which
-	// `podman volume inspect` reports.
+	// The size comes from `du -sb` on the mountpoint `podman volume inspect`
+	// reports.
 	mp, err := podmanVolumeMountpoint(fullName)
 	if err != nil || mp == "" {
 		return 0, false
@@ -123,14 +121,12 @@ func podmanVolumeMountpoint(fullName string) (string, error) {
 // Backup
 // =============================================================================
 
-// Backup writes a tar.zst archive of every compose-declared volume on
-// the service. `tag`, if non-empty, is embedded in the filename for
-// later identification. Returns the absolute paths of the created
-// archives, one per volume.
+// Backup writes a tar.zst archive of every compose-declared volume on the
+// service. A non-empty tag is embedded in the filename for later
+// identification. It returns the absolute path of each created archive.
 //
-// Caller is responsible for the pre-check (service down). Backup itself
-// runs unconditionally — the caller decides whether to enforce the
-// safety guard.
+// The caller owns the service-down pre-check; Backup itself runs
+// unconditionally.
 func Backup(svc *discovery.Service, tag string) ([]string, error) {
 	timestamp := time.Now().UTC().Format("2006-01-02T15-04-05Z")
 	var archives []string
@@ -148,32 +144,28 @@ func Backup(svc *discovery.Service, tag string) ([]string, error) {
 		if err := backupOne(full, dest); err != nil {
 			return archives, fmt.Errorf("backup volume %s: %w", v.Name, err)
 		}
-		// Read the archive back before calling it a backup. The check already
-		// existed but ran only on restore — at the far end of the lifecycle, so a
-		// truncated archive was discovered on the day it was needed. Clear destroys
-		// the volume on the strength of this return value, so it has to be earned
-		// here.
+		// Read the archive back before calling it a backup: Clear destroys the
+		// volume on the strength of this return value, and a truncated archive
+		// would otherwise surface only on the day it is needed.
 		if err := validateArchive(dest); err != nil {
 			_ = os.Remove(dest)
 
 			return archives, fmt.Errorf("verify backup of volume %s: %w", v.Name, err)
 		}
 		archives = append(archives, dest)
-		// Prune past the retention limit AFTER successful backup, so a
-		// failed backup doesn't trigger a prune that loses recovery
-		// state.
+		// Prune to the retention limit only after a successful backup, so a
+		// failed one never prunes away recovery state.
 		pruneOldBackups(dir)
 	}
 	return archives, nil
 }
 
-// backupOne runs `podman volume export <name>` and pipes through zstd
-// into `dest`. Stream-oriented — the volume's bytes never sit in memory.
+// backupOne runs `podman volume export <name>` and pipes it through zstd into
+// dest. The stream never holds the volume's bytes in memory.
 //
-// A failed backup leaves no file behind. Clear reads a successful backup as
-// licence to destroy the volume, and a truncated archive left on disk would
-// also be offered by `restore --previous` — so a partial write is worse than
-// no write at all.
+// A failed backup leaves no file behind: Clear treats a successful backup as
+// license to destroy the volume, and `restore --previous` would offer a
+// truncated archive left on disk.
 func backupOne(volumeName, dest string) error {
 	if err := writeBackup(volumeName, dest); err != nil {
 		_ = os.Remove(dest)
@@ -187,10 +179,10 @@ func backupOne(volumeName, dest string) error {
 // writeBackup exports the volume into dest, compressed.
 //
 // The closes are the crux rather than bookkeeping: zstd.Encoder.Close writes
-// the final block and the frame checksum, so it is precisely the call that can
-// fail after everything else has looked fine — a full disk surfaces here, not
-// in cmd.Run, whose bytes were only accepted into the encoder's buffer.
-// Discarding it reports a truncated archive as a successful backup.
+// the final block and the frame checksum, so it is the call that fails after
+// everything else looked fine — a full disk surfaces there, not in cmd.Run,
+// whose bytes were only accepted into the encoder's buffer. Discarding that
+// error reports a truncated archive as a successful backup.
 func writeBackup(volumeName, dest string) error {
 	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -319,13 +311,10 @@ func pruneOldBackups(dir string) {
 // Restore
 // =============================================================================
 
-// Restore replaces each volume's contents with a backup archive. `from`
-// selects the archive timestamp; empty means "latest backup for each
-// volume" (the most recent .tar.zst by mtime in the per-volume dir).
-//
-// Validates the archive (decompress sanity-check)
-// before touching any volume. Returns the list of restored volume
-// names.
+// Restore replaces each volume's contents from a backup archive. `from` selects
+// the archive timestamp; empty takes each volume's most recent .tar.zst by
+// mtime. Every archive is validated before any volume is touched. It returns
+// the restored volume names.
 func Restore(svc *discovery.Service, from string) ([]string, error) {
 	// 1. Resolve the source archive for each volume.
 	plans := make([]restorePlan, 0, len(svc.Volumes))
@@ -344,7 +333,7 @@ func Restore(svc *discovery.Service, from string) ([]string, error) {
 			bare:    v.Name,
 		})
 	}
-	// 2. After all archives validated, restore each.
+	// 2. Every archive is valid, so restore each in turn.
 	var restored []string
 	for _, p := range plans {
 		if err := restoreOne(p.volume, p.archive); err != nil {
@@ -357,16 +346,15 @@ func Restore(svc *discovery.Service, from string) ([]string, error) {
 
 type restorePlan struct{ volume, archive, bare string }
 
-// resolveBackup returns the path to either a specific timestamped
-// archive (when from != "") or the most-recent one in dir.
+// resolveBackup returns the path to the timestamped archive named by `from`, or
+// to the most recent archive in dir when it is empty.
 func resolveBackup(dir, from string) (string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return "", fmt.Errorf("read backups dir %s: %w", dir, err)
 	}
 	if from != "" {
-		// Match prefix — the file may be `<ts>.tar.zst` or
-		// `<ts>.<tag>.tar.zst`, so prefix-match handles both.
+		// A prefix match covers both `<ts>.tar.zst` and `<ts>.<tag>.tar.zst`.
 		for _, e := range entries {
 			if strings.HasPrefix(e.Name(), from) && strings.HasSuffix(e.Name(), ".tar.zst") {
 				return filepath.Join(dir, e.Name()), nil
@@ -397,9 +385,8 @@ func resolveBackup(dir, from string) (string, error) {
 	return cands[0].path, nil
 }
 
-// validateArchive opens the archive and reads through to ensure it
-// decompresses cleanly. Done up-front so we don't trash
-// a volume halfway through with a corrupt input.
+// validateArchive reads the archive through to confirm it decompresses cleanly.
+// It runs up front, so a corrupt input never trashes a volume halfway.
 func validateArchive(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -429,7 +416,7 @@ func restoreOne(volumeName, archive string) error {
 		return fmt.Errorf("zstd reader: %w", err)
 	}
 	defer dec.Close()
-	// Ensure the target volume exists; podman volume import requires it.
+	// `podman volume import` requires the target volume to exist.
 	_ = exec.Command("podman", "volume", "create", volumeName).Run()
 	cmd := exec.Command("podman", "volume", "import", volumeName, "-")
 	cmd.Stdin = dec
@@ -445,12 +432,11 @@ func restoreOne(volumeName, archive string) error {
 // Clear
 // =============================================================================
 
-// Clear destroys every volume on the service. When noBackup is false
-// (the default), takes an auto-backup first so undo is one
-// `restore --previous` away. With noBackup=true, deletion is
+// Clear destroys every volume on the service. It takes an auto-backup first, so
+// undo is one `restore --previous` away; noBackup makes the deletion
 // irreversible.
 //
-// Caller is responsible for the pre-check (service down).
+// The caller owns the service-down pre-check.
 func Clear(svc *discovery.Service, noBackup bool) ([]string, error) {
 	if !noBackup {
 		if _, err := Backup(svc, "auto-pre-clear"); err != nil {

@@ -5,18 +5,16 @@ import (
 	"testing"
 )
 
-// Test the small substitution-rule primitives the env builder hangs off
-// — ServicePrefix, extractRefs, substitute, the *_KIND classifiers,
-// derivedFor, urlFor. These are pure functions; every one of them is a
-// silent regression risk because the daemon's cross-service env wiring
-// reads through them at every Acquire.
+// Tests for the substitution-rule primitives the env builder hangs off. They
+// are pure functions, and the daemon's cross-service env wiring reads through
+// each of them on every Acquire.
 
 func TestServicePrefix(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"service-json-keys", "SERVICE_JSON_KEYS"},
 		{"service-authentication", "SERVICE_AUTHENTICATION"},
-		// Bare names without hyphens still get uppercased — defensive
-		// against future services that don't follow service-X naming.
+		// A bare name without hyphens is still uppercased, covering a
+		// service that skips the service-X convention.
 		{"plain", "PLAIN"},
 		{"", ""},
 	}
@@ -82,8 +80,8 @@ func TestSubstitute(t *testing.T) {
 }
 
 func TestResolveOwner(t *testing.T) {
-	// Services list sorted longest-first — same shape the allocator
-	// hands us via SetServices.
+	// The services list is sorted longest-first, the shape SetServices hands
+	// out.
 	services := []string{
 		"service-authentication",
 		"service-json-keys",
@@ -95,12 +93,10 @@ func TestResolveOwner(t *testing.T) {
 	}{
 		{"SERVICE_JSON_KEYS_GRPC_PORT", "service-json-keys", "GRPC_PORT"},
 		{"SERVICE_AUTHENTICATION_REST_PORT", "service-authentication", "REST_PORT"},
-		// Unprefixed → "" owner, full name as local.
+		// An unprefixed name yields an empty owner and itself as the local.
 		{"POSTGRES_PORT", "", "POSTGRES_PORT"},
-		// Prefix-collision pitfall: a var name that starts with a
-		// service prefix but isn't actually a service ref. We don't
-		// guard against this — anyone naming a var SERVICE_JSON_KEYS_X
-		// is owning the consequence. Documenting current behavior.
+		// A var that merely starts with a service prefix still resolves to
+		// that service: naming one SERVICE_JSON_KEYS_X owns the consequence.
 		{"SERVICE_JSON_KEYS_PORT", "service-json-keys", "PORT"},
 	}
 	for _, c := range cases {
@@ -113,12 +109,11 @@ func TestResolveOwner(t *testing.T) {
 }
 
 func TestResolveOwnerLongestMatchWins(t *testing.T) {
-	// When two service names share a prefix, the longer must match
-	// first. Without this, `service-template-extra/X` would resolve
-	// against `service-template` and silently misroute.
+	// When two service names share a prefix the longer must match first, or
+	// `service-template-extra/X` resolves against `service-template` and
+	// silently misroutes.
 	services := []string{
-		// Caller's responsibility to sort longest-first; mirror what
-		// allocator.SetServices does.
+		// The caller sorts longest-first, as allocator.SetServices does.
 		"service-template-extra",
 		"service-template",
 	}
@@ -136,8 +131,7 @@ func TestIsAllocatedKind(t *testing.T) {
 		{"REST_PORT", true},
 		{"GRPC_PORT", true},
 		{"SMTP_PORT", true},
-		// PORT alone is NOT allocated — the rule is "ends with _PORT",
-		// not "is PORT". Documenting because this trips people up.
+		// The rule is a _PORT suffix, so a bare PORT allocates nothing.
 		{"PORT", false},
 		{"HOST", false},
 		{"URL", false},
@@ -180,9 +174,9 @@ func TestDerivedFor(t *testing.T) {
 }
 
 func TestUrlFor_GRPC_Schemeless(t *testing.T) {
-	// gRPC URLs are deliberately schemeless — `localhost:port` is what
-	// grpc-go's Dial expects. Adding `grpc://` would force every consumer
-	// to strip it. Lock this in.
+	// A gRPC URL stays schemeless, since `localhost:port` is what grpc-go's
+	// Dial expects and a `grpc://` prefix would leave every consumer stripping
+	// it.
 	if got, want := urlFor("GRPC", 9090), "localhost:9090"; got != want {
 		t.Errorf("urlFor(GRPC, 9090): got %q want %q", got, want)
 	}
@@ -192,9 +186,8 @@ func TestUrlFor_GRPC_Schemeless(t *testing.T) {
 }
 
 func TestItoaAtoi_Roundtrip(t *testing.T) {
-	// Cheap sanity — the in-package itoa/atoi exist to avoid an strconv
-	// import and have one consumer (urlFor). Make sure they're not
-	// off-by-one.
+	// urlFor is the one consumer of the in-package itoa and atoi, so the pair
+	// has to round-trip exactly.
 	for _, n := range []int{0, 1, 9, 10, 99, 100, 65535} {
 		if got := atoi(itoa(n)); got != n {
 			t.Errorf("itoa/atoi roundtrip for %d: got %d", n, got)

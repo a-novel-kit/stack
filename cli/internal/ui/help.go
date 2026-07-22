@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-// HelpView is the generic help: banner, usage, and the command list only.
-// Per-command flags/examples are intentionally NOT here — they live behind
-// `a-novel <command> --help` (see CommandHelpView).
+// HelpView is the generic help: banner, usage, and the command list.
+// Per-command flags and examples live behind `a-novel <command> --help`
+// (see CommandHelpView).
 func HelpView(version string) string {
 	var b strings.Builder
 	b.WriteString(Banner(version))

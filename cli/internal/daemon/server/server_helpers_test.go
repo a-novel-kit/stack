@@ -12,10 +12,9 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Tests for the small pure helpers in server.go — parseInfraLogID,
-// describePhaseEvent, findInfra, convertModeFromProto. Cheap, but their
-// output is wire-visible (StateEvent.Description, log-streaming routing)
-// so silent regressions are user-facing.
+// Tests for the pure helpers in server.go. Their output is wire-visible, in
+// StateEvent.Description and in log-streaming routing, so a regression here
+// reaches the user.
 
 func TestParseInfraLogID(t *testing.T) {
 	cases := []struct {
@@ -92,9 +91,8 @@ func TestDescribePhaseEvent(t *testing.T) {
 			id + " terminated (crashed)",
 		},
 		{
-			// PENDING (or unhandled phase): falls through to the
-			// stringified enum form. Documents the catch-all so a
-			// future "improve string" tweak doesn't break it silently.
+			// PENDING, like any unhandled phase, falls through to the
+			// stringified enum form.
 			runner.PhaseEvent{TargetID: id, NewPhase: anovelv1.Phase_PHASE_PENDING},
 			id + " " + anovelv1.Phase_PHASE_PENDING.String(),
 		},
@@ -120,9 +118,8 @@ func TestFindInfra(t *testing.T) {
 	if got := findInfra(svc, "missing"); got != nil {
 		t.Errorf("findInfra(missing): got %v want nil", got)
 	}
-	// Note: findInfra does not nil-check its svc — callers in this
-	// package always pass a discovered svc, so adding the guard would
-	// be defensive overhead. Don't probe `findInfra(nil, ...)`.
+	// findInfra never nil-checks svc, since every caller in the package passes
+	// a discovered one, so a `findInfra(nil, ...)` probe belongs nowhere here.
 }
 
 func TestConvertModeFromProto(t *testing.T) {
@@ -132,8 +129,8 @@ func TestConvertModeFromProto(t *testing.T) {
 	}{
 		{anovelv1.Mode_MODE_GO_EXEC, runner.ModeGoExec},
 		{anovelv1.Mode_MODE_CONTAINER, runner.ModeContainer},
-		// Unspecified defaults to go-exec — covers the CLI's bare
-		// `a-novel run start` case where no mode flag was passed.
+		// Unspecified defaults to go-exec, covering a bare
+		// `a-novel run start` with no mode flag.
 		{anovelv1.Mode_MODE_UNSPECIFIED, runner.ModeGoExec},
 	}
 	for _, c := range cases {
@@ -144,9 +141,8 @@ func TestConvertModeFromProto(t *testing.T) {
 }
 
 func TestUnimplementedCarriesPhaseLabel(t *testing.T) {
-	// The standard stub message includes the phase reference so users
-	// know when to expect the feature. Make sure the format doesn't
-	// silently change.
+	// The stub message names both the RPC and the phase it is expected in, and
+	// that format has to hold.
 	err := unimplemented("Foo", "phase 99")
 	if err == nil {
 		t.Fatal("nil error")
@@ -156,12 +152,13 @@ func TestUnimplementedCarriesPhaseLabel(t *testing.T) {
 	}
 }
 
-// TestExecExitCode covers the wait-error → exit-status mapping the Exec stream's terminal
-// message carries. The distinction that matters is the third case: a wait failure yields no
-// status at all, and reporting 0 there would be indistinguishable from a clean exit.
+// TestExecExitCode covers the wait-error to exit-status mapping the Exec
+// stream's terminal message carries. The third case is the one that matters: a
+// wait failure yields no status at all, and reporting 0 would read as a clean
+// exit.
 func TestExecExitCode(t *testing.T) {
-	// Real *exec.ExitError values, since ExitCode() reads the platform ProcessState
-	// rather than anything we could construct by hand.
+	// Real *exec.ExitError values, since ExitCode reads the platform
+	// ProcessState rather than anything constructed by hand.
 	runExit := func(code int) error {
 		return exec.Command("sh", "-c", "exit "+strconv.Itoa(code)).Run() //nolint:gosec
 	}

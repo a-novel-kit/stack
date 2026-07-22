@@ -14,9 +14,7 @@ import (
 )
 
 // Reusable lipgloss presentation primitives shared by the dry-run view and the
-// build report: a width helper, per-kind color coding, stat "pills", titled
-// bordered panels, and the two data tables. Keeping them here means the views
-// describe what to show; this file owns how it looks.
+// build report. The views describe what to show; this file owns how it looks.
 
 // termWidth is the content width budget for static (non-TUI) output. The TUI
 // gets its width from tea.WindowSizeMsg; piped/CI output has no terminal to
@@ -55,10 +53,9 @@ var (
 	}
 )
 
-// relLabel renders a target's directory for display: the scan root ("." from
-// filepath.Rel) reads as "(root)" everywhere it is shown — selection list,
-// dry-run table, and failure-panel titles — so a root failure is never the
-// cryptic "[.]".
+// relLabel renders a target's directory for display. The scan root, which
+// filepath.Rel gives as ".", reads as "(root)" everywhere, so a root failure is
+// never the cryptic "[.]".
 func relLabel(rel string) string {
 	if rel == "." {
 		return "(root)"
@@ -152,20 +149,18 @@ func kindColor(k detect.Kind) color.Color {
 }
 
 // kindTag is a fixed-width, color-coded, upper-cased kind label (GO / PNPM /
-// PODMAN). Padded to the longest name so a column of these stays aligned in
-// the live build list where there is no table to do it for us. The padding is
-// applied before coloring so it counts toward visible width.
+// PODMAN), padded to the longest name so a column of these stays aligned in the
+// live build list, which has no table to align it. Padding is applied before
+// coloring so it counts toward visible width.
 func kindTag(k detect.Kind) string {
 	return lipgloss.NewStyle().Foreground(kindColor(k)).Bold(true).
 		Render(pad(strings.ToUpper(string(k)), 6))
 }
 
 // targetName colors a build target's name by outcome: green on success,
-// error-orange on failure. Deliberately NOT a kind color and NOT the default
-// foreground — once a result exists, the name itself should carry the verdict
-// (reinforcing the ✓/✗ glyph) without being mistaken for the kind palette.
-// Before a result exists (dry run, selection, in-flight) callers use the plain
-// default color instead.
+// error-orange on failure, so once a result exists the name itself carries the
+// verdict and reinforces the ✓/✗ glyph. Before a result exists — dry run,
+// selection, in-flight — callers use the plain default color.
 func targetName(name string, ok bool) string {
 	c := colOK
 	if !ok {
@@ -198,14 +193,13 @@ func pillRow(pills ...string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, spaced...)
 }
 
-// panel wraps body in a rounded muted border under a colored title bar — a
-// titled card, bounded to width. lipgloss has no native bordered-title, so the
-// title is a separate accent line above the box (a common, clean compromise).
+// panel wraps body in a rounded muted border under a colored title bar, a
+// titled card bounded to width. lipgloss has no native bordered title, so the
+// title is a separate accent line above the box.
 //
-// width is the OUTER width budget: the box's content is hard-set to
-// width-4 (1 border + 1 padding each side) and lipgloss wraps long lines into
-// it, so an over-long build-log line stays bounded by the border instead of
-// stretching it off the terminal.
+// width is the outer budget: the box's content is hard-set to width-4 (one
+// border and one padding column each side) and lipgloss wraps long lines into
+// it, so an over-long build-log line stays inside the border.
 func panel(title string, c color.Color, body string, width int) string {
 	if width <= 0 {
 		width = termWidth()
@@ -253,14 +247,14 @@ func targetsTable(targets []detect.Target) string {
 		loc := relLabel(tg.RelDir)
 		kind := lipgloss.NewStyle().Foreground(kindColor(tg.Kind)).Bold(true).
 			Render(strings.ToUpper(string(tg.Kind)))
-		// TARGET cell is two lines: the name (default terminal color — a dry
-		// run has no outcome, so no green/red and no kind color), then its
-		// location dimmed beneath it.
+		// The TARGET cell is two lines: the name in the default terminal
+		// color, since a dry run has no outcome to signal, then its location
+		// dimmed beneath it.
 		target := tg.Name + "\n" + styleMuted.Render("↳ "+loc)
 		cmd := lipgloss.NewStyle().Foreground(colMuted).
 			Render(tg.Cmd + " " + strings.Join(tg.Args, " "))
-		// When the target needs a podman-compose env, show it under the
-		// command — for `test` this is the decisive extra fact.
+		// A target needing a podman-compose env shows it under the command,
+		// the decisive extra fact for `test`.
 		if tg.Env != nil {
 			cmd += "\n" + lipgloss.NewStyle().Foreground(colAccent).
 				Render("↳ env "+tg.Env.ID)
@@ -273,14 +267,13 @@ func targetsTable(targets []detect.Target) string {
 // resultsTable is the per-target build outcome grid: a colored status badge,
 // the target, its kind, and how long it took.
 func resultsTable(results []build.Result) string {
-	// KIND before TARGET: the kind is the strongest disambiguator, so it
-	// reads first (matches the live build list ordering).
+	// KIND reads before TARGET, as the strongest disambiguator, matching the
+	// live build list's ordering.
 	t := baseTable().Headers("", "KIND", "TARGET", "TIME")
 
-	// In a multi-service run (global mode), the TARGET column would otherwise
-	// be ambiguous — `rest` appears for every service. Prepend the service
-	// name so the row reads `service-json-keys/rest`. Single-service runs
-	// keep the bare name (the header already carries the service).
+	// In a multi-service (global) run the TARGET column alone is ambiguous,
+	// since `rest` appears for every service, so the row reads
+	// `service-json-keys/rest`. A single-service run keeps the bare name.
 	multi := distinctServices(results) > 1
 
 	for _, r := range results {
@@ -302,8 +295,8 @@ func resultsTable(results []build.Result) string {
 	return t.Render()
 }
 
-// distinctServices counts the unique non-empty Service values across results
-// — the signal that the run spans more than one repo (global mode).
+// distinctServices counts the unique non-empty Service values across results,
+// the signal that a run spans more than one repo (global mode).
 func distinctServices(results []build.Result) int {
 	seen := map[string]bool{}
 	for _, r := range results {
@@ -365,9 +358,8 @@ func failurePanel(r build.Result, tail, width int) string {
 }
 
 // EnvConflictView renders the leftover-environment warning shown by the
-// preflight: a critical titled section, a short explanation, and the stale
-// envs with their containers nested beneath — styled to match the report
-// rather than plain stderr text.
+// preflight: a critical titled section, a short explanation, and the stale envs
+// with their containers nested beneath.
 func EnvConflictView(verb Verb, conflicts []build.Conflict) string {
 	w := termWidth()
 	var b strings.Builder

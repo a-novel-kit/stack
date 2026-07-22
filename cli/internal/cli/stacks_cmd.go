@@ -1,14 +1,12 @@
 package cli
 
-// Stack lifecycle. `core sync --root` stands a stack up in one verb, so tearing
-// one down is one verb too.
+// Stack lifecycle: allocate, list and prune workspace stacks.
 //
-// Prune exists because a stack allocates three things and only one of them is a
-// file. Deleting the root — by hand, or by a tmp sweep — reclaims the checkout
-// and leaves the rest: containers keep running and holding host ports, and
-// podman volumes sit under the container store until something names them. Both
-// are the daemon's to release, which is why this is a CLI verb rather than a
-// documented `rm -rf`.
+// A stack allocates three things and only one of them is a file. Deleting the
+// root reclaims the checkout and leaves the rest: containers keep running and
+// holding host ports, and podman volumes sit under the container store until
+// something names them. Both are the daemon's to release, which is why prune is
+// a CLI verb rather than a documented `rm -rf`.
 
 import (
 	"context"
@@ -30,8 +28,7 @@ import (
 )
 
 // killGrace is how long a target gets to exit on SIGTERM before the daemon
-// escalates. Matches the `run kill` default — a stack being torn down has no
-// claim to a longer goodbye than a single target.
+// escalates. It matches the `run kill` default.
 const killGrace = 10 * time.Second
 
 func newCoreStacksCmd() *cobra.Command {
@@ -57,13 +54,13 @@ space is given back.`,
 // =============================================================================
 
 // defaultStackRoot is where an extra workspace lands when the caller does not
-// choose. os.TempDir() honours $TMPDIR, so this resolves to the per-user
-// /var/folders/…/T on macOS and /tmp on Linux — in both cases a directory the
-// OS already reclaims, which makes a stack that outlives its session a disk
-// leak with an expiry date rather than a permanent one.
+// choose. os.TempDir() honors $TMPDIR, resolving to the per-user
+// /var/folders/…/T on macOS and /tmp on Linux — directories the OS already
+// reclaims, so a stack that outlives its session is a disk leak with an expiry
+// date.
 //
-// The default stack is deliberately NOT here: it is the workspace, and a
-// workspace under a directory the OS empties is a trap.
+// The default stack lives elsewhere: it is the workspace, and a workspace under
+// a directory the OS empties is a trap.
 func defaultStackRoot(name string) string {
 	return filepath.Join(os.TempDir(), "a-novel-stacks", name)
 }
@@ -238,9 +235,9 @@ type pruneOpts struct {
 }
 
 // resolvePruneTargets maps the command's arguments onto the stacks the daemon
-// actually knows about. The default stack is filtered out of --all rather than
-// reported as an error: a sweep is meant to be run without reading the list
-// first, so "everything disposable" is the useful reading of --all.
+// knows about. --all silently filters the default stack out, since a sweep is
+// meant to run without reading the list first and "everything disposable" is
+// the useful reading of it.
 func resolvePruneTargets(
 	ctx context.Context, c *rpc.Client, args []string, all bool,
 ) ([]*anovelv1.Stack, error) {
@@ -387,8 +384,8 @@ func pruneOne(
 	}
 	if opts.purgeBackups {
 		// Opt-in, because ClearVolume just took a backup on the way past: the
-		// default keeps the one artefact that can undo this command, and this
-		// flag is how you say the data really was disposable.
+		// default keeps the one artifact that can undo this command, and this
+		// flag is how the operator says the data really was disposable.
 		dir := stackBackupDir(name)
 		if err := os.RemoveAll(dir); err != nil {
 			return fmt.Errorf("purge backups %s: %w", dir, err)
@@ -408,14 +405,12 @@ func stackBackupDir(stack string) string {
 
 // reportUnmanaged names the stacks $A_NOVEL_STACKS registers that the daemon is
 // not managing. The daemon skips a stack whose files are gone rather than
-// refusing to start over it, so without this the stack simply disappears from
-// the listing while its registration lives on — the operator is left with an
-// entry pointing at nothing and no indication of it.
+// refusing to start, so the stack would otherwise vanish from the listing while
+// its registration lives on, leaving an entry that points at nothing.
 //
-// Reads the caller's own environment, so a shell whose $A_NOVEL_STACKS differs
-// from the one the daemon started with is reported as unmanaged too. That is
-// the honest reading: either way, this shell's registrations and the daemon's
-// view disagree.
+// It reads the caller's own environment, so a shell whose $A_NOVEL_STACKS
+// differs from the one the daemon started with is reported as unmanaged too:
+// either way, this shell's registrations and the daemon's view disagree.
 func reportUnmanaged(out io.Writer, managed map[string]bool) error {
 	registered, err := stacks.ParseEnv()
 	if err != nil {
@@ -436,10 +431,9 @@ func reportUnmanaged(out io.Writer, managed map[string]bool) error {
 	return nil
 }
 
-// dryRunVerdict is what a dry run reports instead of acting. A dry run changes
-// nothing, so a blocked stack gets the reason it would stop rather than an
-// error — the question asked was what would happen, and "it would refuse, here
-// is why" answers it where a non-zero exit does not.
+// dryRunVerdict is what a dry run reports instead of acting. A blocked stack
+// gets the reason it would stop rather than an error, since the question asked
+// was what would happen.
 func dryRunVerdict(blockers []string, force bool) string {
 	if len(blockers) > 0 && !force {
 		return "(dry run — would refuse: unsaved work above; --force overrides)"
@@ -473,8 +467,7 @@ func pruneBlockers(root string) []string {
 
 // unpushedCommits counts commits on HEAD that its upstream does not have. A
 // checkout with no upstream configured counts as zero: there is no remote to
-// have lost them to, and `git clone` always sets one, so this is the
-// never-pushed-anywhere case rather than a silent miss.
+// have lost them to, and `git clone` always sets one.
 func unpushedCommits(dir string) int {
 	out, err := runGit(dir, "rev-list", "--count", "@{upstream}..HEAD")
 	if err != nil {

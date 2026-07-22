@@ -23,9 +23,9 @@ import (
 
 // applyPlan executes every operation in a plan against GitHub via `gh`,
 // printing one line per outcome (managed-file lines print once their sync
-// commit lands). It keeps going after a failed op (so one fiddly step — e.g.
-// CodeQL needing the `workflow` token scope — doesn't block the rest) and
-// returns a combined error if any failed.
+// commit lands). It keeps going after a failed op, so a fiddly step such as
+// CodeQL needing the `workflow` token scope does not block the rest, and
+// returns a combined error when any failed.
 func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) error {
 	var failures []string
 	note := func(ok bool, label, detail string) {
@@ -72,9 +72,9 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 		}
 	}
 
-	// Every staged change lands in one commit — one push, one CI run on the
-	// target repo. No staged change means no commit at all: the mutation would
-	// otherwise record an empty commit, exactly like the contents API.
+	// Every staged change lands in one commit: one push, one CI run on the
+	// target repo. With nothing staged there is no commit, since the mutation
+	// would otherwise record an empty one.
 	if len(staged) > 0 {
 		detail, err := commitSync(org, repo, branch, staged)
 		if err == nil {
@@ -112,10 +112,8 @@ func applySettings(op repocfg.Op) error {
 }
 
 // applyRuleset reconciles a ruleset by name: PUT when one with the same name
-// already exists, POST otherwise, so we never duplicate one. Removing a ruleset
-// is not this function's job — the plan's prune op owns the SET (see
-// pruneRulesets), which is what keeps a repo's rulesets derived rather than
-// accumulated.
+// already exists, POST otherwise, so a ruleset is never duplicated. The plan's
+// prune op owns removal (see pruneRulesets).
 func applyRuleset(org, repo string, op repocfg.Op) (string, error) {
 	body, ok := op.Body.(*repocfg.APIRuleset)
 	if !ok {
@@ -150,17 +148,15 @@ type contentChange struct {
 const codeownersName = "CODEOWNERS"
 
 // stageContents turns a managed-file op into the changes the sync commit must
-// carry. unchanged reports that the file already matches the desired content —
-// nothing is staged for it, so a sync that changes nothing commits nothing.
-// CodeQL advanced setup is mutually exclusive with default setup, so default
-// setup is switched off before the workflow lands; a stray root CODEOWNERS is
-// staged as a deletion (GitHub honors the .github/ copy) even when the
-// .github/ copy itself is unchanged, so a repo never carries two.
+// carry. unchanged reports that the file already matches the desired content,
+// so nothing is staged for it and a sync that changes nothing commits nothing.
 //
-// For a governance caller (a file that pins a-novel-kit/workflows actions) the
-// deployed pins are preserved when they are newer than the template's, so a
-// template that lags a workflows release never downgrades a pin Renovate has
-// already advanced on the deployed caller (see preserveNewerPins).
+// CodeQL advanced setup is mutually exclusive with default setup, so default
+// setup is switched off before the workflow lands. A stray root CODEOWNERS is
+// staged as a deletion — GitHub honors the .github/ copy — even when that copy
+// is itself unchanged, so a repo never carries two. For a file that pins
+// a-novel-kit/workflows actions, deployed pins newer than the template's
+// survive (see preserveNewerPins).
 func stageContents(org, repo string, op repocfg.Op) ([]contentChange, bool, error) {
 	if strings.Contains(op.Path, "/workflows/codeql.yml") {
 		// Default setup may already be off, in which case this errors harmlessly.
@@ -174,9 +170,9 @@ func stageContents(org, repo string, op repocfg.Op) ([]contentChange, bool, erro
 		}
 	}
 
-	// A governance caller is compared against the deployed file so a newer
-	// deployed pin survives (one extra read, and only for pin-bearing files);
-	// everything else takes the cheaper sha-only path.
+	// Pin-bearing files are compared against the deployed text, at the cost of
+	// one extra read, so a newer deployed pin survives; everything else takes
+	// the cheaper sha-only path.
 	desired := op.Content
 	var sha string
 	if workflowsPinRe.MatchString(op.Content) {
@@ -216,8 +212,8 @@ const syncCommitQuery = `mutation($input: CreateCommitOnBranchInput!) { createCo
 // createCommitOnBranch mutation and returns the short commit id.
 func commitSync(org, repo, branch string, changes []contentChange) (string, error) {
 	headline, body := syncCommitMessage(changes)
-	// Empty slices marshal as [], the shape the mutation provably accepts —
-	// nil would marshal as null.
+	// Empty slices marshal as [], the shape the mutation accepts; nil would
+	// marshal as null.
 	additions, deletions := []map[string]string{}, []map[string]string{}
 	for _, change := range changes {
 		if change.outcome == opDeleted {
@@ -405,15 +401,13 @@ func liveRulesets(org, repo string) (map[string]string, error) {
 	return live, nil
 }
 
-// pruneRulesets reconciles the repo's ruleset SET: every live ruleset the plan
+// pruneRulesets reconciles the repo's ruleset set: every live ruleset the plan
 // did not name is deleted.
 //
-// This is what makes repo config DERIVED rather than accumulated. The desired
-// set follows entirely from the class preset, the org profile and code-driven
-// discovery, so anything else on the repo is drift — a ruleset this version no
-// longer ships, or one added by hand in the UI — and neither is allowed to
-// outlive a reconcile. The alternative is an ever-growing list of things to
-// un-apply, and a live config nobody can read off the templates.
+// This is what keeps repo config derived. The desired set follows entirely
+// from the class preset, the org profile and code-driven discovery, so
+// anything else on the repo is drift — a ruleset this version no longer ships,
+// or one added by hand in the UI — and a reconcile removes it.
 func pruneRulesets(org, repo string, op repocfg.Op) (string, error) {
 	live, err := liveRulesets(org, repo)
 	if err != nil {
@@ -436,14 +430,14 @@ func pruneRulesets(org, repo string, op repocfg.Op) (string, error) {
 	return opDeleted + " " + strings.Join(dropped, ", "), nil
 }
 
-// renderPruneImpact names the rulesets a plan's prune op would DELETE.
+// renderPruneImpact names the rulesets a plan's prune op would delete.
 //
-// The plan is computed offline, so the op itself can only state what SURVIVES —
-// and "keep only: master, require-approval, tags" reads exactly the same whether
-// it removes nothing or strips a repo of every protection it has. A preview of
+// The plan is computed offline, so the op itself can only state what survives,
+// and "keep only: master, require-approval, tags" reads the same whether it
+// removes nothing or strips a repo of every protection it has. A preview of
 // the one destructive operation has to name its casualties, so this resolves
-// them live. A read failure is reported as UNRESOLVED rather than as "none": an
-// operator who sees "none" will confirm without looking.
+// them live. A read failure is reported as UNRESOLVED, because an operator who
+// sees "none" will confirm without looking.
 func renderPruneImpact(w io.Writer, org, repo string, plan *repocfg.Plan) {
 	for _, op := range plan.Ops {
 		if !op.PruneRulesets {
@@ -478,8 +472,8 @@ const (
 	opDeleted   = "deleted"
 )
 
-// keyDescription is the JSON "description" field name, lifted to a constant so
-// the package's repeated use of it satisfies goconst.
+// keyDescription is the JSON "description" field name, a constant so the
+// package's repeated use of it satisfies goconst.
 const keyDescription = "description"
 
 // ghJSON runs `gh api -X <method> <path> --input -` with body marshalled to
@@ -515,10 +509,10 @@ var ghStdin = func(stdin string, args ...string) (string, error) {
 }
 
 // contentSHA returns the blob sha of an existing file at path, or "" when the
-// file does not exist yet (a 404 — the create case). Any other error (auth,
-// network, rate limit) is returned so a transient failure isn't silently
-// misread as "create a new file", which would then PUT without the required
-// sha and fail with a confusing error.
+// file does not exist yet (a 404, the create case). Any other error — auth,
+// network, rate limit — is returned, so a transient failure is not misread as
+// "create a new file", which would PUT without the required sha and fail
+// confusingly.
 func contentSHA(path string) (string, error) {
 	out, err := gh("api", path, "--jq", ".sha")
 	if err != nil {
@@ -540,10 +534,9 @@ type ghContent struct {
 
 // contentText returns the decoded text and blob sha of an existing file at
 // path, or ("", "", nil) when it does not exist yet (a 404). Like contentSHA,
-// any other error is propagated rather than misread as "create". The empty
-// text ("", sha, nil) is returned for an encoding the contents API doesn't
-// base64 (files >1MB use a separate blob endpoint); our managed files are a
-// few KB, so that path is a safe no-splice fallback rather than an error.
+// any other error is propagated. An encoding the contents API does not base64
+// — files over 1MB use a separate blob endpoint — yields ("", sha, nil); the
+// managed files are a few KB, so that is a safe no-splice fallback.
 func contentText(path string) (string, string, error) {
 	out, err := gh("api", path)
 	if err != nil {
@@ -575,13 +568,12 @@ func contentText(path string) (string, string, error) {
 var workflowsPinRe = regexp.MustCompile(`a-novel-kit/workflows/([^@\s"']+)@(v\d+\.\d+\.\d+)`)
 
 // preserveNewerPins rewrites each a-novel-kit/workflows pin in desired to the
-// version the deployed file already carries, whenever that deployed version is
-// a higher semver — matched by action sub-path. This stops `repo update` from
+// version the deployed file already carries whenever that deployed version is
+// a higher semver, matched by action sub-path. It stops `repo update` from
 // downgrading a pin Renovate has already advanced on the deployed caller while
-// the CLI template lags a workflows release (the two would otherwise fight, and
-// a stale template would re-deploy an outdated action). It only ever bumps a
-// pin forward, never back, and leaves every other byte of the template intact,
-// so a genuine template edit still lands.
+// the CLI template lags a workflows release. Pins only move forward, and every
+// other byte of the template is left intact so a genuine template edit still
+// lands.
 func preserveNewerPins(desired, deployed string) string {
 	deployedVers := map[string]string{}
 	for _, m := range workflowsPinRe.FindAllStringSubmatch(deployed, -1) {
@@ -603,10 +595,10 @@ func preserveNewerPins(desired, deployed string) string {
 	})
 }
 
-// blobSHA returns the git blob object id of content — SHA-1 over the
-// "blob <len>\0" header plus the bytes — which is exactly the .sha the
-// contents API reports for an existing file, so an unchanged write is
-// detected without any extra API call.
+// blobSHA returns the git blob object id of content: SHA-1 over the
+// "blob <len>\0" header plus the bytes. That is the .sha the contents API
+// reports for an existing file, so an unchanged write is detected without an
+// extra API call.
 func blobSHA(content string) string {
 	//nolint:gosec // git object identity, not a cryptographic guarantee.
 	sum := sha1.Sum([]byte("blob " + strconv.Itoa(len(content)) + "\x00" + content))

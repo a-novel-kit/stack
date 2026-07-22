@@ -9,18 +9,13 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
 )
 
-// Builder tests assert the integration of refs.go + allocator.go against
-// the real compose-env wiring rules — every behavior the env-builder
-// guarantees that a service depends on at runtime.
-//
-// Test shape: minimal in-memory discovery.Target fixtures, no filesystem,
-// no podman. Each test asserts on the resulting env map (entries
-// converted via toMap below) so assertions can be expressed in terms of
-// "the key X has value Y".
+// Builder tests exercise refs.go and allocator.go together against the
+// compose-env wiring rules a service depends on at runtime. Each one builds a
+// minimal in-memory discovery.Target, touching neither the filesystem nor
+// podman, and asserts on the resulting env map.
 
-// toMap collapses the sorted entry slice into a map keyed by variable
-// name. The order is already deterministic (alphabetical), but maps are
-// easier to assert against than positional slices.
+// toMap collapses the sorted entry slice into a map keyed by variable name,
+// which is easier to assert against than a positional slice.
 func toMap(entries []Entry) map[string]string {
 	out := make(map[string]string, len(entries))
 	for _, e := range entries {
@@ -36,14 +31,13 @@ func newBuilderWith(services []string) (*Builder, *Allocator) {
 }
 
 func TestForTarget_DSNRewriteForGoExec(t *testing.T) {
-	// The canonical case: compose has a literal in-container DSN
-	// (`postgres-X:5432`), but the daemon allocates POSTGRES_PORT for
-	// this service so the synthesized output overrides the DSN to
-	// `localhost:<port>`. Without this rewrite, go-exec mode can't
-	// connect to its own postgres.
+	// Compose declares a literal in-container DSN (`postgres-X:5432`), and the
+	// daemon's POSTGRES_PORT allocation for this service overrides it to
+	// `localhost:<port>`. Without that rewrite, go-exec mode cannot reach its
+	// own postgres.
 	b, alloc := newBuilderWith([]string{"svc"})
-	// Pre-allocate the port the way `infra-up` would: under a
-	// service-level consumer, owner=svc.
+	// Pre-allocate the port the way infra-up would, under a service-level
+	// consumer with owner=svc.
 	port, err := alloc.Acquire("svc", "POSTGRES_PORT", "svc-infra")
 	if err != nil {
 		t.Fatal(err)
@@ -68,12 +62,11 @@ func TestForTarget_DSNRewriteForGoExec(t *testing.T) {
 }
 
 func TestForTarget_CrossServiceRef(t *testing.T) {
-	// Cross-service ref: consumer's env references
-	// ${SERVICE_X_GRPC_PORT}. The daemon resolves it to an allocation
-	// against service-x's grpc target and substitutes the port number
-	// into the consumer's value. Service names must be the real
-	// shape ("service-x" → prefix "SERVICE_X") so resolveOwner can
-	// reverse them.
+	// A consumer referencing ${SERVICE_X_GRPC_PORT} resolves to an allocation
+	// against service-x's grpc target, whose port substitutes into the
+	// consumer's value. The service names must carry their real shape, where
+	// "service-x" yields the prefix "SERVICE_X", for resolveOwner to reverse
+	// them.
 	b, alloc := newBuilderWith([]string{"service-x", "service-y"})
 	tgt := &discovery.Target{
 		Name:    "rest",
@@ -95,8 +88,8 @@ func TestForTarget_CrossServiceRef(t *testing.T) {
 	if m["DEP_PORT"] == "" || m["DEP_PORT"] == "0" {
 		t.Errorf("DEP_PORT: got %q want a real allocated port number", m["DEP_PORT"])
 	}
-	// The allocation must be RECORDED so a later service-x/grpc target
-	// gets the same slot.
+	// The allocation must be recorded, so a later service-x/grpc target lands
+	// on the same slot.
 	p, ok := alloc.Lookup("service-x", "GRPC_PORT")
 	if !ok {
 		t.Error("Lookup of allocated cross-service slot failed")
@@ -107,9 +100,9 @@ func TestForTarget_CrossServiceRef(t *testing.T) {
 }
 
 func TestForTarget_PortsBlockTriggersAllocation(t *testing.T) {
-	// Compose's `ports:` block is the daemon's only signal to
-	// allocate a port that's not also referenced in `environment:`.
-	// `mergePortRefs` folds it into the same resolution pass.
+	// Compose's `ports:` block is the daemon's only signal to allocate a port
+	// the `environment:` block never references, and mergePortRefs folds it
+	// into the same resolution pass.
 	b, alloc := newBuilderWith([]string{"svc"})
 	tgt := &discovery.Target{
 		Name:        "rest",
@@ -135,11 +128,9 @@ func TestForTarget_PortsBlockTriggersAllocation(t *testing.T) {
 }
 
 func TestForTarget_PrefixedAndUnprefixedOwnView(t *testing.T) {
-	// Spec §6.4: a target's OWN service prefix is stripped for its
-	// own process env. So svc=service-foo with REST_PORT allocated
-	// gets both `REST_PORT` (un-prefixed local view) and
-	// `SERVICE_FOO_REST_PORT` (prefixed cross-service view) — clients
-	// looking through either name resolve to the same number.
+	// A target's own service prefix is stripped for its process env, so
+	// service-foo with REST_PORT allocated sees both the local `REST_PORT` and
+	// the cross-service `SERVICE_FOO_REST_PORT`, resolving to one number.
 	b, alloc := newBuilderWith([]string{"service-foo"})
 	tgt := &discovery.Target{
 		Name:        "rest",
@@ -163,10 +154,9 @@ func TestForTarget_PrefixedAndUnprefixedOwnView(t *testing.T) {
 }
 
 func TestForTarget_NoDoublePrefix(t *testing.T) {
-	// Pitfall: when un-prefix + re-prefix loops aren't carefully
-	// guarded, you get SERVICE_FOO_SERVICE_BAR_GRPC_PORT. The builder
-	// must skip already-prefixed cross-service keys when adding the
-	// own-prefix view.
+	// An unguarded un-prefix and re-prefix pair yields
+	// SERVICE_FOO_SERVICE_BAR_GRPC_PORT, so the builder must skip
+	// already-prefixed cross-service keys when adding its own-prefix view.
 	b, alloc := newBuilderWith([]string{"service-foo", "service-bar"})
 	tgt := &discovery.Target{
 		Name:    "rest",
@@ -211,19 +201,15 @@ func TestForService_LookupOnlyLeavesUnknownEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := toMap(entries)
-	// Empty value rather than absent — the substitute pass writes "" when
-	// the ref doesn't resolve, matching compose's behavior. The key
-	// presence depends on the substitute order; we just assert the
-	// allocator wasn't touched.
+	// The substitute pass writes "" for a ref that does not resolve, matching
+	// compose's behavior. Whether the key appears depends on substitution
+	// order, so the assertion above is that the allocator stayed untouched.
 	_ = m
 }
 
 func TestForTarget_PORTAloneDoesNotAllocate(t *testing.T) {
-	// Regression guard: isAllocatedKind matches keys ending in _PORT,
-	// not the bare "PORT". A var literally named PORT in compose
-	// should be treated as a constant, not allocated. Documents
-	// existing behavior so future "let's be flexible" tweaks don't
-	// accidentally start binding random ports.
+	// isAllocatedKind matches a key ending in _PORT, so a var literally named
+	// PORT in compose stays a constant instead of binding a random port.
 	b, alloc := newBuilderWith([]string{"svc"})
 	tgt := &discovery.Target{
 		Name:    "weird",
@@ -248,10 +234,9 @@ func TestForTarget_PORTAloneDoesNotAllocate(t *testing.T) {
 }
 
 func TestForTarget_InjectsRepoSecrets(t *testing.T) {
-	// ForTarget appends the repo's locally-stored secrets (decrypted) as plain
-	// env entries so they ride into the spawned process's cmd.Env. Here we stub
-	// the secrets seam to avoid touching the real key store, and assert the
-	// pairs land in the result keyed by their env-var name.
+	// ForTarget appends the repo's decrypted secrets as plain env entries, so
+	// they ride into the spawned process's cmd.Env. Stubbing the secrets seam
+	// keeps the real key store out of it.
 	orig := injectSecrets
 	injectSecrets = func(repoRoot string) (secrets.Resolution, error) {
 		return secrets.Resolution{Env: map[string]string{"OPENAI_API_KEY": "sk-test"}}, nil
@@ -263,8 +248,8 @@ func TestForTarget_InjectsRepoSecrets(t *testing.T) {
 		Name:    "rest",
 		Service: "svc",
 		Stack:   "default",
-		// A non-empty CmdDir is required for serviceRoot to resolve, which is
-		// what gates the injection.
+		// serviceRoot resolves only from a non-empty CmdDir, which is what
+		// gates the injection.
 		CmdDir:      filepath.Join("/tmp", "service-svc", "cmd", "rest"),
 		Environment: map[string]string{},
 	}
@@ -279,8 +264,8 @@ func TestForTarget_InjectsRepoSecrets(t *testing.T) {
 }
 
 func TestForTarget_NoCmdDirSkipsInjection(t *testing.T) {
-	// With no CmdDir, serviceRoot is empty and injection is skipped entirely —
-	// the seam must not even be called (no accidental relative-path read).
+	// Without a CmdDir, serviceRoot is empty and the injection is skipped, so
+	// the seam is never called and no relative path is read by accident.
 	called := false
 	orig := injectSecrets
 	injectSecrets = func(repoRoot string) (secrets.Resolution, error) {
@@ -300,8 +285,8 @@ func TestForTarget_NoCmdDirSkipsInjection(t *testing.T) {
 }
 
 func TestForTarget_MissingSecretWarns(t *testing.T) {
-	// A declared-but-unset secret is surfaced as a warning line (value-free),
-	// not injected and not an error — so the operator sees what to set.
+	// A declared-but-unset secret raises a value-free warning line instead of
+	// an injection or an error, so the operator sees what to set.
 	orig := injectSecrets
 	injectSecrets = func(repoRoot string) (secrets.Resolution, error) {
 		return secrets.Resolution{

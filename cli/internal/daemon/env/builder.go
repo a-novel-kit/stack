@@ -29,28 +29,25 @@ type Entry struct {
 	Value string
 }
 
-// ForTarget builds the env block to pass to a spawned process for the
-// given target. Allocations are CREATED here — the target is recorded as
-// the consumer for every `*_PORT` it references (directly or via
-// cross-service), and Allocator.Release(targetID) frees them.
+// ForTarget builds the env block to pass to a spawned process. It creates the
+// allocations, recording the target as the consumer of every `*_PORT` it
+// references, directly or across services, until Allocator.Release frees them.
 //
-// It returns the resolved env entries plus any missing-secret warning lines
-// (value-free) the caller should write to the target's log so the operator
-// sees what to set. Callers that only inspect env (not start a process)
-// discard the warnings.
+// It returns the resolved entries plus a value-free warning line for each
+// missing secret, which the caller writes to the target's log so the operator
+// sees what to set.
 func (b *Builder) ForTarget(t *discovery.Target, allServices []string) ([]Entry, []string, error) {
 	entries, err := b.buildEnv(t, allServices, true /* allocate */, t.ID())
 	if err != nil {
 		return nil, nil, err
 	}
-	// Inject the service repo's locally-stored secrets (decrypted) as plain
-	// env entries, so they ride into runner.StartGoExec/StartContainer's
-	// cmd.Env. Driven by the value-free .a-novel/secrets.yaml manifest at the
-	// service repo root (the service dir is cmd/<target>'s grandparent); an
-	// absent manifest is a no-op, while an absent key/store reports every
-	// declared secret as missing. Values are never logged or returned through
-	// any inspect path (ForService/ForServiceUp deliberately skip this). A
-	// declared-but-unset secret becomes a warning line, never a hard error.
+	// Inject the service repo's decrypted secrets as plain entries, so they ride
+	// into the runner's cmd.Env. The value-free .a-novel/secrets.yaml manifest
+	// at the service repo root drives them; an absent manifest is a no-op, and
+	// an absent key or store reports every declared secret missing. The inspect
+	// paths, ForService and ForServiceUp, skip this, so no value ever reaches a
+	// log, and a declared-but-unset secret becomes a warning rather than an
+	// error.
 	var warnings []string
 	if root := serviceRoot(t); root != "" {
 		res, err := injectSecrets(root)
@@ -79,11 +76,10 @@ func serviceRoot(t *discovery.Target) string {
 // var so the env-builder tests can stub it without touching the local key store.
 var injectSecrets = secrets.InjectForRepo
 
-// ForServiceUp is the allocate-on-demand variant of ForService — used
-// when bringing infra up so the daemon claims `${*_PORT}` slots
-// referenced by infra services (e.g., postgres-X's `${POSTGRES_PORT}`).
-// Consumer is the service-level synthetic ID ("<stack>/<service>-infra")
-// so KillInfra can Release the slots cleanly.
+// ForServiceUp is the allocating variant of ForService, used when bringing
+// infra up so the daemon claims the `${*_PORT}` slots infra services reference.
+// consumer is the service-level synthetic ID ("<stack>/<service>-infra"), which
+// lets KillInfra release those slots cleanly.
 func (b *Builder) ForServiceUp(svc *discovery.Service, allServices []string, consumer string) ([]Entry, error) {
 	merged := make(map[string]string)
 	for _, t := range svc.Targets {
@@ -114,13 +110,12 @@ func (b *Builder) ForServiceUp(svc *discovery.Service, allServices []string, con
 	return out, nil
 }
 
-// ForService is the read-only variant. Used by the GetEnv RPC so users
-// can inspect the env without side-effecting the allocator. Vars whose
-// allocations haven't been acquired yet appear with empty string values.
+// ForService is the read-only variant, backing the GetEnv RPC so a user can
+// inspect the env without side-effecting the allocator. A var whose allocation
+// has not been acquired appears with an empty value.
 func (b *Builder) ForService(svc *discovery.Service, allServices []string) ([]Entry, error) {
-	// We build the env one target at a time and merge — every target in
-	// the service shares the same env block (compose's environment is
-	// per-service-in-compose, which maps 1:1 to per-target here).
+	// Every target in the service shares the same env block, since compose's
+	// environment is per-compose-service and maps one-to-one to a target here.
 	merged := make(map[string]string)
 	for _, t := range svc.Targets {
 		entries, err := b.buildEnv(t, allServices, false /* lookup-only */, "")
@@ -131,9 +126,8 @@ func (b *Builder) ForService(svc *discovery.Service, allServices []string) ([]En
 			merged[e.Key] = e.Value
 		}
 	}
-	// Also include each infra service's env block (constants and any
-	// derived vars they reference). For our local-dev scope those are
-	// the postgres credentials we want to see in `run env`.
+	// Each infra env block contributes its constants and derived vars, which is
+	// where `run env` picks up the Postgres credentials.
 	for _, in := range svc.Infra {
 		entries, err := b.buildInfraEnv(in, svc, allServices, false, "")
 		if err != nil {
@@ -153,28 +147,25 @@ func (b *Builder) ForService(svc *discovery.Service, allServices []string) ([]En
 	return out, nil
 }
 
-// buildEnv is the shared core for ForTarget/ForService. When `allocate`
-// is true, Acquire is called for every `*_PORT` reference encountered,
-// with `consumer` as the target ID. When false, Lookup is used (empty
-// values for unallocated slots).
+// buildEnv is the shared core of ForTarget and ForService. With allocate set,
+// every `*_PORT` reference is acquired for consumer; otherwise it is looked up,
+// and an unallocated slot resolves empty.
 func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate bool, consumer string) ([]Entry, error) {
 	owner := t.Service
-	// Two-pass: first resolve all referenced vars into the substitution
-	// context, then substitute compose values against it.
+	// Two passes: resolve every referenced var into the substitution context,
+	// then substitute the compose values against it.
 	//
-	// The ports: block of compose is folded in so its ${VAR} references
-	// allocate alongside the environment block's. Compose's ports: like
-	// "${POSTGRES_PORT}:5432" is the daemon's only signal that
-	// POSTGRES_PORT should be allocated — without this fold, services
-	// that don't also reference the port in their environment would
-	// never see an allocation.
+	// The compose `ports:` block folds in so its ${VAR} references allocate
+	// alongside the environment block's. A mapping like "${POSTGRES_PORT}:5432"
+	// is often the daemon's only signal to allocate POSTGRES_PORT, since a
+	// service need never name it in its environment.
 	combined := mergePortRefs(t.Environment, t.Ports)
 	ctx, err := b.resolveContext(combined, owner, allServices, allocate, consumer)
 	if err != nil {
 		return nil, err
 	}
-	// Substitute every compose value, plus emit any synthesized
-	// derivedFor entries we built into ctx.
+	// Substitute every compose value, and emit the derivedFor entries built
+	// into ctx.
 	out := make(map[string]string, len(ctx)+len(t.Environment))
 	for k, v := range ctx {
 		out[k] = v
@@ -182,22 +173,19 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 	for k, raw := range t.Environment {
 		out[k] = substitute(raw, ctx)
 	}
-	// Synthetic __port_N keys leak in via mergePortRefs only to
-	// participate in reference collection — drop them from the user
-	// view.
+	// The synthetic __port_N keys exist only for reference collection, so drop
+	// them from the user view.
 	for k := range out {
 		if strings.HasPrefix(k, "__port_") {
 			delete(out, k)
 		}
 	}
-	// Pull in service-level allocations the target's compose doesn't
-	// directly reference. The canonical case: a one-shot like
-	// `migrations` whose compose only declares POSTGRES_DSN (a literal)
-	// — but the SERVICE has POSTGRES_PORT allocated (for postgres-X
-	// infra). We expose every allocated `*_PORT` owned by this service
-	// + the derived HOST/URL so the synthesis below can build a
-	// correct DSN for go-exec mode (localhost:<port> instead of the
-	// compose's in-container hostname).
+	// Pull in service-level allocations the target's compose never references.
+	// A one-shot like `migrations` declares POSTGRES_DSN as a literal while the
+	// service itself holds the POSTGRES_PORT allocation for its postgres infra.
+	// Exposing every `*_PORT` this service owns, with its derived HOST and URL,
+	// lets the synthesis below build a DSN pointing at localhost for go-exec
+	// mode, in place of the compose file's in-container hostname.
 	for _, slot := range b.alloc.Snapshot() {
 		if slot.Owner != owner {
 			continue
@@ -212,10 +200,9 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 		}
 	}
 
-	// POSTGRES_DSN synthesis (the one named special case). When this service
-	// has an allocated POSTGRES_PORT, the daemon owns POSTGRES_DSN and
-	// overwrites any value the compose file declared (which is typically
-	// the in-container `postgres-<svc>:5432` form, wrong for go-exec).
+	// With an allocated POSTGRES_PORT the daemon owns POSTGRES_DSN and
+	// overwrites whatever the compose file declared, that being the
+	// in-container `postgres-<svc>:5432` form, wrong for go-exec.
 	if portStr, ok := out["POSTGRES_PORT"]; ok && portStr != "" {
 		user := nonEmptyOr(out["POSTGRES_USER"], "postgres")
 		pass := nonEmptyOr(out["POSTGRES_PASSWORD"], "postgres")
@@ -223,14 +210,13 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 		out["POSTGRES_DSN"] = "postgres://" + user + ":" + pass + "@" + hostLocalhost + ":" + portStr + "/" + db + "?sslmode=disable"
 	}
 
-	// Operator un-prefix: this target's OWN service prefix is stripped
-	// for its own process env. So service-json-keys-grpc gets
-	// both `GRPC_PORT=44447` (from its local view) AND, for symmetry,
+	// Strip the target's own service prefix for its process env, so
+	// service-json-keys-grpc sees both `GRPC_PORT=44447` and, for symmetry,
 	// `SERVICE_JSON_KEYS_GRPC_PORT=44447`.
 	ownerPrefix := ServicePrefix(owner) + "_"
 	for k, v := range out {
-		// If we already have a prefixed view of one of our own ports,
-		// expose the un-prefixed form too.
+		// A prefixed view of one of our own ports also gets the un-prefixed
+		// form.
 		base, isPrefixed := stripPrefix(k, ownerPrefix)
 		if isPrefixed {
 			if _, exists := out[base]; !exists {
@@ -238,12 +224,9 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 			}
 		}
 	}
-	// And add the prefixed form for our own ports, so cross-service
-	// consumers see the same shape (handy when running `a-novel run env`
-	// without --all-stacks — you still see the prefixed key). Skip keys
-	// that already carry a known service prefix; otherwise re-prefixing
-	// produces the double-prefix bug
-	// (SERVICE_X_SERVICE_X_SERVICE_Y_VAR).
+	// Add the prefixed form of our own ports so cross-service consumers see the
+	// same shape. A key that already carries a known service prefix is skipped,
+	// since re-prefixing it would produce SERVICE_X_SERVICE_X_SERVICE_Y_VAR.
 	for k, v := range out {
 		if !isAllocatedKind(k) && !isSynthesizedKind(k) {
 			continue
@@ -264,9 +247,9 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 	return entries, nil
 }
 
-// buildInfraEnv is the same as buildEnv but for an infra service (which
-// has no profile and no cmd-target counterpart). It's used by
-// ForService so `a-novel run env` shows the database credentials too.
+// buildInfraEnv is buildEnv for an infra service, which has no profile and no
+// cmd-target counterpart. ForService uses it so `a-novel run env` shows the
+// database credentials too.
 func (b *Builder) buildInfraEnv(in *discovery.Infra, svc *discovery.Service, allServices []string, allocate bool, consumer string) ([]Entry, error) {
 	combined := mergePortRefs(in.Environment, in.Ports)
 	ctx, err := b.resolveContext(combined, svc.Name, allServices, allocate, consumer)
@@ -277,8 +260,8 @@ func (b *Builder) buildInfraEnv(in *discovery.Infra, svc *discovery.Service, all
 	for k, raw := range in.Environment {
 		entries = append(entries, Entry{Key: k, Value: substitute(raw, ctx)})
 	}
-	// Also include the synthesized derived vars (HOST/URL) for any port
-	// allocations resolved during context building.
+	// Include the synthesized HOST and URL vars for every port allocation
+	// resolved while building the context.
 	for k, v := range ctx {
 		if isSynthesizedKind(k) {
 			entries = append(entries, Entry{Key: k, Value: v})
@@ -288,14 +271,13 @@ func (b *Builder) buildInfraEnv(in *discovery.Infra, svc *discovery.Service, all
 	return entries, nil
 }
 
-// resolveContext walks every ${VAR} reference in `env` and builds the
-// substitution context map. Allocations happen here (or lookups, in
-// read-only mode). Constants from env that have no references are added
-// as-is so they're available for substitutions elsewhere.
+// resolveContext walks every ${VAR} reference in env and builds the
+// substitution context map, allocating along the way or, in read-only mode,
+// looking up. A constant carrying no reference is added as-is, so later
+// substitutions can resolve against it.
 func (b *Builder) resolveContext(env map[string]string, owner string, allServices []string, allocate bool, consumer string) (map[string]string, error) {
 	ctx := make(map[string]string)
-	// First, seed with constants (entries that contain no ${VAR}
-	// references) so later substitutions can resolve against them.
+	// Seed with the constants, the entries holding no ${VAR} reference.
 	for k, v := range env {
 		if len(extractRefs(v)) == 0 {
 			ctx[k] = v
@@ -317,18 +299,16 @@ func (b *Builder) resolveContext(env map[string]string, owner string, allService
 	return ctx, nil
 }
 
-// resolveOne resolves a single VAR name against the running context.
-// The classification is:
+// resolveOne resolves a single VAR name against the running context:
 //
-//   - `<prefix>_<localVar>` where <prefix> matches a registered service
-//     prefix → cross-service reference; resolve via the allocator with
-//     the owner = that service.
-//   - `<localVar>` where localVar is a `*_PORT` → allocate against
-//     `owner`.
-//   - `<localVar>` ending in `_HOST` or `_URL` → derived; synthesize
-//     after the matching `*_PORT` is resolved.
-//   - everything else → constant referenced from the same env block
-//     (already in ctx, or returns empty as compose would).
+//   - `<prefix>_<localVar>` whose prefix matches a registered service is a
+//     cross-service reference, resolved through the allocator against that
+//     service.
+//   - a `*_PORT` localVar allocates against `owner`.
+//   - a localVar ending in `_HOST` or `_URL` is synthesized once the matching
+//     `*_PORT` resolves.
+//   - anything else is a constant from the same env block, already in ctx or
+//     empty, as compose would leave it.
 func (b *Builder) resolveOne(varName, owner string, allServices []string, allocate bool, consumer string, ctx map[string]string) (string, error) {
 	resOwner, localVar := resolveOwner(varName, allServices)
 	if resOwner == "" {
@@ -350,12 +330,12 @@ func (b *Builder) resolveOne(varName, owner string, allServices []string, alloca
 		if err != nil {
 			return "", err
 		}
-		// Splat the derived (HOST/URL) into ctx so a later substitution
-		// of a value like "http://${HOST}:${PORT}/..." resolves cleanly.
+		// Splat the derived HOST and URL into ctx, so a later substitution of
+		// a value like "http://${HOST}:${PORT}/..." resolves cleanly.
 		for k, v := range derivedFor(localVar, port) {
-			// If the owner is the same as the current target's, the
-			// derived vars are local; otherwise re-prefix with the
-			// owner's service prefix so the consumer can reach them.
+			// The derived vars are local when the owner is the current
+			// target's; otherwise they carry the owner's service prefix so
+			// the consumer can reach them.
 			if resOwner == owner {
 				if _, exists := ctx[k]; !exists {
 					ctx[k] = v
@@ -373,21 +353,18 @@ func (b *Builder) resolveOne(varName, owner string, allServices []string, alloca
 	if isHostKind(localVar) {
 		return hostLocalhost, nil
 	}
-	// *_URL → synthesized from the matching _PORT (must have been
-	// resolved already, else we can't compose the URL).
+	// *_URL → synthesized from the matching _PORT, which must already be
+	// resolved for the URL to compose.
 	if isURLKind(localVar) {
 		base := stripURLSuffix(localVar)
 		if portStr, ok := ctx[base+"_PORT"]; ok && portStr != "" {
-			// Best-effort URL synthesis from the already-derived port.
 			port := atoi(portStr)
 			return urlFor(base, port), nil
 		}
 		return "", nil
 	}
-	// Anything else: it's expected to be a constant from this env block
-	// (already in ctx) OR an externally-injected var (POSTGRES_DSN etc.
-	// declared as a value with references — resolved by substitute() in
-	// the second pass). If not yet present, leave for the second pass.
+	// Anything else is a constant from this env block, already in ctx, or a
+	// value carrying references that substitute() resolves in the second pass.
 	return ctx[varName], nil
 }
 
@@ -424,10 +401,9 @@ func atoi(s string) int {
 	return n
 }
 
-// nonEmptyOr returns v if non-empty, otherwise fallback. Used to keep
-// POSTGRES_DSN well-formed when the compose hasn't (yet) inlined the
-// standard credentials, supplying "postgres" for USER/PASSWORD/DB when the
-// compose file leaves them unset.
+// nonEmptyOr returns v when it is non-empty, otherwise fallback. It keeps
+// POSTGRES_DSN well-formed when the compose file leaves the standard
+// credentials unset.
 func nonEmptyOr(v, fallback string) string {
 	if v == "" {
 		return fallback
@@ -435,13 +411,10 @@ func nonEmptyOr(v, fallback string) string {
 	return v
 }
 
-// mergePortRefs returns a copy of env with synthetic entries appended
-// for each raw compose ports: mapping. The synthetic keys are unique
-// (`__port_N`) and the values are the raw mapping strings — passed
-// through resolveContext purely so extractRefs picks up the embedded
-// `${VAR}` references. Synthetic keys don't appear in the final
-// output; they exist only to participate in the reference-collection
-// pass.
+// mergePortRefs returns a copy of env with one synthetic `__port_N` entry per
+// raw compose ports: mapping. The synthetic keys carry those mapping strings
+// through resolveContext so extractRefs picks up their embedded `${VAR}`
+// references; they never reach the final output.
 func mergePortRefs(env map[string]string, ports []string) map[string]string {
 	out := make(map[string]string, len(env)+len(ports))
 	for k, v := range env {

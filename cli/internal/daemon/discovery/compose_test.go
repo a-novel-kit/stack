@@ -8,9 +8,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Compose YAML parser tests. The two polymorphic decoders (depends_on +
-// environment) accept both short and long YAML forms — we test each
-// shape so a future cleanup doesn't accidentally drop one.
+// Compose YAML parser tests. The polymorphic decoders for depends_on and
+// environment accept both the short and the long YAML form, and each shape is
+// covered here so a cleanup cannot drop one.
 
 func TestComposeDependsOn_ShortForm(t *testing.T) {
 	src := `
@@ -60,8 +60,8 @@ depends_on:
 }
 
 func TestComposeDependsOn_RejectsScalar(t *testing.T) {
-	// Scalar is neither short nor long form — must error rather than
-	// silently swallowing.
+	// A scalar is neither the short nor the long form, so it must error
+	// instead of being swallowed.
 	src := `depends_on: just-a-string`
 	var v struct {
 		DependsOn composeDependsOn `yaml:"depends_on"`
@@ -113,8 +113,8 @@ environment:
 }
 
 func TestComposeEnv_ListSplitOnFirstEquals(t *testing.T) {
-	// Values containing '=' (e.g., a DSN with ?key=val) must split on
-	// the FIRST '=' only — otherwise the value is truncated.
+	// A value holding '=', such as a DSN with ?key=val, splits on the first
+	// one only; splitting further truncates it.
 	src := `
 environment:
   - DSN=postgres://u:p@h/d?sslmode=disable
@@ -131,9 +131,9 @@ environment:
 }
 
 func TestParseComposeFile_FullDocument(t *testing.T) {
-	// End-to-end: write a representative compose file to a tempdir and
-	// assert the top-level shape parses without surprise. Covers
-	// services/volumes/networks all-at-once.
+	// End to end: a representative compose file written to a tempdir must
+	// parse into the expected top-level shape, services, volumes, and
+	// networks at once.
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "podman-compose.yaml")
 	src := `

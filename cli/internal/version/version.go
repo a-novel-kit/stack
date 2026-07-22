@@ -16,14 +16,14 @@ import (
 	"runtime/debug"
 )
 
-// Version is intentionally a plain var (not a const) so release pipelines can
-// override it at link time without touching source. Leave it empty here — an
-// empty value means "fall back to build info", which keeps local `go run` and
-// `go install @latest` honest about what they actually are.
+// Version is a plain var so release pipelines can override it at link time
+// without touching source. It stays empty here, which means "fall back to
+// build info" and keeps local `go run` and `go install @latest` honest about
+// what they are.
 var Version = ""
 
 // fallback is returned when neither ldflags nor build metadata yield anything
-// usable. Kept as a named constant so callers can compare against it if needed.
+// usable. It is a named constant so callers can compare against it.
 const fallback = "dev"
 
 // String returns the resolved version string, e.g. "v2.1.0", "a1b2c3d-dirty",

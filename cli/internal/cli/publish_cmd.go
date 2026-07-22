@@ -4,8 +4,7 @@
 // script calls during a release, so those references always track the released
 // version.
 //
-// Releases themselves are cut in CI by the release-core GitHub Action, not
-// from a developer's working tree.
+// Releases themselves are cut in CI by the release-core GitHub Action.
 
 package cli
 
@@ -21,11 +20,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// stdinIsTTY reports whether the CLI is attached to an interactive terminal.
-// A package var (not a direct call) so tests can drive the non-interactive
-// branch without a real PTY. Used to gate interactive, human-only commands
-// (repo create / repo update): they prompt for confirmation and must refuse to
-// run without a terminal, so an agent or CI run (no TTY) can't drive them blind.
+// stdinIsTTY reports whether the CLI is attached to an interactive terminal. It
+// is a package var so tests can drive the non-interactive branch without a real
+// PTY. The human-only commands (repo create, repo update) gate on it: they
+// prompt for confirmation, so an agent or CI run with no TTY is refused rather
+// than driving them blind.
 var stdinIsTTY = func() bool { return term.IsTerminal(os.Stdin.Fd()) }
 
 func newPublishCmd() *cobra.Command {

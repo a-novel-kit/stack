@@ -21,9 +21,8 @@ const (
 // mode "always" (they push to the default branch directly).
 const rulesetMaster = "master"
 
-// rulesetTags is the name of the release-tag ruleset. Like master, the release
-// bot writes to it directly (it creates the tag), so its bypass mode is "always"
-// rather than the PR-only "exempt".
+// rulesetTags is the name of the release-tag ruleset. The release bot creates
+// the tag, so like master it bypasses with mode "always".
 const rulesetTags = "tags"
 
 // APIBypassActor is one bypass-actor entry in the GitHub rulesets API request body.
@@ -58,14 +57,14 @@ type RepoTarget struct {
 	Discovered               *Discovered
 }
 
-// Op is one API operation the plan performs — a small tagged union. Most ops
+// Op is one API operation the plan performs, a small tagged union. Most ops
 // carry a Method, Path, and Body (or Content, for a file write). A ruleset op
 // instead sets RulesetName and is reconciled by name at apply time: POST when
 // the ruleset is absent, PUT .../{id} when it already exists.
 //
-// PruneRulesets marks the one op that reconciles the ruleset SET rather than a
-// single ruleset: KeepRulesets is the complete desired list, and apply deletes
-// every live ruleset outside it.
+// PruneRulesets marks the one op that reconciles the whole ruleset set:
+// KeepRulesets is the complete desired list, and apply deletes every live
+// ruleset outside it.
 type Op struct {
 	Method        string   `json:"method,omitempty"`
 	Path          string   `json:"path,omitempty"`
@@ -143,15 +142,10 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		})
 	}
 
-	// Governance workflows for the governed repos: the merge-gate check runner, the
-	// epic-freeze partial-landing check (the per-PR half of the detector), the admin-only
-	// approve-pr override, the board status deriver (a PR's lifecycle drives its linked
-	// Task's board Status), the admin-only human-triggered epic-rollback escape hatch
-	// (workflow_dispatch — reverts a partially-landed Epic's siblings), and the admin-only
-	// human-triggered release-train (workflow_dispatch — releases every repo a landed Epic
-	// touched). Pushed wherever the master ruleset gates merges — the same repos whose PRs
-	// feed the board. Static files: the [Agent] creds and the per-org board id are
-	// GitHub-expression refs resolved at run time, not repocfg substitutions.
+	// Governance workflows, pushed wherever the master ruleset gates merges —
+	// the same repos whose PRs feed the board. They ship as static files: the
+	// [Agent] credentials and the per-org board id are GitHub-expression refs
+	// resolved at run time, not repocfg substitutions.
 	if c.Rulesets.Master {
 		for _, wf := range []string{"merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml", "release-train.yaml", "hotfix.yaml"} {
 			content, err := ReadTemplate("governance/" + wf)
@@ -209,16 +203,13 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		keep = append(keep, w.name)
 	}
 
-	// A repo's ruleset SET is derived, never accumulated. Everything above follows
-	// from the class preset, the org profile, and code-driven discovery — so any
-	// ruleset this plan does not name is drift, whether it was dropped from the
-	// templates or added by hand in the UI, and apply deletes it. Without this the
-	// only way to remove a ruleset would be an ever-growing list of things to
-	// un-apply, and the live config would be the templates plus an unreviewable
-	// history of what each repo happened to be given.
+	// A repo's ruleset set is derived. Everything above follows from the class
+	// preset, the org profile and code-driven discovery, so any ruleset this
+	// plan does not name is drift — dropped from the templates, or added by
+	// hand in the UI — and apply deletes it.
 	//
-	// Pruning runs last, once every desired ruleset has been written, so a repo is
-	// never momentarily left ungoverned.
+	// Pruning runs last, once every desired ruleset has been written, so a repo
+	// is never momentarily left ungoverned.
 	p.Ops = append(p.Ops, Op{
 		PruneRulesets: true,
 		KeepRulesets:  keep,
@@ -233,8 +224,8 @@ func rulesetOp(name string, t *RepoTarget, checks []CheckRef) (Op, error) {
 	if err != nil {
 		return Op{}, err
 	}
-	// The code_quality rule only belongs on classes that opt into it; drop
-	// it everywhere else (docs/workflows repos have no code to gate).
+	// The code_quality rule belongs only on classes that opt into it; a
+	// docs or workflows repo has no code to gate.
 	if !t.Class.CodeQuality {
 		spec.Rules.CodeQuality = nil
 	}
@@ -315,9 +306,9 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRu
 
 // resolveBypass maps one generic bypass entry to concrete actors. Admins
 // always bypass with mode "always"; bots bypass with "always" on master and
-// tags (direct writes — the bump commit and the release tag) and "exempt" on
-// PR rulesets. An entry that resolves to nothing is an error, not a silent
-// drop — a typo in a ruleset template would otherwise quietly strip a bypass
+// tags, where they write directly (the bump commit and the release tag), and
+// "exempt" on PR rulesets. An entry that resolves to nothing is an error,
+// because a typo in a ruleset template would otherwise quietly strip a bypass
 // actor and break the bot's automation.
 func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor, error) {
 	botMode := modeExempt
@@ -376,9 +367,8 @@ func SecurityBlock(c *ClassPreset) map[string]any {
 	}
 }
 
-// CODEOWNERS returns the uniform CODEOWNERS file provisioned to every repo.
-// It is static today — a single owner (`* @kushuh`) — so there is nothing to
-// render; lift it to an org/class config field if/when teams appear.
+// CODEOWNERS returns the uniform CODEOWNERS file provisioned to every repo. It
+// is a static single-owner file, so there is nothing to render.
 func CODEOWNERS() (string, error) {
 	raw, err := ReadTemplate("governance/CODEOWNERS")
 	if err != nil {
@@ -409,18 +399,17 @@ func RenderCodeQL(langs []string, querySuite, defaultBranch string) (string, err
 // codeqlConfigBlock builds the init step's inline `config:` input: the query
 // suite plus a filter that drops actions/unpinned-tag.
 //
-// Both the suite and the filter live inside `config:` (rather than the
-// separate `queries:` input) so query-filters apply cleanly — the docs note
-// the queries input/config interaction needs a `+` prefix and "instead of"
-// semantics that are easy to get wrong.
+// Both the suite and the filter live inside `config:` so query-filters apply
+// cleanly; the separate `queries:` input interacts with config through a `+`
+// prefix that is easy to get wrong.
 //
-// CodeQL's implicit default suite is selected by OMITTING the queries block
-// (passing the literal "default" makes init look for a pack named "default"
-// and fail), so emit queries only for an explicit named suite.
+// CodeQL's implicit default suite is selected by omitting the queries block —
+// the literal "default" makes init look for a pack by that name and fail — so
+// queries are emitted only for an explicit named suite.
 //
 // actions/unpinned-tag is excluded because the org pins GitHub Actions via
-// floating major tags managed by Renovate; the query would flag every
-// `uses: action@vN` as unpinned, which is pure noise under that policy.
+// floating major tags managed by Renovate, so the query would flag every
+// `uses: action@vN` as unpinned.
 func codeqlConfigBlock(querySuite string) string {
 	var b strings.Builder
 	b.WriteString("          config: |\n")
@@ -434,8 +423,8 @@ func codeqlConfigBlock(querySuite string) string {
 	return b.String()
 }
 
-// Render writes the plan as labelled raw JSON (and verbatim file content for
-// content writes) — close to what GitHub receives, no extra formatting.
+// Render writes the plan as labeled raw JSON, with verbatim file content for
+// content writes, so the preview stays close to what GitHub receives.
 func (p *Plan) Render(w io.Writer) error {
 	for i, op := range p.Ops {
 		if i > 0 {
@@ -446,9 +435,9 @@ func (p *Plan) Render(w io.Writer) error {
 			_, _ = fmt.Fprint(w, op.Content)
 			continue
 		}
-		// A prune carries no request body; encoding the nil one would print "null"
-		// under the single operation that DELETES live configuration — the last place
-		// the preview should look like it lost track of what it is doing.
+		// A prune carries no request body, and encoding the nil one would
+		// print "null" under the single operation that deletes live
+		// configuration — the last place a preview should look uncertain.
 		if op.PruneRulesets {
 			continue
 		}

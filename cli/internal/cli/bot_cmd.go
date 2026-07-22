@@ -2,22 +2,17 @@
 // PR/issue/review comment as the org's GitHub App bot, or many at once with
 // `--batch`.
 //
-// The bot's signing key never lives on a dev machine. Instead this
-// command hands the comment (body + target metadata) to the per-org
-// `bot-comment` workflow_dispatch (one dispatcher per org — see
-// botDispatchRepos), triggered with the operator's own gh token. The
-// workflow holds the App key, mints a scoped short-lived token, and
-// posts as <app-slug>[bot]. See .github/workflows/bot-comment.yaml.
+// The bot's signing key never lives on a dev machine. The command hands the
+// comment (body plus target metadata) to the per-org `bot-comment`
+// workflow_dispatch — one dispatcher per org, see botDispatchRepos — triggered
+// with the operator's own gh token. The workflow holds the App key, mints a
+// scoped short-lived token, and posts as <app-slug>[bot].
 //
-// Why a workflow instead of minting locally:
-//
-//   - No local app tokens. A user only needs gh + actions:write on the
-//     dispatcher repo; they never handle a .pem. Revocation is per-user.
-//   - Comment-only by design. The workflow can only post a comment, so a
-//     compromised trigger cannot push, merge, or author a PR — there is
-//     no skeleton-key token locally to misuse.
-//   - Separation of duties. The trigger token cannot change what the
-//     workflow does — that is code on the protected master branch.
+// That split is the trust boundary. A user needs only gh and actions:write on
+// the dispatcher repo and never handles a .pem, so revocation is per-user. The
+// workflow can only post a comment, so a compromised trigger cannot push, merge
+// or author a PR. And the trigger token cannot change what the workflow does,
+// which is code on the protected master branch.
 //
 // The command waits for each dispatched run synchronously (gh run watch
 // --exit-status) and surfaces failures, so callers can react to errors.
@@ -43,9 +38,9 @@ import (
 const (
 	// botWorkflowFile is the workflow_dispatch file, by basename.
 	botWorkflowFile = "bot-comment.yaml"
-	// botRunLookupTimeout bounds how long we wait for the dispatched run
-	// to register before giving up — dispatch returns no run ID, so we
-	// poll the run list until our nonce shows up in a run-name.
+	// botRunLookupTimeout bounds the wait for a dispatched run to register.
+	// Dispatch returns no run ID, so the run list is polled until the
+	// nonce shows up in a run name.
 	botRunLookupTimeout = 60 * time.Second
 	// botMaxCommentsBytes caps the JSON size of one `comments` dispatch.
 	// workflow_dispatch limits the whole inputs payload to ~64KB; this
@@ -54,11 +49,10 @@ const (
 	botMaxCommentsBytes = 50000
 )
 
-// botDispatchRepos maps each org to the repo that hosts its bot-comment
-// dispatcher workflow. The dispatcher MUST live in a repo within the
-// target org: it reads that org's AGENT_BOT_PRIVATE_KEY org secret, and
-// org secrets do not cross org boundaries. Hence one dispatcher (and one
-// routing entry) per org, not a single central one.
+// botDispatchRepos maps each org to the repo hosting its bot-comment dispatcher
+// workflow. The dispatcher must live inside the target org: it reads that org's
+// App private-key secret, and org secrets do not cross org boundaries, so each
+// org gets its own dispatcher and routing entry.
 var botDispatchRepos = map[string]string{
 	orgAnovelKit: orgAnovelKit + "/stack",
 	orgAnovel:    orgAnovel + "/.github",
@@ -176,9 +170,8 @@ func validateBotOrgRepo(org, repo string) error {
 	return nil
 }
 
-// validateBotCommentArgs checks the single-comment positional args before
-// we spend a dispatch on them. Kept separate from the gh plumbing so it is
-// unit testable.
+// validateBotCommentArgs checks the single-comment positional args before a
+// dispatch is spent on them.
 func validateBotCommentArgs(org, repo, number string) error {
 	if err := validateBotOrgRepo(org, repo); err != nil {
 		return err
@@ -227,11 +220,11 @@ func runBotCommentBatch(cmd *cobra.Command, org, repo, batchPath string) error {
 	return nil
 }
 
-// readBotBatch reads the --batch input (a file path, or "-" for stdin),
-// parses it into comment items, and validates the shape the dispatcher
-// can't report on cheaply (a well-formed, non-empty array of comments with
-// a positive number and a non-empty body). Per-comment posting errors are
-// still left to the GitHub API at run time.
+// readBotBatch reads the --batch input — a file path, or "-" for stdin —
+// parses it into comment items, and validates the shape the dispatcher cannot
+// report on cheaply: a non-empty array whose entries carry a positive number
+// and a non-empty body. Per-comment posting errors stay with the GitHub API at
+// run time.
 func readBotBatch(path string, stdin io.Reader) ([]botBatchItem, error) {
 	var (
 		raw []byte
@@ -326,9 +319,9 @@ func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs
 		return fmt.Errorf("bot-comment: %w", err)
 	}
 
-	// gh run watch streams progress and, with --exit-status, returns a
-	// non-zero exit if the run concluded in failure. Wire it straight to
-	// our stdio so the operator sees live progress.
+	// gh run watch streams progress and, with --exit-status, exits non-zero
+	// when the run concluded in failure. It is wired straight to this
+	// command's stdio so the operator sees live progress.
 	watch := exec.Command("gh", "run", "watch", strconv.FormatInt(runID, 10),
 		"--repo", dispatchRepo, "--exit-status", "--interval", "3")
 	watch.Stdout = cmd.OutOrStdout()
@@ -342,10 +335,9 @@ func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs
 	return nil
 }
 
-// waitForDispatchedRun polls the run list until a run whose name carries
-// our nonce appears, and returns its database ID. workflow_dispatch does
-// not return a run ID, and the run takes a moment to register, so we
-// poll with a bounded deadline.
+// waitForDispatchedRun polls the run list until a run whose name carries the
+// nonce appears, and returns its database ID. workflow_dispatch returns no run
+// ID and the run takes a moment to register, hence the bounded poll.
 func waitForDispatchedRun(dispatchRepo, nonce string) (int64, error) {
 	deadline := time.Now().Add(botRunLookupTimeout)
 	for {
@@ -376,11 +368,10 @@ func waitForDispatchedRun(dispatchRepo, nonce string) (int64, error) {
 	}
 }
 
-// runGHOut runs gh with the operator's own credentials and returns
-// stdout only. stderr is captured separately so gh's progress/warning
-// chatter can never corrupt the JSON we parse from stdout (the run-list
-// poll); on failure stderr is folded into the returned error so the
-// caller still sees what went wrong.
+// runGHOut runs gh with the operator's own credentials and returns stdout
+// only. stderr is captured separately, so gh's progress and warning chatter
+// cannot corrupt the JSON parsed from stdout by the run-list poll; on failure
+// it is folded into the returned error.
 func runGHOut(args ...string) (string, error) {
 	c := exec.Command("gh", args...)
 	c.Env = os.Environ()

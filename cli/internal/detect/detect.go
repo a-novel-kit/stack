@@ -11,9 +11,9 @@
 //     target per Dockerfile), with an image tag derived from the Dockerfile
 //     name and the sibling go.mod.
 //
-// Discovery is recursive from the scan root so nested modules and workspace
-// sub-packages are found, while vendored / generated trees (node_modules,
-// .git, …) are pruned for speed and signal.
+// Discovery recurses from the scan root so nested modules and workspace
+// sub-packages are found; vendored and generated trees (node_modules, .git, …)
+// are pruned.
 package detect
 
 import (
@@ -30,19 +30,20 @@ import (
 type Kind string
 
 const (
-	KindGo     Kind = "go"
-	KindPnpm   Kind = "pnpm"
+	// KindGo is a Go module, built and tested through the go toolchain.
+	KindGo Kind = "go"
+	// KindPnpm is a package.json script, run through pnpm.
+	KindPnpm Kind = "pnpm"
+	// KindPodman is a Dockerfile under builds/, built into an image.
 	KindPodman Kind = "podman"
 	// KindContainer is a run-mode target: a compose service guarded by a
-	// profile that the runner brings up via `podman compose --profile X
-	// up <svc>`. Distinct from KindPodman (build's Dockerfile targets) so
-	// the two never collide in pickers / dispatch — KindContainer only
-	// appears via DetectRun in container mode.
+	// profile that the runner brings up with `podman compose --profile X
+	// up <svc>`. Only DetectRun emits it, in container mode.
 	KindContainer Kind = "container"
 )
 
-// buildArg is the "build" token shared by the go/podman subcommands and the
-// canonical pnpm script name — one constant so it reads identically everywhere.
+// buildArg is the "build" token shared by the go and podman subcommands and
+// the canonical pnpm script name.
 const buildArg = "build"
 
 // pkgAll is the Go "all packages under here" selector, shared by the build and
@@ -50,25 +51,23 @@ const buildArg = "build"
 const pkgAll = "./..."
 
 // testArg is the "test" token shared by `go test`, the canonical pnpm script
-// name, and the env-id environment — one constant, like buildArg.
+// name, and the env id.
 const testArg = "test"
 
-// runArg is the "run" token: the pnpm `pnpm run <script>` subcommand, the
-// canonical "run"/"run:*" script name, and the run env id — one constant.
+// runArg is the "run" token shared by the `pnpm run <script>` subcommand, the
+// canonical "run"/"run:*" script name, and the run env id.
 const runArg = "run"
 
-// InitOrder is the priority list of one-shot init Go entrypoints by Name.
-// Anything in this list, when selected, must run to completion BEFORE the
-// long-lived service targets — and in this order (init seeds, migrations
-// applies schema, rotate-keys refreshes JWKs). Shared between detect (mode
-// filter), runner (launch barrier) and main (mode resolution) so the policy
-// lives in one place.
+// InitOrder lists the one-shot init Go entrypoints by Name, in the order they
+// must run to completion before any long-lived service target: init seeds,
+// migrations applies the schema, rotate-keys refreshes the JWKs. Detection,
+// the runner and mode resolution all read it, so the policy lives in one place.
 var InitOrder = []string{"init", "migrations", "rotate-keys"}
 
-// IsInit reports whether t is one of the [InitOrder] entrypoints (a Go
-// `cmd/<name>` main). It is the shared predicate for that one-shot policy: the
-// picker groups these targets with the container targets, and the runner
-// barriers on them before it launches any long-lived service.
+// IsInit reports whether t is one of the [InitOrder] entrypoints, a Go
+// `cmd/<name>` main. The picker groups these targets with the container
+// targets, and the runner barriers on them before launching any long-lived
+// service.
 func IsInit(t Target) bool {
 	if t.Kind != KindGo {
 		return false
@@ -81,14 +80,13 @@ func IsInit(t Target) bool {
 	return false
 }
 
-// ciSuffix marks a pnpm script as CI-only (e.g. "test:ci", "build:ci"): it is
-// tailored for the GitHub pipeline (pnpm i, doc/build prep, …), not for a
-// local developer run, so discovery skips it.
+// ciSuffix marks a pnpm script as CI-only ("test:ci", "build:ci"). Those are
+// tailored to the GitHub pipeline, so discovery skips them.
 const ciSuffix = ":ci"
 
 // pnpmScript reports whether a package.json script name is a discoverable
-// "<kind>" target: it is "<kind>" or "<kind>:<x>", but never the CI-only
-// "<kind>:ci" variant.
+// "<kind>" target: "<kind>" or "<kind>:<x>", excluding the CI-only
+// "<kind>:ci".
 func pnpmScript(name, kind string) bool {
 	if strings.HasSuffix(name, ciSuffix) {
 		return false
@@ -107,8 +105,8 @@ type Target struct {
 
 	// Service is the owning repo/module short name (e.g. "service-json-keys").
 	// Set for `run` targets so the UI can disambiguate identically-named
-	// entrypoints across services (a "rest" exists in every service). Empty
-	// for build/test where Name+RelDir already suffice.
+	// entrypoints across services (every service has a "rest"). Empty for
+	// build/test, where Name and RelDir already suffice.
 	Service string
 
 	// RelDir is the target's directory relative to the scan root ("." for the
@@ -130,12 +128,12 @@ type Target struct {
 	// before the command runs and torn down after. Only test targets set it.
 	Env *ComposeEnv
 
-	// ComposeService is the compose service name that would run this target
-	// dockerized — populated by `run` detection when the target's name
-	// matches a profile in its env's compose file (e.g. "rest" →
-	// "service-json-keys-rest"). Empty means dockerized mode cannot run this
-	// target (one-shots like migrations / rotate-keys / init have no compose
-	// service); the runner falls back to local exec for those.
+	// ComposeService is the compose service name that runs this target
+	// dockerized, set by `run` detection when the target's name matches a
+	// profile in its env's compose file (e.g. "rest" →
+	// "service-json-keys-rest"). Empty when dockerized mode cannot run the
+	// target — one-shots such as migrations have no compose service — and
+	// the runner falls back to local exec.
 	ComposeService string
 }
 
@@ -144,41 +142,41 @@ type Target struct {
 type ComposeEnv struct {
 	// File is the absolute path to the compose YAML.
 	File string
-	// Project is the `podman compose -p` project name — unique per env file
-	// so parallel test targets never collide on container/network names.
+	// Project is the `podman compose -p` project name, unique per env file so
+	// parallel test targets never collide on container or network names.
 	Project string
 	// ID is the parsed identifier, e.g. "go.internal" or "pnpm".
 	ID string
 	// Ports are the env-var names the compose file binds on the host side of
-	// a `ports:` mapping (e.g. POSTGRES_PORT, GRPC_PORT) — exactly the ports
-	// the host test process talks to. The runner allocates a free TCP port
-	// for each so parallel targets never collide.
+	// a `ports:` mapping (POSTGRES_PORT, GRPC_PORT, …), the ports the host
+	// test process talks to. The runner allocates a free TCP port for each so
+	// parallel targets never collide.
 	Ports []string
-	// Refs is every ${VAR} the compose file interpolates (host-exposed or
-	// not). The runner fills known test defaults (POSTGRES_USER/PASSWORD/DB/
-	// HOST) for any it references, so an internal-only postgres — which has
-	// no host port and thus no entry in Ports — still gets credentials.
+	// Refs is every ${VAR} the compose file interpolates, host-exposed or
+	// not. The runner fills known test defaults (POSTGRES_USER, PASSWORD, DB,
+	// HOST) for any it references, so an internal-only postgres with no host
+	// port, and therefore no entry in Ports, still gets credentials.
 	Refs []string
 	// Profiles maps a compose `profiles: ["x"]` value to the service name
-	// that carries it (e.g. "rest" → "service-json-keys-rest"). `run` uses
-	// this to know which compose service to bring up when a target is
-	// requested in dockerized mode (`podman compose --profile x up <svc>`).
+	// carrying it (e.g. "rest" → "service-json-keys-rest"). `run` reads it to
+	// pick the compose service to bring up for a target requested in
+	// dockerized mode (`podman compose --profile x up <svc>`).
 	Profiles map[string]string
 	// Services lists every compose service declared under `services:`, in
-	// source order. The runner uses it to compute the set of services to
-	// bring up at env-up time — in global mode it skips any sibling service
-	// that is also being run from its own repo (avoiding duplicates).
+	// source order. The runner derives the set to bring up at env-up time
+	// from it, skipping in global mode any sibling service already being run
+	// from its own repo.
 	Services []string
 	// Dependents lists the services that declare a `depends_on:` block. The
-	// test env-up path brings an env up in two waves — dependency-free services
-	// first, then dependents — so startup ordering never relies on the external
-	// compose provider's `depends_on` wait, which is broken on podman-compose
-	// ≤1.5.x and on setups without systemd. See build.composeUpPhased.
+	// test env-up path starts dependency-free services first and dependents
+	// second, so ordering never relies on the compose provider's
+	// `depends_on` wait, which is broken on podman-compose ≤1.5.x and on
+	// setups without systemd. See build.composeUpPhased.
 	Dependents []string
 }
 
-// ID is a stable, unique key for a target (used as a selection-map key and to
-// keep the menu order deterministic across runs).
+// ID is a stable, unique key for a target, used as a selection-map key and to
+// keep the menu order deterministic across runs.
 func (t Target) ID() string {
 	return string(t.Kind) + "\x00" + t.RelDir + "\x00" + t.Name
 }
@@ -193,17 +191,15 @@ var prunedDirs = map[string]struct{}{
 }
 
 // maxScanDepth bounds recursion depth below the scan root. Real layouts nest
-// targets a handful of levels (e.g. app/<repo>/pkg/js/test/rest); this cap is
-// generous for that yet stops an accidental run from $HOME or / from walking
-// the whole filesystem and appearing to hang.
+// targets a handful of levels (app/<repo>/pkg/js/test/rest), so the cap is
+// generous for them while stopping an accidental run from $HOME or / from
+// walking the whole filesystem and appearing to hang.
 const maxScanDepth = 10
 
-// skipDir reports whether the walk should not descend into path. It prunes
+// skipDir reports whether the walk should stay out of path. It prunes
 // git-ignored directories (so a scan from the stack root never recurses the
 // gitignored app/ and kit/ checkouts), the known-noise names, every hidden
-// directory, and anything past maxScanDepth — the root itself is never
-// skipped. This is what keeps a scan from an invalid or workspace directory
-// fast and bounded instead of frozen.
+// directory, and anything past maxScanDepth. The root itself is always kept.
 func skipDir(absRoot, path, name string, ignored map[string]struct{}) bool {
 	if path == absRoot {
 		return false
@@ -238,8 +234,7 @@ func Detect(root string) ([]Target, error) {
 
 	walkErr := filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			// A single unreadable subtree shouldn't abort the whole scan —
-			// skip it and keep discovering everything else.
+			// Skip an unreadable subtree and keep discovering the rest.
 			if d != nil && d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -282,11 +277,9 @@ func Detect(root string) ([]Target, error) {
 
 // ExistsUnder reports whether any of relPaths (slash-separated, relative to a
 // directory) exists at root or in any directory below it, using the same
-// bounded, pruned, gitignore-aware walk as Detect. It lets a caller detect a
-// signal file that lives in a sub-module directory — e.g. a go.mod or buf.yaml
-// under cli/ rather than at the repo root — without descending the gitignored
-// sibling checkouts (app/, kit/), node_modules, or hidden trees, and without
-// runaway depth. The walk short-circuits on the first match.
+// bounded, pruned, gitignore-aware walk as Detect. It finds a signal file that
+// lives in a sub-module directory, such as a go.mod or buf.yaml under cli/
+// rather than at the repo root. The walk short-circuits on the first match.
 func ExistsUnder(root string, relPaths []string) bool {
 	if len(relPaths) == 0 {
 		return false
@@ -304,11 +297,11 @@ func ExistsUnder(root string, relPaths []string) bool {
 	return found
 }
 
-// walkRepoDirs walks root with the bounded, pruned, gitignore-aware policy
-// shared by the detection probes — never descending the gitignored sibling
-// checkouts (app/, kit/), node_modules, hidden trees, or past the depth cap. It
-// invokes visit(absDir, relDir) for each surviving directory ("." for the root);
-// visit returns true to stop the walk early.
+// walkRepoDirs walks root with the bounded, pruned, gitignore-aware policy the
+// detection probes share, staying out of the gitignored sibling checkouts
+// (app/, kit/), node_modules, hidden trees and anything past the depth cap. It
+// invokes visit(absDir, relDir) for each surviving directory ("." for the
+// root); visit returns true to stop the walk early.
 func walkRepoDirs(root string, visit func(absDir, relDir string) bool) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -317,7 +310,7 @@ func walkRepoDirs(root string, visit func(absDir, relDir string) bool) {
 	ignored := gitIgnoredDirs(absRoot)
 	_ = filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			// An unreadable subtree shouldn't abort the probe — skip it.
+			// Skip an unreadable subtree and keep probing.
 			if d != nil && d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -329,8 +322,8 @@ func walkRepoDirs(root string, visit func(absDir, relDir string) bool) {
 		if skipDir(absRoot, path, d.Name(), ignored) {
 			return filepath.SkipDir
 		}
-		// path is always absRoot or a descendant, so the relative dir is a plain
-		// prefix trim ("." for the root) — no filepath.Rel error to handle.
+		// path is always absRoot or a descendant, so a prefix trim yields the
+		// relative dir ("." for the root) with no filepath.Rel error to handle.
 		rel := "."
 		if path != absRoot {
 			rel = filepath.ToSlash(strings.TrimPrefix(path, absRoot+string(filepath.Separator)))
@@ -343,7 +336,7 @@ func walkRepoDirs(root string, visit func(absDir, relDir string) bool) {
 }
 
 // kindOrder fixes the group order in the menu: Go first, then pnpm, then
-// podman — cheapest/fastest builds first so feedback arrives sooner.
+// podman, so the fastest builds report back soonest.
 func kindOrder(k Kind) int {
 	switch k {
 	case KindGo:
@@ -382,7 +375,7 @@ func detectGo(dir, rel string) []Target {
 	}}
 }
 
-// packageJSON is the minimal shape we need out of a package.json.
+// packageJSON is the minimal shape read out of a package.json.
 type packageJSON struct {
 	Name    string            `json:"name"`
 	Scripts map[string]string `json:"scripts"`
@@ -409,8 +402,6 @@ func detectPnpm(dir, rel string) []Target {
 
 	scripts := make([]string, 0, len(pkg.Scripts))
 	for name := range pkg.Scripts {
-		// "build", "build:rest", … but not "prebuild"/"rebuild" (must start
-		// the build) and not "build:ci" (CI-only).
 		if pnpmScript(name, buildArg) {
 			scripts = append(scripts, name)
 		}

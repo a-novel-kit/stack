@@ -1,16 +1,14 @@
-# Branch protection for the default branch. The CLI injects the required
-# status checks from semantic discovery, and omits the code_quality rule
-# for classes that set code_quality: false. Admins bypass; the agent bot (which
-# cuts releases) and the publish bot also bypass, because the version-bump commit
-# lands on the default branch directly (no branch proxy). Every status check is
-# required for everyone else.
+# Branch protection for the default branch. The CLI injects the required status
+# checks from discovery, and omits the code_quality rule for classes that set
+# code_quality: false. Admins bypass, as do the agent bot (which cuts releases)
+# and the publish bot, whose version-bump commit lands on the default branch
+# directly. Every status check is required for everyone else.
 #
 # required_signatures enforces verified commits on the default branch. The merge
-# queue squashes, so GitHub validates the signature on the resulting (GitHub-
-# signed) squash commit, not the contributor's individual PR commits — merges are
-# never blocked on unsigned feature commits. The release bot's direct version-bump
-# commit is covered by its bypass above. Renovate already commits via the API
-# (signed), so dependency PRs are unaffected.
+# queue squashes, so GitHub validates the signature on the resulting
+# GitHub-signed squash commit, and an unsigned feature commit never blocks a
+# merge. The release bot's direct version-bump commit is covered by its bypass
+# above, and Renovate commits through the API, already signed.
 name: master
 target: branch
 enforcement: active
@@ -32,13 +30,14 @@ rules:
   merge_queue:
     grouping_strategy: ALLGREEN
     merge_method: SQUASH
-    # How long the queue waits on a required check that never reports before dropping the
-    # entry. A check can go missing without failing — a third party that accepts an upload
-    # and never posts its status leaves the group pending with every other check green — and
-    # until the timeout expires it blocks every PR queued behind it, not just its own. Merge-
-    # group CI measures 1-5 minutes across the governed repos, so 15 clears the slowest run
-    # threefold while capping a stall at a quarter hour. Only raise it against a fresh
-    # measurement of the slowest lane.
+    # How long the queue waits on a required check that never reports before it
+    # drops the entry. A check can go missing without failing — a third party
+    # that accepts an upload and never posts its status leaves the group pending
+    # with every other check green — and until the timeout expires it blocks
+    # every PR queued behind it. Merge-group CI measures 1-5 minutes across the
+    # governed repos, so 15 clears the slowest run threefold while capping a
+    # stall at a quarter hour. Only raise it against a fresh measurement of the
+    # slowest lane.
     check_response_timeout_minutes: 15
     max_entries_to_build: 5
     max_entries_to_merge: 5

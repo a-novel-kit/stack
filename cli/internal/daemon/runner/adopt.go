@@ -14,26 +14,22 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// AdoptOrphanContainers scans podman for containers carrying our
-// adoption labels (anovel.stack / anovel.service / anovel.target) and
-// reconstitutes runner.Instance records for every one. Called at daemon
-// startup so a `core kill` + `core start` cycle doesn't lose
-// container-mode supervision.
+// AdoptOrphanContainers scans podman for containers carrying the adoption
+// labels (anovel.stack, anovel.service, anovel.target) and reconstitutes an
+// Instance record for each. The daemon calls it at startup, so a `core kill`
+// and `core start` cycle keeps its container-mode supervision.
 //
-// Per-service infra sessions are also re-flagged Up so the dep-walker
-// doesn't try to spin infra again when a target start follows
-// adoption. One-shot results aren't restored (no signal for "did this
-// succeed in the session that's now gone") — they'll re-run on the
-// next infra-start cycle, since idempotent one-shots run on every
-// infra-up.
+// It also re-flags each per-service infra session Up, so a target start after
+// adoption does not spin infra again. One-shot results stay unrestored, since
+// nothing records whether they succeeded in the session that is now gone; being
+// idempotent, they re-run on the next infra-up.
 //
-// Returns (adopted-containers, adopted-targets) for reporting.
+// It returns the number of containers and of targets adopted.
 func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
 	var containers, targets int
-	// Use --format json — Go's default map-formatting (used by
-	// `{{.Labels}}`) emits `map[k:v k:v]` which has no documented
-	// parser and collides with values containing spaces or colons
-	// (e.g., image tags). The JSON output is the contract.
+	// `--format json` is the parseable contract: `{{.Labels}}` renders Go's
+	// `map[k:v k:v]`, which has no documented parser and breaks on values
+	// holding spaces or colons, such as image tags.
 	out, err := exec.CommandContext(ctx, "podman", "ps", "-a",
 		"--filter", "label=anovel.stack",
 		"--format", "json").Output()
@@ -61,17 +57,16 @@ func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
 		}
 		containers++
 
-		// Mark the infra session Up — we have at least one container
-		// from this stack/service alive.
+		// At least one container of this stack and service is alive, so the
+		// infra session counts as Up.
 		r.markInfraSessionUp(stack, service)
 
 		if target == "" {
-			// Infra container (no target label) — no Instance record
-			// needed. But we DO need to re-seed the env allocator with
-			// the host ports this container is currently bound to;
-			// otherwise the next Acquire (for, e.g., the migrations
-			// one-shot's POSTGRES_PORT) picks a fresh port and the
-			// one-shot connects to the wrong host port.
+			// An infra container carries no target label and needs no
+			// Instance record, but the env allocator must be re-seeded with
+			// the host ports it is bound to. Otherwise the next Acquire,
+			// say for the migrations one-shot's POSTGRES_PORT, picks a
+			// fresh port and the one-shot connects to the wrong one.
 			r.reseedAllocator(ctx, stack, service, cid)
 			continue
 		}
@@ -79,9 +74,9 @@ func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
 		// Target container — find it in discovery and reconstitute.
 		tgt := r.findTargetInDiscovery(stack, service, target)
 		if tgt == nil {
-			// Discovery doesn't know this target (compose file changed
-			// since the container was created). Leave the container
-			// orphaned; user can `podman rm` manually.
+			// Discovery does not know this target, so the compose file
+			// changed since the container was created. Leave it orphaned
+			// for a manual `podman rm`.
 			continue
 		}
 		phase, health := translatePodmanStatus(status)
@@ -98,8 +93,7 @@ func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
 			StartedAt:   startedAt,
 		}
 		r.mu.Lock()
-		// Skip if we already have a live record (shouldn't happen at
-		// startup, but defensive).
+		// Skip a target that already holds a live record.
 		if _, exists := r.instances[inst.ID]; exists {
 			r.mu.Unlock()
 			continue
@@ -107,9 +101,8 @@ func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
 		r.instances[inst.ID] = inst
 		r.mu.Unlock()
 
-		// Resume watching + log streaming on the adopted container.
-		// Best-effort: if the log writer can't open (e.g., disk full),
-		// just skip log streaming for this adoption.
+		// Resume watching and log streaming on the adopted container. A log
+		// writer that fails to open costs this adoption only its streaming.
 		if phase != anovelv1.Phase_PHASE_TERMINATED && r.logs != nil {
 			ctxAdopt, cancel := context.WithCancel(context.Background())
 			r.mu.Lock()
@@ -125,36 +118,33 @@ func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
 	return containers, targets
 }
 
-// reseedAllocator re-records every host-port → `${VAR}` mapping for an
-// adopted infra container, so subsequent Acquire calls (e.g., from a
-// one-shot or long-runner's ForTarget) return the same host port the
-// already-running container is bound to. Without this, daemon restart
-// silently moves POSTGRES_PORT between sessions and any target that
-// connects to it after the restart gets "connection refused".
+// reseedAllocator re-records every host-port → `${VAR}` mapping for an adopted
+// infra container, so a later Acquire returns the same host port the running
+// container is bound to. Without it a daemon restart moves POSTGRES_PORT
+// between sessions, and every target connecting afterward gets "connection
+// refused".
 //
-// Mapping algorithm:
+// The mapping goes:
 //  1. `podman inspect` → NetworkSettings.Ports = { "5432/tcp": [{HostPort: "38631"}] }
-//  2. Compose Infra.Ports = [ "${POSTGRES_PORT}:5432" ]
-//  3. For each (containerPort, hostPort) inspect pair, find the matching
-//     compose port-mapping by container-side port → extract its ${VAR}.
-//  4. Reserve(owner=service, localVar=VAR, port=hostPort, consumer=session).
+//  2. compose Infra.Ports = [ "${POSTGRES_PORT}:5432" ]
+//  3. match each inspected pair to a compose mapping by container-side port,
+//     and take its ${VAR}
+//  4. Reserve(owner=service, localVar=VAR, port=hostPort, consumer=session)
 //
-// Best-effort: any parse or RPC error logs (silently for now) and skips
-// that pair. The adoption itself stays cheap and infallible.
+// A pair that fails to parse is skipped, keeping adoption cheap and infallible.
 func (r *Runner) reseedAllocator(ctx context.Context, stack, service, cid string) {
 	if r.alloc == nil {
 		return
 	}
-	// Find the infra discovery record. We need the compose ports: block
-	// to map container-side ports back to ${VAR} names. The container
-	// name follows compose's pattern `<project>_<infraName>_N`; extract
-	// infraName so we can pick the right Infra record (a service may
-	// have multiple infras — e.g., postgres + mailserver).
+	// The compose `ports:` block maps container-side ports back to ${VAR}
+	// names. Container names follow compose's `<project>_<infraName>_N`
+	// pattern, and infraName picks the right Infra record among the several a
+	// service may declare.
 	svc := r.findServiceInDiscovery(stack, service)
 	if svc == nil {
 		return
 	}
-	// Inspect for both name + ports.
+	// One inspect covers both the name and the ports.
 	out, err := exec.CommandContext(ctx, "podman", "inspect", cid,
 		"--format", "{{.Name}}|{{json .NetworkSettings.Ports}}").Output()
 	if err != nil {
