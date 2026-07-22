@@ -3283,9 +3283,13 @@ func (x *ExecRequest) GetCmd() []string {
 }
 
 type ExecOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Stream        LogStream              `protobuf:"varint,1,opt,name=stream,proto3,enum=anovel.v1.LogStream" json:"stream,omitempty"`
-	Line          string                 `protobuf:"bytes,2,opt,name=line,proto3" json:"line,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Stream LogStream              `protobuf:"varint,1,opt,name=stream,proto3,enum=anovel.v1.LogStream" json:"stream,omitempty"`
+	Line   string                 `protobuf:"bytes,2,opt,name=line,proto3" json:"line,omitempty"`
+	// Set only on the stream's final message, which carries no line. Presence-tracked on
+	// purpose: a plain int32 defaults to 0, which is indistinguishable from a successful
+	// exit, so a client could not tell "the command succeeded" from "the daemon never said".
+	ExitCode      *int32 `protobuf:"varint,3,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3332,6 +3336,13 @@ func (x *ExecOutput) GetLine() string {
 		return x.Line
 	}
 	return ""
+}
+
+func (x *ExecOutput) GetExitCode() int32 {
+	if x != nil && x.ExitCode != nil {
+		return *x.ExitCode
+	}
+	return 0
 }
 
 type DebugRequest struct {
@@ -3684,11 +3695,14 @@ const file_anovel_v1_core_proto_rawDesc = "" +
 	"\x0fcleared_volumes\x18\x01 \x03(\tR\x0eclearedVolumes\"<\n" +
 	"\vExecRequest\x12\x1b\n" +
 	"\ttarget_id\x18\x01 \x01(\tR\btargetId\x12\x10\n" +
-	"\x03cmd\x18\x02 \x03(\tR\x03cmd\"N\n" +
+	"\x03cmd\x18\x02 \x03(\tR\x03cmd\"~\n" +
 	"\n" +
 	"ExecOutput\x12,\n" +
 	"\x06stream\x18\x01 \x01(\x0e2\x14.anovel.v1.LogStreamR\x06stream\x12\x12\n" +
-	"\x04line\x18\x02 \x01(\tR\x04line\"+\n" +
+	"\x04line\x18\x02 \x01(\tR\x04line\x12 \n" +
+	"\texit_code\x18\x03 \x01(\x05H\x00R\bexitCode\x88\x01\x01B\f\n" +
+	"\n" +
+	"_exit_code\"+\n" +
 	"\fDebugRequest\x12\x1b\n" +
 	"\ttarget_id\x18\x01 \x01(\tR\btargetId\"B\n" +
 	"\rDebugResponse\x12\x1d\n" +
@@ -3948,6 +3962,7 @@ func file_anovel_v1_core_proto_init() {
 	if File_anovel_v1_core_proto != nil {
 		return
 	}
+	file_anovel_v1_core_proto_msgTypes[52].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

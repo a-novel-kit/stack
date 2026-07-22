@@ -1137,8 +1137,16 @@ the underlying command's success.`,
 				return err
 			}
 			defer func() { _ = stream.Close() }()
+			// Absent rather than 0: a daemon that ended the stream without a terminal
+			// message has told us nothing about the child, which must not read as success.
+			var exitCode *int32
 			for stream.Receive() {
 				ev := stream.Msg()
+				if ev.ExitCode != nil {
+					exitCode = ev.ExitCode
+
+					continue
+				}
 				w := cmd.OutOrStdout()
 				if ev.GetStream() == anovelv1.LogStream_LOG_STREAM_STDERR {
 					w = cmd.ErrOrStderr()
@@ -1148,11 +1156,29 @@ the underlying command's success.`,
 			if err := stream.Err(); err != nil && ctx.Err() == nil {
 				return err
 			}
-			return nil
+			return execResult(exitCode)
 		},
 	}
 	ss.bind(cmd)
 	return cmd
+}
+
+// execResult turns the exec stream's terminal exit code into the CLI's own exit status.
+//
+// A nil exitCode means the daemon ended the stream without ever reporting one, which says
+// nothing about the child and must not read as success — the whole point of the terminal
+// message is that "succeeded" and "never told us" are different answers.
+func execResult(exitCode *int32) error {
+	if exitCode == nil {
+		return errors.New("exec: daemon closed the stream without reporting an exit status " +
+			"(a daemon older than this CLI does not send one — run 'a-novel core restart')")
+	}
+
+	if *exitCode != 0 {
+		return &ExitError{Code: int(*exitCode)}
+	}
+
+	return nil
 }
 
 func newDebugCmd() *cobra.Command {

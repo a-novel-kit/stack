@@ -1101,15 +1101,45 @@ func (s *Server) Exec(ctx context.Context, req *connect.Request[anovelv1.ExecReq
 		}
 	}()
 	wg.Wait()
+
 	waitErr := execCmd.Wait()
+
+	code, err := execExitCode(waitErr)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("exec: wait: %w", err))
+	}
+
 	if waitErr != nil {
-		// Convey non-zero exits as a stream-final stderr line then
-		// success — the client decides how to render. (Wrapping waitErr
-		// into a connect.Error would mask the captured output that
-		// already streamed.)
+		// Keep the human-readable line: it survives being piped to a file, where the
+		// process exit status does not. (Wrapping waitErr into a connect.Error would
+		// mask the captured output that already streamed.)
 		send(anovelv1.LogStream_LOG_STREAM_STDERR, "[exec exited: "+waitErr.Error()+"]")
 	}
+	// Terminal message: carries the exit code and no line, so the client can propagate
+	// the child's status instead of always exiting 0.
+	sendMu.Lock()
+	defer sendMu.Unlock()
+	_ = stream.Send(&anovelv1.ExecOutput{ExitCode: &code})
+
 	return nil
+}
+
+// execExitCode maps a [exec.Cmd.Wait] error onto the child's exit status.
+//
+// A non-nil error that is not an [exec.ExitError] means the child's status was never
+// obtained — a spawn or IO failure — so it is returned rather than flattened into a code.
+// Reporting 0 there would be indistinguishable from a successful command.
+func execExitCode(waitErr error) (int32, error) {
+	if waitErr == nil {
+		return 0, nil
+	}
+
+	var exitErr *exec.ExitError
+	if !errors.As(waitErr, &exitErr) {
+		return 0, waitErr
+	}
+
+	return int32(exitErr.ExitCode()), nil
 }
 
 // Debug returns instructions for attaching Delve to a running go-exec
