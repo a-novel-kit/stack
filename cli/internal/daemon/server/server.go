@@ -253,29 +253,25 @@ func (s *Server) Shutdown(ctx context.Context, req *connect.Request[anovelv1.Shu
 	//    so one goroutine per target bounds the total by the longest grace.
 	//    The background context keeps a cancelled RPC from leaving
 	//    half-killed targets, since shutdown is a commitment.
+	//    The response names every target that could not be stopped. Whoever ran
+	//    this asked for a clean environment, and a partial one that reports
+	//    success is one they will not go back and check.
 	killCtx, cancelKill := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelKill()
-	var killWG sync.WaitGroup
-	killWG.Add(len(goExecIDs))
-	for _, id := range goExecIDs {
-		go func(id string) {
-			defer killWG.Done()
-			_ = s.runner.Kill(killCtx, id, 10*time.Second)
-		}(id)
-	}
-	killWG.Wait()
-	// 3) If force, tear down every active infra session.
-	infraTorn := 0
+	// 3) If force, also tear down every active infra session.
+	var sessions []runner.InfraSessionRef
 	if force {
-		for _, ref := range s.runner.ActiveInfraSessions() {
-			if err := s.runner.KillInfra(killCtx, ref.Stack, ref.Service, true /* force */); err == nil {
-				infraTorn++
-			}
-		}
+		sessions = s.runner.ActiveInfraSessions()
 	}
+	outcome := tearDown(goExecIDs, sessions,
+		func(id string) error { return s.runner.Kill(killCtx, id, 10*time.Second) },
+		func(ref runner.InfraSessionRef) error {
+			return s.runner.KillInfra(killCtx, ref.Stack, ref.Service, true /* force */)
+		})
 	resp := &anovelv1.ShutdownResponse{
-		GoExecKilled:          int32(len(goExecIDs)),
-		InfraServicesTornDown: int32(infraTorn),
+		GoExecKilled:          int32(outcome.goExecKilled),
+		InfraServicesTornDown: int32(outcome.infraTornDown),
+		Failures:              outcome.failures,
 	}
 	// 4) Fire the shutdown signal after the response is on the wire; the 50ms
 	//    delay lets the runtime flush it before the listener closes.
@@ -285,6 +281,61 @@ func (s *Server) Shutdown(ctx context.Context, req *connect.Request[anovelv1.Shu
 	}()
 	_ = ctx // keep signature parity with the rest of the handlers
 	return connect.NewResponse(resp), nil
+}
+
+// teardownOutcome is what a shutdown achieved. The counts are successes, and
+// anything that failed is named in failures.
+type teardownOutcome struct {
+	goExecKilled  int
+	infraTornDown int
+	failures      []string
+}
+
+// tearDown stops every go-exec target and, when sessions is non-empty, every
+// infra session, and reports what each one did. The kill funcs are parameters
+// so this can be driven without a live runner.
+//
+// go-exec targets go in parallel: killGoExec blocks until its grace expires, so
+// one goroutine per target bounds the total by the longest grace rather than
+// their sum. Infra teardown is serial and runs after them, since a session's
+// containers outlive the targets that were talking to it.
+func tearDown(
+	goExecIDs []string,
+	sessions []runner.InfraSessionRef,
+	killGoExec func(id string) error,
+	killInfra func(ref runner.InfraSessionRef) error,
+) teardownOutcome {
+	var (
+		mu  sync.Mutex
+		out teardownOutcome
+		wg  sync.WaitGroup
+	)
+	wg.Add(len(goExecIDs))
+	for _, id := range goExecIDs {
+		go func(id string) {
+			defer wg.Done()
+			err := killGoExec(id)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				out.failures = append(out.failures, fmt.Sprintf("go-exec target %s: %v", id, err))
+				return
+			}
+			out.goExecKilled++
+		}(id)
+	}
+	wg.Wait()
+	for _, ref := range sessions {
+		if err := killInfra(ref); err != nil {
+			out.failures = append(out.failures, fmt.Sprintf("infra %s/%s: %v", ref.Stack, ref.Service, err))
+			continue
+		}
+		out.infraTornDown++
+	}
+	// Goroutine completion order is not stable, so the same failures would
+	// otherwise come back in a different order run to run.
+	sort.Strings(out.failures)
+	return out
 }
 
 // ListStacks returns every registered stack. Stacks are fixed at startup,
@@ -754,28 +805,67 @@ func streamFileToClient(ctx context.Context, path string, stream *connect.Server
 		return err
 	}
 	defer func() { _ = f.Close() }()
-	dec := json.NewDecoder(f)
+	return streamLines(ctx, f, stream.Send, filter, path)
+}
+
+// streamLines forwards one JSON-lines log stream to send.
+//
+// It reads a line at a time rather than through a json.Decoder: a decoder that
+// fails part-way cannot be resumed, so the only recovery left is to stop, and
+// stopping hands the viewer a short log that looks whole. The writer flushes
+// per line, but a process killed mid-write leaves a partial final one, and that
+// is the common case.
+func streamLines(ctx context.Context, r io.Reader, send func(*anovelv1.LogLine) error, filter anovelv1.LogStream, path string) error {
+	reader := bufio.NewReader(r)
+	lineNo := 0
 	for {
-		if ctx.Err() != nil {
+		// A client that went away is not a failure, so the snapshot just stops.
+		select {
+		case <-ctx.Done():
 			return nil
+		default:
 		}
-		var ln logs.Line
-		if err := dec.Decode(&ln); err != nil {
-			break
-		}
-		ps := lineStreamToProto(ln.Stream)
-		if filter != anovelv1.LogStream_LOG_STREAM_UNSPECIFIED && ps != filter {
-			continue
-		}
-		if err := stream.Send(&anovelv1.LogLine{
-			Ts:     timestamppb.New(ln.Ts),
-			Stream: ps,
-			Line:   ln.Line,
-		}); err != nil {
+		lineNo++
+		raw, readErr := reader.ReadString('\n')
+		if err := emitLogLine(send, filter, raw, lineNo); err != nil {
 			return err
 		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				return nil
+			}
+			return fmt.Errorf("read log %s: %w", path, readErr)
+		}
 	}
-	return nil
+}
+
+// emitLogLine forwards one raw record, or a marker naming it when it does not
+// parse. The marker is sent whatever the stream filter is: a record that cannot
+// be decoded has no stream to match on, and a viewer that filters it away is
+// back to a log that looks complete. Its timestamp is the read time, since the
+// record carries none — clients render these in receive order.
+func emitLogLine(send func(*anovelv1.LogLine) error, filter anovelv1.LogStream, raw string, lineNo int) error {
+	trimmed := strings.TrimRight(raw, "\r\n")
+	if trimmed == "" {
+		return nil
+	}
+	var ln logs.Line
+	if err := json.Unmarshal([]byte(trimmed), &ln); err != nil {
+		return send(&anovelv1.LogLine{
+			Ts:     timestamppb.New(time.Now()),
+			Stream: anovelv1.LogStream_LOG_STREAM_STDERR,
+			Line:   fmt.Sprintf("a-novel: log line %d is unreadable and was skipped (%v)", lineNo, err),
+		})
+	}
+	ps := lineStreamToProto(ln.Stream)
+	if filter != anovelv1.LogStream_LOG_STREAM_UNSPECIFIED && ps != filter {
+		return nil
+	}
+	return send(&anovelv1.LogLine{
+		Ts:     timestamppb.New(ln.Ts),
+		Stream: ps,
+		Line:   ln.Line,
+	})
 }
 
 func lineStreamToProto(s logs.Stream) anovelv1.LogStream {

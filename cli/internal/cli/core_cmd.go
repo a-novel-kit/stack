@@ -163,7 +163,17 @@ For graceful 'restart-the-daemon-and-relaunch-my-targets', prefer
 					"shutdown: %d go-exec target(s) killed (containers left running)\n",
 					resp.GetGoExecKilled())
 			}
-			return waitForDaemonGone(ctx, c, 10*time.Second, cmd.OutOrStdout())
+			// The daemon still exits, so it is waited on either way. The
+			// failures decide the exit code: whoever ran this to get a clean
+			// environment has to learn from the shell that they did not.
+			waitErr := waitForDaemonGone(ctx, c, 10*time.Second, cmd.OutOrStdout())
+			if fails := resp.GetFailures(); len(fails) > 0 {
+				for _, f := range fails {
+					_, _ = fmt.Fprintf(os.Stderr, "a-novel: shutdown could not stop %s\n", f)
+				}
+				return fmt.Errorf("shutdown left %d target(s) running", len(fails))
+			}
+			return waitErr
 		},
 	}
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "also tear down all infra (cascade-kill remaining targets)")

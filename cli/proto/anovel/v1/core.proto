@@ -189,8 +189,13 @@ message ShutdownRequest {
   bool force = 1;
 }
 message ShutdownResponse {
-  int32 go_exec_killed = 1; // count of go-exec targets that got SIGTERM
+  int32 go_exec_killed = 1; // count of go-exec targets that stopped
   int32 infra_services_torn_down = 2; // 0 unless force
+  // What the shutdown failed to stop, one entry per target, already phrased for
+  // an operator. The counts alone cannot carry this: a target dropped because
+  // its teardown failed reads exactly like a target that was never running, and
+  // the difference is whether the local environment is now clean.
+  repeated string failures = 3;
 }
 
 // =============================================================================
