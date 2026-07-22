@@ -438,9 +438,11 @@ func (r *Runner) updateContainerState(id, phase, health string) {
 	}
 }
 
-// killContainer issues `podman stop -t <grace>` to the container, then
-// closes the watch goroutine. The watcher does the final markTerminated
-// when it observes the exited state.
+// killContainer issues `podman stop -t <grace>` to the container.
+//
+// A stop that fails leaves the container running, so the error travels back to the caller and the
+// instance keeps its STOPPING phase. Reporting a kill that did not happen sends the next start into
+// a name or port collision with a container the operator was told had gone.
 func (r *Runner) killContainer(ctx context.Context, id string, grace time.Duration) error {
 	r.mu.RLock()
 	inst, ok := r.instances[id]
@@ -455,13 +457,11 @@ func (r *Runner) killContainer(ctx context.Context, id string, grace time.Durati
 	cmd := exec.CommandContext(ctx, "podman", "stop", "-t", strconv.Itoa(seconds), inst.ContainerID)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		// A stop error never fails the kill; the watcher observes the exit
-		// and marks the instance terminated.
-		_ = out
+		return fmt.Errorf("podman stop %s: %w\n%s", inst.ContainerID, err, string(out))
 	}
-	// A live watcher observes the exit and calls markTerminated. Forcing it
-	// here covers a watcher whose ctx was already cancelled, so no caller sees
-	// a stuck stopping state.
+	// The watcher reaches markTerminated when it observes the exit. Calling it here covers a watcher
+	// whose context is already closed, so the phase settles either way.
 	r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_KILLED, "")
+
 	return nil
 }
