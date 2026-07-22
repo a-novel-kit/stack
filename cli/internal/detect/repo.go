@@ -16,8 +16,8 @@ var anovelRemote = regexp.MustCompile(`github\.com[:/]a-novel(-kit)?/`)
 
 // RepoGuard fails fast (no filesystem scan) when dir is not inside a git
 // repository owned by the a-novel / a-novel-kit orgs. Walking up for .git and
-// reading the remotes is O(path depth) + two quick git calls, so an invalid
-// directory errors almost instantly instead of triggering a deep walk.
+// reading the remotes is O(path depth) plus two quick git calls, so an invalid
+// directory errors almost instantly.
 func RepoGuard(dir string) error {
 	top, err := git(dir, "rev-parse", "--show-toplevel")
 	if err != nil {

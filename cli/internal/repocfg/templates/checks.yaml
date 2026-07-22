@@ -1,27 +1,26 @@
 # Required-status-check discovery for the master ruleset.
 #
-# Required checks = the `always` set + every job declared in a repo's
+# Required checks are the `always` set plus every job declared in a repo's
 # .github/workflows/main.yaml, minus the `exclude` rules below. A job's ID is
-# its check context, so there is nothing to derive and nothing to drift.
-# Workflow files are code (owned by skills / PRs), not by `repo update`; this
-# map only decides which of their jobs gate the default branch.
+# its check context. Workflow files are code, owned by PRs; this map only
+# decides which of their jobs gate the default branch.
 
 integrations:
   actions: 15368
   gitguardian: 46505
-  # The [Agent] App posts the merge-gate check-run, but its ID is per-org
-  # (a-novel and a-novel-kit run separate Apps), so `agent` is injected from the
-  # org profile at discovery time — never hardcoded here. See ResolveBotIntegrations.
+  # The [Agent] App posts the merge-gate check-run, and its ID is per-org
+  # (a-novel and a-novel-kit run separate Apps), so `agent` is injected from
+  # the org profile at discovery time. See ResolveBotIntegrations.
 
 # Always required, regardless of repo or class.
 always:
   - { context: "GitGuardian Security Checks", integration: gitguardian }
   # merge-gate: the single "may this PR merge?" gate, posted by the [Agent] App
-  # (a stable integration id) from the merge-gate.yaml workflow — hence
-  # integration `agent`, not `actions`.
+  # from the merge-gate.yaml workflow.
   - { context: "merge-gate", integration: agent }
-  # epic-freeze: the partial-landing detector's required check — success by default, failure on a
-  # PR whose Epic landed partially (posted by the [Agent] App from epic-freeze.yaml + the sweep).
+  # epic-freeze: the partial-landing detector's check. It succeeds by default
+  # and fails on a PR whose Epic landed partially, posted by the [Agent] App
+  # from epic-freeze.yaml and the sweep.
   - { context: "epic-freeze", integration: agent }
 
 # main.yaml jobs are required by default, except those matching these rules:
@@ -33,8 +32,8 @@ exclude:
   if_contains: ["github.ref == 'refs/heads/master'"]
 
 # CodeQL languages for the codeql.yml workflow (rendered by repo create/update).
-# This is the only file-based detection that remains: an always-on language
-# needs no signal; the rest are keyed to a canonical file.
+# The only file-based detection here: an always-on language needs no signal,
+# and the rest are keyed to a canonical file.
 codeql:
   always: ["actions"]
   languages:

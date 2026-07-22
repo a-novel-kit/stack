@@ -14,15 +14,12 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// StartGoExec spawns target `id` as a `go run ./cmd/<target>` invocation
-// inside the owning service's directory, with `env` as the process
-// environment (callers — typically the env-synthesis layer in phase 4 —
-// build this list).
+// StartGoExec spawns target `id` as a `go run ./cmd/<target>` invocation inside
+// the owning service's directory, with env as the process environment.
 //
-// Returns the resulting Instance. Already-running idempotency, mutual
-// exclusion vs container mode, and the PHASE_PENDING → PHASE_STARTING →
-// PHASE_RUNNING transitions are handled here so callers don't reimplement
-// them per RPC.
+// It returns the resulting Instance. Idempotency for an already-running target,
+// mutual exclusion against container mode, and the PENDING → STARTING → RUNNING
+// transitions all happen here, so no RPC handler reimplements them.
 func (r *Runner) StartGoExec(ctx context.Context, id string, env []string, warnings []string) (*Instance, error) {
 	// 1. Resolve target metadata from discovery.
 	tgt, svc, err := r.resolveTarget(id)
@@ -39,9 +36,8 @@ func (r *Runner) StartGoExec(ctx context.Context, id string, env []string, warni
 		return &out, nil
 	}
 
-	// 3. Build the command. We use the service's own go.mod context by
-	//    invoking go from the service directory (cmd/<target>/main.go is
-	//    resolved relative to that). Each target gets its own context so
+	// 3. Build the command. Running go from the service directory picks up
+	//    that service's own go.mod, and each target gets its own context so
 	//    Kill can cancel cleanly.
 	procCtx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(procCtx, "go", "run", "./cmd/"+tgt.Name)
@@ -52,9 +48,9 @@ func (r *Runner) StartGoExec(ctx context.Context, id string, env []string, warni
 	// New process group so Kill can take down the entire subtree
 	// (`go run` itself spawns a temp build + the actual binary).
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	// Redirect stdout/stderr through the log store. Each line is
-	// JSON-encoded ({ts, stream, line}) into the per-target current.log
-	// AND fanned out to any live subscribers (StreamLogs RPC).
+	// Redirect stdout and stderr through the log store, which JSON-encodes
+	// each line into the per-target current.log and fans it out to live
+	// StreamLogs subscribers.
 	logWriter, err := r.logs.OpenForWrite(id, tgt.Stack, tgt.Service, tgt.Name)
 	if err != nil {
 		cancel()
@@ -62,9 +58,8 @@ func (r *Runner) StartGoExec(ctx context.Context, id string, env []string, warni
 	}
 	cmd.Stdout = logWriter.Stdout()
 	cmd.Stderr = logWriter.Stderr()
-	// Surface any missing-secret warnings (value-free) into the target's log,
-	// before its own output, so the operator sees what to set in `run logs`
-	// and the TUI.
+	// Put the value-free missing-secret warnings ahead of the target's own
+	// output, so `run logs` and the TUI show the operator what to set.
 	for _, w := range warnings {
 		_, _ = fmt.Fprintln(logWriter.Stderr(), w)
 	}
@@ -99,9 +94,8 @@ func (r *Runner) StartGoExec(ctx context.Context, id string, env []string, warni
 	r.mu.Lock()
 	inst.PID = int32(cmd.Process.Pid)
 	r.mu.Unlock()
-	// transition() emits the STARTING→RUNNING PhaseEvent for Watch
-	// subscribers; don't mutate inst.Phase directly here or the event is
-	// lost.
+	// Every phase change goes through transition, which emits the
+	// STARTING→RUNNING PhaseEvent for Watch subscribers.
 	r.transition(id, anovelv1.Phase_PHASE_RUNNING)
 	go r.watchGoExec(id, logWriter)
 
@@ -128,30 +122,23 @@ func (r *Runner) watchGoExec(id string, logWriter *logs.Writer) {
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			// Classify based on (a) how the process ended and
-			// (b) whether we asked for it. Going via `go run` —
-			// the parent process supervised here — means SIGTERM
-			// sent to the process group always shows up as a
-			// signal exit, even when the actual binary handled it
-			// cleanly and exited 0. The fix: treat any
-			// signal-exit during a daemon-initiated stop as
-			// SUCCESS — clean shutdown by request. CRASHED is
-			// reserved for signals received without us asking
-			// (e.g., OOMKiller, manual `pkill`).
+			// Supervising `go run` means a SIGTERM to the process
+			// group always surfaces as a signal exit, even when the
+			// binary handled it and exited 0. A signal exit during a
+			// daemon-initiated stop therefore counts as SUCCESS, and
+			// CRASHED is reserved for signals nobody asked for, such
+			// as the OOM killer or a manual `pkill`.
 			r.mu.RLock()
 			wasStopping := inst.Phase == anovelv1.Phase_PHASE_STOPPING
 			r.mu.RUnlock()
 			switch {
 			case exitErr.Exited():
-				// Process exited with a non-zero status code on
-				// its own — a real error (panic, config issue,
-				// etc.). Surface as ERROR for both kinds.
+				// A non-zero status the process chose itself is a
+				// real error, such as a panic or a bad config.
 				reason = anovelv1.ExitReason_EXIT_REASON_ERROR
 			case wasStopping:
-				// We asked for the stop, the process is gone.
-				// Whether SIGTERM caught the binary mid-graceful
-				// or had to escalate to SIGKILL, the user-visible
-				// outcome is the same: "done".
+				// The stop was requested and the process is gone,
+				// whether SIGTERM or an escalated SIGKILL ended it.
 				reason = anovelv1.ExitReason_EXIT_REASON_SUCCESS
 			default:
 				reason = anovelv1.ExitReason_EXIT_REASON_CRASHED
@@ -176,9 +163,8 @@ func (r *Runner) killGoExec(ctx context.Context, id string, grace time.Duration)
 	}
 	pid := inst.cmd.Process.Pid
 
-	// SIGTERM the whole process group (we spawned with Setpgid). Use the
-	// negative-pid signal target so children of `go run` (the compiled
-	// binary in particular) get the message.
+	// Signal the whole process group through the negative pid, so the binary
+	// `go run` compiled and spawned receives it too.
 	if grace > 0 {
 		_ = syscall.Kill(-pid, syscall.SIGTERM)
 		// Poll for termination up to grace.
@@ -218,10 +204,9 @@ func (r *Runner) killGoExec(ctx context.Context, id string, grace time.Duration)
 	return nil
 }
 
-// transition is a small helper for atomic phase changes when there's
-// nothing else to update. Emits a PhaseEvent on every actual change so
-// Watch subscribers observe the transition. No-op when the phase didn't
-// actually change (avoids spamming subscribers with redundant events).
+// transition applies an atomic phase change and emits a PhaseEvent so Watch
+// subscribers observe it. A phase that already holds is a no-op, keeping
+// redundant events off the subscriber channels.
 func (r *Runner) transition(id string, phase anovelv1.Phase) {
 	r.mu.Lock()
 	inst, ok := r.instances[id]
@@ -242,6 +227,5 @@ func (r *Runner) transition(id string, phase anovelv1.Phase) {
 	r.emitPhase(ev)
 }
 
-// Keeps the discovery import referenced in this file; the package's other
-// files use it directly.
+// Keeps the discovery import referenced from this file.
 var _ = discovery.TargetKindOneShot

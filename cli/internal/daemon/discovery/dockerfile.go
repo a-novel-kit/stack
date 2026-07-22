@@ -6,20 +6,15 @@ import (
 	"strings"
 )
 
-// dockerfileHasHealthcheck reports whether the given Dockerfile contains a
-// non-NONE HEALTHCHECK instruction. It is the fallback for classifying a
-// target when the compose service itself declares no healthcheck, since the
-// check may legitimately live in either place.
+// dockerfileHasHealthcheck reports whether the Dockerfile at path declares a
+// HEALTHCHECK other than NONE. It classifies a target when the compose service
+// declares no healthcheck of its own, since the check may live in either place.
 //
-// We do a structural scan rather than a full Dockerfile parse: we read line
-// by line, skipping continuations (`\` at EOL), and look for a top-level
-// instruction starting with `HEALTHCHECK`. `HEALTHCHECK NONE` is treated as
-// "no healthcheck" (the official way to opt out of an inherited check).
-//
-// Errors (missing file, unreadable) return (false, nil) — discovery is
-// lenient about Dockerfile parsing because the compose file is the
-// authoritative source for classification, and a missing Dockerfile fails
-// loudly at build/run time anyway.
+// The scan is structural: it reads line by line, joins continuations, and looks
+// for a top-level instruction starting with `HEALTHCHECK`. `HEALTHCHECK NONE`
+// counts as no healthcheck, being the official opt-out from an inherited check.
+// A missing or unreadable file reports false, since the compose file is the
+// authoritative source and a missing Dockerfile fails loudly at build time.
 func dockerfileHasHealthcheck(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
@@ -35,8 +30,8 @@ func dockerfileHasHealthcheck(path string) bool {
 	for sc.Scan() {
 		line := sc.Text()
 		trimmed := strings.TrimRight(line, " \t")
-		// Continuation: append the line minus the trailing backslash, keep
-		// accumulating until the logical line ends.
+		// Continuation: drop the trailing backslash and keep accumulating
+		// until the logical line ends.
 		if strings.HasSuffix(trimmed, "\\") {
 			logical.WriteString(strings.TrimSuffix(trimmed, "\\"))
 			logical.WriteString(" ")
@@ -50,8 +45,8 @@ func dockerfileHasHealthcheck(path string) bool {
 		}
 		upper := strings.ToUpper(text)
 		if strings.HasPrefix(upper, "HEALTHCHECK ") || upper == "HEALTHCHECK" {
-			// Reject the explicit-disable form. Anything else with
-			// HEALTHCHECK at the start counts as declaring a healthcheck.
+			// HEALTHCHECK NONE is the explicit-disable form; anything else
+			// counts as declaring a healthcheck.
 			rest := strings.TrimSpace(text[len("HEALTHCHECK"):])
 			if strings.EqualFold(rest, "NONE") {
 				continue

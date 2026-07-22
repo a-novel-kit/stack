@@ -19,18 +19,17 @@ const (
 	endMarker   = "# <<< a-novel setup <<<"
 )
 
-// Shell names — hoisted so the dispatch tables in resolveRC,
-// shellFromPath, renderRCBlock agree on a single canonical spelling
-// for each shell we detect.
+// Canonical spelling of each detected shell, shared by the dispatch tables in
+// resolveRC, shellFromPath and renderRCBlock.
 const (
 	shellZsh  = "zsh"
 	shellBash = "bash"
 	shellFish = "fish"
 )
 
-// Stack-bootstrap status outcomes. Surfaces in setup.go's summary
-// render and in stack.go's classification; constants prevent typos
-// from silently producing an "(unknown)" status.
+// Stack-bootstrap status outcomes, shown in setup.go's summary and set by
+// stack.go's classification. Constants keep a typo from silently rendering as
+// "(unknown)".
 const (
 	statusValid   = "valid"
 	statusCloned  = "cloned"
@@ -69,10 +68,8 @@ func resolveRC(override string) (string, string) {
 	}
 }
 
-// shellFromPath maps a rc filename to its shell name. Defaults to "zsh"
-// for unfamiliar names so the completion-source line still emits
-// something useful (and at worst silently no-ops if the user is on a
-// different shell — the `command -v` guard prevents broken sourcing).
+// shellFromPath maps an rc filename to its shell name, defaulting to "zsh" for
+// unfamiliar names so the completion-source line still emits something useful.
 func shellFromPath(p string) string {
 	base := filepath.Base(p)
 	switch {
@@ -95,8 +92,8 @@ func renderRCBlock(stk []stacks.Stack, shell string) string {
 	var b strings.Builder
 	b.WriteString("# Managed by `a-novel core setup` — do not edit between markers.\n")
 	b.WriteString("# Re-run `a-novel core setup` to update; delete both markers to opt out.\n")
-	// Only emit the export if the user has anything beyond the implicit
-	// default — saves a noisy export for the common single-stack case.
+	// The export is emitted only for a layout beyond the implicit default,
+	// keeping the common single-stack case quiet.
 	if needsExport(stk) {
 		b.WriteString("export A_NOVEL_STACKS='")
 		b.WriteString(serializeStacks(stk))
@@ -108,7 +105,7 @@ func renderRCBlock(stk []stacks.Stack, shell string) string {
 	case shellBash:
 		b.WriteString("command -v a-novel >/dev/null 2>&1 && source <(a-novel completion bash)\n")
 	case shellFish:
-		// Fish uses pipe-to-source rather than process-substitution.
+		// Fish pipes into source; it has no process substitution.
 		b.WriteString("command -v a-novel >/dev/null 2>&1; and a-novel completion fish | source\n")
 	default: // zsh
 		b.WriteString("command -v a-novel >/dev/null 2>&1 && source <(a-novel completion zsh)\n")

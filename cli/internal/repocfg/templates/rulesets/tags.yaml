@@ -1,12 +1,12 @@
-# Release-tag protection — the server-side half of "releases come from CI only".
-# Only the agent bot (which cuts releases from the release workflow) and repo
-# admins may create, move or delete a tag; everyone else is blocked. So a tag —
-# and therefore a release — can only come from the release workflow or a
-# deliberate admin override, never a developer's `git push origin vX.Y.Z`.
+# Release-tag protection, the server-side half of "releases come from CI only".
+# Only the agent bot, which cuts releases from the release workflow, and repo
+# admins may create, move or delete a tag. A tag — and so a release — therefore
+# comes from the release workflow or a deliberate admin override, never a
+# developer's `git push origin vX.Y.Z`.
 #
 # ~ALL covers every tag, not just v*, so no tag of any shape can be hand-pushed.
-# The agent bot bypasses with mode "always" (a direct write, no branch proxy),
-# resolved by the builder like the master ruleset's bots.
+# The agent bot bypasses with mode "always" for its direct write, resolved by
+# the builder like the master ruleset's bots.
 name: tags
 target: tag
 enforcement: active

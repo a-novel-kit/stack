@@ -28,10 +28,9 @@ func DetectRun(root string) ([]Target, error) {
 		return nil, err
 	}
 
-	// Global mode: when run from a stack root that contains `app/service-*`
-	// checkouts, fan out across every service repo instead of scanning the
-	// stack itself (which has no service entrypoints; the CLI is the
-	// orchestrator). Without such checkouts the scan stays within the single
+	// Global mode: a stack root containing `app/service-*` checkouts fans out
+	// across every service repo, since the stack itself holds no service
+	// entrypoints. Without such checkouts the scan stays within the single
 	// repo at root.
 	walkRoots := []string{absRoot}
 	if rs := globalServiceRoots(absRoot); len(rs) > 0 {
@@ -52,12 +51,11 @@ func DetectRun(root string) ([]Target, error) {
 			if !d.IsDir() {
 				return nil
 			}
-			// skipDir uses walkRoot as its "root" so the walk depth/ignore
-			// semantics are per-repo, but filepath.Rel for `pnpmRun` and
-			// `goRun`'s moduleRootOf bound use the outer absRoot — that is
-			// how each service's modRel comes out as "app/service-X" instead
-			// of "." (which would collide across services in the compose
-			// project name).
+			// skipDir takes walkRoot as its root, keeping depth and ignore
+			// semantics per-repo, while pnpmRun and goRun's moduleRootOf
+			// bound resolve against the outer absRoot. That is what makes
+			// each service's modRel read "app/service-X", which the compose
+			// project name needs to stay unique across services.
 			if skipDir(walkRoot, path, d.Name(), ignored) {
 				return filepath.SkipDir
 			}
@@ -70,9 +68,9 @@ func DetectRun(root string) ([]Target, error) {
 			return nil, walkErr
 		}
 		// One container target per profile-guarded compose service in this
-		// walk root's run env. Container targets are emitted alongside
-		// live targets; main.go filters by run mode before the picker so
-		// each mode sees only its own list.
+		// walk root's run env. These are emitted alongside the live targets;
+		// the caller filters by run mode before the picker, so each mode
+		// sees only its own list.
 		targets = append(targets, containerTargets(absRoot, walkRoot)...)
 	}
 
@@ -109,7 +107,7 @@ func globalServiceRoots(absRoot string) []string {
 			continue
 		}
 		svc := filepath.Join(appDir, e.Name())
-		// Must be its own git repo to count — guards against an unrelated
+		// Only its own git repo counts, guarding against an unrelated
 		// `app/service-something/` directory that happens to share the name.
 		if _, err := os.Stat(filepath.Join(svc, ".git")); err != nil {
 			continue
@@ -204,9 +202,9 @@ func composeServiceFor(env *ComposeEnv, profile string) string {
 }
 
 // containerTargets emits one KindContainer target per profile-guarded compose
-// service in walkRoot's run env. The Cmd/Args are pre-baked so the runner can
-// launch each target with the same exec path the live-mode targets use —
-// dispatch is by Target.Kind, not by a runner-side mode flag.
+// service in walkRoot's run env. Cmd and Args are pre-baked so the runner
+// launches each target through the same exec path the live-mode targets use,
+// dispatching on Target.Kind alone.
 func containerTargets(absRoot, walkRoot string) []Target {
 	rel, _ := filepath.Rel(absRoot, walkRoot)
 	env := runEnvFor(walkRoot, rel)
@@ -227,32 +225,27 @@ func containerTargets(absRoot, walkRoot string) []Target {
 		svc := env.Profiles[p]
 		// Three-step launch in one shell:
 		//   1. `compose --profile X up -d --build --no-deps > /dev/null`
-		//      — build + create + start the profile's container.
-		//      --no-deps is required on podman-compose 1.5.0 (current
-		//      stable): without it, compose's `depends_on:
-		//      service_healthy` wait machinery is broken and the `up`
-		//      hangs forever even though the dependency is healthy
-		//      (verified empirically — the wait is silently a no-op
-		//      that never advances). Skipping the wait is safe because
-		//      the CLI's env-up has already brought every dependency up
-		//      via runner.waitHealthy before any target launches.
-		//      stdout is discarded — compose chatters about every
-		//      service it touches, but only the target's logs matter.
-		//      stderr still flows so real errors surface.
-		//   2. Resolve the container ID via `podman ps` grep-by-name.
-		//      `compose ps -q SVC` would seem natural, but
+		//      builds, creates and starts the profile's container.
+		//      --no-deps is required on podman-compose 1.5.0, where the
+		//      `depends_on: service_healthy` wait is a silent no-op and
+		//      the `up` hangs forever even with the dependency healthy.
+		//      Skipping the wait is safe: the CLI's env-up has already
+		//      brought every dependency up via runner.waitHealthy before
+		//      any target launches. stdout is discarded because compose
+		//      chatters about every service it touches; stderr still
+		//      flows so real errors surface.
+		//   2. Resolve the container ID with `podman ps` grep-by-name.
 		//      podman-compose 1.5.0 rejects positional service args on
-		//      `ps` with `unrecognized arguments`. The podman-ps
-		//      grep-by-name path is universal across compose versions
-		//      and substring-exclusive across sibling services
-		//      (project prefix discriminates).
-		//   3. `exec podman logs -f <id>` — direct streaming of the
-		//      container's stdout/stderr. `exec` replaces bash so the
-		//      runner's ctx-cancel terminates one process.
-		// Single-quoted template values keep the shell literal — none
-		// of project / path / profile / service contain quotes.
-		// Brief status lines on stderr keep the user oriented while
-		// the (suppressed) build is happening.
+		//      `ps` with `unrecognized arguments`, and grep-by-name works
+		//      across compose versions while the project prefix keeps it
+		//      exclusive across sibling services.
+		//   3. `exec podman logs -f <id>` streams the container's
+		//      stdout/stderr. `exec` replaces bash, so the runner's
+		//      ctx-cancel terminates one process.
+		// Single-quoted template values keep the shell literal; none of
+		// project, path, profile or service contain quotes. The stderr
+		// status lines keep the user oriented while the build is
+		// suppressed.
 		shell := fmt.Sprintf(
 			"echo '── %s · bringing up container…' >&2 && "+
 				"podman compose -p '%s' -f '%s' --profile '%s' up -d --build --no-deps > /dev/null || exit; "+

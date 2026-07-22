@@ -29,9 +29,9 @@ import (
 )
 
 // daemonInternalCmd is the hidden subcommand name `a-novel core start` re-execs
-// itself with to switch into "I am the daemon" mode. Cobra subcommand names
-// must not start with "--" (those are flags); we use a double-underscore prefix
-// to make accidental human invocation implausible without confusing the parser.
+// itself with to switch into daemon mode. Cobra reads a leading "--" as a flag,
+// so the double-underscore prefix keeps the name parseable while making an
+// accidental human invocation implausible.
 const daemonInternalCmd = "__daemon"
 
 // daemonLogTailLimit caps how much of a failed start's output is quoted back.
@@ -40,9 +40,9 @@ const daemonInternalCmd = "__daemon"
 const daemonLogTailLimit = 4 << 10
 
 // IsDaemonReexec reports whether args (typically os.Args) invoke the hidden
-// daemon re-exec — `a-novel core __daemon`. main() uses it to skip the
-// version-update check in the detached, long-lived daemon process (which has no
-// user watching and must not phone home on shutdown).
+// daemon re-exec, `a-novel core __daemon`. main() uses it to skip the
+// version-update check in the detached daemon process, which has no user
+// watching and must not phone home on shutdown.
 func IsDaemonReexec(args []string) bool {
 	return len(args) >= 3 && args[1] == "core" && args[2] == daemonInternalCmd
 }
@@ -67,8 +67,6 @@ which is silent on already-running and idempotent.`,
 	cmd.AddCommand(newCoreRestartCmd())
 	cmd.AddCommand(newCoreStatusCmd())
 	cmd.AddCommand(newCorePrepareReinstallCmd())
-	// Internal: handles re-exec by `core start` to become the daemon
-	// process. Hidden from --help; only invoked by our own start path.
 	cmd.AddCommand(newCoreDaemonInternalCmd())
 	return cmd
 }
@@ -105,8 +103,8 @@ stack isn't set up; run 'a-novel core setup' to bootstrap.`,
 			if foreground {
 				return daemon.Run(ctx, daemon.Options{Version: version.String()})
 			}
-			// Background mode: re-exec ourselves with the hidden internal
-			// flag, detached. Saves us from forking + duplicating Go state.
+			// Background mode: re-exec this binary with the hidden internal
+			// subcommand, detached, which avoids forking a Go process.
 			return startDetached()
 		},
 	}
@@ -147,10 +145,9 @@ For graceful 'restart-the-daemon-and-relaunch-my-targets', prefer
 				return err
 			}
 			cancel()
-			// Shutdown RPC — the daemon signals its own exit after the
-			// response is on the wire. We poll Ping until the socket is
-			// gone so the caller (a shell, a script) knows the daemon's
-			// done — same UX shape as PrepareReinstall.
+			// The daemon signals its own exit once the Shutdown response is
+			// on the wire, so polling Ping until the socket is gone is what
+			// tells a shell or script the daemon is done.
 			shutCtx, shutCancel := context.WithTimeout(ctx, 60*time.Second)
 			defer shutCancel()
 			resp, err := c.Shutdown(shutCtx, force)
@@ -173,10 +170,9 @@ For graceful 'restart-the-daemon-and-relaunch-my-targets', prefer
 	return cmd
 }
 
-// waitForDaemonGone polls Ping until the daemon's socket is unresponsive,
-// up to `timeout`. Used by core kill + core restart to give the caller a
-// deterministic "the daemon's actually gone" signal — without this, scripts
-// that immediately `core start` race the shutdown.
+// waitForDaemonGone polls Ping until the daemon's socket is unresponsive, up to
+// timeout. core kill and core restart use it for a deterministic "the daemon is
+// gone" signal, so a script can run `core start` on the next line.
 func waitForDaemonGone(ctx context.Context, c *rpc.Client, timeout time.Duration, out io.Writer) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -230,8 +226,8 @@ If the daemon is already down, this is just 'core start'.`,
 					return errors.New("--preserve-targets and --force are mutually exclusive (force tears down everything; preserve assumes the targets continue)")
 				}
 				if preserve {
-					// Same path as 'core prepare-reinstall' — write the
-					// checkpoint, daemon exits, next start replays it.
+					// The 'core prepare-reinstall' path: write the checkpoint,
+					// the daemon exits, the next start replays it.
 					rCtx, rCancel := context.WithTimeout(ctx, 30*time.Second)
 					resp, err := c.PrepareReinstall(rCtx)
 					rCancel()
@@ -384,10 +380,9 @@ Use --no-shell-rc to skip step 4 entirely (for dotfile-manager users).`,
 				NoShellRC:      noShellRC,
 				NoStartDaemon:  noStartDaemon,
 				NonInteractive: nonInteractive,
-				// StartDaemon idempotency: if the daemon is already
-				// running, treat that as success without re-spawning. This
-				// matches the behavior `a-novel core start` already
-				// guarantees and keeps re-runs of `core setup` a no-op.
+				// A daemon that is already running counts as success without
+				// a re-spawn, matching `a-novel core start` and keeping
+				// re-runs of `core setup` a no-op.
 				StartDaemon: func() error {
 					ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 					defer cancel()
@@ -425,9 +420,8 @@ func newCoreDaemonInternalCmd() *cobra.Command {
 	}
 }
 
-// startDetached re-execs the current binary with the hidden daemon flag
-// and detaches the child so it survives our exit. Standard "spawn a
-// background daemon from a CLI" pattern.
+// startDetached re-execs the current binary with the hidden daemon
+// subcommand and detaches the child so it survives this process's exit.
 func startDetached() error {
 	bin, err := os.Executable()
 	if err != nil {
@@ -437,18 +431,18 @@ func startDetached() error {
 	// Detach: new process group, no terminal.
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	c.Stdin = nil
-	// A detached daemon has nowhere to write but a file. Discarding its output
-	// makes every startup failure — a bad $A_NOVEL_STACKS, an unreadable stack
-	// path, a port already bound — surface identically as "did not become
-	// ready", with the one line that says which discarded.
+	// A detached daemon has nowhere to write but a file. Keeping its output
+	// is what separates a bad $A_NOVEL_STACKS from an unreadable stack path
+	// or an already-bound port; discard it and every startup failure reads
+	// alike as "did not become ready".
 	logFile, logErr := openDaemonLog()
 	if logErr == nil {
 		defer func() { _ = logFile.Close() }()
 		c.Stdout = logFile
 		c.Stderr = logFile
 	}
-	// Where this attempt's output begins, so a failure quotes what THIS start
-	// wrote rather than the tail of a previous one.
+	// Where this attempt's output begins, so a failure quotes only what this
+	// start wrote.
 	var logOffset int64
 	if logErr == nil {
 		if end, err := logFile.Seek(0, io.SeekEnd); err == nil {
@@ -478,8 +472,8 @@ func startDetached() error {
 }
 
 // openDaemonLog opens the detached daemon's log for appending, creating its
-// parent directory. Append rather than truncate: a start that fails is often
-// one of several, and the earlier attempts are the context for the last one.
+// parent directory. A start that fails is often one of several, and the
+// earlier attempts are the context for the last one.
 func openDaemonLog() (*os.File, error) {
 	path := paths.DaemonLog()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -489,12 +483,9 @@ func openDaemonLog() (*os.File, error) {
 }
 
 // daemonFailureDetail renders what the daemon said before giving up, as a
-// suffix to the readiness error. It reads from offset so a crash-looping daemon
-// is diagnosed by its latest words, not its first.
-//
-// Returns the manual fallback when the log could not be opened at all — the
-// readiness failure is still worth reporting, and pointing at --foreground
-// remains better than reporting nothing.
+// suffix to the readiness error. It reads from offset, so a crash-looping
+// daemon is diagnosed by its latest words. When the log could not be opened at
+// all it falls back to pointing the operator at --foreground.
 func daemonFailureDetail(logErr error, offset int64) string {
 	if logErr != nil {
 		return "; check stderr by running `a-novel core start --foreground`"

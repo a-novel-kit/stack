@@ -1,6 +1,6 @@
 // CoreService is the RPC contract between the a-novel daemon and its CLI/TUI
-// clients. The full contract lives here in one file so the wire schema is the
-// single source of truth — clients in any language can codegen against it.
+// clients. The whole contract lives in this one file, so a client in any
+// language can codegen against the wire schema itself.
 //
 // Connect-rpc is the wire protocol; the daemon serves both HTTP/1.1+JSON
 // (curl-friendly debugging) and gRPC framing (programmatic clients) from the
@@ -44,8 +44,8 @@ enum Mode {
   MODE_CONTAINER   = 2; // podman compose --profile <target>
 }
 
-// Health is the container's runtime healthcheck state. Always UNKNOWN for
-// go-exec mode (the daemon does not replicate readiness probes for go-exec).
+// Health is the container's runtime healthcheck state. It is always UNKNOWN in
+// go-exec mode, where the daemon runs no readiness probe.
 enum Health {
   HEALTH_UNSPECIFIED = 0;
   HEALTH_UNKNOWN     = 1;
@@ -174,17 +174,17 @@ message PrepareReinstallResponse {
   int32  go_exec_target_count = 2; // for logging
 }
 
-// Shutdown is the no-checkpoint cousin of PrepareReinstall: it terminates
-// the daemon WITHOUT writing reinstall.json, so on next 'core start' nothing
-// is auto-relaunched. Used by 'a-novel core kill' and 'a-novel core restart'.
+// Shutdown terminates the daemon without writing reinstall.json, so the next
+// 'core start' auto-relaunches nothing. 'a-novel core kill' and 'a-novel core
+// restart' use it.
 //
-// With force=false (default), the daemon SIGTERMs every go-exec target
-// (10s grace) and leaves containers alone — those have their own podman
-// lifecycle that survives the daemon's death.
+// With force=false (default), the daemon SIGTERMs every go-exec target with a
+// 10s grace and leaves containers alone, since their podman lifecycle survives
+// the daemon's death.
 //
-// With force=true, the daemon ALSO cascade-kills every service's infra
-// (KillInfra force=true), leaving no daemon-managed state running. Use
-// when the user wants a clean local environment ('shut everything off').
+// With force=true, it also cascade-kills every service's infra (KillInfra
+// force=true), leaving no daemon-managed state running — the "shut everything
+// off" case.
 message ShutdownRequest {
   bool force = 1;
 }
@@ -392,9 +392,9 @@ message ExecRequest {
 message ExecOutput {
   LogStream stream = 1;
   string    line   = 2;
-  // Set only on the stream's final message, which carries no line. Presence-tracked on
-  // purpose: a plain int32 defaults to 0, which is indistinguishable from a successful
-  // exit, so a client could not tell "the command succeeded" from "the daemon never said".
+  // Set only on the stream's final message, which carries no line. It is
+  // presence-tracked because a plain int32 defaults to 0, which a client could
+  // not tell apart from a successful exit.
   optional int32 exit_code = 3;
 }
 
@@ -441,10 +441,10 @@ service CoreService {
   // Service infrastructure
   rpc StartInfra(StartInfraRequest) returns (StartInfraResponse);
   rpc KillInfra(KillInfraRequest) returns (KillInfraResponse);
-  // Per-infra container lifecycle. Lets the TUI treat infra entries
-  // like targets — kill / restart one container without tearing down
-  // the rest of the service's infra. The whole-service equivalents
-  // (StartInfra/KillInfra) remain for cold-start and full teardown.
+  // Per-infra container lifecycle, which lets the TUI treat infra entries
+  // like targets: kill or restart one container while the rest of the
+  // service's infra stays up. StartInfra and KillInfra remain the
+  // whole-service cold-start and teardown.
   rpc KillInfraContainer(KillInfraContainerRequest) returns (KillInfraContainerResponse);
   rpc RestartInfraContainer(RestartInfraContainerRequest) returns (RestartInfraContainerResponse);
 

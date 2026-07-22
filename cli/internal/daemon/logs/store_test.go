@@ -8,15 +8,13 @@ import (
 	"time"
 )
 
-// Tests for the log store + writer hub. Focus is on the subscriber
-// lifecycle (the bug a recent review caught: Subscribe was leaking
-// channels into ts.subscribers because there was no unsub API). Each
-// test stands up a real Store backed by a tempdir so the file-write
-// side-effects don't get in the way of the fanout assertions.
+// Tests for the log store and its writer hub, centered on the subscriber
+// lifecycle. Each test stands up a real Store backed by a tempdir, so the
+// file-write side effects stay out of the way of the fanout assertions.
 
-// withStore returns a fresh Store + a configured target ready for
-// writes. The targetID is "default/test/x". On teardown, removes the
-// XDG_STATE_HOME override so adjacent tests can't pick up our dir.
+// withStore returns a fresh Store and a target ready for writes, under the
+// targetID "default/test/x". Teardown drops the XDG_STATE_HOME override so an
+// adjacent test cannot pick up this directory.
 func withStore(t *testing.T) (*Store, string, *Writer) {
 	t.Helper()
 	tmp := t.TempDir()
@@ -58,11 +56,8 @@ func TestStore_SubscribeRoundtrip(t *testing.T) {
 }
 
 func TestStore_UnsubRemovesFromFanout(t *testing.T) {
-	// Regression: prior to the review-driven fix, Subscribe had no
-	// unsub API, so the subscribers list grew unbounded over the
-	// target's lifetime. After unsub, subsequent writes must NOT
-	// leave dead channels in the list — the easiest observable
-	// proxy is that the underlying list length goes back to zero.
+	// The subscribers list returns to zero length once every subscriber
+	// unsubscribes, so a long-lived target sheds the ones that leave.
 	s, id, w := withStore(t)
 	const n = 5
 	unsubs := make([]func(), n)
@@ -90,18 +85,15 @@ func TestStore_UnsubRemovesFromFanout(t *testing.T) {
 		t.Errorf("subscriber count after all unsub: got %d want 0", got)
 	}
 	ts.mu.Unlock()
-	// Sanity: writing after unsub mustn't crash on the now-dangling
-	// channels (the writer holds ts.mu during the fanout, so the
-	// unsub happens-before the next write).
+	// A write after unsub must not crash on the dangling channels: the writer
+	// holds ts.mu during the fanout, so the unsub happens before it.
 	_, _ = w.Stdout().Write([]byte("after-unsub\n"))
 }
 
 func TestStore_UnsubDuringWriteNoPanic(t *testing.T) {
-	// Race the unsub against an in-flight stream of writes. Pre-fix
-	// (snapshot-then-send-outside-lock + close-on-unsub), this could
-	// panic with "send on closed channel". Post-fix (hold ts.mu
-	// during fanout + don't close on unsub), every iteration is
-	// clean.
+	// Race the unsub against an in-flight stream of writes. Holding ts.mu
+	// through the fanout, and leaving the channel open on unsub, is what keeps
+	// every iteration clear of a "send on closed channel" panic.
 	s, id, w := withStore(t)
 	const rounds = 200
 	for range rounds {
@@ -125,11 +117,9 @@ func TestStore_SubscribeAfterCloseGetsClosedChannel(t *testing.T) {
 	s, id, w := withStore(t)
 	_ = w.Close()
 	s.CloseTarget(id)
-	// After CloseTarget, the stream record is gone — Subscribe
-	// returns (nil, nil, false). This is the "subscribe to a
-	// vanished target" path; not the "subscribe to a still-alive-
-	// but-terminating stream" path which goes through a different
-	// branch (closed=true).
+	// CloseTarget drops the stream record, so Subscribe reports
+	// (nil, nil, false). A still-alive but terminating stream takes the other
+	// branch, where closed is true.
 	ch, _, ok := s.Subscribe(id)
 	if ok {
 		t.Errorf("Subscribe to deleted target should return ok=false; got ch=%v", ch)
@@ -137,14 +127,13 @@ func TestStore_SubscribeAfterCloseGetsClosedChannel(t *testing.T) {
 }
 
 func TestStore_FullBufferDrops(t *testing.T) {
-	// Confirm the buffer=32 + select-default contract: spam more lines
-	// than the buffer holds, ensure the writer doesn't block.
+	// The 32-slot buffer plus a non-blocking send means more lines than the
+	// buffer holds still never block the writer.
 	s, id, w := withStore(t)
 	_, unsub, _ := s.Subscribe(id)
 	defer unsub()
-	// Don't drain. Each write goes through the fanout; with the
-	// subscriber buffer full, select-default fires and drops. The
-	// writer must not stall.
+	// Nothing drains the channel, so once the subscriber's buffer fills the
+	// fanout drops each line, and the writer must not stall.
 	start := time.Now()
 	for range 100 {
 		_, _ = w.Stdout().Write([]byte("spam\n"))
@@ -154,9 +143,8 @@ func TestStore_FullBufferDrops(t *testing.T) {
 	}
 }
 
-// Smoke: writer pipes to the file even with no subscribers. Ensures
-// the no-subscriber path doesn't accidentally short-circuit the file
-// write.
+// TestStore_NoSubscriberStillWritesFile pins that the no-subscriber path still
+// reaches the file.
 func TestStore_NoSubscriberStillWritesFile(t *testing.T) {
 	s, _, w := withStore(t)
 	_ = s // silence "declared but not used"
@@ -177,9 +165,9 @@ func TestStore_NoSubscriberStillWritesFile(t *testing.T) {
 	}
 }
 
-// Concurrency probe: many subscribers + concurrent writes. With the
-// hold-lock-during-fanout change, this must not deadlock OR
-// race-detect (run under `go test -race`).
+// TestStore_ConcurrentSubscribersWrites drives many subscribers against
+// concurrent writes: holding the lock through the fanout must neither deadlock
+// nor trip the race detector.
 func TestStore_ConcurrentSubscribersWrites(t *testing.T) {
 	s, id, w := withStore(t)
 	const subs = 8

@@ -11,12 +11,12 @@ import (
 )
 
 // LegacyHandlers carries the entrypoints for the standalone capabilities
-// (test, build), which run their own flag parsers rather than Cobra's.
-// cmd/a-novel injects them so that flag-parsing code stays in that package;
-// the daemon-backed verbs under `run` live entirely in this one.
+// (test, build), which run their own flag parsers. cmd/a-novel injects them so
+// the flag-parsing code stays in that package, while the daemon-backed verbs
+// under `run` live entirely in this one.
 //
-// There is no `Run` handler: `run` is the parent namespace for the
-// daemon-backed verbs, so a standalone run capability would collide with it.
+// `run` is the parent namespace for the daemon-backed verbs, so it has no
+// standalone handler here.
 type LegacyHandlers struct {
 	Test  func(args []string) int
 	Build func(args []string) int
@@ -60,9 +60,8 @@ for the full design.`,
 		Version:       version.String(),
 	}
 
-	// Standalone capabilities. These don't need the daemon — they scan the
-	// working tree, run go test / pnpm test / podman build, report results
-	// and exit.
+	// Standalone capabilities: they scan the working tree, run the build or
+	// test command, report results and exit, with no daemon involved.
 	root.AddCommand(newLegacyCmd("test",
 		"Run tests (Go and pnpm) interactively or by selector",
 		`Discovers Go test packages and pnpm test scripts under the working tree, lets
@@ -90,8 +89,7 @@ selector), runs the selection, and prints a pass/fail report.`,
 	// and terminal: it execve's into claude, so it never returns here.
 	root.AddCommand(newClaudeCmd())
 
-	// Version (compatibility with legacy `a-novel version` invocation —
-	// Cobra also exposes --version on root automatically).
+	// `a-novel version`, alongside the --version flag Cobra puts on root.
 	root.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print the a-novel CLI version",
@@ -100,9 +98,8 @@ selector), runs the selection, and prints a pass/fail report.`,
 		},
 	})
 
-	// Daemon control. Stays at the top level — clear separation between
-	// "manage the daemon itself" and "operate on things the daemon
-	// supervises" (which is under `run`).
+	// Daemon control stays at the top level, separate from operating on what
+	// the daemon supervises, which lives under `run`.
 	root.AddCommand(newCoreCmd())
 
 	// `a-novel install` — the canonical reinstall path. Wraps the
@@ -111,9 +108,8 @@ selector), runs the selection, and prints a pass/fail report.`,
 	// binary, preserving live state across the upgrade.
 	root.AddCommand(newInstallCmd())
 
-	// Daemon-backed verbs, all under `run`. The namespace keeps the
-	// daemon-touching surface visually distinct from the standalone
-	// capabilities (test, build, publish).
+	// Daemon-backed verbs, all under `run`, which keeps the daemon-touching
+	// surface distinct from the standalone capabilities.
 	root.AddCommand(newRunCmd())
 
 	return root
@@ -171,10 +167,9 @@ func newLegacyCmd(verb, short, long string, fn func([]string) int) *cobra.Comman
 		RunE: func(cmd *cobra.Command, args []string) error {
 			code := fn(args)
 			if code != 0 {
-				// Cobra wraps non-zero RunE errors in exit code 1 by
-				// default. We need the exact legacy exit code, so we
-				// use a typed error that the executor in main.go
-				// unwraps for os.Exit.
+				// Cobra collapses a non-zero RunE error to exit code 1,
+				// so the exact code travels in a typed error that the
+				// executor in main.go unwraps for os.Exit.
 				return &ExitError{Code: code}
 			}
 			return nil

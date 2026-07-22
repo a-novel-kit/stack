@@ -11,9 +11,9 @@
 // ANSI escapes in `line` so the CLI/TUI can render colored output and
 // `jq` can filter by stream.
 //
-// Streaming hub: the Store also owns subscriber channels per (stack,
-// service, target). When the runner appends a line, every subscriber
-// gets it; the hub closes the channel when the proc terminates. The
+// The Store also acts as the streaming hub, owning subscriber channels per
+// (stack, service, target). Every line the runner appends reaches every
+// subscriber, and the hub closes the channels when the process terminates. The
 // StreamLogs RPC handler attaches a subscriber and forwards lines over
 // connect-rpc until the channel closes or the client disconnects.
 package logs
@@ -30,8 +30,8 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
-// Stream is one of stdout / stderr — matches the proto enum but kept as
-// a local type so this package doesn't depend on the generated code.
+// Stream is one of stdout or stderr. It mirrors the proto enum as a local type,
+// keeping this package free of the generated code.
 type Stream string
 
 const (
@@ -115,18 +115,16 @@ func (s *Store) OpenForWrite(targetID, stack, service, target string) (*Writer, 
 	return &Writer{ts: ts}, nil
 }
 
-// Subscribe adds a delivery channel for `targetID` and returns it
-// alongside an unsubscribe function the caller must defer-call on
-// exit. Without that call, the subscriber channel stays in the
-// stream's fanout list until the target itself terminates — a leak
-// that grows linearly with disconnect rate for long-running targets.
+// Subscribe adds a delivery channel for targetID and returns it with an
+// unsubscribe function the caller must defer. Skipping that call leaves the
+// channel in the stream's fanout list until the target terminates, a leak that
+// grows with the disconnect rate on long-running targets.
 //
-// The channel is buffered modestly (32 slots); slow subscribers that
-// don't drain get dropped lines silently — the daemon never blocks the
-// runner on a stuck client.
+// The channel holds 32 lines; a subscriber that falls behind loses lines
+// silently, so the daemon never blocks the runner on a stuck client.
 //
-// Returns (nil, nil, false) if no stream exists yet for the target —
-// the caller can poll back later or read the archived run instead.
+// It returns (nil, nil, false) when the target has no stream yet, leaving the
+// caller to poll again later or read an archived run instead.
 func (s *Store) Subscribe(targetID string) (<-chan Line, func(), bool) {
 	s.mu.RLock()
 	ts, ok := s.streams[targetID]
@@ -137,9 +135,8 @@ func (s *Store) Subscribe(targetID string) (<-chan Line, func(), bool) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	if ts.closed {
-		// Stream is already over; return a closed channel so the
-		// subscriber gets a clean EOF immediately. No unsub needed —
-		// nothing was registered with the fanout.
+		// The stream is over, so a closed channel gives the subscriber a
+		// clean EOF. Nothing joined the fanout, so the unsub is a no-op.
 		ch := make(chan Line)
 		close(ch)
 		return ch, func() {}, true
@@ -160,19 +157,16 @@ func (s *Store) Subscribe(targetID string) (<-chan Line, func(), bool) {
 				break
 			}
 		}
-		// Don't close ch here — the fanout in writer.go holds ts.mu
-		// during sends (see flush) so it's serialized against this
-		// unsub, but a separate close+send race is easier to reason
-		// about by leaving the channel unclosed. Readers know to stop
-		// because no more sends arrive; GC reclaims when the reader
-		// goroutine exits.
+		// ch stays open: the reader stops because no further send
+		// arrives, and GC reclaims the channel once its goroutine
+		// exits. Only close() closes a subscriber channel.
 	}
 	return ch, unsub, true
 }
 
-// CloseTarget marks the target's stream as done — closes the file
-// handle, closes every subscriber channel, removes the stream record.
-// Called by the runner when an instance reaches PHASE_TERMINATED.
+// CloseTarget ends the target's stream: it closes the file handle and every
+// subscriber channel, then drops the stream record. The runner calls it when an
+// instance reaches PHASE_TERMINATED.
 func (s *Store) CloseTarget(targetID string) {
 	s.mu.Lock()
 	ts, ok := s.streams[targetID]

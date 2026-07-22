@@ -13,11 +13,9 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Podman state strings, hoisted into constants so the half-dozen
-// switch sites across container.go, infra.go, adopt.go, and deps.go
-// agree on a single spelling. These are podman API contracts (the
-// strings podman ps / inspect emit), not arbitrary internal labels —
-// renaming them is a podman-version change, not a refactor.
+// Podman state strings, spelled as `podman ps` and `podman inspect` emit them.
+// They are a podman API contract shared by every switch site in this package,
+// so a change here follows a podman version.
 const (
 	pmPhaseRunning    = "running"
 	pmPhasePaused     = "paused"
@@ -31,24 +29,22 @@ const (
 	pmHealthStarting  = "starting"
 )
 
-// streamContainerLogs runs `podman logs -f <cid>` and pipes its output
-// through the daemon's log writer. Exits when ctx is cancelled (kill)
-// or the container is removed (podman logs detects EOF). Closes the
-// writer on exit so the file handle + subscribers release.
+// streamContainerLogs runs `podman logs -f <cid>` and pipes its output through
+// the daemon's log writer. It exits when ctx is cancelled or the container is
+// removed, closing the writer so its file handle and subscribers release.
 func (r *Runner) streamContainerLogs(ctx context.Context, cid string, writer *logs.Writer) {
 	defer func() { _ = writer.Close() }()
 	cmd := exec.CommandContext(ctx, "podman", "logs", "-f", cid)
-	// podman's `logs -f` writes container stdout to its own stdout and
-	// container stderr to its own stderr — pipe each through the
-	// matching writer side so the stream tag is preserved.
+	// `podman logs -f` mirrors the container's stdout and stderr onto its own,
+	// so piping each through the matching writer preserves the stream tag.
 	cmd.Stdout = writer.Stdout()
 	cmd.Stderr = writer.Stderr()
 	_ = cmd.Run()
 }
 
-// composeProjectName is the prefix-aware compose project:
-// "<stack>_<service>". Used for every podman-compose invocation so
-// multi-stack isolation just works.
+// composeProjectName is the prefix-aware compose project, "<stack>_<service>".
+// Every podman-compose invocation uses it, which is what isolates one stack
+// from another.
 func composeProjectName(stack, service string) string {
 	return stack + "_" + service
 }
@@ -65,18 +61,16 @@ func containerLabelArgs(stack, service, target string) string {
 	if target != "" {
 		parts = append(parts, "--label", "anovel.target="+target)
 	}
-	// --podman-run-args limits the injection to `podman run` invocations
-	// — using the broader --podman-args also forwards these flags to
-	// podman-compose's internal `podman ps` calls, which don't accept
-	// --label and fail with exit 125. Run-args is the right scope.
+	// --podman-run-args scopes the injection to `podman run`, keeping the
+	// labels out of podman-compose's internal `podman ps` calls, which reject
+	// --label and fail with exit 125.
 	return "--podman-run-args=" + strings.Join(parts, " ")
 }
 
-// StartContainer brings up `id` as a podman-compose container in the
-// target's declared profile, labeling it for adoption and passing the
-// synthesized env so compose's ${VAR} port substitution resolves. Uses
-// --no-deps to sidestep podman-compose 1.5.0's broken depends_on wait
-// machinery.
+// StartContainer brings `id` up as a podman-compose container in the target's
+// declared profile, labeling it for adoption and passing the synthesized env so
+// compose's ${VAR} port substitution resolves. --no-deps sidesteps
+// podman-compose 1.5.0's broken depends_on wait.
 func (r *Runner) StartContainer(ctx context.Context, id string, env []string, warnings []string) (*Instance, error) {
 	tgt, svc, err := r.resolveTarget(id)
 	if err != nil {
@@ -115,8 +109,6 @@ func (r *Runner) StartContainer(ctx context.Context, id string, env []string, wa
 
 	r.transition(id, anovelv1.Phase_PHASE_STARTING)
 
-	// --no-deps avoids podman-compose 1.5.0's broken
-	// depends_on: service_healthy wait machinery.
 	args := []string{
 		"compose",
 		"-p", project,
@@ -135,10 +127,9 @@ func (r *Runner) StartContainer(ctx context.Context, id string, env []string, wa
 		return nil, fmt.Errorf("compose up for %s: %w\n%s", id, err, string(out))
 	}
 
-	// Find the container ID. We labeled it on creation, so the canonical
-	// way to retrieve it is a label-filtered ps. Fall back to name-based
-	// lookup if the label query returns nothing — defense against
-	// podman-compose versions that swallow the --podman-args label flag.
+	// Find the container ID through the labels set at creation, falling back
+	// to the name convention for podman-compose versions that swallow the
+	// label flag.
 	cid, err := findContainerByLabels(ctx, svc.Stack, svc.Name, tgt.Name)
 	if err != nil || cid == "" {
 		cid = findContainerByName(ctx, project, tgt.ComposeName)
@@ -153,21 +144,18 @@ func (r *Runner) StartContainer(ctx context.Context, id string, env []string, wa
 	r.mu.Lock()
 	inst.ContainerID = cid
 	inst.Phase = anovelv1.Phase_PHASE_RUNNING
-	// Long-runner containers start with health=STARTING; the watcher
-	// updates as podman's healthcheck progresses. One-shots end up in
-	// HEALTH_UNSPECIFIED — they're transient and the lifecycle is what
-	// matters.
+	// A long-runner starts at health STARTING and the watcher follows
+	// podman's healthcheck from there. A one-shot stays UNSPECIFIED, since
+	// its lifecycle is what matters.
 	inst.Health = anovelv1.Health_HEALTH_STARTING
 	r.mu.Unlock()
 
-	// Open the log writer + spawn the per-container `podman logs -f`
-	// streamer so `a-novel run logs <target>` shows the container's
-	// actual output (not just our shell echoes). Same JSON-line format
-	// as go-exec mode so the storage + streaming layers are uniform.
+	// Stream `podman logs -f` into the same JSON-line store go-exec mode uses,
+	// so `a-novel run logs <target>` shows the container's own output.
 	logWriter, err := r.logs.OpenForWrite(id, tgt.Stack, tgt.Service, tgt.Name)
 	if err == nil {
-		// Surface any missing-secret warnings (value-free) into the target's
-		// log so the operator sees what to set in `run logs` / the TUI.
+		// Surface the value-free missing-secret warnings so `run logs` and
+		// the TUI show the operator what to set.
 		for _, w := range warnings {
 			_, _ = fmt.Fprintln(logWriter.Stderr(), w)
 		}
@@ -215,10 +203,8 @@ func firstLine(s string) string {
 }
 
 // watchContainer polls `podman inspect` every 2s to update the instance's
-// phase + health + exit code. Cheap enough for local dev (one inspect
-// per running container per tick) and far simpler than wiring
-// `podman events` streaming. Terminates when the container exits OR ctx
-// is cancelled (via kill).
+// phase, health, and exit code, one inspect per running container per tick. It
+// returns when the container exits or ctx is cancelled.
 func (r *Runner) watchContainer(ctx context.Context, id, cid string) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -227,8 +213,8 @@ func (r *Runner) watchContainer(ctx context.Context, id, cid string) {
 	for {
 		phase, health, exitCode, err := podmanInspect(ctx, cid)
 		if err != nil {
-			// Container missing — typically means it's been removed.
-			// Mark terminated unless we already did.
+			// A failed inspect means the container is gone, so mark
+			// the instance terminated.
 			r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_CRASHED, err.Error())
 			return
 		}
@@ -264,26 +250,21 @@ type InfraState struct {
 	Health      anovelv1.Health
 }
 
-// InfraStatesOf returns the live state of every infra container in the
-// given stack, keyed by "<service>/<infraName>". One podman call total
-// regardless of how many services / infras the stack has — far faster
-// than a per-infra scan (each podman invocation has
-// ~1s cold-start overhead on rootless WSL2 podman, so N infras serial
-// = N seconds, often exceeding the TUI's 2s poll cadence).
+// InfraStatesOf returns the live state of every infra container in the given
+// stack, keyed by "<service>/<infraName>". It costs one podman call whatever
+// the stack's size, which matters because each invocation carries roughly 1s of
+// cold-start overhead on rootless WSL2 podman and the TUI polls every 2s.
 //
-// Health: deliberately NOT fetched here. podman ps --format json
-// doesn't expose Health.Status, and a per-container `podman inspect`
-// would double the call count. PHASE_RUNNING + HEALTH_UNSPECIFIED
-// renders correctly downstream (green ● in TUI, "running" in CLI ps).
-// Callers needing precise health for a single infra can fall back to
-// InfraStateOf (which does the inspect).
+// Health stays unset here: `podman ps --format json` omits Health.Status, and
+// reading it costs one inspect per container. PHASE_RUNNING with
+// HEALTH_UNSPECIFIED renders correctly downstream, as a green ● in the TUI and
+// "running" in CLI ps.
 //
-// Returns an empty map (not nil) on podman errors so callers can
-// uniformly check `if state, ok := m[key]` without nil-guarding.
+// A podman error yields an empty map, so a caller can check
+// `if state, ok := m[key]` without a nil guard.
 func (r *Runner) InfraStatesOf(ctx context.Context, stack string) map[string]InfraState {
-	// Cache check — TUI poll cadence (~2s) hits this most of the time.
-	// Mutating RPCs call InvalidateInfraStateCache so a stale entry
-	// never outlives an explicit state change.
+	// The TUI's ~2s poll hits this cache most of the time, and every mutating
+	// RPC invalidates it so a stale entry never outlives a state change.
 	r.infraStateMu.Lock()
 	if entry, ok := r.infraStateCache[stack]; ok && time.Since(entry.at) < infraStateCacheTTL {
 		// Copy the map so callers don't race a concurrent invalidation.
@@ -294,11 +275,9 @@ func (r *Runner) InfraStatesOf(ctx context.Context, stack string) map[string]Inf
 		r.infraStateMu.Unlock()
 		return cp
 	}
-	// Snapshot the generation. The reseed at the end of this function
-	// will refuse to write the cache if Invalidate fired in the
-	// meantime — otherwise a long podman scan started PRE-mutation
-	// would resurrect pre-mutation state after the mutation cleared
-	// the cache.
+	// Snapshot the generation: the reseed below refuses to write the cache
+	// when an invalidation fired meanwhile, so a scan started before a
+	// mutation cannot resurrect pre-mutation state.
 	startGen := r.infraStateGen
 	r.infraStateMu.Unlock()
 
@@ -320,15 +299,14 @@ func (r *Runner) InfraStatesOf(ctx context.Context, stack string) map[string]Inf
 	}
 	for _, e := range entries {
 		svc := e.Labels["anovel.service"]
-		// Skip target containers (those carry anovel.target); we only
-		// care about infra here (target state is tracked via the
-		// runner's own Instance records).
+		// Target containers carry anovel.target and are tracked through the
+		// runner's own Instance records, so skip them.
 		if _, isTarget := e.Labels["anovel.target"]; isTarget {
 			continue
 		}
-		// Compose service name lives in com.docker.compose.service
-		// (mirrored by io.podman.compose.service). That's the infra
-		// name we discover from the compose file.
+		// The compose service name lives in com.docker.compose.service,
+		// mirrored by io.podman.compose.service. That is the infra name
+		// discovery reads from the compose file.
 		infraName := e.Labels["com.docker.compose.service"]
 		if infraName == "" {
 			infraName = e.Labels["io.podman.compose.service"]
@@ -336,8 +314,6 @@ func (r *Runner) InfraStatesOf(ctx context.Context, stack string) map[string]Inf
 		if svc == "" || infraName == "" {
 			continue
 		}
-		// Map lowercase JSON state directly: "running" → RUNNING,
-		// "exited"/"stopped" → TERMINATED, "created" → STARTING.
 		var p anovelv1.Phase
 		switch strings.ToLower(e.State) {
 		case pmPhaseRunning, pmPhasePaused:
@@ -351,9 +327,8 @@ func (r *Runner) InfraStatesOf(ctx context.Context, stack string) map[string]Inf
 		}
 		out[svc+"/"+infraName] = InfraState{ContainerID: e.ID, Phase: p, Health: anovelv1.Health_HEALTH_UNSPECIFIED}
 	}
-	// Seed cache for the TTL window — but only if no invalidation
-	// happened during our scan. Otherwise we'd resurrect pre-mutation
-	// state for the next ListServices caller until TTL expires.
+	// Seed the cache for the TTL window, unless an invalidation landed during
+	// the scan.
 	cached := make(map[string]InfraState, len(out))
 	for k, v := range out {
 		cached[k] = v
@@ -366,15 +341,13 @@ func (r *Runner) InfraStatesOf(ctx context.Context, stack string) map[string]Inf
 	return out
 }
 
-// KillInfraContainer stops a single infra container by (stack,
-// service, infraName). Uses podman stop with a 10s grace; the
-// container survives in Exited state so the user can restart it
-// without losing its pod / network attachments. Returns an error if
-// no container matches (already down, or never up).
+// KillInfraContainer stops one infra container by (stack, service, infraName),
+// with a 10s grace. The container survives in Exited state, so a restart keeps
+// its pod and network attachments. It errors when no container matches, whether
+// already down or never up.
 func (r *Runner) KillInfraContainer(ctx context.Context, stack, service, infraName string) error {
-	// Drop the cached state so the next ps reflects the stopped
-	// container immediately, even though podman's filtered scan
-	// would have caught it inside the TTL anyway.
+	// Drop the cached state so the next ps reflects the stopped container at
+	// once.
 	defer r.InvalidateInfraStateCache()
 	st, ok := r.InfraStatesOf(ctx, stack)[service+"/"+infraName]
 	if !ok || st.ContainerID == "" {
@@ -388,10 +361,9 @@ func (r *Runner) KillInfraContainer(ctx context.Context, stack, service, infraNa
 	return nil
 }
 
-// RestartInfraContainer restarts a single infra container in place
-// (`podman restart`, which is stop+start without recreating). Faster
-// than KillInfra → StartInfra because it skips compose-up entirely
-// and preserves the container's existing volume bindings / labels.
+// RestartInfraContainer restarts one infra container in place with `podman
+// restart`, skipping compose-up entirely and preserving the container's
+// existing volume bindings and labels.
 func (r *Runner) RestartInfraContainer(ctx context.Context, stack, service, infraName string) error {
 	defer r.InvalidateInfraStateCache()
 	st, ok := r.InfraStatesOf(ctx, stack)[service+"/"+infraName]
@@ -406,10 +378,8 @@ func (r *Runner) RestartInfraContainer(ctx context.Context, stack, service, infr
 	return nil
 }
 
-// InfraStateOf is the legacy single-infra query — preserved for
-// callers that don't have the batched map yet. Returns
-// (phase, health, containerID). Internally uses InfraStatesOf for
-// consistency.
+// InfraStateOf returns one infra's phase, health, and container ID, reading the
+// batched InfraStatesOf snapshot.
 func (r *Runner) InfraStateOf(ctx context.Context, stack, service, infraName string) (anovelv1.Phase, anovelv1.Health, string) {
 	st, ok := r.InfraStatesOf(ctx, stack)[service+"/"+infraName]
 	if !ok {
@@ -418,8 +388,7 @@ func (r *Runner) InfraStateOf(ctx context.Context, stack, service, infraName str
 	return st.Phase, st.Health, st.ContainerID
 }
 
-// podmanInspect parses just the fields we care about (status, health,
-// exit code) from one container. Returns (phase, health, exitCode, err).
+// podmanInspect returns one container's status, health, and exit code.
 func podmanInspect(ctx context.Context, cid string) (string, string, int, error) {
 	cmd := exec.CommandContext(ctx, "podman", "inspect", cid,
 		"--format", "{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}")
@@ -486,14 +455,13 @@ func (r *Runner) killContainer(ctx context.Context, id string, grace time.Durati
 	cmd := exec.CommandContext(ctx, "podman", "stop", "-t", strconv.Itoa(seconds), inst.ContainerID)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		// Surface but don't fail the kill — the watcher will eventually
-		// observe and mark terminated.
+		// A stop error never fails the kill; the watcher observes the exit
+		// and marks the instance terminated.
 		_ = out
 	}
-	// The watcher (if still running) will observe exited and call
-	// markTerminated. If the watcher's ctx is already cancelled (e.g.,
-	// we got killed twice in a row), force markTerminated here so
-	// callers don't see a stuck stopping state.
+	// A live watcher observes the exit and calls markTerminated. Forcing it
+	// here covers a watcher whose ctx was already cancelled, so no caller sees
+	// a stuck stopping state.
 	r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_KILLED, "")
 	return nil
 }

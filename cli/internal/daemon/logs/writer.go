@@ -45,10 +45,9 @@ func (sw *streamWriter) Write(p []byte) (int, error) {
 	now := time.Now()
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
-	// Combine any partial from the previous Write with the new bytes.
-	// Assign back to sw.partial first (appendAssign lint), then transfer
-	// ownership to buf and clear sw.partial — the for-loop below either
-	// flushes complete lines or stashes a new tail back onto sw.partial.
+	// Combine the previous Write's partial with the new bytes, then hand
+	// ownership to buf: the loop below either flushes complete lines or stashes
+	// a new tail back onto sw.partial.
 	sw.partial = append(sw.partial, p...)
 	buf := sw.partial
 	sw.partial = nil
@@ -72,13 +71,10 @@ func (sw *streamWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// flush writes one Line to the file and fans out to subscribers. The
-// target's mutex guards both the file write and the fanout so the send
-// window stays tied to the subscriber list: sending outside the lock
-// would race unsubscribe, letting the writer send to a channel whose
-// reader is already gone. Sends are non-blocking (select-default), so
-// holding the lock across the fanout costs at most O(N_subs) quick,
-// bounded sends.
+// flush writes one Line to the file and fans it out to subscribers. The
+// target's mutex covers both the write and the fanout, so every send lands on a
+// channel still in the subscriber list. Every send is non-blocking, so holding
+// the lock across the fanout stays bounded.
 func (sw *streamWriter) flush(ln Line) {
 	ts := sw.w.ts
 	ts.mu.Lock()
@@ -93,9 +89,8 @@ func (sw *streamWriter) flush(ln Line) {
 		select {
 		case ch <- ln:
 		default:
-			// Subscriber is slow; drop. Liveness wins over completeness
-			// — the runner never stalls on a stuck client. The archived
-			// file always has the full record.
+			// A slow subscriber loses the line, so the runner never
+			// stalls; the archived file keeps the full record.
 		}
 	}
 }

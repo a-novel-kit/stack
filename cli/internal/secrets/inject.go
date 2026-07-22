@@ -107,9 +107,9 @@ func injectForRepoAt(repoRoot, root string) (Resolution, error) {
 		return Resolution{}, nil // no manifest → nothing to inject or warn about
 	}
 
-	// If the store/key isn't set up at all, report every declared secret as
-	// missing rather than failing — the common case for a developer who hasn't
-	// provisioned this service's secrets yet. No key is created.
+	// With no store or key set up at all, every declared secret is reported
+	// missing: the common case for a developer who has not provisioned this
+	// service's secrets yet. No key is created.
 	if _, statErr := os.Stat(filepath.Join(root, keyFile)); errors.Is(statErr, os.ErrNotExist) {
 		return Resolution{Missing: append([]Declaration(nil), m.Secrets...)}, nil
 	}
@@ -121,10 +121,6 @@ func injectForRepoAt(repoRoot, root string) (Resolution, error) {
 
 	res := Resolution{Env: make(map[string]string, len(m.Secrets))}
 	for _, d := range m.Secrets {
-		// A declared secret that isn't set yet is reported Missing, not an error
-		// — so a repo with a manifest but an unprovisioned secret can still run
-		// the tests that don't need it. The dependent code reports the missing
-		// env var itself; the warning tells the developer how to set it.
 		if value, ok := st.Get(d.ID); ok {
 			res.Env[d.Env] = value
 		} else {
@@ -144,18 +140,16 @@ func readMapping(path string) (mapping, error) {
 	if err != nil {
 		return mapping{}, fmt.Errorf("secrets: read %s: %w", path, err)
 	}
-	// Decode strictly: an unknown top-level key is a hard error rather than a
-	// silent no-op, so a mistyped or outdated manifest fails loudly instead of
-	// injecting nothing.
+	// Decode strictly: an unknown top-level key is a hard error, so a mistyped
+	// or outdated manifest fails loudly.
 	dec := yaml.NewDecoder(bytes.NewReader(raw))
 	dec.KnownFields(true)
 	var m mapping
 	if err := dec.Decode(&m); err != nil && !errors.Is(err, io.EOF) {
 		return mapping{}, fmt.Errorf("secrets: parse %s: %w", path, err)
 	}
-	// Each declaration must name both the target env var and the secret id —
-	// otherwise we'd inject under an empty name or look up an empty id. A
-	// missing field is a malformed manifest, not a silently skipped entry.
+	// Each declaration must name both the target env var and the secret id. A
+	// missing field makes the whole manifest an error.
 	for i, d := range m.Secrets {
 		if d.Env == "" || d.ID == "" {
 			return mapping{}, fmt.Errorf("secrets: %s: entry %d must set both env and id", path, i)

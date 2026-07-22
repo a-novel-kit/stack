@@ -22,11 +22,11 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
 )
 
-// secretsStdinIsTTY reports whether stdin is an interactive terminal. A package
-// var (not a direct call) so the `secrets set` non-interactive refusal is
-// testable without a real PTY — the same seam the publish command uses. Setting
-// a secret reads a no-echo value from the terminal, so it is human-only: an
-// agent or CI run (no TTY) is refused rather than silently reading nothing.
+// secretsStdinIsTTY reports whether stdin is an interactive terminal. It is a
+// package var so the `secrets set` non-interactive refusal is testable without
+// a real PTY, the same seam the publish command uses. Setting a secret reads a
+// no-echo value from the terminal, so it is human-only: an agent or CI run with
+// no TTY is refused outright.
 var secretsStdinIsTTY = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 
 // readPassword reads a line from the terminal with echo disabled. A package var
@@ -103,9 +103,9 @@ history). Provision secrets yourself from a terminal.`,
 			if strings.TrimSpace(id) == "" {
 				return errors.New("secrets set: <id> must not be empty")
 			}
-			// Reading a no-echo value needs a real terminal. Refuse otherwise —
-			// piping a value in would defeat the "never on a terminal/log/history"
-			// guarantee.
+			// A secret must never reach a terminal, a log or a shell history.
+			// Reading it with echo disabled takes a real terminal, so a
+			// non-interactive stdin is refused.
 			if !secretsStdinIsTTY() {
 				return errors.New("secrets set: refusing to run non-interactively — a secret " +
 					"is read with no echo from a terminal, so it must be set by a human. Run it yourself")
@@ -209,8 +209,8 @@ sees, <secret-id> is the id in the local store.
 			if err != nil {
 				return err
 			}
-			// Build NAME=value child-env additions. Resolve before exec so a
-			// typo'd secret id fails cleanly instead of half-running the command.
+			// Build NAME=value child-env additions. Every id resolves before
+			// exec, so a typo fails before the command runs.
 			extra := make([]string, 0, len(envPairs))
 			for _, pair := range envPairs {
 				name, id, ok := strings.Cut(pair, "=")

@@ -1,7 +1,7 @@
 // Daemon-backed verbs: the CLI surface that connects to the daemon over its
 // unix-socket RPC and renders the responses. Each command is a thin client
-// holding no supervision state of its own — the daemon owns the running
-// targets, their phases, and their logs.
+// holding no supervision state; the daemon owns the running targets, their
+// phases, and their logs.
 
 package cli
 
@@ -23,20 +23,22 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Shared string constants for the CLI surface. Mode values (`go-exec`,
-// `container`) appear in flag defaults, palette args, and user-visible
-// labels — same canonical token everywhere. Entity-kind values
-// (`target`, `infra`) discriminate the --kind filter and the
-// entity-ID parser's sentinel segment.
 const (
-	modeGoExec     = "go-exec"
-	modeContainer  = "container"
-	kindTarget     = "target"
+	// modeGoExec is the canonical token for go-exec mode across flag
+	// defaults, palette args and user-visible labels.
+	modeGoExec = "go-exec"
+	// modeContainer is the canonical token for container mode on the same
+	// surfaces.
+	modeContainer = "container"
+	// kindTarget selects targets in the --kind filter.
+	kindTarget = "target"
+	// kindInfra selects infra containers in the --kind filter, and is the
+	// sentinel segment the entity-ID parser looks for.
 	kindInfra      = "infra"
 	cmdNameService = "service"
 )
 
-// Common flag values shared across most daemon-backed commands.
+// stackScope holds the flag values shared across the daemon-backed commands.
 type stackScope struct {
 	stack     string
 	allStacks bool
@@ -186,11 +188,9 @@ func renderPs(w io.Writer, services []*anovelv1.Service, asJSON bool) {
 			_, _ = fmt.Fprintln(w)
 		}
 		_, _ = fmt.Fprintf(w, "%s  (stack %s)\n", s.GetName(), s.GetStack())
-		// Targets first (the user's primary interaction surface),
-		// then infra. The 'kind' column ('1shot' / 'longr' / 'infra')
-		// + the trailing fully-qualified ID make the two
-		// distinguishable at a glance and copy-pasteable into
-		// kill/restart/logs without manual reconstruction.
+		// Targets first, then infra. The kind column and the trailing
+		// fully-qualified ID keep the two distinguishable at a glance, and
+		// the ID pastes straight into kill/restart/logs.
 		for _, t := range s.GetTargets() {
 			kindStr := targetKindShort(t.GetKind())
 			id := s.GetStack() + "/" + s.GetName() + "/" + t.GetName()
@@ -214,10 +214,9 @@ func renderPs(w io.Writer, services []*anovelv1.Service, asJSON bool) {
 	}
 }
 
-// targetStatusLabel returns the user-facing status word for a target,
-// folding kind-aware terminal-state info into the label so a finished
-// one-shot reads as "ok" / "failed" rather than the bland
-// "terminated" that doesn't tell you whether it succeeded:
+// targetStatusLabel returns the user-facing status word for a target, folding
+// the terminal state into the label so a finished one-shot reads as "ok" or
+// "failed":
 //
 //	long-runner running       → "running"
 //	long-runner clean-exit    → "stopped"
@@ -462,8 +461,8 @@ attempting --mode=container today returns a clear Unimplemented error.`,
 }
 
 // runtimeIdentLabel renders the right-side identifier for `start`/`restart`
-// output — `pid=<n>` for go-exec mode, `container=<short>` for container
-// mode (12-char hex). Avoids printing meaningless `pid=0` for containers.
+// output: `pid=<n>` in go-exec mode, `container=<short>` (12-char hex) in
+// container mode, which has no meaningful pid.
 func runtimeIdentLabel(t *anovelv1.Target) string {
 	switch t.GetMode() {
 	case anovelv1.Mode_MODE_GO_EXEC:
@@ -587,24 +586,19 @@ func resolveTargetID(arg, stack string) string {
 	return stack + "/" + arg
 }
 
-// entityRef is a parsed CLI argument identifying either a target or an
-// infra container. The "infra" segment is the literal sentinel that
-// distinguishes the two kinds — see parseEntityID. Helps the surface
-// commands (kill / restart / logs) dispatch to the right RPC without
-// relying on slash-count heuristics that would collide for a 3-segment
-// target ID vs 3-segment shorthand infra ID.
+// entityRef is a parsed CLI argument identifying either a target or an infra
+// container, told apart by the literal "infra" segment (see parseEntityID).
+// kill, restart and logs dispatch to the right RPC from it, since a slash
+// count alone cannot separate a 3-segment target ID from a 3-segment infra
+// shorthand.
 type entityRef struct {
 	IsInfra bool
-	// For both kinds:
 	Stack   string
 	Service string
-	// Target-only.
-	Target string
-	// Infra-only.
-	Infra string
-	// ID returns the canonical full ID. Target form is
-	// "<stack>/<service>/<target>"; infra form is
-	// "<stack>/<service>/infra/<name>".
+	Target  string // set when IsInfra is false
+	Infra   string // set when IsInfra is true
+	// ID is the canonical full ID: "<stack>/<service>/<target>" for a
+	// target, "<stack>/<service>/infra/<name>" for an infra container.
 	ID string
 }
 
@@ -616,10 +610,8 @@ type entityRef struct {
 //	<service>/infra/<name>                  → infra shorthand
 //	<stack>/<service>/infra/<name>          → infra canonical
 //
-// The "infra" sentinel must appear as the second-to-last segment for
-// the entry to count as infra — every other slot containing "infra"
-// is a target name that happens to overlap (none of our cmd/<dir>s
-// are literally named "infra" today, but the resolver is defensive).
+// Only an "infra" in the second-to-last segment marks an infra reference;
+// anywhere else the word is an ordinary target name.
 func parseEntityID(arg, defaultStack string) entityRef {
 	if defaultStack == "" {
 		defaultStack = stacks.DefaultName
@@ -650,8 +642,8 @@ func parseEntityID(arg, defaultStack string) entityRef {
 		ref.Service = parts[0]
 		ref.Target = parts[1]
 	default:
-		// Unrecognized — treat as a bare name and let the daemon
-		// 404, with the message pointing at the right shape.
+		// Unrecognized: pass it through as a bare name and let the daemon
+		// 404 with a message pointing at the right shape.
 		ref.Stack = defaultStack
 		ref.Target = arg
 	}
@@ -659,8 +651,7 @@ func parseEntityID(arg, defaultStack string) entityRef {
 	return ref
 }
 
-// modeLabel / exitLabel are sibling renderers for the phaseLabel helper
-// in this file. Kept inline so the package's UI surface lives together.
+// modeLabel renders a Mode enum as its canonical CLI token.
 func modeLabel(m anovelv1.Mode) string {
 	switch m {
 	case anovelv1.Mode_MODE_GO_EXEC:
@@ -672,6 +663,7 @@ func modeLabel(m anovelv1.Mode) string {
 	}
 }
 
+// exitLabel renders an ExitReason enum as a short human-readable token.
 func exitLabel(r anovelv1.ExitReason) string {
 	switch r {
 	case anovelv1.ExitReason_EXIT_REASON_SUCCESS:
@@ -727,9 +719,9 @@ current/latest session.`,
 			c := rpc.New("")
 			ref := parseEntityID(args[0], ss.stack)
 			id := ref.ID
-			// Infra entries don't have run archives — podman owns the
-			// log files, not the daemon. Refuse --previous / --run-id
-			// up-front rather than letting the daemon return Unimplemented.
+			// Podman owns infra log files, so infra entries have no run
+			// archives. --previous / --run-id are refused here, with a
+			// message that names the reason.
 			if ref.IsInfra && (previous || runID != "") {
 				return errors.New("--previous / --run-id are not supported for infra (podman owns its log file)")
 			}
@@ -797,9 +789,8 @@ current/latest session.`,
 	return cmd
 }
 
-// printLogLine renders one log entry. Format: short timestamp + stream
-// tag colored, then the raw line (ANSI escapes preserved so the
-// target's own colors survive).
+// printLogLine renders one log entry as a short timestamp, a stream tag and
+// the raw line, whose ANSI escapes survive so the target's own colors show.
 func printLogLine(w io.Writer, ln *anovelv1.LogLine) {
 	tag := "out"
 	if ln.GetStream() == anovelv1.LogStream_LOG_STREAM_STDERR {
@@ -853,9 +844,9 @@ to 'json' for agent consumption or 'dotenv' for .env-style key=value.
 			if err != nil {
 				return err
 			}
-			// --only is a client-side glob filter (server returns
-			// everything; we filter before render so the daemon stays
-			// simple and the filter is observable in --json output too).
+			// --only filters client-side: the server returns everything,
+			// and filtering before render keeps the daemon simple while
+			// applying to --json output too.
 			entries := resp.GetEntries()
 			if only != "" {
 				filtered := entries[:0]
@@ -903,8 +894,8 @@ func renderEnv(w io.Writer, entries []*anovelv1.EnvEntry, format string) {
 				_, _ = fmt.Fprintf(w, "# %s\n", svc)
 				lastSvc = svc
 			}
-			// Single-quote the value, escaping any embedded single quotes
-			// via the standard '"'"' trick. Safe for shell eval.
+			// Single-quote the value, escaping embedded single quotes with
+			// the standard '"'"' trick, so the line is safe to eval.
 			esc := strings.ReplaceAll(e.GetValue(), "'", `'"'"'`)
 			_, _ = fmt.Fprintf(w, "export %s='%s'\n", e.GetKey(), esc)
 		}
@@ -1060,10 +1051,9 @@ Refuses while the service is up. --force cascade-stops first.`,
 	return cmd
 }
 
-// matchGlob is a tiny glob matcher supporting * (any chars) — enough for
-// the `--only=PATTERN` filter on env keys. `filepath.Match` is fine for
-// the simple shapes we care about ("REST*", "*_PORT", "POSTGRES_*").
-// Errors fall back to substring matching so a user typo still does
+// matchGlob is a small glob matcher supporting * (any chars), enough for the
+// `--only=PATTERN` filter on env keys ("REST*", "*_PORT", "POSTGRES_*"). A
+// malformed pattern falls back to substring matching, so a typo still does
 // something reasonable.
 func matchGlob(pattern, name string) bool {
 	if pattern == "" {
@@ -1137,8 +1127,8 @@ the underlying command's success.`,
 				return err
 			}
 			defer func() { _ = stream.Close() }()
-			// Absent rather than 0: a daemon that ended the stream without a terminal
-			// message has told us nothing about the child, which must not read as success.
+			// A pointer, so an unreported exit status stays distinct
+			// from a reported 0.
 			var exitCode *int32
 			for stream.Receive() {
 				ev := stream.Msg()
@@ -1163,11 +1153,9 @@ the underlying command's success.`,
 	return cmd
 }
 
-// execResult turns the exec stream's terminal exit code into the CLI's own exit status.
-//
-// A nil exitCode means the daemon ended the stream without ever reporting one, which says
-// nothing about the child and must not read as success — the whole point of the terminal
-// message is that "succeeded" and "never told us" are different answers.
+// execResult turns the exec stream's terminal exit code into the CLI's own
+// exit status. A nil exitCode means the daemon ended the stream without
+// reporting one. That says nothing about the child, so it yields an error.
 func execResult(exitCode *int32) error {
 	if exitCode == nil {
 		return errors.New("exec: daemon closed the stream without reporting an exit status " +
@@ -1278,14 +1266,13 @@ narrow the stream.`,
 	return cmd
 }
 
-// runPsWatch is the ps-style streaming variant: render the current
-// snapshot once, then re-render after every StateEvent. Uses ANSI cursor
-// control to overwrite the previous frame instead of scrolling — feels
-// like `top` / `htop` rather than a log tail.
+// runPsWatch is the ps-style streaming variant: render the current snapshot
+// once, then re-render after every StateEvent, using ANSI cursor control to
+// overwrite the previous frame so it reads like `top`.
 //
-// In --json mode, we don't redraw; we emit one JSON object per state
-// event (newline-delimited) on top of the initial snapshot. That keeps
-// machine consumers' parsing simple (read until \n, parse).
+// In --json mode it emits one newline-delimited JSON object per state event on
+// top of the initial snapshot, keeping machine parsing to "read a line, parse
+// it".
 func runPsWatch(
 	ctx context.Context, c *rpc.Client, out io.Writer,
 	services []*anovelv1.Service, stack, service, kind string, jsonOut bool,
@@ -1316,11 +1303,9 @@ func runPsWatch(
 			})
 			continue
 		}
-		// Human mode: refresh the snapshot. Single ListServices call
-		// per event is cheap (one RPC, batched podman query) and
-		// guarantees the rendered ps reflects the same view a manual
-		// 'ps' would. The terminal "clear-from-cursor + repaint" trick
-		// avoids accumulating frames in the scrollback.
+		// Human mode: refresh the snapshot. One ListServices call per
+		// event is cheap and keeps the rendered table current.
+		// Repainting in place keeps frames out of the scrollback.
 		resp, err := c.ListServices(ctx, stack)
 		if err != nil {
 			_, _ = fmt.Fprintf(out, "watch: refresh failed: %v\n", err)
@@ -1346,8 +1331,8 @@ func runPsWatch(
 				s.Targets = nil
 			}
 		}
-		// ANSI: move cursor home + clear screen. Cheap, terminal-agnostic.
-		// (For non-TTY pipes the escape sequences are harmless filler.)
+		// Move the cursor home and clear the screen. On a non-TTY pipe the
+		// escape sequences are harmless filler.
 		_, _ = fmt.Fprint(out, "\x1b[H\x1b[2J")
 		renderPs(out, fresh, false)
 		_, _ = fmt.Fprintf(out, "\n%s  %s\n",

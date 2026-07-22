@@ -8,18 +8,14 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Tests for the runner's phase-event broadcaster (SubscribePhases +
-// emitPhase). The broadcaster is fanout-style: snapshot subscribers
-// under a lock, then send non-blocking outside the lock. We exercise:
-//   - basic delivery to a single subscriber
-//   - filter function — only matching events arrive
-//   - non-blocking semantics (full buffer drops; doesn't deadlock)
-//   - unsubscribe stops delivery and is idempotent in the lock path
+// Tests for the runner's phase-event broadcaster, SubscribePhases and
+// emitPhase. The fanout iterates its subscribers under the read lock and sends
+// without blocking, so these cover delivery, filtering, the drop on a full
+// buffer, and unsubscribe.
 
 func newRunnerForEvents() *Runner {
-	// New() requires non-nil deps for normal use, but for these tests
-	// we only exercise the events surface so a zero-value runner with
-	// just the subs slice is enough.
+	// New requires non-nil deps for normal use, but the events surface needs
+	// nothing beyond a zero-value runner and its subs slice.
 	return &Runner{}
 }
 
@@ -91,9 +87,9 @@ func TestEvents_Unsubscribe(t *testing.T) {
 }
 
 func TestEvents_FullBufferDrops(t *testing.T) {
-	// The fanout select-default drop means a slow subscriber can lose
-	// events but never stalls the runner. The channel buffer is 32; we
-	// emit 100 without reading and assert the call returns promptly.
+	// A slow subscriber loses events but never stalls the runner, so emitting
+	// 100 events into a 32-slot buffer nobody reads must still return
+	// promptly.
 	r := newRunnerForEvents()
 	_, unsub := r.SubscribePhases(nil)
 	defer unsub()
@@ -106,14 +102,11 @@ func TestEvents_FullBufferDrops(t *testing.T) {
 	}
 }
 
-// TestEvents_UnsubDuringEmitNoPanic regresses the close-on-closed-channel
-// race: an earlier version snapshot-then-released-the-lock before
-// iterating the subscribers, so an unsub that ran in the snapshot →
-// iterate window could close sub.ch while emit was still sending into
-// it. Triggering the race deterministically takes thousands of
-// iterations under -race; we run a tight loop that subscribes,
-// concurrently emits, then unsubs while emit is still going. Pre-fix:
-// panic on `send on closed channel`. Post-fix: clean exit.
+// TestEvents_UnsubDuringEmitNoPanic guards the send-on-closed-channel race: an
+// unsub landing while emitPhase iterates must never close a channel the fanout
+// is still sending into. Surfacing that race takes thousands of iterations
+// under -race, so this loops tightly, subscribing, emitting concurrently, and
+// unsubscribing mid-emit.
 func TestEvents_UnsubDuringEmitNoPanic(t *testing.T) {
 	r := newRunnerForEvents()
 	const rounds = 500

@@ -1,11 +1,11 @@
-# Canonical issue/PR label set, provisioned uniformly to every repo (like
-# governance/CODEOWNERS). `ensure` labels are upserted (created, or recoloured /
-# re-described to match); `retire` labels are deleted. Labels NOT listed here are
-# left untouched — apply never removes an unlisted label.
+# Canonical issue/PR label set, provisioned uniformly to every repo like
+# governance/CODEOWNERS. `ensure` labels are upserted — created, or recolored and
+# re-described to match — and `retire` labels are deleted. A label listed in
+# neither is left untouched, so apply never removes an unlisted label.
 #
-# What is NOT a label: kind (Epic / Feature / Task / Bug / Initiative) is an issue
-# TYPE, and Priority / Size are project fields. Labels here are cross-cutting
-# signals that sort work WITHIN a board status.
+# Labels here are cross-cutting signals that sort work within a board status. The
+# kind of an issue (Epic / Feature / Task / Bug / Initiative) is its issue type,
+# and Priority and Size are project fields.
 ensure:
   - name: documentation
     color: "0075ca"
@@ -37,24 +37,25 @@ ensure:
   - name: meta
     color: "bfd4f2"
     description: No-PR work (manual ops / config); also marks Meta Epics
-  # automation:paused — on an Epic issue, holds THAT epic's [Agent] automation:
-  # merge-gate holds its members, and the partial-landing detector + rollback skip
-  # it; other epics keep moving. BEST-EFFORT: a label-read blip fails open (the pause
-  # is skipped that pass) — the org kill-switch (vars.AGENT_KILL_SWITCH) is the hard,
-  # read-free halt. GitHub caps a label `description` at 100 chars, so the field below
-  # is the short form and this comment carries the full rationale — do NOT re-expand
-  # the description past 100 chars (it 422s the label reconcile for every repo).
+  # automation:paused — on an Epic issue, holds that one epic's [Agent] automation:
+  # merge-gate holds its members, and the partial-landing detector and rollback skip
+  # it, while other epics keep moving. It is best-effort: a label-read blip fails
+  # open and the pause is skipped that pass, so the org kill-switch
+  # (vars.AGENT_KILL_SWITCH) is the hard, read-free halt. GitHub caps a label
+  # `description` at 100 chars, so the field below is the short form and this comment
+  # carries the rest; a longer description 422s the label reconcile for every repo.
   - name: "automation:paused"
     color: "d93f0b"
     description: "Pauses this Epic's [Agent] automation (best-effort; org kill-switch is the hard halt)"
-  # escalation — the umbrella label the escalate action puts on every escalation ticket, so humans get
-  # one board filter for all open escalations. Color + description MATCH the escalate action's own
-  # `gh label create --force` (generic-actions/escalate) so the two never recolor each other.
+  # escalation — the umbrella label the escalate action puts on every escalation
+  # ticket, so humans get one board filter for all open escalations. The color and
+  # description match the escalate action's own `gh label create --force`
+  # (generic-actions/escalate), so the two never recolor each other.
   - name: escalation
     color: "b60205"
     description: "Automated governance escalation (escalate action)."
-  # hotfix-reconcile — on a hotfix's per-hotfix cleanup Task: the fix must be forward-ported to the
-  # default branch or a later minor would reintroduce the bug. Matches hotfix.yaml's own ensure.
+  # hotfix-reconcile — on a hotfix's per-hotfix cleanup Task: the fix is forward-ported to the
+  # default branch, so every later minor carries it. Matches hotfix.yaml's own ensure.
   - name: hotfix-reconcile
     color: "fbca04"
     description: "Tracks a hotfix's forward-port to the default branch."

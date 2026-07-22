@@ -1,8 +1,7 @@
 // Package tui implements the terminal UI behind `a-novel run ui`, the
-// daemon-backed dashboard for the local service stack. It is built on
-// Bubble Tea and Lip Gloss, and every action routes through the same
-// RPC client the CLI uses, so the UI and CLI always observe the same
-// daemon state.
+// daemon-backed dashboard for the local service stack. Every action
+// routes through the same RPC client the CLI uses, so the UI and CLI
+// always observe the same daemon state.
 //
 // The screen is a two-column dashboard: a service navigator on the
 // left and a per-target detail-and-log pane on the right, with a
@@ -40,41 +39,36 @@ import (
 // (typically: daemon unreachable).
 func Run() error {
 	c := rpc.New("")
-	// Pre-flight ping so we surface daemon-down clearly instead of
-	// dropping into an empty UI.
+	// Pre-flight ping so a down daemon surfaces clearly.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if _, err := c.Ping(ctx); err != nil {
 		return err
 	}
 	m := newModel(c)
-	// No tea.WithMouseCellMotion(): capturing mouse-cell motion makes
-	// the terminal forward every mouse event to us and disables its own
-	// click-drag text selection. This UI is keyboard-driven, so native
-	// selection — users copy log lines out to grep or paste into issues
-	// — is worth more than click-to-focus.
+	// Mouse-cell-motion capture stays off, so the terminal keeps its own
+	// click-drag text selection. This keyboard-driven UI needs it for
+	// copying log lines out.
 	p := tea.NewProgram(m)
-	// Hand the program back into the model so background log-follow
-	// goroutines can Send messages via p.Send (Bubble Tea's
-	// cross-goroutine event-injection primitive).
+	// Background log-follow goroutines inject events through p.Send, so
+	// the model needs the program.
 	m.program = p
 	_, err := p.Run()
 	return err
 }
 
-// tabKindInfra and tabKindTarget are the discriminator values
-// activeTabKind returns; naming them keeps the string-equality sites
-// across the TUI agreed on a single source.
 const (
-	tabKindInfra  = "infra"
+	// tabKindInfra is the activeTabKind value for an infra entry.
+	tabKindInfra = "infra"
+	// tabKindTarget is the activeTabKind value for a runnable target.
 	tabKindTarget = "target"
-	// modeContainer / modeGoExec match palette args like ":start
-	// container" and the user-facing labels in renderRight's header.
-	// CLI/RPC use the typed anovelv1.Mode_MODE_* enums; these strings
-	// live in the palette-args and label-display layers where
-	// everything is text.
+	// modeContainer names container mode in palette args like ":start
+	// container" and in renderRight's header label. The CLI and RPC
+	// layers use the typed anovelv1.Mode_MODE_* enums; these strings
+	// belong to the text surfaces.
 	modeContainer = "container"
-	modeGoExec    = "go-exec"
+	// modeGoExec names live go-exec mode on the same text surfaces.
+	modeGoExec = "go-exec"
 )
 
 // view is the discriminator for top-level screens.
@@ -95,19 +89,16 @@ type model struct {
 	width   int
 	height  int
 	err     error
-	// Discovery — refreshed periodically. `loaded` flips true on the
-	// first servicesMsg so the nav can distinguish "haven't refreshed
-	// yet" (loading…) from "refresh succeeded with zero results"
-	// (genuinely no services discovered).
+	// Discovered services, refreshed periodically.
 	services []*anovelv1.Service
-	loaded   bool
-	// Selection state.
+	// loaded flips true on the first servicesMsg, so the nav can tell
+	// "not refreshed yet" from "refreshed and found nothing".
+	loaded      bool
 	selectedSvc int // index into services
-	// selectedTab is the combined index into [targets..., infras...].
-	// Indices < len(svc.Targets) address targets; the rest address
-	// infras at i-len(svc.Targets). This unification lets `←/→`
-	// cycle through both kinds and lets every consumer ask
-	// activeTabKind() to branch.
+	// selectedTab is the combined index into [infras..., targets...].
+	// Indices below len(svc.Infra) address infras; the rest address
+	// targets at i-len(svc.Infra). The single sequence lets `←/→` cycle
+	// through both kinds, and consumers branch on activeTabKind().
 	selectedTab int
 	// Log streaming.
 	logLines     []*anovelv1.LogLine
@@ -116,21 +107,18 @@ type model struct {
 	// from previous followers are dropped on arrival so the
 	// cancel-then-start race window can't mix streams.
 	followGen int
-	// logScroll is the offset from the tail of logLines. 0 means
-	// "auto-follow the bottom" — new lines push the view forward.
-	// Any positive value means the user has paged up; the view shows
-	// `logLines[len-h-scroll : len-scroll]` and new lines accumulate
-	// in the buffer without scrolling the view. Reset to 0 on
-	// tab/service switch and on successful actions (where the
-	// underlying log file may have been truncated).
-	logScroll int
-	// Command palette.
-	cmdInput   string
-	topologyTx string // last GetTopology response (for viewTopology)
-	// Status bar — single line of action feedback above the footer.
-	// busy persists until the action resolves; info auto-fades after
-	// 5s; error persists until next action overrides it. See
-	// renderStatus + statusMsg / actionResultMsg / statusFadeMsg.
+	// logScroll is the offset from the tail of logLines. Zero auto-follows
+	// the bottom, so new lines push the view forward. A positive value
+	// means the user paged up: the view holds at
+	// `logLines[len-h-scroll : len-scroll]` while new lines accumulate in
+	// the buffer. Reset to 0 on a tab or service switch, and after a
+	// successful action, whose log file may have been truncated.
+	logScroll  int
+	cmdInput   string // command-palette input buffer, leading ":" included
+	topologyTx string // last GetTopology response, rendered by viewTopology
+	// status is the line of action feedback above the footer. Busy
+	// persists until the action resolves, info fades after 5s, and an
+	// error stays until the next action overrides it.
 	status statusEntry
 }
 
@@ -168,9 +156,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case servicesMsg:
 		m.services = msg.services
 		m.loaded = true
-		// A successful refresh clears any prior transient error (e.g., a
-		// daemon-restart blip). Keeps the nav from showing a stale
-		// error after recovery.
+		// A successful refresh clears a transient error such as a
+		// daemon-restart blip, so the nav stops showing it after recovery.
 		m.err = nil
 		// Clamp selection.
 		if m.selectedSvc >= len(m.services) {
@@ -184,9 +171,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case errMsg:
-		// Connection / refresh failures land in m.err (rendered in the
-		// nav when the service list is empty). Don't route these into
-		// the status bar — that's reserved for action results.
+		// Connection and refresh failures land in m.err, which the nav
+		// renders when the service list is empty. The status bar is
+		// reserved for action results.
 		m.err = msg.err
 		return m, nil
 
@@ -200,24 +187,23 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case actionResultMsg:
 		if msg.err != nil {
 			m.status = statusEntry{level: statusError, text: msg.actionLabel + ": " + msg.err.Error(), at: time.Now()}
-			// Errors persist; user dismisses by issuing the next
-			// command. Still refresh to pick up partial state.
+			// Errors persist until the next command. Refresh anyway to
+			// pick up partial state.
 			return m, refreshServicesCmd(m.c)
 		}
 		m.status = statusEntry{level: statusInfo, text: msg.successText, at: time.Now()}
-		// Any successful action may have replaced the underlying
-		// log file (kill+restart truncates via O_TRUNC; even a plain
-		// start opens a fresh file). The buffered logLines are now
-		// stale — drop them, reset the scroll, and reattach the
-		// follower so it streams the fresh history-then-tail. The
-		// follower-generation counter inside followSelectedLogs
-		// drops any in-flight messages from the prior follower.
+		// A successful action may have replaced the log file: kill+restart
+		// truncates via O_TRUNC, and even a plain start opens a fresh one.
+		// Drop the stale buffer, reset the scroll and reattach the
+		// follower so it streams history then tail. The generation counter
+		// inside followSelectedLogs discards in-flight messages from the
+		// previous follower.
 		m.logLines = nil
 		m.logScroll = 0
 		return m, tea.Batch(refreshServicesCmd(m.c), fadeStatusAfter(5*time.Second), m.followSelectedLogs())
 
 	case statusFadeMsg:
-		// Only fade info — busy is still in-flight, error is sticky
+		// Only info fades: busy is still in-flight, and an error is sticky
 		// until the user acts again.
 		if m.status.level == statusInfo && time.Since(m.status.at) >= 5*time.Second {
 			m.status = statusEntry{}
@@ -225,19 +211,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case logsMsg:
-		// Drop messages from a stale follower generation — happens
-		// during the cancel-then-start race window on tab/service
-		// switches. Without this, the prior follower's last few
-		// lines would mix into the new tab's view.
+		// Drop messages from a stale follower generation. They arrive
+		// during the cancel-then-start race window on a tab or service
+		// switch, so only the current generation reaches the view.
 		if msg.gen != m.followGen {
 			return m, nil
 		}
 		m.logLines = append(m.logLines, msg.lines...)
-		// Pause-anchor: when paused (logScroll > 0), shift the offset
-		// forward by however many lines arrived so the visible window
-		// continues to show the same absolute lines instead of
-		// drifting toward the tail. When logScroll == 0 we're in
-		// auto-follow mode; nothing to anchor.
+		// While paused, shift the offset by however many lines arrived so
+		// the visible window keeps showing the same absolute lines.
 		if m.logScroll > 0 {
 			m.logScroll += len(msg.lines)
 		}
@@ -245,9 +227,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.logLines) > 500 {
 			m.logLines = m.logLines[len(m.logLines)-500:]
 		}
-		// If the paused view's target line fell off the front of the
-		// trimmed buffer (or off the viewport-aware max), snap scroll
-		// to the most-back position that still shows a full window.
+		// If trimming pushed the paused window past the buffer, snap back
+		// to the furthest offset that still shows a full window.
 		if m.logScroll > 0 {
 			m.logScroll = m.clampLogScroll(m.logScroll)
 		}
@@ -323,11 +304,9 @@ func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.logScroll = 0
 		}
 		return m, m.followSelectedLogs()
-	// Log-pane scrolling. Stepping units chosen so a single key feels
-	// responsive (ctrl+up/down step one line) while pgup/pgdn jump a
-	// half-page each. End/g returns to the tail (auto-follow on); home
-	// jumps to the top of the buffered window. logScroll is clamped to
-	// [0, len(logLines)] by clampLogScroll.
+	// Log-pane scrolling: ctrl+up/down step one line, pgup/pgdn jump a
+	// half-page, end/G returns to the tail (auto-follow) and home/g to the
+	// top of the buffered window. clampLogScroll bounds the offset.
 	case "pgup":
 		m.logScroll = m.clampLogScroll(m.logScroll + m.logViewportHeight()/2)
 		return m, nil
@@ -350,15 +329,14 @@ func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// clampLogScroll keeps logScroll inside [0, maxScroll] where maxScroll
-// is the largest offset that still leaves the visible window full — i.e.
-// `len(logLines) - contentHeight`. Without that ceiling the user could
-// page back until only one line of log shows above the indicator, which
-// looks like "logs paused" took over the pane.
+// clampLogScroll keeps logScroll inside [0, maxScroll], where maxScroll
+// is the largest offset that still leaves the visible window full
+// (`len(logLines) - contentHeight`). That ceiling stops the user paging
+// back until a single log line shows above the "logs paused" indicator.
 //
-// Zero = auto-follow tail; positive = paged up that many lines from the
-// tail. The "−1" accounts for the indicator row that's reserved at the
-// bottom of the pane whenever logScroll > 0 (see renderLogs).
+// Zero auto-follows the tail; a positive value pages that many lines
+// back from it. The "−1" accounts for the indicator row renderLogs
+// reserves at the bottom of the pane whenever logScroll > 0.
 func (m *model) clampLogScroll(n int) int {
 	if n < 0 {
 		return 0
@@ -383,10 +361,10 @@ func (m *model) clampLogScroll(n int) int {
 }
 
 // logViewportHeight mirrors the height arithmetic in renderRight so
-// pgup/pgdn jump by a true half-page. The constants here must match
-// renderRight: -4 chrome lines (status bar, footer, two borders), -5
-// for header+divider inside the right frame, minus the number of tab
-// rows we actually render.
+// pgup/pgdn jump by a true half-page. The constants must stay in step
+// with renderRight: -4 chrome lines (status bar, footer, two borders),
+// -5 for the header and divider inside the right frame, minus the
+// number of tab rows actually rendered.
 func (m *model) logViewportHeight() int {
 	contentHeight := m.height - 4
 	rowCount := 0
@@ -423,9 +401,9 @@ func (m *model) handleCommandKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	// Printable input carries its characters in Key.Text — populated for runes
-	// and space, empty for modifier combos and special keys. Appending it
-	// captures typed text while ignoring chords.
+	// Printable input carries its characters in Key.Text, which is populated
+	// for runes and space and empty for modifier combos and special keys, so
+	// appending it captures typed text while ignoring chords.
 	if txt := msg.Key().Text; txt != "" {
 		m.cmdInput += txt
 	}
@@ -442,7 +420,7 @@ func (m *model) activeService() *anovelv1.Service {
 }
 
 // tabCount is the total number of selectable tabs for the active
-// service — targets first, then infras. Zero if no service active.
+// service, or zero when none is active.
 func (m *model) tabCount() int {
 	svc := m.activeService()
 	if svc == nil {
@@ -453,9 +431,8 @@ func (m *model) tabCount() int {
 
 // activeTabKind returns "infra", "target", or "" depending on which
 // section the selectedTab index falls into. Infras come first in the
-// index so the right pane's two-row tab strip can render them on the
-// top row and target-row second — and ←/→ navigation walks the
-// concatenated sequence linearly.
+// index, so the right pane's two-row tab strip renders them on the top
+// row and ←/→ walks the concatenated sequence linearly.
 func (m *model) activeTabKind() string {
 	svc := m.activeService()
 	if svc == nil || m.selectedTab < 0 || m.selectedTab >= m.tabCount() {

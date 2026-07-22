@@ -6,29 +6,25 @@ import (
 	"strings"
 )
 
-// envRefRe extracts ${VAR} (and ${VAR:-default}) references from
-// compose env values. Mirrors env package's refRe — duplicated here to
-// keep discovery free of an env-package import.
+// envRefRe extracts ${VAR} and ${VAR:-default} references from compose env
+// values. It duplicates the env package's pattern to keep discovery free of an
+// env import.
 var envRefRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}`)
 
-// ValidateEnvRefs scans every compose env block in `disc` for ${VAR}
-// references the daemon doesn't know how to fill, and appends a
-// non-fatal warning to the stack's Errors list. Called at end of
-// discovery so every parse error and validation warning land in one
-// stream the daemon prints at startup.
+// ValidateEnvRefs scans every compose env block for ${VAR} references the
+// daemon cannot fill and appends a non-fatal warning to the owning stack's
+// Errors. It runs at the end of discovery, so parse errors and validation
+// warnings land in the one stream the daemon prints at startup.
 //
-// What's "resolvable":
-//   - `*_PORT`            → allocated by the daemon
-//   - `*_HOST`, `*_URL`   → synthesized from `*_PORT` (same service)
-//   - `POSTGRES_DSN`      → synthesized when POSTGRES_PORT allocated
-//   - `<SERVICE>_<VAR>`   → cross-service reference, if <SERVICE>
-//     is a known service in this stack
-//   - Any key declared as a literal (no `${...}` references) in the
-//     SAME env block — that's a sibling constant
+// A reference resolves when it is:
+//   - `*_PORT`, allocated by the daemon
+//   - `*_HOST` or `*_URL`, synthesized from the same service's `*_PORT`
+//   - `POSTGRES_DSN`, synthesized once POSTGRES_PORT is allocated
+//   - `<SERVICE>_<VAR>`, naming a known service in this stack
+//   - a key declared as a literal in the same env block, a sibling constant
 //
-// Anything else gets a warning: "compose service X references ${VAR}
-// but the daemon can't fill it". The compose will still substitute
-// with an empty string at runtime; this warning surfaces the gap.
+// Anything else warns. Compose still substitutes an empty string at runtime,
+// and the warning surfaces the gap.
 func ValidateEnvRefs(stacks []*Stack) {
 	for _, st := range stacks {
 		serviceNames := make([]string, 0, len(st.Services))
@@ -43,9 +39,8 @@ func ValidateEnvRefs(stacks []*Stack) {
 
 func validateService(svc *Service, allServices []string) []DiscoveryError {
 	var errs []DiscoveryError
-	// Build the set of keys declared as constants in this service's
-	// env blocks (across all targets + infra). Used to recognize
-	// sibling-constant references.
+	// The keys declared as constants across this service's target and infra env
+	// blocks, used to recognize sibling-constant references.
 	declared := make(map[string]bool)
 	collect := func(env map[string]string) {
 		for k := range env {
@@ -85,8 +80,8 @@ func validateService(svc *Service, allServices []string) []DiscoveryError {
 	return errs
 }
 
-// extractRefsLocal returns the deduplicated list of ${VAR} names
-// referenced in raw. Mirrors env.extractRefs without the dependency.
+// extractRefsLocal returns the deduplicated ${VAR} names referenced in raw,
+// mirroring the env package's own extraction without importing it.
 func extractRefsLocal(raw string) []string {
 	matches := envRefRe.FindAllStringSubmatch(raw, -1)
 	seen := make(map[string]bool, len(matches))
@@ -112,7 +107,7 @@ func isResolvable(varName string, allServices []string, declared map[string]bool
 		varName == "POSTGRES_DSN" {
 		return true
 	}
-	// Cross-service form: <SERVICE_UPPER>_<rest>. Match longest-first.
+	// Cross-service form: <SERVICE_UPPER>_<rest>.
 	for _, svc := range allServices {
 		prefix := strings.ToUpper(strings.ReplaceAll(svc, "-", "_")) + "_"
 		if strings.HasPrefix(varName, prefix) {

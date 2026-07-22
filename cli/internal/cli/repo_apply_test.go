@@ -71,8 +71,8 @@ func TestApplyPlan(t *testing.T) {
 			t.Errorf("expected a gh call containing %q; calls:\n%s", w, joined)
 		}
 	}
-	// The per-file contents API path is gone — a REST PUT would mean a commit
-	// per file again.
+	// Managed files land in the one sync commit, so no per-file REST PUT
+	// appears.
 	if strings.Contains(joined, "-X PUT repos/o/r/contents/") {
 		t.Errorf("managed files must land via the sync commit, not per-file PUTs; calls:\n%s", joined)
 	}
@@ -196,7 +196,7 @@ func TestStageContents(t *testing.T) {
 
 // contentsJSON builds a GitHub contents-API response body for text with the
 // matching blob sha, so a stubbed `gh api <path>` returns what the real API
-// would for a deployed file.
+// returns for a deployed file.
 func contentsJSON(t *testing.T, text string) string {
 	t.Helper()
 	raw, err := json.Marshal(ghContent{
@@ -639,9 +639,8 @@ func TestPruneRulesets(t *testing.T) {
 	})
 
 	t.Run("an empty keep set prunes the repo bare", func(t *testing.T) {
-		// A class that declares no rulesets genuinely wants none — this must not be
-		// special-cased into "keep everything", or an ungoverned class would silently
-		// inherit whatever it was given by hand.
+		// A class that declares no rulesets genuinely wants none, so an empty keep
+		// set prunes every ruleset the repo carries.
 		calls := fakeGH(t, map[string]string{"--jq": listed})
 		if _, err := pruneRulesets("a-novel", "docs", repocfg.Op{PruneRulesets: true}); err != nil {
 			t.Fatalf("pruneRulesets: %v", err)
@@ -652,8 +651,7 @@ func TestPruneRulesets(t *testing.T) {
 	})
 
 	t.Run("a listing failure prunes nothing", func(t *testing.T) {
-		// Fail CLOSED: a read error must never be read as "the repo has no rulesets",
-		// which would delete every one of them.
+		// Fail closed: a read error leaves every ruleset in place.
 		orig := ghStdin
 		var deletes int
 		ghStdin = func(_ string, args ...string) (string, error) {

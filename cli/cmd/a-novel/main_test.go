@@ -2,9 +2,8 @@ package main
 
 import "testing"
 
-// TestParseBuildArgs_Keep guards the --keep flag wiring (the reuse behaviour it
-// drives — skip teardown + adopt a leftover env — is exercised end-to-end, not
-// here, since it depends on podman).
+// TestParseBuildArgs_Keep guards the --keep flag wiring. The reuse behavior it
+// drives needs podman, so it is covered end-to-end instead.
 func TestParseBuildArgs_Keep(t *testing.T) {
 	t.Parallel()
 

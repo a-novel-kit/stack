@@ -1,6 +1,5 @@
-# Shared library (Go or Node — the language is detected, not declared).
-# Covers golib, jwt, nodelib: their config is identical, only the
-# discovered checks differ.
+# Shared library, with the language detected from the repo. Covers golib, jwt
+# and nodelib: their config is identical, only the discovered checks differ.
 class: library
 features:
   issues: true

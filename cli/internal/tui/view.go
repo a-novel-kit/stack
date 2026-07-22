@@ -10,8 +10,8 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Styles — Lip Gloss surfaces, kept in one place so future polish
-// (themes, color palettes) has a single switch.
+// Lip Gloss styles for every surface, kept together so a theme change has a
+// single switch.
 var (
 	styleFrame    = lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240"))
 	styleNav      = lipgloss.NewStyle().Padding(0, 1)
@@ -26,8 +26,7 @@ var (
 )
 
 // View is Bubble Tea's render entry point. Bubble Tea v2 makes the alternate
-// screen a property of the View (not a NewProgram option, see Run), so every
-// frame opts in here.
+// screen a property of the View, so every frame opts in here.
 func (m *model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
@@ -62,7 +61,7 @@ func (m *model) renderMain() string {
 		mainWidth = m.width
 		navWidth = 0
 	}
-	// Reserve 1 line for status bar + 1 line for footer hint.
+	// Reserve rows for the status bar, the footer hint and the frame borders.
 	contentHeight := m.height - 4
 
 	nav := m.renderNav(navWidth, contentHeight)
@@ -79,11 +78,9 @@ func (m *model) renderMain() string {
 	return lipgloss.JoinVertical(lipgloss.Left, body, status, footer)
 }
 
-// renderStatus is the always-visible feedback line: shows action
-// progress, results, errors, and validation warnings. Single line so
-// it doesn't fight for vertical space with the log viewer; truncates
-// long messages with an ellipsis instead of wrapping (a wrapped
-// status line plays havoc with the layout below it).
+// renderStatus is the always-visible feedback line for action progress,
+// results, errors and validation warnings. It stays one line and truncates
+// with an ellipsis, since a wrapped status line breaks the layout below it.
 func (m *model) renderStatus(width int) string {
 	if m.status.level == statusIdle || m.status.text == "" {
 		return styleDim.Render(strings.Repeat("─", width))
@@ -106,8 +103,8 @@ func (m *model) renderStatus(width int) string {
 }
 
 func (m *model) renderNav(width, height int) string {
-	// Three "empty" states deserve different messages so the user can
-	// tell loading from a hard failure from a genuinely-empty stack:
+	// Three empty states get their own message, so loading, a hard failure
+	// and a genuinely empty stack read differently:
 	//   - !m.loaded            → refresh hasn't completed (or always errors)
 	//   - m.err != nil         → last refresh failed; surface the reason
 	//   - len(m.services) == 0 → refresh succeeded, stack has no services
@@ -123,12 +120,10 @@ func (m *model) renderNav(width, height int) string {
 		}
 		return styleFrame.Width(width).Height(height).Render(styleDim.Render(msg))
 	}
-	// Vertical per-service block: one line for the name (full width so
-	// it doesn't wrap), one indented status line below it, blank line
-	// between blocks for breathing room. This trades vertical density
-	// for horizontal clarity — service names like
-	// "service-authentication" no longer collide with the right-side
-	// counts on a narrow nav.
+	// Vertical per-service block: the name on its own full-width line, the
+	// status lines indented below it, a blank line between blocks. Long names
+	// like "service-authentication" then never collide with the counts on a
+	// narrow nav.
 	var lines []string
 	lines = append(lines, styleHeader.Render("Services"))
 	lines = append(lines, "")
@@ -136,8 +131,7 @@ func (m *model) renderNav(width, height int) string {
 		name := svc.GetName()
 		hasError := serviceHasError(svc)
 		inactive := countRunning(svc) == 0 && !hasError
-		// Name line — selected wins over inactive dimming (selection
-		// is the more important signal).
+		// Selection wins over inactive dimming.
 		var nameLine string
 		switch {
 		case i == m.selectedSvc:
@@ -147,11 +141,9 @@ func (m *model) renderNav(width, height int) string {
 		default:
 			nameLine = "  " + name
 		}
-		// Two status lines per service — one for targets, one for
-		// infra — each on its own row so neither wraps when the nav
-		// is narrow. The dot per row summarizes that kind's
-		// running/total count. Indented by 4 so the dots align
-		// visually with the first letter of the name above.
+		// One status row per kind, each summarizing its running/total count
+		// with a dot, so neither wraps when the nav is narrow. Indented by 4
+		// so the dots align with the first letter of the name above.
 		targetLine := "    " + serviceTargetsLine(svc)
 		infraLine := "    " + serviceInfraLine(svc)
 		lines = append(lines, nameLine, targetLine, infraLine)
@@ -168,18 +160,14 @@ func (m *model) renderRight(width, height int) string {
 	if svc == nil || m.tabCount() == 0 {
 		return styleFrame.Width(width).Height(height).Render(styleDim.Render("(this service has no targets or infra)"))
 	}
-	// Two selectable tab rows — infra on top, targets below. Each
-	// tab carries a leading colored status dot (no full-word
-	// labels). selectedTab walks the concatenated
-	// [infras..., targets...] sequence so ←/→ flows across both
-	// rows linearly. Either row is omitted entirely when its slice
-	// is empty so a service with only targets isn't shadowed by an
-	// empty infra line.
+	// Two selectable tab rows, infra on top and targets below, each tab
+	// carrying a leading colored status dot. selectedTab walks the
+	// concatenated [infras..., targets...] sequence so ←/→ flows across both
+	// rows linearly. A row whose slice is empty is omitted entirely.
 	infraTabsRow := renderInfraTabs(svc, m.selectedTab)
 	targetTabsRow := renderTargetTabs(svc, m.selectedTab, len(svc.GetInfra()))
-	// Detail header — branches on kind. Targets show
-	// "name · mode · phase [pid] [container]"; infras show
-	// "name · infra · phase healthy container=xxx".
+	// Detail header. Targets read "name · mode · phase [pid] [container]",
+	// infras "name · infra · phase healthy container=xxx".
 	var header string
 	switch m.activeTabKind() {
 	case tabKindTarget:
@@ -204,8 +192,8 @@ func (m *model) renderRight(width, height int) string {
 		}
 	}
 	headerStyled := styleHeader.Render(header)
-	// Layout: [infra-row] [target-row] [divider] [header] [logs].
-	// Each absent row simply skipped from the JoinVertical input.
+	// Layout: [infra-row] [target-row] [divider] [header] [logs], with absent
+	// rows left out of the JoinVertical input.
 	sections := []string{}
 	rowCount := 0
 	if infraTabsRow != "" {
@@ -232,11 +220,10 @@ func (m *model) renderRight(width, height int) string {
 	return styleFrame.Width(width).Height(height).Render(body)
 }
 
-// renderInfraTabs renders the top tab row: one tab per infra
-// container, with a leading colored status dot and {curly} brackets.
-// Returns "" when the service has no infra. selectedTab is the
-// model's combined index — when it falls in [0, len(infras)), the
-// matching tab gets styleSelected.
+// renderInfraTabs renders the top tab row: one tab per infra container, with a
+// leading colored status dot and {curly} brackets, or "" when the service has
+// no infra. selectedTab is the model's combined index; a value in
+// [0, len(infras)) selects the matching tab.
 func renderInfraTabs(svc *anovelv1.Service, selectedTab int) string {
 	infras := svc.GetInfra()
 	if len(infras) == 0 {
@@ -255,11 +242,10 @@ func renderInfraTabs(svc *anovelv1.Service, selectedTab int) string {
 	return styleDim.Render("infra ") + strings.Join(tabs, "  ")
 }
 
-// renderTargetTabs renders the bottom tab row: one tab per target,
-// with a leading colored status dot and [square] brackets.
-// infraOffset shifts the visual selection index — when the combined
-// selectedTab falls in [infraOffset, infraOffset+len(targets)), the
-// matching target tab is selected.
+// renderTargetTabs renders the bottom tab row: one tab per target, with a
+// leading colored status dot and [square] brackets. infraOffset shifts the
+// selection index, so a combined selectedTab in
+// [infraOffset, infraOffset+len(targets)) selects the matching target tab.
 func renderTargetTabs(svc *anovelv1.Service, selectedTab, infraOffset int) string {
 	targets := svc.GetTargets()
 	if len(targets) == 0 {
@@ -278,10 +264,9 @@ func renderTargetTabs(svc *anovelv1.Service, selectedTab, infraOffset int) strin
 	return styleDim.Render("target ") + strings.Join(tabs, "  ")
 }
 
-// targetStatusDot returns the colored status glyph for one target.
-// Branches on TargetKind so one-shots reflect their last-run outcome
-// (✓ success / ✗ failure) instead of falling back to a dim ○ that
-// would look indistinguishable from "never started":
+// targetStatusDot returns the colored status glyph for one target. It branches
+// on TargetKind so a finished one-shot shows its outcome (✓ success, ✗
+// failure) and keeps the dim ○ for "never started":
 //
 //	long-runner running        → ● green
 //	long-runner starting       → ● yellow
@@ -326,10 +311,8 @@ func (m *model) renderLogs(width, height int) string {
 	if len(m.logLines) == 0 {
 		return styleDim.Render("(no log lines yet — start the target or press 'r' to refresh)")
 	}
-	// Reserve the bottom line of the pane for the scroll indicator
-	// when we're not at the tail. When at the tail, the full height
-	// is available for log content (no indicator needed since
-	// auto-follow is the default state).
+	// Away from the tail, the bottom line of the pane holds the scroll
+	// indicator; at the tail the full height goes to log content.
 	contentH := height
 	if m.logScroll > 0 {
 		contentH = height - 1
@@ -358,10 +341,7 @@ func (m *model) renderLogs(width, height int) string {
 		fmt.Fprintf(&b, "%s %s %s\n",
 			styleDim.Render(ts), styleWarn.Render(tag), truncate(ln.GetLine(), width-20))
 	}
-	// Scroll indicator — only visible when we've paused auto-follow.
-	// Tells the user (a) they're paused, (b) how far up they are, and
-	// (c) how to get back. End/G snaps to the tail, the other keys
-	// step the window further.
+	// The scroll indicator appears only while auto-follow is paused.
 	if m.logScroll > 0 {
 		indicator := fmt.Sprintf("⏸ paused — %d line(s) below cursor  ·  pgdn/end resumes tail",
 			m.logScroll)
@@ -370,10 +350,10 @@ func (m *model) renderLogs(width, height int) string {
 	return b.String()
 }
 
-// renderFooter draws the always-visible hint of the most-relevant
-// commands for the current context. Single-line — action feedback
-// lives in the dedicated status bar above (renderStatus). When the log
-// pane is scrolled back, the hint advertises End/G as the way out.
+// renderFooter draws the always-visible one-line hint of the commands most
+// relevant to the current context; action feedback belongs to renderStatus
+// above it. While the log pane is scrolled back, the hint advertises End as
+// the way out.
 func (m *model) renderFooter() string {
 	scrollHint := styleCmd.Render("PgUp/PgDn") + " scroll logs"
 	if m.logScroll > 0 {
@@ -462,12 +442,11 @@ func overlayCommand(main, input string) string {
 	if len(lines) == 0 {
 		return cmd
 	}
-	// Replace the bottom line with the cmd input + any suggestions
-	// above it (so the input stays visually anchored at the bottom).
+	// The input sits on the bottom line with any suggestions stacked above
+	// it, so it stays anchored where the user is typing.
 	overlayLines := suggestions
 	overlayLines = append(overlayLines, cmd)
-	// Splice in: drop as many bottom lines as we need to overlay, then
-	// append the overlay block.
+	// Drop as many bottom lines as the overlay needs, then append it.
 	drop := len(overlayLines)
 	if drop > len(lines) {
 		drop = len(lines)
@@ -477,9 +456,8 @@ func overlayCommand(main, input string) string {
 	return strings.Join(lines, "\n")
 }
 
-// paletteCommands is the master list shown by the autocomplete suggester.
-// Each entry is (verb, one-line description). Kept here (vs cmds.go) so
-// the view is the single rendering surface for the palette.
+// paletteCommands is the list the autocomplete suggester draws from, each
+// entry a verb and its one-line description.
 var paletteCommands = []struct{ verb, desc string }{
 	{"start", "start the active target (default go-exec)"},
 	{"start container", "start the active target in container mode"},
@@ -524,9 +502,9 @@ func countRunning(svc *anovelv1.Service) int {
 	return n
 }
 
-// serviceTargetsLine is the per-service "X/Y targets" row in the nav
-// block. Green dot when any target is running, red when any has an
-// error exit, dim otherwise. Single line — no infra count here.
+// serviceTargetsLine is the per-service "X/Y targets" row in the nav block:
+// a green dot when any target is running, red when any exited with an error,
+// dim otherwise.
 func serviceTargetsLine(svc *anovelv1.Service) string {
 	if serviceHasError(svc) {
 		return styleErr.Render("●") + " errored"
@@ -540,9 +518,9 @@ func serviceTargetsLine(svc *anovelv1.Service) string {
 	return dot + fmt.Sprintf(" %d/%d targets", running, total)
 }
 
-// serviceInfraLine is the per-service "X/Y infra" row in the nav
-// block. Always rendered (even when Y == 0) so the panel layout
-// stays rectangular and the user knows whether infra exists.
+// serviceInfraLine is the per-service "X/Y infra" row in the nav block. It is
+// rendered even at zero, so the panel stays rectangular and the absence of
+// infra is visible.
 func serviceInfraLine(svc *anovelv1.Service) string {
 	healthy, total := countInfraHealthy(svc)
 	if total == 0 {
@@ -555,11 +533,10 @@ func serviceInfraLine(svc *anovelv1.Service) string {
 	return dot + fmt.Sprintf(" %d/%d infra", healthy, total)
 }
 
-// countInfraHealthy returns (healthy, total) across a service's infra
-// entries. A "healthy" infra is one with PHASE_RUNNING AND either
-// HEALTH_HEALTHY or no healthcheck declared (HEALTH_UNSPECIFIED on a
-// running container = no probe, treat as up). Distinguishes from
-// "starting" (HEALTH_STARTING, probe failing) which is NOT healthy.
+// countInfraHealthy returns (healthy, total) across a service's infra entries.
+// A healthy infra is running and either reports HEALTH_HEALTHY or declares no
+// healthcheck at all — HEALTH_UNSPECIFIED on a running container means no
+// probe, which counts as up. A failing probe (HEALTH_STARTING) does not.
 func countInfraHealthy(svc *anovelv1.Service) (int, int) {
 	total := len(svc.GetInfra())
 	healthy := 0
@@ -612,10 +589,10 @@ func infraHealthLabel(in *anovelv1.Infra) string {
 	return "unknown"
 }
 
-// computeNavWidth picks the sidebar width so the longest service name
-// fits on one line. Clamped to [24, 40]: 24 keeps the panel a
-// recognizable width even when nothing's discovered yet; 40 caps it so
-// a rogue super-long name doesn't squeeze the right pane.
+// computeNavWidth picks the sidebar width so the longest service name fits on
+// one line, clamped to [24, 40]: 24 keeps the panel a recognizable width when
+// nothing is discovered yet, 40 stops one very long name squeezing the right
+// pane.
 func computeNavWidth(svcs []*anovelv1.Service) int {
 	const minW, maxW = 24, 40
 	w := minW
@@ -632,10 +609,9 @@ func computeNavWidth(svcs []*anovelv1.Service) int {
 	return w
 }
 
-// serviceHasError reports whether any target in the service terminated
-// with a non-success exit. Used by serviceTargetsLine to render the red
-// "● errored" line, and by the nav's inactive-row dimming — an errored
-// service shouldn't dim, it needs attention.
+// serviceHasError reports whether any target in the service terminated with a
+// non-success exit. serviceTargetsLine renders the red "● errored" line from
+// it, and the nav keeps such a service undimmed since it needs attention.
 func serviceHasError(svc *anovelv1.Service) bool {
 	for _, t := range svc.GetTargets() {
 		if t.GetPhase() == anovelv1.Phase_PHASE_TERMINATED &&

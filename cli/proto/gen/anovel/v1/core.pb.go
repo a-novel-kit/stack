@@ -1,6 +1,6 @@
 // CoreService is the RPC contract between the a-novel daemon and its CLI/TUI
-// clients. The full contract lives here in one file so the wire schema is the
-// single source of truth — clients in any language can codegen against it.
+// clients. The whole contract lives in this one file, so a client in any
+// language can codegen against the wire schema itself.
 //
 // Connect-rpc is the wire protocol; the daemon serves both HTTP/1.1+JSON
 // (curl-friendly debugging) and gRPC framing (programmatic clients) from the
@@ -198,8 +198,8 @@ func (Mode) EnumDescriptor() ([]byte, []int) {
 	return file_anovel_v1_core_proto_rawDescGZIP(), []int{2}
 }
 
-// Health is the container's runtime healthcheck state. Always UNKNOWN for
-// go-exec mode (the daemon does not replicate readiness probes for go-exec).
+// Health is the container's runtime healthcheck state. It is always UNKNOWN in
+// go-exec mode, where the daemon runs no readiness probe.
 type Health int32
 
 const (
@@ -1273,17 +1273,17 @@ func (x *PrepareReinstallResponse) GetGoExecTargetCount() int32 {
 	return 0
 }
 
-// Shutdown is the no-checkpoint cousin of PrepareReinstall: it terminates
-// the daemon WITHOUT writing reinstall.json, so on next 'core start' nothing
-// is auto-relaunched. Used by 'a-novel core kill' and 'a-novel core restart'.
+// Shutdown terminates the daemon without writing reinstall.json, so the next
+// 'core start' auto-relaunches nothing. 'a-novel core kill' and 'a-novel core
+// restart' use it.
 //
-// With force=false (default), the daemon SIGTERMs every go-exec target
-// (10s grace) and leaves containers alone — those have their own podman
-// lifecycle that survives the daemon's death.
+// With force=false (default), the daemon SIGTERMs every go-exec target with a
+// 10s grace and leaves containers alone, since their podman lifecycle survives
+// the daemon's death.
 //
-// With force=true, the daemon ALSO cascade-kills every service's infra
-// (KillInfra force=true), leaving no daemon-managed state running. Use
-// when the user wants a clean local environment ('shut everything off').
+// With force=true, it also cascade-kills every service's infra (KillInfra
+// force=true), leaving no daemon-managed state running — the "shut everything
+// off" case.
 type ShutdownRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Force         bool                   `protobuf:"varint,1,opt,name=force,proto3" json:"force,omitempty"`
@@ -3286,9 +3286,9 @@ type ExecOutput struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Stream LogStream              `protobuf:"varint,1,opt,name=stream,proto3,enum=anovel.v1.LogStream" json:"stream,omitempty"`
 	Line   string                 `protobuf:"bytes,2,opt,name=line,proto3" json:"line,omitempty"`
-	// Set only on the stream's final message, which carries no line. Presence-tracked on
-	// purpose: a plain int32 defaults to 0, which is indistinguishable from a successful
-	// exit, so a client could not tell "the command succeeded" from "the daemon never said".
+	// Set only on the stream's final message, which carries no line. It is
+	// presence-tracked because a plain int32 defaults to 0, which a client could
+	// not tell apart from a successful exit.
 	ExitCode      *int32 `protobuf:"varint,3,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

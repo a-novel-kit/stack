@@ -75,10 +75,9 @@ func implicitDefault() Stack {
 	}
 }
 
-// expandHome turns a leading ~ into $HOME. Conservative — only expands the
-// special-case prefix; everything else is returned unchanged so accidental
-// shell-expansion mistakes surface as broken paths rather than silently
-// resolved ones.
+// expandHome turns a leading ~ into $HOME. Only that prefix expands, and
+// everything else is returned unchanged, so a shell-expansion mistake surfaces
+// as a broken path.
 func expandHome(p string) string {
 	if strings.HasPrefix(p, "~/") {
 		return filepath.Join(homeDir(), p[2:])

@@ -7,10 +7,9 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 )
 
-// TestRegisteredAndDiscovered pins that the server is told only about stacks
-// discovery kept. Handing it the raw registration list instead would let
-// ListStacks advertise a stack every other RPC then rejects as not registered —
-// the two views must not disagree.
+// TestRegisteredAndDiscovered pins that the server hears only about the stacks
+// discovery kept. What ListStacks advertises and what the other RPCs accept
+// come from the same set.
 func TestRegisteredAndDiscovered(t *testing.T) {
 	t.Parallel()
 
@@ -36,7 +35,7 @@ func TestRegisteredAndDiscovered(t *testing.T) {
 }
 
 // TestRegisteredAndDiscoveredEmpty covers discovery keeping nothing: the result
-// is empty rather than a silent fallback to the full registration list.
+// comes back empty, never falling back to the full registration list.
 func TestRegisteredAndDiscoveredEmpty(t *testing.T) {
 	t.Parallel()
 

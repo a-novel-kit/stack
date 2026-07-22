@@ -6,19 +6,15 @@ import (
 	"strings"
 )
 
-// RenderTopology returns an ASCII tree of the service's dependency graph,
-// formatted for `a-novel run topology` output. One service per invocation;
-// the daemon RPC handler concatenates per service when --service is omitted.
+// RenderTopology returns an ASCII tree of one service's dependency graph, as
+// `a-novel run topology` prints it. The daemon RPC handler concatenates the
+// per-service renders when --service is omitted.
 //
-// Layout puts infra first (it's the root), then
-// one-shots (in compose-graph order), then long-runners, with each leaf
-// annotated by current phase + (mode).
+// Infra comes first as the root, then one-shots, then long-runners, with each
+// line annotated by its kind and its depends_on list.
 func RenderTopology(s *Service) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n", s.Name)
-	// Sort infra alphabetically; one-shots and long-runners in two
-	// separate groups, each alphabetical, so the topology is
-	// deterministic regardless of map iteration order.
 	type row struct {
 		label  string
 		detail string
@@ -31,7 +27,8 @@ func RenderTopology(s *Service) string {
 		}
 		rows = append(rows, row{label: in.Name, detail: detail})
 	}
-	// Targets: one-shots first, then long-runners. Within each, alphabetical.
+	// One-shots first, then long-runners, each group alphabetical so the
+	// topology is deterministic regardless of map iteration order.
 	oneShots := make([]*Target, 0)
 	longRunners := make([]*Target, 0)
 	for _, t := range s.Targets {
@@ -50,7 +47,6 @@ func RenderTopology(s *Service) string {
 		}
 		rows = append(rows, row{label: t.Name, detail: detail})
 	}
-	// Render: use ├─ for all but the last entry, └─ for the last.
 	for i, r := range rows {
 		prefix := "├─"
 		if i == len(rows)-1 {

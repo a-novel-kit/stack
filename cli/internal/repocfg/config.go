@@ -4,9 +4,9 @@
 //
 // The desired state for a repo is composed from three inputs:
 //
-//   - a CLASS preset (classes/<class>.yaml) — the per-kind toggles,
-//   - an ORG profile (orgs/<org>.yaml) — bypass actors and signing,
-//   - semantically DISCOVERED checks (checks.yaml + the detect package),
+//   - a class preset (classes/<class>.yaml) — the per-kind toggles,
+//   - an org profile (orgs/<org>.yaml) — bypass actors and signing,
+//   - discovered checks (checks.yaml + the detect package),
 //
 // then overridden by CLI flags / the interactive form. The templates are
 // plain YAML so they can be edited without touching Go; an on-disk copy
@@ -49,10 +49,10 @@ var AllClasses = []Class{ClassService, ClassLibrary, ClassWorkflows, ClassMeta}
 
 // DetectClass infers a repo's class from its name, used when neither a
 // repos/<org>_<repo>.yaml override nor the --class flag is given. The
-// strong-semantic classes match exact names (workflows, .github); the service-*
-// family is the service class; everything else falls to the freeform library
-// default. platform-* frontends are not modelled yet — they fall to library or
-// need an explicit override until platform conventions exist.
+// strong-semantic classes match exact names (workflows, .github), the service-*
+// family is the service class, and everything else falls to the freeform
+// library default — including platform-* frontends, which have no conventions
+// of their own yet and need an explicit override.
 func DetectClass(repo string) Class {
 	switch {
 	case repo == "workflows":
@@ -156,10 +156,9 @@ type CodeQLLangRule struct {
 	Lang   string   `yaml:"lang"`
 }
 
-// ChecksConfig is checks.yaml. Required checks are the jobs declared in a repo's
-// .github/workflows/main.yaml (minus Exclude), plus the Always set — there is no
-// per-class or per-file derivation. CodeQL languages (for the codeql.yml
-// workflow) are the only other piece here.
+// ChecksConfig is checks.yaml. Required checks are exactly the jobs declared in
+// a repo's .github/workflows/main.yaml, minus Exclude, plus the Always set.
+// CodeQL languages for the codeql.yml workflow are the only other piece here.
 type ChecksConfig struct {
 	Integrations map[string]int64 `yaml:"integrations"`
 	Always       []CheckDef       `yaml:"always"`
@@ -194,12 +193,11 @@ func LoadChecks() (*ChecksConfig, error) {
 	return &c, nil
 }
 
-// ResolveBotIntegrations fills the integration ids that belong to a per-org bot
-// rather than a global app. checks.yaml can't hardcode these: each org runs its
-// own [Agent] App with a distinct id (a-novel and a-novel-kit differ), and the
-// same checks.yaml is loaded for both. Call this with the target repo's org
-// profile before discovery so a check posted by the [Agent] App — the merge-gate
-// — is required against that org's App and can actually be satisfied.
+// ResolveBotIntegrations fills the integration ids that belong to a per-org
+// bot. checks.yaml cannot hardcode these: each org runs its own [Agent] App
+// with a distinct id, and the same checks.yaml is loaded for both. Call it with
+// the target repo's org profile before discovery, so a check posted by that
+// org's App — the merge-gate — is required against an App that can satisfy it.
 func (c *ChecksConfig) ResolveBotIntegrations(org *OrgProfile) {
 	if c.Integrations == nil {
 		c.Integrations = map[string]int64{}
@@ -209,7 +207,7 @@ func (c *ChecksConfig) ResolveBotIntegrations(org *OrgProfile) {
 	}
 }
 
-// LabelDef is one entry in the canonical label set — name, hex colour (no
+// LabelDef is one entry in the canonical label set: name, hex color (no
 // leading '#', lower-case, as GitHub stores it) and description.
 type LabelDef struct {
 	Name        string `yaml:"name"`
@@ -218,10 +216,10 @@ type LabelDef struct {
 }
 
 // LabelsConfig is governance/labels.yaml: the uniform label vocabulary every
-// repo carries, provisioned like CODEOWNERS. Ensure labels are upserted (created
-// when absent, recoloured / re-described when they drift); Retire labels are
-// deleted. A label in neither list is left untouched — apply never removes a
-// label it was not told about.
+// repo carries, provisioned like CODEOWNERS. Ensure labels are upserted —
+// created when absent, recolored or re-described when they drift — and Retire
+// labels are deleted. A label in neither list is left untouched, so apply never
+// removes a label it was not told about.
 type LabelsConfig struct {
 	Ensure []LabelDef `yaml:"ensure"`
 	Retire []string   `yaml:"retire"`

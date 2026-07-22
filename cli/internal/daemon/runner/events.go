@@ -6,46 +6,44 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// PhaseEvent is the minimum metadata Watch subscribers need to render a
-// state-change line: who transitioned, from what to what, when. The runner
-// emits one for every phase change AND for markTerminated (which carries
-// the exit reason in NewPhase=TERMINATED + a derived OldPhase=RUNNING).
+// A PhaseEvent carries what a Watch subscriber needs to render a state-change
+// line: who transitioned, from which phase to which, and when. The runner emits
+// one for every phase change, markTerminated included, where NewPhase is
+// TERMINATED and the exit reason rides along.
 //
-// Service / Stack are duplicated from the Instance so subscribers don't have
-// to look the target up — important because by the time the subscriber
-// drains the channel, the daemon may have torn down the instance record.
+// Service and Stack are copied from the Instance so a subscriber never looks the
+// target up: by the time it drains the channel, the daemon may have dropped the
+// instance record.
 type PhaseEvent struct {
 	TargetID string
 	Service  string
 	Stack    string
 	OldPhase anovelv1.Phase
 	NewPhase anovelv1.Phase
-	// ExitReason is meaningful only when NewPhase == PHASE_TERMINATED;
-	// zero otherwise. Tracked separately from Phase so a subscriber that
-	// cares about success-vs-error doesn't have to re-query the runner.
+	// ExitReason is meaningful only when NewPhase is PHASE_TERMINATED, and
+	// zero otherwise. It rides alongside the phase so a subscriber telling
+	// success from error needs no second query.
 	ExitReason anovelv1.ExitReason
 	Ts         time.Time
 }
 
 // eventSub is one Watch subscriber. emitPhase iterates the live subs under
-// `subsMu` and sends into each channel non-blocking; a slow subscriber
-// loses events rather than stalling the runner.
+// subsMu and sends into each channel without blocking, so a slow subscriber
+// loses events and the runner keeps going.
 //
-// `filter` returns true for events the subscriber wants. A nil filter
-// means every event — see SubscribePhases below.
+// filter returns true for the events the subscriber wants; a nil filter takes
+// every event.
 type eventSub struct {
 	ch     chan PhaseEvent
 	filter func(PhaseEvent) bool
 }
 
-// SubscribePhases registers a channel-based subscriber for phase events.
-// Returns the channel to read from + an unsubscribe func the caller must
-// invoke on exit (typically deferred). `filter` is optional — pass nil to
-// receive every event.
+// SubscribePhases registers a channel-based subscriber for phase events. It
+// returns the channel to read from and an unsubscribe function the caller must
+// invoke on exit, typically deferred. A nil filter receives every event.
 //
-// Buffer of 32 picked so a brief consumer stall (rendering a ps table,
-// say) doesn't drop events under normal load; sustained slowness drops
-// silently (liveness > completeness for the runner).
+// The 32-slot buffer absorbs a brief consumer stall, such as rendering a ps
+// table; sustained slowness drops events silently and keeps the runner live.
 func (r *Runner) SubscribePhases(filter func(PhaseEvent) bool) (<-chan PhaseEvent, func()) {
 	sub := &eventSub{
 		ch:     make(chan PhaseEvent, 32),
@@ -68,20 +66,13 @@ func (r *Runner) SubscribePhases(filter func(PhaseEvent) bool) (<-chan PhaseEven
 	return sub.ch, unsub
 }
 
-// emitPhase is the runner-internal fanout. Called from transition() and
-// markTerminated() so every subscriber sees the same view as Instance
-// readers.
+// emitPhase is the runner-internal fanout, called from transition and
+// markTerminated so every subscriber sees the same view as Instance readers.
 //
-// The fanout holds subsMu.RLock for the entire iteration rather than
-// snapshotting then sending outside the lock. Snapshotting would race
-// with unsub, which removes the sub from the slice AND closes sub.ch
-// under the write lock: a snapshot taken before the unsub still holds the
-// *eventSub pointer and would panic on `send on closed channel`. Holding
-// the read lock while sending serializes correctly against unsub's write
-// lock without any close-detection ceremony. The cost is bounded:
-// `select-default` makes every send non-blocking, so iteration is
-// O(N_subs × microseconds) — well below the time any caller of
-// emitPhase already spends inside the runner's `mu`.
+// It holds subsMu.RLock across the whole iteration, so every send lands on a
+// channel unsub has not closed yet: unsub removes the sub and closes sub.ch
+// under the write lock, which waits for this one. Every send is non-blocking,
+// so the read lock costs microseconds per subscriber.
 func (r *Runner) emitPhase(ev PhaseEvent) {
 	ev.Ts = time.Now()
 	r.subsMu.RLock()
@@ -93,7 +84,7 @@ func (r *Runner) emitPhase(ev PhaseEvent) {
 		select {
 		case s.ch <- ev:
 		default:
-			// Drop — see SubscribePhases buffer note.
+			// Dropped; see the buffer note on SubscribePhases.
 		}
 	}
 }

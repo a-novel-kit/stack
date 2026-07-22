@@ -3,12 +3,11 @@
 // each whitelisted checkout present under app/ or kit/, the same list
 // `core sync` manages), so the operator never enumerates repos by hand.
 //
-// The sweep is deliberately conservative about ongoing work: config is
-// discovered from each working tree (repocfg.Discover reads
-// .github/workflows/main.yaml), so a repo that is off its default branch or has
-// uncommitted changes is skipped untouched — reconciling from an in-progress
-// checkout could otherwise push unmerged config live. A single confirm gates the
-// whole batch; --dry-run / --json preview without applying.
+// The sweep is conservative about ongoing work. Config is discovered from each
+// working tree (repocfg.Discover reads .github/workflows/main.yaml), and a repo
+// that is off its default branch or has uncommitted changes is skipped
+// untouched. Only committed config reaches the live repo. A single confirm
+// gates the whole batch, and --dry-run / --json preview without applying.
 
 package cli
 
@@ -215,10 +214,9 @@ func excludedRepo(set map[string]struct{}, c updateCandidate) bool {
 	return ok
 }
 
-// renderCompactSummary prints the one-repo, two-line overview the batch confirm
-// shows per eligible repo — class plus the dimensions that actually vary between
-// repos (rulesets, codecov, the discovered required checks). The full grouped
-// view (renderSummary) would be too noisy repeated across a whole workspace.
+// renderCompactSummary prints the two-line overview the batch confirm shows per
+// eligible repo: the class plus the dimensions that vary between repos, such as
+// rulesets and the discovered required checks.
 func renderCompactSummary(w io.Writer, t *repocfg.RepoTarget) {
 	rs := []string{}
 	if t.Class.Rulesets.Master {
@@ -240,9 +238,8 @@ func renderCompactSummary(w io.Writer, t *repocfg.RepoTarget) {
 }
 
 // renderAllJSON writes the previewed plans as a JSON array of {repo, ops}
-// objects — the --all analogue of the single-repo `plan.RenderJSON`, so an
-// operator can inspect or diff the exact operations a bulk run would apply. A
-// nil/empty slice renders as `[]`.
+// objects, so an operator can inspect or diff the exact operations a bulk run
+// would apply. An empty slice renders as `[]`.
 func renderAllJSON(w io.Writer, items []plannedUpdate) error {
 	type repoOps struct {
 		Repo string       `json:"repo"`

@@ -5,10 +5,9 @@ import (
 	"testing"
 )
 
-// Allocator tests exercise the (owner, localVar)→port refcounted store
-// the daemon uses for every port allocation. Bugs here would silently
-// break port reuse (two services binding the same slot) or cause leaks
-// (slots that never free after a target dies).
+// Allocator tests exercise the refcounted (owner, localVar) → port store behind
+// every daemon port allocation. A defect here breaks port reuse, letting two
+// services bind one slot, or leaks slots that never free after a target dies.
 
 func TestAllocator_RejectsNonAllocatedKind(t *testing.T) {
 	a := NewAllocator()
@@ -19,10 +18,8 @@ func TestAllocator_RejectsNonAllocatedKind(t *testing.T) {
 }
 
 func TestAllocator_AcquireIdempotentSameConsumer(t *testing.T) {
-	// Repeated Acquire from the same consumer must return the same
-	// port AND not double-count the ref (otherwise Release would
-	// need to be called twice). Refs are a map keyed by consumer ID,
-	// so this is structurally enforced — but lock it in.
+	// A repeated Acquire from one consumer returns the same port and holds a
+	// single ref, so one Release still frees the slot.
 	a := NewAllocator()
 	p1, err := a.Acquire("svc", "REST_PORT", "consumer-1")
 	if err != nil {
@@ -42,10 +39,9 @@ func TestAllocator_AcquireIdempotentSameConsumer(t *testing.T) {
 }
 
 func TestAllocator_TwoConsumersShareSlot(t *testing.T) {
-	// The cross-service case: service-A allocates SERVICE_B_GRPC_PORT
-	// (with consumer=A); later service-B starts its own grpc target
-	// (with consumer=B) and must get the SAME port. Both refs are
-	// recorded so the slot survives until BOTH release.
+	// In the cross-service case service-A allocates SERVICE_B_GRPC_PORT, then
+	// service-B starts its own grpc target and must land on that same port.
+	// Both refs are recorded, so the slot survives until each releases.
 	a := NewAllocator()
 	p1, err := a.Acquire("svc-b", "GRPC_PORT", "consumer-a")
 	if err != nil {
@@ -71,10 +67,9 @@ func TestAllocator_TwoConsumersShareSlot(t *testing.T) {
 }
 
 func TestAllocator_ReserveSkipsKernel(t *testing.T) {
-	// Reserve is the adoption path — daemon-restart finds an
-	// already-bound container and re-seeds the slot with that
-	// container's port. No kernel call; whatever port the caller
-	// passes is what's recorded.
+	// Reserve is the adoption path: a restarting daemon finds an already-bound
+	// container and re-seeds the slot with its port. No kernel call happens,
+	// and whatever port the caller passes is what gets recorded.
 	a := NewAllocator()
 	port := a.Reserve("svc", "POSTGRES_PORT", 41699, "infra-consumer")
 	if port != 41699 {
@@ -86,10 +81,9 @@ func TestAllocator_ReserveSkipsKernel(t *testing.T) {
 }
 
 func TestAllocator_ReserveExistingWins(t *testing.T) {
-	// Spec contract: if a slot already exists, Reserve takes a ref
-	// but returns the EXISTING port. The new port arg is ignored.
-	// This is what makes "reseed then re-Acquire" robust against
-	// races where Acquire fires before reseed completes.
+	// Over an existing slot, Reserve takes a ref and returns the port already
+	// recorded, ignoring the one passed. That is what makes a reseed followed
+	// by an Acquire robust when the Acquire fires first.
 	a := NewAllocator()
 	first, err := a.Acquire("svc", "POSTGRES_PORT", "owner-a")
 	if err != nil {
@@ -165,8 +159,8 @@ func TestAllocator_SetServicesLongestFirst(t *testing.T) {
 }
 
 func TestAllocator_ConcurrentAcquireSameKey(t *testing.T) {
-	// Race the same (owner, localVar) from many goroutines. All must
-	// get the same port; no panics; refcount equals goroutines.
+	// Race one (owner, localVar) across many goroutines: each gets the same
+	// port, nothing panics, and the refcount matches the goroutine count.
 	a := NewAllocator()
 	const N = 64
 	var wg sync.WaitGroup

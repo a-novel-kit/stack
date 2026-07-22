@@ -1,19 +1,16 @@
 // `a-novel install` — the safe re-install path.
 //
-// Why this exists: running `go install ./cmd/a-novel` directly leaves the
-// previous daemon process running (with the old binary). The user then
-// sees inconsistent behavior — new CLI talking to old daemon — and
-// `core status` shows the old version's `started:` timestamp.
+// A bare `go install ./cmd/a-novel` leaves the previous daemon running on the
+// old binary, so a new CLI ends up talking to an old daemon and `core status`
+// reports a stale `started:` timestamp. This verb replaces both halves at once:
 //
-// `a-novel install` is the all-in-one wrapper that:
-//
-//  1. asks the running daemon (if any) to checkpoint via PrepareReinstall;
+//  1. asks the running daemon, if any, to checkpoint via PrepareReinstall;
 //  2. runs `go install ./cmd/a-novel` from the resolved CLI source dir;
-//  3. starts a fresh daemon — which reads the checkpoint and re-launches
-//     the recorded go-exec targets, then deletes the checkpoint.
+//  3. starts a fresh daemon, which reads the checkpoint, re-launches the
+//     recorded go-exec targets, then deletes it.
 //
-// End-state: same containers + same go-exec targets running, but now on
-// the new binary. Runnable from anywhere, not just inside the cli/ dir.
+// The end state is the same containers and go-exec targets running on the new
+// binary. It runs from anywhere in the workspace.
 
 package cli
 
@@ -160,10 +157,9 @@ func waitDaemonGone(timeout time.Duration) error {
 		_, err := rpc.New("").Ping(ctx)
 		cancel()
 		if err != nil {
-			// Ping error == socket closed == daemon stopped, which IS
-			// the success condition we're polling for. Returning the
-			// transport error would mean "couldn't talk to daemon" =
-			// failure, the opposite of what we want.
+			// A Ping error means the socket is closed and the daemon
+			// has stopped, which is the condition being polled for.
+			// Report success.
 			return nil //nolint:nilerr // intentional: error here means daemon is gone
 		}
 		time.Sleep(100 * time.Millisecond)

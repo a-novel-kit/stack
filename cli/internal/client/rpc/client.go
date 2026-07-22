@@ -34,9 +34,9 @@ func New(socketPath string) *Client {
 	}
 	httpClient := &http.Client{
 		Transport: &http.Transport{
-			// Unix socket dialer: replace net+addr with our path. The
-			// scheme/host in the URL we pass to connect-rpc are just
-			// placeholders since we always dial the same socket.
+			// Unix-socket dialer: the network and address arguments are
+			// discarded, and so are the scheme and host of the URL handed
+			// to connect-rpc, since every call dials the same socket.
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 				return (&net.Dialer{Timeout: 2 * time.Second}).DialContext(ctx, "unix", socketPath)
 			},
@@ -202,9 +202,8 @@ func (c *Client) KillInfra(ctx context.Context, stack, service string, force boo
 	return resp.Msg, nil
 }
 
-// KillInfraContainer stops one infra container (by name) without
-// affecting the rest of the service. Used by the TUI for tab-level
-// infra lifecycle.
+// KillInfraContainer stops one infra container by name, leaving the rest
+// of the service up. The TUI uses it for tab-level infra lifecycle.
 func (c *Client) KillInfraContainer(ctx context.Context, stack, service, name string) (*anovelv1.KillInfraContainerResponse, error) {
 	resp, err := c.core.KillInfraContainer(ctx, connect.NewRequest(&anovelv1.KillInfraContainerRequest{
 		Stack:   stack,
@@ -217,9 +216,8 @@ func (c *Client) KillInfraContainer(ctx context.Context, stack, service, name st
 	return resp.Msg, nil
 }
 
-// RestartInfraContainer issues `podman restart` for one infra
-// container — faster than kill+infra-start because it preserves
-// volume bindings.
+// RestartInfraContainer issues `podman restart` for one infra container,
+// which preserves the volume bindings and so beats kill+infra-start.
 func (c *Client) RestartInfraContainer(ctx context.Context, stack, service, name string) (*anovelv1.RestartInfraContainerResponse, error) {
 	resp, err := c.core.RestartInfraContainer(ctx, connect.NewRequest(&anovelv1.RestartInfraContainerRequest{
 		Stack:   stack,
@@ -371,8 +369,8 @@ func (c *Client) Debug(ctx context.Context, targetID string) (*anovelv1.DebugRes
 	return resp.Msg, nil
 }
 
-// IsNotRunning reports whether err signals the daemon is unreachable (socket
-// missing, connection refused). Distinct from a daemon-side error.
+// IsNotRunning reports whether err signals an unreachable daemon: a missing
+// socket or a refused connection.
 func IsNotRunning(err error) bool {
 	var nrErr *NotRunningError
 	return errors.As(err, &nrErr)
@@ -390,8 +388,8 @@ func (e *NotRunningError) Error() string {
 }
 func (e *NotRunningError) Unwrap() error { return e.Cause }
 
-// mapErr classifies errors so the CLI can show a helpful message rather than
-// a raw transport error.
+// mapErr turns a transport failure into a typed error the CLI can report in
+// its own words.
 func (c *Client) mapErr(err error) error {
 	// Connect errors carry a code; the transport-level failures we care
 	// about (socket missing, refused) come through as Unavailable.

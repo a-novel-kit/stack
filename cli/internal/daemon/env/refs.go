@@ -20,15 +20,12 @@ import (
 	"strings"
 )
 
-// hostLocalhost is the canonical synthesized hostname for *_HOST
-// derivations. Hoisted so a future "rewrite for remote daemon" can
-// flip the value in one place without grepping the package.
+// hostLocalhost is the hostname synthesized for every *_HOST derivation.
 const hostLocalhost = "localhost"
 
-// refRe matches a ${VAR} reference in a compose environment value. Two
-// variants supported: bare ${VAR} and ${VAR:-default}. Default values
-// aren't honored yet — they're rare in our compose files and adding them
-// is a one-line follow-up.
+// refRe matches a ${VAR} reference in a compose environment value, in both the
+// bare ${VAR} and the ${VAR:-default} form. The default is matched but dropped,
+// never applied.
 var refRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}`)
 
 // extractRefs returns the deduplicated list of ${VAR} names referenced in
@@ -46,14 +43,13 @@ func extractRefs(raw string) []string {
 	return out
 }
 
-// substitute resolves every ${VAR} in raw against ctx. Unknown references
-// resolve to empty string (matching compose's behavior, so a missing var
-// surfaces as an empty value instead of a literal ${VAR} that breaks at
-// run time).
+// substitute resolves every ${VAR} in raw against ctx. An unknown reference
+// resolves to the empty string, matching compose's behavior, so a missing var
+// never survives as a literal ${VAR} that breaks at run time.
 func substitute(raw string, ctx map[string]string) string {
 	return refRe.ReplaceAllStringFunc(raw, func(match string) string {
-		// match looks like "${VAR}" or "${VAR:-default}"; the captured
-		// VAR is the first match group.
+		// The captured VAR is the first group of "${VAR}" or
+		// "${VAR:-default}".
 		m := refRe.FindStringSubmatch(match)
 		if len(m) < 2 {
 			return ""
@@ -62,23 +58,22 @@ func substitute(raw string, ctx map[string]string) string {
 	})
 }
 
-// ServicePrefix is the uppercase, underscore-separated form of a service
-// name used in cross-service env references. The convention
-// turns `service-json-keys` into `SERVICE_JSON_KEYS`; the resulting
-// prefix is what other services prepend when consuming this service's
-// vars: `${SERVICE_JSON_KEYS_GRPC_PORT}`.
+// ServicePrefix is the uppercase, underscore-separated form of a service name
+// used in cross-service env references: `service-json-keys` becomes
+// `SERVICE_JSON_KEYS`, which other services prepend when consuming its vars, as
+// in `${SERVICE_JSON_KEYS_GRPC_PORT}`.
 func ServicePrefix(serviceName string) string {
 	return strings.ToUpper(strings.ReplaceAll(serviceName, "-", "_"))
 }
 
-// resolveOwner classifies a variable name against the set of registered
-// service names. If varName carries a known service prefix, returns
-// (ownerServiceName, localVarName); otherwise returns ("", varName) and
-// the caller treats it as local to its own service.
+// resolveOwner classifies a variable name against the registered service names.
+// A varName carrying a known service prefix yields (ownerServiceName,
+// localVarName); anything else yields ("", varName), which the caller treats as
+// local to its own service.
 //
-// Order of evaluation matters: when two service names share a prefix
-// (e.g., `service-template` and `service-template-extra`), the longer
-// match wins. allServices must be sorted longest-first by the caller.
+// When two service names share a prefix, such as `service-template` and
+// `service-template-extra`, the longer match wins, so the caller must pass
+// allServices sorted longest-first.
 func resolveOwner(varName string, allServices []string) (string, string) {
 	for _, svc := range allServices {
 		prefix := ServicePrefix(svc) + "_"
@@ -89,15 +84,15 @@ func resolveOwner(varName string, allServices []string) (string, string) {
 	return "", varName
 }
 
-// isAllocatedKind reports whether localVar is one we allocate (currently
-// only `*_PORT`). Future polish: pluggable allocators.
+// isAllocatedKind reports whether localVar is one the daemon allocates, which
+// today means `*_PORT`.
 func isAllocatedKind(localVar string) bool {
 	return strings.HasSuffix(localVar, "_PORT")
 }
 
-// derivedFor produces the synthesized vars that always accompany an
-// allocated `<X>_PORT`. The keys returned use the local
-// (un-prefixed) form; callers re-prefix for cross-service exposure.
+// derivedFor produces the synthesized vars that accompany an allocated
+// `<X>_PORT`. The returned keys use the local, un-prefixed form; callers
+// re-prefix them for cross-service exposure.
 func derivedFor(localPortVar string, port int) map[string]string {
 	base := strings.TrimSuffix(localPortVar, "_PORT")
 	host := hostLocalhost
@@ -109,9 +104,9 @@ func derivedFor(localPortVar string, port int) map[string]string {
 	}
 }
 
-// urlFor renders the URL string for a "<base>_PORT" allocation. gRPC has
-// a deliberately schemeless form (`localhost:port` — `grpc-go` clients
-// take it as-is); everything else gets `http://`.
+// urlFor renders the URL string for a "<base>_PORT" allocation. gRPC gets the
+// schemeless `localhost:port` form that grpc-go clients take as-is; everything
+// else gets `http://`.
 func urlFor(base string, port int) string {
 	switch base {
 	case "GRPC":
@@ -121,9 +116,7 @@ func urlFor(base string, port int) string {
 	}
 }
 
-// itoa is a thin wrapper to avoid importing strconv just for one call
-// site — and to keep this file's surface focused on the substitution
-// rules.
+// itoa formats a non-negative int as a decimal string.
 func itoa(n int) string {
 	const digits = "0123456789"
 	if n == 0 {

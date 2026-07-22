@@ -138,9 +138,8 @@ func TestBuildPlanProvisionsLabels(t *testing.T) {
 // TestLabelsSatisfyGitHubConstraints guards the constraints GitHub enforces only
 // at apply time — the label reconcile runs against live GitHub, so CI never
 // exercises them otherwise. A `description` must be <= 100 characters and a color
-// a bare 6-hex string. A 312-char description once 422'd the label reconcile on
-// every repo (fixed in cli/v1.4.5); this keeps that class of failure at author
-// time instead of surfacing during `a-novel repo update`.
+// a bare 6-hex string. Either one 422s the reconcile for every repo in the run,
+// so both are checked here at author time.
 func TestLabelsSatisfyGitHubConstraints(t *testing.T) {
 	t.Parallel()
 	labels, err := LoadLabels()
@@ -278,10 +277,9 @@ func contextsOf(checks []CheckRef) []string {
 }
 
 // TestBuildPlanPrunesUnknownRulesets pins the invariant that makes repo config
-// derived rather than accumulated: the plan names the COMPLETE set of rulesets a
-// repo may carry, and apply deletes everything else. Without it the only way to
-// remove a ruleset would be an ever-growing list of things to un-apply, and a
-// ruleset added by hand in the UI would outlive every reconcile.
+// derived: the plan names the complete set of rulesets a repo may carry, and
+// apply deletes everything else. A ruleset is removed by dropping it from the
+// class preset, and one added by hand in the UI is gone at the next reconcile.
 func TestBuildPlanPrunesUnknownRulesets(t *testing.T) {
 	t.Parallel()
 

@@ -1,6 +1,6 @@
 // CoreService is the RPC contract between the a-novel daemon and its CLI/TUI
-// clients. The full contract lives here in one file so the wire schema is the
-// single source of truth — clients in any language can codegen against it.
+// clients. The whole contract lives in this one file, so a client in any
+// language can codegen against the wire schema itself.
 //
 // Connect-rpc is the wire protocol; the daemon serves both HTTP/1.1+JSON
 // (curl-friendly debugging) and gRPC framing (programmatic clients) from the
@@ -122,10 +122,10 @@ type CoreServiceClient interface {
 	// Service infrastructure
 	StartInfra(context.Context, *connect.Request[v1.StartInfraRequest]) (*connect.Response[v1.StartInfraResponse], error)
 	KillInfra(context.Context, *connect.Request[v1.KillInfraRequest]) (*connect.Response[v1.KillInfraResponse], error)
-	// Per-infra container lifecycle. Lets the TUI treat infra entries
-	// like targets — kill / restart one container without tearing down
-	// the rest of the service's infra. The whole-service equivalents
-	// (StartInfra/KillInfra) remain for cold-start and full teardown.
+	// Per-infra container lifecycle, which lets the TUI treat infra entries
+	// like targets: kill or restart one container while the rest of the
+	// service's infra stays up. StartInfra and KillInfra remain the
+	// whole-service cold-start and teardown.
 	KillInfraContainer(context.Context, *connect.Request[v1.KillInfraContainerRequest]) (*connect.Response[v1.KillInfraContainerResponse], error)
 	RestartInfraContainer(context.Context, *connect.Request[v1.RestartInfraContainerRequest]) (*connect.Response[v1.RestartInfraContainerResponse], error)
 	// Logs (streaming)
@@ -482,10 +482,10 @@ type CoreServiceHandler interface {
 	// Service infrastructure
 	StartInfra(context.Context, *connect.Request[v1.StartInfraRequest]) (*connect.Response[v1.StartInfraResponse], error)
 	KillInfra(context.Context, *connect.Request[v1.KillInfraRequest]) (*connect.Response[v1.KillInfraResponse], error)
-	// Per-infra container lifecycle. Lets the TUI treat infra entries
-	// like targets — kill / restart one container without tearing down
-	// the rest of the service's infra. The whole-service equivalents
-	// (StartInfra/KillInfra) remain for cold-start and full teardown.
+	// Per-infra container lifecycle, which lets the TUI treat infra entries
+	// like targets: kill or restart one container while the rest of the
+	// service's infra stays up. StartInfra and KillInfra remain the
+	// whole-service cold-start and teardown.
 	KillInfraContainer(context.Context, *connect.Request[v1.KillInfraContainerRequest]) (*connect.Response[v1.KillInfraContainerResponse], error)
 	RestartInfraContainer(context.Context, *connect.Request[v1.RestartInfraContainerRequest]) (*connect.Response[v1.RestartInfraContainerResponse], error)
 	// Logs (streaming)

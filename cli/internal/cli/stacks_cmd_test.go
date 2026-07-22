@@ -87,8 +87,8 @@ func TestSelectPruneTargets(t *testing.T) {
 }
 
 // TestSelectPruneTargetsAllWithNoScratch pins the empty case: a machine with
-// only the default stack yields nothing to prune rather than an error, so the
-// sweep is safe to run unconditionally.
+// only the default stack yields nothing to prune, so the sweep is safe to run
+// unconditionally.
 func TestSelectPruneTargetsAllWithNoScratch(t *testing.T) {
 	t.Parallel()
 
@@ -150,9 +150,8 @@ func TestHoldingsOf(t *testing.T) {
 	}
 }
 
-// TestHoldingsOfUnknownPhase pins that an unset phase is not treated as live.
-// A zero-valued Target is a decoding artefact, not a running process, and
-// killing one would fail the whole prune on a target that never existed.
+// TestHoldingsOfUnknownPhase pins that an unset phase counts as not running.
+// A zero-valued Target is a decoding artifact, so the prune leaves it alone.
 func TestHoldingsOfUnknownPhase(t *testing.T) {
 	t.Parallel()
 
@@ -194,8 +193,8 @@ func TestUnpushedCommits(t *testing.T) {
 	}
 }
 
-// TestUnpushedCommitsNoUpstream covers a checkout with no upstream at all. It
-// counts as zero rather than erroring the prune — see the doc comment.
+// TestUnpushedCommitsNoUpstream covers a checkout with no upstream at all,
+// which counts as zero unpushed commits.
 func TestUnpushedCommitsNoUpstream(t *testing.T) {
 	t.Parallel()
 
@@ -213,8 +212,8 @@ func TestUnpushedCommitsNoUpstream(t *testing.T) {
 }
 
 // TestDefaultStackRoot pins that an unrouted stack lands under the OS temp
-// directory. os.TempDir() honours $TMPDIR, which is what makes this correct on
-// macOS (a per-user /var/folders/…/T) rather than a Linux-only /tmp assumption.
+// directory. os.TempDir() honors $TMPDIR, so this holds on macOS too, where it
+// resolves to a per-user /var/folders/…/T.
 func TestDefaultStackRoot(t *testing.T) {
 	t.Parallel()
 
@@ -253,9 +252,9 @@ func TestStackBackupDir(t *testing.T) {
 }
 
 // TestReportUnmanaged pins that a registration the daemon is not serving is
-// named rather than silently absent, and that a vanished root is distinguished
-// from one the daemon simply has not picked up yet — the two need different
-// fixes (drop the entry vs restart).
+// named in the output, and that a vanished root reads differently from one the
+// daemon simply has not picked up yet. The two need different fixes: drop the
+// entry, or restart.
 func TestReportUnmanaged(t *testing.T) {
 	present := t.TempDir()
 	gone := filepath.Join(t.TempDir(), "swept")
@@ -278,9 +277,8 @@ func TestReportUnmanaged(t *testing.T) {
 	}
 }
 
-// TestDryRunVerdict pins that a dry run reports rather than refuses. An earlier
-// revision errored out on a blocked stack, which answered "what would this do?"
-// with neither the plan nor the reason.
+// TestDryRunVerdict pins that a dry run always reports. A blocked stack gets a
+// verdict and the reason behind it, which is what the question asked for.
 func TestDryRunVerdict(t *testing.T) {
 	t.Parallel()
 

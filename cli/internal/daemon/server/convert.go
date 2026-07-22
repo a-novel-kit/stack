@@ -11,10 +11,9 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// targetIDFor reconstructs the stack/service/target ID that uniquely
-// addresses a target across every stack. Single source for this rule so
-// every RPC handler that returns IDs agrees with every parser. Matches
-// runner.targetID exactly.
+// targetIDFor builds the stack/service/target ID that addresses a target across
+// every stack. It is the one place this rule lives on the server side, and it
+// must match the runner's own form exactly.
 func targetIDFor(stack, service, target string) string {
 	return stack + "/" + service + "/" + target
 }
@@ -25,14 +24,13 @@ func infraIDFor(stack, service, name string) string {
 	return stack + "/" + service + "/" + name
 }
 
-// convertService converts a discovery.Service into the proto Service,
-// embedding its targets (with live state from the runner if present),
-// infra, and volumes.
+// convertService converts a discovery.Service into the proto Service, embedding
+// its targets with whatever live state the runner holds, plus its infra and
+// volumes.
 //
-// infraStates is the per-stack live-state cache built once per
-// ListServices call by liveInfraStates — pass nil to fall back to a
-// fresh single-infra query per row (slow, used by code paths that
-// convert a single service in isolation).
+// infraStates is the per-stack live-state cache liveInfraStates builds once per
+// ListServices call. A nil map falls back to a fresh query per infra row, which
+// is slower and suits a handler converting one service in isolation.
 func (s *Server) convertService(svc *discovery.Service, infraStates map[string]runner.InfraState) *anovelv1.Service {
 	out := &anovelv1.Service{
 		Name:            svc.Name,
@@ -51,14 +49,13 @@ func (s *Server) convertService(svc *discovery.Service, infraStates map[string]r
 	return out
 }
 
-// convertInfraWithLive enriches a discovery.Infra with the matching
-// podman container's live state (Phase + Health + ContainerID). Without
-// this, infra rows in `ps` show "idle" even when the container is up.
+// convertInfraWithLive enriches a discovery.Infra with its podman container's
+// live phase, health, and ID, so an infra row in `ps` never reads "idle" while
+// the container is up.
 //
-// Reads from the pre-built infraStates map when provided (one podman
-// call total for the whole ListServices RPC); falls back to a single
-// InfraStateOf call when the map is nil (slower per-call cost but
-// keeps single-service handlers honest).
+// A pre-built infraStates map costs one podman call for the whole ListServices
+// RPC; a nil map falls back to a single InfraStateOf call, slower but honest
+// for a single-service handler.
 func (s *Server) convertInfraWithLive(in *discovery.Infra, infraStates map[string]runner.InfraState) *anovelv1.Infra {
 	out := convertInfra(in)
 	if s.runner == nil {
@@ -72,9 +69,8 @@ func (s *Server) convertInfraWithLive(in *discovery.Infra, infraStates map[strin
 		}
 		return out
 	}
-	// Fallback path — single-shot query. Generous 3s timeout because
-	// rootless podman cold start can be ~1s and we'd rather be slow
-	// than report a misleading "idle".
+	// The single-shot query gets a 3s budget: a rootless podman cold start
+	// costs about 1s, and being slow beats reporting a misleading "idle".
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	phase, health, cid := s.runner.InfraStateOf(ctx, in.Stack, in.Service, in.Name)
@@ -84,24 +80,22 @@ func (s *Server) convertInfraWithLive(in *discovery.Infra, infraStates map[strin
 	return out
 }
 
-// liveInfraStates returns one map of live container states for the
-// given stack, suitable to pass to convertService. Built via a single
-// batched podman call — see runner.InfraStatesOf.
+// liveInfraStates returns the live container states for a stack, ready to pass
+// to convertService. One batched podman call builds it.
 func (s *Server) liveInfraStates(stack string) map[string]runner.InfraState {
 	if s.runner == nil {
 		return nil
 	}
-	// 5s budget for the batched scan: one podman ps + one inspect
-	// per container. The TUI polls every 2s but the underlying RPC
-	// can afford the headroom; better to be slow than wrong.
+	// A 5s budget for the batched scan. The TUI polls every 2s, but the RPC
+	// can afford the headroom, and being slow beats being wrong.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return s.runner.InfraStatesOf(ctx, stack)
 }
 
-// convertTargetWithLive enriches a discovery.Target with the matching
-// runner.Instance (if any) so the proto carries real phase / pid /
-// mode / exit-reason instead of zero values.
+// convertTargetWithLive enriches a discovery.Target with its runner.Instance,
+// where one exists, so the proto carries the real phase, pid, mode, and exit
+// reason.
 func (s *Server) convertTargetWithLive(t *discovery.Target) *anovelv1.Target {
 	id := targetIDFor(t.Stack, t.Service, t.Name)
 	inst, ok := s.runner.Instance(id)
@@ -124,8 +118,8 @@ func (s *Server) convertTargetWithLive(t *discovery.Target) *anovelv1.Target {
 	return out
 }
 
-// convertTargetStatic produces the discovery-only view (no live state) —
-// used when no runner.Instance is recorded for the target.
+// convertTargetStatic produces the discovery-only view, for a target with no
+// runner.Instance recorded.
 func convertTargetStatic(t *discovery.Target) *anovelv1.Target {
 	out := &anovelv1.Target{
 		Id:      targetIDFor(t.Stack, t.Service, t.Name),
@@ -138,10 +132,9 @@ func convertTargetStatic(t *discovery.Target) *anovelv1.Target {
 	return out
 }
 
-// instanceToProto builds a Target message from a live Instance plus its
-// backing discovery.Target. `t` may be nil (e.g., the instance was
-// constructed before discovery was re-run); in that case the static
-// metadata is sparse but the live fields are still present.
+// instanceToProto builds a Target message from a live Instance and its backing
+// discovery.Target. A nil t, as when the instance predates the latest
+// discovery, leaves the static metadata sparse and the live fields intact.
 func instanceToProto(inst *runner.Instance, t *discovery.Target) *anovelv1.Target {
 	if inst == nil || inst.ID == "" {
 		return nil

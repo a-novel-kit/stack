@@ -1,8 +1,7 @@
 // Package discovery parses each stack's per-service podman-compose.yaml files
-// and exposes the result as a structured model (services, targets, infra,
-// volumes, networks, dependency graph). The result is the daemon's source of
-// truth for everything operational — every later phase (supervision, env,
-// logs, volumes) keys off these types.
+// and exposes the result as a structured model of services, targets, infra,
+// volumes, networks, and the dependency graph. It is the daemon's operational
+// source of truth: supervision, env, logs, and volumes all key off these types.
 //
 // # The compose contract
 //
@@ -11,17 +10,16 @@
 // every service repo, so service compose files don't re-document them:
 //
 //   - Every cmd/<target> entrypoint has a compose mirror named
-//     <service>-<target> gated behind profiles: ["<target>"]. The profile
-//     keeps targets out of a plain `podman compose up`: the daemon runs
-//     targets itself (go-exec by default, the profiled container on demand)
-//     and orchestrates ordering through depends_on, never through Compose's
-//     profile cascade. It also prevents a containerized copy from binding the
-//     host port a locally-run target owns.
+//     <service>-<target> gated behind profiles: ["<target>"]. The profile keeps
+//     targets out of a plain `podman compose up`: the daemon runs them itself,
+//     as a go-exec process by default or the profiled container on demand, and
+//     orders them through depends_on. It also keeps a containerized copy from
+//     binding the host port a locally-run target owns.
 //   - Compose services without a profile are infrastructure (databases,
 //     mailservers): always brought up, never run as targets.
-//   - A target with a healthcheck (compose or Dockerfile) is a long-runner;
-//     one without is a one-shot. One-shots run to completion on infra-up and
-//     must be idempotent — they re-run on every infra-up cycle.
+//   - A target with a healthcheck, in compose or in the Dockerfile, is a
+//     long-runner; one without is a one-shot. One-shots run to completion on
+//     infra-up and must be idempotent, since every infra-up cycle re-runs them.
 //   - Sibling services are never declared in each other's compose files. Each
 //     service describes only its own infra; cross-service connections resolve
 //     through daemon-allocated env (<SIBLING>_<VAR> references).
@@ -29,8 +27,6 @@
 //     allocates or derives (ports, hosts, URLs, DSNs) appear as ${VAR}
 //     references the daemon fills.
 //
-// Discovery is deliberately strict: contract violations surface as errors at
-// daemon startup, so misconfigurations never become runtime surprises. The
-// one place it is lenient is healthcheck classification — see the kind
-// derivation in discovery.go for why.
+// Discovery is strict: a contract violation surfaces as an error at daemon
+// startup, so a misconfiguration never becomes a runtime surprise.
 package discovery

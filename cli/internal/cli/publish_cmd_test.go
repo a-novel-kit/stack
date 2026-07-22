@@ -206,7 +206,7 @@ func TestResolveStampTargets(t *testing.T) {
 	}
 
 	// a literal filename containing glob metacharacters resolves to itself,
-	// not to whatever the brackets would match as a pattern.
+	// with the brackets taken literally.
 	weird := filepath.Join(dir, "weird[1].yaml")
 	got, err = resolveStampTargets([]string{weird})
 	if err != nil || len(got) != 1 || got[0] != weird {

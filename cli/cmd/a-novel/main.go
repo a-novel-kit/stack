@@ -1,14 +1,11 @@
-// Command a-novel is the A-Novel storyverse build tool: a single, branded CLI
-// for local development. It runs standalone capabilities (test, build, publish)
-// and fronts a long-lived background daemon that supervises run targets —
-// `a-novel core start` brings it up, and the daemon-backed verbs (`ps`,
-// `start`, `kill`, `logs`, `env`, `volume`, ...) talk to it over a unix socket
-// via connect-rpc.
+// Command a-novel is the A-Novel storyverse build tool: a single CLI for local
+// development. It runs standalone capabilities such as test and build, and
+// fronts a long-lived background daemon that supervises run targets. The
+// daemon-backed verbs reach it over a unix socket via connect-rpc.
 //
-// Dispatch is Cobra-based: every subcommand is a *cobra.Command attached to
-// the root. The standalone `test` and `build` commands are wrapped via
-// internal/cli's LegacyHandlers because they run their own flag parsers rather
-// than Cobra's.
+// Dispatch is Cobra-based: every subcommand is a *cobra.Command attached to the
+// root. The standalone `test` and `build` commands are wrapped via
+// internal/cli's LegacyHandlers because they run their own flag parsers.
 package main
 
 import (
@@ -45,58 +42,49 @@ const (
 	exitAborted = 130 // user interrupted before completing a run (128+SIGINT)
 )
 
-// cmdTest is the test subcommand name, which also happens to be the `go test`
-// subcommand token — one constant for both readings.
+// cmdTest is the test subcommand name, shared with the `go test` subcommand
+// token.
 const cmdTest = "test"
 
 func main() {
-	// Pin the compose provider for every `podman compose` this CLI runs, so a
-	// machine that also has docker-compose installed never has it silently
-	// selected — `podman compose` prefers docker-compose when present, which
-	// would drag in the Docker-compatible socket. Scoped to this process tree,
-	// not the developer's shell: the daemon re-exec runs main() too (so it sets
-	// this in its own env) and every compose call builds its env from
-	// os.Environ. Also silence the provider banner so it doesn't clutter
-	// captured compose output.
+	// Pin the compose provider for every `podman compose` this CLI runs:
+	// `podman compose` prefers docker-compose when it is installed, which drags
+	// in the Docker-compatible socket. The setting stays inside this process
+	// tree — the daemon re-exec runs main() too, and every compose call builds
+	// its env from os.Environ. The second variable silences the provider banner
+	// so it stays out of captured compose output.
 	_ = os.Setenv("PODMAN_COMPOSE_PROVIDER", "podman-compose")
 	_ = os.Setenv("PODMAN_COMPOSE_WARNING_LOGS", "false")
 
-	// The standalone test/build commands are wrapped so Cobra dispatches to
-	// their implementations in this file; they parse their own flags, which
-	// Cobra can't own directly.
 	root := anovelcli.NewRoot(anovelcli.LegacyHandlers{
 		Test:  legacyTest,
 		Build: legacyBuild,
 	})
 	err := root.Execute()
 
-	// Best-effort "newer release available" notice after any foreground
-	// command (interactive or not). Skipped for the detached daemon re-exec,
-	// which is long-lived and has no user to notify. Writes to stderr so it
-	// never corrupts stdout that callers parse / eval (e.g. `run env`).
+	// Best-effort "newer release available" notice, skipped for the detached
+	// daemon re-exec, which has no user to notify. It goes to stderr so it never
+	// corrupts stdout that callers parse or eval (e.g. `run env`).
 	if !anovelcli.IsDaemonReexec(os.Args) {
 		update.Notify(os.Stderr, version.String())
 	}
 
 	if err != nil {
-		// internal/cli's ExitError carries the legacy commands' explicit
-		// exit code through Cobra's error path so we preserve it here.
+		// ExitError carries a legacy command's explicit exit code through
+		// Cobra's error path.
 		var exitErr *anovelcli.ExitError
 		if errors.As(err, &exitErr) {
 			os.Exit(exitErr.Code)
 		}
-		// Cobra has already printed its own error (with SilenceUsage we
-		// don't dump usage on every failure — too noisy for the
-		// daemon-backed verbs that report their own errors).
+		// Cobra already printed the error, and SilenceUsage keeps the usage
+		// dump out of every failure.
 		os.Exit(exitFailure)
 	}
 	os.Exit(exitOK)
 }
 
-// legacyTest runs the `test` capability path, including its own -h/--help
-// interception. Wrapping it this way keeps Cobra's command tree (and its
-// `--help` for the verb header) from fighting the flag parsing inside
-// runCapability.
+// legacyTest runs the `test` capability path, intercepting -h/--help before it
+// reaches runCapability's own flag parsing.
 func legacyTest(args []string) int {
 	if wantsHelp(args) {
 		fmt.Println(ui.CommandHelpView(version.String(), cmdTest))
@@ -113,10 +101,9 @@ func legacyBuild(args []string) int {
 	return runCapability(args, ui.VerbBuild, detect.Detect)
 }
 
-// wantsHelp reports whether a build/test invocation is a request for that
-// command's help. Help is always the -h/--help flag (the universal CLI
-// convention); the bare word form is intentionally not accepted — use
-// `a-novel help <command>` for the command-style entry point.
+// wantsHelp reports whether a build/test invocation asks for that command's
+// help. Only the -h/--help flags count; `a-novel help <command>` is the
+// command-style entry point.
 func wantsHelp(args []string) bool {
 	for _, a := range args {
 		if a == "-h" || a == "--help" {
@@ -126,8 +113,7 @@ func wantsHelp(args []string) bool {
 	return false
 }
 
-// buildOpts is the parsed `build` / `test` invocation. (`a-novel run` is a
-// separate daemon-backed surface with its own flags.)
+// buildOpts is the parsed `build` / `test` invocation.
 type buildOpts struct {
 	dir      string
 	types    map[detect.Kind]bool // nil means "all kinds"
@@ -140,9 +126,8 @@ type buildOpts struct {
 	keep     bool          // reuse a still-healthy test env across runs (skip teardown, no re-initdb)
 }
 
-// parseBuildArgs hand-parses the small, fixed `build` flag set. A bespoke
-// parser keeps the short/long flag pairs first-class without the stdlib flag
-// package's awkward dual registration.
+// parseBuildArgs hand-parses the small, fixed `build` flag set, keeping each
+// short/long flag pair first-class.
 func parseBuildArgs(args []string) (buildOpts, error) {
 	opts := buildOpts{dir: ".", timeout: 10 * time.Minute, coverage: true}
 
@@ -257,8 +242,8 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 		return exitOK
 	}
 
-	// The scan directory must exist and be a directory — fail clearly rather
-	// than silently finding nothing in a path that isn't there.
+	// Fail clearly on a path that is missing or not a directory, so a bad --dir
+	// never looks like an empty scan.
 	absDir, _ := filepath.Abs(opts.dir)
 	if info, statErr := os.Stat(opts.dir); statErr != nil || !info.IsDir() {
 		fmt.Fprintf(os.Stderr, "a-novel %s: cannot scan %q: not an accessible directory\n",
@@ -266,9 +251,8 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 		return exitUsage
 	}
 
-	// Fail fast (no filesystem walk) when not inside an a-novel / a-novel-kit
-	// git repository — this is what makes an invalid directory error almost
-	// instantly instead of triggering a deep scan.
+	// Fail before any filesystem walk when the directory sits outside an
+	// a-novel / a-novel-kit git repository, so a wrong path errors instantly.
 	if guardErr := detect.RepoGuard(opts.dir); guardErr != nil {
 		fmt.Fprintf(os.Stderr, "a-novel %s: %v\n", verb.Base, guardErr)
 		return exitUsage
@@ -286,8 +270,8 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 		targets = withCoverage(targets)
 	}
 
-	// Nothing to do is an error, not a silent success: a caller (or CI) that
-	// expected targets here needs to know none were found and why.
+	// An empty selection exits non-zero: a caller expecting targets needs to
+	// know none were found, and where the scan looked.
 	if len(targets) == 0 {
 		scope := ""
 		if opts.types != nil {
@@ -309,18 +293,17 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Wrap with a cancel that fires on every return path. Quitting the TUI
-	// with q/esc tears down the program but not the build goroutines; cancel()
-	// here propagates into exec.CommandContext so no subprocess outlives the
-	// CLI. On a clean finish builds are already done, so this is a no-op.
+	// Quitting the TUI with q/esc tears down the program but leaves the build
+	// goroutines running; cancelling on every return path propagates into
+	// exec.CommandContext so no subprocess outlives the CLI.
 	ctx, cancel := context.WithCancel(sigCtx)
 	defer cancel()
 
-	// The TUI needs a real terminal. Without one (CI, pipes), or with -y,
-	// fall back to the non-interactive runner — same builds, plain report.
+	// The TUI needs a real terminal. Without one, or with -y, fall back to the
+	// non-interactive runner.
 	interactive := !opts.yes && term.IsTerminal(os.Stdout.Fd())
 
-	// Fail-safe: never run on top of a test env left up by an aborted run.
+	// Never run on top of a test env left up by an aborted run.
 	if code := preflight(ctx, verb, targets, interactive && term.IsTerminal(os.Stdin.Fd()), opts.keep); code >= 0 {
 		return code
 	}
@@ -329,12 +312,10 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 		return runNonInteractive(ctx, verb, targets, opts.timeout, opts.keep)
 	}
 
-	// Run the whole interactive flow in the alternate screen buffer. On quit
-	// the alt-screen is torn down and its last frame (the in-TUI report) is
-	// discarded — leaving exactly one report: the authoritative full-log one
-	// we print below to the normal buffer. Without alt-screen, Bubble Tea
-	// leaves its final frame on screen and we'd print the report a second
-	// time underneath it (the "results appear twice" bug).
+	// The interactive flow runs in the alternate screen buffer, so quitting
+	// discards its last frame and the full-log report printed below to the
+	// normal buffer is the only one left. Without alt-screen Bubble Tea keeps
+	// its final frame on screen and the results appear twice.
 	model := ui.New(ctx, version.String(), verb, targets, opts.jobs, opts.timeout, opts.keep)
 	final, err := tea.NewProgram(model).Run()
 	if err != nil {
@@ -349,8 +330,8 @@ func runCapability(args []string, verb ui.Verb, detectFn func(string) ([]detect.
 	}
 	results := m.Results()
 
-	// The in-TUI report only shows a tail; this is the single, full-log copy
-	// that survives in scrollback.
+	// The in-TUI report shows only a tail; this full-log copy survives in
+	// scrollback.
 	if len(results) > 0 {
 		fmt.Print(ui.RenderTextReport(results, m.Aborted(), m.Elapsed(), verb))
 	}
@@ -383,9 +364,8 @@ func runNonInteractive(ctx context.Context, verb ui.Verb, targets []detect.Targe
 		}
 	}
 
-	// On abort the remaining targets never ran: surface them as failures so
-	// the report accounts for every selected target, not just the ones that
-	// finished before the interruption.
+	// On abort, record the targets that never ran as failures so the report
+	// accounts for every selected target.
 	if aborted {
 		done := make(map[string]bool, len(results))
 		for _, r := range results {
@@ -405,11 +385,11 @@ func runNonInteractive(ctx context.Context, verb ui.Verb, targets []detect.Targe
 	return exitCodeFor(results, aborted)
 }
 
-// preflight is the fail-safe against running on top of a test env left up by
-// an aborted command. It returns -1 to proceed, or an exit code to return.
-// "Clean" and "abort" both tear down ONLY the conflicting projects (scoped
-// `compose down --volume`, never a global podman wipe); clean continues,
-// abort stops. Non-interactive can't ask, so it self-cleans and aborts.
+// preflight guards against running on top of a test env left up by an aborted
+// command. It returns -1 to proceed, or an exit code for the caller to return.
+// Both answers to the prompt tear down only the conflicting projects, through a
+// scoped `compose down --volume`; clean then continues and abort stops. Without
+// a TTY to prompt, it cleans and continues.
 func preflight(ctx context.Context, verb ui.Verb, targets []detect.Target, canPrompt, keep bool) int {
 	conflicts := build.EnvConflicts(ctx, targets)
 	if len(conflicts) == 0 {
@@ -417,10 +397,10 @@ func preflight(ctx context.Context, verb ui.Verb, targets []detect.Target, canPr
 	}
 
 	if keep {
-		// --keep: a leftover env is expected and desired, not a conflict —
-		// adopt it so this run reuses its warm containers + volume (no postgres
-		// re-init). composeUpPhased is idempotent, so it reconciles anything
-		// that drifted. The prior schema/data persists (the --keep trade-off).
+		// With --keep a leftover env is the point: adopt it so this run reuses
+		// its warm containers and volume and skips the Postgres re-init. Bring-up
+		// is idempotent and reconciles whatever drifted, while the previous
+		// schema and data persist.
 		fmt.Fprintln(os.Stderr, ui.EnvNote(
 			"Reusing the existing test environment (--keep); its data and schema "+
 				"persist from the previous run."))
@@ -438,8 +418,7 @@ func preflight(ctx context.Context, verb ui.Verb, targets []detect.Target, canPr
 	}
 
 	if !canPrompt {
-		// No TTY to prompt — "clean" is the automatic choice so CI / piped
-		// runs self-heal: tear the stale (scoped) env down and continue.
+		// Without a TTY, clean automatically so CI and piped runs self-heal.
 		fmt.Fprintln(os.Stderr, ui.EnvNote(
 			"No prompt available — cleaning the stale environment "+
 				"(scoped to this project only) and continuing."))
@@ -481,19 +460,16 @@ func filterTypes(targets []detect.Target, types map[detect.Kind]bool) []detect.T
 	return out
 }
 
-// covExclude matches package import paths that must not count toward coverage:
-// generated mocks, test-support trees, and generated protobuf code, none of
-// which represent product code whose coverage is meaningful.
+// covExclude matches package import paths excluded from coverage: generated
+// mocks, test-support trees, and generated protobuf code.
 var covExclude = regexp.MustCompile(`/(mocks|test|protogen)(/|$)`)
 
-// withCoverage rewrites every Go test target for coverage mode: it expands the
-// `./…` selector via `go list`, drops the excluded folders, and runs
-// `go test -cover` over the explicit, filtered package list — so the reported
-// percentages are not diluted by mocks/test/protogen. If `go list` fails it
-// falls back to `-cover` over the original selector (better some coverage than
-// none). pnpm test targets get `-- --coverage` appended, forwarding
-// --coverage to the underlying vitest (its v8 text reporter then prints a
-// coverage table the report extracts verbatim).
+// withCoverage rewrites every test target for coverage mode. A Go target
+// expands its `./…` selector via `go list` and runs `go test -cover` over the
+// filtered package list, so the folders covExclude matches never dilute the
+// percentage; when `go list` fails, the original selector just gains `-cover`.
+// A pnpm target gets `-- --coverage`, and vitest's v8 text reporter then prints
+// a coverage table the report extracts verbatim.
 func withCoverage(targets []detect.Target) []detect.Target {
 	for i := range targets {
 		t := &targets[i]
@@ -505,10 +481,9 @@ func withCoverage(targets []detect.Target) []detect.Target {
 			sel := pkgAllSelector(t.Args)
 			pkgs := goListFiltered(t.Dir, sel)
 			if len(pkgs) > 0 {
-				// Keep -count=1 only for env-backed targets (their Postgres
-				// state is invisible to Go's cache — see detect/tests.go);
-				// env-less coverage runs stay cacheable. -cover results cache
-				// just like plain runs.
+				// Env-backed targets need -count=1: their Postgres state is
+				// invisible to Go's test cache. Env-less runs stay cacheable,
+				// and -cover results cache like plain ones.
 				base := []string{cmdTest, "-cover"}
 				if t.Env != nil {
 					base = append(base, "-count=1")
@@ -518,7 +493,7 @@ func withCoverage(targets []detect.Target) []detect.Target {
 				t.Detail = "go test -cover (" + strconv.Itoa(len(pkgs)) +
 					" pkg, excl. mocks/test/protogen)"
 			} else {
-				// Fallback: keep the original flags/selector, just add -cover.
+				// Keep the original flags and selector, adding only -cover.
 				t.Args = append([]string{cmdTest, "-cover"}, t.Args[1:]...)
 				t.Detail = "go test -cover " + sel
 			}

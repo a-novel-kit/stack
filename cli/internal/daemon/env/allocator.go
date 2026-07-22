@@ -7,20 +7,18 @@ import (
 	"sync"
 )
 
-// Allocator picks free host ports for `*_PORT` env variables and tracks
-// refcounts so an allocation is freed only when its last consumer
-// terminates. Local-dev convention: ephemeral range, kernel-assigned, no
-// fixed pool.
+// An Allocator picks free host ports for `*_PORT` env variables and refcounts
+// them, freeing an allocation once its last consumer terminates. Ports come
+// from the kernel-assigned ephemeral range, with no fixed pool.
 //
-// The (ownerService, localVar) tuple is the unique key. Cross-service
-// references resolve by looking up the owner's allocation; the consumer
-// is added to the refs list without taking a separate slot.
+// The (ownerService, localVar) tuple keys a slot. A cross-service reference
+// resolves to the owner's allocation and joins its refs without taking a slot
+// of its own.
 type Allocator struct {
 	mu    sync.RWMutex
 	slots map[string]*portSlot // key: ownerService + "/" + localVar
-	// services is the list of every known service name, longest-first
-	// (so resolveOwner picks the most specific match). Populated by
-	// SetServices at daemon-start.
+	// services holds every known service name, longest-first so resolveOwner
+	// picks the most specific match. SetServices populates it at daemon start.
 	services []string
 }
 
@@ -28,8 +26,8 @@ type portSlot struct {
 	owner    string
 	localVar string
 	port     int
-	// Set of target IDs currently consuming this allocation. Map for O(1)
-	// add/remove and natural dedup if a target somehow lands twice.
+	// refs holds the target IDs consuming this allocation, as a set so a
+	// repeated claim collapses.
 	refs map[string]struct{}
 }
 
@@ -39,10 +37,9 @@ func NewAllocator() *Allocator {
 	return &Allocator{slots: make(map[string]*portSlot)}
 }
 
-// SetServices registers the universe of service names the allocator
-// should recognize as cross-service prefixes. Sorts longest-first so
-// shadowing (e.g., `service-template-extra` vs `service-template`)
-// resolves to the longer name.
+// SetServices registers the service names the allocator recognizes as
+// cross-service prefixes. It sorts them longest-first, so a name that shadows a
+// shorter one — `service-template-extra` over `service-template` — wins.
 func (a *Allocator) SetServices(names []string) {
 	cp := append([]string(nil), names...)
 	sort.Slice(cp, func(i, j int) bool {
@@ -56,9 +53,8 @@ func (a *Allocator) SetServices(names []string) {
 	a.mu.Unlock()
 }
 
-// Services returns a snapshot of the registered service names. Read-only
-// helper for callers that need to resolve owners without grabbing the
-// internal lock.
+// Services returns a snapshot of the registered service names, for callers that
+// resolve owners outside the allocator's lock.
 func (a *Allocator) Services() []string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -94,14 +90,11 @@ func (a *Allocator) Acquire(owner, localVar, consumer string) (int, error) {
 	return port, nil
 }
 
-// Reserve records (owner, localVar) → port WITHOUT consulting the
-// kernel. Used by adoption: when the daemon restarts and finds an
-// already-running infra container with port mapping host:N → container:5432,
-// it calls Reserve to re-seed the slot so subsequent Acquire calls (e.g.,
-// for the one-shot migrations target) return the same host port the
-// running container is bound to. Idempotent for matching (owner,
-// localVar, port); refuses to overwrite a conflicting port already
-// recorded (returns the existing port instead).
+// Reserve records (owner, localVar) → port without consulting the kernel.
+// Adoption uses it: a daemon restarting onto an already-running infra container
+// re-seeds the slot from that container's host mapping, so later Acquire calls
+// hand back the port the container is bound to. An existing slot keeps its own
+// port, which Reserve then returns.
 func (a *Allocator) Reserve(owner, localVar string, port int, consumer string) int {
 	if !isAllocatedKind(localVar) {
 		return 0
@@ -110,8 +103,7 @@ func (a *Allocator) Reserve(owner, localVar string, port int, consumer string) i
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if slot, ok := a.slots[key]; ok {
-		// Existing slot wins — caller's port is informational. Add the
-		// consumer ref.
+		// The existing slot wins; the caller's port is informational.
 		slot.refs[consumer] = struct{}{}
 		return slot.port
 	}
@@ -124,9 +116,9 @@ func (a *Allocator) Reserve(owner, localVar string, port int, consumer string) i
 	return port
 }
 
-// Lookup returns the current port for (owner, localVar) WITHOUT
-// allocating. Returns (0, false) if no slot exists. Used by the Builder
-// for the read-only ForService path (`a-novel run env`).
+// Lookup returns the current port for (owner, localVar) without allocating, and
+// (0, false) when no slot exists. The Builder uses it on the read-only
+// ForService path behind `a-novel run env`.
 func (a *Allocator) Lookup(owner, localVar string) (int, bool) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -137,9 +129,8 @@ func (a *Allocator) Lookup(owner, localVar string) (int, bool) {
 	return slot.port, true
 }
 
-// Release decrements every slot the given consumer was holding. A slot
-// whose refcount hits zero is removed (its port returned to the
-// ephemeral pool simply by virtue of nobody binding it). Idempotent.
+// Release drops the given consumer from every slot it holds, removing a slot
+// once its last ref is gone and leaving its port unbound. It is idempotent.
 func (a *Allocator) Release(consumer string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -189,10 +180,10 @@ type Allocation struct {
 	Refs     []string
 }
 
-// pickFreePort asks the kernel for a free ephemeral port by binding to
-// :0 and reading back what was assigned. There's a small race window
-// between Close and the caller's bind, where another process could grab
-// the same port — acceptable for local dev.
+// pickFreePort asks the kernel for a free ephemeral port by binding to :0 and
+// reading back what was assigned. Another process can claim the same port in
+// the window between the close here and the caller's bind, which is acceptable
+// for local dev.
 func pickFreePort() (int, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

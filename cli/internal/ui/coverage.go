@@ -14,14 +14,13 @@ import (
 )
 
 // coverRe matches the per-package line `go test -cover` prints, e.g.
-// "ok  pkg  0.12s  coverage: 78.3% of statements". That exact phrase is
-// emitted ONLY by go test -cover — podman/compose/setup-env output and
-// pnpm/vitest output never contain it.
+// "ok  pkg  0.12s  coverage: 78.3% of statements". Only go test -cover emits
+// that exact phrase, so it never matches podman, compose or pnpm output.
 var coverRe = regexp.MustCompile(`coverage:\s+([0-9.]+)%\s+of statements`)
 
-// vitestHeader matches the header row of vitest's v8 text coverage table; its
-// "% Stmts" + "% Lines" pair is unique to that table — env-spin / go output
-// never has it, so it reliably anchors the node coverage block.
+// vitestHeader matches the header row of vitest's v8 text coverage table. Its
+// "% Stmts" and "% Lines" pair is unique to that table, so it reliably anchors
+// the node coverage block.
 var vitestHeader = regexp.MustCompile(`%\s*Stmts.*%\s*Lines`)
 
 // tableRow reports whether a line is part of a vitest pipe table (a data/

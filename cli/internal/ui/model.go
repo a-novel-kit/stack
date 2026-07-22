@@ -1,7 +1,6 @@
 // Package ui is the Bubble Tea front-end shared by `a-novel build`, `test`, and
-// `run`: a branded, keyboard-driven flow of three phases — select targets, run
-// them, read the report. lipgloss handles all presentation; this file owns the
-// state machine.
+// `run`: a keyboard-driven flow of three phases — select targets, run them,
+// read the report. This file owns the state machine.
 package ui
 
 import (
@@ -42,11 +41,10 @@ const (
 
 type row struct {
 	kind rowKind
-	// groupKey is the opaque group identifier this row belongs to. For
-	// kind-grouping (build/test) it is the Kind string ("go"/"pnpm"/...). For
-	// service-grouping (run, multi-service) it is the service name. Both
-	// rowGroup (heading) and rowTarget (member) carry it, so toggling /
-	// counting / labeling all key off the same value regardless of mode.
+	// groupKey identifies the group this row belongs to: the Kind string
+	// ("go"/"pnpm"/...) under kind-grouping (build/test), the service name
+	// under service-grouping (run). Headings and members carry the same
+	// value, so toggling, counting and labeling key off it in either mode.
 	groupKey string
 	target   int // index into Model.targets when kind == rowTarget
 }
@@ -71,48 +69,36 @@ type Model struct {
 	queue   []detect.Target // resolved selection, dispatch order
 	results []build.Result  // completion order (as each finishes)
 
-	// Parallel run state. maxPar bounds how many builds run at once; procs is
-	// the GOMAXPROCS handed to each spawned target (NumCPU/maxPar) so the
-	// concurrent go-test targets share the machine rather than each grabbing
-	// every core; nextIdx is the next queue entry to dispatch; running maps an
-	// in-flight target's ID to when it started (for its live timer).
-	maxPar  int
-	procs   int
-	keep    bool           // leave env-backed targets' compose envs up after the run
-	timeout time.Duration  // per-target deadline (0 = none)
-	live    *build.LiveLog // shared latest-line tail (pointer; survives value copies)
-	nextIdx int
-	running map[string]time.Time
+	maxPar  int                  // how many builds run at once
+	procs   int                  // GOMAXPROCS given to each spawned target (NumCPU/maxPar), so concurrent go-test targets share the machine
+	keep    bool                 // leave env-backed targets' compose envs up after the run
+	timeout time.Duration        // per-target deadline (0 = none)
+	live    *build.LiveLog       // shared latest-line tail (pointer; survives value copies)
+	nextIdx int                  // next queue entry to dispatch
+	running map[string]time.Time // in-flight target ID to start time, for its live timer
 
-	// Wall-clock run timing: runStart is stamped when the first build is
-	// dispatched; runElapsed is frozen when the last one finishes. The report
-	// shows runElapsed as "took" — under parallelism the sum of per-target
-	// durations would badly overstate how long the user actually waited.
-	runStart   time.Time
-	runElapsed time.Duration
+	// Wall-clock run timing. The report shows runElapsed as "took", the wait
+	// the user actually sat through with targets running in parallel.
+	runStart   time.Time     // stamped when the first build is dispatched
+	runElapsed time.Duration // frozen when the last build finishes
 
 	width   int
 	aborted bool // true if the user ctrl+c'd mid-run
 
 	// selectOnly makes the model a pure target picker: `enter` records the
-	// selection and quits instead of starting the build pool. `run` uses this
-	// so it shares build/test's exact selection UI, then hands the chosen
-	// targets to its own long-lived dashboard.
+	// selection and quits. `run` uses it to share build/test's selection UI,
+	// then drives the chosen targets from its own dashboard.
 	selectOnly bool
 
-	// runModeLabel is the resolved run mode ("container" / "live"), surfaced
-	// in the SELECT TARGETS title so it is unambiguous which list the user
-	// is looking at. Empty for build/test pickers.
+	// runModeLabel is the resolved run mode ("container" / "live"), shown in
+	// the select-targets title. Empty for build/test pickers.
 	runModeLabel string
 }
 
-// New builds a Model from discovered targets. Every target starts selected —
-// the common case is "build everything", and opting out is one keystroke.
+// New builds a Model from discovered targets, with every target selected.
 //
-// jobs is the maximum number of builds to run concurrently once the user
-// confirms; jobs <= 0 means the resource-aware default (see defaultJobs).
-// Parallelism is interactive-only; the non-interactive path stays strictly
-// sequential by design.
+// jobs bounds how many builds run concurrently once the user confirms;
+// jobs <= 0 picks the resource-aware default (see defaultJobs).
 func New(ctx context.Context, version string, verb Verb, targets []detect.Target, jobs int, timeout time.Duration, keep bool) Model {
 	if jobs <= 0 {
 		jobs = defaultJobs()
@@ -120,16 +106,15 @@ func New(ctx context.Context, version string, verb Verb, targets []detect.Target
 	if jobs < 1 {
 		jobs = 1
 	}
-	// Split the machine's cores across the concurrent targets so N parallel
-	// `go test` runs use ≈ NumCPU threads in total instead of N × NumCPU.
+	// Split the machine's cores across the concurrent targets, so N parallel
+	// `go test` runs use ≈ NumCPU threads in total.
 	procs := max(1, runtime.NumCPU()/jobs)
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(colBrand)
 
-	// Default selection: everything on, minus a small hand-curated set of
-	// services that start off in a global (multi-service) run — see
-	// defaultOffByService.
+	// Everything starts selected, except the services defaultOffByService
+	// holds back in a global (multi-service) run.
 	distinctSvc := map[string]bool{}
 	for _, t := range targets {
 		distinctSvc[t.Service] = true
@@ -162,24 +147,21 @@ func New(ctx context.Context, version string, verb Verb, targets []detect.Target
 // defaultJobs is the resource-aware parallelism used when the user passes no
 // -j. NumCPU/4 (min 2) keeps a multi-target run from serializing on a big box
 // while leaving headroom: paired with the per-target GOMAXPROCS cap
-// (NumCPU/jobs) the concurrent go-test targets stay within ≈ NumCPU threads,
-// and only a handful boot their container constellations at once — a large
-// drop from the old NumCPU default (e.g. 8 not 32 on a 32-core machine).
+// (NumCPU/jobs), concurrent go-test targets stay within ≈ NumCPU threads and
+// only a handful boot their container constellations at once.
 func defaultJobs() int {
 	return max(2, runtime.NumCPU()/4)
 }
 
-// defaultOffByService lists the run-mode services that start UNSELECTED when
-// the picker opens in global mode. Kept small: service-template is boilerplate
-// / fixture, not something a stack-root run should include unless asked for
-// explicitly.
+// defaultOffByService holds the run-mode services that start unselected when
+// the picker opens in global mode. service-template is a fixture, so a
+// stack-root run includes it only when asked for explicitly.
 var defaultOffByService = map[string]bool{
 	"service-template": true,
 }
 
-// defaultOffInGlobal reports whether a target should be DESELECTED by default
-// — only fires for the run verb in multi-service (global) scope; single-repo
-// runs and build/test runs always start with everything selected.
+// defaultOffInGlobal reports whether a target starts deselected, which happens
+// only for the run verb in multi-service (global) scope.
 func defaultOffInGlobal(verb Verb, multiService bool, t detect.Target) bool {
 	if verb.Base != VerbRun.Base || !multiService {
 		return false
@@ -187,11 +169,10 @@ func defaultOffInGlobal(verb Verb, multiService bool, t detect.Target) bool {
 	return defaultOffByService[t.Service]
 }
 
-// NewSelect builds a target picker that reuses build/test's exact selection
-// UI, then quits on `enter` returning the chosen targets via [Model.Selected].
-// It carries no run state (no ctx/jobs/timeout) — `run` drives the actual
-// processes itself. `runMode` ("container" / "live" / "") is displayed in
-// the picker title so the user can tell at a glance which list this is.
+// NewSelect builds a target picker that reuses build/test's selection UI, then
+// quits on `enter` returning the chosen targets via [Model.Selected]. It
+// carries no run state — `run` drives the processes itself. runMode
+// ("container" / "live" / "") appears in the picker title.
 func NewSelect(version string, verb Verb, runMode string, targets []detect.Target) Model {
 	m := New(context.Background(), version, verb, targets, 1, 0, false)
 	m.selectOnly = true
@@ -203,9 +184,8 @@ func NewSelect(version string, verb Verb, runMode string, targets []detect.Targe
 // aborted or nothing was picked). Pair with [Model.Aborted].
 func (m Model) Selected() []detect.Target { return m.queue }
 
-// groupByService is the picker grouping mode for the run verb — multiple
-// services in scope (global run) means the user wants services as the
-// top-level grouping, not kinds. build/test keep kind-grouping.
+// groupByService reports whether the picker groups rows by service, which the
+// run verb does; build/test group by kind.
 func (m Model) groupByService() bool {
 	return m.verb.Base == VerbRun.Base
 }
@@ -220,9 +200,8 @@ func (m Model) groupOfTarget(t detect.Target) string {
 }
 
 // buildRows flattens the sorted targets into displayable rows, inserting a
-// group heading whenever the group key changes. The slice is already sorted
-// such that group members are consecutive (service-first sort for run,
-// kind-first for build/test — see detect's sort).
+// group heading whenever the group key changes. Targets arrive sorted so that
+// group members are consecutive.
 func (m Model) buildRows() []row {
 	var rows []row
 	last := ""
@@ -237,12 +216,13 @@ func (m Model) buildRows() []row {
 	return rows
 }
 
-// Results / Aborted expose terminal state so the caller can print an
-// authoritative plain-text report (with full logs) after the TUI tears down.
-// Results are returned in queue (dispatch) order, not completion order, so the
-// report is deterministic regardless of which parallel build finished first.
+// Results is the outcome of every queued target, in queue (dispatch) order so
+// the report reads the same run to run. Callers print an authoritative
+// plain-text report from it, with full logs, after the TUI tears down.
 func (m Model) Results() []build.Result { return m.orderedResults() }
-func (m Model) Aborted() bool           { return m.aborted }
+
+// Aborted reports whether the user interrupted the run.
+func (m Model) Aborted() bool { return m.aborted }
 
 // Elapsed is the real wall-clock run time: frozen when the run completed, or
 // measured to now if it was aborted mid-flight. Zero if no build ever started.
@@ -258,11 +238,9 @@ func (m Model) Elapsed() time.Duration {
 }
 
 // orderedResults sorts a copy of the completion-ordered results back into the
-// queue order the user saw at selection time. When the run was aborted, every
-// queued target that never produced a result (in-flight when killed, or never
-// started) is surfaced as a failed result — an abort leaves no work silently
-// unaccounted for; its in-flight output was lost with the killed goroutine, so
-// it reads as a failure with no captured output.
+// queue order the user saw at selection time. After an abort, every queued
+// target that produced no result surfaces as a failure with no captured
+// output, so nothing goes silently unaccounted for.
 func (m Model) orderedResults() []build.Result {
 	pos := make(map[string]int, len(m.queue))
 	for i, t := range m.queue {
@@ -292,10 +270,9 @@ func (m Model) orderedResults() []build.Result {
 
 func (m Model) Init() tea.Cmd { return nil }
 
-// buildCmd runs one target off the Bubble Tea event loop. Each runs in its own
-// goroutine (Bubble Tea spawns a goroutine per Cmd), so several of these in a
-// tea.Batch execute in parallel; output is captured per-result so the
-// interleaving on disk never reaches the screen.
+// buildCmd runs one target off the Bubble Tea event loop. Bubble Tea spawns a
+// goroutine per command, so several of these in a tea.Batch execute in
+// parallel; each captures its own output, keeping the interleaving off screen.
 func (m Model) buildCmd(t detect.Target) tea.Cmd {
 	ctx := m.ctx
 	timeout := m.timeout
@@ -308,9 +285,9 @@ func (m Model) buildCmd(t detect.Target) tea.Cmd {
 }
 
 // dispatch starts as many queued targets as spare capacity allows (keeping
-// len(running) <= maxPar) and returns their commands batched. It mutates the
-// receiver, so call it via pointer on a model about to be returned from
-// Update. Returns nil when nothing new could start.
+// len(running) <= maxPar) and returns their commands batched, or nil when
+// nothing could start. It mutates the receiver, so call it on a model about to
+// be returned from Update.
 func (m *Model) dispatch() tea.Cmd {
 	var cmds []tea.Cmd
 	for len(m.running) < m.maxPar && m.nextIdx < len(m.queue) {
@@ -357,8 +334,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// Key names as Bubble Tea's KeyMsg.String() reports them — named so the
-// literals are not repeated across the three phase handlers.
+// Key names as Bubble Tea's KeyPressMsg.String() reports them.
 const (
 	keyCtrlC = "ctrl+c"
 	keyEsc   = "esc"
@@ -411,8 +387,7 @@ func (m Model) handleSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.cursor++
 		}
 
-	// Bubble Tea v2 reports the spacebar as "space" (not " ") from
-	// KeyPressMsg.String(); match that so space still toggles selection.
+	// Bubble Tea v2 reports the spacebar as "space" from KeyPressMsg.String().
 	case "space", "x":
 		m.toggleAt(m.cursor)
 
@@ -442,11 +417,9 @@ func (m Model) handleSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// deps returns the IDs of targets t requires. Every schema-touching target
-// in the same module needs migrations to have run first — that's true in
-// LIVE mode (Go rest/grpc/rotate-keys talking to the DB) and equally in
-// CONTAINER mode (the compose service we're about to start expects an
-// applied schema). migrations itself doesn't pull anything.
+// deps returns the IDs of targets t requires. Every schema-touching target in
+// the same module needs migrations applied first, in live mode and in
+// container mode alike; migrations itself pulls in nothing.
 func (m Model) deps(t detect.Target) []string {
 	if m.verb.Base != VerbRun.Base {
 		return nil
@@ -463,10 +436,9 @@ func (m Model) deps(t detect.Target) []string {
 	return ids
 }
 
-// applyDeps is the selection closure: anything selected drags its
-// dependencies on too. Idempotent and cheap — run after every toggle so a
-// dependency can never be left unselected under a selected dependant (the
-// "always auto-select dependencies" rule).
+// applyDeps closes the selection over dependencies: anything selected drags
+// its dependencies on too. Idempotent and cheap, so it runs after every toggle
+// and a dependency is never left unselected under a selected dependant.
 func (m *Model) applyDeps() {
 	for _, t := range m.targets {
 		if m.selected[t.ID()] {
@@ -488,9 +460,9 @@ func (m *Model) toggleAt(idx int) {
 	m.applyDeps()
 }
 
-// toggleGroup flips a whole group (kind or service): if every member is
-// already selected it clears them, otherwise it selects them all
-// ("ensure on, then off" — predictable regardless of mixed state).
+// toggleGroup flips a whole group: it clears the group when every member is
+// already selected, and selects them all otherwise, which stays predictable
+// under mixed state.
 func (m *Model) toggleGroup(key string) {
 	allOn := true
 	for _, t := range m.targets {
@@ -555,9 +527,9 @@ func (m Model) View() tea.View {
 	case phaseReport:
 		b.WriteString(m.viewReport())
 	}
-	// Bubble Tea v2 makes the alternate screen a property of the View, not a
-	// NewProgram option; every frame opts in so cmd/a-novel's
-	// report-after-teardown flow still discards the TUI's last frame.
+	// Bubble Tea v2 makes the alternate screen a property of the View, so
+	// every frame opts in; the caller's report-after-teardown flow then
+	// discards the TUI's last frame.
 	v := tea.NewView(b.String())
 	v.AltScreen = true
 	return v
@@ -598,9 +570,9 @@ func (m Model) viewSelect() string {
 
 		t := m.targets[r.target]
 		box := glyphUnchecked
-		// No build outcome yet at selection time, so the name uses the default
-		// terminal color (bold when selected, dim when not) — never a kind
-		// color, and never green/red which would falsely imply a result.
+		// Color carries the run outcome. There is none at selection time, so
+		// the name stays in the default terminal color: bold when selected,
+		// dim when not.
 		name := lipgloss.NewStyle().Bold(true).Render(t.Name)
 		if m.selected[t.ID()] {
 			box = styleSel.Render(glyphChecked)
@@ -609,9 +581,9 @@ func (m Model) viewSelect() string {
 			name = styleMuted.Render(t.Name)
 		}
 		loc := relLabel(t.RelDir)
-		// cursor is 2 cols wide ("  " or "▸ "); the extra 2 spaces nest the
-		// target one level under its group heading. The detail line is indented
-		// to sit directly beneath the name (2+2+box+space = 6).
+		// The cursor is 2 columns wide ("  " or "▸ "); the extra 2 spaces nest
+		// the target under its group heading. The detail line indents to 6
+		// (2+2+box+space) so it sits directly beneath the name.
 		fmt.Fprintf(&b, "%s  %s %s %s\n", cursor, box, name, styleMuted.Render(loc))
 		fmt.Fprintf(&b, "      %s\n", styleMuted.Render(t.Detail))
 	}
@@ -628,8 +600,8 @@ func (m Model) viewSelect() string {
 }
 
 // groupCheckbox renders a heading's tri-state checkbox: filled when every
-// member of the group (kind or service) is selected, empty when none are,
-// and a half-filled "partial" glyph (gold, "mixed — look here") otherwise.
+// member is selected, empty when none are, and a gold half-filled glyph when
+// the group is mixed.
 func (m Model) groupCheckbox(key string) string {
 	all, anySel, seen := true, false, false
 	for _, t := range m.targets {
@@ -663,9 +635,9 @@ func (m Model) groupCount(key string) int {
 	return n
 }
 
-// groupLabel is the display name of a group key. For service-grouping (run)
-// it is the service name as-is; for kind-grouping (build/test) it is the
-// pretty Kind label (e.g. "Go modules").
+// groupLabel is the display name of a group key: the service name under
+// service-grouping, the pretty Kind label (e.g. "Go modules") under
+// kind-grouping.
 func (m Model) groupLabel(key string) string {
 	if m.groupByService() {
 		return key
@@ -690,9 +662,9 @@ func (m Model) viewRun() string {
 		b.WriteString("  " + statusLine(res) + "\n")
 	}
 
-	// In-flight targets, in queue order so the list is stable as builds come
-	// and go. Each carries its own live timer (time since it started); the
-	// trailing position keeps the spinner/name columns from shifting.
+	// In-flight targets, in queue order so the list stays stable as builds
+	// come and go. The live timer trails each line, keeping the spinner and
+	// name columns fixed.
 	for _, t := range m.queue {
 		start, ok := m.running[t.ID()]
 		if !ok {
@@ -707,8 +679,8 @@ func (m Model) viewRun() string {
 			styleMuted.Render(relLabel(t.RelDir)),
 			elapsed,
 		)
-		// Most recent output line, dimmed under the target — a brief sense of
-		// what each command is doing so a stalled one is obvious early.
+		// Most recent output line, dimmed under the target, so a stalled
+		// command shows up early.
 		if last := m.live.Line(t.ID()); last != "" {
 			fmt.Fprintf(&b, "    %s\n", styleMuted.Render(clip(last, w-6)))
 		}
@@ -724,9 +696,9 @@ func (m Model) viewRun() string {
 	return b.String()
 }
 
-// statusLine is the one-line completed-target result in the live run view.
-// The kind tag precedes the name and the duration trails the line (matching
-// the in-flight timer's position), so finished rows read
+// statusLine is the one-line completed-target result in the live run view. The
+// kind tag precedes the name and the duration trails the line, matching the
+// in-flight timer's position, so finished rows read
 // "✓ GO     service-json-keys (root) (1.98s)" with no shifting left column.
 func statusLine(r build.Result) string {
 	mark := styleOK.Render(glyphOK)
@@ -744,22 +716,20 @@ func statusLine(r build.Result) string {
 
 func (m Model) viewReport() string {
 	var b strings.Builder
-	// Queue order, not the order parallel builds happened to finish, so the
-	// report is identical run to run.
+	// Queue order keeps the report identical run to run.
 	ordered := m.orderedResults()
 	s := build.Summarize(ordered)
 
-	// Width budget: terminal width minus the 2-space gutter every block sits
-	// under (fall back to the static default before the first WindowSizeMsg).
+	// Terminal width minus the 2-space gutter every block sits under, falling
+	// back to the static default before the first WindowSizeMsg.
 	w := m.width
 	if w <= 0 {
 		w = termWidth()
 	}
 	cw := w - gutter
 
-	// A failed build is the one thing that must grab the eye immediately, so
-	// the headline uses the critical color; the per-failure panels stay the
-	// calmer error orange.
+	// The headline uses the critical color so a failure grabs the eye; the
+	// per-failure panels stay the calmer error orange.
 	headline := styleOK.Render("✓ " + m.verb.Upper + " PASSED")
 	lead := "Every selected target passed."
 	if s.Failed > 0 {
@@ -777,9 +747,7 @@ func (m Model) viewReport() string {
 	if s.Failed > 0 {
 		failColor = colCrit
 	}
-	// indentBlock, not "  "+: the pill row is 3 lines tall, so a string
-	// prefix would only shift the top border and leave the box body at
-	// column 0.
+	// The pill row is 3 lines tall, so indentBlock indents every line of it.
 	b.WriteString(indentBlock(pillRow(
 		pill("passed", strconv.Itoa(s.Passed), colOK),
 		pill("failed", strconv.Itoa(s.Failed), failColor),
@@ -803,8 +771,7 @@ func (m Model) viewReport() string {
 			if res.Success {
 				continue
 			}
-			// tail > 0 → preview; the authoritative full log is printed by
-			// RenderTextReport after the TUI tears down.
+			// A preview; RenderTextReport prints the full log after teardown.
 			b.WriteString("\n" + indentBlock(failurePanel(res, 20, cw)) + "\n")
 		}
 	}

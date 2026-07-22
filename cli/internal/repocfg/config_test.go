@@ -111,10 +111,9 @@ func TestLoadChecks(t *testing.T) {
 	}
 }
 
-// TestResolveBotIntegrations pins the per-org [Agent] app id resolution: the two
-// orgs run separate Apps, so the merge-gate integration must come from each org's
-// profile, never a shared checks.yaml constant. A single hardcoded id would make
-// the required check unsatisfiable on one of the orgs.
+// TestResolveBotIntegrations pins the per-org [Agent] app id resolution. The two
+// orgs run separate Apps, so each org's merge-gate integration comes from its own
+// profile. Only that org's own app id can satisfy its required check.
 func TestResolveBotIntegrations(t *testing.T) {
 	t.Parallel()
 	cases := map[string]int64{"a-novel": 3549319, "a-novel-kit": 3549379}

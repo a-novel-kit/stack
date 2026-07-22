@@ -44,9 +44,8 @@ func TestRenderSummary(t *testing.T) {
 }
 
 // TestRenderSummaryOmitsRetiredRulesets guards the summary against announcing a
-// ruleset repocfg no longer applies. The summary is what an operator reads before
-// confirming a reconcile, so listing a retired gate would describe protection the
-// plan is in fact about to delete — the most misleading thing this view could say.
+// ruleset repocfg no longer applies. An operator reads the summary before
+// confirming a reconcile, so it names only the protection the plan keeps.
 func TestRenderSummaryOmitsRetiredRulesets(t *testing.T) {
 	t.Parallel()
 	target := &repocfg.RepoTarget{

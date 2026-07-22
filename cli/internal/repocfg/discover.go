@@ -114,8 +114,9 @@ func workflowJobs(path string) ([]workflowJob, error) {
 	return out, nil
 }
 
-// excludes reports whether a main.yaml job should NOT become a required check —
-// its id matches an excluded prefix, or its `if:` contains an excluded string.
+// excludes reports whether a main.yaml job is held back from the required
+// checks, because its id matches an excluded prefix or its `if:` contains an
+// excluded string.
 func (e ExcludeRules) excludes(j workflowJob) bool {
 	for _, p := range e.Prefixes {
 		if strings.HasPrefix(j.ID, p) {

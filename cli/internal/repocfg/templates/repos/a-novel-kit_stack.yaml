@@ -1,7 +1,6 @@
-# Repo-specific config for a-novel-kit/stack (the a-novel CLI). Config is
-# library-shaped today; this file is its home for stack-only divergence
-# later (e.g. per-cmd release tags). A repos/<org>_<repo>.yaml file fully
-# replaces the class for that repo.
+# Repo-specific config for a-novel-kit/stack (the a-novel CLI); its shape
+# follows the library class. A repos/<org>_<repo>.yaml file fully replaces the
+# class for that repo.
 class: library
 features:
   issues: true

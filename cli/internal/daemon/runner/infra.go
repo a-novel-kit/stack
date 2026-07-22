@@ -72,19 +72,18 @@ func (r *Runner) ActiveInfraSessions() []InfraSessionRef {
 }
 
 // StartInfra brings up a service's infrastructure containers, waits for
-// healthchecks, then auto-runs every one-shot target in compose-dep
-// order. Idempotent — calling on an already-up service is a no-op.
+// healthchecks, then auto-runs every one-shot target in compose-dep order. It
+// is idempotent: an already-up service is a no-op.
 //
-// `oneShotsMode` controls the mode of auto-run one-shots (defaults to
-// go-exec). `extraEnv` is the daemon's inherited env
-// (PATH/HOME etc.) layered ON TOP of synthesized port allocations.
-// The runner ALLOCATES infra ports itself (via env.Builder.ForServiceUp)
-// so compose's `${POSTGRES_PORT}` substitutes to a real number even
-// when called via the dep-walk path (where the caller can't pre-allocate).
+// oneShotsMode selects the mode for the auto-run one-shots, defaulting to
+// go-exec. extraEnv is the daemon's inherited env, which the synthesized port
+// allocations layer over. The runner allocates the infra ports itself through
+// env.Builder.ForServiceUp, so compose's `${POSTGRES_PORT}` substitutes to a
+// real number even on the dep-walk path, where the caller cannot pre-allocate.
 func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShotsMode Mode, extraEnv []string) error {
-	// `compose up` creates new containers; the next ListServices must
-	// see them. The idempotent already-up early-return doesn't change
-	// state, so the extra invalidate is harmless there.
+	// `compose up` creates containers the next ListServices must see. The
+	// idempotent early return changes no state, so invalidating there is
+	// harmless.
 	defer r.InvalidateInfraStateCache()
 	svc, err := r.findService(stack, service)
 	if err != nil {
@@ -107,11 +106,9 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 	r.infraSessions[key] = sess
 	r.sessMu.Unlock()
 
-	// Build infra env: ALLOCATE port slots referenced by infra services
-	// (postgres-X's `${POSTGRES_PORT}` etc.) so compose's substitution
-	// at infra-up time produces real port numbers. The synthesized env
-	// layers on top of the caller's inherited env (PATH/HOME for
-	// `go run` later).
+	// Allocate the port slots infra services reference, so compose's
+	// substitution at infra-up time produces real port numbers. The
+	// synthesized env layers over the caller's inherited env.
 	envEntries, err := r.builder.ForServiceUp(svc, r.alloc.Services(), sess.AllocationConsumer)
 	if err != nil {
 		r.sessMu.Lock()
@@ -122,9 +119,8 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 	env := append([]string(nil), extraEnv...)
 	env = append(env, envEntriesToList(envEntries)...)
 
-	// 1. Bring up the no-profile compose services (postgres, mailserver,
-	//    etc.) via `compose up -d --build` (no profile selection — that
-	//    picks up exactly the infra entries per compose's default rules).
+	// 1. Bring up the profile-less compose services, which compose's default
+	//    rules resolve to exactly the infra entries.
 	project := composeProjectName(stack, service)
 	args := []string{
 		"compose",
@@ -145,9 +141,8 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 
 	// 2. Wait for healthchecks (where declared). Bounded — 60s default.
 	if err := r.waitInfraHealthy(ctx, svc, 60*time.Second); err != nil {
-		// Don't tear down on health-wait failure; the user can debug.
-		// Just refuse to mark Up so subsequent target-starts will surface
-		// the issue.
+		// A health-wait failure leaves the containers up for debugging, and
+		// the session stays un-Up so later target starts surface the issue.
 		return fmt.Errorf("infra %s/%s did not become healthy: %w", stack, service, err)
 	}
 	r.sessMu.Lock()
@@ -208,8 +203,8 @@ func (r *Runner) KillInfra(ctx context.Context, stack, service string, force boo
 			_ = r.Kill(ctx, id, 5*time.Second)
 		}
 	}
-	// `compose down` tears down infra + any orphaned containers in the
-	// project. It doesn't pass --volume, so postgres data survives; only
+	// `compose down` tears down the project's infra and any orphaned
+	// containers. Without --volume the postgres data survives; only
 	// `volume clear` destroys volumes.
 	project := composeProjectName(stack, service)
 	cmd := exec.CommandContext(ctx, "podman", "compose",
@@ -237,22 +232,18 @@ func (r *Runner) KillInfra(ctx context.Context, stack, service string, force boo
 // runOneShot spawns a one-shot target and blocks until it terminates.
 // Returns nil iff it terminated with EXIT_REASON_SUCCESS.
 func (r *Runner) runOneShot(ctx context.Context, t *discovery.Target, mode Mode) error {
-	// Build env for the one-shot. The env builder allocates ports as
-	// needed, just like for long-runners.
 	if r.alloc == nil {
 		return errors.New("runner has no allocator (internal misconfiguration)")
 	}
-	// Build env AFTER any prior allocation steps (infra-up). The
-	// builder's snapshot-fill picks up POSTGRES_PORT etc. that infra-up
-	// allocated under the service-level consumer, so the target's
-	// POSTGRES_DSN synthesizes correctly to localhost:<port>.
+	// Build the env after infra-up has allocated: the builder's snapshot fill
+	// picks up POSTGRES_PORT from the service-level consumer, so the target's
+	// POSTGRES_DSN synthesizes to localhost:<port>.
 	envEntries, warnings, err := r.builder.ForTarget(t, r.alloc.Services())
 	if err != nil {
 		return fmt.Errorf("env for %s: %w", t.ID(), err)
 	}
-	// Inherit the daemon's env (HOME, PATH, GOPATH defaults, etc.) so
-	// `go run` finds its toolchain + module cache. Synthesized env
-	// layers ON TOP so its values win for any overlapping keys.
+	// Inherit the daemon's env so `go run` finds its toolchain and module
+	// cache. The synthesized env layers over it and wins any overlapping key.
 	envList := append([]string(nil), os.Environ()...)
 	envList = append(envList, envEntriesToList(envEntries)...)
 	switch mode {
@@ -264,8 +255,8 @@ func (r *Runner) runOneShot(ctx context.Context, t *discovery.Target, mode Mode)
 	if err != nil {
 		return err
 	}
-	// Block until terminated. Poll every 500ms — one-shots are short by
-	// nature so this is cheap. Bounded to 5 minutes as a safety net.
+	// Block until terminated, polling every 500ms, with a 5-minute bound as a
+	// safety net.
 	deadline := time.Now().Add(5 * time.Minute)
 	for time.Now().Before(deadline) {
 		inst, ok := r.Instance(t.ID())
@@ -305,8 +296,7 @@ func (r *Runner) waitInfraHealthy(ctx context.Context, svc *discovery.Service, t
 		}
 		ids := strings.Fields(string(out))
 		if len(ids) == 0 {
-			// Nothing to wait for — e.g., the service has no infra
-			// services declared.
+			// Nothing to wait for, as when a service declares no infra.
 			return nil
 		}
 		ready := true
@@ -347,10 +337,8 @@ func envEntriesToList(entries []env.Entry) []string {
 	return out
 }
 
-// topoSortOneShots returns the service's one-shot targets in
-// dependency-respecting order: dependencies first. For the typical
-// migrations + rotate-keys pattern, migrations comes before rotate-keys
-// if rotate-keys depends on it.
+// topoSortOneShots returns the service's one-shot targets with dependencies
+// first, so migrations runs before a rotate-keys that depends on it.
 func topoSortOneShots(svc *discovery.Service) []*discovery.Target {
 	// Build a name → Target map of one-shots.
 	byName := make(map[string]*discovery.Target)
@@ -359,8 +347,7 @@ func topoSortOneShots(svc *discovery.Service) []*discovery.Target {
 			byName[t.ComposeName] = t
 		}
 	}
-	// Reverse deps: result starts empty; we add a target after all its
-	// one-shot deps have been added.
+	// A target joins the result only after all of its one-shot deps.
 	visited := make(map[string]bool)
 	var out []*discovery.Target
 	var visit func(t *discovery.Target)
@@ -376,21 +363,20 @@ func topoSortOneShots(svc *discovery.Service) []*discovery.Target {
 		}
 		out = append(out, t)
 	}
-	// Visit alphabetically for deterministic ties.
+	// Map iteration fixes the visit order, so independent one-shots come out in
+	// an arbitrary order while the walk still puts every dependency first.
 	names := make([]string, 0, len(byName))
 	for n := range byName {
 		names = append(names, n)
 	}
-	// We don't need sort.Strings here — for the typical small N (2-3
-	// one-shots) any order with topo-correctness is fine.
 	for _, n := range names {
 		visit(byName[n])
 	}
 	return out
 }
 
-// findService is the runner-side counterpart of server.findService —
-// used by infra/dep code that doesn't have direct access to the server.
+// findService resolves (stack, service) against the runner's discovery
+// snapshot, for the infra and dependency code that has no access to the server.
 func (r *Runner) findService(stack, service string) (*discovery.Service, error) {
 	for _, st := range r.discovery {
 		if st.Name != stack && stack != "" {

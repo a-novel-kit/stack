@@ -10,9 +10,8 @@ import (
 // one-shot "job" image rather than a long-lived server. Their tag is namespaced
 // under jobs/ and stripped of dashes (rotate-keys → jobs/rotatekeys).
 //
-// Which basenames are jobs cannot be derived from the filename alone — it is
-// domain knowledge (migrations is a job, rest is not). Extend this set when a
-// new job kind appears.
+// The filename alone does not say which basenames are jobs; it is domain
+// knowledge, so extend this set when a new job kind appears.
 var jobBasenames = map[string]struct{}{
 	"migrations":  {},
 	"init":        {},
@@ -22,11 +21,10 @@ var jobBasenames = map[string]struct{}{
 }
 
 // detectPodman emits one target per *.Dockerfile in dir/builds/. The build
-// context is dir, and the image tag is derived from the go.mod located in dir
-// itself (the same directory as builds/) plus the Dockerfile name. By
-// a-novel convention builds/ always sits at the module root next to go.mod, so
-// this is intentionally a same-directory lookup, not a walk up the tree; when
-// no sibling go.mod exists registryBase falls back to a localhost/ prefix.
+// context is dir, and the image tag comes from the Dockerfile name plus the
+// go.mod in dir itself. By a-novel convention builds/ always sits at the module
+// root next to go.mod, so this is a same-directory lookup; with no sibling
+// go.mod, registryBase falls back to a localhost/ prefix.
 func detectPodman(dir, rel string) []Target {
 	buildsDir := filepath.Join(dir, "builds")
 	entries, err := os.ReadDir(buildsDir)

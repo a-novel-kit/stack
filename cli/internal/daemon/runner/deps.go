@@ -22,15 +22,15 @@ import (
 //     success for it. Auto-triggers via the infra session if the session
 //     is Up but the one-shot hasn't run yet. Refuses if the previous run
 //     failed (caller must re-start infra or fix the underlying issue).
-//   - long-runner target: must already be running. We DO NOT auto-start
-//     long-runners — that's an explicit user action.
+//   - long-runner target: must already be running. A long-runner is never
+//     auto-started; that stays an explicit user action.
 func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *discovery.Service, oneShotsMode Mode, env []string) error {
 	if len(t.DependsOn) == 0 {
 		return nil
 	}
 	for _, depName := range t.DependsOn {
-		// Classify the dep by looking it up in the service's discovered
-		// targets / infra.
+		// Classify the dep against the service's discovered targets and
+		// infra.
 		if isInfra(svc, depName) {
 			if err := r.ensureInfraReady(ctx, svc, oneShotsMode, env); err != nil {
 				return fmt.Errorf("infra dep %s: %w", depName, err)
@@ -63,8 +63,8 @@ func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *
 			}
 			continue
 		}
-		// Unknown dep — likely a cross-service reference, which the
-		// runner doesn't resolve yet. Skip it.
+		// An unknown dep is most likely a cross-service reference, so skip
+		// it.
 		// TODO: resolve cross-service dependencies here.
 	}
 	return nil
