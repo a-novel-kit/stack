@@ -14,6 +14,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,6 +24,7 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/client/rpc"
 	"github.com/a-novel-kit/stack/cli/internal/daemon"
 	"github.com/a-novel-kit/stack/cli/internal/setup"
+	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 	"github.com/a-novel-kit/stack/cli/internal/version"
 )
 
@@ -30,6 +33,11 @@ import (
 // must not start with "--" (those are flags); we use a double-underscore prefix
 // to make accidental human invocation implausible without confusing the parser.
 const daemonInternalCmd = "__daemon"
+
+// daemonLogTailLimit caps how much of a failed start's output is quoted back.
+// Enough for a stack trace or a handful of discovery errors; not enough for a
+// crash-looping daemon to bury the error under its own retries.
+const daemonLogTailLimit = 4 << 10
 
 // IsDaemonReexec reports whether args (typically os.Args) invoke the hidden
 // daemon re-exec — `a-novel core __daemon`. main() uses it to skip the
@@ -425,11 +433,27 @@ func startDetached() error {
 		return fmt.Errorf("locate own binary: %w", err)
 	}
 	c := exec.Command(bin, "core", daemonInternalCmd)
-	// Detach: new process group, no shared file descriptors.
+	// Detach: new process group, no terminal.
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	c.Stdin = nil
-	c.Stdout = nil
-	c.Stderr = nil
+	// A detached daemon has nowhere to write but a file. Discarding its output
+	// makes every startup failure — a bad $A_NOVEL_STACKS, an unreadable stack
+	// path, a port already bound — surface identically as "did not become
+	// ready", with the one line that says which discarded.
+	logFile, logErr := openDaemonLog()
+	if logErr == nil {
+		defer func() { _ = logFile.Close() }()
+		c.Stdout = logFile
+		c.Stderr = logFile
+	}
+	// Where this attempt's output begins, so a failure quotes what THIS start
+	// wrote rather than the tail of a previous one.
+	var logOffset int64
+	if logErr == nil {
+		if end, err := logFile.Seek(0, io.SeekEnd); err == nil {
+			logOffset = end
+		}
+	}
 	if err := c.Start(); err != nil {
 		return fmt.Errorf("spawn daemon: %w", err)
 	}
@@ -449,5 +473,53 @@ func startDetached() error {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	return errors.New("daemon did not become ready within 5s; check stderr by running `a-novel core start --foreground`")
+	return fmt.Errorf("daemon did not become ready within 5s%s", daemonFailureDetail(logErr, logOffset))
+}
+
+// openDaemonLog opens the detached daemon's log for appending, creating its
+// parent directory. Append rather than truncate: a start that fails is often
+// one of several, and the earlier attempts are the context for the last one.
+func openDaemonLog() (*os.File, error) {
+	path := paths.DaemonLog()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
+	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+}
+
+// daemonFailureDetail renders what the daemon said before giving up, as a
+// suffix to the readiness error. It reads from offset so a crash-looping daemon
+// is diagnosed by its latest words, not its first.
+//
+// Returns the manual fallback when the log could not be opened at all — the
+// readiness failure is still worth reporting, and pointing at --foreground
+// remains better than reporting nothing.
+func daemonFailureDetail(logErr error, offset int64) string {
+	if logErr != nil {
+		return "; check stderr by running `a-novel core start --foreground`"
+	}
+	out := readDaemonLogFrom(paths.DaemonLog(), offset)
+	if out == "" {
+		return fmt.Sprintf(" and wrote nothing to %s; run `a-novel core start --foreground` to watch it",
+			paths.DaemonLog())
+	}
+	return fmt.Sprintf(":\n%s\n(full log: %s)", out, paths.DaemonLog())
+}
+
+// readDaemonLogFrom returns the trimmed tail of path starting at offset, capped
+// so a runaway daemon cannot flood the terminal with its own failure.
+func readDaemonLogFrom(path string, offset int64) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		return ""
+	}
+	buf, err := io.ReadAll(io.LimitReader(f, daemonLogTailLimit))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(buf))
 }
