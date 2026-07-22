@@ -270,4 +270,4 @@ this section is only how the daemon discovers it through compose.
 
 - Per-service `app/service-*/builds/podman-compose.yaml` — the compose mirror
   each service ships; see [The compose contract](#the-compose-contract) above.
-- `.claude/skills/use-a-novel-cli/` — the full raw-command → CLI mapping.
+- `.agents/skills/use-a-novel-cli/` — the full raw-command → CLI mapping.

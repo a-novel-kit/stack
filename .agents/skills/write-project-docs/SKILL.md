@@ -965,14 +965,21 @@ token (used by the CI `report-codecov` job) lives in repo secrets, never here.
 
 ## Portability to New Projects
 
-This skill lives in this repo's `.claude/skills/write-project-docs/`. To reuse it in a new
+This skill lives in this repo's `.agents/skills/write-project-docs/`. To reuse it in a new
 Agora service:
 
-1. Copy the directory into the new repo's `.claude/skills/`:
+1. Copy the directory into the new repo's `.agents/skills/`:
 
    ```bash
-   cp -r /path/to/this-repo/.claude/skills/write-project-docs \
-         /path/to/new-repo/.claude/skills/
+   cp -r /path/to/this-repo/.agents/skills/write-project-docs \
+         /path/to/new-repo/.agents/skills/
+   ```
+
+   Codex and Copilot scan `.agents/skills` directly, but Claude Code only scans
+   `.claude/skills` — so if the new repo has no link there yet, add one:
+
+   ```bash
+   ln -s ../.agents/skills /path/to/new-repo/.claude/skills
    ```
 
 2. In the new repo, invoke the skill (Claude picks it up once the file exists). Phase 1
