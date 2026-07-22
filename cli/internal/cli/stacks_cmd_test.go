@@ -1,9 +1,14 @@
 package cli
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/a-novel-kit/stack/cli/internal/daemon/volumes"
+	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
@@ -204,6 +209,72 @@ func TestUnpushedCommitsNoUpstream(t *testing.T) {
 
 	if n := unpushedCommits(dir); n != 0 {
 		t.Fatalf("no-upstream checkout reported %d unpushed, want 0", n)
+	}
+}
+
+// TestDefaultStackRoot pins that an unrouted stack lands under the OS temp
+// directory. os.TempDir() honours $TMPDIR, which is what makes this correct on
+// macOS (a per-user /var/folders/…/T) rather than a Linux-only /tmp assumption.
+func TestDefaultStackRoot(t *testing.T) {
+	t.Parallel()
+
+	got := defaultStackRoot("agent-7b46")
+
+	if !strings.HasPrefix(got, os.TempDir()) {
+		t.Errorf("defaultStackRoot = %q, want it under %q", got, os.TempDir())
+	}
+	if !strings.HasSuffix(got, "agent-7b46") {
+		t.Errorf("defaultStackRoot = %q, want it to end in the stack name", got)
+	}
+	if got == defaultStackRoot("other") {
+		t.Error("two stacks resolved to the same root")
+	}
+}
+
+// TestStackBackupDir pins that --purge-backups targets the whole stack, not one
+// service: volumes.BackupDir nests <stack>/<service>/<volume>, so the stack
+// directory is the parent that takes all of them.
+func TestStackBackupDir(t *testing.T) {
+	t.Parallel()
+
+	got := stackBackupDir("agent-7b46")
+
+	if !strings.HasPrefix(got, paths.BackupsRoot()) {
+		t.Errorf("stackBackupDir = %q, want it under %q", got, paths.BackupsRoot())
+	}
+	if filepath.Base(got) != "agent-7b46" {
+		t.Errorf("stackBackupDir = %q, want it to end in the stack name", got)
+	}
+	// The per-volume path must nest inside it, or the purge misses backups.
+	perVolume := volumes.BackupDir("agent-7b46", "service-json-keys", "pg-data")
+	if !strings.HasPrefix(perVolume, got+string(filepath.Separator)) {
+		t.Errorf("volumes.BackupDir = %q is not inside %q", perVolume, got)
+	}
+}
+
+// TestReportUnmanaged pins that a registration the daemon is not serving is
+// named rather than silently absent, and that a vanished root is distinguished
+// from one the daemon simply has not picked up yet — the two need different
+// fixes (drop the entry vs restart).
+func TestReportUnmanaged(t *testing.T) {
+	present := t.TempDir()
+	gone := filepath.Join(t.TempDir(), "swept")
+	t.Setenv(stacks.EnvVar, "default:"+present+",alive:"+present+",swept:"+gone)
+
+	var buf bytes.Buffer
+	if err := reportUnmanaged(&buf, map[string]bool{"default": true}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := buf.String()
+
+	if strings.Contains(got, "default") {
+		t.Errorf("managed stack was reported as unmanaged: %q", got)
+	}
+	if !strings.Contains(got, "alive") || !strings.Contains(got, "restart the daemon") {
+		t.Errorf("an intact but unmanaged stack should suggest a restart: %q", got)
+	}
+	if !strings.Contains(got, "swept") || !strings.Contains(got, "files are gone") {
+		t.Errorf("a vanished stack should say so: %q", got)
 	}
 }
 

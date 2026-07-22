@@ -14,13 +14,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/client/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/setup"
+	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
@@ -42,8 +46,71 @@ its kit/ and app/ repos). Extra stacks let a session work without
 disturbing a checkout someone else is mid-task in; pruning is how that
 space is given back.`,
 	}
+	cmd.AddCommand(newStacksNewCmd())
 	cmd.AddCommand(newStacksListCmd())
 	cmd.AddCommand(newStacksPruneCmd())
+	return cmd
+}
+
+// =============================================================================
+// new
+// =============================================================================
+
+// defaultStackRoot is where an extra workspace lands when the caller does not
+// choose. os.TempDir() honours $TMPDIR, so this resolves to the per-user
+// /var/folders/…/T on macOS and /tmp on Linux — in both cases a directory the
+// OS already reclaims, which makes a stack that outlives its session a disk
+// leak with an expiry date rather than a permanent one.
+//
+// The default stack is deliberately NOT here: it is the workspace, and a
+// workspace under a directory the OS empties is a trap.
+func defaultStackRoot(name string) string {
+	return filepath.Join(os.TempDir(), "a-novel-stacks", name)
+}
+
+func newStacksNewCmd() *cobra.Command {
+	var root string
+	cmd := &cobra.Command{
+		Use:   "new <name>",
+		Short: "Allocate an extra workspace stack",
+		Long: `Clone the workspace into a fresh root and report the $A_NOVEL_STACKS entry
+that registers it.
+
+Without --root the stack lands under the OS temp directory (honouring
+$TMPDIR), so a stack that outlives its session is reclaimed eventually
+even if nobody prunes it. Pass --root to put it somewhere durable.
+
+Registration is yours: $A_NOVEL_STACKS lives in your shell config, and
+the daemon reads it at start, so the new stack becomes visible after you
+add the printed entry and run 'a-novel core restart'.`,
+		Example: `  a-novel core stacks new agent-7b46
+  a-novel core stacks new review-291 --root=~/scratch/review-291`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			if name == stacks.DefaultName {
+				return fmt.Errorf("%q is reserved for the workspace stack", stacks.DefaultName)
+			}
+			path := root
+			if path == "" {
+				path = defaultStackRoot(name)
+			}
+			if entries, err := os.ReadDir(path); err == nil && len(entries) > 0 {
+				return fmt.Errorf("%s already exists and is not empty", path)
+			}
+			out := cmd.OutOrStdout()
+			_, _ = fmt.Fprintf(out, "▸ cloning the workspace into %s\n", path)
+			if err := setup.CloneStack(path); err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(out, "  ✓ %s\n", path)
+			_, _ = fmt.Fprintf(out, "  add to %s: %s:%s\n", stacks.EnvVar, name, path)
+			_, _ = fmt.Fprintf(out, "  then: a-novel core sync --root=%s && a-novel core restart\n", path)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&root, "root", "",
+		"where to put the stack (default: <os temp dir>/a-novel-stacks/<name>)")
 	return cmd
 }
 
@@ -70,6 +137,7 @@ leftovers from a finished session.`,
 				return err
 			}
 			out := cmd.OutOrStdout()
+			managed := make(map[string]bool, len(resp.GetStacks()))
 			_, _ = fmt.Fprintf(out, "  %-20s %-40s %8s %8s %8s\n",
 				"NAME", "PATH", "TARGETS", "INFRA", "VOLUMES")
 			for _, st := range resp.GetStacks() {
@@ -89,8 +157,9 @@ leftovers from a finished session.`,
 					fmt.Sprintf("%d up", len(held.liveTargets)),
 					fmt.Sprintf("%d up", held.liveInfra),
 					len(held.volumes))
+				managed[st.GetName()] = true
 			}
-			return nil
+			return reportUnmanaged(out, managed)
 		},
 	}
 }
@@ -100,7 +169,7 @@ leftovers from a finished session.`,
 // =============================================================================
 
 func newStacksPruneCmd() *cobra.Command {
-	var all, force, yes, dryRun bool
+	var all, force, yes, dryRun, purgeBackups bool
 	cmd := &cobra.Command{
 		Use:   "prune [<name>]",
 		Short: "Tear down a stack: kill its targets, clear its volumes, remove its files",
@@ -140,7 +209,7 @@ to drop rather than editing the file underneath you.`,
 			failed := 0
 			for _, st := range targets {
 				if err := pruneOne(ctx, c, cmd, st, pruneOpts{
-					force: force, yes: yes, dryRun: dryRun,
+					force: force, yes: yes, dryRun: dryRun, purgeBackups: purgeBackups,
 				}); err != nil {
 					_, _ = fmt.Fprintf(out, "  ✗ %s: %v\n", st.GetName(), err)
 					failed++
@@ -156,13 +225,16 @@ to drop rather than editing the file underneath you.`,
 	cmd.Flags().BoolVar(&force, "force", false, "prune even when a checkout holds unsaved or unpushed work")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what would be reclaimed, change nothing")
+	cmd.Flags().BoolVar(&purgeBackups, "purge-backups", false,
+		"also delete the stack's volume backups (otherwise they outlive it)")
 	return cmd
 }
 
 type pruneOpts struct {
-	force  bool
-	yes    bool
-	dryRun bool
+	force        bool
+	yes          bool
+	dryRun       bool
+	purgeBackups bool
 }
 
 // resolvePruneTargets maps the command's arguments onto the stacks the daemon
@@ -269,6 +341,9 @@ func pruneOne(
 	_, _ = fmt.Fprintf(out, "▸ %s (%s)\n", name, root)
 	_, _ = fmt.Fprintf(out, "  %d target(s) up, %d infra container(s), %d volume(s), %d service(s)\n",
 		len(held.liveTargets), held.liveInfra, len(held.volumes), len(held.services))
+	if opts.purgeBackups {
+		_, _ = fmt.Fprintf(out, "  purging backups at %s\n", stackBackupDir(name))
+	}
 	for _, b := range blockers {
 		verb := "holds"
 		if opts.force {
@@ -310,8 +385,54 @@ func pruneOne(
 	if err := os.RemoveAll(root); err != nil {
 		return fmt.Errorf("remove %s: %w", root, err)
 	}
+	if opts.purgeBackups {
+		// Opt-in, because ClearVolume just took a backup on the way past: the
+		// default keeps the one artefact that can undo this command, and this
+		// flag is how you say the data really was disposable.
+		dir := stackBackupDir(name)
+		if err := os.RemoveAll(dir); err != nil {
+			return fmt.Errorf("purge backups %s: %w", dir, err)
+		}
+		_, _ = fmt.Fprintf(out, "  ✓ purged backups %s\n", dir)
+	}
 	_, _ = fmt.Fprintf(out, "  ✓ reclaimed %s\n", root)
 	_, _ = fmt.Fprintf(out, "  ! drop from %s: %s:%s\n", stacks.EnvVar, name, root)
+	return nil
+}
+
+// stackBackupDir is where every volume backup for a stack lives — the parent of
+// the per-service, per-volume directories `volumes.BackupDir` writes into.
+func stackBackupDir(stack string) string {
+	return filepath.Join(paths.BackupsRoot(), stack)
+}
+
+// reportUnmanaged names the stacks $A_NOVEL_STACKS registers that the daemon is
+// not managing. The daemon skips a stack whose files are gone rather than
+// refusing to start over it, so without this the stack simply disappears from
+// the listing while its registration lives on — the operator is left with an
+// entry pointing at nothing and no indication of it.
+//
+// Reads the caller's own environment, so a shell whose $A_NOVEL_STACKS differs
+// from the one the daemon started with is reported as unmanaged too. That is
+// the honest reading: either way, this shell's registrations and the daemon's
+// view disagree.
+func reportUnmanaged(out io.Writer, managed map[string]bool) error {
+	registered, err := stacks.ParseEnv()
+	if err != nil {
+		// A malformed $A_NOVEL_STACKS is the daemon's problem to report at
+		// start; the listing above is still valid without this footnote.
+		return nil //nolint:nilerr
+	}
+	for _, s := range registered {
+		if managed[s.Name] {
+			continue
+		}
+		reason := "not managed — restart the daemon to pick it up"
+		if info, statErr := os.Stat(s.Path); statErr != nil || !info.IsDir() {
+			reason = "files are gone — drop it from " + stacks.EnvVar
+		}
+		_, _ = fmt.Fprintf(out, "! %-20s %-40s %s\n", s.Name, s.Path, reason)
+	}
 	return nil
 }
 
