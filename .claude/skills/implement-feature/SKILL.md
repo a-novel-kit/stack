@@ -22,7 +22,9 @@ A later section covers recovery when an earlier branch needs to change.
 > with its Task sub-issues); this skill then executes it, and the **Plan** phase below is the per-repo
 > **branch decomposition** of that already-agreed design — typically one branch/PR per Task sub-issue.
 > Link every PR back to its issue with a `Closes #<n>` line so merging closes the unit and the Epic's
-> sub-issue progress advances. Small, unambiguous changes can start directly here.
+> sub-issue progress advances. When the design is an Epic spanning repos, each PR also carries the
+> `epic:<N>` label and lands under the gates in "Landing a Task that belongs to an Epic" below. Small,
+> unambiguous changes can start directly here.
 >
 > **Scope: backend services only.** Frontend **`platform`** repos are deliberately more monolithic
 > than services — the layer-by-layer branch decomposition here does **not** apply to them, and their
@@ -244,6 +246,40 @@ instead of discarding it.
 
 Skip this entirely when you worked in the default stack. That one is the workspace, and `prune`
 refuses it by design.
+
+---
+
+## Landing a Task that belongs to an Epic
+
+An Epic's Tasks land **as a unit or not at all** — that is the Epic Atomicity Rule, and it is enforced
+by required checks, not convention. What follows is what a Task author needs; `coordinate-landing`
+owns the full saga.
+
+**One Task per repo per Epic.** If an Epic touches three repos, it has three Tasks and three pull
+requests. Two pieces in the same repo belong to the same Task; work that cannot land concurrently
+belongs to a different Epic.
+
+**Membership is the `epic:<N>` label on the pull request** — not the `Closes` keyword, which the author
+controls. Applying a label needs triage rights, so the label is a permission-gated claim. Add it when
+you open the pull request.
+
+**Draft means not ready.** The gate reads draft state as your readiness signal, so a draft holds the
+whole Epic. Mark ready when the Task is genuinely done, not to start review.
+
+**`merge-gate` red usually is not about you.** It holds every member until _all_ of them are
+non-draft and approved, across every repo. A red gate most often means a sibling is not ready yet.
+Check the check's summary — it names what it is waiting on — before assuming your branch is at fault.
+
+**`epic-freeze` red means the Epic landed partially.** Some siblings merged and one did not, so the
+rest are frozen to stop the split widening. Do not work around it: do not re-run the check hoping for
+green, and never re-enable auto-merge by hand. The sweep re-derives from live state every ~15 minutes
+and clears the freeze itself once the Epic is whole again.
+
+**To stop a landing rather than let it resume,** label the Epic issue `automation:paused`. That is the
+latch — a freeze only describes the Epic's current shape and lifts as soon as that shape is healthy.
+
+**Rolling back a landed Epic is human-triggered and rare.** If you think you need it, that is a
+`coordinate-landing` conversation, not something to attempt from here.
 
 ---
 
