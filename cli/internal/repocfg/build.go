@@ -145,7 +145,7 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	// Governance workflows, pushed wherever the master ruleset gates merges —
 	// the same repos whose PRs feed the board. They ship as static files: the
 	// [Agent] credentials and the per-org board id are GitHub-expression refs
-	// resolved at run time, not repocfg substitutions.
+	// the workflow resolves at run time.
 	if c.Rulesets.Master {
 		for _, wf := range []string{"merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml", "release-train.yaml", "hotfix.yaml"} {
 			content, err := ReadTemplate("governance/" + wf)
@@ -307,9 +307,8 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRu
 // resolveBypass maps one generic bypass entry to concrete actors. Admins
 // always bypass with mode "always"; bots bypass with "always" on master and
 // tags, where they write directly (the bump commit and the release tag), and
-// "exempt" on PR rulesets. An entry that resolves to nothing is an error,
-// because a typo in a ruleset template would otherwise quietly strip a bypass
-// actor and break the bot's automation.
+// "exempt" on PR rulesets. An entry that resolves to nothing is an error, so a
+// typo in a ruleset template is caught before the bypass list ships.
 func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor, error) {
 	botMode := modeExempt
 	if rulesetName == rulesetMaster || rulesetName == rulesetTags {
@@ -400,16 +399,16 @@ func RenderCodeQL(langs []string, querySuite, defaultBranch string) (string, err
 // suite plus a filter that drops actions/unpinned-tag.
 //
 // Both the suite and the filter live inside `config:` so query-filters apply
-// cleanly; the separate `queries:` input interacts with config through a `+`
+// cleanly. The separate `queries:` input interacts with config through a `+`
 // prefix that is easy to get wrong.
 //
-// CodeQL's implicit default suite is selected by omitting the queries block —
-// the literal "default" makes init look for a pack by that name and fail — so
-// queries are emitted only for an explicit named suite.
+// Omitting the queries block selects CodeQL's implicit default suite, so
+// queries are emitted only for an explicit named suite. The literal "default"
+// makes init look for a pack by that name and fail.
 //
-// actions/unpinned-tag is excluded because the org pins GitHub Actions via
-// floating major tags managed by Renovate, so the query would flag every
-// `uses: action@vN` as unpinned.
+// actions/unpinned-tag is excluded: the org pins GitHub Actions to floating
+// major tags managed by Renovate, and the query reads every `uses: action@vN`
+// as unpinned.
 func codeqlConfigBlock(querySuite string) string {
 	var b strings.Builder
 	b.WriteString("          config: |\n")

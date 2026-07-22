@@ -278,8 +278,8 @@ func Detect(root string) ([]Target, error) {
 // ExistsUnder reports whether any of relPaths (slash-separated, relative to a
 // directory) exists at root or in any directory below it, using the same
 // bounded, pruned, gitignore-aware walk as Detect. It finds a signal file that
-// lives in a sub-module directory, such as a go.mod or buf.yaml under cli/
-// rather than at the repo root. The walk short-circuits on the first match.
+// lives in a sub-module directory, such as a go.mod or buf.yaml under cli/. The
+// walk short-circuits on the first match.
 func ExistsUnder(root string, relPaths []string) bool {
 	if len(relPaths) == 0 {
 		return false

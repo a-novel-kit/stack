@@ -158,8 +158,8 @@ func (s *Store) Subscribe(targetID string) (<-chan Line, func(), bool) {
 			}
 		}
 		// ch stays open: the reader stops because no further send
-		// arrives, and GC reclaims the channel once its goroutine exits.
-		// Closing it here would open a close-versus-send race.
+		// arrives, and GC reclaims the channel once its goroutine
+		// exits. Only close() closes a subscriber channel.
 	}
 	return ch, unsub, true
 }

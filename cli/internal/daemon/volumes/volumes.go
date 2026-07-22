@@ -145,8 +145,8 @@ func Backup(svc *discovery.Service, tag string) ([]string, error) {
 			return archives, fmt.Errorf("backup volume %s: %w", v.Name, err)
 		}
 		// Read the archive back before calling it a backup: Clear destroys the
-		// volume on the strength of this return value, and a truncated archive
-		// would otherwise surface only on the day it is needed.
+		// volume on the strength of this return value, so a truncated archive
+		// has to surface now.
 		if err := validateArchive(dest); err != nil {
 			_ = os.Remove(dest)
 
@@ -163,9 +163,9 @@ func Backup(svc *discovery.Service, tag string) ([]string, error) {
 // backupOne runs `podman volume export <name>` and pipes it through zstd into
 // dest. The stream never holds the volume's bytes in memory.
 //
-// A failed backup leaves no file behind: Clear treats a successful backup as
-// license to destroy the volume, and `restore --previous` would offer a
-// truncated archive left on disk.
+// A failed backup leaves no file behind, so every archive on disk is a complete
+// one. Clear treats a successful backup as license to destroy the volume, and
+// `restore --previous` picks from the same directory.
 func backupOne(volumeName, dest string) error {
 	if err := writeBackup(volumeName, dest); err != nil {
 		_ = os.Remove(dest)
@@ -178,18 +178,17 @@ func backupOne(volumeName, dest string) error {
 
 // writeBackup exports the volume into dest, compressed.
 //
-// The closes are the crux rather than bookkeeping: zstd.Encoder.Close writes
-// the final block and the frame checksum, so it is the call that fails after
-// everything else looked fine — a full disk surfaces there, not in cmd.Run,
-// whose bytes were only accepted into the encoder's buffer. Discarding that
-// error reports a truncated archive as a successful backup.
+// The closes carry the real errors. zstd.Encoder.Close writes the final block
+// and the frame checksum, so it is the call a full disk surfaces in, after
+// everything else looked fine. Every close error is returned, since a dropped
+// one reports a truncated archive as a successful backup.
 func writeBackup(volumeName, dest string) error {
 	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", dest, err)
 	}
-	// Guards the early returns only; the success path closes explicitly below so
-	// the error is reported rather than dropped.
+	// Guards the early returns only. The success path closes explicitly below
+	// and returns the close error.
 	closed := false
 
 	defer func() {

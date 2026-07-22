@@ -174,9 +174,8 @@ func TestDerivedFor(t *testing.T) {
 }
 
 func TestUrlFor_GRPC_Schemeless(t *testing.T) {
-	// A gRPC URL stays schemeless, since `localhost:port` is what grpc-go's
-	// Dial expects and a `grpc://` prefix would leave every consumer stripping
-	// it.
+	// A gRPC URL stays schemeless: `localhost:port` is what grpc-go's Dial
+	// takes. REST keeps its http:// scheme.
 	if got, want := urlFor("GRPC", 9090), "localhost:9090"; got != want {
 		t.Errorf("urlFor(GRPC, 9090): got %q want %q", got, want)
 	}

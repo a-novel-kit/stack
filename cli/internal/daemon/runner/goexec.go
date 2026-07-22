@@ -94,8 +94,8 @@ func (r *Runner) StartGoExec(ctx context.Context, id string, env []string, warni
 	r.mu.Lock()
 	inst.PID = int32(cmd.Process.Pid)
 	r.mu.Unlock()
-	// transition emits the STARTING→RUNNING PhaseEvent for Watch subscribers;
-	// mutating inst.Phase directly here would lose the event.
+	// Every phase change goes through transition, which emits the
+	// STARTING→RUNNING PhaseEvent for Watch subscribers.
 	r.transition(id, anovelv1.Phase_PHASE_RUNNING)
 	go r.watchGoExec(id, logWriter)
 

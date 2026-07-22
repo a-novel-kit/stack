@@ -72,10 +72,9 @@ func (sw *streamWriter) Write(p []byte) (int, error) {
 }
 
 // flush writes one Line to the file and fans it out to subscribers. The
-// target's mutex covers both the write and the fanout, keeping the send window
-// tied to the subscriber list; sending outside the lock would race unsubscribe
-// and hand a line to a channel whose reader is gone. Every send is
-// non-blocking, so holding the lock across the fanout stays bounded.
+// target's mutex covers both the write and the fanout, so every send lands on a
+// channel still in the subscriber list. Every send is non-blocking, so holding
+// the lock across the fanout stays bounded.
 func (sw *streamWriter) flush(ln Line) {
 	ts := sw.w.ts
 	ts.mu.Lock()

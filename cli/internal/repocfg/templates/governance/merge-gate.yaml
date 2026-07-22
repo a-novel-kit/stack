@@ -8,9 +8,9 @@
 #                the gate must post there too or a queued PR waits out the timeout
 #                and drops. The [Agent] App posts the check itself through the Checks
 #                API, under the stable integration id the ruleset requires, leaving
-#                this job as the runner; its id therefore differs from the check
-#                name, which would otherwise collide. A standalone PR passes; an epic
-#                member holds until every sibling is ready (epic atomicity).
+#                this job as the runner, under an id kept clear of the check name.
+#                A standalone PR passes; an epic member holds until every sibling
+#                is ready (epic atomicity).
 #
 #   auto-merge — enables native auto-merge on an epic member so the whole set lands
 #                together once the gate and approval go green. Enabling it while the

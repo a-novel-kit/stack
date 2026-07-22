@@ -87,8 +87,8 @@ func Write(cp Checkpoint) error {
 
 // Read returns the checkpoint at Path(), or (nil, nil) when none exists, the
 // common case at a fresh start. A schema mismatch or malformed file also yields
-// (nil, nil), degrading handoff to "containers survive, go-exec targets are
-// lost" rather than failing the daemon's startup.
+// (nil, nil), so the daemon still starts and the handoff degrades to
+// "containers survive, go-exec targets are lost".
 func Read() (*Checkpoint, error) {
 	data, err := os.ReadFile(Path())
 	if err != nil {
@@ -99,7 +99,6 @@ func Read() (*Checkpoint, error) {
 	}
 	var cp Checkpoint
 	if err := json.Unmarshal(data, &cp); err != nil {
-		// A malformed checkpoint is dropped rather than surfaced.
 		return nil, nil //nolint:nilerr // intentional: malformed checkpoint is non-fatal
 	}
 	if cp.Schema != SchemaVersion {
@@ -124,8 +123,8 @@ func Exists() bool {
 }
 
 // EnsureSinglePending guards against a double checkpoint. A checkpoint already
-// present when PrepareReinstall arrives yields an error instead of an
-// overwrite, leaving the caller to resolve it, usually by aborting the second
+// present when PrepareReinstall arrives yields an error and leaves the file
+// untouched, so the caller resolves it — usually by aborting the second
 // install.
 func EnsureSinglePending() error {
 	if Exists() {

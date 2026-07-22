@@ -8,9 +8,8 @@
 # predicate, so the two can never disagree on a PR.
 #
 # It lives in its own file so that, as a second required check, it has an
-# independent failure domain: a broken run here must not starve merge-gate, or the
-# reverse. It also carries no auto-merge job, which would silently resume a landing
-# a human froze.
+# independent failure domain: a broken run here leaves merge-gate running, and the
+# reverse. It carries no auto-merge job, so a landing a human froze stays frozen.
 name: epic-freeze
 
 on:
@@ -25,8 +24,8 @@ on:
   merge_group:
 
 jobs:
-  # Named `evaluate` because the [Agent] App posts the `epic-freeze` check-run
-  # itself, and a job of that name would collide with it (as in merge-gate.yaml).
+  # Named `evaluate`: the [Agent] App posts the `epic-freeze` check-run itself, so
+  # the job name stays clear of it (as in merge-gate.yaml).
   evaluate:
     runs-on: ubuntu-latest
     # No permissions of its own: the detector mints its own [Agent] tokens. In

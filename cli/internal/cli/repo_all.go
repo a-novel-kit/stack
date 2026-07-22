@@ -4,11 +4,10 @@
 // `core sync` manages), so the operator never enumerates repos by hand.
 //
 // The sweep is conservative about ongoing work. Config is discovered from each
-// working tree (repocfg.Discover reads .github/workflows/main.yaml), so a repo
+// working tree (repocfg.Discover reads .github/workflows/main.yaml), and a repo
 // that is off its default branch or has uncommitted changes is skipped
-// untouched; reconciling from an in-progress checkout would push unmerged
-// config live. A single confirm gates the whole batch, and --dry-run / --json
-// preview without applying.
+// untouched. Only committed config reaches the live repo. A single confirm
+// gates the whole batch, and --dry-run / --json preview without applying.
 
 package cli
 

@@ -75,13 +75,12 @@ func runAction(busyText, successText, actionLabel string, do func() error) tea.C
 
 // logsMsg carries log lines from a follower goroutine into the model.
 // `gen` is the follower-generation tag: Update drops any message whose
-// gen does not match m.followGen, covering the cancel-then-start race
-// where the prior follower's in-flight messages would mix into the new
-// stream.
+// gen does not match m.followGen, so only the current follower's lines
+// reach the view across the cancel-then-start race.
 //
 // Lines are always appended. The server's follow=true mode delivers
-// history then tail in one stream, so pairing a snapshot with a follower
-// would show every historical line twice.
+// history then tail in one stream, so the follower alone carries the
+// whole view.
 type logsMsg struct {
 	lines []*anovelv1.LogLine
 	gen   int

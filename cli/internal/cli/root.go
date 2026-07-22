@@ -15,8 +15,8 @@ import (
 // the flag-parsing code stays in that package, while the daemon-backed verbs
 // under `run` live entirely in this one.
 //
-// There is no `Run` handler: `run` is the parent namespace for the
-// daemon-backed verbs, and a standalone run capability would collide with it.
+// `run` is the parent namespace for the daemon-backed verbs, so it has no
+// standalone handler here.
 type LegacyHandlers struct {
 	Test  func(args []string) int
 	Build func(args []string) int

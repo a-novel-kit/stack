@@ -86,9 +86,8 @@ func shouldNotify(current, latest string) bool {
 // Returns "" on any failure.
 func latestVersion() string {
 	path := filepath.Join(paths.State(), cacheFile)
-	// The cached version must be valid as well as fresh: a corrupt or
-	// hand-edited cache with a recent timestamp would otherwise suppress the
-	// check for the whole interval.
+	// The cached version has to be valid as well as fresh, so a corrupt or
+	// hand-edited entry falls through to a fetch.
 	if entry, err := readCache(path); err == nil &&
 		time.Since(entry.LastCheck) < checkInterval && semver.IsValid(entry.Latest) {
 		return entry.Latest

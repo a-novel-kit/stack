@@ -153,12 +153,11 @@ func TestUnimplementedCarriesPhaseLabel(t *testing.T) {
 }
 
 // TestExecExitCode covers the wait-error to exit-status mapping the Exec
-// stream's terminal message carries. The third case is the one that matters: a
-// wait failure yields no status at all, and reporting 0 would read as a clean
-// exit.
+// stream's terminal message carries. A wait failure yields no status at all,
+// so the mapping returns the error.
 func TestExecExitCode(t *testing.T) {
 	// Real *exec.ExitError values, since ExitCode reads the platform
-	// ProcessState rather than anything constructed by hand.
+	// ProcessState.
 	runExit := func(code int) error {
 		return exec.Command("sh", "-c", "exit "+strconv.Itoa(code)).Run() //nolint:gosec
 	}

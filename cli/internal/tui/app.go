@@ -46,9 +46,9 @@ func Run() error {
 		return err
 	}
 	m := newModel(c)
-	// Mouse-cell-motion capture stays off: it would disable the
-	// terminal's own click-drag text selection, which this
-	// keyboard-driven UI needs so users can copy log lines out.
+	// Mouse-cell-motion capture stays off, so the terminal keeps its own
+	// click-drag text selection. This keyboard-driven UI needs it for
+	// copying log lines out.
 	p := tea.NewProgram(m)
 	// Background log-follow goroutines inject events through p.Send, so
 	// the model needs the program.
@@ -213,8 +213,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case logsMsg:
 		// Drop messages from a stale follower generation. They arrive
 		// during the cancel-then-start race window on a tab or service
-		// switch, and would otherwise mix the previous stream into the
-		// new tab's view.
+		// switch, so only the current generation reaches the view.
 		if msg.gen != m.followGen {
 			return m, nil
 		}

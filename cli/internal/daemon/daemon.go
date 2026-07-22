@@ -68,8 +68,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	// A responsive listener means another daemon already owns this socket.
-	// Reporting it here gives the caller a clear message instead of an obscure
-	// listen() failure.
+	// Reporting it here names the socket and the command that frees it.
 	if live, _ := isLive(opts.SocketPath); live {
 		return fmt.Errorf("daemon already running on %s — use `a-novel core kill` to stop it first", opts.SocketPath)
 	}

@@ -68,7 +68,7 @@ const repoWhitelistFile = "workspace-repos.yaml"
 // A missing file yields an empty list and no error, and the caller reports
 // "nothing to sync". Each `repos:` entry is an "<org>/<repo>" string; the org
 // must be one of the two the workspace routes (a-novel → app/, a-novel-kit →
-// kit/), so a typo fails loudly instead of misrouting a clone.
+// kit/). Any other org is an error, so a typo never routes a clone.
 func loadRepoWhitelist(root string) ([]repoEntry, error) {
 	data, err := os.ReadFile(filepath.Join(root, repoWhitelistFile))
 	if errors.Is(err, os.ErrNotExist) {
@@ -289,7 +289,7 @@ func updateExistingRepo(out io.Writer, target string, r repoEntry, counts *syncC
 		// On the default branch, fast-forward it in place. `git pull
 		// --ff-only` advances HEAD without disturbing unstaged changes, and
 		// refuses when incoming commits would clobber a locally-modified
-		// file; that refusal surfaces as a skip, so the working tree is
+		// file. That refusal surfaces as a skip, so the working tree is
 		// never rewritten behind the user's back.
 		if cmdOut, err := runGit(target, "pull", "--quiet", "--ff-only", "origin", def); err != nil {
 			if strings.Contains(cmdOut, "overwritten") {

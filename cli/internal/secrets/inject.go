@@ -140,18 +140,16 @@ func readMapping(path string) (mapping, error) {
 	if err != nil {
 		return mapping{}, fmt.Errorf("secrets: read %s: %w", path, err)
 	}
-	// Decode strictly: an unknown top-level key is a hard error rather than a
-	// silent no-op, so a mistyped or outdated manifest fails loudly instead of
-	// injecting nothing.
+	// Decode strictly: an unknown top-level key is a hard error, so a mistyped
+	// or outdated manifest fails loudly.
 	dec := yaml.NewDecoder(bytes.NewReader(raw))
 	dec.KnownFields(true)
 	var m mapping
 	if err := dec.Decode(&m); err != nil && !errors.Is(err, io.EOF) {
 		return mapping{}, fmt.Errorf("secrets: parse %s: %w", path, err)
 	}
-	// Each declaration must name both the target env var and the secret id, or
-	// injection would use an empty name and the lookup an empty id. A missing
-	// field is a malformed manifest, not a silently skipped entry.
+	// Each declaration must name both the target env var and the secret id. A
+	// missing field makes the whole manifest an error.
 	for i, d := range m.Secrets {
 		if d.Env == "" || d.ID == "" {
 			return mapping{}, fmt.Errorf("secrets: %s: entry %d must set both env and id", path, i)

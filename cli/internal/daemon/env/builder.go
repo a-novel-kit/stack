@@ -46,8 +46,7 @@ func (b *Builder) ForTarget(t *discovery.Target, allServices []string) ([]Entry,
 	// at the service repo root drives them; an absent manifest is a no-op, and
 	// an absent key or store reports every declared secret missing. The inspect
 	// paths, ForService and ForServiceUp, skip this, so no value ever reaches a
-	// log, and a declared-but-unset secret becomes a warning rather than an
-	// error.
+	// log. A declared-but-unset secret becomes a warning.
 	var warnings []string
 	if root := serviceRoot(t); root != "" {
 		res, err := injectSecrets(root)
@@ -226,7 +225,7 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 	}
 	// Add the prefixed form of our own ports so cross-service consumers see the
 	// same shape. A key that already carries a known service prefix is skipped,
-	// since re-prefixing it would produce SERVICE_X_SERVICE_X_SERVICE_Y_VAR.
+	// so every key ends up with exactly one prefix.
 	for k, v := range out {
 		if !isAllocatedKind(k) && !isSynthesizedKind(k) {
 			continue
@@ -308,7 +307,7 @@ func (b *Builder) resolveContext(env map[string]string, owner string, allService
 //   - a localVar ending in `_HOST` or `_URL` is synthesized once the matching
 //     `*_PORT` resolves.
 //   - anything else is a constant from the same env block, already in ctx or
-//     empty, as compose would leave it.
+//     empty — the value compose gives an unset variable.
 func (b *Builder) resolveOne(varName, owner string, allServices []string, allocate bool, consumer string, ctx map[string]string) (string, error) {
 	resOwner, localVar := resolveOwner(varName, allServices)
 	if resOwner == "" {

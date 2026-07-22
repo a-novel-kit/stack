@@ -266,7 +266,7 @@ func renderTargetTabs(svc *anovelv1.Service, selectedTab, infraOffset int) strin
 
 // targetStatusDot returns the colored status glyph for one target. It branches
 // on TargetKind so a finished one-shot shows its outcome (✓ success, ✗
-// failure), which a dim ○ would leave indistinguishable from "never started":
+// failure) and keeps the dim ○ for "never started":
 //
 //	long-runner running        → ● green
 //	long-runner starting       → ● yellow

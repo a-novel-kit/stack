@@ -61,9 +61,9 @@ func containerLabelArgs(stack, service, target string) string {
 	if target != "" {
 		parts = append(parts, "--label", "anovel.target="+target)
 	}
-	// --podman-run-args scopes the injection to `podman run`. The broader
-	// --podman-args would also forward these flags to podman-compose's
-	// internal `podman ps` calls, which reject --label and fail with exit 125.
+	// --podman-run-args scopes the injection to `podman run`, keeping the
+	// labels out of podman-compose's internal `podman ps` calls, which reject
+	// --label and fail with exit 125.
 	return "--podman-run-args=" + strings.Join(parts, " ")
 }
 
@@ -253,11 +253,10 @@ type InfraState struct {
 // InfraStatesOf returns the live state of every infra container in the given
 // stack, keyed by "<service>/<infraName>". It costs one podman call whatever
 // the stack's size, which matters because each invocation carries roughly 1s of
-// cold-start overhead on rootless WSL2 podman, and a serial per-infra scan
-// would outrun the TUI's 2s poll cadence.
+// cold-start overhead on rootless WSL2 podman and the TUI polls every 2s.
 //
-// Health stays unset here: `podman ps --format json` omits Health.Status, and a
-// per-container inspect would double the call count. PHASE_RUNNING with
+// Health stays unset here: `podman ps --format json` omits Health.Status, and
+// reading it costs one inspect per container. PHASE_RUNNING with
 // HEALTH_UNSPECIFIED renders correctly downstream, as a green ● in the TUI and
 // "running" in CLI ps.
 //

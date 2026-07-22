@@ -60,8 +60,7 @@ depends_on:
 }
 
 func TestComposeDependsOn_RejectsScalar(t *testing.T) {
-	// A scalar is neither the short nor the long form, so it must error
-	// instead of being swallowed.
+	// A scalar matches neither the short nor the long form, so it errors.
 	src := `depends_on: just-a-string`
 	var v struct {
 		DependsOn composeDependsOn `yaml:"depends_on"`

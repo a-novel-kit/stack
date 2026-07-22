@@ -720,8 +720,8 @@ current/latest session.`,
 			ref := parseEntityID(args[0], ss.stack)
 			id := ref.ID
 			// Podman owns infra log files, so infra entries have no run
-			// archives. Refuse --previous / --run-id up front rather than
-			// letting the daemon return Unimplemented.
+			// archives. --previous / --run-id are refused here, with a
+			// message that names the reason.
 			if ref.IsInfra && (previous || runID != "") {
 				return errors.New("--previous / --run-id are not supported for infra (podman owns its log file)")
 			}
@@ -1127,8 +1127,8 @@ the underlying command's success.`,
 				return err
 			}
 			defer func() { _ = stream.Close() }()
-			// Absent rather than 0: an unreported exit status says nothing
-			// about the child, and must not read as success.
+			// A pointer, so an unreported exit status stays distinct
+			// from a reported 0.
 			var exitCode *int32
 			for stream.Receive() {
 				ev := stream.Msg()
@@ -1155,8 +1155,7 @@ the underlying command's success.`,
 
 // execResult turns the exec stream's terminal exit code into the CLI's own
 // exit status. A nil exitCode means the daemon ended the stream without
-// reporting one, which says nothing about the child and must not read as
-// success.
+// reporting one. That says nothing about the child, so it yields an error.
 func execResult(exitCode *int32) error {
 	if exitCode == nil {
 		return errors.New("exec: daemon closed the stream without reporting an exit status " +
@@ -1269,7 +1268,7 @@ narrow the stream.`,
 
 // runPsWatch is the ps-style streaming variant: render the current snapshot
 // once, then re-render after every StateEvent, using ANSI cursor control to
-// overwrite the previous frame so it reads like `top` rather than a log tail.
+// overwrite the previous frame so it reads like `top`.
 //
 // In --json mode it emits one newline-delimited JSON object per state event on
 // top of the initial snapshot, keeping machine parsing to "read a line, parse
@@ -1305,9 +1304,8 @@ func runPsWatch(
 			continue
 		}
 		// Human mode: refresh the snapshot. One ListServices call per
-		// event is cheap and guarantees the rendered ps matches what a
-		// manual 'ps' would show. Repainting in place keeps frames out of
-		// the scrollback.
+		// event is cheap and keeps the rendered table current.
+		// Repainting in place keeps frames out of the scrollback.
 		resp, err := c.ListServices(ctx, stack)
 		if err != nil {
 			_, _ = fmt.Fprintf(out, "watch: refresh failed: %v\n", err)

@@ -5,8 +5,8 @@ package cli
 // A stack allocates three things and only one of them is a file. Deleting the
 // root reclaims the checkout and leaves the rest: containers keep running and
 // holding host ports, and podman volumes sit under the container store until
-// something names them. Both are the daemon's to release, which is why prune is
-// a CLI verb rather than a documented `rm -rf`.
+// something names them. Both are the daemon's to release, so prune is a CLI
+// verb.
 
 import (
 	"context"
@@ -404,9 +404,9 @@ func stackBackupDir(stack string) string {
 }
 
 // reportUnmanaged names the stacks $A_NOVEL_STACKS registers that the daemon is
-// not managing. The daemon skips a stack whose files are gone rather than
-// refusing to start, so the stack would otherwise vanish from the listing while
-// its registration lives on, leaving an entry that points at nothing.
+// not managing. The daemon skips a stack whose files are gone and starts
+// anyway, so a registration can outlive the stack it points at. This names
+// those entries.
 //
 // It reads the caller's own environment, so a shell whose $A_NOVEL_STACKS
 // differs from the one the daemon started with is reported as unmanaged too:
@@ -431,8 +431,8 @@ func reportUnmanaged(out io.Writer, managed map[string]bool) error {
 	return nil
 }
 
-// dryRunVerdict is what a dry run reports instead of acting. A blocked stack
-// gets the reason it would stop rather than an error, since the question asked
+// dryRunVerdict is the line a dry run prints in place of acting. A blocked
+// stack gets the reason the real run would refuse, since the question asked
 // was what would happen.
 func dryRunVerdict(blockers []string, force bool) string {
 	if len(blockers) > 0 && !force {

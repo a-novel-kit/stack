@@ -209,7 +209,7 @@ func TestForService_LookupOnlyLeavesUnknownEmpty(t *testing.T) {
 
 func TestForTarget_PORTAloneDoesNotAllocate(t *testing.T) {
 	// isAllocatedKind matches a key ending in _PORT, so a var literally named
-	// PORT in compose stays a constant instead of binding a random port.
+	// PORT stays a constant.
 	b, alloc := newBuilderWith([]string{"svc"})
 	tgt := &discovery.Target{
 		Name:    "weird",
@@ -285,8 +285,8 @@ func TestForTarget_NoCmdDirSkipsInjection(t *testing.T) {
 }
 
 func TestForTarget_MissingSecretWarns(t *testing.T) {
-	// A declared-but-unset secret raises a value-free warning line instead of
-	// an injection or an error, so the operator sees what to set.
+	// A declared-but-unset secret stays out of the env and raises one warning
+	// line naming what to set.
 	orig := injectSecrets
 	injectSecrets = func(repoRoot string) (secrets.Resolution, error) {
 		return secrets.Resolution{

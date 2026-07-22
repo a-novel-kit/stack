@@ -73,8 +73,7 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 	}
 
 	// Every staged change lands in one commit: one push, one CI run on the
-	// target repo. With nothing staged there is no commit, since the mutation
-	// would otherwise record an empty one.
+	// target repo. With nothing staged there is no commit at all.
 	if len(staged) > 0 {
 		detail, err := commitSync(org, repo, branch, staged)
 		if err == nil {
@@ -509,10 +508,9 @@ var ghStdin = func(stdin string, args ...string) (string, error) {
 }
 
 // contentSHA returns the blob sha of an existing file at path, or "" when the
-// file does not exist yet (a 404, the create case). Any other error — auth,
-// network, rate limit — is returned, so a transient failure is not misread as
-// "create a new file", which would PUT without the required sha and fail
-// confusingly.
+// file does not exist yet (a 404, the create case). Only a 404 reads as the
+// create case. Any other error — auth, network, rate limit — is returned to
+// the caller.
 func contentSHA(path string) (string, error) {
 	out, err := gh("api", path, "--jq", ".sha")
 	if err != nil {

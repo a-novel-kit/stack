@@ -8,9 +8,8 @@ import (
 )
 
 // TestRegisteredAndDiscovered pins that the server hears only about the stacks
-// discovery kept. The raw registration list would let ListStacks advertise a
-// stack every other RPC then rejects as unregistered, and the two views must
-// agree.
+// discovery kept. What ListStacks advertises and what the other RPCs accept
+// come from the same set.
 func TestRegisteredAndDiscovered(t *testing.T) {
 	t.Parallel()
 

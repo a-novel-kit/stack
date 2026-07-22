@@ -328,10 +328,10 @@ func Run(ctx context.Context, t detect.Target, timeout time.Duration, live *Live
 		defer cancel()
 	}
 
-	// One buffer for both streams, so the report preserves the interleaving a
-	// terminal would have shown. Compose up/down output lands in it too, fenced
-	// with ── headers, and a failure to stand up the environment then reads as
-	// part of the same story.
+	// One buffer for both streams, so the report keeps stdout and stderr
+	// interleaved. Compose up/down output lands in it too, fenced with ──
+	// headers, so a failure to stand up the environment reads as part of the
+	// same story.
 	var buf bytes.Buffer
 	// Everything bound for the report buffer also tees to the live tail, so
 	// env-up progress and the command's own output both feed the line the TUI
@@ -678,10 +678,10 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 // composeUpPhased brings a compose env up in two waves: dependency-free
 // services first, then the ones declaring `depends_on:` (e.Dependents), waiting
 // for each wave to become healthy before starting the next. --no-deps keeps the
-// provider from ordering anything itself, since its `depends_on` wait hangs on
-// podman-compose ≤1.5.x and silently no-ops without systemd, leaving health at
-// "starting". Two waves cover the flat test composes — infra plus one
-// standalone subject — and a deeper chain would need more.
+// provider from ordering anything itself. Its `depends_on` wait hangs on
+// podman-compose ≤1.5.x, and without systemd it silently no-ops and leaves
+// health at "starting". Two waves cover the flat test composes: infra plus one
+// standalone subject.
 //
 // services, when non-empty, restricts the bring-up to that subset and
 // partitions it into the same two waves. An unknown service list falls back to

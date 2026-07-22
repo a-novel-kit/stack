@@ -11,8 +11,8 @@ import (
 // TestDiscoverStacksSkipsVanishedScratch pins the asymmetry that keeps the
 // daemon startable: a scratch stack lives in a directory the OS reclaims, so
 // its files can disappear while its $A_NOVEL_STACKS entry lives on in a shell
-// config. Failing discovery over that would take the whole daemon down, and
-// with it the workspace the operator is actually using, on every temp sweep.
+// config. Discovery skips the vanished entry and keeps the stacks that are
+// still there, so a temp sweep never costs the operator their workspace.
 func TestDiscoverStacksSkipsVanishedScratch(t *testing.T) {
 	t.Parallel()
 

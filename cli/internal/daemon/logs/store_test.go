@@ -56,9 +56,8 @@ func TestStore_SubscribeRoundtrip(t *testing.T) {
 }
 
 func TestStore_UnsubRemovesFromFanout(t *testing.T) {
-	// Without unsub the subscribers list would grow unbounded over the
-	// target's lifetime, so the observable contract is that its length
-	// returns to zero once every subscriber unsubscribes.
+	// The subscribers list returns to zero length once every subscriber
+	// unsubscribes, so a long-lived target sheds the ones that leave.
 	s, id, w := withStore(t)
 	const n = 5
 	unsubs := make([]func(), n)

@@ -370,7 +370,7 @@ func (c *Client) Debug(ctx context.Context, targetID string) (*anovelv1.DebugRes
 }
 
 // IsNotRunning reports whether err signals an unreachable daemon: a missing
-// socket or a refused connection, as opposed to a daemon-side error.
+// socket or a refused connection.
 func IsNotRunning(err error) bool {
 	var nrErr *NotRunningError
 	return errors.As(err, &nrErr)

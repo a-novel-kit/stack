@@ -663,8 +663,7 @@ func (s *Server) StreamLogs(ctx context.Context, req *connect.Request[anovelv1.S
 	tid := req.Msg.GetTargetId()
 	// An infra log ID, "<stack>/<service>/infra/<name>", streams an infra
 	// container's stdout through this same RPC. Those containers belong to
-	// podman, so the branch reads `podman logs -f <cid>` rather than a
-	// daemon-managed file.
+	// podman, so the branch reads `podman logs -f <cid>`.
 	if stack, service, name, ok := parseInfraLogID(tid); ok {
 		st, found := s.runner.InfraStatesOf(ctx, stack)[service+"/"+name]
 		if !found || st.ContainerID == "" {
@@ -1078,12 +1077,12 @@ func (s *Server) Exec(ctx context.Context, req *connect.Request[anovelv1.ExecReq
 
 	if waitErr != nil {
 		// The human-readable line survives being piped to a file, where the
-		// process exit status does not. Wrapping waitErr into a connect.Error
-		// would mask the output that already streamed.
+		// process exit status does not. It rides the same stream as the
+		// output, after everything the child wrote.
 		send(anovelv1.LogStream_LOG_STREAM_STDERR, "[exec exited: "+waitErr.Error()+"]")
 	}
 	// The terminal message carries the exit code and no line, so the client can
-	// propagate the child's status instead of always exiting 0.
+	// propagate the child's status as its own.
 	sendMu.Lock()
 	defer sendMu.Unlock()
 	_ = stream.Send(&anovelv1.ExecOutput{ExitCode: &code})
@@ -1094,8 +1093,8 @@ func (s *Server) Exec(ctx context.Context, req *connect.Request[anovelv1.ExecReq
 // execExitCode maps a [exec.Cmd.Wait] error onto the child's exit status.
 //
 // A non-nil error that is not an [exec.ExitError] comes from a spawn or IO
-// failure, where the child's status was never obtained, so it is returned
-// rather than flattened into a code that would read as success.
+// failure, where the child's status was never obtained. That error is returned
+// to the caller, and only a real [exec.ExitError] yields a code.
 func execExitCode(waitErr error) (int32, error) {
 	if waitErr == nil {
 		return 0, nil

@@ -37,9 +37,9 @@ on:
 
 run-name: "🚑 hotfix v${{ inputs.line }}.x${{ inputs.dry_run && ' (dry-run)' || '' }}"
 
-# Hotfixes serialize on this repo, so a second one waits rather than racing, and
-# cancel-in-progress:false queues it rather than cancelling a hotfix mid-flight. A
-# hotfix racing a release is handled by the reusable workflow's own lock.
+# Hotfixes serialize on this repo: a second one waits, and cancel-in-progress:false
+# queues it behind the hotfix in flight. A hotfix racing a release is handled by the
+# reusable workflow's own lock.
 concurrency:
   group: hotfix-${{ github.repository }}
   cancel-in-progress: false

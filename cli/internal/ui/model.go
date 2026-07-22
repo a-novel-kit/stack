@@ -77,8 +77,8 @@ type Model struct {
 	nextIdx int                  // next queue entry to dispatch
 	running map[string]time.Time // in-flight target ID to start time, for its live timer
 
-	// Wall-clock run timing. The report shows runElapsed as "took": under
-	// parallelism, summing per-target durations would overstate the wait.
+	// Wall-clock run timing. The report shows runElapsed as "took", the wait
+	// the user actually sat through with targets running in parallel.
 	runStart   time.Time     // stamped when the first build is dispatched
 	runElapsed time.Duration // frozen when the last build finishes
 
@@ -747,8 +747,7 @@ func (m Model) viewReport() string {
 	if s.Failed > 0 {
 		failColor = colCrit
 	}
-	// The pill row is 3 lines tall, so it needs indentBlock: a string prefix
-	// would shift only the top border and leave the box body at column 0.
+	// The pill row is 3 lines tall, so indentBlock indents every line of it.
 	b.WriteString(indentBlock(pillRow(
 		pill("passed", strconv.Itoa(s.Passed), colOK),
 		pill("failed", strconv.Itoa(s.Failed), failColor),
