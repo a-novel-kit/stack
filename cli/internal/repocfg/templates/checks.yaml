@@ -9,7 +9,6 @@
 integrations:
   actions: 15368
   gitguardian: 46505
-  codecov: 254
   # The [Agent] App posts the merge-gate check-run, but its ID is per-org
   # (a-novel and a-novel-kit run separate Apps), so `agent` is injected from the
   # org profile at discovery time — never hardcoded here. See ResolveBotIntegrations.
@@ -41,11 +40,3 @@ codeql:
   languages:
     - { detect: ["go.mod"], lang: "go" }
     - { detect: ["package.json"], lang: "javascript-typescript" }
-
-# The codecov ruleset's checks. Codecov posts these statuses itself (they are
-# not main.yaml jobs), so they live in a separate ruleset that bots bypass.
-codecov:
-  enable_when_tests: true
-  checks:
-    - { context: "codecov/patch", integration: codecov }
-    - { context: "codecov/project", integration: codecov }

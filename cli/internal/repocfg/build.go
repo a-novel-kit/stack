@@ -56,28 +56,35 @@ type RepoTarget struct {
 	OrgProfile               *OrgProfile
 	Checks                   *ChecksConfig
 	Discovered               *Discovered
-
-	// CodecovReports is whether Codecov posts a status on this repo. It
-	// gates `codecov: auto` — a coverage ruleset is only enforced where
-	// Codecov actually reports, so it never blocks PRs on a repo that has
-	// no coverage upload.
-	CodecovReports bool
 }
 
 // Op is one API operation the plan performs — a small tagged union. Most ops
 // carry a Method, Path, and Body (or Content, for a file write). A ruleset op
 // instead sets RulesetName and is reconciled by name at apply time: POST when
 // the ruleset is absent, PUT .../{id} when it already exists.
+//
+// PruneRulesets marks the one op that reconciles the ruleset SET rather than a
+// single ruleset: KeepRulesets is the complete desired list, and apply deletes
+// every live ruleset outside it.
 type Op struct {
-	Method      string `json:"method,omitempty"`
-	Path        string `json:"path,omitempty"`
-	Body        any    `json:"body,omitempty"`
-	Content     string `json:"content,omitempty"`
-	RulesetName string `json:"ruleset,omitempty"`
+	Method        string   `json:"method,omitempty"`
+	Path          string   `json:"path,omitempty"`
+	Body          any      `json:"body,omitempty"`
+	Content       string   `json:"content,omitempty"`
+	RulesetName   string   `json:"ruleset,omitempty"`
+	PruneRulesets bool     `json:"prune_rulesets,omitempty"`
+	KeepRulesets  []string `json:"keep_rulesets,omitempty"`
 }
 
 // Title is a one-line human label for the op.
 func (o Op) Title() string {
+	if o.PruneRulesets {
+		keep := "nothing"
+		if len(o.KeepRulesets) > 0 {
+			keep = strings.Join(o.KeepRulesets, ", ")
+		}
+		return fmt.Sprintf("PRUNE rulesets (%s) — keep only: %s", o.Path, keep)
+	}
 	if o.RulesetName != "" {
 		return fmt.Sprintf("PUT|POST ruleset %q (%s)", o.RulesetName, o.Path)
 	}
@@ -180,35 +187,43 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	// Rulesets, reconciled by name (POST when absent, PUT .../{id} when present).
 	// The master ruleset gates exactly the discovered checks (always + the
 	// repo's main.yaml jobs, minus exclusions) — set wholesale, no reconcile.
-	if c.Rulesets.Master {
-		if op, err := rulesetOp(rulesetMaster, t, t.Discovered.Checks); err != nil {
-			return nil, err
-		} else {
-			p.Ops = append(p.Ops, op)
-		}
+	wanted := []struct {
+		name   string
+		on     bool
+		checks []CheckRef
+	}{
+		{rulesetMaster, c.Rulesets.Master, t.Discovered.Checks},
+		{"require-approval", c.Rulesets.RequireApproval, nil},
+		{rulesetTags, c.Rulesets.Tags, nil},
 	}
-	if c.Rulesets.RequireApproval {
-		if op, err := rulesetOp("require-approval", t, nil); err != nil {
-			return nil, err
-		} else {
-			p.Ops = append(p.Ops, op)
+	keep := make([]string, 0, len(wanted))
+	for _, w := range wanted {
+		if !w.on {
+			continue
 		}
-	}
-	if c.Rulesets.Tags {
-		if op, err := rulesetOp(rulesetTags, t, nil); err != nil {
+		op, err := rulesetOp(w.name, t, w.checks)
+		if err != nil {
 			return nil, err
-		} else {
-			p.Ops = append(p.Ops, op)
 		}
+		p.Ops = append(p.Ops, op)
+		keep = append(keep, w.name)
 	}
-	if codecovEnabled(c, t) {
-		checks := resolveCheckDefs(t.Checks.Codecov.Checks, t.Checks)
-		if op, err := rulesetOp("codecov", t, checks); err != nil {
-			return nil, err
-		} else {
-			p.Ops = append(p.Ops, op)
-		}
-	}
+
+	// A repo's ruleset SET is derived, never accumulated. Everything above follows
+	// from the class preset, the org profile, and code-driven discovery — so any
+	// ruleset this plan does not name is drift, whether it was dropped from the
+	// templates or added by hand in the UI, and apply deletes it. Without this the
+	// only way to remove a ruleset would be an ever-growing list of things to
+	// un-apply, and the live config would be the templates plus an unreviewable
+	// history of what each repo happened to be given.
+	//
+	// Pruning runs last, once every desired ruleset has been written, so a repo is
+	// never momentarily left ungoverned.
+	p.Ops = append(p.Ops, Op{
+		PruneRulesets: true,
+		KeepRulesets:  keep,
+		Path:          repoPath + "/rulesets",
+	})
 
 	return p, nil
 }
@@ -232,27 +247,6 @@ func rulesetOp(name string, t *RepoTarget, checks []CheckRef) (Op, error) {
 		Path:        fmt.Sprintf("repos/%s/%s/rulesets", t.Org, t.Repo),
 		Body:        body,
 	}, nil
-}
-
-func codecovEnabled(c *ClassPreset, t *RepoTarget) bool {
-	switch c.Codecov {
-	case CodecovEnabled:
-		return true
-	case CodecovAuto:
-		// Only enforce coverage where Codecov actually reports, so the gate
-		// never blocks PRs on a repo that uploads no coverage.
-		return t.CodecovReports
-	default:
-		return false
-	}
-}
-
-func resolveCheckDefs(defs []CheckDef, cc *ChecksConfig) []CheckRef {
-	out := make([]CheckRef, 0, len(defs))
-	for _, cd := range defs {
-		out = append(out, CheckRef{Context: cd.Context, IntegrationID: cc.Integrations[cd.Integration]})
-	}
-	return out
 }
 
 // BuildRuleset turns a ruleset template + org + discovered checks into the
@@ -450,6 +444,12 @@ func (p *Plan) Render(w io.Writer) error {
 		_, _ = fmt.Fprintf(w, "### %s\n", op.Title())
 		if op.Content != "" {
 			_, _ = fmt.Fprint(w, op.Content)
+			continue
+		}
+		// A prune carries no request body; encoding the nil one would print "null"
+		// under the single operation that DELETES live configuration — the last place
+		// the preview should look like it lost track of what it is doing.
+		if op.PruneRulesets {
 			continue
 		}
 		enc := json.NewEncoder(w)

@@ -22,7 +22,6 @@ codeql:
   enabled: true
   query_suite: default
 pages: false
-codecov: disabled
 code_quality: false
 rulesets:
   master: true

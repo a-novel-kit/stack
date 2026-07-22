@@ -107,27 +107,12 @@ type CodeQLPreset struct {
 	QuerySuite string `yaml:"query_suite"`
 }
 
-// ClassRulesets says which named rulesets the class applies. codecov is
-// driven separately by ClassPreset.Codecov.
+// ClassRulesets says which named rulesets the class applies.
 type ClassRulesets struct {
 	Master          bool `yaml:"master"`
 	RequireApproval bool `yaml:"require_approval"`
 	Tags            bool `yaml:"tags"`
 }
-
-// CodecovMode selects whether a repo enforces the Codecov coverage ruleset. It
-// is a string rather than a bool to sidestep YAML's off/on boolean coercion.
-type CodecovMode string
-
-const (
-	// CodecovAuto enforces the ruleset only where the repo has tests (Codecov
-	// actually reports), so the gate never blocks a repo that uploads no coverage.
-	CodecovAuto CodecovMode = "auto"
-	// CodecovEnabled always enforces the ruleset.
-	CodecovEnabled CodecovMode = "enabled"
-	// CodecovDisabled never enforces the ruleset.
-	CodecovDisabled CodecovMode = "disabled"
-)
 
 // ClassPreset is one classes/<class>.yaml file.
 type ClassPreset struct {
@@ -137,7 +122,6 @@ type ClassPreset struct {
 	Security    SecurityToggles `yaml:"security"`
 	CodeQL      CodeQLPreset    `yaml:"codeql"`
 	Pages       bool            `yaml:"pages"`
-	Codecov     CodecovMode     `yaml:"codecov"`
 	CodeQuality bool            `yaml:"code_quality"`
 	Rulesets    ClassRulesets   `yaml:"rulesets"`
 }
@@ -147,14 +131,6 @@ type ClassPreset struct {
 type CheckDef struct {
 	Context     string `yaml:"context"`
 	Integration string `yaml:"integration"`
-}
-
-// CodecovRule controls the codecov ruleset's auto-enable + its checks. Codecov
-// posts its own statuses (codecov/patch, codecov/project), so they are not
-// main.yaml jobs — they live in this separate, bot-bypassing ruleset.
-type CodecovRule struct {
-	EnableWhenTests bool       `yaml:"enable_when_tests"`
-	Checks          []CheckDef `yaml:"checks"`
 }
 
 // ExcludeRules narrows the main.yaml jobs that become required checks. A job is
@@ -183,13 +159,12 @@ type CodeQLLangRule struct {
 // ChecksConfig is checks.yaml. Required checks are the jobs declared in a repo's
 // .github/workflows/main.yaml (minus Exclude), plus the Always set — there is no
 // per-class or per-file derivation. CodeQL languages (for the codeql.yml
-// workflow) and the Codecov ruleset's checks are the only other pieces here.
+// workflow) are the only other piece here.
 type ChecksConfig struct {
 	Integrations map[string]int64 `yaml:"integrations"`
 	Always       []CheckDef       `yaml:"always"`
 	Exclude      ExcludeRules     `yaml:"exclude"`
 	CodeQL       CodeQLRule       `yaml:"codeql"`
-	Codecov      CodecovRule      `yaml:"codecov"`
 }
 
 // LoadClass reads and parses classes/<class>.yaml.

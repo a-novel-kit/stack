@@ -276,3 +276,101 @@ func contextsOf(checks []CheckRef) []string {
 	}
 	return out
 }
+
+// TestBuildPlanPrunesUnknownRulesets pins the invariant that makes repo config
+// derived rather than accumulated: the plan names the COMPLETE set of rulesets a
+// repo may carry, and apply deletes everything else. Without it the only way to
+// remove a ruleset would be an ever-growing list of things to un-apply, and a
+// ruleset added by hand in the UI would outlive every reconcile.
+func TestBuildPlanPrunesUnknownRulesets(t *testing.T) {
+	t.Parallel()
+
+	build := func(t *testing.T, rs ClassRulesets) *Plan {
+		t.Helper()
+		plan, err := BuildPlan(&RepoTarget{
+			Org:        "a-novel-kit",
+			Repo:       "example",
+			Class:      &ClassPreset{Rulesets: rs},
+			OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{"agent": 1, "publish": 2, "dependencies": 3}},
+			Checks:     &ChecksConfig{},
+			Discovered: &Discovered{},
+		})
+		if err != nil {
+			t.Fatalf("BuildPlan: %v", err)
+		}
+		return plan
+	}
+
+	prunes := func(t *testing.T, plan *Plan) Op {
+		t.Helper()
+		var found []Op
+		for _, op := range plan.Ops {
+			if op.PruneRulesets {
+				found = append(found, op)
+			}
+		}
+		if len(found) != 1 {
+			t.Fatalf("want exactly 1 prune op, got %d", len(found))
+		}
+		return found[0]
+	}
+
+	t.Run("keeps exactly what the plan applies", func(t *testing.T) {
+		t.Parallel()
+		plan := build(t, ClassRulesets{Master: true, RequireApproval: true, Tags: true})
+		var applied []string
+		for _, op := range plan.Ops {
+			if op.RulesetName != "" {
+				applied = append(applied, op.RulesetName)
+			}
+		}
+		keep := prunes(t, plan).KeepRulesets
+		slices.Sort(applied)
+		slices.Sort(keep)
+		if !slices.Equal(applied, keep) {
+			t.Errorf("keep set %v != applied rulesets %v — a ruleset would be written then immediately deleted", keep, applied)
+		}
+	})
+
+	t.Run("prunes last, so the repo is never briefly ungoverned", func(t *testing.T) {
+		t.Parallel()
+		plan := build(t, ClassRulesets{Master: true, RequireApproval: true, Tags: true})
+		lastApply := -1
+		pruneAt := -1
+		for i, op := range plan.Ops {
+			if op.RulesetName != "" {
+				lastApply = i
+			}
+			if op.PruneRulesets {
+				pruneAt = i
+			}
+		}
+		if pruneAt < lastApply {
+			t.Errorf("prune op at %d precedes the last ruleset apply at %d", pruneAt, lastApply)
+		}
+	})
+
+	t.Run("a class with no rulesets keeps none", func(t *testing.T) {
+		t.Parallel()
+		plan := build(t, ClassRulesets{})
+		if keep := prunes(t, plan).KeepRulesets; len(keep) != 0 {
+			t.Errorf("keep = %v, want empty — an ungoverned class must not retain rulesets", keep)
+		}
+	})
+
+	t.Run("coverage is never kept", func(t *testing.T) {
+		t.Parallel()
+		keep := prunes(t, build(t, ClassRulesets{Master: true, RequireApproval: true, Tags: true})).KeepRulesets
+		if slices.Contains(keep, "codecov") {
+			t.Errorf("codecov is still in the keep set %v — it would survive the prune", keep)
+		}
+	})
+
+	t.Run("the prune op reads as a deletion", func(t *testing.T) {
+		t.Parallel()
+		title := prunes(t, build(t, ClassRulesets{Master: true})).Title()
+		if !strings.Contains(title, "PRUNE") || !strings.Contains(title, "master") {
+			t.Errorf("prune title = %q, want it to name the operation and what survives", title)
+		}
+	})
+}

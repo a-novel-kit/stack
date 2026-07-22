@@ -77,9 +77,6 @@ func renderSummary(w io.Writer, t *repocfg.RepoTarget) {
 	if c.Rulesets.RequireApproval {
 		rs = append(rs, "require-approval")
 	}
-	if codecovWanted(c, t) {
-		rs = append(rs, "codecov")
-	}
 	line("Rulesets", strings.Join(rs, ", "))
 	if checks := masterChecksFor(t); len(checks) > 0 {
 		line("Checks", fmt.Sprintf("%s (%d)", strings.Join(checks, ", "), len(checks)))
@@ -95,19 +92,6 @@ func masterChecksFor(t *repocfg.RepoTarget) []string {
 		out[i] = c.Context
 	}
 	return out
-}
-
-// codecovWanted mirrors the engine's codecov gate: enabled outright, or auto
-// when Codecov reports on the repo.
-func codecovWanted(c *repocfg.ClassPreset, t *repocfg.RepoTarget) bool {
-	switch c.Codecov {
-	case repocfg.CodecovEnabled:
-		return true
-	case repocfg.CodecovAuto:
-		return t.CodecovReports
-	default:
-		return false
-	}
 }
 
 func pad(s string, n int) string {

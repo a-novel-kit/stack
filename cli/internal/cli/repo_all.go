@@ -109,6 +109,7 @@ func runRepoUpdateAll(cmd *cobra.Command, rootDir, class string, exclude []strin
 	if dryRun {
 		for _, p := range eligible {
 			_, _ = fmt.Fprintf(progress, "\n# dry-run %s — class %s\n", p.cand.fullName(), p.target.Class.Class)
+			renderPruneImpact(progress, p.target.Org, p.target.Repo, p.plan)
 			if renderErr := p.plan.Render(out); renderErr != nil {
 				return renderErr
 			}
@@ -225,9 +226,6 @@ func renderCompactSummary(w io.Writer, t *repocfg.RepoTarget) {
 	}
 	if t.Class.Rulesets.RequireApproval {
 		rs = append(rs, "require-approval")
-	}
-	if codecovWanted(t.Class, t) {
-		rs = append(rs, "codecov")
 	}
 	header := fmt.Sprintf("  %s %s — class %s",
 		repoOn.Render("▸"), repoHead.Render(t.Org+"/"+t.Repo), t.Class.Class)

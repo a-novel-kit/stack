@@ -122,14 +122,13 @@ rulesets, Pages. Interactive (human-only); run it from anywhere.`,
 			}
 			branch := repoDefaultBranch(org, name)
 			target := &repocfg.RepoTarget{
-				Org:            org,
-				Repo:           name,
-				DefaultBranch:  branch,
-				Class:          preset,
-				OrgProfile:     orgProfile,
-				Checks:         checks,
-				Discovered:     discovered,
-				CodecovReports: codecovReports(org, name, branch),
+				Org:           org,
+				Repo:          name,
+				DefaultBranch: branch,
+				Class:         preset,
+				OrgProfile:    orgProfile,
+				Checks:        checks,
+				Discovered:    discovered,
 			}
 			plan, err := repocfg.BuildPlan(target)
 			if err != nil {
@@ -209,8 +208,10 @@ confirm gates the whole batch.`,
 			}
 			if dryRun {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-					"# dry-run %s/%s — class %s\n# required checks: %s\n\n",
+					"# dry-run %s/%s — class %s\n# required checks: %s\n",
 					org, repo, target.Class.Class, strings.Join(checkContexts(target.Discovered.Checks), ", "))
+				renderPruneImpact(cmd.ErrOrStderr(), org, repo, plan)
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr())
 				return plan.Render(cmd.OutOrStdout())
 			}
 
@@ -280,14 +281,13 @@ func buildRepoTarget(dir, class string) (*repocfg.RepoTarget, *repocfg.Plan, err
 
 	branch := repoDefaultBranch(org, repo)
 	target := &repocfg.RepoTarget{
-		Org:            org,
-		Repo:           repo,
-		DefaultBranch:  branch,
-		Class:          preset,
-		OrgProfile:     orgProfile,
-		Checks:         checks,
-		Discovered:     discovered,
-		CodecovReports: codecovReports(org, repo, branch),
+		Org:           org,
+		Repo:          repo,
+		DefaultBranch: branch,
+		Class:         preset,
+		OrgProfile:    orgProfile,
+		Checks:        checks,
+		Discovered:    discovered,
 	}
 	plan, err := repocfg.BuildPlan(target)
 	if err != nil {
@@ -343,15 +343,6 @@ func repoDefaultBranch(org, repo string) string {
 
 // codecovReports reports whether Codecov posts a status check on the repo's
 // default branch (gates codecov: auto).
-func codecovReports(org, repo, branch string) bool {
-	out, err := exec.Command("gh", "api", "repos/"+org+"/"+repo+"/commits/"+branch+"/status",
-		"--jq", `[.statuses[].context]|map(select(startswith("codecov")))|length`).Output()
-	if err != nil {
-		return false
-	}
-	return strings.TrimSpace(string(out)) != "0" && strings.TrimSpace(string(out)) != ""
-}
-
 func checkContexts(checks []repocfg.CheckRef) []string {
 	cs := make([]string, len(checks))
 	for i, c := range checks {

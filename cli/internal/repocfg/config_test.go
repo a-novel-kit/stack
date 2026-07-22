@@ -109,10 +109,6 @@ func TestLoadChecks(t *testing.T) {
 	if len(c.CodeQL.Languages) == 0 {
 		t.Error("codeql.languages empty")
 	}
-	// Codecov posts its own statuses (separate, bot-bypass ruleset).
-	if len(c.Codecov.Checks) == 0 {
-		t.Error("codecov.checks empty")
-	}
 }
 
 // TestResolveBotIntegrations pins the per-org [Agent] app id resolution: the two
@@ -168,7 +164,7 @@ func TestLoadLabels(t *testing.T) {
 
 func TestLoadRulesets(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"master", "require-approval", "codecov", "tags"} {
+	for _, name := range []string{"master", "require-approval", "tags"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			r, err := LoadRuleset(name)
@@ -247,34 +243,19 @@ func TestBuildRulesetBypassResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("codecov ruleset exempts the agent (the release bump push)", func(t *testing.T) {
+	t.Run("no coverage ruleset ships", func(t *testing.T) {
 		t.Parallel()
-		// The dispatched release pushes the version-bump commit straight to the
-		// default branch as the agent bot; codecov must exempt it or that push is
-		// rejected on required_status_checks. "exempt" is enough — the same mode on
-		// require-approval already lets the agent's direct push through.
-		spec, err := LoadRuleset("codecov")
-		if err != nil {
-			t.Fatalf("LoadRuleset(codecov): %v", err)
-		}
-		o := &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{
-			"dependencies": 1734926, "publish": 1734949, "agent": 3549379,
-		}}
-		rs, err := BuildRuleset(spec, o, nil)
-		if err != nil {
-			t.Fatalf("BuildRuleset(codecov): %v", err)
-		}
-		var agent *APIBypassActor
-		for i := range rs.BypassActors {
-			if rs.BypassActors[i].ActorID != nil && *rs.BypassActors[i].ActorID == 3549379 {
-				agent = &rs.BypassActors[i]
-			}
-		}
-		if agent == nil {
-			t.Fatal("codecov ruleset does not bypass the agent bot — the release bump push would be rejected")
-		}
-		if agent.BypassMode != modeExempt {
-			t.Fatalf("agent bypass mode = %q, want %q", agent.BypassMode, modeExempt)
+		// Coverage was a required status check on the default branch, with the bot Apps
+		// exempt so dependency PRs were not blocked on it. A ruleset bypass exempts the
+		// author of a PULL REQUEST, but the merge queue validates required checks against
+		// a merge GROUP, which has no author to match — so the exemption disappeared at
+		// exactly the point dependency PRs relied on it, and a coverage provider that
+		// accepted an upload without posting its status stalled the entire queue.
+		//
+		// Removing the template is the whole removal, because the ruleset SET is derived:
+		// what a plan does not name, apply prunes (see TestBuildPlanPrunesUnknownRulesets).
+		if _, err := LoadRuleset("codecov"); err == nil {
+			t.Error("rulesets/codecov.yaml still ships — coverage must not gate a merge")
 		}
 	})
 }

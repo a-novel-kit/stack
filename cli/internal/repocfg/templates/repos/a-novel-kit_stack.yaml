@@ -24,7 +24,6 @@ codeql:
   enabled: true
   query_suite: security-and-quality
 pages: false
-codecov: auto
 code_quality: true
 rulesets:
   master: true

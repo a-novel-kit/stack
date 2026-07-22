@@ -139,18 +139,16 @@ func TestRenderCompactSummary(t *testing.T) {
 		Repo: "service-auth",
 		Class: &repocfg.ClassPreset{
 			Class:    repocfg.ClassService,
-			Codecov:  repocfg.CodecovAuto,
 			Rulesets: repocfg.ClassRulesets{Master: true, RequireApproval: true},
 		},
-		Discovered:     &repocfg.Discovered{Checks: []repocfg.CheckRef{{Context: "lint-go"}, {Context: "test-go"}}},
-		CodecovReports: true, // gates codecov: auto on
+		Discovered: &repocfg.Discovered{Checks: []repocfg.CheckRef{{Context: "lint-go"}, {Context: "test-go"}}},
 	}
 	var buf bytes.Buffer
 	renderCompactSummary(&buf, target)
 	got := buf.String()
 	for _, want := range []string{
 		"a-novel/service-auth", "class service",
-		"master", "require-approval", "codecov",
+		"master", "require-approval",
 		"lint-go, test-go (2)",
 	} {
 		if !strings.Contains(got, want) {

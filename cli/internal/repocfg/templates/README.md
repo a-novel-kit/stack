@@ -12,6 +12,10 @@ A repo's desired config is composed from three inputs:
 2. the **org** profile (`orgs/<org>.yaml`) — bot IDs + signing policy;
 3. **discovered** checks/languages (`checks.yaml` + the repo's contents).
 
+Those three are the _only_ inputs. A repo's config is **derived**, never
+accumulated: what they do not produce, `repo update` removes — see
+[Derived, not accumulated](#derived-not-accumulated).
+
 CLI flags and the interactive form override any field.
 
 ## Org-level prerequisite: `AGENT_KILL_SWITCH`
@@ -69,7 +73,6 @@ are required unless noted.
 | `codeql.enabled`                                                | bool   | Enable CodeQL advanced setup (commits `.github/workflows/codeql.yml`).                                      |
 | `codeql.query_suite`                                            | string | `default` or `security-and-quality` (the latter feeds the `code_quality` rule). Omit when `enabled: false`. |
 | `pages`                                                         | bool   | Enable a GitHub Pages site (build type: workflow).                                                          |
-| `codecov`                                                       | enum   | `auto` (on when the repo has tests), `enabled`, or `disabled`.                                              |
 | `code_quality`                                                  | bool   | Add the `code_quality` rule to the `master` ruleset.                                                        |
 | `rulesets.master` / `.require_approval` / `.tags`               | bool   | Apply those rulesets. `tags` locks tag (and release) creation to the agent bot + admins.                    |
 
@@ -129,8 +132,37 @@ this map only decides which of their jobs are required, and the set is applied
 | `exclude.if_contains` | []string | Jobs whose `if:` contains one of these are not required (master-only jobs never run on a PR).      |
 | `codeql.always`       | []string | CodeQL languages analyzed with no detection (e.g. `actions`).                                      |
 | `codeql.languages`    | list     | `{ detect, lang }` — a CodeQL language keyed to a canonical file (the only file detection left).   |
-| `codecov`             | mixed    | The codecov ruleset's checks (see below).                                                          |
 
-The codecov checks (`codecov/patch`, `codecov/project`) are **not** `main.yaml`
-jobs — Codecov posts them itself — so they live in a separate ruleset that bots
-bypass, gated on whether the repo actually uploads coverage.
+Coverage is deliberately **not** among them. Codecov posts its own commit
+statuses rather than running as a `main.yaml` job, and a required status check
+applies to the merge **group** as well as the pull request — where no bypass can
+reach it, because a merge group has no author. A provider that accepted an upload
+and then never posted its status therefore stalled the queue behind an otherwise
+green build. Coverage is still uploaded, reported and visible; it is advisory, and
+the old gate is listed in `retired.yaml`.
+
+## Derived, not accumulated
+
+A repo's **rulesets are a set, and the plan names all of it.** Every ruleset comes
+from the class preset, the org profile and code-driven discovery, so anything else
+live on the repo is drift — whether it was dropped from these templates or added
+by hand in the UI — and `repo update` **deletes it**.
+
+That is a deliberate constraint, not a convenience. The alternative is an
+ever-growing list of things to un-apply, and a live configuration that is the
+templates plus an unreviewable history of whatever each repo happened to be given.
+With the set derived, these files are the whole truth: what you can read here is
+what governs the repos, and a reconcile is enough to prove it.
+
+Two consequences worth stating plainly:
+
+- **Removing a template removes the ruleset.** Nothing further is needed, and no
+  migration list records that it once existed.
+- **The UI is not a place to configure a governed repo.** A ruleset added there
+  survives until the next reconcile and no longer. Anything genuinely wanted
+  belongs in `rulesets/` and a class preset, where every repo gets it and a
+  reviewer can see it.
+
+Variance between repos is legitimate only where it is _computed_ — the `master`
+ruleset's required checks differ per repo because they are read out of that repo's
+`main.yaml`, not because someone set them differently.
