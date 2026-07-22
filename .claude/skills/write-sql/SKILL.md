@@ -197,6 +197,30 @@ migration with a current timestamp.
 **Up migrations on the current branch (not yet merged to `master`) and all down migrations
 may be edited freely**, since they have not yet been applied to any shared environment.
 
+#### Exception: `service-template` edits its initial migrations in place
+
+**`a-novel/service-template` is exempt from the immutability rule.** It is a template: nothing is
+ever published from it and nothing is ever deployed from it, so there is no environment where a
+migration has already been applied and no divergence to create. The rule's entire premise is absent.
+
+In that repo, change the schema by **editing the initial migration directly** — do not add a new one.
+A template's migration set is boilerplate every generated service inherits, and a second migration
+that only exists to patch the first is boilerplate with no purpose, propagated forever.
+
+```sql
+-- service-template: edit 20250306000000_items_table.up.sql in place
+created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+```
+
+```sql
+-- NOT this — a corrective migration in a repo that never runs migrations against a live database
+ALTER TABLE items ALTER COLUMN created_at TYPE timestamp with time zone;
+```
+
+This applies **only** to `service-template`. Every real service — `service-authentication`,
+`service-json-keys`, `service-narrative-engine`, and anything generated from the template — has
+deployed environments and follows the immutability rule above without exception.
+
 ### Statement Splitting: `--bun:split`
 
 bun's migration runner executes each file as a single database round-trip by default. When
