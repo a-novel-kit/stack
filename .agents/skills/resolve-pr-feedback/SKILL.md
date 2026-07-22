@@ -223,7 +223,7 @@ independently — do not classify in bulk.
 
 Signals that push toward **decline** specifically:
 
-- Accepting would violate a rule in `.claude/skills/*/SKILL.md` — the skill file is the
+- Accepting would violate a rule in `.agents/skills/*/SKILL.md` — the skill file is the
   authoritative source, not the comment.
 - The comment asks to re-expose something that was deliberately hidden for security
   (e.g., error strings on an unauthenticated endpoint). Treat that as a decline, not a
@@ -281,7 +281,7 @@ a-novel core bot-comment <org> <repo> <number> --reply-to <comment-id> \
   --body "$(cat <<'EOF'
 <one-sentence reason>
 
-Per <.claude/skills/...-SKILL.md section / CLAUDE.md anchor / linked source>.
+Per <.agents/skills/...-SKILL.md section / CLAUDE.md anchor / linked source>.
 Happy to revisit if I've missed context here.
 EOF
 )"

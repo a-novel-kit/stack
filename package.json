@@ -8,9 +8,10 @@
     "format": "pnpm run format:prettier",
     "format:prettier": "prettier --write . --config prettier.config.ts",
     "preinstall": "npx only-allow pnpm",
-    "lint": "pnpm lint:stylecheck && pnpm lint:eslint",
+    "lint": "pnpm lint:symlinks && pnpm lint:stylecheck && pnpm lint:eslint",
     "lint:eslint": "eslint .",
-    "lint:stylecheck": "prettier --check . --config prettier.config.ts"
+    "lint:stylecheck": "prettier --check . --config prettier.config.ts",
+    "lint:symlinks": "node scripts/check-symlinks.js"
   },
   "devDependencies": {
     "@a-novel-kit/nodelib-config": "^1.3.1",

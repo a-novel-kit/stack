@@ -67,7 +67,7 @@ The scope is the area of the codebase affected. Use the layer name, not the feat
 | `scripts`    | Shell scripts (`scripts/`)                      |
 | `ci`         | GitHub Actions workflows (`.github/`)           |
 | `deps`       | Dependency bumps (go.mod, package.json)         |
-| `skills`     | Skill documents (`.claude/skills/`)             |
+| `skills`     | Skill documents (`.agents/skills/`)             |
 
 When a commit touches multiple scopes of the same weight, pick the primary one. When the commit
 is genuinely cross-cutting (e.g., a rename that touches every layer), omit the scope.
