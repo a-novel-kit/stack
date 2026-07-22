@@ -435,7 +435,7 @@ GitHub's own model is **one project, many saved views**. Do **not** add per-area
 The one real limit: a project **cannot span two orgs**, which is the other reason the two orgs keep
 separate boards (cross-org epics are tracked by reference — see "Where the issue lives").
 
-**Status is written by the board's bot, not by GitHub's built-in workflows.** The bot derives every
+**Status is single-writer: the board's bot owns it, not GitHub's built-in workflows.** The bot derives every
 status from what happened to a Pull Request (draft → _In progress_, ready → _In review_, approved →
 _Done_, merged → _Awaiting release_) and a sweep re-asserts it, so a manual edit will not stick. Leave
 the built-in workflows that derive status **from Pull Request state** off: they cannot see the board's
