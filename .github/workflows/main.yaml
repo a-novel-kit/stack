@@ -95,8 +95,49 @@ jobs:
       - name: discover modules
         id: discover
         run: |
-          echo "$(for mod in $(go list -m); do go list ${mod//$(go list .)/.}/... | grep -v /mocks | grep -v /test | grep -v /proto; done)" > modules.txt
-          echo "MODULES=$(cat modules.txt | tr '\n' ' ')" >> $GITHUB_ENV
+          # Every read is checked, and the discovered set has to name at least one package. An
+          # empty MODULES reaches gotestsum as no package arguments at all, so it falls back to
+          # `.` — which in cli/ holds no test files. It reports `DONE 0 tests` and exits 0,
+          # coverage comes out as the bare `mode: set` header, and this job is the only source of
+          # the CLI's test signal.
+          discover_modules() {
+            local root modules mod packages
+
+            if ! root=$(go list .); then
+              echo "::error::go list . failed — cannot derive the module path prefix"
+              return 1
+            fi
+
+            if ! modules=$(go list -m); then
+              echo "::error::go list -m failed — cannot enumerate the modules"
+              return 1
+            fi
+
+            : >modules.txt
+
+            for mod in $modules; do
+              if ! packages=$(go list "${mod//$root/.}/..."); then
+                echo "::error::go list failed for module ${mod}"
+                return 1
+              fi
+
+              # A module contributing nothing is legitimate — every one of its packages may be
+              # filtered out, and then the last grep exits 1. Only the emptiness of the whole set
+              # is a failure, so it is checked once, below.
+              [ -n "$packages" ] || continue
+
+              printf '%s\n' "$packages" | grep -v /mocks | grep -v /test | grep -v /proto >>modules.txt
+            done
+
+            if [ ! -s modules.txt ]; then
+              echo "::error::discovery produced no packages — the test run would report success having run nothing"
+              return 1
+            fi
+          }
+
+          discover_modules || exit 1
+
+          echo "MODULES=$(tr '\n' ' ' <modules.txt)" >>"$GITHUB_ENV"
       - name: run tests
         run: |
           go tool -modfile=gotestsum.mod gotestsum --jsonfile tests.json --format pkgname \
