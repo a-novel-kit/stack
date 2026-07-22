@@ -66,8 +66,9 @@ under `a-novel publish` is `stamp`, the doc-version helper `prepublish:doc` call
    it an unauthorized user can push a `v*` tag from any commit (even one not on `master`) and CI
    releases from it.
 
-Only the [Agent] bot (and repo admins) can bypass these, which is why the release runs in CI under
-the bot and a developer cannot hand-push a `v*` tag.
+A `v*` tag is only ever created by a CI dispatch — the release or release-train job, running as the
+[Agent] bot. Nobody pushes one by hand, maintainers included. Repo admins can bypass every rule
+here, but that power exists to repair a broken state, never to cut a release.
 
 **Releases are human-triggered but bot-run.** A human starts the release workflow; the agent never
 decides to publish (or merge, or push to master) on its own, and a non-interactive token must lack
@@ -169,9 +170,9 @@ entries:
 3. (if needed) golib#PPP  (removes old X) → after #2 ships → release v0.21.0
 ```
 
-> Edge case — A is `golib` (no separate "release PR", releases on tag): the maintainer pushes the
-> tag after A's PR merges. Don't merge B until that tag exists and B is pinned to it. If you don't
-> control the tag push, hand off: "golib#NNN is merged; needs a release tag before
+> Edge case — A is `golib`, which has no separate "release PR" and releases on tag: dispatch A's
+> release workflow once its PR merges. Don't merge B until that tag exists and B is pinned to it. If
+> you cannot dispatch it, hand off: "golib#NNN is merged; needs a release tag before
 > service-foo#MMM can land — re-pin and merge once `vX.Y.Z` is out."
 
 ---
