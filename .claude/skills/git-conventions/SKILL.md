@@ -1,14 +1,16 @@
 ---
 name: git-conventions
 description: >
-  Git branch naming, commit message format, and workflow conventions for Agora backend services.
-  Use this skill whenever creating a branch, writing a commit message, or deciding how to group
-  changes. Referenced by implement-feature and any other skill that touches git.
+  Git workspace pre-flight, branch naming, commit message format, and workflow conventions for
+  Agora backend services. Use this skill whenever starting work in a checkout, creating a branch,
+  writing a commit message, or deciding how to group changes. Referenced by implement-feature and
+  any other skill that touches git.
 ---
 
 # Git Conventions
 
-This skill governs branch naming and commit messages across all Agora backend services. Every
+This skill governs workspace state, branch naming, and commit messages across all Agora backend
+services. Every
 branch and commit produced by Claude must follow these conventions exactly — they drive automation
 (Renovate, CI tagging, changelogs) and signal intent to reviewers at a glance.
 
@@ -126,6 +128,41 @@ Flag any change that:
 - Removes or renames an exported TypeScript type or function in `pkg/js`
 - Removes or changes the semantics of a REST endpoint path or response shape
 - Changes a database column type or removes a column
+
+---
+
+## Workspace Pre-Flight
+
+**Start every task from `master`, with a clean tree, in a checkout that is yours.** Check this
+before the first edit — in the stack root and in each `app/` or `kit/` checkout the task will
+touch, since those are independent repos with independent states:
+
+```bash
+git -C <checkout> status --porcelain            # empty
+git -C <checkout> rev-parse --abbrev-ref HEAD   # master
+git -C <checkout> branch --no-merged master     # nothing you did not create
+```
+
+Uncommitted changes, or an unmerged branch you did not create, mean **someone else is working in
+this checkout** — the operator in another terminal, or a parallel agent session. Their
+work-in-progress is invisible to you, and `stash`, `reset`, `checkout -f`, or branching on top of
+it can destroy hours of work that exists nowhere else. Leave it untouched and take a checkout of
+your own.
+
+The daemon manages as many stacks as the machine supports. `A_NOVEL_STACKS` is its source of
+truth, formatted `name:/path,name:/path` with the first entry as the default; unset means a single
+`default` stack at `~/git-projects/a-novel`.
+
+```bash
+a-novel core status                       # which stacks exist, and where
+a-novel core sync --root=/tmp/agent-stack # clone the workspace into a fresh root
+```
+
+Add the new root to `A_NOVEL_STACKS` for daemon-backed verbs (`a-novel run …`) to reach it, then
+work from there — see `use-a-novel-cli`.
+
+Resuming a branch **you** created earlier in the same session is your own work, not this case.
+Carry on with it.
 
 ---
 
