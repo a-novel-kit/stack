@@ -269,7 +269,25 @@ a-novel core sync --allow=a-novel-kit/golib  # subset to specific repos
 a-novel core sync --ignore=<org>/<repo>      # skip specific repos
 a-novel core bot-comment <org> <repo> <number> --body <text> [--reply-to <id>]
                                            # comment as the org App bot (see below)
+
+# Stack lifecycle — `sync` stands one up, `stacks prune` gives it back.
+a-novel core stacks list              # every stack: path, targets up, volumes
+a-novel core stacks prune <name>      # kill its targets + infra, clear its volumes, remove its files
+a-novel core stacks prune <name> --dry-run   # report what would be reclaimed
+a-novel core stacks prune --all -y    # sweep every stack but the default
 ```
+
+**Pruning a scratch stack.** A stack allocates three things and only one is a
+file, so deleting the root reclaims the checkout and leaves containers holding
+host ports and volumes sitting in the container store. `stacks prune` releases
+all three, in that order.
+
+It refuses the default stack outright — that is the workspace, not scratch space
+— and `--all` sweeps every _other_ registered stack, which is the pass to run
+after a batch of agent sessions. It also refuses a stack whose checkouts hold
+work that exists nowhere else (dirty tree, a branch other than the default, or
+unpushed commits) unless `--force`. `$A_NOVEL_STACKS` lives in your shell config,
+so prune prints the entry to drop rather than editing the file underneath you.
 
 `bot-comment` is the **only** way to post a PR/issue/review comment as
 `<app-slug>[bot]`. It does **not** mint a local token: it triggers the

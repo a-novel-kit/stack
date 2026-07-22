@@ -53,6 +53,7 @@ which is silent on already-running and idempotent.`,
 	cmd.AddCommand(newCoreStartCmd())
 	cmd.AddCommand(newCoreSetupCmd())
 	cmd.AddCommand(newCoreSyncCmd())
+	cmd.AddCommand(newCoreStacksCmd())
 	cmd.AddCommand(newCoreBotCommentCmd())
 	cmd.AddCommand(newCoreKillCmd())
 	cmd.AddCommand(newCoreRestartCmd())
