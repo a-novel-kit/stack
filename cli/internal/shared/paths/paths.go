@@ -68,8 +68,8 @@ func ReinstallCheckpoint() string { return filepath.Join(State(), "reinstall.jso
 // LogsRoot(), which holds the output of the targets the daemon supervises.
 func DaemonLog() string { return filepath.Join(State(), "daemon.log") }
 
-// home returns $HOME (falls back to "/" if unset, which would be a broken
-// environment but avoids panicking inside path computation).
+// home returns $HOME, or "/" when it is unset, so path computation always
+// yields a path.
 func home() string {
 	if v := os.Getenv("HOME"); v != "" {
 		return v

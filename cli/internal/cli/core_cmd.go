@@ -172,8 +172,7 @@ For graceful 'restart-the-daemon-and-relaunch-my-targets', prefer
 
 // waitForDaemonGone polls Ping until the daemon's socket is unresponsive, up to
 // timeout. core kill and core restart use it for a deterministic "the daemon is
-// gone" signal, which a script that immediately runs `core start` would
-// otherwise race.
+// gone" signal, so a script can run `core start` on the next line.
 func waitForDaemonGone(ctx context.Context, c *rpc.Client, timeout time.Duration, out io.Writer) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -442,8 +441,8 @@ func startDetached() error {
 		c.Stdout = logFile
 		c.Stderr = logFile
 	}
-	// Where this attempt's output begins, so a failure quotes what this start
-	// wrote rather than the tail of a previous one.
+	// Where this attempt's output begins, so a failure quotes only what this
+	// start wrote.
 	var logOffset int64
 	if logErr == nil {
 		if end, err := logFile.Seek(0, io.SeekEnd); err == nil {
@@ -473,8 +472,8 @@ func startDetached() error {
 }
 
 // openDaemonLog opens the detached daemon's log for appending, creating its
-// parent directory. Append rather than truncate: a start that fails is often
-// one of several, and the earlier attempts are the context for the last one.
+// parent directory. A start that fails is often one of several, and the
+// earlier attempts are the context for the last one.
 func openDaemonLog() (*os.File, error) {
 	path := paths.DaemonLog()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

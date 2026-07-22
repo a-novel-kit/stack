@@ -54,8 +54,8 @@ ensure:
   - name: escalation
     color: "b60205"
     description: "Automated governance escalation (escalate action)."
-  # hotfix-reconcile — on a hotfix's per-hotfix cleanup Task: the fix must be forward-ported to the
-  # default branch or a later minor would reintroduce the bug. Matches hotfix.yaml's own ensure.
+  # hotfix-reconcile — on a hotfix's per-hotfix cleanup Task: the fix is forward-ported to the
+  # default branch, so every later minor carries it. Matches hotfix.yaml's own ensure.
   - name: hotfix-reconcile
     color: "fbca04"
     description: "Tracks a hotfix's forward-port to the default branch."

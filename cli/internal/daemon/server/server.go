@@ -184,7 +184,7 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *connect.Request[anovelv1
 	}
 	// Gather the running go-exec instances. An instance never stores the env
 	// it started with, so relaunch re-derives it from the env builder and the
-	// target comes back on freshly allocated ports, as a manual restart would.
+	// target comes back on freshly allocated ports, as a manual restart does.
 	cp := reinstall.Checkpoint{}
 	for _, inst := range s.runner.AllInstances() {
 		if inst.Mode != runner.ModeGoExec {

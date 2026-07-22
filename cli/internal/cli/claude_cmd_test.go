@@ -38,8 +38,8 @@ func TestDefaultStackPath(t *testing.T) {
 	})
 }
 
-// The whole point of `a-novel claude` is that flags reach claude rather than
-// Cobra — a regression here would silently break `a-novel claude --continue`.
+// TestClaudeCmdForwardsFlags pins the point of `a-novel claude`: every flag
+// reaches claude, so `a-novel claude --continue` works.
 func TestClaudeCmdForwardsFlags(t *testing.T) {
 	cmd := newClaudeCmd()
 	if !cmd.DisableFlagParsing {

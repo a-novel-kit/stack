@@ -161,7 +161,7 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	}
 
 	// Auto-approve the trusted dependency bots' PRs so their version bumps don't
-	// wait on a human — pushed wherever require-approval would otherwise hold them.
+	// wait on a human. The workflow ships wherever require-approval holds them.
 	if c.Rulesets.RequireApproval {
 		content, err := ReadTemplate("governance/auto-approve-dependabot.yaml")
 		if err != nil {
@@ -434,9 +434,7 @@ func (p *Plan) Render(w io.Writer) error {
 			_, _ = fmt.Fprint(w, op.Content)
 			continue
 		}
-		// A prune carries no request body, and encoding the nil one would
-		// print "null" under the single operation that deletes live
-		// configuration — the last place a preview should look uncertain.
+		// A prune carries no request body, so its title stands alone.
 		if op.PruneRulesets {
 			continue
 		}

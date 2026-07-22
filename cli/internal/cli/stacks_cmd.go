@@ -146,9 +146,9 @@ leftovers from a finished session.`,
 				if err != nil {
 					return err
 				}
-				// Infra gets its own column: a stack whose only live container is
-				// its database would otherwise read as "0 up" — idle — while
-				// still holding a host port.
+				// Infra gets its own column. A stack whose only live container
+				// is its database still holds a host port, and the infra count
+				// is what shows it.
 				_, _ = fmt.Fprintf(out, "%s %-20s %-40s %8s %8s %8d\n",
 					marker, st.GetName(), st.GetPath(),
 					fmt.Sprintf("%d up", len(held.liveTargets)),
@@ -432,8 +432,7 @@ func reportUnmanaged(out io.Writer, managed map[string]bool) error {
 }
 
 // dryRunVerdict is the line a dry run prints in place of acting. A blocked
-// stack gets the reason the real run would refuse, since the question asked
-// was what would happen.
+// stack gets the reason the real run would refuse.
 func dryRunVerdict(blockers []string, force bool) string {
 	if len(blockers) > 0 && !force {
 		return "(dry run — would refuse: unsaved work above; --force overrides)"

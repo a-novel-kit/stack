@@ -23,8 +23,8 @@ func TestExecResult(t *testing.T) {
 	}{
 		{"success", code(0), 0, false},
 		{"failure", code(3), 3, false},
-		// A signal-killed child reports -1. It must stay non-zero rather than
-		// collapsing into something that reads as success.
+		// A signal-killed child reports -1, and the code stays non-zero so it
+		// never reads as success.
 		{"signalled", code(-1), -1, false},
 		// The case the terminal message exists for: no report is not success.
 		{"no terminal message", nil, 0, true},

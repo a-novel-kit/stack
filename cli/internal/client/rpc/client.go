@@ -388,8 +388,8 @@ func (e *NotRunningError) Error() string {
 }
 func (e *NotRunningError) Unwrap() error { return e.Cause }
 
-// mapErr classifies errors so the CLI can show a helpful message rather than
-// a raw transport error.
+// mapErr turns a transport failure into a typed error the CLI can report in
+// its own words.
 func (c *Client) mapErr(err error) error {
 	// Connect errors carry a code; the transport-level failures we care
 	// about (socket missing, refused) come through as Unavailable.

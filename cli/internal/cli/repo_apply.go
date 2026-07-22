@@ -211,8 +211,7 @@ const syncCommitQuery = `mutation($input: CreateCommitOnBranchInput!) { createCo
 // createCommitOnBranch mutation and returns the short commit id.
 func commitSync(org, repo, branch string, changes []contentChange) (string, error) {
 	headline, body := syncCommitMessage(changes)
-	// Empty slices marshal as [], the shape the mutation accepts; nil would
-	// marshal as null.
+	// The mutation accepts [], so both slices start empty.
 	additions, deletions := []map[string]string{}, []map[string]string{}
 	for _, change := range changes {
 		if change.outcome == opDeleted {
@@ -291,8 +290,8 @@ func branchHeadOid(org, repo, branch string) (string, error) {
 }
 
 // applyPages enables a Pages site; a 409 (or an "already exists" message)
-// means one already exists, which is fine. Any other error — including a 422
-// validation failure — is surfaced rather than swallowed.
+// means one already exists, which is fine. Every other error is returned,
+// including a 422 validation failure.
 func applyPages(op repocfg.Op) (string, error) {
 	if err := ghJSON("POST", op.Path, op.Body); err != nil {
 		if isAlreadyExists(err) {

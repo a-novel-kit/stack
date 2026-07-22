@@ -311,7 +311,7 @@ func distinctServices(results []build.Result) int {
 // box. Build tools (podman especially) emit CRLF and bare carriage returns for
 // in-place progress; rendered verbatim into a static panel those overprint and
 // shred the layout. Per line we keep only what survives the last '\r' (what a
-// terminal would actually show), drop trailing whitespace, and trim leading/
+// terminal shows), drop trailing whitespace, and trim leading/
 // trailing blank lines so the panel starts and ends on real content.
 func cleanOutput(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")

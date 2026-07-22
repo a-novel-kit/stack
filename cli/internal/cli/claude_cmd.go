@@ -42,9 +42,8 @@ its own with nothing in between.`,
 		Example: `  a-novel claude
   a-novel claude --continue
   a-novel claude -p "summarize what changed on this branch"`,
-		// All args belong to claude, including flags this command would
-		// otherwise be asked to interpret. Cobra's own -h/--help handling
-		// goes with them — deliberate, see Long.
+		// Every arg belongs to claude, flags included. Cobra's own -h/--help
+		// handling travels with them, as Long explains.
 		DisableFlagParsing: true,
 		RunE: func(_ *cobra.Command, args []string) error {
 			root, err := defaultStackPath()

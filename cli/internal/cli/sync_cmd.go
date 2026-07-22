@@ -260,8 +260,8 @@ func syncOne(out io.Writer, root string, r repoEntry, counts *syncCounts) {
 //     the local default-branch ref only if fast-forwardable, leaving
 //     HEAD and the working tree untouched.
 //   - On the default branch  → `git pull --ff-only` advances it in
-//     place; unstaged changes are preserved, and a pull that would
-//     overwrite them is skipped rather than stashed.
+//     place. Unstaged changes are preserved, and a pull git refuses
+//     over a dirty file is skipped.
 //   - Divergence → skip.
 func updateExistingRepo(out io.Writer, target string, r repoEntry, counts *syncCounts) {
 	def := resolveDefaultBranch(target)

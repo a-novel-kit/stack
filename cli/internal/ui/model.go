@@ -570,9 +570,9 @@ func (m Model) viewSelect() string {
 
 		t := m.targets[r.target]
 		box := glyphUnchecked
-		// No outcome yet at selection time, so the name keeps the default
-		// terminal color: bold when selected, dim when not. Coloring it would
-		// imply a result the run has not produced.
+		// Color carries the run outcome. There is none at selection time, so
+		// the name stays in the default terminal color: bold when selected,
+		// dim when not.
 		name := lipgloss.NewStyle().Bold(true).Render(t.Name)
 		if m.selected[t.ID()] {
 			box = styleSel.Render(glyphChecked)

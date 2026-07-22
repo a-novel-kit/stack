@@ -134,9 +134,8 @@ func (m *model) followSelectedLogs() tea.Cmd {
 	if m.program == nil {
 		return nil
 	}
-	// One follower stream: the server's follow=true mode delivers history
-	// first and then tails new lines, so a separate snapshot call would
-	// stream the history twice.
+	// One follower stream carries everything: the server's follow=true mode
+	// delivers history first, then tails new lines.
 	ctx, cancel := context.WithCancel(context.Background())
 	m.followCancel = cancel
 	go func() {

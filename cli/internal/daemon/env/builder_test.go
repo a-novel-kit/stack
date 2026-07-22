@@ -36,7 +36,7 @@ func TestForTarget_DSNRewriteForGoExec(t *testing.T) {
 	// `localhost:<port>`. Without that rewrite, go-exec mode cannot reach its
 	// own postgres.
 	b, alloc := newBuilderWith([]string{"svc"})
-	// Pre-allocate the port the way infra-up would, under a service-level
+	// Pre-allocate the port the way infra-up does, under a service-level
 	// consumer with owner=svc.
 	port, err := alloc.Acquire("svc", "POSTGRES_PORT", "svc-infra")
 	if err != nil {
@@ -180,9 +180,9 @@ func TestForTarget_NoDoublePrefix(t *testing.T) {
 }
 
 func TestForService_LookupOnlyLeavesUnknownEmpty(t *testing.T) {
-	// ForService is the read-only path (`a-novel run env`). Allocator
-	// is never mutated — a var with no existing allocation comes back
-	// empty rather than holding a new slot.
+	// ForService is the read-only path (`a-novel run env`). The allocator
+	// is never mutated, and a var with no existing allocation comes back
+	// empty.
 	b, _ := newBuilderWith([]string{"service-a", "service-b"})
 	svc := &discovery.Service{
 		Name:  "service-a",

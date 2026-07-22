@@ -29,7 +29,7 @@ type PhaseEvent struct {
 
 // eventSub is one Watch subscriber. emitPhase iterates the live subs under
 // subsMu and sends into each channel without blocking, so a slow subscriber
-// loses events rather than stalling the runner.
+// loses events and the runner keeps going.
 //
 // filter returns true for the events the subscriber wants; a nil filter takes
 // every event.

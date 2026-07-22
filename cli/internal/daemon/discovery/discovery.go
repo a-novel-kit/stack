@@ -136,8 +136,8 @@ func DiscoverStacks(stk []stacks.Stack) ([]*Stack, error) {
 		if err != nil {
 			// A scratch stack lives in a directory the OS reclaims, so its
 			// files can vanish while the $A_NOVEL_STACKS entry lives on in a
-			// shell config. Skipping it costs one stack; failing here would
-			// cost the whole daemon.
+			// shell config. A vanished scratch stack is skipped, and only the
+			// default stack is fatal.
 			if !s.IsDefault {
 				continue
 			}

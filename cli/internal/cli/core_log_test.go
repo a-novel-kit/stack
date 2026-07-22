@@ -10,9 +10,9 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
-// TestReadDaemonLogFrom pins that a failed start quotes its own output and not
-// the output of the start before it. A daemon that fails, is fixed, and fails
-// again for a new reason would otherwise be diagnosed from the stale message.
+// TestReadDaemonLogFrom pins that a failed start quotes its own output. A
+// daemon that fails, is fixed, and fails again for a new reason is diagnosed
+// from the new message.
 func TestReadDaemonLogFrom(t *testing.T) {
 	t.Parallel()
 
@@ -107,7 +107,7 @@ func TestDaemonFailureDetail(t *testing.T) {
 }
 
 // TestOpenDaemonLogAppends pins the append: a start that fails is often one of
-// several, and truncating would discard the attempts that explain the last one.
+// several, and every attempt stays in the log to explain the last one.
 func TestOpenDaemonLogAppends(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 

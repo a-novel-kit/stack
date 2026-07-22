@@ -157,10 +157,9 @@ func waitDaemonGone(timeout time.Duration) error {
 		_, err := rpc.New("").Ping(ctx)
 		cancel()
 		if err != nil {
-			// Ping error == socket closed == daemon stopped, which IS
-			// the success condition we're polling for. Returning the
-			// transport error would mean "couldn't talk to daemon" =
-			// failure, the opposite of what we want.
+			// A Ping error means the socket is closed and the daemon
+			// has stopped, which is the condition being polled for.
+			// Report success.
 			return nil //nolint:nilerr // intentional: error here means daemon is gone
 		}
 		time.Sleep(100 * time.Millisecond)

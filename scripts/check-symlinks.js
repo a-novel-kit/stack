@@ -39,8 +39,8 @@ for (const [link, target] of Object.entries(TRACKED_LINKS)) {
     continue;
   }
 
-  // Checkouts without symlink support hold a regular file here. That is a local limitation
-  // rather than a fault in the commit, so only a link that survived checkout gets validated.
+  // Checkouts without symlink support hold a regular file here. The commit itself is
+  // already verified above, so only a link that survived checkout gets validated.
   if (!lstatSync(link, { throwIfNoEntry: false })?.isSymbolicLink()) {
     continue;
   }

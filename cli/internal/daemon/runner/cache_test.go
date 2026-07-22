@@ -48,7 +48,7 @@ func TestCache_InvalidateClearsEntries(t *testing.T) {
 // replays the snapshot-work-compare-and-write sequence.
 func TestCache_GenCheckSkipsStaleWrite(t *testing.T) {
 	r := newRunnerForCache()
-	// Snapshot the generation, as a scan about to start would.
+	// Snapshot the generation, the way a scan does as it starts.
 	r.infraStateMu.Lock()
 	startGen := r.infraStateGen
 	r.infraStateMu.Unlock()

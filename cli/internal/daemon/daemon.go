@@ -108,8 +108,9 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("discover stacks: %w", err)
 	}
-	// The server reports the stacks it manages. Handing it the raw config would
-	// let ListStacks advertise a skipped stack that every other RPC refuses.
+	// The server reports the stacks it manages, so it gets the registered set
+	// narrowed to what discovery accepted. ListStacks then matches what every
+	// other RPC serves.
 	opts.Stacks = registeredAndDiscovered(opts.Stacks, disc)
 	// Surface per-service discovery errors at daemon start. The daemon keeps
 	// running: well-formed services still work, and a broken one refuses with

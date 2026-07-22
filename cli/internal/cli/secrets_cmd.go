@@ -103,9 +103,9 @@ history). Provision secrets yourself from a terminal.`,
 			if strings.TrimSpace(id) == "" {
 				return errors.New("secrets set: <id> must not be empty")
 			}
-			// Reading a no-echo value needs a real terminal. Refuse otherwise —
-			// piping a value in would defeat the "never on a terminal/log/history"
-			// guarantee.
+			// A secret must never reach a terminal, a log or a shell history.
+			// Reading it with echo disabled takes a real terminal, so a
+			// non-interactive stdin is refused.
 			if !secretsStdinIsTTY() {
 				return errors.New("secrets set: refusing to run non-interactively — a secret " +
 					"is read with no echo from a terminal, so it must be set by a human. Run it yourself")
@@ -209,8 +209,8 @@ sees, <secret-id> is the id in the local store.
 			if err != nil {
 				return err
 			}
-			// Build NAME=value child-env additions. Resolve before exec so a
-			// typo'd secret id fails cleanly instead of half-running the command.
+			// Build NAME=value child-env additions. Every id resolves before
+			// exec, so a typo fails before the command runs.
 			extra := make([]string, 0, len(envPairs))
 			for _, pair := range envPairs {
 				name, id, ok := strings.Cut(pair, "=")
