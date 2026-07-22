@@ -1,21 +1,20 @@
 ---
 name: write-proto
 description: >
-  Write, review, and modify Protobuf definitions for Agora backend services. Use this skill
-  whenever creating or editing .proto files — new RPCs, new messages, shared types, enums, or
-  breaking-change assessment. Applies to internal/models/proto/ and the buf toolchain.
+  Write, review, and modify Protobuf definitions for Agora backend services. Use whenever
+  creating or editing .proto files — new RPCs, messages, shared types, enums, or breaking-change
+  assessment. Covers internal/models/proto/ and the buf toolchain.
 ---
 
 # Protobuf Writing Skill
 
-This skill governs how to write and maintain `.proto` files in Agora backend services. Proto
-definitions are the contract between gRPC producers and consumers — once published, they must
-evolve without breaking existing callers. Treat every field number and type as a durable commitment.
+Proto definitions are the contract between gRPC producers and consumers: once published, they
+must evolve without breaking existing callers. Treat every field number and type as a durable
+commitment.
 
 **Before touching any proto file**, read it and all files it imports. Read `buf.yaml` and
-`buf.gen.yaml` if you have not already — they control what gets generated and where. Look at the
-corresponding generated Go file in `internal/handlers/protogen/` to understand what callers
-currently depend on.
+`buf.gen.yaml` — they control what gets generated and where. Read the corresponding generated Go
+file in `internal/handlers/protogen/` to see what callers currently depend on.
 
 ---
 
@@ -50,11 +49,11 @@ Run these in order. `pnpm format:proto` must come before `pnpm generate:go` — 
 files in place, and the generated output reflects the formatted source.
 
 After `pnpm generate:go`, update the Go handler code that uses the changed types, then run
-`pnpm format:go` and `pnpm lint:go` to confirm everything compiles cleanly.
+`pnpm format:go` and `pnpm lint:go` to confirm it compiles cleanly.
 
 Then invoke the **`document-code` skill** for every `.proto` file you created or modified. Proto
-comments are the public API contract — they must be accurate, complete, and written before the
-change is considered done. Documentation is not optional.
+comments are the public API contract — write them, accurate and complete, before considering the
+change done.
 
 ---
 
@@ -101,18 +100,18 @@ inputs:
 ```
 
 Managed mode injects `option go_package` automatically — do **not** add `option go_package` or
-`package` statements to `.proto` files manually.
+`package` statements to `.proto` files manually. A manual one conflicts with the managed-mode
+settings or produces a duplicate declaration.
 
 ---
 
 ## File Structure
 
-**One service per file.** Each `.proto` file that defines a `service` contains exactly that
-service and its request/response messages. No other services or unrelated types.
+**One service per file.** A `.proto` file that defines a `service` holds exactly that service and
+its request/response messages — no other services, no unrelated types.
 
 ```
 jwk_get.proto       → JwkGetService + JwkGetRequest + JwkGetResponse
-jwk_list.proto      → JwkListService + JwkListRequest + JwkListResponse
 claims_sign.proto   → ClaimsSignService + ClaimsSignRequest + ClaimsSignResponse
 status.proto        → StatusService + StatusRequest + StatusResponse + DependencyHealth + DependencyStatus
 jwk.proto           → Jwk message + JwkUsage enum (shared, no service)
@@ -139,9 +138,8 @@ registers and what `pkg/go/client.go` calls.
 
 ### Messages
 
-Messages use `PascalCase`. Field names use `snake_case` — the Go generator converts them to
-`camelCase` getters (`GetKeyId()`, `GetUsage()`). Always use `snake_case` in proto; never use
-camelCase field names.
+Messages use `PascalCase`. Field names always use `snake_case`, never camelCase — the Go
+generator converts them to `camelCase` getters (`GetKeyId()`, `GetUsage()`).
 
 ### Enums
 
@@ -156,8 +154,8 @@ enum DependencyStatus {
 }
 ```
 
-The `_UNSPECIFIED = 0` value is required by proto3: unset enum fields default to 0, and you must
-be able to detect "not set" at the application level. Never assign 0 to a meaningful value.
+proto3 requires `_UNSPECIFIED = 0`: unset enum fields default to 0, and the application must be
+able to detect "not set". Never assign 0 to a meaningful value.
 
 ---
 
@@ -200,7 +198,8 @@ Field numbers are **permanent**. They are serialized in binary encoding and must
 or be reused:
 
 - Start at `1` for the first field. Use sequential numbers.
-- Once a field is removed, **reserve** its number and name to prevent accidental reuse:
+- Once a field is removed, **reserve** its number and name. Reusing the number of a deleted field
+  silently corrupts data for clients that still send the old one:
   ```proto
   message JwkGetRequest {
     reserved 2;
@@ -239,11 +238,15 @@ Wire-safe (non-breaking) changes:
 | Add a new RPC           | Old clients never call it                               |
 | Add or change a comment | No runtime impact                                       |
 
+Renaming is never the safe refactor it looks like — buf rejects it at `FILE` level. To rename a
+field, add a new field with the correct name and a new number, deprecate the old one with a
+comment, then remove it in a coordinated release.
+
 ---
 
 ## Well-Known Types
 
-Prefer proto's well-known types for common data shapes rather than raw primitives:
+Prefer proto's well-known types over raw primitives for common data shapes:
 
 | Use case                      | Import                            | Type                                |
 | ----------------------------- | --------------------------------- | ----------------------------------- |
@@ -279,15 +282,12 @@ between proto types and core types.
 | `message JwkGetRequest` | `protogen.JwkGetRequest` struct          | handler, converted to service request |
 | `enum DependencyStatus` | `protogen.DependencyStatus` const        | handler only                          |
 
-When you add a new service, the handler file embeds the generated `Unimplemented<Name>Server`
-struct and registers with `protogen.Register<Name>Server` in `cmd/grpc/main.go`.
-
 ---
 
 ## Adding a New RPC: Step-by-Step
 
 1. **Create `internal/models/proto/<entity>_<operation>.proto`** with the service, request,
-   and response messages. Follow file structure and naming conventions above.
+   and response messages, following the file structure and naming conventions above.
 2. **Run `pnpm format:proto`** — formats the file and updates buf.lock.
 3. **Run `pnpm lint:proto`** — fix any violations before generating.
 4. **Run `pnpm generate:go`** — wipes `protogen/` and regenerates everything.
@@ -305,23 +305,16 @@ struct and registers with `protogen.Register<Name>Server` in `cmd/grpc/main.go`.
 
 ## Common Pitfalls
 
-- **Missing `_UNSPECIFIED = 0` in enums.** proto3 defaults unset enum fields to 0. If 0 is a
-  meaningful value, callers cannot distinguish "not set" from "set to the first value". Always
-  reserve 0 as the unspecified/invalid sentinel.
-- **Adding `package` or `option go_package` to .proto files.** Managed mode in buf.gen.yaml
-  injects these automatically. Adding them manually will conflict with managed mode settings
-  or produce duplicate declarations.
-- **Editing files in `internal/handlers/protogen/`.** They are always overwritten. Any edits
-  will be lost on the next `pnpm generate:go`.
-- **Reusing a field number.** Once a number is removed, reserve it. Reusing a number from a
-  deleted field causes silent data corruption for clients that still send the old field.
-- **Using proto types in services or DAO.** Proto types belong exclusively in handlers. Never
-  import `internal/handlers/protogen` from `internal/core` or `internal/dao`.
-- **Forgetting `pnpm format:proto` before `pnpm generate:go`.** buf formats source files in place;
-  the generated output reflects the formatted source. Run format first, then generate.
-- **Renaming a field as a "safe" refactor.** Field renames are breaking at FILE level — buf will
-  reject them. If a field must be renamed, add a new field with the correct name and a new
-  number, deprecate the old one with a comment, then remove it in a coordinated release.
-- **`repeated` on response fields that could be empty.** An empty `repeated` field returns a nil
-  slice in Go, not an empty slice. Callers must use `GetField()` (nil-safe accessor) rather than
-  `.Field` directly.
+**`repeated` on response fields that could be empty.** An empty `repeated` field returns a nil
+slice in Go, not an empty slice. Callers must use `GetField()` (nil-safe accessor) rather than
+`.Field` directly.
+
+The rules above, as a checklist:
+
+- Omitting `_UNSPECIFIED = 0` from an enum.
+- Adding `package` or `option go_package` to a `.proto` file, which managed mode already injects.
+- Editing files in `internal/handlers/protogen/`, which the next `pnpm generate:go` overwrites.
+- Reusing the field number of a deleted field instead of reserving it.
+- Importing `internal/handlers/protogen` from `internal/core` or `internal/dao`.
+- Running `pnpm generate:go` before `pnpm format:proto`.
+- Renaming a field in place instead of adding a replacement and staging the removal.

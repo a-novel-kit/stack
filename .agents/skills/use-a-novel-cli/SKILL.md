@@ -1,40 +1,40 @@
 ---
 name: use-a-novel-cli
 description: >
-  Canonical reference for the `a-novel` CLI. ALWAYS load alongside any skill that
-  involves running tests, building artifacts, releasing, or starting/stopping local
-  services. The CLI replaces the deleted Makefiles and per-repo scripts with the
-  standalone groups `test`, `build`, `publish` and `repo` (repository config,
-  rulesets and required checks), plus `run` (daemon-backed verbs for
-  `start`/`kill`/`logs`/`env`/`volume`/`ui` etc.) and `core` for daemon lifecycle. Prefer `a-novel <verb>` over equivalent raw commands wherever a 1:1
-  mapping exists; lint/format/generate live in pnpm scripts (`pnpm lint:go`,
-  `pnpm format:go`, ...), never in Makefiles (which no longer exist in any repo).
-  Loaded automatically by `implement-feature`,
-  `open-pull-request`, `resolve-pr-feedback`, `write-go`, `write-go-tests`,
-  `write-go-service`, `write-go-kit`, `write-js-package`, `write-dockerfiles`,
-  `write-bash-scripts`, and `write-proto`.
+  Canonical reference for the `a-novel` CLI. ALWAYS load alongside any skill that runs tests,
+  builds artifacts, releases, or starts/stops local services. Covers the groups `test`, `build`,
+  `publish`, `repo` (repository config, rulesets, required checks), `run` (daemon-backed
+  `start`/`kill`/`logs`/`env`/`volume`/`ui`) and `core` (daemon lifecycle). Prefer
+  `a-novel <verb>` over raw commands; lint/format/generate live in pnpm scripts
+  (`pnpm lint:go`, `pnpm format:go`), never in Makefiles — deleted from every repo.
 ---
 
 # Use the `a-novel` CLI
 
-The `a-novel` CLI is the single user-facing entrypoint for local-dev workflows in the
-a-novel ecosystem. It replaces the deleted Makefiles and per-repo bash scripts (`go
-test` wrappers, `podman build`, `podman compose`, `publish.sh`) with four coherent
-command groups:
+The `a-novel` CLI is the single user-facing entrypoint for local-dev workflows. It replaces
+the deleted Makefiles and per-repo bash scripts (`go test` wrappers, `podman build`, `podman
+compose`, `publish.sh`) with one coherent command surface:
 
 ```
 a-novel
 ├── test          standalone — runs Go + pnpm tests in the working tree
 ├── build         standalone — builds Go binaries, pnpm bundles, Podman images
-├── publish       standalone — cut a release (bump, commit, tag vX.Y.Z, push)
+├── publish       standalone — release doc helpers (releases themselves run in CI)
+├── repo          standalone — GitHub repo config, rulesets, required checks
 ├── core          daemon control (start, setup, kill, status, prepare-reinstall)
 └── run           daemon-backed verbs (services + targets)
 ```
+
+`secrets` (a local encrypted store injected into a child env), `claude` and `install` complete the
+surface; `cli/README.md` in the stack repo is the exhaustive reference.
 
 **Always prefer `a-novel <verb>` over the equivalent raw command** when one exists.
 Makefiles are gone from every repo — `make` is never the answer. What the CLI doesn't
 cover lives in pnpm scripts (lint/format/generate, see "When NOT to use the CLI") so
 each repo's surface is exactly: `a-novel <verb>` + `pnpm <script>` + raw `go`/`git`.
+
+Load this skill alongside any skill that runs tests, builds artifacts, releases, or starts local
+services.
 
 ---
 
@@ -62,21 +62,21 @@ each repo's surface is exactly: `a-novel <verb>` + `pnpm <script>` + raw `go`/`g
 | `make format` (gone)                            | `pnpm format:go` / `pnpm format` / `pnpm format:proto`            |
 | `make generate` (gone)                          | `pnpm generate:go` (plus `pnpm generate:mjml` where present)      |
 
-Use the bare `a-novel <verb> --help` (or `a-novel help <verb>`) for the full flag list
-of any subcommand. Every subcommand carries exhaustive Short/Long/Example help text.
+`a-novel <verb> --help` (or `a-novel help <verb>`) prints the full flag list of any
+subcommand. Every subcommand carries exhaustive Short/Long/Example help text.
 
 ---
 
 ## Driving the CLI non-interactively (agents, CI, scripts)
 
 The CLI is interactive only where a human benefits — the `test` / `build` pickers
-and the `run ui` TUI. Everything else already runs to completion and returns.
-When you are an agent, a CI job, or a script, drive it like this:
+and the `run ui` TUI. Everything else runs to completion and returns. Agents, CI
+jobs and scripts drive it like this:
 
 - **`test` / `build`: always pass `-y`.** It skips the picker and runs every
-  discovered target sequentially (CI-safe). Both commands also auto-fall-back to
-  that path when there is no TTY, but pass `-y` explicitly — it states intent and
-  survives a stray PTY. Pair with `--dry-run` to inspect the target list first.
+  discovered target sequentially (CI-safe). Both fall back to that path with no
+  TTY, but pass `-y` explicitly — it states intent and survives a stray PTY.
+  Pair with `--dry-run` to inspect the target list first.
 
   ```bash
   a-novel test -y --type=go        # all Go tests, no prompt
@@ -85,15 +85,13 @@ When you are an agent, a CI job, or a script, drive it like this:
 
 - **`run` verbs are already non-interactive** — `start`, `kill`, `restart`,
   `logs`, `ps`, `service`, `volume`, `topology`, `env`, `watch`, `exec` and
-  `debug` all complete and return an exit code. The one interactive member of
-  the group is `run ui` (the TUI): **never launch it from an agent or CI** — use
-  the discrete verbs instead.
+  `debug` all complete and return an exit code. Only `run ui` (the TUI) is
+  interactive: **never launch it from an agent or CI** — use the discrete verbs.
 
-- **Observe state with `run watch`, do not poll `ps`.** `a-novel run watch`
-  subscribes to the daemon's event stream and emits one newline-delimited JSON
-  object per state change (phase transition, exit, health flip). It is the
-  agent-facing primitive — built so you react the moment a target turns healthy
-  instead of looping `ps`. Narrow it with `--service` / `--target`.
+- **Observe state with `run watch`, do not poll `ps`.** It subscribes to the
+  daemon's event stream and emits one newline-delimited JSON object per state
+  change (phase transition, exit, health flip), so you react the moment a target
+  turns healthy. Narrow it with `--service` / `--target`.
 
   ```bash
   a-novel run watch --service=service-json-keys   # NDJSON, one event per line
@@ -115,8 +113,8 @@ When you are an agent, a CI job, or a script, drive it like this:
 Discovers every Go test target (`go test ./...` per module, scoped by
 `builds/podman-compose.go[.<path>].test.yaml` when present) and every pnpm
 `test`/`test:*` script in the working tree, lets you pick which to run via a TUI
-picker, runs the selection, and prints a pass/fail report. Test envs are brought up +
-torn down per-target so independent envs run in parallel safely.
+picker, runs the selection, and prints a pass/fail report. Test envs come up and down
+per-target, so independent envs run in parallel safely.
 
 Common patterns:
 
@@ -132,10 +130,9 @@ a-novel test -j 4             # cap parallelism at 4 (interactive only)
 ```
 
 **When to use:** ALWAYS for local-dev test runs — there is no `make` fallback
-anymore (Makefiles and the `scripts/test*.sh` family are deleted). The raw
-`go test ./<path>/...` form remains for running a single package/test while
-iterating; CI runs `gotestsum` directly through the `kit/workflows`
-composite actions, not through the CLI.
+(Makefiles and the `scripts/test*.sh` family are deleted). Raw `go test ./<path>/...`
+remains for a single package/test while iterating. CI runs `gotestsum` directly
+through the `kit/workflows` composite actions, not through the CLI.
 
 **Test plan checkboxes in PR bodies:**
 
@@ -161,27 +158,23 @@ a-novel build --type=go,pnpm  # union filter
 a-novel build --dry-run       # list targets without building
 ```
 
-**When to use:** ALWAYS for local-dev builds, especially when validating a
-Dockerfile change. Avoid `podman build -f ...` directly; `a-novel build --type=podman`
-discovers all Dockerfiles, builds them with the same convention CI uses, and prints
-a pass/fail report.
+**When to use:** ALWAYS for local-dev builds, especially to validate a Dockerfile
+change. Avoid raw `podman build -f ...`: `a-novel build --type=podman` discovers all
+Dockerfiles, builds them with the same convention CI uses, and prints a pass/fail report.
 
 ---
 
 ## `a-novel publish` — release doc helpers
 
-Releases are cut **in CI**, not from a local working tree: trigger the repo's
-release workflow and pick a release type (patch / minor / major), and the
-`release-core` action (in `a-novel-kit/workflows`) bumps the version, refreshes
-doc refs, commits, tags `vX.Y.Z`, pushes, and creates the GitHub Release. The
-[Agent] bot performs the push. Covered in depth by `manage-versions`.
+Releases are cut **in CI**: trigger the repo's release workflow and pick a release
+type (patch / minor / major), and the `release-core` action (in `a-novel-kit/workflows`)
+bumps the version, refreshes doc refs, commits, tags `vX.Y.Z`, pushes, and creates the
+GitHub Release. The [Agent] bot performs the push. `manage-versions` covers it in depth.
 
-There is **no local release command** — the only verb under `a-novel publish`
-is `stamp`:
-
-`a-novel publish stamp <prefix> <file>` is the doc-stamping helper the
-`prepublish:doc` pnpm scripts call — it rewrites `<prefix>vX.Y.Z` references
-(prefix is a regex) to the current package.json version.
+There is **no local release command** — `stamp` is the only verb under `a-novel publish`.
+`a-novel publish stamp <prefix> <file>` is the doc-stamping helper the `prepublish:doc`
+pnpm scripts call: it rewrites `<prefix>vX.Y.Z` references (prefix is a regex) to the
+current package.json version.
 
 ---
 
@@ -189,8 +182,8 @@ is `stamp`:
 
 `create` scaffolds a repository from its class template; `update` reconciles an existing one. This is
 how the governance workflows, the branch rulesets, and the required-check list reach every repo — so
-after adding or renaming a job in a repo's `.github/workflows/main.yaml`, its ruleset is stale until
-`update` runs.
+after adding or renaming a job in a repo's `.github/workflows/main.yaml`, its ruleset stays stale
+until `update` runs.
 
 ```bash
 a-novel repo update --dry-run    # print the API operations, no writes — the agent-safe form
@@ -198,13 +191,13 @@ a-novel repo update              # interactive, human-only: a human must run thi
 a-novel repo update --all        # every whitelisted checkout present under app/ or kit/
 ```
 
-Four behaviours worth knowing before running it:
+Four behaviours to know before running it:
 
 - **Required checks are derived, not configured.** They are the jobs in the repo's `main.yaml` (minus
   `report-*` and master-only jobs) plus the always-required set. A new job becomes a required check on
   the next `update`, and not before.
 - **Config comes from the working tree**, not from GitHub. Run it on an up-to-date default branch, or
-  it deploys whatever your checkout happens to hold.
+  it deploys whatever your checkout holds.
 - **A checkout off its default branch is skipped**, silently and by design — reconciling from an
   in-progress branch would push half-finished template edits fleet-wide. Check branches before `--all`,
   or the repos you most care about are the ones quietly missed.
@@ -217,9 +210,9 @@ Agents stop at `--dry-run`: the write path refuses a non-TTY.
 
 ## `a-novel run` — daemon-backed service operations
 
-This is the entire surface for starting, stopping, observing, and inspecting
-locally-running services. Requires the a-novel daemon to be running
-(`a-novel core start`; lives in `~/.zshrc` after `a-novel core setup`).
+The entire surface for starting, stopping, observing, and inspecting locally-running
+services. Requires the a-novel daemon (`a-novel core start`; lives in `~/.zshrc`
+after `a-novel core setup`).
 
 ### Lifecycle
 
@@ -236,9 +229,9 @@ a-novel run service infra kill <service> --force  # cascade-kill
 The supervisor **auto-walks dependencies**: `a-novel run start service-X/rest`
 brings up postgres, runs migrations + rotate-keys (one-shots), then starts rest.
 Mutual exclusion is enforced (refuses with hint if the target is already running
-in the other mode). One-shots are tracked per infra-up session — they re-run on
-every `infra start` (one-shots are idempotent by contract, so re-applying
-migrations locally is by design).
+in the other mode). One-shots are tracked per infra-up session and re-run on every
+`infra start`; they are idempotent by contract, so re-applying migrations locally
+is by design.
 
 ### Observability
 
@@ -277,9 +270,8 @@ a-novel run ui                                # full-screen TUI
 ```
 
 The TUI is a thin client over the same RPCs as the CLI — actions taken in the UI
-are observable from `a-novel run watch` and vice-versa. For non-interactive /
-agent use, reach for `run watch` (and the other discrete verbs) instead of the
-TUI — see [Driving the CLI non-interactively](#driving-the-cli-non-interactively-agents-ci-scripts).
+are observable from `a-novel run watch` and vice-versa. Agents and CI use the discrete
+verbs instead, see [Driving the CLI non-interactively](#driving-the-cli-non-interactively-agents-ci-scripts).
 
 ---
 
@@ -311,55 +303,52 @@ a-novel core stacks prune --all -y    # sweep every stack but the default
 ```
 
 **Pruning a scratch stack.** A stack allocates three things and only one is a
-file, so deleting the root reclaims the checkout and leaves containers holding
-host ports and volumes sitting in the container store. `stacks prune` releases
-all three, in that order.
+file, so deleting the root reclaims the checkout but leaves containers holding
+host ports and volumes in the container store. `stacks prune` releases all three,
+in that order.
 
-It refuses the default stack outright — that is the workspace, not scratch space
-— and `--all` sweeps every _other_ registered stack, which is the pass to run
-after a batch of agent sessions. It also refuses a stack whose checkouts hold
-work that exists nowhere else (dirty tree, a branch other than the default, or
-unpushed commits) unless `--force`. `$A_NOVEL_STACKS` lives in your shell config,
-so prune prints the entry to drop rather than editing the file underneath you.
+It refuses the default stack — that is the workspace, not scratch space — and
+`--all` sweeps every _other_ registered stack, the pass to run after a batch of
+agent sessions. It also refuses a stack whose checkouts hold work that exists
+nowhere else (dirty tree, a non-default branch, unpushed commits) unless `--force`.
+`$A_NOVEL_STACKS` lives in your shell config, so prune prints the entry to drop
+instead of editing the file under you.
 
-Volume backups survive by default: `ClearVolume` takes one on the way past, so
-the artefact that undoes a prune outlives it. `--purge-backups` says the data
-really was disposable and deletes them too.
+Volume backups survive: `ClearVolume` takes one on the way past, so the artefact
+that undoes a prune outlives it. `--purge-backups` deletes them too.
 
 **Where a new stack lives.** `stacks new` defaults to `<os temp dir>/a-novel-stacks/<name>`
 via Go's `os.TempDir()`, which honours `$TMPDIR` — a per-user `/var/folders/…/T`
-on macOS, `/tmp` on Linux. Both are reclaimed by the OS, so a stack nobody prunes
-expires instead of accumulating. Pass `--root` for somewhere durable.
+on macOS, `/tmp` on Linux. The OS reclaims both, so a stack nobody prunes expires
+instead of accumulating. Pass `--root` for somewhere durable.
 
 Because that home is swept, a registration can outlive its files. The daemon
 skips such a stack rather than refusing to start over it, and `stacks list`
-flags it (`files are gone — drop it from A_NOVEL_STACKS`) so the stale entry is
-visible instead of silently doing nothing.
+flags it (`files are gone — drop it from A_NOVEL_STACKS`) so the stale entry
+stays visible.
 
 `bot-comment` is the **only** way to post a PR/issue/review comment as
-`<app-slug>[bot]`. It does **not** mint a local token: it triggers the
-centralized `bot-comment` workflow in `a-novel-kit/stack` with your own
-`gh` token, and the workflow (which alone holds the App keys) posts the
-comment and is watched to completion. No `.pem` ever lives on a dev
-machine; you only need `gh` + `actions:write` on the dispatcher repo. PR
-authoring/merge/close are impossible through it — the bot can only
-comment. See [[feedback-bot-attribution]].
+`<app-slug>[bot]`. It mints no local token: it triggers the centralized
+`bot-comment` workflow in `a-novel-kit/stack` with your own `gh` token, and
+that workflow (which alone holds the App keys) posts the comment and is watched
+to completion. No `.pem` ever lives on a dev machine; you need only `gh` +
+`actions:write` on the dispatcher repo. The bot can only comment — PR
+authoring/merge/close are impossible through it.
 
 `core setup` is interactive; everything else is non-interactive and `.zshrc`-safe.
 
 **Sub-agents spawning fresh stacks**: run `a-novel core sync --root=<new-stack-root>`
-as the first action in the new workspace. This pulls the six whitelisted repos
-into `kit/` and `app/` so subsequent test/build/run commands have something to
-operate on. The current whitelist is intentionally narrow (workflows, golib,
-nodelib, service-template, service-json-keys, service-authentication) until
-the broader workspace is stabilised; expanding it is a one-line PR.
+as the first action in the new workspace. It pulls the six whitelisted repos into
+`kit/` and `app/` so later test/build/run commands have something to operate on.
+The whitelist is deliberately narrow (workflows, golib, nodelib, service-template,
+service-json-keys, service-authentication) until the broader workspace stabilises;
+expanding it is a one-line PR.
 
 ---
 
 ## pnpm scripts vs. the CLI — the boundary
 
-When you touch a repo's `package.json` scripts (or review a PR that does),
-apply one rule:
+When you touch a repo's `package.json` scripts (or review a PR that does), apply one rule:
 
 > A pnpm script earns its place only when it carries something **specific to
 > the repo** — a local package, a config file, a fixed argument set, or a hook
@@ -368,8 +357,7 @@ apply one rule:
 
 - **Delete** (pure mirrors): `publish:major|minor|patch` — releases are cut in
   CI by the release workflow (the `release-core` action), never a pnpm script or
-  a local command. These wrappers added nothing and drifted (each copy diverged
-  independently); delete them.
+  a local command. These wrappers added nothing and drifted; delete them.
 - **Keep** (repo-specific constructs the CLI discovers or invokes):
   - `test` (`vitest run …`), `build:rest` (`vite build …`) — the concrete
     invocations `a-novel test` / `a-novel build` discover and run.
@@ -379,16 +367,14 @@ apply one rule:
   - `prepublish:doc` and its `prepublish:doc:readme` / `:openapi` children —
     the release flow (`release-core`) runs `prepublish:doc` as a hook, and the
     children carry this repo's stamp prefix + file (`a-novel publish stamp
-'<prefix>' <file>`). The repo-specific args are exactly what justifies the
-    script.
+'<prefix>' <file>`). Those repo-specific args justify the script.
 
 The smell test for a new/edited script: _strip the repo-specific part — if
 what's left is just an `a-novel <verb>` call, the script shouldn't exist._
 
 ### Naming: generic does everything, language lanes are suffixed
 
-A second rule governs how the surviving scripts are **named**, so a contributor
-never gets a surprise:
+A second rule governs how the surviving scripts are **named**:
 
 > A **generic** verb (`format`, `lint`, `build`, `generate`, `test`) must do
 > **everything** that verb covers in the repo. A script scoped to one
@@ -404,14 +390,13 @@ format:js`, and `lint` likewise. Each lane is a `:`-suffixed script; the bare
 - **Single-lane verb → stay generic, do NOT suffix.** A pure-JS repo
   (`nodelib`), a Prettier-only repo (`workflows`), or `build`/`test` in a
   service (only a JS pnpm lane — Go is built/tested via `a-novel`) already do
-  everything under the bare verb. Adding a redundant `:js`/`:go` alias there is
-  overdoing it — don't. The suffix exists to disambiguate **multiple** lanes,
-  not to restate the obvious.
+  everything under the bare verb. A redundant `:js`/`:go` alias there is
+  overdoing it: the suffix disambiguates **multiple** lanes.
 - **Name the lane by what it actually contains.** The Node/Prettier lane is
   `:js` when the repo ships a real JS/TS package (the lane runs eslint + tsc +
   prettier on actual JS). When the lane only runs Prettier over docs/config and
   there is **no JS** (`golib`), name it `:prettier` — `format:js` in a Go-only
-  repo is the confusion this whole rule exists to prevent.
+  repo is the confusion this rule exists to prevent.
 - **CI calls the lane, not the umbrella.** The `lint-node` composite action
   runs on a node-only runner with no Go/buf toolchain, so it must target the
   node lane (`lint:ci` → `lint:js`, or `lint_action: "lint:prettier"`), never
@@ -424,29 +409,27 @@ format:js`, and `lint` likewise. Each lane is a `:`-suffixed script; the bare
 
 ## When NOT to use the CLI
 
-Some tasks fall outside the CLI's scope and use pnpm scripts or raw commands:
+Some tasks fall outside the CLI and use pnpm scripts or raw commands:
 
 - **Lint / format / generate**: pnpm scripts, uniform across repos —
   `pnpm lint:go` / `pnpm lint:proto` / `pnpm lint` (node) and
   `pnpm format:go` / `pnpm format:proto` / `pnpm format` (prettier), plus
   `pnpm generate:go` (mocks/proto stubs). Each is a one-line wrapper over the
   raw form (`go tool -modfile=golangci-lint.mod golangci-lint run ./...`,
-  `go tool buf format -w`, `go generate ./...` — per
-  [[feedback-go-tools-policy]]), so the raw forms stay valid too. The CLI
-  deliberately doesn't wrap these.
+  `go tool buf format -w`, `go generate ./...`), so the raw forms stay valid too.
 - **Direct database access**: `a-novel run exec <service>/<target> -- psql ...`.
-  For a container-mode target that is running, the command runs inside its
-  container (`podman exec`); for a go-exec or stopped target it runs on the host
-  with the target's resolved env (`POSTGRES_DSN`, `*_PORT`, …) — e.g.
+  For a running container-mode target, the command runs inside its container
+  (`podman exec`); for a go-exec or stopped target it runs on the host with the
+  target's resolved env (`POSTGRES_DSN`, `*_PORT`, …) — e.g.
   `a-novel run exec <service>/migrations -- psql` to get `psql` with the right
   DSN. Raw `podman exec <container-name> psql ...` still works against a running
   container.
 - **CI workflows**: CI never shells into the CLI — the `kit/workflows`
   composite actions invoke `gotestsum` / `golangci-lint` / `pnpm run <script>`
-  directly. Skills documenting CI behavior should reference those actions, not
-  local commands.
-- **Git operations**: standard `git` / `gh` (per [[feedback-bot-attribution]] —
-  user token for PR ops, `a-novel core bot-comment` for comments).
+  directly. Skills documenting CI behavior reference those actions, not local
+  commands.
+- **Git operations**: standard `git` / `gh` — the operator's user token for PR ops,
+  `a-novel core bot-comment` for comments.
 
 ---
 
@@ -458,14 +441,3 @@ First-time setup: `a-novel core setup`.
 
 The daemon refuses to start if the default stack isn't set up — surface the error
 verbatim to the user.
-
----
-
-## Related memories
-
-- [[feedback-go-tools-policy]] — `go tool -modfile=<x>.mod` for golangci-lint /
-  gotestsum (the CLI doesn't wrap these; raw invocations stay).
-- [[feedback-bot-attribution]] — `a-novel core bot-comment` for PR/issue comments
-  only (via the dispatcher workflow, no local token); PR creation uses the
-  operator's user token.
-- [[project-workspace-layout]] — `app/` (gitignored services) + `kit/` checkouts.

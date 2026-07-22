@@ -3,26 +3,22 @@ name: write-go-service
 description: >
   Clean-architecture conventions for the a-novel backend SERVICES — `app/service-*`,
   `app/platform-*`, and any repo with the `cmd`/`internal/{config,lib,dao,core,handlers,models}`/`pkg`
-  layout. Load this skill whenever writing or modifying Go in such a repo: new endpoints, schema
-  changes, business logic, new layers, handlers, refactors, or layer-specific tests (DAO Postgres
-  harness, REST/gRPC handler tests). Covers the layer split and import direction, the
-  interface+implementation pattern, DAO/core/handlers/config/lib/models/pkg/cmd, transaction
-  scoping, OpenTelemetry instrumentation, and the service security model. ALWAYS load `write-go`
-  (the base Go conventions) ALONGSIDE this skill; for shared libraries under `a-novel-kit` use
-  `write-go-kit` instead of this one. Pairs with `write-go-tests`, `document-code`, `write-sql`,
-  `write-proto`, `write-openapi`. Does NOT cover JS/TS.
+  layout. Load it for Go work there: endpoints, schema changes, business logic, new layers,
+  REST/gRPC handlers, DAO tests. Covers the layer split and import direction, the
+  interface+implementation pattern, transaction scoping, OpenTelemetry, and the service security
+  model. Load `write-go` alongside; `write-go-kit` is the a-novel-kit library counterpart.
 ---
 
 # Go — Backend Services (clean architecture)
 
 This skill governs Go in the a-novel backend services: repos shaped as
-`cmd/` + `internal/{config,lib,dao,core,handlers,models}` + (optionally) `pkg/`. The goal is
-coherent, idiomatic, minimal code that strictly respects the layered architecture.
+`cmd/` + `internal/{config,lib,dao,core,handlers,models}` + (optionally) `pkg/`. Aim for coherent,
+idiomatic, minimal code that strictly respects the layered architecture.
 
-**This skill is layered on `write-go`.** Everything in `write-go` — read-before-edit, the
+**This skill is layered on `write-go`.** Everything there — read-before-edit, the
 `pnpm format:go`/`pnpm lint:go` discipline, dependency policy, naming of packages/files/variables,
 constructors, error sentinels and `%w` wrapping, context rules, time-capture-once, secrets
-hygiene, the layer-relative span-reporting rule — applies here unchanged. This skill adds only the
+hygiene, the layer-relative span-reporting rule — applies here unchanged; this skill adds the
 **service-architecture-specific** rules on top. Load `write-go` and `write-go-tests` (and
 `document-code` when documenting) alongside it. For shared libraries under `a-novel-kit` (`golib`,
 `jwt`, …) load `write-go-kit` instead of this skill.
@@ -42,10 +38,9 @@ Run the base loop from `write-go` (`pnpm generate:go` when interfaces/proto chan
    `go test` on the one package being iterated), the narrowest target that covers the change.
    Reserve the full `a-novel test -y` for the final commit.
 2. **`document-code`** — doc comments for every symbol added or changed.
-3. If you changed a REST handler in a way that alters the public API contract (new endpoint,
-   changed parameters, changed response shape, added/removed status codes), invoke
-   **`write-openapi`** to update `openapi.yaml`. The spec is a durable public commitment; letting
-   it drift breaks clients.
+3. If a REST handler change alters the public API contract (new endpoint, changed parameters,
+   changed response shape, added/removed status codes), invoke **`write-openapi`** to update
+   `openapi.yaml`. The spec is a durable public commitment; drift breaks clients.
 
 ---
 
@@ -123,7 +118,7 @@ types prefixed `Http` are legacy; rename them when they come into scope (see Act
 
 Every file in `dao/`, `core/`, and `handlers/` exports **exactly one struct implementation**;
 the struct name mirrors the file name (camel-cased). The file also defines the **dependency
-interfaces** that implementation needs — but not every layer has them:
+interfaces** that implementation needs, though not every layer has them:
 
 | Layer       | Struct exports | Interface exports                                                                        |
 | ----------- | -------------- | ---------------------------------------------------------------------------------------- |
@@ -164,19 +159,18 @@ func NewUserSearch(dao UserSearchDao) *UserSearch {
 - **Interfaces proxy the imported package — always defined by the _consumer_, never the producer.**
   A service that imports `dao.PgUserSearch` does not use that concrete type directly; it declares a
   local `UserSearchDao` interface describing only the methods it needs. The DAO package has
-  no interface of its own. Consumer owns the contract; producer satisfies it; neither layer forces
-  the other to import it.
-- **One method per interface, named `Exec`.** This is _not_ idiomatic Go (idiomatic Go names
-  interface methods after what they do) — it is a deliberate project standard for consistency.
-  Follow it.
+  no interface of its own. The consumer owns the contract and the producer satisfies it, so neither
+  layer forces the other to import it.
+- **One method per interface, named `Exec`.** Idiomatic Go names interface methods after what they
+  do; this is a deliberate project standard that trades that for consistency. Follow it.
 - The method signature is `(ctx context.Context, request *XxxRequest) (Result, error)` — `Result`
   is a struct pointer, slice, or named type, never a bare primitive, so fields can be added later
   without breaking callers.
 - **Exceptions in handlers**: gRPC method signatures are protoc-generated; REST handlers implement
   `ServeHTTP(w, r)`. Both are accepted exceptions to the `Exec` shape.
 - Service and DAO types are **stateless after construction** — every field is set by `New*` and
-  never mutated. This makes every type safe for concurrent use without synchronization; it is a
-  requirement, not an accident.
+  never mutated, so every type is safe for concurrent use without synchronization. This is a
+  requirement.
 - **Shared sentinels/types within a layer** go in that layer's single `common.go` (one per layer
   at most), never duplicated across files.
 
@@ -233,7 +227,7 @@ func NewPgUserSelect() *PgUserSelect { return &PgUserSelect{} }
 - **Errors:** map a database error onto a domain sentinel by _joining_ it
   (`err = errors.Join(err, ErrXxxNotFound)`), then `otel.ReportError` it like any other failure —
   **including the not-found case**. A missing row is a real outcome the DAO encountered; whether
-  it's benign is the caller's call (ultimately the handler's, by discarding it), not the DAO's.
+  it's benign is the caller's call (ultimately the handler's, by discarding it).
 - **Telemetry:** `otel.ReportError(span, err)` on every failure path; `otel.ReportSuccess(span,
 value)` on the happy path. See the Telemetry section.
 - **Entity types** (bun models) go in their own `pg.<entity>.go` file, separate from the operations
@@ -305,7 +299,7 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
   with `errors.Is`. The service may re-export a DAO sentinel as its own (`core.ErrXxx`) when
   the handler needs to map it (see Common Pitfalls).
 - Services reach DAOs **only** through the local interfaces they declare. Configuration is injected
-  as a **concrete config struct** — config is static and never needs to be mocked.
+  as a **concrete config struct**: it is static and never needs mocking.
 
 ---
 
@@ -359,14 +353,12 @@ func NewRestUserList(service RestUserListService, logger logging.Log) *RestUserL
 - **REST is public-facing.** Never leak internal error detail. Map each expected sentinel to a
   status with the project's error-mapping helper (`httpf.HandleError` + `httpf.ErrMap`); the
   helper's fallback covers unmapped errors as 500. `httpf.HandleError` already calls
-  `otel.ReportError` on the error for you (the handler span records which error the request ended
-  on, whatever status it maps to) — so you do **not** add a separate `otel.ReportError` on a path
-  that goes through `httpf.HandleError`. On the gRPC side, where you do the mapping by hand, call
-  `_ = otel.ReportError(span, err)` yourself before `status.Error(...)` to get the same effect.
+  `otel.ReportError` for you, so never add a separate one on a path that goes through it (see
+  Telemetry).
 - Conventional short names `w` / `r`. JSON in via `json.NewDecoder(r.Body)` or `gorilla/schema` for
   query params; out via the project's `httpf.SendJSON`.
 - Handler type names carry the `Rest` prefix (`RestUserList`); the service interface mirrors it
-  (`RestUserListService`). File: `rest.<entity><Operation>.go`. Rename legacy `http.*` when touched.
+  (`RestUserListService`). File: `rest.<entity><Operation>.go`.
 
 ### gRPC handlers
 
@@ -409,8 +401,8 @@ func NewGrpcOrderCreate(service GrpcOrderCreateService) *GrpcOrderCreate {
 - **gRPC is internal** (service-to-service only) — never exposed to the internet. Embed
   `protogen.Unimplemented<ServiceName>Server`.
 - Map core sentinels to `codes.*` via `errors.Is` + `status.Error`. Inside `status.Error` /
-  `status.Errorf` use `%v`, never `%w` — gRPC status errors don't support `errors.Unwrap`, so `%w`
-  is misleading. Keep status _messages_ generic enough not to leak DB/crypto detail.
+  `status.Errorf` use `%v`, never `%w`: gRPC status errors don't support `errors.Unwrap`, so `%w`
+  misleads. Keep status _messages_ generic enough not to leak DB/crypto detail.
 - Convert proto↔core models **in the handler**. Never pass a proto type into the core layer.
 - Handler type names carry the `Grpc` prefix; the service interface mirrors it. File:
   `grpc.<entity><Operation>.go`.
@@ -435,10 +427,10 @@ Configuration structs + loading from env vars or YAML. No logic beyond parsing a
 
 ## Lib layer (`internal/lib/`)
 
-Only tools genuinely unavailable from dependencies or stdlib. Keep it **as small as possible —
-ideally nonexistent**. Before adding anything: check stdlib/deps first, then ask the developer
-whether it belongs here at all (vs. inside the relevant package). During maintenance, actively look
-for `lib/` code a newer upstream now subsumes, and delete it.
+Only tools unavailable from dependencies or stdlib. Keep it **as small as possible — ideally
+nonexistent**. Before adding anything: check stdlib/deps first, then ask the developer whether it
+belongs here at all (vs. inside the relevant package). During maintenance, look for `lib/` code a
+newer upstream now subsumes, and delete it.
 
 ---
 
@@ -465,8 +457,8 @@ enter `core` or `dao`; handlers own all proto↔core conversion.
 
 Optional — create only when another service consumes this one as a library. When it exists: export
 the minimal surface external consumers need; follow the same naming/interface rules as `internal/`;
-provide a `NewClient()` that encapsulates connection setup and returns a clean interface; leak no
-internal implementation detail through the public API.
+provide a `NewClient()` that wraps connection setup and returns a clean interface; leak no internal
+implementation detail through the public API.
 
 ---
 
@@ -505,7 +497,7 @@ Every DAO and service operation is wrapped in a span. Three `golib/otel` helpers
 path:
 
 - `otel.ReportError(span, err)` — `RecordError` + `SetStatus(Error)`, returns `err` so it inlines in
-  a `return`. Does **not** end the span — a `defer span.End()` does.
+  a `return`. It does **not** end the span; a `defer span.End()` does.
 - `otel.ReportSuccess(span, value)` — `SetStatus(Ok)`, returns `value`.
 - `otel.ReportSuccessNoContent(span)` — `SetStatus(Ok)` for void operations.
 
@@ -542,24 +534,22 @@ service layers:
 - **Core** that receives an error from a DAO/sub-service and returns it upward → still
   `otel.ReportError`. Returning upward is _propagating_, not discarding; wrapping it changes nothing.
 - **Handler** that maps the error to a transport response → it reports too. `httpf.HandleError`
-  calls `otel.ReportError` unconditionally before writing the HTTP status, so the REST handler
-  span records the error whatever status it maps to; on the gRPC side, do the same by hand
-  (`_ = otel.ReportError(span, err)` before `status.Error(...)`). The handler span thus shows
-  which error each request ended on — useful, not noise. The handler is the _boundary_, not a
-  layer that makes the error vanish.
+  calls `otel.ReportError` unconditionally before writing the HTTP status; on the gRPC side, do the
+  same by hand (`_ = otel.ReportError(span, err)` before `status.Error(...)`). The handler span
+  then shows which error each request ended on, whatever status it mapped to. The handler is the
+  _boundary_, not a layer that makes the error vanish.
 - **Anti-pattern**: a `reportUnexpected(span, err)` keyed on a list of "known" sentinels, used at
   _any_ layer that still propagates or surfaces the error. It couples the layer to an error
   registry and drops real signal. The forbidden moves are: suppressing reporting based on the
   error's identity, and `return nil, ErrXxx` bare from a layer that has a span. Every span'd layer
   reports.
 
-The "is the service broken" view is built on the **HTTP status code** (the otel HTTP
-instrumentation records it) — not on span status. Span status answers "did an error occur in
-processing", which is `true` even for a deliberate 404, and that is fine: spans are independent,
-so the DAO span says "no row", the core span says "no row", the handler span says "no row → 404",
-and the dashboard counts the 404 as a 404, not as a 500. For bulk-anomaly visibility on a specific
-security sentinel (a spike of `ErrInvalidSignature`), use a counter / audit log / dedicated event
-— not `span.status`.
+The "is the service broken" view is built on the **HTTP status code**, which the otel HTTP
+instrumentation records — not on span status. Span status answers "did an error occur in
+processing", which is `true` even for a deliberate 404. That is fine: spans are independent, so
+every layer's span can record "no row" while the dashboard still counts the 404 as a 404. For
+bulk-anomaly visibility on a specific security sentinel (a spike of `ErrInvalidSignature`), use a
+counter, audit log, or dedicated event rather than `span.status`.
 
 **Span attributes** use a semantic `<entity>.<field>` scheme describing the _data_, not the Go
 variable holding it: `"key.id"`, `"key.usage"`, `"key.expires_at"` — never `"request.Jwk.*"` or
@@ -583,10 +573,10 @@ rule — all of which apply here. The service-specific additions:
   through bun's parameterized API (`NewRaw(query, args...)`). The embed pattern keeps SQL visible
   and reviewable; do not move SQL into Go string literals to sidestep it. (See `write-sql`.)
 - **No error-information disclosure in REST responses.** Map to a generic status text
-  (`http.StatusText(...)`); the helper does this for you. This covers **structured bodies** too —
-  a health/status JSON body must carry a binary state (`"up"` / `"down"`) and at most a stable
-  error _code_, never `err.Error()`: a wrapped DB error routinely contains hostnames, ports,
-  schema names, and one `err.Error()` on a downed dependency leaks topology to an unauthenticated
+  (`http.StatusText(...)`); the helper does this for you. **Structured bodies** count too —
+  a health/status JSON body carries a binary state (`"up"` / `"down"`) and at most a stable
+  error _code_, never `err.Error()`: a wrapped DB error routinely contains hostnames, ports and
+  schema names, so one `err.Error()` on a downed dependency leaks topology to an unauthenticated
   caller. Log/trace the full error; return only the public shape. Richer detail goes on a separate,
   auth-gated endpoint. gRPC (internal) tolerates slightly more context in status messages but still
   no raw DB/crypto detail.
@@ -604,8 +594,8 @@ service-architecture additions.
 
 ### DAO tests — real Postgres, rolled-back transaction
 
-DAO tests run against a real PostgreSQL database inside an isolated transaction that is rolled back
-after each sub-test, so cases can't interfere. No mocks — the point is to exercise the real DB.
+DAO tests run against a real PostgreSQL database inside an isolated transaction rolled back after
+each sub-test, so cases can't interfere. No mocks — the point is to exercise the real DB.
 
 ```go
 func TestPgJwkSelect(t *testing.T) {
@@ -651,8 +641,8 @@ func TestPgJwkSelect(t *testing.T) {
 
 - `t.Parallel()` on the outer function, like any test. Construct the DAO once outside the
   loop. Insert fixtures via `db.NewInsert().Model(...)` on the transaction-bound DB.
-- A test that verifies filtering/ordering must include enough fixtures to make the assertion
-  meaningful (a `"FilterUsage"` case needs at least one matching row and one non-matching row).
+- A test verifying filtering/ordering needs enough fixtures to make the assertion meaningful (a
+  `"FilterUsage"` case needs at least one matching row and one non-matching row).
 - Use fixed UUIDs (`uuid.MustParse("00000000-0000-0000-0000-000000000001")`) and fixed timestamps
   relative to `time.Now()` (`hourAgo`, `hourLater`) so the data is deterministic and readable.
 
@@ -703,9 +693,9 @@ if testCase.expectResponse != nil {
 
 - Build requests with `httptest.NewRequestWithContext(t.Context(), method, url, body)`, using the
   **real registered method and path** (`http.MethodGet`, `"/healthcheck"` not `"/"`).
-- Decode the expected response into `any` (not a typed struct) — avoids import coupling and matches
-  JSON numbers as `float64`. For empty list results use `[]any{}` (not `nil`): Go encodes a nil
-  slice as `null` and a non-nil empty slice as `[]`, distinct API contracts.
+- Decode the expected response into `any` (not a typed struct) — this avoids import coupling and
+  matches JSON numbers as `float64`. For empty list results use `[]any{}` (not `nil`): Go encodes a
+  nil slice as `null` and a non-nil empty slice as `[]`, distinct API contracts.
 - Always test: success, every mapped error sentinel (e.g. 404), the generic fallback (500), and —
   if the handler parses input before calling the service — an invalid-input case. Assert the body
   on success cases (including empty collections); on error cases assert only the status code.
@@ -739,18 +729,18 @@ shared across cases.
 
 ### pkg/go tests — end-to-end against a running service
 
-`pkg/go` tests connect to a running service stack and exercise the exported client API. Run with
-`a-novel test --type=go -y`, not `a-novel test --type=go -y`. Don't mock anything at this layer — the point is the real
-integration path.
+`pkg/go` tests connect to a running service stack and exercise the exported client API. Scope the run
+to the package with `a-novel test --type=go -y -C pkg/go`. Don't mock anything at this layer — the
+point is the real integration path.
 
 ### Common test pitfalls (service-specific)
 
 - **Mocking the database in DAO tests.** DAO tests always use the real DB via
   `postgres.RunIsolatedTransactionalTest`. Mocks belong in core and handler tests.
 - **Using DAO sentinels in handler tests.** Handler tests must not import `dao`. The service mock
-  in a handler test returns the _core-layer_ sentinel (`core.ErrJwkNotFound`), not the DAO
-  one (`dao.ErrJwkSelectNotFound`) — that mirrors what the real service returns after translation
-  and keeps the test honest about the handler's actual contract.
+  returns the _core-layer_ sentinel (`core.ErrJwkNotFound`), not the DAO one
+  (`dao.ErrJwkSelectNotFound`) — that mirrors what the real service returns after translation and
+  keeps the test honest about the handler's contract.
 
 ---
 
@@ -769,10 +759,8 @@ Apply these when a file is already in scope — never speculatively:
 | `current := item` copy inside a `for range` loop | Delete (Go 1.22+ per-iteration vars)                                             |
 | `internal/services/` layer + `*Repository` deps  | `internal/core/` (`package core`, `coremocks`), `*Dao` interfaces + `dao` fields |
 
-> **`service-narrative-engine` is a known divergence.** It went through the `services`→`core` /
-> `repository`→`dao` rename in a separate session and may still carry the pre-rename naming. Do
-> **not** migrate it piecemeal as a side effect of another change — leave it until its own session
-> catches up.
+> A repo that has not yet taken the rename is migrated in its own session. Do **not** migrate one
+> piecemeal as a side effect of another change.
 
 ---
 
@@ -780,23 +768,19 @@ Apply these when a file is already in scope — never speculatively:
 
 (`write-go` lists the language-level ones — context-in-struct, new deps without asking, logging
 secrets, multiple `time.Now()`, bare `return nil, ErrXxx` from a layer with a span, `new(T)`,
-discarding errors. These are the **service-architecture** ones:)
+discarding errors. These are the **service-architecture** ones, each stated in full in its section
+above:)
 
-- **HTTP/gRPC concerns leaking into the core layer.** `http.Error`, `json.Marshal`, `status.Errorf`
-  in a core file → move it to the handler.
-- **`dao` imported in handlers.** Handlers depend on core components via interfaces; if a handler
-  needs a DAO sentinel, the core re-exports it as `core.ErrXxx` (in `core/common.go` if shared)
-  and the handler checks that. Keeps the handler decoupled from the DAO layer.
-- **Inline SQL.** All SQL lives in `.sql` files embedded with `//go:embed` at package level; all
-  queries are parameterized via bun — no `fmt.Sprintf`.
+- **HTTP/gRPC concerns in a core file** — `http.Error`, `json.Marshal`, `status.Errorf` → move to
+  the handler.
+- **`dao` imported in handlers.** Handlers depend on core components via interfaces; a handler that
+  needs a DAO sentinel checks the core re-export `core.ErrXxx` (in `core/common.go` if shared).
+- **Inline SQL** instead of a `//go:embed`-ed `.sql` file, or a query built with `fmt.Sprintf`
+  instead of bun parameters.
 - **Hand-written mocks.** Mocks are `mockery`-generated from the interfaces in each file; run
   `pnpm generate:go` after adding/changing an interface.
-- **`http` in new file or type names.** Use `rest` everywhere; rename legacy `http.*` / `Http*`
-  when in scope.
-- **Returning raw error detail in a REST response** — including in a structured JSON field. Map to a
-  generic status; carry at most a stable error code.
-- **Validation in handlers instead of the core layer.** Business-rule checks belong in the core
-  layer; handlers reject only structurally invalid input.
-- **A span on a constructor or config loader.** Spans go on operations that do real work.
-- **A transaction started in a handler.** Transactions are a persistence concern — the core layer
-  or `cmd/` start them, never handlers.
+- **`http` in new file or type names** instead of `rest`.
+- **Raw error detail in a REST response**, including in a structured JSON field.
+- **Validation in handlers** instead of the core layer.
+- **A span on a constructor or config loader.**
+- **A transaction started in a handler** instead of the core layer or `cmd/`.

@@ -1,39 +1,29 @@
 ---
 name: plan-feature
 description: >
-  The planning and technical-design gate that runs BEFORE any non-trivial implementation in the
-  a-novel / a-novel-kit workspace. Use it the moment a request is more than a small, unambiguous,
-  single-repo edit — anything that spans multiple repos, introduces or restructures a service
-  (backend), platform (frontend), or library, changes an architecture or data model, weighs
-  build-vs-buy, migrates existing code, or is even slightly ambiguous about what to build. It owns
-  problem framing, codebase AND internet research (from trusted sources), proposing and defending a
-  technical approach through the lenses secure-by-design / efficient / maintainable, and capturing
-  the agreed design as a GitHub planning **issue** (an Initiative of Epics, an Epic, or a Feature with Task sub-issues) that
-  is iterated with the human until agreed — then handing off to implement-feature (per-repo
-  execution) and manage-versions (cross-repo staging). Always invoke it before writing code when the
-  implementation steps are not already 100% clear; skip it only for trivial, well-scoped changes.
-  Pairs with implement-feature, manage-versions, choose-dependency, git-conventions, open-pull-request,
-  and triage-issues (the recurring grooming pass over the issues this skill creates).
+  The planning and technical-design gate before any non-trivial implementation in the a-novel /
+  a-novel-kit workspace. Use it when a change spans multiple repos, touches an architecture or data
+  model, introduces a service, platform or library, weighs build-vs-buy, or is ambiguous about what
+  to build. It captures the agreed design as a GitHub planning **issue** (Initiative / Epic / Task
+  sub-issues), then hands off to implement-feature. Skip trivial single-repo edits.
 ---
 
 # Plan & design before you build
 
-You are the tech lead on this change, not an order-taker. Your job is to turn a request — which may
-be vague, partial, or even wrong — into a technical plan that is **exhaustive, secure by design,
-efficient, and maintainable**, and to get the human to agree to it before a line of production code
-is written. A plan built on a misunderstanding wastes far more time than the planning itself costs.
+You are the tech lead on this change, not an order-taker. Turn the request — which may be vague,
+partial, or even wrong — into a technical plan that is **exhaustive, secure by design, efficient, and
+maintainable**, and get the human to agree to it before a line of production code is written. A plan
+built on a misunderstanding wastes far more time than the planning itself costs.
 
-The output of this skill is an agreed **planning issue** (see below). Execution then belongs to
-other skills: this skill decides _what_ and _why_; `implement-feature` and `manage-versions` decide
-_how_ the branches and releases are sequenced. Do not re-derive versioning or branch mechanics here —
-delegate to them.
+The output is an agreed **planning issue** (below). This skill decides _what_ and _why_;
+`implement-feature` and `manage-versions` decide _how_ branches and releases are sequenced — delegate
+those mechanics to them.
 
 > **Why issues, not plan files.** Plans used to live in gitignored `plan-*.md` files at the workspace
-> root. That had two fatal flaws: a gitignored file has **no backup** (one was lost, which is why
-> this workflow exists), and a local file can't carry **type, labels, priority/effort, sub-issue
-> structure, dependencies, or PR links**. A GitHub issue survives context resets, is the natural home
-> for the human's replies, and links directly to the PRs that implement it. The plan is no longer a
-> document on disk — it is a **typed, linked, trackable issue graph**.
+> root. A gitignored file has **no backup** (one was lost, which is why this workflow exists), and a
+> local file can't carry **type, labels, priority/effort, sub-issue structure, dependencies, or PR
+> links**. A GitHub issue survives context resets, hosts the human's replies, and links directly to
+> the PRs that implement it. The plan is a **typed, linked, trackable issue graph**.
 
 ---
 
@@ -53,9 +43,9 @@ enough that getting it wrong is expensive:
 | Small, unambiguous, single-repo edit with obvious steps       | No — go straight to `implement-feature` |
 | A typo, a one-line fix, a rename you can see end-to-end       | No                                      |
 
-When in doubt, plan. The cost of a short plan is minutes; the cost of building the wrong thing is
-the whole change plus the rework. (The roadmap direction is that **every** PR — even a one-liner —
-eventually traces to an issue; for now, the table above is the gate for the full planning ritual.)
+When in doubt, plan: a short plan costs minutes, building the wrong thing costs the whole change plus
+the rework. (The roadmap direction is that **every** PR — even a one-liner — eventually traces to an
+issue; for now, the table above is the gate for the full planning ritual.)
 
 ---
 
@@ -63,19 +53,18 @@ eventually traces to an issue; for now, the table above is the gate for the full
 
 - **Propose, don't just ask.** Every open question you raise carries your recommendation. You are
   paid for judgment, not for a menu.
-- **Challenge the request — technically and on UX.** Humans are sometimes wrong, miss context, or
-  ask for the second-best thing. If a different direction is better — whether it's more robust _or_
-  more ergonomic for the people who'll use it — say so and explain why. If something is missing,
-  fill it. If part of the request is a mistake, push back before it becomes code.
-- **Stand your ground, then yield gracefully.** Defend your reasoning. But the human owns the final
-  call; once they've decided against you on a point, comply cleanly and move on — and capture the
-  decision in the issue so it isn't relitigated. You can be wrong too.
-- **Speak to the reader.** Issues are read by busy people, sometimes non-technical. Be concise,
-  concrete, and pedagogical: justify choices in plain language, define jargon, lead with the
-  decision. A technical reviewer reads the same issue before execution — make it serve both.
-  An issue body is a prose surface, so `document-code`'s **Prose economy** section governs it —
-  most of all "write the choice, not the rejected alternative". Record what we decided; the
-  alternatives you weighed belong in the discussion comments, where the reader can skip them.
+- **Challenge the request — technically and on UX.** Humans miss context or ask for the second-best
+  thing. If a different direction is better — more robust _or_ more ergonomic for the people who'll
+  use it — say so and explain why. Fill what is missing; push back on a mistake before it becomes
+  code.
+- **Stand your ground, then yield gracefully.** Defend your reasoning, but the human owns the final
+  call: once they've decided against you, comply cleanly and capture the decision in the issue so it
+  isn't relitigated. You can be wrong too.
+- **Speak to the reader.** Issues are read by busy people, sometimes non-technical, and by a
+  technical reviewer before execution — serve both: concise, concrete, jargon defined, decision
+  first. An issue body is a prose surface, so `document-code`'s **Prose economy** section governs
+  it — most of all "write the choice, not the rejected alternative". Record what we decided; the
+  alternatives you weighed belong in the discussion comments.
 
 ---
 
@@ -84,9 +73,8 @@ eventually traces to an issue; for now, the table above is the gate for the full
 ### 1. Frame the problem
 
 Restate the goal in one or two plain sentences — _what_ outcome, and _why_ it matters — and the
-explicit scope boundaries (what is in, what is deliberately out). If the request is ambiguous or
-could be read several ways, resolve that **now**, before research: one focused clarifying question
-beats a plan built on a guess.
+explicit scope boundaries (what is in, what is deliberately out). If the request is ambiguous,
+resolve that **now**, before research: one focused clarifying question beats a plan built on a guess.
 
 ### 2. Research — the three axes
 
@@ -97,12 +85,11 @@ apply to the change, and say why. Cite what you relied on so the human can verif
   problem, search the web and read how it is handled _outside_ our walls: official docs and specs
   first, then how **major public organizations** solve the same thing (their open-source repos,
   engineering blogs, RFCs, conference talks), reputable standards bodies, and well-regarded
-  write-ups — informational posts included. Prefer recent, primary sources over hearsay. **Default to
+  write-ups, informational posts included. Prefer recent, primary sources over hearsay. **Default to
   the established community standard over inventing our own:** a widely-adopted pattern is
   battle-tested, familiar to contributors, and cheaper to maintain. Deviate only with a thorough
-  justification, and even then derive the deviation _from_ a proven standard rather than from scratch
-  (the way we run a few **macro** services instead of micro/nano — a deliberate, defended departure,
-  not a bespoke invention).
+  justification, and derive the deviation _from_ a proven standard (the way we run a few **macro**
+  services instead of micro/nano — a deliberate, defended departure, not a bespoke invention).
 - **b. Our own code — how we already handle this.** Read the production and test files in every layer
   the change could touch; the tests document the contract. If existing code already solves part of
   the problem, study it and **extend the established pattern** rather than adding a second way to do
@@ -111,9 +98,9 @@ apply to the change, and say why. Cite what you relied on so the human can verif
 - **c. Internal tooling & libraries — what already exists to cut the work.** Before designing
   anything from scratch, inventory what we can reuse: internal helpers and packages, and the
   **already-imported** third-party libraries. **Read their documentation deeply** — a capability you
-  didn't know a dependency offered is implementation time saved and less surface to maintain.
-  Build-vs-buy and _new_ package selection is delegated to `choose-dependency`; this axis is about
-  fully exploiting what is already on hand.
+  didn't know a dependency offered is implementation time saved and less surface to maintain. This
+  axis is about exploiting what is already on hand; build-vs-buy and _new_ package selection belong
+  to `choose-dependency`.
 
 **Spikes are allowed.** If you need to edit code to explore or test a hypothesis, do it — then
 **revert** the exploratory changes before (or immediately after) you capture the plan. Planning
@@ -130,18 +117,17 @@ Propose the approach and evaluate it against four lenses, every time:
   simplest thing that fully works?
 - **User experience & fit.** Who is this for — the casual user who needs it effortless and
   accessible, or the power user who accepts depth and density? Often both: make the common case
-  prominent and _progressively disclose_ advanced options so power users can find them without
+  prominent and _progressively disclose_ advanced options, so power users find them without
   burdening everyone else. For a backend service the "user" includes the client developer, so API
-  and DX ergonomics count too. Challenge the request on this axis — if a different shape serves the
-  target user better (simpler, fewer steps, more ergonomic), propose it; a technically elegant
-  feature that doesn't fit how people actually work is the wrong feature.
+  and DX ergonomics count too. Challenge the request here as well: if a different shape serves the
+  target user better (simpler, fewer steps, more ergonomic), propose it. A technically elegant
+  feature that doesn't fit how people work is the wrong feature.
 
 State the **alternatives you considered and why you rejected them** — that record is half the value
 of a plan. Where the design needs a new dependency or an internal implementation, invoke
-`choose-dependency`. Where it spans repos or breaks a published contract, the rollout is a
-`manage-versions` concern: capture the dependency order and whether the change must ship in stages
-(a backward-compatible deployment first, cleanup second) — but let `manage-versions` own the
-mechanics.
+`choose-dependency`. Where it spans repos or breaks a published contract, capture the dependency
+order and whether the change must ship in stages (a backward-compatible deployment first, cleanup
+second) — but let `manage-versions` own the mechanics.
 
 ### 4. Open the planning issue(s)
 
@@ -150,19 +136,24 @@ and survive context resets. The issue body — not chat, not a local file — is
 Set its **type**, **labels**, **project**, and **fields** on creation; break it into **sub-issues**
 and **dependencies** when it has stages.
 
+Open it **early**, while the design is still moving, and refine the body in place as it firms up. A
+wrong Epic costs one click to close; a session that ends before anything was written down takes every
+decision with it.
+
 ### 5. Iterate to agreement
 
 Walk the human through it, take feedback, refine the **issue body**. Park open questions and
 back-and-forth in **comments** (not the body — see "Keep the body clean"), so the body always reads
 as the current agreed plan and the human can reply inline. Repeat until you both agree. Treat heated
 disagreement as a signal to understand their constraints, not to dig in. The gate to execution is
-**explicit agreement**, or — for a small, well-scoped task — that the steps are simply 100% clear.
+**explicit agreement**, or — for a small, well-scoped task — that the steps are 100% clear.
 
 ### 6. Hand off to execution
 
 Once agreed, execution proceeds through the other skills: `implement-feature` decomposes each repo's
-work into branches and implements/tests them (typically one branch/PR per Task sub-issue, each PR
-carrying `Closes #<n>`); `manage-versions` sequences cross-repo merges and staged rollouts;
+work into branches (named and committed per `git-conventions`) and implements/tests them — typically
+one branch/PR per Task sub-issue, each PR carrying `Closes #<n>`; `manage-versions` sequences
+cross-repo merges and staged rollouts;
 `open-pull-request` / `monitor-ci` / `resolve-pr-feedback` carry each PR to green. Keep the issue
 current as work lands (see completion handling).
 
@@ -172,12 +163,12 @@ current as work lands (see completion handling).
 
 ### Where the issue lives
 
-| Situation                                                                      | Where the planning issue goes                                                                                                                                                                                                                                                                                                                                                                          |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Single repo**                                                                | One issue in that repo.                                                                                                                                                                                                                                                                                                                                                                                |
-| **Multiple repos within one org**                                              | An **Epic** in that org's `.github` repo, with **Task sub-issues** in each member repo. Sub-issue progress rolls up to the Epic.                                                                                                                                                                                                                                                                       |
-| **Cross-org** (an `a-novel` repo needs an `a-novel-kit` change, or vice versa) | Epic in the **outcome-owning** org's `.github`. The dependency in the _other_ org is a **referenced + `blocked-by`** link, **not** a cross-org sub-issue — cross-org sub-issues link but their progress rollup undercounts. `manage-versions` owns the actual merge order.                                                                                                                             |
-| **Broad, multi-release / multi-Epic effort**                                   | An **Initiative** — in the repo itself when single-repo, or the outcome-owning org's `.github` when cross-repo — with **one Epic per release/capability** under it (Task sub-issues under each Epic), grouped by a goal-named milestone. Milestones can't span repos, so a cross-repo effort uses one milestone **per repo, all sharing the same goal name** (the board's milestone view groups them). |
+| Situation                                                                      | Where the planning issue goes                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Single repo**                                                                | One issue in that repo.                                                                                                                                                                                                                                                                   |
+| **Multiple repos within one org**                                              | An **Epic** in that org's `.github` repo, with **Task sub-issues** in each member repo. Sub-issue progress rolls up to the Epic.                                                                                                                                                          |
+| **Cross-org** (an `a-novel` repo needs an `a-novel-kit` change, or vice versa) | Epic in the **outcome-owning** org's `.github`. The dependency in the _other_ org is a **referenced + `blocked-by`** link, **not** a cross-org sub-issue — cross-org sub-issues link but their progress rollup undercounts. `manage-versions` owns the actual merge order.                |
+| **Broad, multi-release / multi-Epic effort**                                   | An **Initiative** — in the repo itself when single-repo, or the outcome-owning org's `.github` when cross-repo — with **one Epic per release/capability** under it (Task sub-issues under each Epic), grouped by a goal-named milestone (per repo — see **Milestone naming & grouping**). |
 
 The two `.github` repos (`a-novel/.github`, `a-novel-kit/.github`) are the natural home for
 cross-repo Epics and Initiatives; per-repo work lives in the repo it touches.
@@ -196,10 +187,9 @@ cross-repo Epics and Initiatives; per-repo work lives in the repo it touches.
   | **Bug**        | A defect.                                                                                                                                                                                                                                                                                                                                                |
 
   Set it with `gh issue create --type <Initiative\|Epic\|Feature\|Task\|Bug>`. The type carries the
-  kind, so there is **no `bug`/`enhancement` label** any more. **Don't overload one Epic with a whole
-  multi-release effort** — make it an **Initiative** with **one Epic per release/capability**
-  underneath, all sharing **one** goal-named milestone (see the Milestone rule below), not a milestone
-  per stage.
+  kind, so there is **no `bug`/`enhancement` label** any more. An effort spanning several releases is
+  an **Initiative** with **one Epic per release/capability** underneath, all sharing **one**
+  goal-named milestone (see the Milestone rule below), never a milestone per stage.
 
 - **Body** = the plan, in the structure below. Markdown (same as PR descriptions). Iterate it with
   `gh issue edit <n> --body-file <file>`.
@@ -211,48 +201,48 @@ cross-repo Epics and Initiatives; per-repo work lives in the repo it touches.
   dependencies).
 
 - **Assignee** — assign every Epic and Task to its **creator** on creation (`--assignee "@me"`, the
-  operator whose `gh` token authors it — not the bot). They may reassign later, but a default owner
-  keeps the board triageable the moment more contributors arrive: no issue sits ownerless.
+  operator whose `gh` token authors it — not the bot). They may reassign later; a default owner keeps
+  the board triageable as more contributors arrive, and no issue sits ownerless.
 
 - **Project board** — add the issue to the org's **"Tasks"** board (`a-novel` project #7,
   `a-novel-kit` project #1) and set its fields:
 
-  | Field           | Values                                                                                            | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-  | --------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-  | **Status**      | Backlog · Triage · Tracking · Ready · In progress · In review · Done · Awaiting release · Applied | Workflow state. **Triage** = un-assessed incoming; **Backlog** = not-yet-ready draft; **Ready** = pickup-able; **Tracking** = an Initiative's active state; **Awaiting release** = merged, not yet released; **Applied** = terminal for a meta / no-PR task.                                                                                                                                                                                                                                                             |
-  | **Priority**    | P0 · P1 · P2 · P3 · P4                                                                            | P0 = drop-everything; P4 = nice-to-have.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-  | **Size**        | XS · S · M · L · XL                                                                               | The **effort / weight** estimate. Every actionable ticket gets one.                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-  | **Stage**       | Stage 1 … Stage N · Unscheduled                                                                   | **Absolute** placement within a multi-stage milestone / initiative. "What's next" = the lowest-numbered stage not yet Done.                                                                                                                                                                                                                                                                                                                                                                                              |
-  | **Target date** | _date_                                                                                            | The **due date**. Set it once the issue goes **active** (see below).                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-  | **Milestone**   | _per-repo_                                                                                        | Optional grouping toward a deliverable. **Name it for the repo + the change, never a bare version** — e.g. `JWT: security hardening & API modernization`, not `v1.2.0`. The shared boards list every repo's milestones together, so a bare version is unreadable out of context; the release **version lives on the Epic** (its title/target), not the milestone name. Group **several Epics under one** goal-named milestone rather than one milestone per stage. Cannot span repos. Give it a **due date** (`due_on`). |
+  | Field           | Values                                                                                            | Meaning                                                                                                                                                                                                                                                      |
+  | --------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+  | **Status**      | Backlog · Triage · Tracking · Ready · In progress · In review · Done · Awaiting release · Applied | Workflow state. **Triage** = un-assessed incoming; **Backlog** = not-yet-ready draft; **Ready** = pickup-able; **Tracking** = an Initiative's active state; **Awaiting release** = merged, not yet released; **Applied** = terminal for a meta / no-PR task. |
+  | **Priority**    | P0 · P1 · P2 · P3 · P4                                                                            | P0 = drop-everything; P4 = nice-to-have.                                                                                                                                                                                                                     |
+  | **Size**        | XS · S · M · L · XL                                                                               | The **effort / weight** estimate. Every actionable ticket gets one.                                                                                                                                                                                          |
+  | **Stage**       | Stage 1 … Stage N · Unscheduled                                                                   | **Absolute** placement within a multi-stage milestone / initiative. "What's next" = the lowest-numbered stage not yet Done.                                                                                                                                  |
+  | **Target date** | _date_                                                                                            | The **due date**. Set it once the issue goes **active** (see below).                                                                                                                                                                                         |
+  | **Milestone**   | _per-repo_                                                                                        | Optional goal-scoped grouping toward a deliverable. Cannot span repos. Give it a **due date** (`due_on`). Name and group it per **Milestone naming & grouping** below.                                                                                       |
 
 - **When to set each field — weight, priority, due dates.** Set **Size** (weight) and **Priority** at
-  **creation when the scope is clear** — you usually know a planned Task's rough size and urgency — and
-  otherwise **assign/refine them during the triage pass** (`triage-issues`). Leave the **Target date**
-  (due date) empty until the issue becomes **active** — i.e. it has an open PR linked against it — then
-  **agree a due date with the operator**; an active issue without a due date is a triage smell. Give
-  every **milestone** a due date too — PATCH the specific milestone, not the collection:
+  **creation when the scope is clear** — you usually know a planned Task's rough size and urgency —
+  otherwise **during the triage pass** (`triage-issues`). Leave the **Target date** (due date) empty
+  until the issue becomes **active** — it has an open PR linked against it — then **agree a due date
+  with the operator**; an active issue without a due date is a triage smell. Give every **milestone**
+  a due date too — PATCH the specific milestone, not the collection:
   `gh api repos/<o>/<r>/milestones/<n> -X PATCH -f due_on=<RFC3339>` (or pass `-f due_on=…` to
-  `... -f title=…` when first creating it). Both dates exist to make triage decisions, not decoration.
+  `... -f title=…` when first creating it). Both dates exist to make triage decisions.
 
 - **Set every field at creation — `--project` is not enough (recurring footgun).** Boarding an issue
   (`--project "Tasks"`) and setting its **milestone** and **board fields** are _independent_ actions:
-  adding an issue to the board does **not** set its Milestone, Priority, Size, or Stage — those default
-  to empty. So treat each `gh issue create` as a two-part act: (1) create it **with** `--milestone` for any issue that belongs to a milestone (a milestone can only be set by `--milestone` /
-  `gh issue edit --milestone`, never by `--project`), then (2) set **Priority / Size / Stage** in the
-  same breath via `gh project item-edit`. Never leave an item half-fielded. **Verify after any batch
-  create** with a one-line board scan — _a Stage-tagged item with no Milestone is the tell_ that
-  `--project` was passed but `--milestone` was forgotten. The same care applies to every field edit:
-  confirm the write landed rather than assuming it did.
+  boarding sets neither Milestone, Priority, Size, nor Stage — those default to empty. Treat each
+  `gh issue create` as a two-part act: (1) create it **with** `--milestone` when it belongs to one (a
+  milestone can only be set by `--milestone` / `gh issue edit --milestone`, never by `--project`),
+  then (2) set **Priority / Size / Stage** in the same breath via `gh project item-edit`. Never leave
+  an item half-fielded. **Verify after any batch create** with a one-line board scan — _a Stage-tagged
+  item with no Milestone is the tell_ that `--project` was passed but `--milestone` was forgotten.
+  Confirm every field write landed rather than assuming it did.
 
 - **Milestone naming & grouping.** A milestone is a **goal-scoped grouping, not a version tag**. Name
   it for the repo + what it delivers (`JWT: security hardening & API modernization`), **never a bare
   version** — the org boards render every repo's milestones in one list, so `v1.2.0` is meaningless
   out of context. Put the **release version on the Epic** (its title/body/target), and group
-  **several Epics under one** goal-named milestone rather than spinning up a milestone per release
-  stage. Milestones are **per-repo and cannot span repos**; to group a cross-repo deliverable, give
-  each repo a milestone with the **identical (goal) name** so the board's milestone view groups them,
-  and let the **Initiative → Epic** graph be the real cross-repo glue.
+  **several Epics under one** goal-named milestone rather than one milestone per release stage.
+  Milestones are **per-repo and cannot span repos**; to group a cross-repo deliverable, give each repo
+  a milestone with the **identical (goal) name** so the board's milestone view groups them, and let
+  the **Initiative → Epic** graph be the real cross-repo glue.
 
 ### Breakdown & staging — sub-issues and dependencies
 
@@ -269,10 +259,10 @@ This replaces both the old `- [ ]` work-breakdown checkboxes and the stepped `pl
   per relationship type.
 
 - **Draft future stages.** For a staged plan, open the later stages **ahead of time** as Task
-  sub-issues in Status `Backlog`, each `blocked-by` its predecessor, so the whole shape is visible
-  and "we can pick them up later." Drafts are cheap — **if the plan changes, delete the draft**
-  (`gh issue delete <n> --yes`; deletion needs an owner/admin token). Deleting a not-yet-started
-  draft is fine; never delete an issue that has history worth keeping — close it instead.
+  sub-issues in Status `Backlog`, each `blocked-by` its predecessor, so the whole shape is visible and
+  pick-up-able later. Drafts are cheap — **if the plan changes, delete the draft**
+  (`gh issue delete <n> --yes`; deletion needs an owner/admin token). Never delete an issue that has
+  history worth keeping — close it instead.
 
 ### Keep the body clean; discuss in comments
 
@@ -280,8 +270,8 @@ The issue **body** holds the current agreed plan only. Everything conversational
 your recommendations, the human's answers, rejected alternatives mid-debate — goes in **comments**,
 so the body stays readable and the human can reply inline to a specific point.
 
-Post your comments through the **bot**, never bare `gh` (the bot dispatcher comments on issues just
-as it does on PRs — issues and PRs share one number sequence):
+Post your comments through the **bot**, never bare `gh` (the bot dispatcher comments on issues as it
+does on PRs — issues and PRs share one number sequence):
 
 ```bash
 a-novel core bot-comment <org> <repo> <issue-number> --body "$(cat <<'EOF'
@@ -360,12 +350,32 @@ The old "keep the plan file from rotting" discipline is now mostly automatic:
 - Keep the Epic open until every stage has landed, then close it. A closed Epic with its closed
   sub-issues _is_ the durable record — no summary rewrite needed.
 
+### Side quests — file them, don't absorb them
+
+A good analysis surfaces more work than the plan should carry. File each find as an **orphan
+issue**: no parent, no milestone, boarded on the org "Tasks" project with **Status = Triage**, the
+un-assessed incoming queue `triage-issues` drains (Backlog is for planned-but-not-ready work).
+Folding the find into the current Epic bloats its scope and delays it; leaving it in chat loses it at
+the next context reset.
+
+File it in the repo it would land in, typed normally, and verify it against the code first — an
+inferred defect that turns out to be already fixed costs whoever picks it up their whole slot. The
+body carries what was spotted, the evidence, and why it matters, written to survive without the
+conversation that produced it.
+
+When a pass surfaces a **batch** meant to be picked up as one unit, give them a shared goal-named
+milestone — still no parent, still Triage. A milestone cannot span repos, so use the identical name
+in each repo. Without one, a parallel session has no single handle to pick the batch up by.
+
+Batch the filing at the end of the pass rather than interrupting the analysis, and name the side
+quests in the plan's "Out of scope / future" section so a reader knows they were considered.
+
 ---
 
 ## Repo taxonomy you are planning within
 
-The workspace has more than one kind of repo, and the right conventions differ by kind. Identify the
-kind early — it changes the work breakdown and which skills apply.
+Conventions differ by repo kind, so identify the kind early — it changes the work breakdown and which
+skills apply.
 
 | Kind                           | Org           | Shape                                                                                                   | Examples                                      |
 | ------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
@@ -375,8 +385,8 @@ kind early — it changes the work breakdown and which skills apply.
 | **tooling / meta / workflows** | both          | CLI, `.github`, reusable CI                                                                             | `stack`, `workflows`                          |
 
 `implement-feature`'s layer-by-layer branch decomposition is a **service** pattern — do **not** apply
-it wholesale to a platform repo. Frontend (platform) authoring conventions are a separate, later
-stage; until those skills exist, plan platform work conservatively and flag the gap.
+it wholesale to a platform repo. Frontend (platform) authoring conventions come later; until those
+skills exist, plan platform work conservatively and flag the gap.
 
 ---
 
@@ -409,8 +419,7 @@ issue lifecycle** — create, read, update, delete, plus sub-issues, dependencie
 milestones. That rides on the **`repo`** scope (deleting an issue additionally needs an owner/admin
 role on the repo, which org owners have). Reading and writing **board fields** (Priority / Size /
 Status / Stage) needs the **`project`** scope. Managing the org-level **issue types** themselves
-(adding / editing / removing a type such as `Epic`) needs **`admin:org`** — a one-time admin act, not
-part of day-to-day planning.
+(adding / editing / removing a type such as `Epic`) needs **`admin:org`** — a one-time admin act.
 
 **If any `gh` / `gh api` command fails with an authorization or `INSUFFICIENT_SCOPES` error, do not
 work around it** (don't fall back to a label, a comment, or a local file). Stop and **ask the human
@@ -420,48 +429,47 @@ to grant the missing scope**, naming it explicitly:
 gh auth refresh -h github.com -s <missing-scope>   # e.g. -s project, -s admin:org
 ```
 
-Then retry the command. Higher privilege is granted on request for exactly this reason; silently
-degrading the plan to fit a missing scope is the wrong move.
+Then retry the command. Higher privilege is granted on request for exactly this reason; never
+silently degrade the plan to fit a missing scope.
 
 ---
 
 ## Operating the board
 
-**One board per org, scaled by _views_ not boards.** Each org has exactly one "Tasks" project. This
-is deliberate and idiomatic for a small operation: orgs that run many boards (Kubernetes per-SIG,
-Node.js per-team, Prometheus per-release) do so because they have many parallel _teams_ — a scale
-driver we don't have. Comparable focused projects (Astro, Vite, Excalidraw) anchor on a single board;
-GitHub's own model is **one project, many saved views**. Do **not** add per-area or per-release boards.
-The one real limit: a project **cannot span two orgs**, which is the other reason the two orgs keep
-separate boards (cross-org epics are tracked by reference — see "Where the issue lives").
+**One board per org, scaled by _views_ not boards.** Each org has exactly one "Tasks" project, and
+GitHub's own model is **one project, many saved views**. Orgs that run many boards (Kubernetes
+per-SIG, Node.js per-team, Prometheus per-release) have many parallel _teams_, a scale driver we don't
+have; comparable focused projects (Astro, Vite, Excalidraw) anchor on a single board. Do **not** add
+per-area or per-release boards. A project **cannot span two orgs**, which is the other reason the two
+orgs keep separate boards (cross-org epics are tracked by reference — see "Where the issue lives").
 
-**Status is single-writer: the board's bot owns it, not GitHub's built-in workflows.** The bot derives every
-status from what happened to a Pull Request (draft → _In progress_, ready → _In review_, approved →
-_Done_, merged → _Awaiting release_) and a sweep re-asserts it, so a manual edit will not stick. Leave
-the built-in workflows that derive status **from Pull Request state** off: they cannot see the board's
-own statuses (_Awaiting release_, _Tracking_, _Applied_), and GitHub's _Pull request merged → Done_
-directly contradicts the bot's _merged → Awaiting release_. The one built-in that stays **on** is
-_Item added to project → Triage_. At add-time there is no Pull Request to read from, so the bot has no
-opinion yet: this seeds a status, and anything boarded outside the skills lands in the Triage queue
-instead of sitting status-less and unseen — including an item whose field edits were forgotten (see
-the footgun above). Planned work never lingers there, because the skills set its real status in the
-same breath. **Keep the _auto-add_ workflows OFF** too — both _Auto-add to
-project_ (repo) and _Auto-add sub-issues to project_. The principle: **the bot sets Status, the skills
-add the items.** Every issue and sub-issue joins the board explicitly via `--project` on
-`gh issue create` (or `gh project item-add`), so board membership stays deliberate, not magic.
-**Backlog** is the landing for **planned** work; **Triage** is a _deliberate_ status a
-maintainer moves an un-assessed issue into — and where the deferred external-user intake will file
-incoming reports — so the _Triage_ view surfaces only work still needing assessment, not every newly
-added item.
+**Status is single-writer: the board's bot owns it, not GitHub's built-in workflows.** The bot derives
+every Pull-Request-backed status (draft → _In progress_, ready → _In review_, approved → _Done_,
+merged → _Awaiting release_) and a sweep re-asserts it, so editing one of those by hand will not
+stick. The statuses no Pull Request can produce stay yours to set: `Triage` → `Ready`, an
+Initiative's `Tracking`, and a meta task's final `Applied`. Leave the built-in workflows that derive status **from Pull Request state** off: they cannot
+see the board's own statuses (_Awaiting release_, _Tracking_, _Applied_), and GitHub's _Pull request
+merged → Done_ directly contradicts the bot's _merged → Awaiting release_. The one built-in that stays
+**on** is _Item added to project → Triage_: at add-time there is no Pull Request to read from, so the
+bot has no opinion yet, and anything boarded outside the skills lands in the Triage queue instead of
+sitting status-less and unseen — including an item whose field edits were forgotten (see the footgun
+above). Planned work never lingers there, because the skills set its real status in the same breath.
+**Keep the _auto-add_ workflows OFF** too — both _Auto-add to project_ (repo) and _Auto-add
+sub-issues to project_. **The bot sets Status, the skills add the items:** every issue and sub-issue
+joins the board explicitly via `--project` on `gh issue create` (or `gh project item-add`), so board
+membership stays deliberate. **Backlog** is the landing for **planned** work; **Triage** is a
+_deliberate_ status a maintainer moves an un-assessed issue into — and where the deferred
+external-user intake will file incoming reports — so the _Triage_ view surfaces only work still
+needing assessment, not every newly added item.
 
 **Saved views worth having** (also UI-only): _Board by Status_; _Triage_ (`is:open status:Triage`);
 _My/agent items_ (`assignee:@me is:open`); _Roadmap_ grouped by Milestone; _Epics_ grouped by
 **Parent issue** (or filtered `type:Epic`).
 
 **Recurring triage is its own skill.** Grooming the open-issue set — prioritising, assigning weights,
-setting due dates, refining drafts that are about to go active — is the `triage-issues` skill, run
-manually during a planning pass. This skill (`plan-feature`) sets a ticket's fields at _creation_;
-`triage-issues` keeps them honest over time.
+setting due dates, refining drafts about to go active — is the `triage-issues` skill, run manually
+during a planning pass. `plan-feature` sets a ticket's fields at _creation_; `triage-issues` keeps
+them honest over time.
 
 ---
 
@@ -485,9 +493,8 @@ plan that is already agreed.
 
 ## Principles
 
-- **The issue is the artifact.** Decisions live in the planning issue, not scattered through chat or
-  a local file, so they survive context resets, are backed up, and link to the PRs that implement
-  them. The body is the agreed plan; comments are the conversation.
+- **The issue is the artifact.** Decisions live in the planning issue, not in chat or a local file.
+  The body is the agreed plan; comments are the conversation.
 - **Justify, don't decree.** Every recommendation states its reasoning. "Because it's best practice"
   is not a reason.
 - **Research before asserting.** Read the code; search trusted sources. Cite what you relied on.
@@ -497,23 +504,21 @@ plan that is already agreed.
   docs, and conversation. If a name proves wrong, change it everywhere in one deliberate pass — never
   let two names for one thing coexist.
 - **Cut on results, not activities.** An area, Epic, or module earns its own boundary only when it
-  owns a distinct _result_ the others consume rather than produce — draw the line where ownership of an
-  output changes hands, not where the work merely looks different. Forking a story looks like its own
-  feature, but its result is a story, so it belongs to whoever owns stories, not to a separate
-  "forking" area; publishing consumes a finished story yet produces a new thing it alone owns — the
-  published release — so it stands apart. A boundary that only separates two activities on the same
-  result is a false one, and undoing it later costs a network hop or a migration.
-- **Adopt proven standards; surpass weak instances.** Default to the established community pattern —
-  it is battle-tested, familiar, and cheap to maintain; reinventing it is a cost, not a virtue.
-  Deviate only with a thorough justification derived from a proven base (the way we run **macro**
-  services, not micro/nano). That is not in tension with being critical: when you study a _specific_
-  prior implementation — ours or a reference — it shows what was tried, not what to copy, so name its
-  flaws and aim past them. Embrace the standard, improve the instance; max the quality, then stage
-  delivery sensibly.
-- **Stage what can't ship at once.** Single-step delivery is preferred; when deployment forces
-  incompatible stages, plan a backward-compatible step then a cleanup step — drafted ahead as
-  `blocked-by` sub-issues — and hand the mechanics to `manage-versions`.
-- **Leave the tree clean.** Exploratory edits are reverted; the plan lives in the issue, nothing is
-  left on disk.
+  owns a distinct _result_ the others consume rather than produce — draw the line where ownership of
+  an output changes hands, not where the work merely looks different. Forking a story looks like its
+  own feature, but its result is a story, so it belongs to whoever owns stories, not a separate
+  "forking" area; publishing consumes
+  a finished story and produces a new thing it alone owns — the published release — so it stands
+  apart. A boundary that only separates two activities on the same result is false, and undoing it
+  later costs a network hop or a migration.
+- **Adopt proven standards; surpass weak instances.** Defaulting to the established pattern (research
+  axis a) is not in tension with being critical: a _specific_ prior implementation — ours or a
+  reference — shows what was tried, not what to copy, so name its flaws and aim past them. Embrace
+  the standard, improve the instance; max the quality, then stage delivery sensibly.
+- **Stage what can't ship at once.** Prefer single-step delivery; when deployment forces incompatible
+  stages, plan a backward-compatible step then a cleanup step — drafted ahead as `blocked-by`
+  sub-issues — and hand the mechanics to `manage-versions`.
+- **Leave the tree clean.** Exploratory edits are reverted; the plan lives in the issue, nothing on
+  disk.
 - **Agreement is the gate.** Don't start production code until the plan is agreed or the task is
   small enough to be unambiguous.

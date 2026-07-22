@@ -1,34 +1,30 @@
 ---
 name: implement-feature
 description: >
-  Plan and implement changes to an a-novel backend SERVICE repo using a layered branch strategy.
-  Use whenever implementing an add/change/remove to a service — new API endpoints, schema changes,
-  business logic, client updates. For non-trivial, multi-repo, or architectural work, run
-  plan-feature first to agree the design, then use this skill to execute it; small, unambiguous
-  changes can come straight here. Covers the full lifecycle from triage to final commit: decompose
-  into branches, test each branch, handle backtracking. Backend services only — frontend (platform)
-  repos have their own (forthcoming) conventions; do not apply the layered decomposition to them.
+  Implement a change to an a-novel backend SERVICE repo using a layered branch strategy. Use whenever
+  implementing a new API endpoint, schema change, business logic, or client update. Covers branch
+  decomposition, per-branch testing, and backtracking. Run plan-feature first for non-trivial,
+  multi-repo, or architectural work. Backend services only — not platform (frontend) repos.
 ---
 
 # Feature Implementation Workflow
 
-This skill governs how Claude executes feature work in a-novel **backend services** (the `service-*`
-repos with the `cmd`/`internal/...`/`pkg` clean-architecture layout). Every non-trivial change goes
-through the same phases: **Assess → Plan → Implement**. Each phase has a gate before the next begins.
-A later section covers recovery when an earlier branch needs to change.
+Feature work in a-novel **backend services** (the `service-*` repos with the
+`cmd`/`internal/...`/`pkg` clean-architecture layout) runs through three gated phases:
+**Assess → Plan → Implement**. Phase 4 covers recovery when an earlier branch needs to change.
 
-> **Where the design comes from.** For non-trivial, multi-repo, or architectural work the _design_ is
-> settled first in `plan-feature`, which produces an agreed **planning issue** (an Epic, or a Feature
-> with its Task sub-issues); this skill then executes it, and the **Plan** phase below is the per-repo
-> **branch decomposition** of that already-agreed design — typically one branch/PR per Task sub-issue.
-> Link every PR back to its issue with a `Closes #<n>` line so merging closes the unit and the Epic's
-> sub-issue progress advances. When the design is an Epic spanning repos, each PR also carries the
-> `epic:<N>` label and lands under the gates in "Landing a Task that belongs to an Epic" below. Small,
-> unambiguous changes can start directly here.
+> **Where the design comes from.** For non-trivial, multi-repo, or architectural work, `plan-feature`
+> settles the design first and produces a **planning issue** (an Epic, or a Feature with its Task
+> sub-issues). This skill executes it: the **Plan** phase below is the per-repo **branch
+> decomposition** of that agreed design, typically one branch/PR per Task sub-issue. Link every PR to
+> its issue with a `Closes #<n>` line, so merging closes the unit and advances the Epic's sub-issue
+> progress. A PR under an Epic spanning repos also carries the `epic:<N>` label and lands under the
+> gates in "Landing a Task that belongs to an Epic" below. Small, unambiguous changes start directly
+> here.
 >
-> **Scope: backend services only.** Frontend **`platform`** repos are deliberately more monolithic
-> than services — the layer-by-layer branch decomposition here does **not** apply to them, and their
-> authoring conventions arrive in a later stage. Don't force a platform change through this workflow.
+> **Scope: backend services only.** Frontend **`platform`** repos are deliberately more monolithic, so
+> the layer-by-layer branch decomposition here does **not** apply to them; their authoring conventions
+> arrive in a later stage. Don't force a platform change through this workflow.
 
 ---
 
@@ -41,8 +37,8 @@ means another session is already working there: allocate your own stack with
 end of the lifecycle (3.6).
 
 **Clarify ambiguous requests first.** If the request is broad ("improve the service", "refactor
-this area") or could be interpreted multiple ways, ask one focused question before reading any code.
-A plan built on a misunderstood requirement wastes both read and write effort.
+this area") or reads several ways, ask one focused question before reading any code. A plan built on
+a misunderstood requirement wastes read and write effort alike.
 
 **Read the code that will change.** Never guess at signatures, error types, or interfaces. Before
 proposing a plan, read:
@@ -51,8 +47,7 @@ proposing a plan, read:
 - The test files for those layers (they document the contract)
 - Any SQL migrations that the change builds on
 
-Do not propose a plan based on assumptions. If you are unsure which files are involved, use Grep
-and Glob to find them.
+Use Grep and Glob when you are unsure which files are involved.
 
 ---
 
@@ -78,15 +73,14 @@ change**, or **not affected**.
 | pkg/js          | The REST endpoint contract changes (same trigger as OpenAPI) |
 
 **OpenAPI / REST / JS synchronization rule**: the OpenAPI spec (`openapi.yaml`), the Go REST
-handlers, and the JS client (`pkg/js/rest/`) are three representations of the same contract.
-Whenever any one of them changes, all three must be updated in the same feature. A PR that
-updates one without the others must explicitly justify the omission. Divergence between these
-three is a bug.
+handlers, and the JS client (`pkg/js/rest/`) are three representations of the same contract, so a
+change to one updates all three in the same feature. A PR that updates one without the others must
+justify the omission. Divergence is a bug.
 
 ### Does it break anything?
 
-A change is breaking if it would cause existing callers to fail without code changes on their side.
-Flag these explicitly — they require a BREAKING CHANGE commit footer and a warning to the developer.
+A change is breaking if it makes existing callers fail without code changes on their side. Flag
+these explicitly — they require a BREAKING CHANGE commit footer and a warning to the developer.
 
 Breaking changes include:
 
@@ -107,9 +101,9 @@ Breaking changes include:
 
 ### Is this purely additive or does it modify existing behaviour?
 
-Additive changes (new endpoint, new field, new service) are safe to ship in parallel with existing
-code. Modifications (change error mapping, change response shape, fix a bug) may affect existing
-callers and need extra care.
+Additive changes (new endpoint, new field, new service) ship safely in parallel with existing code.
+Modifications (error mapping, response shape, a bug fix) may affect existing callers and need extra
+care.
 
 ---
 
@@ -136,11 +130,10 @@ Decompose the feature into **one branch per layer boundary**. A branch is the sm
 Skip layers that are not affected. A feature that only adds a new service method and handler may
 start at step 4.
 
-**When a single branch is enough**: if the feature touches only one layer (or the coupled
-OpenAPI + pkg/js pair, which always moves as one unit), creates no migration, and involves no
-proto changes, a single branch is appropriate. Improvement rounds (multi-layer bug fixes, test
-additions, doc updates, code cleanup) that contain no user-facing behavior change also stay on a
-single branch — splitting them would be churn with no review benefit.
+**When a single branch is enough**: the feature touches one layer (or the coupled OpenAPI + pkg/js
+pair, which always moves as one unit), creates no migration, and changes no proto. Improvement rounds
+(multi-layer bug fixes, test additions, doc updates, code cleanup) with no user-facing behavior
+change also stay on a single branch — splitting them would be churn with no review benefit.
 
 **Present the plan to the developer before starting.** Show:
 
@@ -168,8 +161,8 @@ git checkout feat/<parent-area>/<parent-description>
 git checkout -b feat/<area>/<description>
 ```
 
-Branch from master whenever possible. Only branch from a parent branch when the work literally
-cannot compile without that branch's changes.
+Branch from master whenever possible. Branch from a parent only when the work cannot compile without
+that branch's changes.
 
 ### 3.2 Implement
 
@@ -190,9 +183,8 @@ cannot compile without that branch's changes.
 
 - **After any proto or interface change, run `pnpm generate:go`** to regenerate protobuf Go bindings
   and Go interface mocks. Commit the generated files (`internal/models/proto/gen/`, `internal/handlers/mocks/`, `internal/core/mocks/`)
-  in the same commit as the change that necessitated them — never in a separate cleanup commit.
-- **Only change what the feature requires.** No refactoring, no style fixes, no "while we're here"
-  improvements alongside feature work. Those are separate commits on a separate branch.
+  in the same commit as the change that required them — never in a separate cleanup commit.
+- **Only change what the feature requires** (see "Surgical changes" under Key Principles).
 - Keep diffs small and reviewable. A handler + its test + the mock update = one commit.
 
 ### 3.3 Test
@@ -204,7 +196,7 @@ a-novel test --type=go -y    # Go: DAO, services, handlers, lib + pkg/go
 a-novel test --type=pnpm -y  # pkg/js (containerised service env, auto-managed)
 ```
 
-Tests must pass before declaring the branch ready. Never mark a branch done with failing tests.
+Tests must pass before the branch is ready. Never mark a branch done with failing tests.
 
 ### 3.4 Commit
 
@@ -241,23 +233,23 @@ a-novel core stacks prune <name>
 
 Approval is the trigger, not a green pipeline: review produces work, and a stack rebuilt to answer
 one comment costs more than one kept a few hours longer. `prune` refuses while any checkout still
-holds unpushed or uncommitted work, so running it early is safe — it tells you what is unsaved
-instead of discarding it.
+holds unpushed or uncommitted work, so running it early is safe — it names what is unsaved instead
+of discarding it.
 
-Skip this entirely when you worked in the default stack. That one is the workspace, and `prune`
-refuses it by design.
+Skip this when you worked in the default stack. That one is the workspace, and `prune` refuses it by
+design.
 
 ---
 
 ## Landing a Task that belongs to an Epic
 
-An Epic's Tasks land **as a unit or not at all** — that is the Epic Atomicity Rule, and it is enforced
-by required checks, not convention. What follows is what a Task author needs; `coordinate-landing`
-owns the full saga.
+An Epic's Tasks land **as a unit or not at all** — the Epic Atomicity Rule, enforced by required
+checks rather than convention. What follows is what a Task author needs; `coordinate-landing` owns
+the full saga.
 
-**One Task per repo per Epic.** If an Epic touches three repos, it has three Tasks and three pull
-requests. Two pieces in the same repo belong to the same Task; work that cannot land concurrently
-belongs to a different Epic.
+**One Task per repo per Epic.** An Epic touching three repos has three Tasks and three pull requests.
+Two pieces in the same repo belong to the same Task; work that cannot land concurrently belongs to a
+different Epic.
 
 **Membership is the `epic:<N>` label on the pull request** — not the `Closes` keyword, which the author
 controls. Applying a label needs triage rights, so the label is a permission-gated claim. Add it when
@@ -267,13 +259,13 @@ you open the pull request.
 whole Epic. Mark ready when the Task is genuinely done, not to start review.
 
 **`merge-gate` red usually is not about you.** It holds every member until _all_ of them are
-non-draft and approved, across every repo. A red gate most often means a sibling is not ready yet.
+non-draft and approved, across every repo, so a red gate most often means a sibling is not ready yet.
 Check the check's summary — it names what it is waiting on — before assuming your branch is at fault.
 
 **`epic-freeze` red means the Epic landed partially.** Some siblings merged and one did not, so the
 rest are frozen to stop the split widening. Do not work around it: do not re-run the check hoping for
 green, and never re-enable auto-merge by hand. The sweep re-derives from live state every ~15 minutes
-and clears the freeze itself once the Epic is whole again.
+and clears the freeze once the Epic is whole again.
 
 **To stop a landing rather than let it resume,** label the Epic issue `automation:paused`. That is the
 latch — a freeze only describes the Epic's current shape and lifts as soon as that shape is healthy.
@@ -307,33 +299,31 @@ If more than one child branch depends on the updated parent, rebase them shallow
 child onto the updated parent first, then its children in order). Each branch is touched exactly
 once; deepest-first would require re-rebasing intermediate branches after their own parents move.
 
-Never merge a parent branch into a child — always rebase. Merges add noise to the history and
-make the final PR harder to review.
+Always rebase a child onto its updated parent; merging the parent in adds noise to the history and
+makes the final PR harder to review.
 
 ---
 
 ## Key Principles
 
-**Surgical changes.** Every line changed must be required by the feature. If you find yourself
-fixing an unrelated issue, stop: note it as a separate improvement and continue on the feature.
-
-**No side-effects.** Refactoring, style fixes, and "improvements" that are not part of the feature
-belong in a separate branch with a separate commit. Mixed changes make PRs hard to review and
-bisect.
+**Surgical changes.** Every line changed must be required by the feature. Refactoring, style fixes,
+and "while we're here" improvements belong on a separate branch with their own commit — mixed
+changes are hard to review and bisect. When you spot an unrelated issue, note it as a separate
+improvement and continue on the feature.
 
 **Additive over destructive.** Prefer adding new fields, methods, and endpoints over removing or
 changing existing ones. When removal is unavoidable, mark it `BREAKING CHANGE` and flag it to the
 developer.
 
-**One concern per commit.** A commit should answer exactly one "what changed?" question. If you
-cannot describe a commit in a single conventional-commit line, it contains more than one concern.
+**One concern per commit.** A commit answers exactly one "what changed?" question. A commit you
+cannot describe in a single conventional-commit line contains more than one concern.
 
 **Test every branch.** The relevant test target must pass on every branch, not just the final
 one: `a-novel test --type=go -y` for Go layers (internal + pkg/go), `a-novel test --type=pnpm -y` for pkg/js.
 A branch that compiles but fails tests is not ready for review.
 
-**Verify before proposing.** Never propose a plan based on assumed file locations or signatures.
-Read the code first. A plan built on wrong assumptions wastes the developer's review time.
+**Verify before proposing.** Read the code first; a plan built on assumed file locations or
+signatures wastes the developer's review time.
 
 ---
 

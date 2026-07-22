@@ -1,25 +1,21 @@
 ---
 name: triage-issues
 description: >
-  The manual triage / grooming pass over the open GitHub issue set across the a-novel / a-novel-kit
-  orgs, run from Claude Code during a planning session. Use it whenever the user asks to "run triage",
-  "do a triage pass", "groom the backlog", "prioritise the issues", "prep the planning meeting", or to
-  review and refine open issues and drafts. It surveys both org "Tasks" boards, drains the `Triage`
-  status queue, assigns and refines Priority and Size (weight), sets due dates on active issues and on
-  milestones, advances Status, and firms up Backlog drafts that are about to enter production. Trigger
-  it MANUALLY — it is not a scheduled job. Pairs with plan-feature (which creates the issues and owns
-  their bodies), resolve-pr-feedback (issue / PR discussion), and manage-versions (cross-repo staging).
+  Manual triage and board-grooming pass over open GitHub issues in the a-novel / a-novel-kit orgs.
+  Use it when asked to "run triage", "groom the backlog", "prioritise the issues", or prep a planning
+  meeting. It surveys both org "Tasks" boards, drains the `Triage` queue, sets Priority, Size, due
+  dates and Status, and refines Backlog drafts. Trigger it MANUALLY. Pairs with plan-feature, which
+  creates the issues.
 ---
 
 # Triage & groom the issue set
 
-Planning creates issues; **triage keeps them honest**. Over time, priorities drift, scopes change,
-drafts pile up, active work loses its due date, and the `Triage` status fills with un-assessed reports.
-This skill is the recurring pass that fixes all of that — run **manually**, as a planning meeting with
-the operator, not on a timer. A weekly cadence is recommended, but the human pulls the trigger.
+Planning creates issues; **triage keeps them honest**. Over time priorities drift, scopes change,
+drafts pile up, active work loses its due date, and the `Triage` status fills with un-assessed
+reports. This is the recurring pass that fixes all of that — run **manually**, as a planning meeting
+with the operator, not on a timer. A weekly cadence is recommended, but the human pulls the trigger.
 
-The companion to `plan-feature`: that skill sets a ticket's fields at **creation**; this one keeps
-them honest **over time**.
+`plan-feature` sets a ticket's fields at **creation**; this pass keeps them true **over time**.
 
 ---
 
@@ -28,13 +24,13 @@ them honest **over time**.
 - **Scope to the work in hand.** "Clean the board" means the milestone — or the single task — this
   session is already about, not every open item. Survey what that work touches, fix what drifted
   there, and leave the rest alone: an unrelated ticket belongs to someone else's pass, and reporting
-  it is noise dressed as diligence. Sweep the whole board only when the operator asks for that in so
-  many words.
+  it is noise dressed as diligence. Sweep the whole board only when the operator asks for that
+  explicitly.
 - **This is a planning conversation, not a batch job.** Propose field values; the operator confirms —
   especially **due dates**, which are commitments. Use the `resolve-pr-feedback` issue-comment loop to
   ask and record decisions where useful.
-- **Lead with priority.** Work the set in Priority order (P0 → P4). The output of a pass is a clear
-  "what's next": the P0/P1 items that aren't already moving.
+- **Lead with priority.** Work the set in Priority order (P0 → P4). A pass outputs a clear "what's
+  next": the P0/P1 items that aren't already moving.
 - **Keep the board honest.** The invariants a pass enforces: every actionable ticket has a **Type**, a
   **Priority**, and a **Size**; **every item that belongs to a milestone actually carries it** — boarding
   an item (`--project`) never sets its Milestone, so scan for a **Stage-tagged item with an empty
@@ -64,8 +60,20 @@ Drop the filter only for a full sweep the operator has asked for.
 
 For each item in scope read: Type, Priority, Size, Status, Target date, Milestone, linked PRs,
 blocked-by, and sub-issue progress. The **Triage queue** is every board item sitting in the `Triage`
-**status** — an un-assessed incoming issue lands there; filter the item-list above by
+**status**, where an un-assessed incoming issue lands; filter the item-list above by
 `Status == Triage`.
+
+`item-list` is a scan, not evidence. It has returned a single item for a populated board even at
+`--limit 1200`, which reads as "everything else was archived" when nothing was. Before concluding an
+item is missing or archived, confirm against the issue itself:
+
+```bash
+gh api graphql -f query='query { repository(owner:"<org>", name:"<repo>") {
+  issue(number: <n>) { id projectItems(first:10, includeArchived:true) {
+    nodes { id isArchived project { number title } } } } } }'
+```
+
+Read the fields off that item node (`ProjectV2ItemFieldSingleSelectValue`).
 
 ### 2. Drain the triage queue (un-assessed → assessed)
 
@@ -87,15 +95,15 @@ For each item in the `Triage` status, with the operator:
 
 ### 3. Prioritise
 
-Order the actionable set by **Priority** and surface the **P0/P1 items that are not yet In progress** —
-that is the planning focus. Re-balance priorities with the operator where reality has drifted (a P2
-that's now blocking a release becomes P1; a P1 nobody will touch becomes P3).
+Order the actionable set by **Priority** and surface the **P0/P1 items not yet In progress** — the
+planning focus. Re-balance priorities with the operator where reality has drifted (a P2 now blocking
+a release becomes P1; a P1 nobody will touch becomes P3).
 
 ### 4. Weights
 
 Every actionable ticket gets a **Size** (XS–XL). Assign where missing; **re-estimate** where the
-scope changed since creation. A ticket whose size keeps growing is a signal to split it into
-sub-issues (hand back to `plan-feature`).
+scope changed since creation. A ticket whose size keeps growing should be split into sub-issues
+(hand back to `plan-feature`).
 
 ### 5. Due dates — with the operator
 
@@ -108,7 +116,7 @@ sub-issues (hand back to `plan-feature`).
   ```
 
 - Treat both as **soft commitments** that drive the _next_ pass — a slipped date is information, not a
-  failure. The point is that every in-flight thing has a date to slip _from_.
+  failure. Every in-flight thing needs a date to slip _from_.
 
 ### 6. Refine drafts nearing production
 
@@ -118,27 +126,35 @@ grooming as they approach activation:
 - For a draft about to go active: **firm up the body** (is the approach still right?), set its
   **Size/Priority**, confirm its **blocked-by** is now satisfied, and move **Backlog → Ready**.
 - **Delete drafts the plan has overtaken** (`gh issue delete <n> --yes`) — a not-yet-started draft is
-  cheap to discard, and a stale one is worse than none. Don't let drafts rot.
+  cheap to discard, and a stale one is worse than none.
 
 ### 7. Status is single-writer
 
-The board's bot derives Status from what happened to a Pull Request, so `In progress`, `In review`, and
-`Awaiting release` are not yours to set: a manual edit will not stick. Your part is the `Triage → Ready`
-move from the drain above, plus a **meta task**'s final `Applied`, which has no Pull Request to read
-from. Everything else follows the work, so don't fight it.
+The board's bot derives Status from what happened to a Pull Request, so `In progress`, `In review`,
+and `Awaiting release` are not yours to set: a manual edit will not stick. Your part is the
+`Triage → Ready` move from the drain above, plus a **meta task**'s final `Applied`, which has no Pull
+Request to read from. Everything else follows the work.
+
+**Check for siblings before closing a child.** Sub-issue progress of 1 of 1 is indistinguishable from
+"all children done", so closing an Epic or Initiative's only sub-issue derives the parent as
+complete: Status moves to Done, the auto-close workflow closes it, and it disappears from the board.
+Either hold the child open until siblings exist, or expect the close and reopen the parent straight
+after — `gh issue reopen <parent>`, then set its Status again by hand, since reopening does not
+restore board fields the automation overwrote. A parent with several children is safe; this bites
+only at the start of a plan, when the first child is the only child.
 
 ### 8. Keep the Stage field accurate (absolute scheme)
 
 The `Stage` board field is **absolute** — `Stage 1 … Stage N` (six on the board today), plus
-`Unscheduled` for work not yet placed in a stage. A staged milestone's epics and their child tasks each carry their stage's number,
-set once at creation (per the `plan-feature` field habit) and **never shifted**: an item at `Stage 3`
-stays `Stage 3` for good. "What's next" is a derivation, not a label — the lowest-numbered stage that
-is not yet done. A finished stage keeps its number; its epic follows the normal Done → archive
-lifecycle rather than being relabelled.
+`Unscheduled` for work not yet placed in a stage. A staged milestone's epics and their child tasks
+each carry their stage's number, set once at creation (per the `plan-feature` field habit) and
+**never shifted**: an item at `Stage 3` stays `Stage 3` for good. "What's next" is a derivation, not
+a label — the lowest-numbered stage not yet done. A finished stage keeps its number; its epic follows
+the normal Done → archive lifecycle rather than being relabelled.
 
 So this pass has nothing to shift. Check only that new items carry the right stage number — a human
-call about which stage the work belongs to — and that an epic and its tasks agree on it. For now no
-automation reads the field: you set it by hand at creation, and you read "what's next" off the numbers
+call about which stage the work belongs to — and that an epic and its tasks agree on it. No
+automation reads the field yet: you set it by hand at creation and read "what's next" off the numbers
 yourself.
 
 ### 9. Report
@@ -189,10 +205,10 @@ triage-issues (recurring manual pass: prioritise · weigh · due-date · refine 
 
 ## Principles
 
-- **Scope before sweep.** A pass covers the work the session is about. The whole board only on request.
-- **Lead with priority.** A pass is judged by whether "what's next" is unambiguous afterwards.
-- **Honest invariants.** Every actionable ticket: Type + Priority + Size. Active ⇒ a due date. No
-  items lingering in `Triage`.
-- **Dates are for triage, not theatre.** They exist to make the next decision; a slip is information.
-- **Drafts are living.** Refine the ones about to go active; delete the ones the plan has overtaken.
-- **Propose, the operator commits.** Especially dates — triage is a conversation, not an edict.
+- **Scope before sweep** — the work the session is about; the whole board only on request.
+- **Lead with priority** — a pass is judged by whether "what's next" is unambiguous afterwards.
+- **Honest invariants** — Type + Priority + Size on every actionable ticket; active ⇒ a due date;
+  nothing lingering in `Triage`.
+- **Dates are for triage, not theatre** — they make the next decision, and a slip is information.
+- **Drafts are living** — refine the ones going active, delete the ones the plan has overtaken.
+- **Propose, the operator commits** — especially dates; triage is a conversation, not an edict.

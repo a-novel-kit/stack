@@ -1,31 +1,24 @@
 ---
 name: choose-dependency
 description: >
-  Decide whether to solve a need with the standard library, an existing dependency, a new
-  third-party library, or an internal implementation — and if importing, which package to pick. Use
-  it whenever a plan or change is about to add a library, weighs build-vs-buy, considers replacing an
-  internal helper with a dependency (or vice versa), or must choose between competing packages. It
-  encodes the a-novel balance: minimize non-standard dependencies, but don't reinvent solved
-  problems; when you do import, prefer one comprehensive, well-maintained library from a trusted org
-  or community over several narrow ones, so the codebase can consolidate and stay on it. Requires
-  internet research from trusted sources to evaluate candidates. Pairs with plan-feature (feeds the
-  build-vs-buy section), write-go / write-go-kit (the dependency policy), and manage-versions (when
-  the dependency is internal).
+  Decide whether a need is met by the standard library, an existing dependency, a new third-party
+  library, or an internal implementation — and which package to pick when importing. Use it whenever
+  a change adds a library, weighs build-vs-buy, swaps an internal helper for a dependency (or back),
+  or picks between competing packages. Feeds plan-feature's build-vs-buy section.
 ---
 
 # Choosing a dependency
 
-Every dependency is a trade. This skill exists because the obvious heuristics pull in opposite
-directions and you have to balance them deliberately, not reflexively.
+Every dependency is a trade, and the obvious heuristics pull in opposite directions. Balance them
+deliberately.
 
 - **Force A — fewer dependencies is better.** Each third-party library is attack surface, a
-  supply-chain risk, transitive bloat, a thing that can break or go unmaintained, and a version you
-  must track. The standard library is always the first choice; a pile of micro-dependencies is a
-  smell.
+  supply-chain risk, transitive bloat, a thing that can break or go unmaintained, and a version to
+  track. The standard library is always the first choice; a pile of micro-dependencies is a smell.
 - **Force B — don't reinvent the wheel.** A library delegates a whole problem's maintenance to its
-  owner, so you can focus on the app. Hand-rolled helpers for solved, non-trivial problems are
-  _our_ bug surface and _our_ maintenance burden forever. So we generally **prefer a good external
-  library to an internal reimplementation** of something already well-solved.
+  owner. Hand-rolled helpers for solved, non-trivial problems are _our_ bug surface and _our_
+  maintenance burden forever, so **prefer a good external library to an internal reimplementation**
+  of something already well-solved.
 
 These resolve into one rule:
 
@@ -36,9 +29,9 @@ These resolve into one rule:
 
 **Illustration.** Prefer an ORM like `bun` (struct decoding, query building, migrations, hooks all
 native, one maintainer) over a lower-level driver like `pgx` that needs extra third-party packages
-bolted on for the same ergonomics. One broad, well-maintained dependency replaces several narrow
-ones — that is the consolidation you're optimizing for. (This is the _reasoning pattern_; pick per
-the actual need, not by analogy.)
+bolted on for the same ergonomics: one broad, well-maintained dependency replaces several narrow
+ones, fewer versions to track and one place to learn. Follow the _reasoning pattern_ — pick per the
+actual need, not by analogy.
 
 ---
 
@@ -51,13 +44,13 @@ Work top to bottom; stop at the first answer that fits.
    one already does is the most common avoidable dependency.
 
 2. **Is it trivial and stable?** A few lines, well-understood, unlikely to change (a tiny string
-   helper, a constant, a one-off transform)? Implement it internally — pulling a dependency for it
-   is not worth the supply-chain and version cost. (For Go libraries, also weigh `write-go-kit`'s
-   "should this even live in `golib`?" bar.)
+   helper, a constant, a one-off transform)? Implement it internally — a dependency is not worth the
+   supply-chain and version cost here. (For Go libraries, also weigh `write-go-kit`'s "should this
+   even live in `golib`?" bar.)
 
 3. **Is it a solved, non-trivial domain?** Parsing, crypto, ORM/SQL, HTTP routing, validation,
-   serialization, UUID, time, retries, observability, etc. — these are where you **buy, not build**.
-   Reimplementing them is how subtle bugs and security holes get in. Go to candidate evaluation.
+   serialization, UUID, time, retries, observability, etc. — these are where you **buy, not build**;
+   reimplementing them is how subtle bugs and security holes get in. Go to candidate evaluation.
 
 4. **Is it genuinely novel to our domain?** No good library exists, or every candidate fails
    evaluation? Implement internally — and design it so it could graduate into a library later
@@ -88,7 +81,7 @@ section. The first three are gating; the rest are tie-breakers.
 
 ## Research method — use the internet, from trusted sources
 
-Do not decide from memory. Search the web and read **primary, trustworthy** sources:
+Never decide from memory. Search the web and read **primary, trustworthy** sources:
 
 - The library's **official docs and repository** (README, changelog, release cadence, open issues).
 - The package registry — `pkg.go.dev` (Go), `npmjs.com` (JS) — for versions, dependents, and the
@@ -117,20 +110,14 @@ human can verify the call.
 
 ## Output
 
-The deliverable is a short, justified recommendation that drops into the plan's build-vs-buy
-section: the need, the options weighed (stdlib / existing / a named library / internal), the
-evaluation evidence with sources, and the call with its reasoning. If the answer is "build
-internally," say why every buy option fell short; if "buy," say why this library and not the
-narrower alternatives.
+A short, justified recommendation that drops into the plan's build-vs-buy section: the need, the
+options weighed (stdlib / existing / a named library / internal), the evaluation evidence with
+sources, and the call with its reasoning. If the answer is "build internally," say why every buy
+option fell short; if "buy," say why this library and not the narrower alternatives.
 
 ---
 
 ## Examples
-
-**Buy, and consolidate.** Need: talk to Postgres with struct mapping, query building, and
-migrations. Options: a low-level driver plus separate mapping/migration libraries, vs one
-batteries-included ORM from a trusted maintainer. Choose the broad ORM — one well-maintained
-dependency instead of three narrow ones, fewer versions to track, one place to learn.
 
 **Build.** Need: a 15-line helper that formats an internal ID into a display string, specific to our
 domain. No external library matches without contortions, the logic is trivial and stable. Implement
@@ -139,3 +126,5 @@ it internally — a dependency here would add supply-chain risk for nothing.
 **Reuse.** Need: structured logging in a new service. `golib` already exposes the org's logging
 setup. Use it — adding a different logging library would fragment the codebase and duplicate a solved
 concern.
+
+(The buy-and-consolidate case is the `bun`-over-`pgx` illustration above.)

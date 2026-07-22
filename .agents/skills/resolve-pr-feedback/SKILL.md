@@ -1,73 +1,57 @@
 ---
 name: resolve-pr-feedback
 description: >
-  Survey a pull request's combined state (CI + review threads + reviewer status) and work through
-  reviewer feedback on ANY repo across the a-novel / a-novel-kit orgs — backend services, the golib /
-  nodelib libraries, the workflows Actions repo, the stack CLI, and the org .github / docs repos. Use
-  this skill whenever checking on an open PR
-  ("what's the state of PR X", "look at the CI and comments on 123", "monitor PR 532"), reading
-  Copilot or human review comments, deciding whether to accept a suggestion, replying on a thread,
-  resolving a thread after a fix, starting your own thread to flag a concern, or re-requesting
-  review after changes. ALSO covers discussion under an ISSUE — the planning issues plan-feature
-  produces — reading and answering comments, posting open questions for the human, and folding
-  settled decisions back into the issue body. Always invoke it when the user mentions PR review
-  comments, a reviewer's name, a failing check on an open PR, comments under an issue, or asks
-  anything that involves reading + responding to feedback on a pull request OR an issue — even if the
-  word "resolve" is not used. Pairs with git-conventions (for the format of review-driven fix
-  commits) and plan-feature (which owns the planning-issue body this skill discusses around).
+  Survey a pull request's state (CI, review threads, reviewer status) and work through reviewer
+  feedback on any repo in the a-novel / a-novel-kit orgs. Use it when checking on an open PR, reading
+  Copilot or human review comments, replying on or resolving a thread, re-requesting review, or
+  answering comments under an issue. Pairs with plan-feature, which owns the issue body.
 ---
 
 # Resolve PR Feedback
 
-This skill governs how Claude surveys a pull request's state and works through reviewer
-feedback. It is called both as a passive read ("check PR 532") and as an active workflow
-("address the comments on PR 532"). Both modes share Phase 1; only the resolve workflow
-continues through Phases 2–5.
+This skill governs how Claude surveys a pull request's state and works through reviewer feedback. It
+runs as a passive read ("check PR 532") and as an active workflow ("address the comments on PR 532").
+Both modes share Phase 1; only the resolve workflow continues through Phases 2–5.
 
 It **also** governs discussion under an **issue** — chiefly the planning issues `plan-feature`
 produces, where the human and the agent converse in comments while the body holds the agreed plan.
-Phases 1–5 are written for PRs; the [Issue discussions](#issue-discussions-planning--triage) section
-near the end maps the same posture onto issues (which are simpler — flat comments, no review
-threads, no resolution state) and is the place to start when the work is an issue rather than a PR.
+Phases 1–5 are written for PRs. When the work is an issue, start at
+[Issue discussions](#issue-discussions-planning--triage), which maps the same posture onto issues:
+flat comments, no review threads, no resolution state.
 
 ---
 
 ## Guiding principle
 
-A pull request — or a planning issue — is a **conversation**, not a checklist. Reviewers
-and collaborators — human or bot — can be right, wrong, unclear, or working from a partial
-picture of the change. Apply judgment, not obedience. The failure modes are symmetric: silently overriding a valid concern
-erodes trust; blindly applying an incorrect suggestion ships a regression. In both cases
-the remedy is the same — speak on the thread so the reviewer sees your reasoning and
-can push back.
+A pull request — or a planning issue — is a **conversation**, not a checklist. Reviewers and
+collaborators — human or bot — can be right, wrong, unclear, or working from a partial picture of the
+change, so apply judgment. The failure modes are symmetric: silently overriding a valid concern
+erodes trust; blindly applying an incorrect suggestion ships a regression. The remedy for both is the
+same — speak on the thread so the reviewer sees your reasoning and can push back.
 
-Two rules anchor the loop. Everything else in this skill is the mechanics behind them:
+Two rules anchor the loop; the rest of this skill is their mechanics:
 
-1. **Clear-cut → resolve.** A thread you have decisively answered — accepted (and pushed
-   the fix) or declined (with a defensible reason) — is settled. Resolve it. Open
-   threads should signal a real decision pending, not a pending audit trail. The
-   reviewer can re-open if they bring new information.
+1. **Clear-cut → resolve.** A thread you have decisively answered — accepted (and pushed the fix) or
+   declined (with a defensible reason) — is settled. Resolve it. An open thread signals a real
+   decision pending, not a pending audit trail. The reviewer can re-open with new information.
 2. **Genuinely unclear or worth discussing → reply with a specific question, leave open.**
    Silence is the worst option; acting on partial understanding is the second-worst.
 
-If you partially accepted, took a different direction, or bundled the fix with adjacent
-changes, the **reply explains the deviation** before resolution. Quiet, after-the-fact
-re-interpretation is what erodes trust. Larger deviations where the reviewer might
-prefer the original suggestion fall under rule 2 — leave open with an explicit "OK with
-this approach?" question.
+If you partially accepted, took a different direction, or bundled the fix with adjacent changes, the
+**reply explains the deviation** before resolution. Quiet, after-the-fact re-interpretation erodes
+trust. Larger deviations where the reviewer might prefer the original suggestion fall under rule 2 —
+leave open with an explicit "OK with this approach?" question.
 
-**Reply style: rationale-dense, zero filler.** Thread replies may be more technical than a
-PR body, but the same economy applies — lead with the reason, cite the evidence (a SHA, a
-doc, a measured fact), and stop. Never restate what the reviewer or the diff already shows;
-every sentence either advances the decision or gets cut.
+**Reply style: rationale-dense, zero filler.** Thread replies may be more technical than a PR body,
+but the same economy applies — lead with the reason, cite the evidence (a SHA, a doc, a measured
+fact), and stop. Never restate what the reviewer or the diff already shows.
 
 ---
 
 ## Phase 1: Survey PR state
 
-Callable on its own. When the user asks only to "check", "look at", or "monitor" a PR,
-run this phase, report back, and stop. Do not proceed to action without explicit
-go-ahead.
+Callable on its own. When the user asks only to "check", "look at", or "monitor" a PR, run this
+phase, report back, and stop. Do not act without an explicit go-ahead.
 
 ### 1.1 Read the PR envelope
 
@@ -78,19 +62,18 @@ gh pr view <number> --json \
 
 Fields that matter:
 
-- **state**: OPEN / CLOSED / MERGED. Never act on non-OPEN PRs without confirmation —
-  reopening a closed discussion is a different kind of decision.
-- **isDraft**: draft PRs rarely need the full review-cycle. If the reviewer left
-  comments anyway, confirm with the user whether they want them addressed now.
-- **reviewDecision**: APPROVED / CHANGES_REQUESTED / REVIEW_REQUIRED. Shapes what
-  Phase 5 looks like.
-- **baseRefName** / **headRefName**: you almost always land fixes as new commits on
-  `headRefName`. Force-push with `--force-with-lease` only if a rebase was required.
+- **state**: OPEN / CLOSED / MERGED. Never act on non-OPEN PRs without confirmation — reopening a
+  closed discussion is a different kind of decision.
+- **isDraft**: draft PRs rarely need the full review-cycle. If the reviewer left comments anyway,
+  confirm with the user whether they want them addressed now.
+- **reviewDecision**: APPROVED / CHANGES_REQUESTED / REVIEW_REQUIRED. Shapes Phase 5.
+- **baseRefName** / **headRefName**: land fixes as new commits on `headRefName`. Force-push with
+  `--force-with-lease` only if a rebase was required.
 
 ### 1.2 Read review comments
 
-GitHub splits review feedback across three endpoints. You need all three to see the
-full picture — a comment in one does not show up in the others.
+GitHub splits review feedback across three endpoints, and a comment in one does not show up in the
+others. Read all three when surveying.
 
 **Inline review comments** (anchored to `file:line`):
 
@@ -98,9 +81,8 @@ full picture — a comment in one does not show up in the others.
 gh api repos/<owner>/<repo>/pulls/<number>/comments
 ```
 
-Each record has `id`, `path`, `line`, `body`, `user.login`, `in_reply_to_id`, `commit_id`.
-The `id` here is the REST comment ID — not the GraphQL thread node ID used for
-resolution (see 1.3).
+Each record has `id`, `path`, `line`, `body`, `user.login`, `in_reply_to_id`, `commit_id`. The `id`
+here is the REST comment ID — the GraphQL thread node ID used for resolution comes from 1.3.
 
 **Top-level PR comments** (the "Conversation" tab, not anchored to code):
 
@@ -116,7 +98,6 @@ gh api repos/<owner>/<repo>/pulls/<number>/reviews
 ```
 
 A single review envelope can contain zero or many inline comments and a top-level body.
-Read all three endpoints when surveying.
 
 ### 1.3 Read thread resolution state
 
@@ -144,21 +125,20 @@ query($owner:String!, $repo:String!, $number:Int!, $threadCursor:String) {
 }' -F owner=<owner> -F repo=<repo> -F number=<number>
 ```
 
-The `id` returned here is the **thread node ID** — distinct from the REST `comment.id`.
-You need it for Phase 5.2 to resolve the thread. Save it.
+The `id` returned here is the **thread node ID**, distinct from the REST `comment.id`. Phase 5.2
+needs it to resolve the thread. Save it.
 
-`reviewThreads(first:100)` and `comments(first:50)` cover the vast majority of PRs, but
-long-lived or high-traffic PRs can exceed either limit. The authoritative truncation
-signal is `pageInfo.hasNextPage`; pagination is **two-level** because GraphQL cursors
-are scoped to the specific connection instance that produced them:
+`reviewThreads(first:100)` and `comments(first:50)` cover most PRs, but a long-lived or high-traffic
+one can exceed either limit. The authoritative truncation signal is `pageInfo.hasNextPage`;
+pagination is **two-level** because GraphQL cursors are scoped to the connection instance that
+produced them:
 
-1. **Outer — threads.** If `reviewThreads.pageInfo.hasNextPage` is `true`, re-issue the
-   query above with `-F threadCursor=<endCursor>` and loop until it is `false`.
-2. **Inner — comments on a specific thread.** Each thread exposes its own
-   `comments.pageInfo`. If a thread reports `comments.pageInfo.hasNextPage == true`,
-   that thread's `endCursor` is meaningful **only for that thread** — it cannot be
-   reused across threads. Paginate per-thread via a `node(id:)` follow-up, using the
-   `thread.id` saved above:
+1. **Outer — threads.** If `reviewThreads.pageInfo.hasNextPage` is `true`, re-issue the query above
+   with `-F threadCursor=<endCursor>` and loop until it is `false`.
+2. **Inner — comments on a specific thread.** Each thread exposes its own `comments.pageInfo`. If a
+   thread reports `comments.pageInfo.hasNextPage == true`, that thread's `endCursor` is meaningful
+   **only for that thread** and cannot be reused across threads. Paginate per-thread via a
+   `node(id:)` follow-up, using the `thread.id` saved above:
 
    ```bash
    gh api graphql -f query='
@@ -174,13 +154,12 @@ are scoped to the specific connection instance that produced them:
    }' -F threadId=<thread-node-id> -F cursor=<endCursor>
    ```
 
-(An exact-100 or exact-50 result count can coincidentally match the page size, so it is
-a weaker heuristic than `hasNextPage` — treat it as a hint to check, not a signal on its
-own.) Missing a thread or a comment at survey time means silently missing feedback
-during classification, which is the worst failure mode for this phase.
+(A result count of exactly 100 or 50 can coincide with the page size, so it is a weaker heuristic
+than `hasNextPage` — treat it as a hint to check, not a signal on its own.) Missing a thread or a
+comment at survey time silently drops feedback during classification, the worst failure mode here.
 
-`isOutdated: true` means the comment anchored to code that has since changed; the
-reviewer's concern may already be addressed by a later push. Confirm before closing.
+`isOutdated: true` means the comment anchored to code that has since changed; the reviewer's concern
+may already be addressed by a later push. Confirm before closing.
 
 ### 1.4 Read CI state
 
@@ -188,11 +167,10 @@ reviewer's concern may already be addressed by a later push. Confirm before clos
 gh pr checks <number>
 ```
 
-CI failures are feedback too. When a CI failure overlaps with a reviewer's concern (same
-lint rule, same missing test, same typo), fold the fix into the thread response so the
-reviewer can see it addressed in one place. For isolated CI failures — or anything that
-needs flake-vs-real classification — hand off to `monitor-ci`. Summarize the failing
-checks in your status report and use `monitor-ci` to investigate and drive next steps.
+CI failures are feedback too. When a CI failure overlaps with a reviewer's concern (same lint rule,
+same missing test, same typo), fold the fix into the thread response so the reviewer sees it
+addressed in one place. Summarize the failing checks in your status report, and hand isolated CI
+failures — or anything needing flake-vs-real classification — to `monitor-ci`.
 
 ### 1.5 Report the survey
 
@@ -204,15 +182,14 @@ When invoked as a standalone check, report in this shape:
 - **Failing CI checks**: name + link.
 - **New commits since last review**: short-SHA + subject.
 
-Stop here. Do not begin classifying or replying without the user's go-ahead.
+Stop here — classifying and replying wait for the user's go-ahead.
 
 ---
 
 ## Phase 2: Classify each unresolved thread
 
-For every unresolved thread, fit it into one of four buckets. Read the full thread
-(including prior replies), read the code it points at, and reason about each thread
-independently — do not classify in bulk.
+For every unresolved thread, fit it into one of four buckets. Read the full thread (including prior
+replies), read the code it points at, and reason about each thread independently — never in bulk.
 
 | Bucket                    | When to use                                                                                                                                                                                                      |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -223,37 +200,33 @@ independently — do not classify in bulk.
 
 Signals that push toward **decline** specifically:
 
-- Accepting would violate a rule in `.agents/skills/*/SKILL.md` — the skill file is the
-  authoritative source, not the comment.
-- The comment asks to re-expose something that was deliberately hidden for security
-  (e.g., error strings on an unauthenticated endpoint). Treat that as a decline, not a
-  conversation.
-- The comment asks for feature work outside this PR's layer or scope. The right answer
-  is usually "decline for this PR, file a follow-up."
+- Accepting would violate a rule in `.agents/skills/*/SKILL.md` — the skill file is the authoritative
+  source, not the comment.
+- The comment asks to re-expose something deliberately hidden for security (e.g., error strings on an
+  unauthenticated endpoint). That is a decline, not a conversation.
+- The comment asks for feature work outside this PR's layer or scope. The answer is usually "decline
+  for this PR, file a follow-up."
 
 Signals that push toward **unsure**:
 
-- The comment assumes context you do not see in the PR (e.g., references an incident,
-  a prior decision, or code in another repo).
-- Two readings of the comment would lead to different fixes, and the reviewer did not
-  pick one.
+- The comment assumes context you do not see in the PR (an incident, a prior decision, code in
+  another repo).
+- Two readings of the comment lead to different fixes, and the reviewer did not pick one.
 - The comment is terse ("this won't work") with no specifics.
 
-**Bots vs humans.** Copilot and similar bots do not re-engage on thread replies. Still
-classify their comments with the same rigor — bots miss context routinely, and blanket
-acceptance is how insecure or incorrect changes land. Weight your reply toward the
-**human** reviewer who will read the thread later.
+**Bots vs humans.** Copilot and similar bots do not re-engage on thread replies. Still classify their
+comments with the same rigor — bots miss context routinely, and blanket acceptance is how insecure or
+incorrect changes land. Weight your reply toward the **human** reviewer who will read the thread
+later.
 
-A bot repeating the same claim across several comments is **not** independent evidence
-of correctness; it is one opinion with a megaphone. Verify the underlying fact once —
-official docs, a spec, or an empirical test (the latter is often one `gh api` call
-away) — and cite that source in your reply. Treating repetition as confirmation is how
-a confidently wrong bot propagates an error from the review into the codebase.
+A bot repeating the same claim across several comments is **not** independent evidence of
+correctness; it is one opinion with a megaphone. Verify the underlying fact once — official docs, a
+spec, or an empirical test (often one `gh api` call away) — and cite that source in your reply.
+Treating repetition as confirmation is how a confidently wrong bot lands an error in the codebase.
 
-Bots are especially prone to confident errors about **external specs** — API endpoint
-paths, header names, status code semantics, protocol details. When a comment asserts a
-factual claim about a third-party system, the correct first move is to check that
-system's authoritative source, not to argue from plausibility.
+Bots are especially prone to confident errors about **external specs** — API endpoint paths, header
+names, status code semantics, protocol details. When a comment asserts a factual claim about a
+third-party system, check that system's authoritative source before arguing from plausibility.
 
 ---
 
@@ -271,10 +244,8 @@ Reply once, inline on the thread, with:
   linked incident, standard).
 - An invitation to push back if more context would change the assessment.
 
-Resolve the thread. The reply is the closure; if the reviewer has new information that
-changes the assessment, they can re-open and you re-enter Phase 2 on the same thread.
-A defensible decline does not need to wait for the reviewer to close — leaving it open
-creates audit-trail noise.
+Resolve the thread. The reply is the closure; if the reviewer brings new information, they can
+re-open and you re-enter Phase 2 on the same thread.
 
 ```bash
 a-novel core bot-comment <org> <repo> <number> --reply-to <comment-id> \
@@ -289,27 +260,26 @@ EOF
 
 ### 3.2 Unsure — start a discussion
 
-Reply with a **specific question**, not a generic "what do you mean?". Quote the part
-you are unsure about and lay out the interpretations you see. This respects the
-reviewer's time and anchors the next round.
+Reply with a **specific question**, not a generic "what do you mean?". Quote the part you are unsure
+about and lay out the interpretations you see. That respects the reviewer's time and anchors the next
+round.
 
-Wait for a reply before acting. Re-enter Phase 2 once the reviewer responds; multi-round
-exchanges on a single thread are normal.
+Wait for a reply before acting. Re-enter Phase 2 once the reviewer responds; multi-round exchanges on
+a single thread are normal.
 
 ### 3.3 Accept-with-deviation
 
-Apply the fix in the direction that actually makes sense (Phase 4). After pushing,
-reply **explaining the deviation** before any resolution:
+Apply the fix in the direction that actually makes sense (Phase 4). After pushing, reply
+**explaining the deviation** before any resolution:
 
 - "Took the core suggestion but scoped it to X instead of Y — Y would also touch the
   Z layer, which is out of scope for this branch."
 - "Applied the spirit of the comment via <alternative> — the literal suggestion would
   not work because <reason>."
 
-Whether to resolve depends on how far you deviated. Small, well-explained deviations
-should be resolved — the reply is the audit trail. Larger deviations where the reviewer
-might prefer the original suggestion stay open with an explicit "OK with this approach?"
-question. **When the question is genuinely open, leave it open.**
+How far you deviated decides whether to resolve. Resolve a small, well-explained deviation — the
+reply is the audit trail. A larger deviation where the reviewer might prefer the original suggestion
+stays open with an explicit "OK with this approach?" question.
 
 ### 3.4 Accept
 
@@ -326,8 +296,8 @@ Resolve the thread.
 
 ### 4.1 Commit per `git-conventions`
 
-One logical unit per commit. Pick the commit type that matches the change itself, not
-the reviewer's category:
+One logical unit per commit. Pick the commit type that matches the change itself, not the reviewer's
+category:
 
 - Reviewer asked for a test → `test(<scope>): ...`
 - Reviewer asked for a doc or description clarification → `docs(<scope>): ...`
@@ -340,9 +310,9 @@ Cite the review in the commit body so the log is self-documenting:
 Addresses <reviewer-login> review feedback on #<PR-number>.
 ```
 
-**Never amend a pushed commit to address review.** The review is anchored to the old
-SHA; amending rewrites shared history and strands the review thread's context. Always
-create new commits. (This is a hard rule from `git-conventions`.)
+**Never amend a pushed commit to address review.** The review is anchored to the old SHA; amending
+rewrites shared history and strands the review thread's context. Always create new commits. (A hard
+rule from `git-conventions`.)
 
 ### 4.2 Run the narrowest test target
 
@@ -359,8 +329,8 @@ Full mapping in the `use-a-novel-cli` skill (auto-loaded). Never push a red tree
 git push
 ```
 
-If the fix required a rebase, use `git push --force-with-lease`. Never plain `--force`,
-never force-push to `master`.
+If the fix required a rebase, use `git push --force-with-lease`. Never plain `--force`, never
+force-push to `master`.
 
 ---
 
@@ -368,35 +338,31 @@ never force-push to `master`.
 
 ### 5.1 Reply on every addressed thread
 
-Even threads you resolve get a one-line reply. The reply is the audit trail — the
-resolve button alone leaves reviewers guessing which commit addressed which comment.
-For declines and deviations, the reply is the whole point; the resolution (if any)
-follows from it.
+Even threads you resolve get a one-line reply. The reply is the audit trail — the resolve button
+alone leaves reviewers guessing which commit addressed which comment. For declines and deviations,
+the reply is the whole point; the resolution (if any) follows from it.
 
-Post the reply **as the bot** with `a-novel core bot-comment --reply-to` — never bare
-`gh`, which attributes the note to your user account. The `<comment-id>` is the REST
-review-comment id from the Phase 1.2 inline listing (not the GraphQL thread node id).
-Top-level comments do **not** thread with inline review comments, so a thread reply must
-pass `--reply-to`:
+Post the reply **as the bot** with `a-novel core bot-comment --reply-to` — never bare `gh`, which
+attributes the note to your user account. The `<comment-id>` is the REST review-comment id from the
+Phase 1.2 inline listing, not the GraphQL thread node id. Top-level comments do **not** thread with
+inline review comments, so a thread reply must pass `--reply-to`:
 
 ```bash
 a-novel core bot-comment <org> <repo> <number> --reply-to <comment-id> \
   --body "Fixed in <short-sha>."
 ```
 
-The command triggers the dispatcher workflow and blocks until it finishes; on a non-zero
-exit, read the surfaced run log and retry. See [[feedback-bot-attribution]].
+The command triggers the dispatcher workflow and blocks until it finishes; on a non-zero exit, read
+the surfaced run log and retry.
 
 ### 5.2 Resolve settled threads
 
-A thread is settled when you've decisively answered it — clean accept (3.4), small
-deviation (3.3), or defensible decline (3.1). All three get resolved. Only large
-deviations and unsure threads (3.2) stay open, because both genuinely need the
-reviewer's next move.
+A thread is settled when you've decisively answered it — clean accept (3.4), small deviation (3.3),
+or defensible decline (3.1). All three get resolved. Only large deviations and unsure threads (3.2)
+stay open, because both need the reviewer's next move.
 
-Resolving a thread is **not** a comment, so it always runs as you (operator user token,
-plain `gh`) — there is no bot path for it; the bot can only post comments. Resolve with
-the thread node id from Phase 1.3:
+Resolving a thread is **not** a comment, so it always runs as you (operator user token, plain `gh`);
+the bot can only post comments. Resolve with the thread node id from Phase 1.3:
 
 ```bash
 gh api graphql -f query='
@@ -407,16 +373,14 @@ mutation($id:ID!) {
 }' -F id=<thread-node-id>
 ```
 
-The `thread-node-id` comes from the Phase 1.3 GraphQL response — not the REST comment
-ID.
+The `thread-node-id` comes from the Phase 1.3 GraphQL response, not the REST comment ID.
 
 ### 5.3 Re-request review
 
 Only after:
 
 - Every accepted fix has been pushed.
-- CI is green (hand off to `monitor-ci` while it runs if that skill is available on
-  master — pending, tracked in #533 — otherwise watch `gh pr checks <n>` manually).
+- CI is green — hand off to `monitor-ci` while it runs.
 - Any decline replies have been posted so the reviewer has context when they look again.
 
 Then:
@@ -426,37 +390,35 @@ gh api repos/<owner>/<repo>/pulls/<number>/requested_reviewers \
   -X POST -F 'reviewers[]=<reviewer-login>'
 ```
 
-Note the `reviewers[]=...` syntax: `gh api` sends `-f` and `-F` values as scalar strings
-by default (or, for `-F`, does type inference only on literal `true`/`false`/`null`/ints).
-Neither `-f reviewers='["alice"]'` nor `-F reviewers='["alice"]'` produces a JSON array —
-both send a string. The documented way to build an array is repeated `key[]=value`
-entries, one per element; the GitHub API then receives an actual `reviewers: [...]`
-payload.
+Note the `reviewers[]=...` syntax: `gh api` sends `-f` and `-F` values as scalar strings (`-F` infers
+types only on literal `true`/`false`/`null`/ints), so neither `-f reviewers='["alice"]'` nor
+`-F reviewers='["alice"]'` produces a JSON array — both send a string. The documented way to build an
+array is repeated `key[]=value` entries, one per element; the GitHub API then receives an actual
+`reviewers: [...]` payload.
 
-Re-requesting mid-exchange, while declines are unresolved, or with failing CI burns
-reviewer attention and signals carelessness. Don't.
+Re-requesting mid-exchange, while declines are unresolved, or with failing CI burns reviewer
+attention and signals carelessness. Don't.
 
 ### 5.4 Give the workspace back
 
-Approval is where a scratch stack's life ends. Once the reviewer has approved and no
-thread is awaiting a change from you, prune the stack this work was done in:
+Approval is where a scratch stack's life ends. Once the reviewer has approved and no thread is
+awaiting a change from you, prune the stack this work was done in:
 
 ```bash
 a-novel core stacks prune <name>
 ```
 
-This is the trigger `git-conventions` › Workspace Hygiene names, and it lands here
-because this skill is where approval actually arrives — a stack pruned at push time gets
-rebuilt by the first review comment.
+This is the trigger `git-conventions` › Workspace Hygiene names, and it lands here because this skill
+is where approval arrives — a stack pruned at push time gets rebuilt by the first review comment.
 
-Only prune a stack you allocated. Work done in the default stack leaves nothing to
-reclaim, and `prune` refuses that one anyway.
+Only prune a stack you allocated. Work done in the default stack leaves nothing to reclaim, and
+`prune` refuses that one anyway.
 
 ---
 
 ## Starting your own thread
 
-The skill is not just defensive. Claude may initiate a thread when:
+Claude may initiate a thread when:
 
 - Applying a fix surfaces an adjacent concern that deserves discussion — either on the
   same line, or at the top level for cross-cutting issues.
@@ -464,8 +426,7 @@ The skill is not just defensive. Claude may initiate a thread when:
   future readers.
 - An assumption needs reviewer confirmation before another round.
 
-Every comment you post goes through the bot (`a-novel core bot-comment`), never bare
-`gh` — see [[feedback-bot-attribution]].
+Every comment you post goes through the bot (`a-novel core bot-comment`), never bare `gh`.
 
 **Top-level comment** (general discussion — or a concern that points at specific code,
 naming the `file:line` in the body):
@@ -480,20 +441,18 @@ a-novel core bot-comment <org> <repo> <number> --body "..."
 a-novel core bot-comment <org> <repo> <number> --reply-to <comment-id> --body "..."
 ```
 
-Starting a _brand-new_ inline thread anchored to a code line is not a bot capability —
-the dispatcher posts top-level comments and thread replies only. To raise line-specific
-code as the bot, post a top-level comment that names the `file:line`; reserve raw
-anchored-thread creation for a human reviewer.
+Starting a _brand-new_ inline thread anchored to a code line is not a bot capability — the dispatcher
+posts top-level comments and thread replies only. To raise line-specific code as the bot, post a
+top-level comment that names the `file:line`; anchored-thread creation is a human reviewer's.
 
 ---
 
 ## Issue discussions (planning & triage)
 
 Everything above is written for pull requests, but the same posture — **a conversation, not a
-checklist** — governs **issues**, above all the planning issues `plan-feature` produces, where the
-human and the agent converse in comments while the body holds the agreed plan. Use this section
-whenever you're reading and responding to comments under an issue: answering the human's questions
-on a plan, posting your own open questions, or triaging an incoming report.
+checklist** — governs **issues**, above all the planning issues `plan-feature` produces. Use this
+section when reading and responding to comments under an issue: answering the human's questions on a
+plan, posting your own open questions, or triaging an incoming report.
 
 **What carries over unchanged:** the survey-then-act shape; the accept / accept-with-deviation /
 decline / unsure classification (Phase 2); rationale-dense, zero-filler replies; the bots-vs-humans
@@ -504,10 +463,9 @@ number sequence and one dispatcher. Reads still use plain `gh`.
 **What's different — issues are simpler than PRs:**
 
 - **No inline threads, no resolution state, no re-request-review.** Issue comments are a single flat
-  top-level stream. There is no `--reply-to` (that targets PR inline review threads), no
-  `resolveReviewThread` mutation, and no reviewer to re-request. Don't reach for the PR-only
-  machinery — none of Phase 1.3 (thread node IDs), Phase 5.2 (resolve), or Phase 5.3 (re-request)
-  applies.
+  top-level stream: no `--reply-to` (that targets PR inline review threads), no `resolveReviewThread`
+  mutation, no reviewer to re-request. None of Phase 1.3 (thread node IDs), Phase 5.2 (resolve), or
+  Phase 5.3 (re-request) applies.
 - **Survey with the issue endpoints:**
 
   ```bash
@@ -534,55 +492,55 @@ Classify it with the Phase 2 buckets exactly as you would a review comment, then
 decisions into the body, keep discussing the unsure ones, and push back (once, with a reason) where
 you disagree. The body converges on the agreed plan; the comment stream records how you got there.
 
+**An answered comment is permanent history.** Post the follow-up as a new comment and leave the
+answered one in place, so the human's reply keeps the context it was written against. Replacing a
+comment in place is right only while it is still **unanswered** — a list of open questions a design
+reshape has made obsolete, where leaving the stale list would mislead. Once even one item has an
+answer, the whole comment stays: deleting it strands the reply, which goes on referencing headings
+that exist nowhere. Permission to replace a comment is granted against its unanswered state and does
+not carry forward past the first answer, so check for a reply before any
+`gh api -X DELETE .../issues/comments/<id>`.
+
 ---
 
 ## Common pitfalls
 
-- **Silent resolution without a reply.** Reviewers cannot tell which commit addressed
-  the thread — they have to hunt. Always pair a resolve with a reply linking to the SHA.
-- **Blanket acceptance of bot comments.** Copilot can be wrong. Classify every comment;
-  the failure mode of over-trust is insecure or incorrect code landing in main.
-- **Treating repeated bot claims as confirmation.** Three identical comments from one
-  bot are one opinion amplified, not three independent signals. Verify the underlying
-  fact once against an authoritative source before accepting or declining.
-- **Accepting a reviewer's spec claim without checking the spec.** When a comment
-  asserts a specific API shape, endpoint path, header name, or protocol detail, verify
-  it against the upstream docs — or make a single empirical call — before editing.
-  Plausibility is not evidence.
-- **Replying with the wrong mode.** A top-level comment does not thread with an inline
-  review comment. To reply on a review thread, pass `--reply-to <comment-id>` to
-  `a-novel core bot-comment`; a bare comment (no `--reply-to`) posts at the top level.
+- **Silent resolution without a reply.** Always pair a resolve with a reply naming the SHA (5.1).
+- **Blanket acceptance of bot comments**, or **treating repeated bot claims as confirmation.**
+  Classify every comment, and verify the underlying fact once against an authoritative source
+  (Phase 2).
+- **Accepting a reviewer's spec claim without checking the spec.** Verify an asserted API shape,
+  endpoint path, header name, or protocol detail against upstream docs — or one empirical call —
+  before editing. Plausibility is not evidence.
+- **Replying with the wrong mode.** A top-level comment does not thread with an inline review
+  comment. To reply on a review thread, pass `--reply-to <comment-id>` to `a-novel core bot-comment`;
+  a bare comment (no `--reply-to`) posts at the top level.
 - **Commenting as yourself.** Every PR/issue/review comment goes through `a-novel core
 bot-comment` so it attributes to `<app-slug>[bot]`. Bare `gh pr comment` / `gh api …
 comments` posts as your user account — only reads use plain `gh`.
-- **Leaving clear-cut threads open.** A thread you have decisively answered — accept
-  and fixed, or decline with a defended reason — does not need to wait for the reviewer
-  to close. Leaving it open creates audit-trail noise. Resolve it; the reviewer can
-  re-open if they have new information. Reserve the open state for genuinely-pending
-  decisions.
-- **Amending or force-pushing to address review.** Review comments are anchored to the
-  SHA that was reviewed. Rewriting strands them. New commits, every time.
+- **Leaving clear-cut threads open.** Resolve a thread you have decisively answered; reserve the open
+  state for genuinely-pending decisions (rule 1).
+- **Amending or force-pushing to address review.** Review comments are anchored to the SHA that was
+  reviewed. Rewriting strands them. New commits, every time.
 - **Re-requesting review too early.** Wait for all pushes + green CI + posted declines.
-- **Acting while unsure.** If the comment is ambiguous, the only correct first move is
-  a specific question. Do not apply a best-guess fix and then explain on the thread —
-  that wastes a round.
-- **Mixing types in one commit to bundle a batch of review fixes.** Each review-driven
-  commit is still subject to `git-conventions` — a `test` and a `docs` fix are two
-  commits, even when they came from the same review.
+- **Acting while unsure.** A specific question is the only correct first move. A best-guess fix
+  explained afterwards on the thread wastes a round.
+- **Mixing types in one commit to bundle a batch of review fixes.** Each review-driven commit is
+  still subject to `git-conventions` — a `test` and a `docs` fix are two commits, even from the same
+  review.
 
 ---
 
 ## Hand-offs
 
-- **From `open-pull-request`** — once a PR is open and reviewers start commenting, the
-  push-and-open flow hands off here to assess CI, review threads, and reviewer status,
-  then work through the feedback.
+- **From `open-pull-request`** — once a PR is open and reviewers start commenting, the push-and-open
+  flow hands off here to assess CI, review threads, and reviewer status, then work the feedback.
 - **With `plan-feature`** — `plan-feature` owns the planning-issue **body** (the agreed plan);
   this skill owns the **comment loop** around it (posting open questions, answering the human's
   replies, folding decisions back into the body). See [Issue discussions](#issue-discussions-planning--triage).
-- **To `monitor-ci`** — for failing checks that need flake-vs-real classification or a
-  retry loop. When CI agrees with a reviewer (same root cause), fold the fix into the
-  thread response rather than pushing twice.
+- **To `monitor-ci`** — for failing checks that need flake-vs-real classification or a retry loop.
+  When CI agrees with a reviewer (same root cause), fold the fix into the thread response rather than
+  pushing twice.
 - **To `git-conventions`** — every review-driven commit. No exceptions.
 - **To the layer-specific skills** — `write-go`, `write-go-service` (or `write-go-kit` for a-novel-kit repos), `write-go-tests`, `write-openapi`,
   `write-js-package`, etc. Phase 4 writes code; those skills govern _how_.
