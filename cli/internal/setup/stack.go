@@ -56,7 +56,7 @@ func bootstrapStack(s stacks.Stack, nonInteractive bool, prompter Prompter) Stac
 				return out
 			}
 		}
-		if err := cloneStack(s.Path); err != nil {
+		if err := CloneStack(s.Path); err != nil {
 			out.Status = statusRefused
 			out.Detail = "clone failed: " + err.Error()
 			return out
@@ -93,9 +93,11 @@ func isValidStackRepo(path string) bool {
 		url == "https://github.com/a-novel-kit/stack"
 }
 
-// cloneStack clones the canonical stack repo into path. LFS disabled
-// + partial blob filter (fast clone, no large assets).
-func cloneStack(path string) error {
+// CloneStack clones the canonical stack repo into path. LFS disabled
+// + partial blob filter (fast clone, no large assets). Exported so the
+// stack-creation verb allocates a new workspace the same way setup
+// bootstraps a registered one — one clone shape, not two.
+func CloneStack(path string) error {
 	// Ensure parent dir exists; clone creates the leaf.
 	parent := filepath.Dir(path)
 	if err := os.MkdirAll(parent, 0o700); err != nil {

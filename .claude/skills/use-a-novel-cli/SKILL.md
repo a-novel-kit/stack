@@ -269,7 +269,42 @@ a-novel core sync --allow=a-novel-kit/golib  # subset to specific repos
 a-novel core sync --ignore=<org>/<repo>      # skip specific repos
 a-novel core bot-comment <org> <repo> <number> --body <text> [--reply-to <id>]
                                            # comment as the org App bot (see below)
+
+# Stack lifecycle — allocate, audit, give back.
+a-novel core stacks new <name>        # clone a fresh stack under the OS temp dir
+a-novel core stacks new <name> --root=<path>  # ...or somewhere durable
+a-novel core stacks list              # every stack: path, targets up, infra up, volumes
+a-novel core stacks prune <name>      # kill its targets + infra, clear its volumes, remove its files
+a-novel core stacks prune <name> --dry-run    # report what would be reclaimed
+a-novel core stacks prune <name> --purge-backups  # also delete its volume backups
+a-novel core stacks prune --all -y    # sweep every stack but the default
 ```
+
+**Pruning a scratch stack.** A stack allocates three things and only one is a
+file, so deleting the root reclaims the checkout and leaves containers holding
+host ports and volumes sitting in the container store. `stacks prune` releases
+all three, in that order.
+
+It refuses the default stack outright — that is the workspace, not scratch space
+— and `--all` sweeps every _other_ registered stack, which is the pass to run
+after a batch of agent sessions. It also refuses a stack whose checkouts hold
+work that exists nowhere else (dirty tree, a branch other than the default, or
+unpushed commits) unless `--force`. `$A_NOVEL_STACKS` lives in your shell config,
+so prune prints the entry to drop rather than editing the file underneath you.
+
+Volume backups survive by default: `ClearVolume` takes one on the way past, so
+the artefact that undoes a prune outlives it. `--purge-backups` says the data
+really was disposable and deletes them too.
+
+**Where a new stack lives.** `stacks new` defaults to `<os temp dir>/a-novel-stacks/<name>`
+via Go's `os.TempDir()`, which honours `$TMPDIR` — a per-user `/var/folders/…/T`
+on macOS, `/tmp` on Linux. Both are reclaimed by the OS, so a stack nobody prunes
+expires instead of accumulating. Pass `--root` for somewhere durable.
+
+Because that home is swept, a registration can outlive its files. The daemon
+skips such a stack rather than refusing to start over it, and `stacks list`
+flags it (`files are gone — drop it from A_NOVEL_STACKS`) so the stale entry is
+visible instead of silently doing nothing.
 
 `bot-comment` is the **only** way to post a PR/issue/review comment as
 `<app-slug>[bot]`. It does **not** mint a local token: it triggers the

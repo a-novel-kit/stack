@@ -138,9 +138,20 @@ func DiscoverStacks(stk []stacks.Stack) ([]*Stack, error) {
 	for _, s := range stk {
 		info, err := os.Stat(s.Path)
 		if err != nil {
+			// A scratch stack is disposable, and its default home is a
+			// directory the OS reclaims — so its files can vanish while the
+			// $A_NOVEL_STACKS entry lives on in a shell config. Skipping it
+			// costs that one stack; failing here costs the whole daemon,
+			// including the workspace the operator is actually using.
+			if !s.IsDefault {
+				continue
+			}
 			return nil, fmt.Errorf("stack %s at %s: %w", s.Name, s.Path, err)
 		}
 		if !info.IsDir() {
+			if !s.IsDefault {
+				continue
+			}
 			return nil, fmt.Errorf("stack %s: %s is not a directory", s.Name, s.Path)
 		}
 		st := &Stack{Name: s.Name, Path: s.Path, Default: s.IsDefault}

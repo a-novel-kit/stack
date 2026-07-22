@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/client/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 	"github.com/a-novel-kit/stack/cli/internal/tui"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
@@ -581,7 +582,7 @@ func resolveTargetID(arg, stack string) string {
 		return arg
 	}
 	if stack == "" {
-		stack = "default"
+		stack = stacks.DefaultName
 	}
 	return stack + "/" + arg
 }
@@ -621,7 +622,7 @@ type entityRef struct {
 // are literally named "infra" today, but the resolver is defensive).
 func parseEntityID(arg, defaultStack string) entityRef {
 	if defaultStack == "" {
-		defaultStack = "default"
+		defaultStack = stacks.DefaultName
 	}
 	parts := strings.Split(arg, "/")
 	// Infra: 3 segments (svc/infra/name) or 4 (stack/svc/infra/name).
