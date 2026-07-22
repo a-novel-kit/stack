@@ -93,6 +93,11 @@ matters, in as few words as it takes, and stop.
 
 - Lead with _why_; the code already shows _what_.
 - Cut hedges, preambles, and ceremony ("note that", "in order to", "it is important to").
+- **Stay sharp. Cut the sugar.** Softening costs words and buys nothing: a comment is read by someone
+  who needs the fact, not reassurance. Drop the throat-clearing ("on purpose", "deliberately", "it is
+  worth noting", "the case that matters"), the emphasis that adds no information (`MUST`, `NEVER`, and
+  the rest of the shouted words), and the build-up that delays the point ("two is nobody's intended
+  answer"). Assert the fact and move on.
 - One precise sentence beats three approximate ones. If a comment reads well aloud, it ships.
 - **Default to plain words.** Prefer the common word and the short one. Reach for an advanced or
   technical word only when it earns its place — when it replaces a whole clause or removes a real
@@ -124,6 +129,23 @@ matters, in as few words as it takes, and stop.
   going to do, and leaves the rejected idea sitting in their head next to the real one. Write "Values
   are stored as JSONB", not "Values are stored as JSONB, never EAV". Keep a counter-example only where
   the wrong path is the one a reader would otherwise take; then give it once, plainly.
+- **A counterfactual is that same defect in other grammar.** A sentence describing what _would_ happen
+  under an implementation nobody wrote defends the code instead of describing it: "a fixed counter
+  would repeat them", "a nested transaction would inherit the caller's isolation", "a redacted
+  placeholder would still leak the length". State the property that holds — "Both must differ", "A
+  redaction still carries its length" — and drop the rest. Three uses of "would" survive this rule.
+  A **previewed action** the code shows without taking: "renderPruneImpact names the rulesets a plan's
+  prune op would delete" documents what a dry run displays. A **condition that genuinely occurs**:
+  "git refuses when incoming commits would clobber a locally-modified file" is git's real behavior and
+  the code branches on it. And the wrong-path counter-example above: "depend on the typed structs
+  declared here rather than reading os.Getenv directly" names the call a reader would otherwise reach
+  for. When the conditional describes what the reader is shown or a condition that occurs, keep it.
+- **Prefer affirmative sentences to clause chains.** Give a rule its own sentence rather than trailing
+  it off another as "…, so X must Y", and split a chain of subordinate clauses into plain statements.
+  "…the MAC and ENC keys of an AES-CBC-HMAC key, so they must differ" becomes "…the MAC and ENC keys
+  of an AES-CBC-HMAC key. Both must differ." This is not license to shred prose into fragments — the
+  aim is statements a reader takes in one at a time, and the fully-formed-sentence rule above still
+  holds.
 
 This applies to every prose surface we write — doc comments, package docs, README sections, PR
 descriptions (see `open-pull-request`), and planning issues (see `plan-feature`). Load this section
@@ -329,6 +351,42 @@ placeholder were the intended design.
 
 ---
 
+## Sweeping comments across a codebase
+
+A cleanup pass over existing comments — one repo or many — behaves differently from documenting new
+code, and fails in its own ways.
+
+**Scope the check to the tree, not to your diff.** Searching your own diff answers "did I change this
+correctly?" It cannot answer "did I find everything?" The moment the bar tightens mid-sweep — a rule
+added after reviewing the first pass — every comment the earlier pass deliberately left alone is
+reclassified, and only a full re-scan surfaces them. Re-scan the whole tree whenever the rules change,
+and measure the tree you are sweeping: a `grep -r` over a sibling checkout reports whatever
+branch that checkout happens to be parked on, not your baseline.
+
+**A pattern search locates candidates; reading classifies them.** Every mechanical scan is a proxy —
+`would`, `rather than`, `, not ` — and the worst findings match none of them. Change narrative
+("the defect lived on the read path", "fixed in v1.4.5"), aggregate blocks describing the elements
+below them, and docs that contradict the code are all found by reading the block the grep dragged into
+view, never by the grep itself.
+
+**Expect to find comments that are wrong.** Trimming forces someone to read the code underneath, which
+is why a verbosity sweep routinely turns up inverted parameter descriptions, references to helpers
+that no longer exist, and doc blocks attached to the wrong function. Those are the valuable output.
+Fix the comment, leave the code, and call them out separately from the prose changes — a reviewer
+skims rewording and scrutinizes a corrected claim.
+
+**Comments in a generating source must be regenerated.** Editing a `.proto` comment changes the
+generated Go, and the `generated-go` job fails on the drift. Run the repo's generate script and commit
+the output as its own `chore(gen)` commit — `git-conventions` forbids mixing types, and a `docs`
+commit carrying regenerated files hides the reason they changed.
+
+**A comment-only diff is not always a comment-only diff.** Removing a trailing comment lets gofmt
+re-align a struct or const block, and removing the comment above a single-element `var (…)` group
+makes gofumpt collapse it. Both are the formatter asserting itself rather than an edit to the code, and
+both belong in the PR description — an unexplained non-comment hunk costs a reviewer more than it saves.
+
+---
+
 ## Consistency and Quality
 
 Wrong documentation is a liability. Every time you write or touch it:
@@ -382,6 +440,12 @@ Wrong documentation is a liability. Every time you write or touch it:
 - **Contrastive framing where the positive alone would do**: `// Stored, not derived`,
   `// We use X rather than Y`, `// This is not a cache`. State the choice instead:
   `// Stored at publish time.` — see "Write the choice, not the rejected alternative" above.
+- **Counterfactuals defending the implementation**: `// A fixed counter would repeat them`,
+  `// a nested transaction would inherit the caller's isolation`. State the property that holds — see
+  "A counterfactual is that same defect in other grammar" above, including the three cases where a
+  conditional stays.
+- **A rule trailing off another sentence**: `// …, so they must differ`. Give it its own sentence —
+  see "Prefer affirmative sentences to clause chains" above.
 - **Rhetorical labels standing in for a sentence**: `// Why this matters: ...`, `// Note: ...`,
   `// The reason: ...` — state the point plainly, as under "Write plain sentences, not labels" above.
 - **Change narrative and references to deleted code or transient docs** — see "Document the code as

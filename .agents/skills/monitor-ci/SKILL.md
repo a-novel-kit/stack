@@ -208,6 +208,46 @@ Use a `fix(<scope>): resolve lint findings` commit for trivial mechanical change
 commits unconditionally, so a noisy `fix(lint): ...` follow-up is the right call; under
 squash-merge the PR author squashes or absorbs it at merge time.
 
+#### When the findings do not reproduce locally
+
+Before editing anything, confirm the finding is real. Two traps produce lint failures that exist
+only on the runner, and "fixing" either one edits correct code or buries a `//nolint` in it.
+
+**Reproduce with the binary the action installs, not the repo-pinned tool.**
+`go tool -modfile=golangci-lint.mod golangci-lint` builds from the repo's own module graph; the
+action downloads a released binary built against a different toolchain. Same version number, two
+different builds. Take the version from the job log and run that:
+
+```bash
+gh run view <run-id> --repo <org>/<repo> --log | grep -i 'golangci-lint binary v'
+curl -sSL https://github.com/golangci/golangci-lint/releases/download/vX.Y.Z/golangci-lint-X.Y.Z-linux-amd64.tar.gz | tar xz
+./golangci-lint-X.Y.Z-linux-amd64/golangci-lint run --path-mode=abs   # from the module dir, as CI does
+```
+
+**Suspect the analyzer cache when the same key gives two verdicts.** The cache key
+(`golangci-lint.cache-Linux-<mod>-<n>-<hash>`) derives from the Go version and the modfiles, never
+from source, while results inside it are stored per package by content hash. A PR that edits a
+package invalidates only that package, which is re-analyzed against stale inter-package facts left
+in the cache — and stale facts are how staticcheck loses knowledge like "`(*testing.T).Fatalf` never
+returns", turning every `if x == nil { t.Fatalf(...) }` into a bogus `SA5011`. `master` passes on the
+identical key because its packages were unchanged and their verdicts were replayed, not recomputed.
+
+The signature: findings on lines the PR never touched, in packages it merely brushed, that reproduce
+on no local configuration — warm cache, cold `GOCACHE`/`GOLANGCI_LINT_CACHE`, released binary, same
+Go version. Confirm by comparing cache keys, then evict:
+
+```bash
+gh run view <failing-run> --repo <org>/<repo> --log | grep 'Restored cache'
+gh run view <last-green-master-run> --repo <org>/<repo> --log | grep 'Restored cache'  # same key?
+gh cache list --repo <org>/<repo>          # find the id
+gh cache delete <id> --repo <org>/<repo>   # ask the operator first — shared CI state
+```
+
+A re-run alone does not help: it restores the same cache. Caches regenerate on the next lint job, so
+eviction is reversible, but it affects every run on the repo — surface it rather than doing it
+silently. And note what this means for the green check on `master`: it is not evidence the package
+still lints clean, only that nothing forced it to be re-examined.
+
 ### 2.3 `test-go` (Go unit) failure
 
 **Symptom**: `--- FAIL: TestXxx` in the log, optionally a stack trace.
