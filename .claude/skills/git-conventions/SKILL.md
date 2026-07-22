@@ -174,27 +174,22 @@ session mistakes for real work, plus containers and volumes that outlive the mac
 Prune it once the work has landed — the PR is merged, or the branch is pushed and nothing local
 is needed any more.
 
-Scope every teardown to your own stack. Each `run` verb takes `--stack <name>`, and target IDs
-are `<stack>/<service>/<target>`:
-
 ```bash
-a-novel run ps --stack <name>                       # what is still up
-a-novel run kill <name>/<service>/<target>          # stop each running target
-a-novel run volume clear <service> --stack <name>   # destroy its volumes (auto-backs up first)
-rm -rf <stack-root>                                 # drop the checkout
+a-novel core stacks list           # what each stack is still holding
+a-novel core stacks prune <name>   # kill its targets + infra, clear its volumes, remove its files
 ```
 
-Then remove the entry from `A_NOVEL_STACKS` and `a-novel core restart`, so the daemon stops
-discovering a path that no longer exists.
+Prune covers all three of a stack's allocations. Deleting the root by hand covers one of them: the
+containers keep running on their host ports and the volumes stay in the container store, because
+neither ever lived in the stack directory.
 
-The CLI creates a stack in one verb and tears one down in several: it owns the containers and the
-volumes, while the checkout on disk and the `A_NOVEL_STACKS` entry are yours to remove by hand.
+`prune` refuses the default stack, and refuses any stack still holding work that exists nowhere
+else — so run it without rehearsing the state first. It reports the `A_NOVEL_STACKS` entry to drop
+rather than editing your shell config.
 
 **Never reach for `a-novel core kill --force` as cleanup.** It tears down every service's infra
 across every registered stack, the operator's included — the exact harm the pre-flight above
 exists to prevent.
-
-The default stack is not scratch space. Prune only a stack you synced yourself.
 
 ---
 
