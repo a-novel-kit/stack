@@ -103,6 +103,22 @@ matters, in as few words as it takes, and stop.
   the idea: "This runs first because the cache is cold", not "Why this runs first: the cache."
 - **Name a thing once, and keep the name.** Use one term for one concept. Do not alternate synonyms
   ("the cache," then "the store") for the same thing, or the reader stops to check whether they differ.
+  An abstract label earns its place only when tied to something the reader can hold: "the intention" is
+  vague until it is "the specification behind your idea" — name it that, then carry "specification"
+  through. Where the domain already has a precise term, use it and resist paraphrasing it for warmth,
+  because a paraphrase can carry a connotation the precise term rules out: a "convoy" may lose
+  stragglers and still be one, where an "atomic landing" is all-or-none by name. When a name doubles as
+  a common word, name its category on first use — "a dedicated Tracking status" reads as a place on the
+  board where "Tracking" alone reads as an activity — and use it bare afterwards. When one concept spans
+  several concrete forms, name the umbrella too, and never reuse that word in its ordinary sense a line
+  later.
+- **Make every reference land on something the reader already holds.** Keep a pronoun beside its one
+  possible antecedent: "comprehension and judgment are the whole job, so spend your attention there"
+  beats "so spend them there", where "them" reaches back past "the whole job" for its noun. Name earlier
+  content by a plain description rather than an abstract handle the reader has to decode; a handle earns
+  its place only once you have attached it to the thing.
+- **Concision is careful word choice, not dropped grammar.** Keep sentences fully formed — subject and
+  verb — rather than clipping them to fragments. A doc that is short but cryptic has failed.
 - **Write the choice, not the rejected alternative.** State what holds and stop. The contrast form
   ("X is this, not that", "we use A rather than B") spends a clause on something the reader was never
   going to do, and leaves the rejected idea sitting in their head next to the real one. Write "Values

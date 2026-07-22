@@ -126,10 +126,8 @@ locally`, the LAST section before Contributing. `### Configuration` lives inside
    thumb: four-plus comma-separated items belong in a table, not a sentence. Lead with the
    plain-English purpose and let the table, intellisense, or the API reference carry the inventory.
    Cut every word that adds no information, and drop boilerplate ("if you have questions or run into
-   issues", "check existing issues"). Concision is careful word choice, not dropped grammar — keep
-   sentences fully formed (subject + verb). Nor is it cut explanation: an unfamiliar concept or a
-   non-obvious rationale earns the words to make it clear, in plain language. A doc that is short but
-   cryptic has failed.
+   issues", "check existing issues"). Cutting filler is not cutting explanation: an unfamiliar concept
+   or a non-obvious rationale earns the words to make it clear, in plain language.
 5. **Contribution rules live in `CONTRIBUTING.md`, not the README.** The README Contributing
    section is only the two links. The "what belongs here / bar for additions" policy, review
    norms, and any other contributor guidance go in CONTRIBUTING.md, phrased naturally.
@@ -386,27 +384,8 @@ note above).
 
 ### 13. Name a concept once, concretely, and keep the name
 
-`document-code`'s "Name a thing once, and keep the name" carries the base rule — one term per concept,
-no drifting to a synonym. Project docs extend it four ways.
-
-An abstract label earns its place only when it is tied to something the reader can hold: "the
-intention" is vague until it is "the specification behind your idea" — name it that, then carry
-"specification" through.
-
-When the domain has a precise term, use it, and resist paraphrasing it for warmth or variety ("the
-second human-gated stage" beats "the work waits for a human a second time"); a motif (principle 12) may
-echo a term, never replace it. A warm paraphrase can even carry a false connotation the precise term
-rules out — a "convoy" may lose stragglers and still be one, while an "atomic landing" is all-or-none
-by name — so prefer the word that carries the invariant over the image beside it.
-
-When a name doubles as a common word, name the category, or the reader takes it for prose: "sitting in
-a dedicated Tracking status" reads as a place on the board where "sitting in Tracking" reads as an
-activity. Once framed, the name can be used bare; the first, unframed use is the one that misleads.
-
-When one concept spans several concrete forms, name the umbrella too: calling the intention a "feature"
-lets the doc say "feature" where it would otherwise recite "Task, Epic, or Initiative." Once a word is
-reserved for a concept, keep it there — never use it in its ordinary sense a line later, where "a
-GitHub feature" beside "a feature is the intention" makes two things of one word.
+`document-code`'s **Prose economy** owns this rule and its extensions; apply it as written. One thing
+is specific to a guide: a motif (principle 12) may echo a term, never replace it.
 
 ### 14. Start simple: the global picture first, then the details
 
@@ -451,13 +430,8 @@ does all three, hiding the instruction behind the warning meant to drive it home
 
 ### 17. Make every reference land on something the reader already holds
 
-A pronoun or a back-reference points somewhere, and the target must be right there and unmistakable.
-Keep a pronoun beside its one possible antecedent: "comprehension and judgment are the whole job, so
-spend your attention there" beats "so spend them there," where "them" reaches back past "the whole job"
-for its noun. Name earlier content concretely, not with an abstract label the reader has to decode:
-"until now we have followed a single Task" beats "the journey followed a single Task," a word the doc
-never pinned to that walkthrough. An abstract handle earns its place only once you have plainly
-attached it to the thing; until then, point with a plain description of what you mean.
+`document-code`'s **Prose economy** owns this: a pronoun sits beside its one possible antecedent, and
+earlier content is named by a plain description rather than an abstract handle the reader must decode.
 
 ### 18. State what is, not what is not
 
