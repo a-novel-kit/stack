@@ -392,6 +392,10 @@ message ExecRequest {
 message ExecOutput {
   LogStream stream = 1;
   string    line   = 2;
+  // Set only on the stream's final message, which carries no line. Presence-tracked on
+  // purpose: a plain int32 defaults to 0, which is indistinguishable from a successful
+  // exit, so a client could not tell "the command succeeded" from "the daemon never said".
+  optional int32 exit_code = 3;
 }
 
 message DebugRequest {
