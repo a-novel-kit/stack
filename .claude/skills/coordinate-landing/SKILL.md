@@ -25,6 +25,11 @@ sequence with compensating actions when a step fails. This skill is the map of t
 pieces are called, the one invariant they all serve, and the operator procedures when something needs
 a human.
 
+The contributor-facing half of this — what a held or frozen Pull Request means to the person who
+opened it — is published in
+[`a-novel-kit/.github` › docs/board-lifecycle.md](https://github.com/a-novel-kit/.github/blob/master/docs/board-lifecycle.md).
+This skill is the operator's view: the vocabulary, the invariant, and the procedures that need a human.
+
 The saga is enforced by the `a-novel-kit/workflows` governance actions, driven by two triggers: the
 per-PR / per-merge-group events, and a **reconcile sweep** that runs every ~15 minutes as a
 level-triggered, self-healing floor. Nothing here is a bespoke distributed-transaction engine — it is
@@ -57,7 +62,9 @@ two things.
 | Term                                       | Meaning                                                                                                                                                                                                                                                            |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Epic**                                   | The planning issue grouping a multi-repo change; its number is `N`.                                                                                                                                                                                                |
-| **`epic:<N>` membership**                  | The label binding a PR to Epic N. Author-role-gated (only a maintainer can add it), so membership is trusted.                                                                                                                                                      |
+| **`epic:<N>` membership**                  | The label binding a PR to Epic N. Author-role-gated (only a maintainer can add it), so membership is trusted. It defines the set until activation freezes it — see **Activation snapshot**.                                                                        |
+| **Activation snapshot**                    | The member set frozen into the Epic issue body once it has held merge-ready long enough to settle. From then on the snapshot _is_ the set: a PR de-labelled, closed, or relabelled afterwards stays a member.                                                      |
+| **Wave**                                   | One frozen set landing. A PR labelled after the freeze belongs to the **next** wave, and waits — the snapshot retires when every member is terminal, and the next ready set freezes its own.                                                                       |
 | **Atomic landing**                         | All member PRs merging together — INV-1 satisfied.                                                                                                                                                                                                                 |
 | **merge-gate**                             | The required status check that **holds** an `epic:<N>` PR until the whole member set is ready + approved, then lets the merge queue land them together. A standalone (unlabelled) PR fast-paths to pass. On engagement of the halt it posts `failure` on every PR. |
 | **merge queue**                            | GitHub's native queue. The merge-gate re-evaluates over each frozen `gh-readonly-queue/...` head so the set greens and commits together.                                                                                                                           |
@@ -73,6 +80,24 @@ two things.
 | **Blast-cap**                              | The per-Epic distinct-repo cap that trips a loud alert (freeze) or a hard abort (rollback) when an Epic's fan-out is suspiciously wide.                                                                                                                            |
 | **Saga**                                   | The whole coordinated land → detect → recover → release → archive lifecycle.                                                                                                                                                                                       |
 | **Coordinator**                            | The set of governance actions that drive the saga (the reconcile sweep + the per-event workflows).                                                                                                                                                                 |
+
+---
+
+## Why membership freezes
+
+Before landing starts, membership is the live `epic:<N>` label search. That works until a member is
+de-labelled mid-landing: GitHub indexes no "ever carried label X", so the PR simply vanishes from the
+set, and the detector reads the survivors as a clean landing while a member sits abandoned. The set is
+therefore captured into the Epic body once it has held merge-ready long enough for the label index to
+settle, and from that point the snapshot is the authority.
+
+Two consequences worth knowing before operating an Epic:
+
+- **A de-labelled member is still a member.** Removing the label does not remove a PR from an
+  in-flight landing. To stop the landing, use `automation:paused` on the Epic.
+- **The snapshot names members; it does not authorise them.** Each member must still show it carried
+  `epic:<N>` — currently, or in its own label history. A named PR that never did voids the whole
+  snapshot, because the Epic body is editable and its members become freeze targets.
 
 ---
 

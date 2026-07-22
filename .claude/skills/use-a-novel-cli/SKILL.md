@@ -3,10 +3,10 @@ name: use-a-novel-cli
 description: >
   Canonical reference for the `a-novel` CLI. ALWAYS load alongside any skill that
   involves running tests, building artifacts, releasing, or starting/stopping local
-  services. The CLI replaces the deleted Makefiles and per-repo scripts with four
-  command groups: `test`, `build`, `publish` (standalone), and `run` (daemon-backed
-  verbs for `start`/`kill`/`logs`/`env`/`volume`/`ui` etc.) plus `core` for daemon
-  lifecycle. Prefer `a-novel <verb>` over equivalent raw commands wherever a 1:1
+  services. The CLI replaces the deleted Makefiles and per-repo scripts with the
+  standalone groups `test`, `build`, `publish` and `repo` (repository config,
+  rulesets and required checks), plus `run` (daemon-backed verbs for
+  `start`/`kill`/`logs`/`env`/`volume`/`ui` etc.) and `core` for daemon lifecycle. Prefer `a-novel <verb>` over equivalent raw commands wherever a 1:1
   mapping exists; lint/format/generate live in pnpm scripts (`pnpm lint:go`,
   `pnpm format:go`, ...), never in Makefiles (which no longer exist in any repo).
   Loaded automatically by `implement-feature`,
@@ -182,6 +182,36 @@ is `stamp`:
 `a-novel publish stamp <prefix> <file>` is the doc-stamping helper the
 `prepublish:doc` pnpm scripts call — it rewrites `<prefix>vX.Y.Z` references
 (prefix is a regex) to the current package.json version.
+
+---
+
+## `a-novel repo` — repository config and governance
+
+`create` scaffolds a repository from its class template; `update` reconciles an existing one. This is
+how the governance workflows, the branch rulesets, and the required-check list reach every repo — so
+after adding or renaming a job in a repo's `.github/workflows/main.yaml`, its ruleset is stale until
+`update` runs.
+
+```bash
+a-novel repo update --dry-run    # print the API operations, no writes — the agent-safe form
+a-novel repo update              # interactive, human-only: a human must run this
+a-novel repo update --all        # every whitelisted checkout present under app/ or kit/
+```
+
+Four behaviours worth knowing before running it:
+
+- **Required checks are derived, not configured.** They are the jobs in the repo's `main.yaml` (minus
+  `report-*` and master-only jobs) plus the always-required set. A new job becomes a required check on
+  the next `update`, and not before.
+- **Config comes from the working tree**, not from GitHub. Run it on an up-to-date default branch, or
+  it deploys whatever your checkout happens to hold.
+- **A checkout off its default branch is skipped**, silently and by design — reconciling from an
+  in-progress branch would push half-finished template edits fleet-wide. Check branches before `--all`,
+  or the repos you most care about are the ones quietly missed.
+- **A newer deployed pin survives.** For files pinning `a-novel-kit/workflows` actions, a version
+  already ahead of the template's is kept, so `update` never rolls back a bump Renovate landed.
+
+Agents stop at `--dry-run`: the write path refuses a non-TTY.
 
 ---
 
