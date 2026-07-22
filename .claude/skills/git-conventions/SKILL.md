@@ -76,6 +76,38 @@ is genuinely cross-cutting (e.g., a rename that touches every layer), omit the s
 - No period at the end
 - Describes the _what_, not the _how_ — readers see the diff; they need the intent
 
+The subject line carries the message. It is what `git blame`, `git log --oneline`, and the
+release notes show, and in practice it is as far as most readers get. Spend the effort there.
+
+### Body
+
+Default to no body. Most commits are a subject line and nothing else.
+
+Repos squash-merge with `COMMIT_MESSAGES`, so every body on the branch is concatenated into the
+commit that lands on `master`. A five-commit branch with three-paragraph bodies becomes a wall of
+prose attached to a single line of history that nobody scrolls past.
+
+A body earns its place only when it carries something **neither the subject nor the diff can
+show**:
+
+- A constraint that forced a non-obvious approach — the thing a future reader would otherwise
+  "clean up" and break.
+- The failure a `fix` repairs, when the symptom is not visible in the diff (a race, a CI-only
+  break, a bug in a dependency).
+
+When it does, keep it to one or two sentences — three lines wrapped at 72 characters is the
+ceiling. Never restate the subject at greater length, summarise the diff, or list touched files.
+
+Footers (`BREAKING CHANGE:`, `Closes`, `Co-Authored-By:`) are not prose and are never trimmed.
+
+Longer reasoning has better homes, all of which readers actually reach:
+
+| Reasoning                                   | Goes in                                 |
+| ------------------------------------------- | --------------------------------------- |
+| What the change does and why, for reviewers | The PR description                      |
+| A design decision or rejected option        | The planning issue (body or discussion) |
+| Something a reader of the code needs        | A code comment (see `document-code`)    |
+
 ### Breaking Changes
 
 Prefix the description with `!` and add a `BREAKING CHANGE:` footer:
@@ -134,21 +166,23 @@ version numbers unless it's a release branch.
 # 1. Stage only the files for this logical unit
 git add internal/dao/pg.jwkRevoke.go internal/dao/pg.jwkRevoke_test.go
 
-# 2. Commit with a conventional message (use HEREDOC for multi-line)
+# 2. Commit with a conventional message — a subject line, nothing more
 git commit -m "feat(dao): add soft-delete repository for key revocation"
 
-# or multi-line:
+# Only when the body carries what the diff cannot (HEREDOC for multi-line):
 git commit -m "$(cat <<'EOF'
-feat(dao): add soft-delete repository for key revocation
+fix(dao): lock the key row before revoking
 
-Returns ErrJwkRevokeNotFound when the target key is already deleted
-or expired, mirroring the PgJwkDelete sentinel pattern.
+Concurrent revokes both read the key as ACTIVE and wrote two audit
+entries; SELECT ... FOR UPDATE is what serialises them.
 EOF
 )"
 ```
 
 ### Rules
 
+- **A commit is its subject line.** Add a body only when it says something the subject and the
+  diff cannot, and keep it to a sentence or two — see [Body](#body).
 - **One logical unit per commit.** A DAO file + its test = one commit. A handler + its test = one
   commit. A migration file = one commit. Never combine DAO + service in a single commit.
 - **Generated files belong in the same commit as the change that necessitated them.** Proto Go
