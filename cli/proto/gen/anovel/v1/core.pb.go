@@ -1330,10 +1330,15 @@ func (x *ShutdownRequest) GetForce() bool {
 
 type ShutdownResponse struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
-	GoExecKilled          int32                  `protobuf:"varint,1,opt,name=go_exec_killed,json=goExecKilled,proto3" json:"go_exec_killed,omitempty"`                              // count of go-exec targets that got SIGTERM
+	GoExecKilled          int32                  `protobuf:"varint,1,opt,name=go_exec_killed,json=goExecKilled,proto3" json:"go_exec_killed,omitempty"`                              // count of go-exec targets that stopped
 	InfraServicesTornDown int32                  `protobuf:"varint,2,opt,name=infra_services_torn_down,json=infraServicesTornDown,proto3" json:"infra_services_torn_down,omitempty"` // 0 unless force
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// What the shutdown failed to stop, one entry per target, already phrased for
+	// an operator. The counts alone cannot carry this: a target dropped because
+	// its teardown failed reads exactly like a target that was never running, and
+	// the difference is whether the local environment is now clean.
+	Failures      []string `protobuf:"bytes,3,rep,name=failures,proto3" json:"failures,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ShutdownResponse) Reset() {
@@ -1378,6 +1383,13 @@ func (x *ShutdownResponse) GetInfraServicesTornDown() int32 {
 		return x.InfraServicesTornDown
 	}
 	return 0
+}
+
+func (x *ShutdownResponse) GetFailures() []string {
+	if x != nil {
+		return x.Failures
+	}
+	return nil
 }
 
 type ListStacksRequest struct {
@@ -3583,10 +3595,11 @@ const file_anovel_v1_core_proto_rawDesc = "" +
 	"\x0fcheckpoint_path\x18\x01 \x01(\tR\x0echeckpointPath\x12/\n" +
 	"\x14go_exec_target_count\x18\x02 \x01(\x05R\x11goExecTargetCount\"'\n" +
 	"\x0fShutdownRequest\x12\x14\n" +
-	"\x05force\x18\x01 \x01(\bR\x05force\"q\n" +
+	"\x05force\x18\x01 \x01(\bR\x05force\"\x8d\x01\n" +
 	"\x10ShutdownResponse\x12$\n" +
 	"\x0ego_exec_killed\x18\x01 \x01(\x05R\fgoExecKilled\x127\n" +
-	"\x18infra_services_torn_down\x18\x02 \x01(\x05R\x15infraServicesTornDown\"\x13\n" +
+	"\x18infra_services_torn_down\x18\x02 \x01(\x05R\x15infraServicesTornDown\x12\x1a\n" +
+	"\bfailures\x18\x03 \x03(\tR\bfailures\"\x13\n" +
 	"\x11ListStacksRequest\">\n" +
 	"\x12ListStacksResponse\x12(\n" +
 	"\x06stacks\x18\x01 \x03(\v2\x10.anovel.v1.StackR\x06stacks\"+\n" +
