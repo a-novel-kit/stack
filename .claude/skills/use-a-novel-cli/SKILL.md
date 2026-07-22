@@ -3,10 +3,10 @@ name: use-a-novel-cli
 description: >
   Canonical reference for the `a-novel` CLI. ALWAYS load alongside any skill that
   involves running tests, building artifacts, releasing, or starting/stopping local
-  services. The CLI replaces the deleted Makefiles and per-repo scripts with four
-  command groups: `test`, `build`, `publish` (standalone), and `run` (daemon-backed
-  verbs for `start`/`kill`/`logs`/`env`/`volume`/`ui` etc.) plus `core` for daemon
-  lifecycle. Prefer `a-novel <verb>` over equivalent raw commands wherever a 1:1
+  services. The CLI replaces the deleted Makefiles and per-repo scripts with the
+  standalone groups `test`, `build`, `publish` and `repo` (repository config,
+  rulesets and required checks), plus `run` (daemon-backed verbs for
+  `start`/`kill`/`logs`/`env`/`volume`/`ui` etc.) and `core` for daemon lifecycle. Prefer `a-novel <verb>` over equivalent raw commands wherever a 1:1
   mapping exists; lint/format/generate live in pnpm scripts (`pnpm lint:go`,
   `pnpm format:go`, ...), never in Makefiles (which no longer exist in any repo).
   Loaded automatically by `implement-feature`,

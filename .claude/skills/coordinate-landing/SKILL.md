@@ -25,6 +25,11 @@ sequence with compensating actions when a step fails. This skill is the map of t
 pieces are called, the one invariant they all serve, and the operator procedures when something needs
 a human.
 
+The contributor-facing half of this — what a held or frozen Pull Request means to the person who
+opened it — is published in
+[`a-novel-kit/.github` › docs/board-lifecycle.md](https://github.com/a-novel-kit/.github/blob/master/docs/board-lifecycle.md).
+This skill is the operator's view: the vocabulary, the invariant, and the procedures that need a human.
+
 The saga is enforced by the `a-novel-kit/workflows` governance actions, driven by two triggers: the
 per-PR / per-merge-group events, and a **reconcile sweep** that runs every ~15 minutes as a
 level-triggered, self-healing floor. Nothing here is a bespoke distributed-transaction engine — it is
