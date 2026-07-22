@@ -33,9 +33,9 @@ A later section covers recovery when an earlier branch needs to change.
 ## Phase 0: Before Writing Any Code
 
 **Check the workspace is yours.** Every checkout the task will touch must be on `master` with a
-clean tree — see `git-conventions` › Workspace Pre-Flight. A dirty tree or a foreign unmerged
-branch means another session is already working there; sync a stack of your own rather than
-building on top of their work.
+clean tree — see `git-conventions` › Workspace Hygiene. A dirty tree or a foreign unmerged branch
+means another session is already working there; sync a stack of your own rather than building on
+top of their work, and prune that stack once the work lands.
 
 **Clarify ambiguous requests first.** If the request is broad ("improve the service", "refactor
 this area") or could be interpreted multiple ways, ask one focused question before reading any code.

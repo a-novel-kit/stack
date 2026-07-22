@@ -1,10 +1,11 @@
 ---
 name: git-conventions
 description: >
-  Git workspace pre-flight, branch naming, commit message format, and workflow conventions for
-  Agora backend services. Use this skill whenever starting work in a checkout, creating a branch,
-  writing a commit message, or deciding how to group changes. Referenced by implement-feature and
-  any other skill that touches git.
+  Git workspace hygiene (clean-tree pre-flight, pruning a scratch stack), branch naming, commit
+  message format, and workflow conventions for Agora backend services. Use this skill whenever
+  starting or finishing work in a checkout, creating a branch, writing a commit message, or
+  deciding how to group changes. Referenced by implement-feature and any other skill that touches
+  git.
 ---
 
 # Git Conventions
@@ -131,7 +132,9 @@ Flag any change that:
 
 ---
 
-## Workspace Pre-Flight
+## Workspace Hygiene
+
+### Before you start
 
 **Start every task from `master`, with a clean tree, in a checkout that is yours.** Check this
 before the first edit — in the stack root and in each `app/` or `kit/` checkout the task will
@@ -163,6 +166,35 @@ work from there — see `use-a-novel-cli`.
 
 Resuming a branch **you** created earlier in the same session is your own work, not this case.
 Carry on with it.
+
+### When you are done
+
+A stack synced for one task is scratch space. Left behind it becomes a stale checkout the next
+session mistakes for real work, plus containers and volumes that outlive the machine's reboot.
+Prune it once the work has landed — the PR is merged, or the branch is pushed and nothing local
+is needed any more.
+
+Scope every teardown to your own stack. Each `run` verb takes `--stack <name>`, and target IDs
+are `<stack>/<service>/<target>`:
+
+```bash
+a-novel run ps --stack <name>                       # what is still up
+a-novel run kill <name>/<service>/<target>          # stop each running target
+a-novel run volume clear <service> --stack <name>   # destroy its volumes (auto-backs up first)
+rm -rf <stack-root>                                 # drop the checkout
+```
+
+Then remove the entry from `A_NOVEL_STACKS` and `a-novel core restart`, so the daemon stops
+discovering a path that no longer exists.
+
+The CLI creates a stack in one verb and tears one down in several: it owns the containers and the
+volumes, while the checkout on disk and the `A_NOVEL_STACKS` entry are yours to remove by hand.
+
+**Never reach for `a-novel core kill --force` as cleanup.** It tears down every service's infra
+across every registered stack, the operator's included — the exact harm the pre-flight above
+exists to prevent.
+
+The default stack is not scratch space. Prune only a stack you synced yourself.
 
 ---
 
