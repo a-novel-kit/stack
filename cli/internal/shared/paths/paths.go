@@ -62,6 +62,12 @@ func SecretsRoot() string { return filepath.Join(Data(), "secrets") }
 // Single fixed location; presence == "new daemon should replay".
 func ReinstallCheckpoint() string { return filepath.Join(State(), "reinstall.json") }
 
+// DaemonLog is where a detached daemon's own stdout/stderr goes (State()/daemon.log).
+// A backgrounded process has nowhere else to put them, and discarding them makes
+// every startup failure look identical: "did not become ready". Distinct from
+// LogsRoot(), which holds the output of the targets the daemon supervises.
+func DaemonLog() string { return filepath.Join(State(), "daemon.log") }
+
 // home returns $HOME (falls back to "/" if unset, which would be a broken
 // environment but avoids panicking inside path computation).
 func home() string {
