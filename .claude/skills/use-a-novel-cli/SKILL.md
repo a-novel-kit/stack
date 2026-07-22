@@ -185,6 +185,36 @@ is `stamp`:
 
 ---
 
+## `a-novel repo` — repository config and governance
+
+`create` scaffolds a repository from its class template; `update` reconciles an existing one. This is
+how the governance workflows, the branch rulesets, and the required-check list reach every repo — so
+after adding or renaming a job in a repo's `.github/workflows/main.yaml`, its ruleset is stale until
+`update` runs.
+
+```bash
+a-novel repo update --dry-run    # print the API operations, no writes — the agent-safe form
+a-novel repo update              # interactive, human-only: a human must run this
+a-novel repo update --all        # every whitelisted checkout present under app/ or kit/
+```
+
+Four behaviours worth knowing before running it:
+
+- **Required checks are derived, not configured.** They are the jobs in the repo's `main.yaml` (minus
+  `report-*` and master-only jobs) plus the always-required set. A new job becomes a required check on
+  the next `update`, and not before.
+- **Config comes from the working tree**, not from GitHub. Run it on an up-to-date default branch, or
+  it deploys whatever your checkout happens to hold.
+- **A checkout off its default branch is skipped**, silently and by design — reconciling from an
+  in-progress branch would push half-finished template edits fleet-wide. Check branches before `--all`,
+  or the repos you most care about are the ones quietly missed.
+- **A newer deployed pin survives.** For files pinning `a-novel-kit/workflows` actions, a version
+  already ahead of the template's is kept, so `update` never rolls back a bump Renovate landed.
+
+Agents stop at `--dry-run`: the write path refuses a non-TTY.
+
+---
+
 ## `a-novel run` — daemon-backed service operations
 
 This is the entire surface for starting, stopping, observing, and inspecting
