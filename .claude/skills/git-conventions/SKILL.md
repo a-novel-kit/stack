@@ -157,12 +157,15 @@ truth, formatted `name:/path,name:/path` with the first entry as the default; un
 `default` stack at `~/git-projects/a-novel`.
 
 ```bash
-a-novel core status                       # which stacks exist, and where
-a-novel core sync --root=/tmp/agent-stack # clone the workspace into a fresh root
+a-novel core stacks list             # which stacks exist, and what they hold
+a-novel core stacks new <name>       # clone the workspace into a fresh root
+a-novel core sync --root=<new-root>  # populate it with the whitelisted repos
 ```
 
-Add the new root to `A_NOVEL_STACKS` for daemon-backed verbs (`a-novel run …`) to reach it, then
-work from there — see `use-a-novel-cli`.
+`stacks new` puts the checkout under the OS temp directory unless `--root` says otherwise, so a
+stack nobody prunes expires instead of accumulating. Add the printed entry to `A_NOVEL_STACKS`
+and `a-novel core restart` so daemon-backed verbs (`a-novel run …`) reach it, then work from
+there — see `use-a-novel-cli`.
 
 Resuming a branch **you** created earlier in the same session is your own work, not this case.
 Carry on with it.
@@ -171,8 +174,11 @@ Carry on with it.
 
 A stack synced for one task is scratch space. Left behind it becomes a stale checkout the next
 session mistakes for real work, plus containers and volumes that outlive the machine's reboot.
-Prune it once the work has landed — the PR is merged, or the branch is pushed and nothing local
-is needed any more.
+
+**Prune it when development ends: every change reviewed and approved.** Not at push, and not at
+green CI — review turns up work, and rebuilding a stack to answer one comment costs more than
+keeping it a few hours longer. Approval is the first moment nothing further is expected of the
+checkout.
 
 ```bash
 a-novel core stacks list           # what each stack is still holding

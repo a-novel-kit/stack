@@ -436,6 +436,22 @@ payload.
 Re-requesting mid-exchange, while declines are unresolved, or with failing CI burns
 reviewer attention and signals carelessness. Don't.
 
+### 5.4 Give the workspace back
+
+Approval is where a scratch stack's life ends. Once the reviewer has approved and no
+thread is awaiting a change from you, prune the stack this work was done in:
+
+```bash
+a-novel core stacks prune <name>
+```
+
+This is the trigger `git-conventions` › Workspace Hygiene names, and it lands here
+because this skill is where approval actually arrives — a stack pruned at push time gets
+rebuilt by the first review comment.
+
+Only prune a stack you allocated. Work done in the default stack leaves nothing to
+reclaim, and `prune` refuses that one anyway.
+
 ---
 
 ## Starting your own thread
