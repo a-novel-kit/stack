@@ -416,7 +416,9 @@ Some tasks fall outside the CLI and use pnpm scripts or raw commands:
   `pnpm format:go` / `pnpm format:proto` / `pnpm format` (prettier), plus
   `pnpm generate:go` (mocks/proto stubs). Each is a one-line wrapper over the
   raw form (`go tool -modfile=golangci-lint.mod golangci-lint run ./...`,
-  `go tool buf format -w`, `go generate ./...`), so the raw forms stay valid too.
+  `go tool -modfile=buf.mod buf format -w`, `go generate ./...`), so the raw forms
+  stay valid too. Every Go tool is pinned in its own `<tool>.mod`, so each raw
+  invocation names the modfile it comes from.
 - **Direct database access**: `a-novel run exec <service>/<target> -- psql ...`.
   For a running container-mode target, the command runs inside its container
   (`podman exec`); for a go-exec or stopped target it runs on the host with the
