@@ -32,7 +32,7 @@ repo-specific or downstream of a base table entry.
 | `lint-go`                     | `golangci-lint run` clean                  | `pnpm lint:go`                | New Go code violates style or has a bug                                      |
 | `lint-proto`                  | `buf lint` clean                           | `pnpm lint:proto`             | Proto file violates buf style                                                |
 | `lint-node`                   | `pnpm lint:ci` clean                       | `pnpm lint:ci`                | JS/TS code violates eslint/prettier                                          |
-| `test`                        | Go unit tests in `/internal`               | `a-novel test --type=go -y`   | Broken Go code or test                                                       |
+| `test-go`                     | Go unit tests in `/internal`               | `a-novel test --type=go -y`   | Broken Go code or test                                                       |
 | `test-pkg`                    | Go integration tests in `/pkg/go`          | `a-novel test --type=go -y`   | gRPC contract mismatch OR flake                                              |
 | `test-pkg-js`                 | JS integration tests in `/pkg/js`          | `a-novel test --type=pnpm -y` | REST contract mismatch OR flake                                              |
 | `build-database`              | Docker build for Postgres image            | `a-novel build --type=podman` | Dockerfile error, bad init script                                            |
@@ -46,15 +46,13 @@ repo-specific or downstream of a base table entry.
 | `report-grc` / `publish-docs` | Post-success reporting, **master only**    | (none)                        | Rarely actionable; usually transient                                         |
 | `report-codecov`              | Coverage upload, runs on **every branch**  | (none)                        | Upload failure can still mark the run failed in PR checks; usually transient |
 
-`test` blocks most application `build-*` jobs (`build-grpc`, `build-rest`,
-`build-standalone-*`, `build-job-rotate-keys`); when it fails they are cancelled, so fix `test`
-first. `build-database` does **not** depend on `test`, and `build-migrations` depends only on
+`test-go` blocks most application `build-*` jobs (`build-grpc`, `build-rest`,
+`build-standalone-*`, `build-job-rotate-keys`); when it fails they are cancelled, so fix `test-go`
+first. `build-database` does **not** depend on `test-go`, and `build-migrations` depends only on
 `build-database`, so failures in those two surface independently and need their own diagnosis.
 
-**Name a new job by its lane.** A check context is always lane-suffixed — `test-go`, `test-node`,
-`lint-go`, `lint-node`, `lint-proto`, `generated-go` — never a bare verb. A repo holding both Go and
-JS cannot have two jobs called `test`, and the repo-config discovery map cannot tell which lane a
-bare `test` belongs to. The bare `test` above is legacy, still emitted by repos not yet migrated.
+Check contexts are lane-suffixed (`test-go`, `lint-node`, …); `write-github-actions` owns that rule
+and the reasons for it. A repo not yet migrated may still emit a bare `test`.
 
 ---
 
@@ -210,7 +208,7 @@ Use a `fix(<scope>): resolve lint findings` commit for trivial mechanical change
 commits unconditionally, so a noisy `fix(lint): ...` follow-up is the right call; under
 squash-merge the PR author squashes or absorbs it at merge time.
 
-### 2.3 `test` (Go unit) failure
+### 2.3 `test-go` (Go unit) failure
 
 **Symptom**: `--- FAIL: TestXxx` in the log, optionally a stack trace.
 
@@ -399,7 +397,7 @@ self-review surfaced that you did not fix yourself.
 | `lint-go`      | `pnpm lint:go`                        |
 | `lint-proto`   | `pnpm lint:proto`                     |
 | `lint-node`    | `pnpm lint:ci`                        |
-| `test`         | `a-novel test --type=go -y`           |
+| `test-go`      | `a-novel test --type=go -y`           |
 | `test-pkg`     | `a-novel test --type=go -y`           |
 | `test-pkg-js`  | `a-novel test --type=pnpm -y`         |
 | `build-js`     | `pnpm -C pkg/js build:rest`           |
