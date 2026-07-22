@@ -207,6 +207,33 @@ func TestUnpushedCommitsNoUpstream(t *testing.T) {
 	}
 }
 
+// TestDryRunVerdict pins that a dry run reports rather than refuses. An earlier
+// revision errored out on a blocked stack, which answered "what would this do?"
+// with neither the plan nor the reason.
+func TestDryRunVerdict(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		blockers []string
+		force    bool
+		want     string
+	}{
+		{name: "clean stack", want: "nothing changed"},
+		{name: "blocked stack reports the refusal", blockers: []string{"golib: uncommitted changes"}, want: "would refuse"},
+		{name: "force overrides the refusal", blockers: []string{"golib: uncommitted changes"}, force: true, want: "nothing changed"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := dryRunVerdict(tc.blockers, tc.force); !strings.Contains(got, tc.want) {
+				t.Errorf("dryRunVerdict = %q, want it to mention %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPruneBlockers(t *testing.T) {
 	t.Parallel()
 

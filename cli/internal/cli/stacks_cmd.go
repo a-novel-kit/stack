@@ -70,7 +70,8 @@ leftovers from a finished session.`,
 				return err
 			}
 			out := cmd.OutOrStdout()
-			_, _ = fmt.Fprintf(out, "  %-20s %-40s %8s %8s\n", "NAME", "PATH", "TARGETS", "VOLUMES")
+			_, _ = fmt.Fprintf(out, "  %-20s %-40s %8s %8s %8s\n",
+				"NAME", "PATH", "TARGETS", "INFRA", "VOLUMES")
 			for _, st := range resp.GetStacks() {
 				marker := " "
 				if st.GetIsDefault() {
@@ -80,9 +81,14 @@ leftovers from a finished session.`,
 				if err != nil {
 					return err
 				}
-				_, _ = fmt.Fprintf(out, "%s %-20s %-40s %8s %8d\n",
+				// Infra gets its own column: a stack whose only live container is
+				// its database would otherwise read as "0 up" — idle — while
+				// still holding a host port.
+				_, _ = fmt.Fprintf(out, "%s %-20s %-40s %8s %8s %8d\n",
 					marker, st.GetName(), st.GetPath(),
-					fmt.Sprintf("%d up", len(held.liveTargets)), len(held.volumes))
+					fmt.Sprintf("%d up", len(held.liveTargets)),
+					fmt.Sprintf("%d up", held.liveInfra),
+					len(held.volumes))
 			}
 			return nil
 		},
@@ -259,20 +265,25 @@ func pruneOne(
 		return err
 	}
 	blockers := pruneBlockers(root)
-	if len(blockers) > 0 && !opts.force {
-		return fmt.Errorf("holds work that exists nowhere else (%s) — push it, or --force to discard",
-			strings.Join(blockers, "; "))
-	}
 
 	_, _ = fmt.Fprintf(out, "▸ %s (%s)\n", name, root)
 	_, _ = fmt.Fprintf(out, "  %d target(s) up, %d infra container(s), %d volume(s), %d service(s)\n",
 		len(held.liveTargets), held.liveInfra, len(held.volumes), len(held.services))
 	for _, b := range blockers {
-		_, _ = fmt.Fprintf(out, "  ! discarding: %s\n", b)
+		verb := "holds"
+		if opts.force {
+			verb = "discarding"
+		}
+		_, _ = fmt.Fprintf(out, "  ! %s: %s\n", verb, b)
 	}
+
 	if opts.dryRun {
-		_, _ = fmt.Fprintln(out, "  (dry run — nothing changed)")
+		_, _ = fmt.Fprintf(out, "  %s\n", dryRunVerdict(blockers, opts.force))
 		return nil
+	}
+	if len(blockers) > 0 && !opts.force {
+		return fmt.Errorf("holds work that exists nowhere else (%s) — push it, or --force to discard",
+			strings.Join(blockers, "; "))
 	}
 	if !opts.yes && !confirm(cmd, fmt.Sprintf("  Prune %s and everything it holds?", name)) {
 		_, _ = fmt.Fprintln(out, "  skipped")
@@ -302,6 +313,17 @@ func pruneOne(
 	_, _ = fmt.Fprintf(out, "  ✓ reclaimed %s\n", root)
 	_, _ = fmt.Fprintf(out, "  ! drop from %s: %s:%s\n", stacks.EnvVar, name, root)
 	return nil
+}
+
+// dryRunVerdict is what a dry run reports instead of acting. A dry run changes
+// nothing, so a blocked stack gets the reason it would stop rather than an
+// error — the question asked was what would happen, and "it would refuse, here
+// is why" answers it where a non-zero exit does not.
+func dryRunVerdict(blockers []string, force bool) string {
+	if len(blockers) > 0 && !force {
+		return "(dry run — would refuse: unsaved work above; --force overrides)"
+	}
+	return "(dry run — nothing changed)"
 }
 
 // pruneBlockers lists the reasons a stack's checkouts should outlive the prune,
