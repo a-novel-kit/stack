@@ -152,6 +152,23 @@ work-in-progress is invisible to you, and `stash`, `reset`, `checkout -f`, or br
 it can destroy hours of work that exists nowhere else. Leave it untouched and take a checkout of
 your own.
 
+**A clean pre-flight expires immediately.** It proves the checkout was free at that instant, and a
+checkout has exactly one HEAD with nothing holding it: a parallel session that runs `git checkout`
+between your `checkout -b` and your `commit` lands your commit on whatever branch it moved you to,
+and its own `reset` can then unlink it. For anything longer than a couple of commands, work in a
+worktree of your own instead — git refuses to check out a branch already checked out elsewhere, so
+the branch cannot be taken from you mid-task, and the shared object store keeps every commit you
+have already made.
+
+```bash
+git worktree add <path-outside-the-repo> <branch>
+```
+
+If a collision already happened, nothing is lost: the commit is unreferenced, not deleted. Find it
+in `git reflog`, point your branch at it with `git branch -f <branch> <sha>`, and put local `master`
+back with `git branch -f master origin/master`. Clear your own stray files out of the shared tree so
+the other session does not commit them, and leave everything of theirs alone.
+
 The daemon manages as many stacks as the machine supports. `A_NOVEL_STACKS` is its source of
 truth, formatted `name:/path,name:/path` with the first entry as the default; unset means a single
 `default` stack at `~/git-projects/a-novel`.
