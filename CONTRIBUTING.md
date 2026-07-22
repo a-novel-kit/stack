@@ -23,6 +23,12 @@ The CLI's own vocabulary. Terms borrowed from service anatomy — **target**, **
 - `cli/` — the CLI's Go module (`github.com/a-novel-kit/stack/cli`). Commands live under `cli/internal/cli/` as Cobra subcommands.
 - `app/`, `kit/` — checkouts of the repos the CLI operates on. Gitignored and populated by `a-novel core sync`; never commit inside them.
 
+## Agent skills
+
+The skill documents live in `.agents/skills/`, the shared path the Agent Skills standard defines. Codex and Copilot scan it directly. Claude Code scans only `.claude/skills`, so that path is a symlink into the same directory — one source, no copies to keep in sync. Add a skill at `.agents/skills/<name>/SKILL.md` and every agent picks it up.
+
+Git records that link as a symlink, so a Windows checkout needs symlink support to reproduce it: enable Developer Mode, or install Git with its "Enable symbolic links" option. Without it the path arrives as a plain file holding the target and Claude Code finds no skills, while Codex and Copilot keep reading `.agents/skills`. Staging that file would turn the link into a regular blob for everyone, so `pnpm lint:symlinks` checks the recorded mode and fails on it.
+
 ## Adding a command
 
 A new command is a Cobra subcommand under `cli/internal/cli/` (a `*_cmd.go` file), wired into the right parent — `core` (lifecycle), `run` (daemon-backed verbs), or top-level (`test` / `build` / `publish`). Lint, format, and generate stay as `pnpm` scripts, not CLI verbs.
