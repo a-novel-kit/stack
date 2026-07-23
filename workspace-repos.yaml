@@ -11,9 +11,11 @@ repos:
   - a-novel-kit/golib
   - a-novel-kit/nodelib
   - a-novel-kit/jwt
+  - a-novel-kit/uikit
   - a-novel-kit/workflows
   - a-novel/.github
   - a-novel/service-template
+  - a-novel/platform-template
   - a-novel/service-json-keys
   - a-novel/service-authentication
   - a-novel/service-narrative-engine

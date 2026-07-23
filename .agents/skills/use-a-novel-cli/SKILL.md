@@ -189,6 +189,12 @@ how the governance workflows, the branch rulesets, and the required-check list r
 after adding or renaming a job in a repo's `.github/workflows/main.yaml`, its ruleset stays stale
 until `update` runs.
 
+The **class** is inferred from the repo name: `service-*` → a Go backend service, `platform-*` → a
+SvelteKit frontend platform (a _terminal_ app — it ships a container image and a healthcheck route but
+exports no package), `workflows` / `.github` → the shared-CI and meta repos, everything else → a shared
+library (`golib`, `nodelib`, `jwt`, `stack`). A repo needing a different class carries a
+`repos/<org>_<repo>.yaml` override, which wins over the name-based guess.
+
 ```bash
 a-novel repo update --dry-run    # print the API operations, no writes — the agent-safe form
 a-novel repo update              # interactive, human-only: a human must run this
@@ -217,6 +223,10 @@ Agents stop at `--dry-run`: the write path refuses a non-TTY.
 The entire surface for starting, stopping, observing, and inspecting locally-running
 services. Requires the a-novel daemon (`a-novel core start`; lives in `~/.zshrc`
 after `a-novel core setup`).
+
+Run it from a single repo, or from the stack root — where it fans out across every `app/service-*`
+**and** `app/platform-*` checkout, so a platform's dev-server `run`/`run:*` script shows up in the
+picker beside the services' targets.
 
 ### Lifecycle
 

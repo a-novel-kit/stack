@@ -24,7 +24,7 @@ a-novel
 ├── publish       standalone — release doc helpers (releases run in CI)
 │   └── stamp <prefix> <file>           refresh vX.Y.Z references in doc files
 ├── repo          standalone — GitHub repo configuration (interactive, human-only)
-│   ├── create <org> <name>             create a repo and apply its class config
+│   ├── create <org> <name>             create a repo (class: service|platform|library|…) + apply config
 │   └── update                          reconcile the current repo to its class template
 ├── secrets       standalone — local, encrypted secrets manager (child-env only)
 │   ├── init                            create the local key + store dir
