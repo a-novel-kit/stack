@@ -31,9 +31,13 @@ same — speak on the thread so the reviewer sees your reasoning and can push ba
 
 Two rules anchor the loop; the rest of this skill is their mechanics:
 
-1. **Clear-cut → resolve.** A thread you have decisively answered — accepted (and pushed the fix) or
-   declined (with a defensible reason) — is settled. Resolve it. An open thread signals a real
-   decision pending, not a pending audit trail. The reviewer can re-open with new information.
+1. **Clear-cut → reply _and_ resolve, in the same action.** A thread you have decisively answered —
+   accepted (and pushed the fix) or declined (with a defensible reason) — is settled. Reply, then
+   resolve it right then; the resolve is not a later step. A "fixed in `<sha>`" reply that leaves the
+   thread **open** is the defect this rule exists to stop — it forces the reviewer to re-read work
+   that is already done and to close threads you should have closed. An open thread must mean a real
+   decision is still pending, never "answered but not yet resolved." The reviewer can re-open with new
+   information.
 2. **Genuinely unclear or worth discussing → reply with a specific question, leave open.**
    Silence is the worst option; acting on partial understanding is the second-worst.
 

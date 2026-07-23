@@ -166,15 +166,22 @@ parent first and make sure its PR is open.
 
 ## Phase 3: Decide PR Status (Ready vs. Draft)
 
-Open as **draft** when any of these apply:
+**Ready for review is the default. Draft is the narrow exception, only for a reason below.**
+Finished work with passing tests and a green tree is review-ready — open it ready. Do **not**
+default to draft "to be safe": a draft withholds the PR from the reviewer, and leaving
+review-ready work in draft is exactly the failure this phase exists to prevent.
+
+Open as **draft** only when one of these genuinely holds:
 
 - The developer explicitly said "draft" or "WIP"
-- The branch is one of several stacked branches still being built — usually only the tip
-  branch is ready for review
-- The branch intentionally omits tests, docs, or a related layer coming later
-- The developer wants early feedback on direction before a full review
+- The branch is a non-tip link in a stack still being built — only the tip is review-ready
+- The branch intentionally omits tests, docs, or a related layer landing in a later PR
+- The developer wants early directional feedback before a full review
 
-Otherwise open as **ready for review** (default).
+If none of these hold, open **ready for review**. And a draft is not a resting state — it is a
+standing claim that one of the reasons above still applies. It is something you _own and must
+clear_, never something you leave behind. The moment the claim stops being true, flip it to ready
+(Phase 6).
 
 ```bash
 gh pr create --draft ...   # draft
@@ -356,6 +363,22 @@ gh pr ready --undo
 
 When the change is code, push new commits instead — the PR updates automatically. Never
 close and re-open a PR to change its code; that loses review comments and CI history.
+
+### 6.1 Flip a draft to ready the moment it qualifies (mandatory)
+
+A draft exists for a Phase 3 reason. **Every time you push to a draft PR, re-check whether that
+reason still holds** — status is not decided once at creation and forgotten. When the latest work
+makes the branch review-ready — the stacked parent merged, the omitted tests/docs/layer landed,
+the requested directional feedback incorporated, the WIP finished — flip it in the same turn:
+
+```bash
+gh pr ready   # then apply Phase 5.5 tracking metadata: board + milestone + labels
+```
+
+**Never end a turn with review-ready work sitting in a draft PR.** If the branch is done and green
+and no Phase 3 reason still applies, the PR is ready — say so and run `gh pr ready`. Silently
+leaving it draft withholds it from the reviewer and stalls the task; waiting for the user to say
+"flip it" is the failure, not the courtesy.
 
 ---
 
