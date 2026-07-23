@@ -145,7 +145,7 @@ rulesets, Pages. Interactive (human-only); run it from anywhere.`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&class, "class", "", "class (service|library|workflows|meta); a repos/<org>_<repo>.yaml override wins")
+	cmd.Flags().StringVar(&class, "class", "", "class (service|platform|library|workflows|meta); a repos/<org>_<repo>.yaml override wins")
 	cmd.Flags().StringVar(&description, "description", "", "repository description")
 	cmd.Flags().StringVar(&template, "template", "", "create from this org template repo (e.g. service-template)")
 	cmd.Flags().BoolVar(&private, "private", false, "create a private repository (default public)")
@@ -235,7 +235,7 @@ confirm gates the whole batch.`,
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the API operations that would run, without applying")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "with --dry-run, emit the plan(s) as JSON")
-	cmd.Flags().StringVar(&class, "class", "", "class (service|library|workflows|meta); a repos/<org>_<repo>.yaml override wins")
+	cmd.Flags().StringVar(&class, "class", "", "class (service|platform|library|workflows|meta); a repos/<org>_<repo>.yaml override wins")
 	cmd.Flags().BoolVar(&all, "all", false, "reconcile every pulled workspace repo (stack + app/ + kit/) in one run")
 	cmd.Flags().StringSliceVar(&exclude, "exclude", nil,
 		"with --all, skip these repos (<org>/<name> or bare <name>); may be repeated")

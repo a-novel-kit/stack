@@ -1,0 +1,37 @@
+# Frontend platform (SvelteKit app). The client-side deployed-app analogue of a
+# service: it ships as a container, consumes the private @a-novel / @a-novel-kit
+# packages, and runs the same node-audit + CodeQL (javascript-typescript, keyed
+# off package.json) checks any JS/TS repo gets. Used by platform-template and the
+# platform-* apps it spawns.
+class: platform
+features:
+  issues: true
+  wiki: false
+  projects: true
+  discussions: true
+merge:
+  squash: true
+  merge_commit: false
+  rebase: false
+  auto_merge: true
+  delete_branch_on_merge: true
+  allow_update_branch: true
+  signoff_required: true
+security:
+  secret_scanning: true
+  push_protection: true
+  # Same rationale as the service class: Dependabot security updates are redundant
+  # with the node-audit workflow and fail on the private @a-novel / @a-novel-kit
+  # deps a platform consumes, which Dependabot has no registry token for.
+  dependabot: false
+codeql:
+  enabled: true
+  query_suite: security-and-quality
+# A platform deploys as a container, not a Pages site; its component docs live in
+# the uikit's Storybook, not here.
+pages: false
+code_quality: true
+rulesets:
+  master: true
+  require_approval: true
+  tags: true

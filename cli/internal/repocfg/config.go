@@ -38,6 +38,7 @@ type Class string
 
 const (
 	ClassService   Class = "service"
+	ClassPlatform  Class = "platform"
 	ClassLibrary   Class = "library"
 	ClassWorkflows Class = "workflows"
 	ClassMeta      Class = "meta"
@@ -45,14 +46,13 @@ const (
 
 // AllClasses is the ordered set of known classes (for the UI picker and
 // flag validation).
-var AllClasses = []Class{ClassService, ClassLibrary, ClassWorkflows, ClassMeta}
+var AllClasses = []Class{ClassService, ClassPlatform, ClassLibrary, ClassWorkflows, ClassMeta}
 
 // DetectClass infers a repo's class from its name, used when neither a
 // repos/<org>_<repo>.yaml override nor the --class flag is given. The
 // strong-semantic classes match exact names (workflows, .github), the service-*
-// family is the service class, and everything else falls to the freeform
-// library default — including platform-* frontends, which have no conventions
-// of their own yet and need an explicit override.
+// and platform-* families map to the service and platform classes, and
+// everything else falls to the freeform library default.
 func DetectClass(repo string) Class {
 	switch {
 	case repo == "workflows":
@@ -61,6 +61,8 @@ func DetectClass(repo string) Class {
 		return ClassMeta
 	case strings.HasPrefix(repo, "service-"):
 		return ClassService
+	case strings.HasPrefix(repo, "platform-"):
+		return ClassPlatform
 	default:
 		return ClassLibrary
 	}
