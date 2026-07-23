@@ -353,13 +353,31 @@ func resolveBackup(dir, from string) (string, error) {
 		return "", fmt.Errorf("read backups dir %s: %w", dir, err)
 	}
 	if from != "" {
-		// A prefix match covers both `<ts>.tar.zst` and `<ts>.<tag>.tar.zst`.
+		// A prefix match covers both `<ts>.tar.zst` and `<ts>.<tag>.tar.zst`. A bare
+		// timestamp matches every tagged variant of it, so returning the first — which
+		// os.ReadDir sorts by name, putting .auto-pre-clear ahead of the plain
+		// archive — restores something other than what the operator named. An
+		// ambiguous prefix is an error they resolve with a fuller name; a full
+		// filename prefix-matches only itself.
+		var matches []string
+
 		for _, e := range entries {
 			if strings.HasPrefix(e.Name(), from) && strings.HasSuffix(e.Name(), ".tar.zst") {
-				return filepath.Join(dir, e.Name()), nil
+				matches = append(matches, e.Name())
 			}
 		}
-		return "", fmt.Errorf("no backup matching timestamp %q", from)
+
+		switch len(matches) {
+		case 0:
+			return "", fmt.Errorf("no backup matching timestamp %q", from)
+		case 1:
+			return filepath.Join(dir, matches[0]), nil
+		default:
+			sort.Strings(matches)
+
+			return "", fmt.Errorf("timestamp %q matches %d backups (%s); pass a longer prefix to pick one",
+				from, len(matches), strings.Join(matches, ", "))
+		}
 	}
 	// Newest by mtime.
 	type cand struct {
