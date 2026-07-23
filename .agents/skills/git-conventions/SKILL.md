@@ -271,6 +271,12 @@ EOF
   diff cannot — see [Body](#body).
 - **One logical unit per commit.** A DAO file + its test = one commit; a migration file = one
   commit. Never combine DAO + service in a single commit.
+- **Stage explicit paths — never `git add -A` / `git add .`.** These checkouts keep sibling
+  worktrees under an untracked `tmp/` (see [Before you start](#before-you-start)). A blanket add
+  stages each `tmp/wt-*` as an embedded-repo **gitlink** — a bogus submodule ref that rides your
+  commit onto `master` if it slips through review. `git show --stat HEAD` betrays it as a
+  `tmp/wt-… | 1 +` line. Name the files the logical unit touched; the `git add …` in this workflow
+  is a list on purpose.
 - **Generated files belong in the same commit as the change that required them.** Proto Go bindings
   (`internal/models/proto/gen/`) and mocks (`internal/handlers/mocks/`, `internal/core/mocks/`)
   never get their own commit — stage them with the `.proto` or interface change that required
