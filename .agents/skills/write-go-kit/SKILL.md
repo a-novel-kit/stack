@@ -134,7 +134,7 @@ Once graduated, the package is a **public, community-facing library**, and the r
   the slice a-novel happens to use: `jwt` implements JWA / JWE / JWK / JWS / JWP, not only the two
   token flows the auth service needs. Design the exported surface as if strangers will build on it.
 - **A real documentation site, not just godoc.** `jwt` has a `docs/` directory published to GitHub
-  Pages. The README carries badges (Go version, CI status, codecov, Go Report Card), a `go get`
+  Pages. The README carries badges (Go version, CI status, codecov), a `go get`
   line, and a link to the docs site.
 - **Thorough tests + coverage gates.** A `codecov.yml`, high coverage, and `Example_xxx` /
   `ExampleType_method` functions for the public API — those render on pkg.go.dev _and_ run as

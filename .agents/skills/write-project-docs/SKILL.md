@@ -72,8 +72,8 @@ whose CI uploads coverage.
 
 | Repo type                | Tech badges (in order)                                                       | Codecov? |
 | ------------------------ | ---------------------------------------------------------------------------- | -------- |
-| Go service (`service-*`) | go-mod version · file count · code size · CI status · Go Report Card         | yes      |
-| Go library (`golib`)     | go-mod version · file count · code size · CI status · Go Report Card         | no       |
+| Go service (`service-*`) | go-mod version · file count · code size · CI status                          | yes      |
+| Go library (`golib`)     | go-mod version · file count · code size · CI status                          | no       |
 | JS package (`nodelib`)   | file count · code size · CI status                                           | yes      |
 | Actions (`workflows`)    | file count · code size · CI status                                           | no       |
 | CLI (`stack`)            | go-mod version (`?filename=cli/go.mod`) · file count · code size · CI status | no       |
@@ -580,7 +580,6 @@ inputs from Phase 1 before writing the file; an unresolved `{{…}}` in the outp
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/{{repo-path}})
 
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/{{repo-path}}/{{main-workflow-file}})
-[![Go Report Card](https://goreportcard.com/badge/github.com/{{repo-path}})](https://goreportcard.com/report/github.com/{{repo-path}})
 [![codecov](https://codecov.io/gh/{{repo-path}}/graph/badge.svg)](https://codecov.io/gh/{{repo-path}}) <!-- TODO(project-docs): if this repo requires a tokenized Codecov badge, append `?token=<codecov-graph-token>` to the badge URL above using the value from codecov.io/gh/{{repo-path}}/settings > Badge -->
 
 ![Coverage graph](https://codecov.io/gh/{{repo-path}}/graphs/sunburst.svg) <!-- TODO(project-docs): if this repo requires a tokenized Codecov sunburst, append `?token=<codecov-graph-token>` to the image URL above -->
@@ -830,7 +829,6 @@ path segments). Parameters are marked with `{{…}}`.
 | File count               | `![GitHub repo file or directory count](https://img.shields.io/github/directory-file-count/{{repo-path}})`                                                                                                                           |
 | Code size                | `![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/{{repo-path}})`                                                                                                                                      |
 | CI workflow status       | `![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/{{repo-path}}/{{main-workflow-file}})`                                                                                                      |
-| Go Report Card           | `[![Go Report Card](https://goreportcard.com/badge/github.com/{{repo-path}})](https://goreportcard.com/report/github.com/{{repo-path}})`                                                                                             |
 | Codecov badge            | Default (no token): `[![codecov](https://codecov.io/gh/{{repo-path}}/graph/badge.svg)](https://codecov.io/gh/{{repo-path}})` — add `?token={{codecov-graph-token}}` to the badge URL only when the repo requires a tokenized variant |
 | Codecov sunburst         | Default (no token): `![Coverage graph](https://codecov.io/gh/{{repo-path}}/graphs/sunburst.svg)` — add `?token={{codecov-graph-token}}` to the image URL only when a tokenized variant is required                                   |
 
