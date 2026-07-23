@@ -243,6 +243,64 @@ func TestCommitSync(t *testing.T) {
 		}
 	})
 
+	t.Run("empty repo bootstraps a parentless root commit", func(t *testing.T) {
+		// A freshly created repo has no commit: the ref read answers 409 "empty".
+		// The sync must lay the additions down via the Git Data API (blob → tree
+		// → parentless commit → ref), never the createCommitOnBranch mutation.
+		orig := ghStdin
+		t.Cleanup(func() { ghStdin = orig })
+		var calls []string
+		ghStdin = func(stdin string, args ...string) (string, error) {
+			j := strings.Join(args, " ")
+			if stdin != "" {
+				j += " " + stdin
+			}
+			calls = append(calls, j)
+			switch {
+			case strings.Contains(j, "git/ref/heads/master"):
+				return "", errors.New("exit 1: gh: Git Repository is empty. (HTTP 409)")
+			case strings.Contains(j, "git/blobs"):
+				return "blobsha\n", nil
+			case strings.Contains(j, "git/trees"):
+				return "treesha\n", nil
+			case strings.Contains(j, "git/commits"):
+				return "c0mm1t5ha0000\n", nil
+			default: // git/refs create, and anything else
+				return "", nil
+			}
+		}
+
+		detail, err := commitSync("o", "r", branchMaster, changes)
+		if err != nil {
+			t.Fatalf("commitSync on empty repo: %v", err)
+		}
+		if detail != "c0mm1t5" {
+			t.Fatalf("detail = %q, want the short root-commit id", detail)
+		}
+		joined := strings.Join(calls, "\n")
+		for _, w := range []string{
+			"api -X POST repos/o/r/git/blobs", // one blob for the added file
+			`"encoding":"base64"`,             // ...carrying its content as base64
+			"api -X POST repos/o/r/git/trees", // a tree over the blobs
+			`"parents":[]`,                    // a parentless root commit
+			"api -X POST repos/o/r/git/refs",  // the branch ref create
+			`"ref":"refs/heads/master"`,       // ...pointed at the root commit
+		} {
+			if !strings.Contains(joined, w) {
+				t.Errorf("expected a bootstrap call containing %q; calls:\n%s", w, joined)
+			}
+		}
+		// The GraphQL mutation cannot commit without a branch, so it must not run.
+		if strings.Contains(joined, "api graphql") {
+			t.Errorf("empty-repo bootstrap must not use createCommitOnBranch; calls:\n%s", joined)
+		}
+		// A root commit has nothing to delete, so the staged CODEOWNERS deletion
+		// is dropped rather than sent as a phantom tree entry.
+		if strings.Contains(joined, `"path":"CODEOWNERS"`) {
+			t.Errorf("root commit must not carry a deletion; calls:\n%s", joined)
+		}
+	})
+
 	t.Run("stale branch tip retries once with a fresh oid", func(t *testing.T) {
 		orig := ghStdin
 		t.Cleanup(func() { ghStdin = orig })
