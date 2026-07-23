@@ -243,10 +243,11 @@ func TestCommitSync(t *testing.T) {
 		}
 	})
 
-	t.Run("empty repo bootstraps a parentless root commit", func(t *testing.T) {
-		// A freshly created repo has no commit: the ref read answers 409 "empty".
-		// The sync must lay the additions down via the Git Data API (blob → tree
-		// → parentless commit → ref), never the createCommitOnBranch mutation.
+	t.Run("empty repo seeds the first commit via the Contents API", func(t *testing.T) {
+		// A freshly created repo has no commit: the ref read answers 409 "empty",
+		// and so would the Git Data blob/tree/commit endpoints. Only the Contents
+		// API can create the first commit, so the single added file must land
+		// through a PUT .../contents/... , never createCommitOnBranch.
 		orig := ghStdin
 		t.Cleanup(func() { ghStdin = orig })
 		var calls []string
@@ -259,45 +260,76 @@ func TestCommitSync(t *testing.T) {
 			switch {
 			case strings.Contains(j, "git/ref/heads/master"):
 				return "", errors.New("exit 1: gh: Git Repository is empty. (HTTP 409)")
-			case strings.Contains(j, "git/blobs"):
-				return "blobsha\n", nil
-			case strings.Contains(j, "git/trees"):
-				return "treesha\n", nil
-			case strings.Contains(j, "git/commits"):
-				return "c0mm1t5ha0000\n", nil
-			default: // git/refs create, and anything else
+			case strings.Contains(j, "PUT repos/o/r/contents/"):
+				return "c0mm1t5ha0000\n", nil // .commit.sha
+			default:
 				return "", nil
 			}
 		}
 
-		detail, err := commitSync("o", "r", branchMaster, changes)
+		// One added file; the CODEOWNERS deletion in `changes` must be dropped.
+		detail, err := commitSync("o", "r", branchMaster, changes[:1])
 		if err != nil {
 			t.Fatalf("commitSync on empty repo: %v", err)
 		}
 		if detail != "c0mm1t5" {
-			t.Fatalf("detail = %q, want the short root-commit id", detail)
+			t.Fatalf("detail = %q, want the short seed-commit id", detail)
 		}
 		joined := strings.Join(calls, "\n")
 		for _, w := range []string{
-			"api -X POST repos/o/r/git/blobs", // one blob for the added file
-			`"encoding":"base64"`,             // ...carrying its content as base64
-			"api -X POST repos/o/r/git/trees", // a tree over the blobs
-			`"parents":[]`,                    // a parentless root commit
-			"api -X POST repos/o/r/git/refs",  // the branch ref create
-			`"ref":"refs/heads/master"`,       // ...pointed at the root commit
+			"api -X PUT repos/o/r/contents/.github/workflows/codeql.yml", // the seed file
+			`"branch":"master"`, // ...onto the default branch
+			`"content":"`,       // ...carrying its base64 content
 		} {
 			if !strings.Contains(joined, w) {
-				t.Errorf("expected a bootstrap call containing %q; calls:\n%s", w, joined)
+				t.Errorf("expected a Contents-API seed call containing %q; calls:\n%s", w, joined)
 			}
 		}
-		// The GraphQL mutation cannot commit without a branch, so it must not run.
+		// The mutation cannot commit without a branch, so it must not be reached.
 		if strings.Contains(joined, "api graphql") {
-			t.Errorf("empty-repo bootstrap must not use createCommitOnBranch; calls:\n%s", joined)
+			t.Errorf("empty-repo seed must not use createCommitOnBranch; calls:\n%s", joined)
 		}
-		// A root commit has nothing to delete, so the staged CODEOWNERS deletion
-		// is dropped rather than sent as a phantom tree entry.
-		if strings.Contains(joined, `"path":"CODEOWNERS"`) {
-			t.Errorf("root commit must not carry a deletion; calls:\n%s", joined)
+	})
+
+	t.Run("empty repo seeds one file then syncs the rest", func(t *testing.T) {
+		// With more than one added file the first seeds the initial commit via the
+		// Contents API; the branch then exists, so the remainder land in one
+		// normal createCommitOnBranch mutation.
+		orig := ghStdin
+		t.Cleanup(func() { ghStdin = orig })
+		var puts, mutations, headReads int
+		ghStdin = func(_ string, args ...string) (string, error) {
+			j := strings.Join(args, " ")
+			switch {
+			case strings.Contains(j, "git/ref/heads/master"):
+				headReads++
+				if headReads == 1 {
+					return "", errors.New("exit 1: gh: Git Repository is empty. (HTTP 409)")
+				}
+				return "seedoid\n", nil // the seed commit is now the tip
+			case strings.Contains(j, "PUT repos/o/r/contents/"):
+				puts++
+				return "seedcommit123\n", nil
+			case strings.Contains(j, "api graphql"):
+				mutations++
+				return "restcommit456\n", nil
+			}
+			return "", nil
+		}
+
+		twoAdds := []contentChange{
+			{path: ".github/workflows/codeql.yml", content: "name: CodeQL\n", outcome: opCreated},
+			{path: ".github/CODEOWNERS", content: "* @team\n", outcome: opCreated},
+		}
+		detail, err := commitSync("o", "r", branchMaster, twoAdds)
+		if err != nil {
+			t.Fatalf("commitSync on empty repo (2 files): %v", err)
+		}
+		if puts != 1 || mutations != 1 {
+			t.Fatalf("got %d Contents PUT / %d mutation(s), want 1 / 1", puts, mutations)
+		}
+		if detail != "restcom" {
+			t.Fatalf("detail = %q, want the short id of the follow-up sync commit", detail)
 		}
 	})
 
