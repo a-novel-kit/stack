@@ -28,12 +28,12 @@ func DetectRun(root string) ([]Target, error) {
 		return nil, err
 	}
 
-	// Global mode: a stack root containing `app/service-*` checkouts fans out
-	// across every service repo, since the stack itself holds no service
-	// entrypoints. Without such checkouts the scan stays within the single
-	// repo at root.
+	// Global mode: a stack root containing `app/service-*` or `app/platform-*`
+	// checkouts fans out across every app repo, since the stack itself holds no
+	// entrypoints. Without such checkouts the scan stays within the single repo
+	// at root.
 	walkRoots := []string{absRoot}
-	if rs := globalServiceRoots(absRoot); len(rs) > 0 {
+	if rs := globalAppRoots(absRoot); len(rs) > 0 {
 		walkRoots = rs
 	}
 
@@ -87,11 +87,11 @@ func DetectRun(root string) ([]Target, error) {
 	return targets, nil
 }
 
-// globalServiceRoots auto-detects a stack-root scan: the directory contains
-// `app/service-*` subdirectories (each its own git repo). Returns those
-// service-repo paths, or nil if the root is not a stack. Platforms
-// (`platform-*`) and non-service dirs under app/ are ignored.
-func globalServiceRoots(absRoot string) []string {
+// globalAppRoots auto-detects a stack-root scan: the directory contains
+// `app/service-*` or `app/platform-*` subdirectories (each its own git repo).
+// Returns those app-repo paths, or nil if the root is not a stack. Other dirs
+// under app/ are ignored.
+func globalAppRoots(absRoot string) []string {
 	appDir := filepath.Join(absRoot, "app")
 	info, err := os.Stat(appDir)
 	if err != nil || !info.IsDir() {
@@ -103,16 +103,18 @@ func globalServiceRoots(absRoot string) []string {
 	}
 	var roots []string
 	for _, e := range entries {
-		if !e.IsDir() || !strings.HasPrefix(e.Name(), "service-") {
+		name := e.Name()
+		isAppRepo := strings.HasPrefix(name, "service-") || strings.HasPrefix(name, "platform-")
+		if !e.IsDir() || !isAppRepo {
 			continue
 		}
-		svc := filepath.Join(appDir, e.Name())
+		repo := filepath.Join(appDir, name)
 		// Only its own git repo counts, guarding against an unrelated
-		// `app/service-something/` directory that happens to share the name.
-		if _, err := os.Stat(filepath.Join(svc, ".git")); err != nil {
+		// `app/<name>/` directory that happens to share the prefix.
+		if _, err := os.Stat(filepath.Join(repo, ".git")); err != nil {
 			continue
 		}
-		roots = append(roots, svc)
+		roots = append(roots, repo)
 	}
 	sort.Strings(roots)
 	return roots

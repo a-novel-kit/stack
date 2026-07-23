@@ -31,7 +31,8 @@ func TestDetectClass(t *testing.T) {
 		"golib":                  ClassLibrary,
 		"stack":                  ClassLibrary,
 		"nodelib":                ClassLibrary,
-		"platform-web":           ClassLibrary, // platform not modelled yet → default
+		"platform-web":           ClassPlatform,
+		"platform-studio":        ClassPlatform,
 	}
 	for repo, want := range cases {
 		t.Run(repo, func(t *testing.T) {
