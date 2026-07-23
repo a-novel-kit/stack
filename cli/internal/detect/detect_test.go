@@ -87,6 +87,31 @@ func runGit(t *testing.T, dir string, args ...string) {
 	}
 }
 
+// TestGlobalAppRoots pins the stack-root run fan-out: both app/service-* and
+// app/platform-* checkouts (each its own git repo) are returned, sorted; a
+// prefixed dir that is not its own git repo, and a non-app-prefixed dir, are
+// skipped.
+func TestGlobalAppRoots(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	// Two real app repos: a service and a platform.
+	mustWrite(t, filepath.Join(root, "app", "service-auth", ".git"), "")
+	mustWrite(t, filepath.Join(root, "app", "platform-studio", ".git"), "")
+	// A prefixed dir that is not its own git repo (no .git) — skipped.
+	mustWrite(t, filepath.Join(root, "app", "service-nogit", "go.mod"), "module x\n")
+	// An unrelated dir sharing neither prefix — skipped.
+	mustWrite(t, filepath.Join(root, "app", "docs", ".git"), "")
+
+	got := globalAppRoots(root)
+	want := []string{
+		filepath.Join(root, "app", "platform-studio"),
+		filepath.Join(root, "app", "service-auth"),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("globalAppRoots = %v, want %v", got, want)
+	}
+}
+
 // TestComposeDependents guards the classifier that drives build.composeUpPhased:
 // a service is a "dependent" (second wave) iff it declares a depends_on: block.
 // Both the map and short-list forms count; a service with none is first-wave
