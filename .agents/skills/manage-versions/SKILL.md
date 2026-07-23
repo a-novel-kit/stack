@@ -25,8 +25,10 @@ footer) and `implement-feature` (the layered-branch workflow these cross-repo pl
 ## How things are versioned
 
 - **Each repo is git-tag semver.** A release is a `vX.Y.Z` git tag pushed on a `master` commit; the
-  next version comes from the conventional-commit history since the last tag (`fix:` → patch,
-  `feat:` → minor, a `BREAKING CHANGE:` footer or `!` → major — see `git-conventions`). The tag
+  next version comes from the commit history since the last tag (`fix:`/`chore:` → patch, `feat:` or
+  an absorbable breaking change → minor). A `!` does **not** force a major here: a major is a planned
+  `vX`-line initiative, never derived from a commit range — `prepare-release` owns that policy and the
+  sizing. The tag
   push triggers the `release` workflow (`a-novel-kit/workflows/publish-actions/auto-release`),
   which cuts the GitHub Release and, for service repos, builds and publishes the Docker images /
   npm packages tagged with that version.
