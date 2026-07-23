@@ -282,48 +282,119 @@ func (r *Runner) runOneShot(ctx context.Context, t *discovery.Target, mode Mode)
 // is either running+healthy (long-runners) or exited+success (one-shots).
 // Bounded by `timeout`. Returns nil on full readiness or an error
 // listing the still-unhealthy containers.
+// infraContainerState is one container's inspected state, or the fact that its
+// inspect failed.
+type infraContainerState struct {
+	phase      string
+	health     string
+	exitCode   int
+	inspectErr bool
+}
+
+// infraHealthy reports whether a service's infra is ready to depend on.
+//
+// declaredInfra is len(svc.Infra). A service that declares no infra is ready
+// with nothing to wait for. One that declares infra but whose containers have
+// not been resolved yet is NOT ready: no containers found is a state to keep
+// waiting through, not a green light. Conflating the two let a service march on
+// to run migrations against a Postgres still running initdb, because the label
+// query saw nothing.
+func infraHealthy(declaredInfra int, states []infraContainerState) bool {
+	if declaredInfra == 0 {
+		return true
+	}
+
+	if len(states) == 0 {
+		return false
+	}
+
+	for _, s := range states {
+		if s.inspectErr {
+			return false
+		}
+
+		running := s.phase == pmPhaseRunning && (s.health == pmHealthHealthy || s.health == "-")
+		oneShotDone := s.phase == pmPhaseExited && s.exitCode == 0
+
+		if !running && !oneShotDone {
+			return false
+		}
+	}
+
+	return true
+}
+
+// resolveInfraContainerIDs returns the container IDs of a service's infra,
+// preferring the adoption labels and falling back to the compose naming
+// convention — the same fallback StartContainer uses for podman-compose
+// versions that swallow the --podman-args label flag. Without it, those
+// versions make the label query come back empty and the wait mistake that for
+// "no infra".
+func (r *Runner) resolveInfraContainerIDs(ctx context.Context, svc *discovery.Service, project string) ([]string, error) {
+	out, err := exec.CommandContext(ctx, "podman", "ps", "-a",
+		"--filter", "label=anovel.stack="+svc.Stack,
+		"--filter", "label=anovel.service="+svc.Name,
+		"--format", "{{.ID}}").Output()
+	if err != nil {
+		return nil, fmt.Errorf("list infra containers for %s: %w", project, err)
+	}
+
+	ids := strings.Fields(string(out))
+	if len(ids) > 0 {
+		return ids, nil
+	}
+
+	// The label filter found nothing. Resolve each declared infra by name before
+	// concluding there is nothing running.
+	for _, in := range svc.Infra {
+		if cid := findContainerByName(ctx, project, in.Name); cid != "" {
+			ids = append(ids, cid)
+		}
+	}
+
+	return ids, nil
+}
+
 func (r *Runner) waitInfraHealthy(ctx context.Context, svc *discovery.Service, timeout time.Duration) error {
+	// A service that declares no infra has nothing to wait for, and this is the
+	// only place that is known for certain rather than inferred from an empty
+	// container query.
+	if len(svc.Infra) == 0 {
+		return nil
+	}
+
 	project := composeProjectName(svc.Stack, svc.Name)
 	deadline := time.Now().Add(timeout)
+
 	for time.Now().Before(deadline) {
-		// List every container in the project.
-		out, err := exec.CommandContext(ctx, "podman", "ps", "-a",
-			"--filter", "label=anovel.stack="+svc.Stack,
-			"--filter", "label=anovel.service="+svc.Name,
-			"--format", "{{.ID}}").Output()
+		ids, err := r.resolveInfraContainerIDs(ctx, svc, project)
 		if err != nil {
-			return fmt.Errorf("list infra containers for %s: %w", project, err)
+			return err
 		}
-		ids := strings.Fields(string(out))
-		if len(ids) == 0 {
-			// Nothing to wait for, as when a service declares no infra.
-			return nil
-		}
-		ready := true
+
+		states := make([]infraContainerState, 0, len(ids))
+
 		for _, cid := range ids {
-			phase, health, exitCode, err := podmanInspect(ctx, cid)
-			if err != nil {
-				ready = false
-				continue
-			}
-			switch {
-			case phase == pmPhaseRunning && (health == pmHealthHealthy || health == "-"):
-				// Good.
-			case phase == pmPhaseExited && exitCode == 0:
-				// One-shot succeeded.
-			default:
-				ready = false
-			}
+			phase, health, exitCode, inspectErr := podmanInspect(ctx, cid)
+			states = append(states, infraContainerState{
+				phase:      phase,
+				health:     health,
+				exitCode:   exitCode,
+				inspectErr: inspectErr != nil,
+			})
 		}
-		if ready {
+
+		if infraHealthy(len(svc.Infra), states) {
 			return nil
 		}
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(1 * time.Second):
 		}
 	}
+
 	return fmt.Errorf("infra not healthy within %s", timeout)
 }
 
