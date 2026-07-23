@@ -14,10 +14,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -45,6 +43,9 @@ const (
 // cmdTest is the test subcommand name, shared with the `go test` subcommand
 // token.
 const cmdTest = "test"
+
+// coverFlag is go test's coverage flag, added to every Go target in coverage mode.
+const coverFlag = "-cover"
 
 func main() {
 	// Pin the compose provider for every `podman compose` this CLI runs:
@@ -460,16 +461,13 @@ func filterTypes(targets []detect.Target, types map[detect.Kind]bool) []detect.T
 	return out
 }
 
-// covExclude matches package import paths excluded from coverage: generated
-// mocks, test-support trees, and generated protobuf code.
-var covExclude = regexp.MustCompile(`/(mocks|test|protogen)(/|$)`)
-
-// withCoverage rewrites every test target for coverage mode. A Go target
-// expands its `./…` selector via `go list` and runs `go test -cover` over the
-// filtered package list, so the folders covExclude matches never dilute the
-// percentage; when `go list` fails, the original selector just gains `-cover`.
-// A pnpm target gets `-- --coverage`, and vitest's v8 text reporter then prints
-// a coverage table the report extracts verbatim.
+// withCoverage rewrites every test target for coverage mode. A Go target keeps
+// its own package selectors and only gains -cover, so every test package runs;
+// the generated mocks, test-support and protobuf trees are dropped from the
+// reported mean rather than from the run (see internal/ui.goCoverage). Filtering
+// the run list instead skipped a package's tests entirely the moment its path
+// held one of those segments. A pnpm target gets `-- --coverage`, and vitest's
+// v8 text reporter then prints a coverage table the report extracts verbatim.
 func withCoverage(targets []detect.Target) []detect.Target {
 	for i := range targets {
 		t := &targets[i]
@@ -478,25 +476,10 @@ func withCoverage(targets []detect.Target) []detect.Target {
 		}
 		switch {
 		case t.Kind == detect.KindGo && t.Args[0] == cmdTest:
-			sel := pkgAllSelector(t.Args)
-			pkgs := goListFiltered(t.Dir, sel)
-			if len(pkgs) > 0 {
-				// Env-backed targets need -count=1: their Postgres state is
-				// invisible to Go's test cache. Env-less runs stay cacheable,
-				// and -cover results cache like plain ones.
-				base := []string{cmdTest, "-cover"}
-				if t.Env != nil {
-					base = append(base, "-count=1")
-				}
-				base = append(base, pkgs...)
-				t.Args = base
-				t.Detail = "go test -cover (" + strconv.Itoa(len(pkgs)) +
-					" pkg, excl. mocks/test/protogen)"
-			} else {
-				// Keep the original flags and selector, adding only -cover.
-				t.Args = append([]string{cmdTest, "-cover"}, t.Args[1:]...)
-				t.Detail = "go test -cover " + sel
-			}
+			// The selectors and any -count=1 an env-backed target carries stay
+			// as detected; only -cover is added.
+			t.Args = append([]string{cmdTest, coverFlag}, t.Args[1:]...)
+			t.Detail = "go test -cover " + strings.Join(t.Args[2:], " ")
 		case t.Kind == detect.KindPnpm:
 			// `pnpm run <script> -- --coverage` → vitest --coverage.
 			t.Args = append(append([]string{}, t.Args...), "--", "--coverage")
@@ -504,34 +487,4 @@ func withCoverage(targets []detect.Target) []detect.Target {
 		}
 	}
 	return targets
-}
-
-// pkgAllSelector returns the package pattern from a `go test … <sel>` arg list
-// (the last "./…"-looking arg), defaulting to "./...".
-func pkgAllSelector(args []string) string {
-	for i := len(args) - 1; i >= 0; i-- {
-		if strings.HasPrefix(args[i], "./") {
-			return args[i]
-		}
-	}
-	return "./..."
-}
-
-// goListFiltered runs `go list <sel>` in dir and returns the package import
-// paths that do not match covExclude.
-func goListFiltered(dir, sel string) []string {
-	cmd := exec.Command("go", "list", sel)
-	cmd.Dir = dir
-	cmd.Env = os.Environ()
-	out, err := cmd.Output()
-	if err != nil {
-		return nil
-	}
-	var pkgs []string
-	for _, p := range strings.Fields(string(out)) {
-		if !covExclude.MatchString(p) {
-			pkgs = append(pkgs, p)
-		}
-	}
-	return pkgs
 }

@@ -18,6 +18,12 @@ import (
 // that exact phrase, so it never matches podman, compose or pnpm output.
 var coverRe = regexp.MustCompile(`coverage:\s+([0-9.]+)%\s+of statements`)
 
+// covExclude matches the package paths kept out of the coverage mean: generated
+// mocks, test-support trees, and generated protobuf code. It filters what is
+// reported, not what runs — a test in one of these paths still executes, it just
+// does not drag the mean toward the zero coverage generated code always has.
+var covExclude = regexp.MustCompile(`/(mocks|test|protogen)(/|$)`)
+
 // vitestHeader matches the header row of vitest's v8 text coverage table. Its
 // "% Stmts" and "% Lines" pair is unique to that table, so it reliably anchors
 // the node coverage block.
@@ -60,6 +66,11 @@ func goCoverage(results []build.Result) []covEntry {
 					pkg = f
 					break
 				}
+			}
+			// Generated and test-support packages ran, but their coverage is
+			// noise — kept out of the mean here rather than out of the run.
+			if covExclude.MatchString(pkg) {
+				continue
 			}
 			es = append(es, covEntry{pkg: pkg, pct: pct})
 		}
