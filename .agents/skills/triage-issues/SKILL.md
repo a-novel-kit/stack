@@ -159,7 +159,10 @@ yourself.
 
 ### 9. Report
 
-Close the pass with a tight summary for the operator:
+Close the pass with a tight summary for the operator, and **end it with the session recap table**
+(memory `session-recap-table`): every issue that still needs the operator — decisions, due dates to
+commit, promotions pending — as a row whose id is an **inline link** to the issue, so they can jump
+straight there. Cover it in:
 
 - The prioritised **P0/P1 "what's next"** list.
 - What was **triaged** (queue drained), **re-prioritised**, and **re-sized**.

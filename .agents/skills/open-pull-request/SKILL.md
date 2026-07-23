@@ -9,10 +9,20 @@ description: >
 
 # Open Pull Request
 
-This skill governs how Claude pushes a branch and opens a pull request. Opening a PR is a
-publishing action — it notifies reviewers, triggers CI, and creates visible history. Never
-open one without the user's explicit go-ahead, and never from a branch that is not ready
-for review.
+This skill governs how Claude pushes a branch and opens a pull request. **Pushing a feature
+branch and opening a PR never need permission — do both as soon as a branch has a commit, and
+open the PR as a _draft_ if the work is not review-ready.** A branch and a (draft) PR harm
+nothing: they touch no shared history and request no review, while leaving committed work
+unpushed risks losing it to a crashed session. See `git-conventions` → "Branch and PR freedom"
+for the underlying rule.
+
+The one hard prohibition is upstream: **never push to `master`/`main` without explicit consent**
+(`git-conventions`). Most contributors cannot; on an admin account it is your guardrail to hold.
+
+So the pre-flight below gates on _quality_ (lint, tests, a clean tree), not on _permission_. When
+a check fails you fix it, not ask to skip it. And "not review-ready" is never a reason to withhold
+a PR — it is the reason to open a **draft** one, which has no rules (force-push, redirect, or delete
+it freely).
 
 Every PR in this repo follows the same contract: Conventional-Commits title, structured
 body, correct base, and no manual reviewer/assignee assignment (workflows handle that).
@@ -370,8 +380,40 @@ Do not merge — merges are a developer decision unless explicitly delegated.
 
 ---
 
+## Phase 8: Close With a Session Recap Table (mandatory)
+
+**Whenever you finish a stretch of code or issue work, end your reply with a recap table** so the
+operator can jump straight to whatever needs their attention. This is not optional and not limited
+to what changed since the last prompt: **list every item from this whole session that still needs
+attention** — PRs awaiting review or merge, issues to act on, branches pushed, CI still running —
+even ones you reported turns ago, until they are actually resolved.
+
+Each row's identifier is an **inline markdown link** to the PR or issue, so the target is one click
+away. A minimal shape:
+
+```markdown
+| Item                                    | State              | Needs                     |
+| --------------------------------------- | ------------------ | ------------------------- |
+| [#321](https://github.com/…/321)        | Draft PR, CI green | Your review → mark ready  |
+| [.github#432](https://github.com/…/432) | Task, blocked      | Decide ownership boundary |
+```
+
+Drop the table only when the turn touched no code or issues at all (a pure question). If nothing
+is outstanding, say so in one line instead of an empty table. This rule is session-global — its
+authoritative statement lives in memory (`session-recap-table`) so it fires even on turns where
+this skill never loads (e.g. issue-only work under `triage-issues`).
+
+---
+
 ## Common Mistakes
 
+- **Asking permission to push a branch or open a PR.** Neither ever needs it — do both once a
+  branch has a commit (open a draft if not review-ready). The only push that needs consent is to
+  `master`/`main`.
+- **Sitting on committed-but-unpushed work.** Committed and not pushed is one crashed session from
+  gone. Push and open a (draft) PR so it is tracked.
+- **Ending a code/issue turn without the recap table.** Close with the Phase 8 table linking
+  everything still outstanding this session.
 - **Trying to author a PR as the bot.** There is no bot path — `a-novel core bot-comment`
   only posts comments (5.0).
 - **Treating "PR opened" as task-done.** Carry `monitor-ci` through to CI green or an
