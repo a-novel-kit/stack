@@ -77,6 +77,10 @@ type envFile struct {
 	id   string   // full identifier ("go.internal")
 }
 
+// uncoveredTargetName identifies the catch-all Go target that runs the test
+// packages no scoped env covers.
+const uncoveredTargetName = "go.uncovered"
+
 var composeNameRe = regexp.MustCompile(`^podman-compose\.([a-z0-9.]+)\.test\.yaml$`)
 
 // composeEnvs reads dir/builds and returns every test-env compose file it
@@ -329,11 +333,21 @@ func goTests(dir, rel string, envs []envFile) []Target {
 	// stands up, which Go's cache cannot see, so a cached pass could hide a
 	// migration or schema change.
 	targets := make([]Target, 0, len(goEnvs))
+
+	scoped := make([][]string, 0, len(goEnvs))
+
 	for _, e := range goEnvs {
 		sel := pkgAll
 		if len(e.path) > 0 {
 			sel = "./" + strings.Join(e.path, "/") + "/..."
 		}
+
+		// A bare env (empty path) selects ./... and so covers the whole module;
+		// its empty prefix matches every package, leaving nothing for the
+		// catch-all. Recording every env's path, empty included, is what makes
+		// that fall out.
+		scoped = append(scoped, e.path)
+
 		targets = append(targets, Target{
 			Kind:   KindGo,
 			Name:   e.id, // "go.internal" / "go.pkg" — unique within the dir
@@ -345,7 +359,147 @@ func goTests(dir, rel string, envs []envFile) []Target {
 			Env:    e.toEnv(rel),
 		})
 	}
+
+	// Every scoped env narrows the run to its own subtree, so a test package
+	// under no env's path runs nowhere and reports nothing. This catch-all
+	// selects exactly those packages, so adding pkg/go/client_test.go to a
+	// module whose only env covers ./internal does not silently skip it.
+	//
+	// It carries no env: a package that needs external state declares its own
+	// env file, so an uncovered one is either cache-safe or fails loudly on the
+	// missing state — which surfaces the absent env rather than hiding it. That
+	// is also why it omits -count=1.
+	if uncovered := uncoveredGoSelectors(goTestPackageDirs(dir), scoped); len(uncovered) > 0 {
+		args := append([]string{testArg}, uncovered...)
+		targets = append(targets, Target{
+			Kind:   KindGo,
+			Name:   uncoveredTargetName,
+			RelDir: rel,
+			Dir:    dir,
+			Detail: "go test " + strings.Join(uncovered, " ") + "  ·  no env",
+			Cmd:    string(KindGo),
+			Args:   args,
+		})
+	}
+
 	return targets
+}
+
+// goTestPackageDirs returns the module-relative segment paths of every directory
+// under dir holding a *_test.go file. It prunes the same trees the main scan does
+// and stops at any nested go.mod: those packages belong to that module, which is
+// discovered on its own, and this is also what keeps a sibling checkout dropped
+// under tmp/ — a worktree git does not report as ignored — out of the count. The
+// module root itself is the empty path.
+func goTestPackageDirs(dir string) [][]string {
+	absRoot, err := filepath.Abs(dir)
+	if err != nil {
+		return nil
+	}
+
+	ignored := gitIgnoredDirs(absRoot)
+	seen := map[string]struct{}{}
+
+	var pkgs [][]string
+
+	_ = filepath.WalkDir(absRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil //nolint:nilerr // an unreadable subtree is skipped, not fatal to detection
+		}
+
+		if entry.IsDir() {
+			if skipDir(absRoot, path, entry.Name(), ignored) {
+				return filepath.SkipDir
+			}
+
+			if path != absRoot && fileExists(filepath.Join(path, "go.mod")) {
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		if !strings.HasSuffix(entry.Name(), "_test.go") {
+			return nil
+		}
+
+		rel, relErr := filepath.Rel(absRoot, filepath.Dir(path))
+		if relErr != nil {
+			return nil //nolint:nilerr // a path outside the root is not a package of this module
+		}
+
+		if _, dup := seen[rel]; dup {
+			return nil
+		}
+
+		seen[rel] = struct{}{}
+
+		if rel == "." {
+			pkgs = append(pkgs, []string{})
+
+			return nil
+		}
+
+		pkgs = append(pkgs, strings.Split(rel, string(filepath.Separator)))
+
+		return nil
+	})
+
+	return pkgs
+}
+
+// uncoveredGoSelectors returns a `go test` selector for each test package no
+// scoped path covers. A scoped path covers a package when it is a leading
+// segment-run of the package's path, so ["internal"] covers internal/dao but
+// not pkg/go.
+func uncoveredGoSelectors(testPkgs, scoped [][]string) []string {
+	var sels []string
+
+	for _, pkg := range testPkgs {
+		if coveredByScopedPath(pkg, scoped) {
+			continue
+		}
+
+		if len(pkg) == 0 {
+			sels = append(sels, ".")
+
+			continue
+		}
+
+		sels = append(sels, "./"+strings.Join(pkg, "/"))
+	}
+
+	sort.Strings(sels)
+
+	return sels
+}
+
+// coveredByScopedPath reports whether any scoped prefix is a leading segment-run
+// of pkg.
+func coveredByScopedPath(pkg []string, scoped [][]string) bool {
+	for _, prefix := range scoped {
+		if hasSegmentPrefix(pkg, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// hasSegmentPrefix reports whether prefix matches the leading segments of pkg.
+// An empty prefix matches everything, but a scoped env never has one.
+func hasSegmentPrefix(pkg, prefix []string) bool {
+	if len(prefix) > len(pkg) {
+		return false
+	}
+
+	for i, seg := range prefix {
+		if pkg[i] != seg {
+			return false
+		}
+	}
+
+	return true
 }
 
 // pnpmTests emits a target per "test"/"test:*" script, attaching a matching
