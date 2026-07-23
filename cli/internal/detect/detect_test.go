@@ -205,3 +205,153 @@ func TestGoTests_TestCacheByEnv(t *testing.T) {
 		}
 	})
 }
+
+// TestGoTests_ScopedEnvCatchAll reproduces the issue: a module whose only Go env
+// covers ./internal, with a test package under pkg/go that no env names. Before the
+// catch-all, that package ran nowhere and the suite reported success.
+func TestGoTests_ScopedEnvCatchAll(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "go.mod"), "module x\n\ngo 1.26.4\n")
+	mustWrite(t, filepath.Join(dir, "internal", "dao", "dao_test.go"), "package dao\n")
+	mustWrite(t, filepath.Join(dir, "pkg", "go", "client_test.go"), "package client\n")
+
+	compose := filepath.Join(dir, "compose.yaml")
+	mustWrite(t, compose, "services:\n  db:\n    image: postgres\n")
+	envs := []envFile{{env: string(KindGo), path: []string{"internal"}, file: compose, id: "go.internal"}}
+
+	targets := goTests(dir, ".", envs)
+
+	var scoped, catchAll *Target
+
+	for i := range targets {
+		switch targets[i].Name {
+		case "go.internal":
+			scoped = &targets[i]
+		case uncoveredTargetName:
+			catchAll = &targets[i]
+		}
+	}
+
+	if scoped == nil {
+		t.Fatal("the scoped internal target is missing")
+	}
+
+	if catchAll == nil {
+		t.Fatal("no catch-all target: pkg/go would run nowhere")
+	}
+
+	// The catch-all names pkg/go and not internal, which the scoped env already runs.
+	if !slices.Contains(catchAll.Args, "./pkg/go") {
+		t.Errorf("catch-all must select ./pkg/go; args=%v", catchAll.Args)
+	}
+
+	if slices.Contains(catchAll.Args, "./internal") || slices.Contains(catchAll.Args, "./internal/dao") {
+		t.Errorf("catch-all must not re-run the scoped subtree; args=%v", catchAll.Args)
+	}
+
+	// It carries no env and is cacheable, like the kit-lib path.
+	if catchAll.Env != nil {
+		t.Errorf("catch-all must carry no compose env")
+	}
+
+	if slices.Contains(catchAll.Args, "-count=1") {
+		t.Errorf("catch-all must be cacheable (no -count=1); args=%v", catchAll.Args)
+	}
+}
+
+// A module fully covered by its scoped envs needs no catch-all.
+func TestGoTests_NoCatchAllWhenFullyCovered(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "go.mod"), "module x\n\ngo 1.26.4\n")
+	mustWrite(t, filepath.Join(dir, "internal", "dao", "dao_test.go"), "package dao\n")
+	mustWrite(t, filepath.Join(dir, "pkg", "go", "client_test.go"), "package client\n")
+
+	compose := filepath.Join(dir, "compose.yaml")
+	mustWrite(t, compose, "services:\n  db:\n    image: postgres\n")
+	envs := []envFile{
+		{env: string(KindGo), path: []string{"internal"}, file: compose, id: "go.internal"},
+		{env: string(KindGo), path: []string{"pkg", "go"}, file: compose, id: "go.pkg"},
+	}
+
+	for _, target := range goTests(dir, ".", envs) {
+		if target.Name == uncoveredTargetName {
+			t.Errorf("no catch-all should be emitted when every test package is covered")
+		}
+	}
+}
+
+func TestUncoveredGoSelectors(t *testing.T) {
+	t.Parallel()
+
+	seg := func(parts ...string) []string { return parts }
+
+	cases := []struct {
+		name    string
+		testPkg [][]string
+		scoped  [][]string
+		want    []string
+	}{
+		{
+			name:    "pkg/go uncovered by an internal-only env",
+			testPkg: [][]string{seg("internal", "dao"), seg("pkg", "go")},
+			scoped:  [][]string{seg("internal")},
+			want:    []string{"./pkg/go"},
+		},
+		{
+			name:    "everything covered yields nothing",
+			testPkg: [][]string{seg("internal", "dao"), seg("pkg", "go")},
+			scoped:  [][]string{seg("internal"), seg("pkg", "go")},
+			want:    nil,
+		},
+		{
+			name:    "the module root is a selector on its own",
+			testPkg: [][]string{{}, seg("cmd", "rest")},
+			scoped:  [][]string{seg("internal")},
+			want:    []string{".", "./cmd/rest"},
+		},
+		{
+			// pkg is not covered by pkg/go — the prefix must match whole segments,
+			// not a string prefix.
+			name:    "a sibling under a partly-scoped tree stays uncovered",
+			testPkg: [][]string{seg("pkg", "js"), seg("pkg", "go")},
+			scoped:  [][]string{seg("pkg", "go")},
+			want:    []string{"./pkg/js"},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := uncoveredGoSelectors(c.testPkg, c.scoped)
+			if !reflect.DeepEqual(got, c.want) {
+				t.Errorf("uncoveredGoSelectors = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// A bare go env (podman-compose.go.test.yaml, no path) runs ./... and covers the
+// whole module, so no catch-all is emitted even with tests spread across it. This is
+// service-authentication's layout, and a spurious catch-all there would re-run its
+// DB-backed tests with no env and fail.
+func TestGoTests_BareEnvCoversWholeModule(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "go.mod"), "module x\n\ngo 1.26.4\n")
+	mustWrite(t, filepath.Join(dir, "internal", "dao", "dao_test.go"), "package dao\n")
+	mustWrite(t, filepath.Join(dir, "cmd", "rest", "main_test.go"), "package main\n")
+
+	compose := filepath.Join(dir, "compose.yaml")
+	mustWrite(t, compose, "services:\n  db:\n    image: postgres\n")
+	envs := []envFile{{env: string(KindGo), path: nil, file: compose, id: "go"}}
+
+	for _, target := range goTests(dir, ".", envs) {
+		if target.Name == uncoveredTargetName {
+			t.Errorf("a bare env covers ./...; no catch-all should be emitted, got args %v", target.Args)
+		}
+	}
+}
