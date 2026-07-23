@@ -1,10 +1,11 @@
 ---
 name: prepare-release
 description: >
-  Run BEFORE cutting a release: it reads the commits since the last tag, proposes the semver bump
-  (`fix`→patch, `feat`→minor, `BREAKING CHANGE`/`!`→major), and drafts the per-version migration
-  guide (`docs/migrations/vX.Y.Z.md`) when consumers must act. Use it when asked "is this patch /
-  minor / major?", "what changed since the last release?", or "does this need a migration guide?".
+  Run BEFORE cutting a release: it reads the commits since the last tag, proposes the version bump
+  (`fix`/`chore`→patch, `feat` or an absorbable breaking change→minor; a major is never derived from
+  commits — it is a planned `vX`-line initiative), and drafts the per-version migration guide
+  (`docs/migrations/vX.Y.Z.md`) when consumers must act. Use it when asked "is this patch / minor /
+  major?", "what changed since the last release?", or "does this need a migration guide?".
   ADVISORY — the human cuts the release; this never tags, pushes, or publishes.
 ---
 
@@ -12,7 +13,8 @@ description: >
 
 A release has two questions this skill answers before anyone clicks "Run":
 
-1. **How big is it?** — patch, minor, or major, derived from the conventional-commit history, not a guess.
+1. **How big is it?** — patch or minor, read from the commit history, not guessed. (A major is not sized
+   here; it is a planned `vX`-line initiative — see step 2.)
 2. **What must a consumer do to adopt it?** — captured as a **migration guide** that ships with the
    code and lives forever, so the answer is never lost in a PR description or a Slack thread.
 
@@ -47,17 +49,31 @@ nothing to migrate _from_, so a guide is rarely needed.
 
 ## 2. Propose the bump
 
-Apply the `git-conventions` / Conventional Commits mapping; the **highest** wins across the range:
+Apply this mapping — a **local variant** of Conventional Commits; the **highest** wins across the range:
 
-| Commit signal                                  | Bump      |
-| ---------------------------------------------- | --------- |
-| `BREAKING CHANGE:` footer, or `!` after type   | **major** |
-| any `feat:`                                    | **minor** |
-| only `fix:` / `perf:` / `refactor:` / `chore:` | **patch** |
+| Commit signal                                                                      | Bump      |
+| ---------------------------------------------------------------------------------- | --------- |
+| any `feat:`, or a `!` / `BREAKING CHANGE:` too small for its own major (see below) | **minor** |
+| only `fix:` / `perf:` / `refactor:` / `chore:`                                     | **patch** |
 
-Pre-1.0 caveat: while a repo is `0.y.z`, a breaking change is conventionally a **minor** bump, not a
-major — confirm the repo's stance with the operator if it matters. Docs/CI-only ranges (`docs:`, `ci:`,
-`chore:`) are a **patch** (still a release if you want the notes), or skip the release entirely.
+**A major is never derived from the commit history here.** This is the deliberate departure from stock
+Conventional Commits: a `!` or `BREAKING CHANGE:` footer does **not** size a release to major. A major
+is a **planned, initiative-led migration on its own `vX` release line** — a global sweep, a paradigm
+shift, a change whose migration is large enough to track as its own initiative — and it is cut from that
+line when it lands, not proposed by this pass. If the range you are sizing contains a `!` and you think
+it warrants a major, that is a signal to **stop and raise an initiative**, not to bump the second digit.
+
+So a **breaking change small enough to absorb in a normal release stays a minor**: removing a capability
+(especially one that no longer works), dropping a dead action, tightening a validation. It ships as a
+minor with a migration guide (below), because it still asks a consumer to act, but it does not touch the
+major. Name it plainly in the proposal — _"minor, carries one small breaking change (#NNN removes the
+dead `foo` action)"_ — so the operator sees the break without a version jump implying a bigger one.
+
+The **highest across the range is therefore minor** whenever any `feat:` or an absorbable break is
+present, else patch. Docs/CI-only ranges (`docs:`, `ci:`, `chore:`) are a **patch** (still a release if
+you want the notes), or skip the release entirely.
+
+(There is no pre-1.0 special case: majors are initiative-gated regardless of the current major digit.)
 
 State the proposed version plainly — e.g. _"`v1.0.3` → `v1.1.0` (minor: three `feat:`, no breaking
 footer)"_ — and name the one or two commits that drove it. That version is also the **release-type the
@@ -71,7 +87,8 @@ A guide documents **consumer action**, not a changelog. Use this gate:
 
 | Release shape                                                                              | Guide?          |
 | ------------------------------------------------------------------------------------------ | --------------- |
-| Major / any `BREAKING CHANGE` / `!`                                                        | **Required**    |
+| A major (the planned `vX`-line migration)                                                  | **Required**    |
+| Minor carrying an absorbable breaking change (a removal, a tightened validation)           | **Required**    |
 | Minor that **deprecates** a path, adds a **preferred** alternative, or recommends a change | **Recommended** |
 | Minor that is purely additive (new optional thing, no consumer change)                     | No (notes only) |
 | Patch (bug/perf/internal)                                                                  | No              |
@@ -162,8 +179,12 @@ and defer.
 - **The guide is consumer-facing.** Release notes list _what changed_; the guide says _what to do about
   it_. A change needing no consumer action belongs in the notes.
 - **One file per version, immutable.** Additive, conflict-free, 1:1 with a tag.
-- **Derive the version from the commit history.** If the history is wrong (a `feat` mislabeled `fix`),
-  fix the discipline (`git-conventions`) rather than silently overriding the math.
+- **Derive patch-vs-minor from the commit history.** If the history is wrong (a `feat` mislabeled
+  `fix`), fix the discipline (`git-conventions`) rather than silently overriding the math.
+- **A major is never derived; it is planned.** No commit range proposes a major. A major is an
+  initiative with its own `vX` branch that becomes master when it lands. A `!` in an ordinary range is
+  an absorbable breaking change (a minor with a guide), or a prompt to raise that initiative — never a
+  second-digit bump on the current line.
 - **Advisory, never the trigger.** You propose; the human releases.
 
 ---
