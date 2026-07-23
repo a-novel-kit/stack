@@ -302,3 +302,90 @@ func TestGitToplevel(t *testing.T) {
 		t.Errorf("nested toplevel = %q, want %q (must scope to the nested repo, not the outer)", gotNested, wantNested)
 	}
 }
+
+func TestStampTargets(t *testing.T) {
+	t.Parallel()
+
+	write := func(t *testing.T, dir, rel, content string) string {
+		t.Helper()
+
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		return full
+	}
+
+	t.Run("a matched reference is stamped", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		f := write(t, dir, "README.md", "go get x@v1.0.0\n")
+
+		total, fileCount, err := stampTargets([]string{f}, "x@", "1.1.0")
+		if err != nil {
+			t.Fatalf("stampTargets: %v", err)
+		}
+
+		if total != 1 || fileCount != 1 {
+			t.Errorf("got total=%d files=%d, want 1 and 1", total, fileCount)
+		}
+
+		got, _ := os.ReadFile(f)
+		if string(got) != "go get x@v1.1.0\n" {
+			t.Errorf("content = %q", got)
+		}
+	})
+
+	t.Run("zero matches across every file is an error", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		a := write(t, dir, "a.md", "nothing here\n")
+		b := write(t, dir, "b.md", "nor here\n")
+
+		_, _, err := stampTargets([]string{a, b}, "version: ", "1.1.0")
+		if err == nil {
+			t.Fatal("stampTargets: got nil, want an error for a pattern that matched nothing")
+		}
+
+		// The message names the pattern and the files it swept, so a broken
+		// prepublish:doc script points at its own line.
+		if !strings.Contains(err.Error(), "version: ") || !strings.Contains(err.Error(), "a.md") {
+			t.Errorf("error = %q, want the pattern and the files named", err)
+		}
+	})
+
+	t.Run("a match in one file of several still succeeds", func(t *testing.T) {
+		t.Parallel()
+
+		// The aggregate is what must be non-zero; a file that legitimately holds
+		// no reference is not itself a failure.
+		dir := t.TempDir()
+		hit := write(t, dir, "has.md", "x@v1.0.0\n")
+		miss := write(t, dir, "none.md", "unrelated\n")
+
+		total, fileCount, err := stampTargets([]string{hit, miss}, "x@", "1.1.0")
+		if err != nil {
+			t.Fatalf("stampTargets: %v", err)
+		}
+
+		if total != 1 || fileCount != 2 {
+			t.Errorf("got total=%d files=%d, want 1 and 2", total, fileCount)
+		}
+	})
+
+	t.Run("no files matched is still an error", func(t *testing.T) {
+		t.Parallel()
+
+		_, _, err := stampTargets([]string{filepath.Join(t.TempDir(), "absent-*.md")}, "x@", "1.1.0")
+		if err == nil {
+			t.Fatal("stampTargets: got nil, want the no-files-matched error")
+		}
+	})
+}

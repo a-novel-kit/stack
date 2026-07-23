@@ -69,22 +69,48 @@ inside docs/config always match the released version:
 			if err != nil {
 				return err
 			}
-			files, err := resolveStampTargets(args[1:])
+			total, fileCount, err := stampTargets(args[1:], args[0], version)
 			if err != nil {
 				return err
 			}
-			total := 0
-			for _, f := range files {
-				count, err := stampFile(f, args[0], version)
-				if err != nil {
-					return err
-				}
-				total += count
-			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ stamped %d reference(s) across %d file(s) to v%s\n", total, len(files), version)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ stamped %d reference(s) across %d file(s) to v%s\n", total, fileCount, version)
 			return nil
 		},
 	}
+}
+
+// stampTargets stamps version into every reference matching prefix across the
+// files the patterns resolve to, and reports the totals.
+//
+// The whole set matching nothing is an error, the command-level counterpart to
+// resolveStampTargets refusing an empty file set. A prepublish:doc script exists
+// to keep a doc reference in step with the release; a pattern that matches zero
+// references has stopped tracking what it names — a README rewrite that changed
+// the reference shape, a renamed field — and stamping nothing is the silent way
+// that surfaces, one release too late.
+func stampTargets(patterns []string, prefix, version string) (int, int, error) {
+	files, err := resolveStampTargets(patterns)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	total := 0
+
+	for _, f := range files {
+		count, err := stampFile(f, prefix, version)
+		if err != nil {
+			return 0, 0, err
+		}
+
+		total += count
+	}
+
+	if total == 0 {
+		return 0, 0, fmt.Errorf("publish: pattern %q matched no references across %d file(s): %s",
+			prefix, len(files), strings.Join(files, " "))
+	}
+
+	return total, len(files), nil
 }
 
 // readPackageVersion returns the "version" field of root/package.json —
