@@ -142,7 +142,6 @@ git -C <checkout> status --porcelain            # empty
 git -C <checkout> checkout master               # be on master before pulling
 git -C <checkout> pull --ff-only                # fast-forward to origin/master, no merge commit
 git -C <checkout> rev-parse --abbrev-ref HEAD   # master
-git -C <checkout> branch --no-merged master     # nothing you did not create
 ```
 
 **Always pull `master` before cutting the branch — never branch from a stale local `master`.** A
@@ -153,11 +152,14 @@ landed since, collides in review with changes it never saw, and forces a rebase 
 can look, rather than silently tangling histories. A branch whose parent is already merged (as a
 completed task's branch is, once its PR lands) is finished work; leave it and branch from master.
 
-Uncommitted changes, or an unmerged branch you did not create, mean **someone else is working in
-this checkout** — the operator in another terminal, or a parallel agent session. Their
-work-in-progress is invisible to you, and `stash`, `reset`, `checkout -f`, or branching on top of
-it can destroy hours of work that exists nowhere else. Leave it untouched and take a checkout of
-your own.
+Uncommitted changes, or a checkout sitting on a branch other than `master` that you did not create,
+mean **someone else is working in this checkout** — the operator in another terminal, or a parallel
+agent session. The mere _existence_ of stale unmerged branches is not that signal: a repo that has
+shipped hundreds of PRs carries dozens of finished branches nobody deleted, and none of them blocks
+cutting a fresh one from `master` — which is why the pre-flight keys on the current branch and the
+tree, not on `branch --no-merged`. When someone _is_ working here, their work-in-progress is
+invisible to you, and `stash`, `reset`, `checkout -f`, or branching on top of it can destroy hours
+of work that exists nowhere else. Leave it untouched and take a checkout of your own.
 
 **A clean pre-flight expires immediately.** It proves the checkout was free at that instant, and a
 checkout has one HEAD that nothing holds: a parallel session running `git checkout` between your
