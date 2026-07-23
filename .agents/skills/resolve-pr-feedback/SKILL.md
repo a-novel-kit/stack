@@ -544,6 +544,9 @@ comments` posts as your user account — only reads use plain `gh`.
 - **To `git-conventions`** — every review-driven commit. No exceptions.
 - **To the layer-specific skills** — `write-go`, `write-go-service` (or `write-go-kit` for a-novel-kit repos), `write-go-tests`, `write-openapi`,
   `write-js-package`, etc. Phase 4 writes code; those skills govern _how_.
+- **Close with the session recap table** (memory `session-recap-table`) — after working a PR's
+  feedback, end the turn with a table linking every PR/issue still outstanding this session (this
+  PR's remaining threads, its CI, anything else in flight), so the operator can jump to each.
 
 ---
 

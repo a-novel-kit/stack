@@ -133,15 +133,25 @@ Flag any change that:
 
 ### Before you start
 
-**Start every task from `master`, with a clean tree, in a checkout that is yours.** Check this
-before the first edit — in the stack root and in each `app/` or `kit/` checkout the task will
-touch, since those are independent repos with independent states:
+**Start every task from _freshly-pulled_ `master`, with a clean tree, in a checkout that is
+yours.** Check this before the first edit — in the stack root and in each `app/` or `kit/` checkout
+the task will touch, since those are independent repos with independent states:
 
 ```bash
 git -C <checkout> status --porcelain            # empty
+git -C <checkout> checkout master               # be on master before pulling
+git -C <checkout> pull --ff-only                # fast-forward to origin/master, no merge commit
 git -C <checkout> rev-parse --abbrev-ref HEAD   # master
 git -C <checkout> branch --no-merged master     # nothing you did not create
 ```
+
+**Always pull `master` before cutting the branch — never branch from a stale local `master`.** A
+branch cut from a `master` that is days behind starts life already diverged: it re-runs work that
+landed since, collides in review with changes it never saw, and forces a rebase later that a
+`pull --ff-only` now would have avoided. `--ff-only` refuses to invent a merge commit — if local
+`master` has drifted (someone committed to it directly, which should not happen), it stops so you
+can look, rather than silently tangling histories. A branch whose parent is already merged (as a
+completed task's branch is, once its PR lands) is finished work; leave it and branch from master.
 
 Uncommitted changes, or an unmerged branch you did not create, mean **someone else is working in
 this checkout** — the operator in another terminal, or a parallel agent session. Their
@@ -268,7 +278,33 @@ EOF
 - **Never commit secrets.** .env files, APP_MASTER_KEY values, real credentials.
 - **Never skip hooks** (`--no-verify`) unless explicitly asked.
 - **Never amend a pushed commit.** Create a new commit instead.
-- **Never force-push to master/main.**
+- **Never push to `master`/`main` — not force-push, not a plain push — without explicit consent.**
+  This is the one git action that is never safe by default. Most contributors lack the access, so
+  the guardrail is already enforced for them; on an admin account it is _yours_ to hold, because you
+  have the rights to bypass it and nothing else will stop you. Feature branches carry no such risk:
+  they cannot damage shared history, so **pushing a branch and opening its PR never needs
+  permission** — see [Branch and PR freedom](#branch-and-pr-freedom).
+
+---
+
+## Branch and PR Freedom
+
+**Pushing a feature branch and opening a pull request are always safe — never ask permission for
+either.** A branch touches no shared history; a pull request only proposes. The sole thing that can
+harm the repo is a push to `master`/`main`, which is prohibited without explicit consent (above).
+Everything short of that is free, and the freedom is the point: work that lives only in your local
+checkout is one crashed session away from gone.
+
+**Once a branch has a commit, open a pull request for it — a draft one if it is not review-ready.**
+A PR is how work becomes _tracked_: it survives session loss, shows the operator what you did, and
+gives CI something to run. Do not sit on committed-but-unpushed work waiting for a "ship it".
+
+**A draft PR has no rules.** It requests no review, blocks nothing, and triggers no merge
+automation. You may `--force-with-lease` over it freely, redirect its base, or delete it outright
+if the direction changes — none of that costs anyone anything. So default to opening one early:
+the downside is zero and the upside is that nothing you did is ever stranded. Push and PR
+mechanics live in `open-pull-request`; this rule is only _when_ (always, once committed) and
+_whether to ask_ (never).
 
 ---
 

@@ -141,7 +141,12 @@ change also stay on a single branch — splitting them would be churn with no re
 - Any breaking changes, flagged explicitly
 - Any layers deliberately skipped and why
 
-Wait for explicit approval before creating branch 1.
+Wait for explicit approval of **the plan** before creating branch 1. The gate here is the
+_design_ — what to build and how to split it — not permission to use git. Once the plan is agreed,
+branching, committing, pushing, and opening (draft) PRs need no further sign-off; that mechanical
+freedom is `git-conventions` → "Branch and PR freedom". For a change small enough to skip this
+planning phase (a single-branch fix or improvement round), there is no plan to approve — just
+branch from fresh master and go.
 
 ---
 
