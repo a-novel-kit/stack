@@ -233,3 +233,17 @@ There is no local runner, so verification is reading plus CI.
   `a-novel repo update` runs.
 - **Interpolating an input straight into a `run:` script.** Bind it through `env:` so the value cannot
   be read as shell syntax.
+- **A `pnpm <script>` step in an action without reconciling the lockfile first.** pnpm 11's
+  verify-deps pre-run hook spawns a _frozen_ `pnpm install` ahead of the script and aborts
+  `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` whenever an earlier step (e.g. `pnpm audit --fix=override`)
+  rewrote `pnpm-workspace.yaml` but left the lockfile stale. `npm_config_frozen_lockfile: "false"`
+  does _not_ rescue this path — the pre-run install runs frozen regardless. Reconcile with
+  `pnpm i --no-frozen-lockfile` before any `pnpm <script>`.
+- **Interpolating an unvalidated value into a `search(...)` / `gh search` query.** GitHub answers a
+  malformed `merged:` / `closed:` qualifier — a bad instant, or a relative word like `yesterday` —
+  with _zero rows and no `errors` array_, indistinguishable from a genuinely empty result, so a
+  well-formed-response guard waves it through. In the landing-saga actions an empty `merged` bucket
+  reads as "nothing landed" and lifts a standing freeze. These qualifiers take a full ISO-8601
+  instant (second granularity); validate every interpolated value to an exact canonical form (strict
+  regex plus a calendar parse for dates) and _drop_ an unusable one for the unscoped query rather
+  than pass it through — over-detecting is the safe direction, a silent all-clear is not.
