@@ -103,11 +103,12 @@ func globalAppRoots(absRoot string) []string {
 	}
 	var roots []string
 	for _, e := range entries {
-		if !e.IsDir() ||
-			!(strings.HasPrefix(e.Name(), "service-") || strings.HasPrefix(e.Name(), "platform-")) {
+		name := e.Name()
+		isAppRepo := strings.HasPrefix(name, "service-") || strings.HasPrefix(name, "platform-")
+		if !e.IsDir() || !isAppRepo {
 			continue
 		}
-		repo := filepath.Join(appDir, e.Name())
+		repo := filepath.Join(appDir, name)
 		// Only its own git repo counts, guarding against an unrelated
 		// `app/<name>/` directory that happens to share the prefix.
 		if _, err := os.Stat(filepath.Join(repo, ".git")); err != nil {
