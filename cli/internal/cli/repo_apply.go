@@ -231,10 +231,10 @@ func commitSync(org, repo, branch string, changes []contentChange) (string, erro
 		oid, err := branchHeadOid(org, repo, branch)
 		if err != nil {
 			// A freshly created repo has no commit, so createCommitOnBranch has
-			// no branch to build on (a ref read answers 409 "empty"). Lay the
-			// staged files down as the root commit instead, which needs no ref.
+			// no branch to build on (a ref read answers 409 "empty"). Seed the
+			// first commit via the Contents API, then land the rest here.
 			if isEmptyRepo(err) {
-				return bootstrapCommit(org, repo, branch, headline, body, additions)
+				return bootstrapEmpty(org, repo, branch, changes)
 			}
 			return "", err
 		}
@@ -265,41 +265,57 @@ func commitSync(org, repo, branch string, changes []contentChange) (string, erro
 	}
 }
 
-// bootstrapCommit lays the staged additions down as a repository's root commit
-// through the Git Data API — a blob per file, a tree over them, a parentless
-// commit, then the branch ref. It exists because createCommitOnBranch cannot:
-// that mutation commits onto an existing branch, and a freshly created repo has
-// none. Deletions are dropped — a root commit has nothing to remove — and the
-// staging pass never produces one on an empty repo anyway (the file it would
-// delete does not exist). The commit is unsigned, unlike the verified
-// createCommitOnBranch path, but `repo create` runs as an org admin, who
-// bypasses the default-branch ruleset, so it lands even under required_signatures.
-func bootstrapCommit(org, repo, branch, headline, body string, additions []map[string]string) (string, error) {
-	base := fmt.Sprintf("repos/%s/%s/git", org, repo)
-	tree := make([]map[string]any, 0, len(additions))
-	for _, add := range additions {
-		blob, err := ghField(base+"/blobs", map[string]string{"content": add["contents"], "encoding": encodingBase64}, ".sha")
-		if err != nil {
-			return "", fmt.Errorf("bootstrap blob %s: %w", add[keyPath], err)
+// bootstrapEmpty seeds a repository that has no commits yet. Both
+// createCommitOnBranch and the Git Data API (blobs/trees/commits) build on an
+// existing object store and 409 on an empty repo, so the initial commit has to
+// come from the Contents API — the one endpoint that creates a repo's first
+// commit and its default branch. It seeds the first managed file that way (a
+// GitHub-verified commit, so required_signatures is satisfied), then lands any
+// remaining files through the normal createCommitOnBranch path now that the
+// branch exists. Deletions are dropped: an empty repo has nothing to remove,
+// and the staging pass never produces one against a repo with no files.
+func bootstrapEmpty(org, repo, branch string, changes []contentChange) (string, error) {
+	adds := make([]contentChange, 0, len(changes))
+	for _, change := range changes {
+		if change.outcome != opDeleted {
+			adds = append(adds, change)
 		}
-		tree = append(tree, map[string]any{keyPath: add[keyPath], "mode": "100644", "type": "blob", "sha": blob})
 	}
-	treeSHA, err := ghField(base+"/trees", map[string]any{"tree": tree}, ".sha")
+	if len(adds) == 0 {
+		return "", nil
+	}
+	seeded, err := putContent(org, repo, branch, adds[0])
 	if err != nil {
-		return "", fmt.Errorf("bootstrap tree: %w", err)
+		return "", fmt.Errorf("bootstrap %s: %w", adds[0].path, err)
 	}
-	commitSHA, err := ghField(base+"/commits", map[string]any{
+	if len(adds) == 1 {
+		return seeded, nil
+	}
+	// The branch now exists; the rest land in one normal sync commit.
+	return commitSync(org, repo, branch, adds[1:])
+}
+
+// putContent creates or updates a single file through the Contents API and
+// returns the short id of the commit it makes. On an empty repository this is
+// the call that lays down the initial commit and the default branch; the
+// resulting commit is GitHub-verified.
+func putContent(org, repo, branch string, change contentChange) (string, error) {
+	headline, body := syncCommitMessage([]contentChange{change})
+	payload, err := json.Marshal(map[string]string{
 		"message": headline + "\n\n" + body,
-		"tree":    treeSHA,
-		"parents": []string{},
-	}, ".sha")
+		"content": base64.StdEncoding.EncodeToString([]byte(change.content)),
+		"branch":  branch,
+	})
 	if err != nil {
-		return "", fmt.Errorf("bootstrap commit: %w", err)
+		return "", err
 	}
-	if err := ghJSON("POST", base+"/refs", map[string]string{"ref": "refs/heads/" + branch, "sha": commitSHA}); err != nil {
-		return "", fmt.Errorf("bootstrap ref %s: %w", branch, err)
+	out, err := ghStdin(string(payload), "api", "-X", "PUT",
+		fmt.Sprintf("repos/%s/%s/contents/%s", org, repo, change.path),
+		"--jq", ".commit.sha", "--input", "-")
+	if err != nil {
+		return "", err
 	}
-	return shortOid(commitSHA), nil
+	return shortOid(out), nil
 }
 
 // syncCommitMessage derives the sync commit's headline and body from the
@@ -534,21 +550,6 @@ func ghJSON(method, path string, body any) error {
 	}
 	_, err = ghStdin(string(raw), "api", "-X", method, path, "--input", "-")
 	return err
-}
-
-// ghField POSTs body as JSON and returns the single value `jq` selects,
-// trimmed — the create-and-read-back the Git Data API bootstrap needs (blob,
-// tree and commit each answer with the id the next step consumes).
-func ghField(path string, body any, jq string) (string, error) {
-	raw, err := json.Marshal(body)
-	if err != nil {
-		return "", err
-	}
-	out, err := ghStdin(string(raw), "api", "-X", "POST", path, "--jq", jq, "--input", "-")
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
 }
 
 func gh(args ...string) (string, error) { return ghStdin("", args...) }
