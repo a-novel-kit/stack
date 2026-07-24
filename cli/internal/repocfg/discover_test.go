@@ -54,9 +54,9 @@ jobs:
 		t.Fatalf("Discover: %v", err)
 	}
 
-	// always (GitGuardian + epic-freeze + merge-gate) + the non-excluded main.yaml jobs.
+	// always (epic-freeze + merge-gate) + the non-excluded main.yaml jobs.
 	got := contextsOf(d.Checks)
-	want := []string{"GitGuardian Security Checks", "epic-freeze", "lint-go", "merge-gate", "test-go"}
+	want := []string{"epic-freeze", "lint-go", "merge-gate", "test-go"}
 	if !slices.Equal(got, want) {
 		t.Errorf("required checks = %v, want %v", got, want)
 	}
@@ -94,7 +94,7 @@ func TestDiscover_NoMainYaml(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if got, want := contextsOf(d.Checks), []string{"GitGuardian Security Checks", "epic-freeze", "merge-gate"}; !slices.Equal(got, want) {
+	if got, want := contextsOf(d.Checks), []string{"epic-freeze", "merge-gate"}; !slices.Equal(got, want) {
 		t.Errorf("checks = %v, want %v", got, want)
 	}
 }

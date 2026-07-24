@@ -114,8 +114,8 @@ The core team is intentionally **not** a bypass actor.
 Decides which CI jobs gate the default branch. The `master` ruleset's required
 checks are:
 
-1. the **`always`** set — required on every repo regardless of class (today
-   GitGuardian); plus
+1. the **`always`** set — required on every repo regardless of class (the
+   [Agent] App's `merge-gate` and `epic-freeze`); plus
 2. **every job declared in the repo's `.github/workflows/main.yaml`**, minus the
    **`exclude`** rules.
 
