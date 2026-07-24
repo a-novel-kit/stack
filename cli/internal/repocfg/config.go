@@ -1,5 +1,5 @@
 // Package repocfg models and applies a repository's GitHub configuration —
-// general settings, security, CodeQL, Pages and the per-repo rulesets —
+// general settings, security, Pages and the per-repo rulesets —
 // from editable YAML templates under templates/.
 //
 // The desired state for a repo is composed from three inputs:
@@ -102,13 +102,6 @@ type SecurityToggles struct {
 	Dependabot     bool `yaml:"dependabot"`
 }
 
-// CodeQLPreset configures CodeQL advanced setup. Languages are discovered,
-// not declared here.
-type CodeQLPreset struct {
-	Enabled    bool   `yaml:"enabled"`
-	QuerySuite string `yaml:"query_suite"`
-}
-
 // ClassRulesets says which named rulesets the class applies.
 type ClassRulesets struct {
 	Master          bool `yaml:"master"`
@@ -122,7 +115,6 @@ type ClassPreset struct {
 	Features    Features        `yaml:"features"`
 	Merge       Merge           `yaml:"merge"`
 	Security    SecurityToggles `yaml:"security"`
-	CodeQL      CodeQLPreset    `yaml:"codeql"`
 	Pages       bool            `yaml:"pages"`
 	CodeQuality bool            `yaml:"code_quality"`
 	Rulesets    ClassRulesets   `yaml:"rulesets"`
@@ -144,28 +136,12 @@ type ExcludeRules struct {
 	IfContains []string `yaml:"if_contains"`
 }
 
-// CodeQLRule is the only file-based detection left: the CodeQL workflow's
-// languages. Always-on languages need no signal (e.g. actions); the rest are
-// detected by a canonical file (go.mod → go, package.json → javascript).
-type CodeQLRule struct {
-	Always    []string         `yaml:"always"`
-	Languages []CodeQLLangRule `yaml:"languages"`
-}
-
-// CodeQLLangRule maps a detection signal to a CodeQL language.
-type CodeQLLangRule struct {
-	Detect []string `yaml:"detect"`
-	Lang   string   `yaml:"lang"`
-}
-
 // ChecksConfig is checks.yaml. Required checks are exactly the jobs declared in
 // a repo's .github/workflows/main.yaml, minus Exclude, plus the Always set.
-// CodeQL languages for the codeql.yml workflow are the only other piece here.
 type ChecksConfig struct {
 	Integrations map[string]int64 `yaml:"integrations"`
 	Always       []CheckDef       `yaml:"always"`
 	Exclude      ExcludeRules     `yaml:"exclude"`
-	CodeQL       CodeQLRule       `yaml:"codeql"`
 }
 
 // LoadClass reads and parses classes/<class>.yaml.

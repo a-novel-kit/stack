@@ -18,12 +18,10 @@ func TestRenderSummary(t *testing.T) {
 			Features: repocfg.Features{Issues: true, Projects: true},
 			Merge:    repocfg.Merge{Squash: true, AutoMerge: true, SignoffRequired: true},
 			Security: repocfg.SecurityToggles{SecretScanning: true, PushProtection: true, Dependabot: true},
-			CodeQL:   repocfg.CodeQLPreset{Enabled: true, QuerySuite: "security-and-quality"},
 			Rulesets: repocfg.ClassRulesets{Master: true, RequireApproval: true},
 		},
 		Discovered: &repocfg.Discovered{
-			Checks:      []repocfg.CheckRef{{Context: "lint-go"}, {Context: "test"}},
-			CodeQLLangs: []string{"go"},
+			Checks: []repocfg.CheckRef{{Context: "lint-go"}, {Context: "test"}},
 		},
 	}
 
@@ -34,7 +32,6 @@ func TestRenderSummary(t *testing.T) {
 	for _, want := range []string{
 		"a-novel/service-auth", "class service",
 		"Features", "squash", "auto-merge", "signoff",
-		"CodeQL", "go (security-and-quality)",
 		"lint-go, test (2)", // discovered checks
 	} {
 		if !strings.Contains(got, want) {

@@ -275,68 +275,6 @@ func Detect(root string) ([]Target, error) {
 	return targets, nil
 }
 
-// ExistsUnder reports whether any of relPaths (slash-separated, relative to a
-// directory) exists at root or in any directory below it, using the same
-// bounded, pruned, gitignore-aware walk as Detect. It finds a signal file that
-// lives in a sub-module directory, such as a go.mod or buf.yaml under cli/. The
-// walk short-circuits on the first match.
-func ExistsUnder(root string, relPaths []string) bool {
-	if len(relPaths) == 0 {
-		return false
-	}
-	found := false
-	walkRepoDirs(root, func(absDir, _ string) bool {
-		for _, rel := range relPaths {
-			if _, statErr := os.Stat(filepath.Join(absDir, filepath.FromSlash(rel))); statErr == nil {
-				found = true
-				return true
-			}
-		}
-		return false
-	})
-	return found
-}
-
-// walkRepoDirs walks root with the bounded, pruned, gitignore-aware policy the
-// detection probes share, staying out of the gitignored sibling checkouts
-// (app/, kit/), node_modules, hidden trees and anything past the depth cap. It
-// invokes visit(absDir, relDir) for each surviving directory ("." for the
-// root); visit returns true to stop the walk early.
-func walkRepoDirs(root string, visit func(absDir, relDir string) bool) {
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return
-	}
-	ignored := gitIgnoredDirs(absRoot)
-	_ = filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			// Skip an unreadable subtree and keep probing.
-			if d != nil && d.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !d.IsDir() {
-			return nil
-		}
-		if skipDir(absRoot, path, d.Name(), ignored) {
-			return filepath.SkipDir
-		}
-		// path is always absRoot or a descendant, so a prefix trim yields the
-		// relative dir ("." for the root) with no filepath.Rel error to handle.
-		rel := "."
-		if path != absRoot {
-			rel = filepath.ToSlash(strings.TrimPrefix(path, absRoot+string(filepath.Separator)))
-		}
-		if visit(path, rel) {
-			return filepath.SkipAll
-		}
-		return nil
-	})
-}
-
-// kindOrder fixes the group order in the menu: Go first, then pnpm, then
-// podman, so the fastest builds report back soonest.
 func kindOrder(k Kind) int {
 	switch k {
 	case KindGo:

@@ -1,5 +1,5 @@
-# Reusable GitHub Actions workflows. No application code, so CodeQL scans
-# only the actions and there is no code-quality gate.
+# Reusable GitHub Actions workflows. No application code, so there is no
+# code-quality gate.
 class: workflows
 features:
   issues: true
@@ -18,9 +18,6 @@ security:
   secret_scanning: true
   push_protection: true
   dependabot: true
-codeql:
-  enabled: true
-  query_suite: default
 pages: false
 code_quality: false
 rulesets:

@@ -38,7 +38,7 @@ func newRepoCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "repo",
 		Short: "Create and configure GitHub repositories (interactive, human-only)",
-		Long: `Apply the standard repository configuration (settings, security, CodeQL,
+		Long: `Apply the standard repository configuration (settings, security,
 rulesets, Pages) from the templates in cli/internal/repocfg/templates.
 
 Writes are interactive and human-only. '--dry-run' computes the desired
@@ -60,7 +60,7 @@ func newRepoCreateCmd() *cobra.Command {
 		Use:   "create <org> <name>",
 		Short: "Create a repository and apply its class config",
 		Long: `Creates <org>/<name> (optionally from a template), then discovers its
-checks and applies the class configuration — settings, security, CodeQL,
+checks and applies the class configuration — settings, security,
 rulesets, Pages. Interactive (human-only); run it from anywhere.`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {

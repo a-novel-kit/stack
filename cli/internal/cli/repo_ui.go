@@ -62,11 +62,6 @@ func renderSummary(w io.Writer, t *repocfg.RepoTarget) {
 		onOff("push-protection", c.Security.PushProtection),
 		onOff("dependabot", c.Security.Dependabot),
 	}, " "))
-	if c.CodeQL.Enabled && len(t.Discovered.CodeQLLangs) > 0 {
-		line("CodeQL", strings.Join(t.Discovered.CodeQLLangs, ", ")+" ("+c.CodeQL.QuerySuite+")")
-	} else {
-		line("CodeQL", repoOff.Render("off"))
-	}
 	if c.Pages {
 		line("Pages", repoOn.Render("enabled"))
 	}

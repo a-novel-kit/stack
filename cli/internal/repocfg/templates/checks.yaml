@@ -36,12 +36,3 @@ exclude:
   # Jobs whose `if:` contains one of these strings — master-only jobs never run
   # on a PR, so they cannot gate one.
   if_contains: ["github.ref == 'refs/heads/master'"]
-
-# CodeQL languages for the codeql.yml workflow (rendered by repo create/update).
-# The only file-based detection here: an always-on language needs no signal,
-# and the rest are keyed to a canonical file.
-codeql:
-  always: ["actions"]
-  languages:
-    - { detect: ["go.mod"], lang: "go" }
-    - { detect: ["package.json"], lang: "javascript-typescript" }

@@ -47,7 +47,8 @@ func TestApplyPlan(t *testing.T) {
 
 	plan := &repocfg.Plan{Ops: []repocfg.Op{
 		{Method: "PATCH", Path: "repos/o/r", Body: map[string]any{"has_wiki": false}},
-		{Method: "PUT", Path: "repos/o/r/contents/.github/workflows/codeql.yml", Content: "name: CodeQL\n"},
+		{Method: "PATCH", Path: "repos/o/r/code-scanning/default-setup", Body: map[string]any{"state": "not-configured"}},
+		{Method: "PUT", Path: "repos/o/r/contents/.github/workflows/managed.yaml", Content: "name: Managed\n"},
 		{RulesetName: branchMaster, Path: "repos/o/r/rulesets", Body: &repocfg.APIRuleset{Name: branchMaster}},
 		{RulesetName: "codecov", Path: "repos/o/r/rulesets", Body: &repocfg.APIRuleset{Name: "codecov"}},
 	}}
@@ -58,13 +59,13 @@ func TestApplyPlan(t *testing.T) {
 
 	joined := strings.Join(*calls, "\n")
 	wants := []string{
-		"api -X PATCH repos/o/r --input -",                    // settings
-		"code-scanning/default-setup -f state=not-configured", // codeql: disable default setup first
-		"api repos/o/r/git/ref/heads/master --jq .object.sha", // sync commit: read the branch tip
-		`"expectedHeadOid":"headoid123"`,                      // sync commit: optimistic lock on that tip
-		`"path":".github/workflows/codeql.yml"`,               // sync commit: carries the staged file
-		"api -X POST repos/o/r/rulesets --input -",            // master ruleset created (no existing id)
-		"api -X PUT repos/o/r/rulesets/777 --input -",         // codecov ruleset updated (existing id 777)
+		"api -X PATCH repos/o/r --input -",                             // settings
+		"api -X PATCH repos/o/r/code-scanning/default-setup --input -", // code scanning stays off
+		"api repos/o/r/git/ref/heads/master --jq .object.sha",          // sync commit: read the branch tip
+		`"expectedHeadOid":"headoid123"`,                               // sync commit: optimistic lock on that tip
+		`"path":".github/workflows/managed.yaml"`,                      // sync commit: carries the staged file
+		"api -X POST repos/o/r/rulesets --input -",                     // master ruleset created (no existing id)
+		"api -X PUT repos/o/r/rulesets/777 --input -",                  // codecov ruleset updated (existing id 777)
 	}
 	for _, w := range wants {
 		if !strings.Contains(joined, w) {
@@ -81,11 +82,11 @@ func TestApplyPlan(t *testing.T) {
 func TestStageContents(t *testing.T) {
 	// Not parallel: sub-tests swap the package-level ghStdin seam.
 	t.Run("unchanged content stages nothing", func(t *testing.T) {
-		content := "name: CodeQL\n"
+		content := "name: Managed\n"
 		fakeGH(t, map[string]string{"--jq .sha": blobSHA(content) + "\n"})
 
-		changes, unchanged, err := stageContents("o", "r", repocfg.Op{
-			Path: "repos/o/r/contents/.github/workflows/codeql.yml", Content: content,
+		changes, unchanged, err := stageContents(repocfg.Op{
+			Path: "repos/o/r/contents/.github/workflows/managed.yaml", Content: content,
 		})
 		if err != nil {
 			t.Fatalf("stageContents: %v", err)
@@ -98,13 +99,13 @@ func TestStageContents(t *testing.T) {
 	t.Run("new file stages a creation", func(t *testing.T) {
 		fakeGH(t, nil) // sha GET yields "" → the file does not exist yet
 
-		changes, unchanged, err := stageContents("o", "r", repocfg.Op{
-			Path: "repos/o/r/contents/.github/workflows/codeql.yml", Content: "name: CodeQL\n",
+		changes, unchanged, err := stageContents(repocfg.Op{
+			Path: "repos/o/r/contents/.github/workflows/managed.yaml", Content: "name: Managed\n",
 		})
 		if err != nil || unchanged {
 			t.Fatalf("stageContents: (unchanged=%v, err=%v)", unchanged, err)
 		}
-		want := contentChange{path: ".github/workflows/codeql.yml", content: "name: CodeQL\n", outcome: opCreated}
+		want := contentChange{path: ".github/workflows/managed.yaml", content: "name: Managed\n", outcome: opCreated}
 		if len(changes) != 1 || changes[0] != want {
 			t.Fatalf("changes = %+v, want [%+v]", changes, want)
 		}
@@ -113,8 +114,8 @@ func TestStageContents(t *testing.T) {
 	t.Run("drifted file stages an update", func(t *testing.T) {
 		fakeGH(t, map[string]string{"--jq .sha": "someothersha\n"})
 
-		changes, unchanged, err := stageContents("o", "r", repocfg.Op{
-			Path: "repos/o/r/contents/.github/workflows/codeql.yml", Content: "name: CodeQL\n",
+		changes, unchanged, err := stageContents(repocfg.Op{
+			Path: "repos/o/r/contents/.github/workflows/managed.yaml", Content: "name: Managed\n",
 		})
 		if err != nil || unchanged {
 			t.Fatalf("stageContents: (unchanged=%v, err=%v)", unchanged, err)
@@ -132,7 +133,7 @@ func TestStageContents(t *testing.T) {
 			"--jq .sha": blobSHA(content) + "\n",
 		})
 
-		changes, unchanged, err := stageContents("o", "r", repocfg.Op{
+		changes, unchanged, err := stageContents(repocfg.Op{
 			Path: "repos/o/r/contents/.github/CODEOWNERS", Content: content,
 		})
 		if err != nil {
@@ -151,7 +152,7 @@ func TestStageContents(t *testing.T) {
 		deployed := "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.15.0\n"
 		fakeGH(t, map[string]string{gatePath: contentsJSON(t, deployed)})
 
-		changes, unchanged, err := stageContents("o", "r", repocfg.Op{Path: gatePath, Content: template})
+		changes, unchanged, err := stageContents(repocfg.Op{Path: gatePath, Content: template})
 		if err != nil {
 			t.Fatalf("stageContents: %v", err)
 		}
@@ -167,7 +168,7 @@ func TestStageContents(t *testing.T) {
 		deployed := "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.15.0\n"
 		fakeGH(t, map[string]string{gatePath: contentsJSON(t, deployed)})
 
-		changes, unchanged, err := stageContents("o", "r", repocfg.Op{Path: gatePath, Content: template})
+		changes, unchanged, err := stageContents(repocfg.Op{Path: gatePath, Content: template})
 		if err != nil || unchanged {
 			t.Fatalf("stageContents: (unchanged=%v, err=%v)", unchanged, err)
 		}
@@ -181,7 +182,7 @@ func TestStageContents(t *testing.T) {
 		deployed := "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.15.0\n"
 		fakeGH(t, map[string]string{gatePath: contentsJSON(t, deployed)})
 
-		changes, unchanged, err := stageContents("o", "r", repocfg.Op{Path: gatePath, Content: template})
+		changes, unchanged, err := stageContents(repocfg.Op{Path: gatePath, Content: template})
 		if err != nil || unchanged {
 			t.Fatalf("stageContents: (unchanged=%v, err=%v)", unchanged, err)
 		}
@@ -213,7 +214,7 @@ func contentsJSON(t *testing.T, text string) string {
 func TestCommitSync(t *testing.T) {
 	// Not parallel: sub-tests swap the package-level ghStdin seam.
 	changes := []contentChange{
-		{path: ".github/workflows/codeql.yml", content: "name: CodeQL\n", outcome: opUpdated},
+		{path: ".github/workflows/managed.yaml", content: "name: Managed\n", outcome: opUpdated},
 		{path: "CODEOWNERS", outcome: opDeleted},
 	}
 
@@ -233,9 +234,9 @@ func TestCommitSync(t *testing.T) {
 		joined := strings.Join(*calls, "\n")
 		for _, w := range []string{
 			`"expectedHeadOid":"headoid123"`,
-			`"additions":[{"contents":"` + base64.StdEncoding.EncodeToString([]byte("name: CodeQL\n")),
+			`"additions":[{"contents":"` + base64.StdEncoding.EncodeToString([]byte("name: Managed\n")),
 			`"deletions":[{"path":"CODEOWNERS"}]`,
-			`"headline":"ci: sync managed config (codeql, CODEOWNERS)"`,
+			`"headline":"ci: sync managed config (managed, CODEOWNERS)"`,
 		} {
 			if !strings.Contains(joined, w) {
 				t.Errorf("expected the mutation payload to contain %q; calls:\n%s", w, joined)
@@ -277,7 +278,7 @@ func TestCommitSync(t *testing.T) {
 		}
 		joined := strings.Join(calls, "\n")
 		for _, w := range []string{
-			"api -X PUT repos/o/r/contents/.github/workflows/codeql.yml", // the seed file
+			"api -X PUT repos/o/r/contents/.github/workflows/managed.yaml", // the seed file
 			`"branch":"master"`, // ...onto the default branch
 			`"content":"`,       // ...carrying its base64 content
 		} {
@@ -318,7 +319,7 @@ func TestCommitSync(t *testing.T) {
 		}
 
 		twoAdds := []contentChange{
-			{path: ".github/workflows/codeql.yml", content: "name: CodeQL\n", outcome: opCreated},
+			{path: ".github/workflows/managed.yaml", content: "name: Managed\n", outcome: opCreated},
 			{path: ".github/CODEOWNERS", content: "* @team\n", outcome: opCreated},
 		}
 		detail, err := commitSync("o", "r", branchMaster, twoAdds)
@@ -381,13 +382,13 @@ func TestCommitSync(t *testing.T) {
 func TestSyncCommitMessage(t *testing.T) {
 	t.Run("short change lists name the files", func(t *testing.T) {
 		headline, body := syncCommitMessage([]contentChange{
-			{path: ".github/workflows/codeql.yml", outcome: opUpdated},
+			{path: ".github/workflows/managed.yaml", outcome: opUpdated},
 			{path: "CODEOWNERS", outcome: opDeleted},
 		})
-		if headline != "ci: sync managed config (codeql, CODEOWNERS)" {
+		if headline != "ci: sync managed config (managed, CODEOWNERS)" {
 			t.Errorf("headline = %q", headline)
 		}
-		for _, w := range []string{"updated .github/workflows/codeql.yml", "deleted CODEOWNERS", "Managed by a-novel repo sync."} {
+		for _, w := range []string{"updated .github/workflows/managed.yaml", "deleted CODEOWNERS", "Managed by a-novel repo sync."} {
 			if !strings.Contains(body, w) {
 				t.Errorf("body should contain %q; got:\n%s", w, body)
 			}
@@ -397,7 +398,7 @@ func TestSyncCommitMessage(t *testing.T) {
 	t.Run("long change lists fall back to a count", func(t *testing.T) {
 		headline, _ := syncCommitMessage([]contentChange{
 			{path: ".github/CODEOWNERS"},
-			{path: ".github/workflows/codeql.yml"},
+			{path: ".github/workflows/managed.yaml"},
 			{path: ".github/workflows/merge-gate.yaml"},
 			{path: ".github/workflows/approve-pr.yaml"},
 			{path: ".github/workflows/derive-status.yaml"},

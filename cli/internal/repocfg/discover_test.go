@@ -20,7 +20,7 @@ func writeTree(root, rel, content string) {
 
 // TestDiscover covers the main.yaml-based discovery: required checks are the
 // always set plus every main.yaml job, minus the report-* and master-only
-// exclusions; CodeQL languages come from the file signals + the always list.
+// exclusions.
 func TestDiscover(t *testing.T) {
 	t.Parallel()
 
@@ -70,12 +70,6 @@ jobs:
 	for _, ex := range []string{"report-codecov", "publish-docs"} {
 		if slices.Contains(got, ex) {
 			t.Errorf("excluded job %q leaked into required checks: %v", ex, got)
-		}
-	}
-	// CodeQL languages from file signals (go.mod, package.json) + always-on actions.
-	for _, lang := range []string{"go", "javascript-typescript", "actions"} {
-		if !slices.Contains(d.CodeQLLangs, lang) {
-			t.Errorf("missing CodeQL lang %q; got %v", lang, d.CodeQLLangs)
 		}
 	}
 }
