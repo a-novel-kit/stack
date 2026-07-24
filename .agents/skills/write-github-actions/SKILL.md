@@ -153,6 +153,35 @@ worthless, such as a lint-only workflow. Anything that releases or deploys must 
 
 ---
 
+## `needs:` is data flow, not sequencing
+
+A `needs:` edge belongs there only when the downstream job **consumes something the upstream one
+produces**. In this fleet that is one of three things: an image digest read as
+`needs.build-database.outputs.digest`, a coverage artifact ID read as
+`needs.test-go.outputs.artifact-id`, or a file the upstream job left on disk. If you cannot name the
+value crossing the edge, the edge is wrong.
+
+Do not add one to express "don't spend a runner if the previous check failed". Jobs run on separate
+runners against separate checkouts, so an upstream verdict cannot change a downstream one — a
+`lint-go → test-go` edge buys nothing but latency, and it costs it on every run, including the green
+ones. It also degrades a red run: failures surface one layer at a time instead of all at once, so a
+branch with a lint error and a test error takes two round trips to fix. `merge-gate` is what stops a
+red PR from merging; the graph shape is not, and never was.
+
+The same reasoning kills the "don't publish an image from untested code" edge (`test-go → build-*`).
+Those images carry branch tags and are dev artifacts; `merge-gate` requires the test lane green
+before anything reaches `master`.
+
+Rewiring `needs:` is safe against the ruleset: required checks derive from the **job list** in
+`main.yaml` (see below), not from the graph, so cutting an edge never changes a check context and
+never needs `a-novel repo update`. Adding or removing a job does.
+
+Sequencing decisions are the skill's job, not the workflow's — do not restate this rationale as a
+comment in a `main.yaml`. Comment what is specific to that file: why *this* postgres needs a longer
+health timeout, why *this* job runs its binary twice. Reviewers get the general rule from here.
+
+---
+
 ## Job names are check contexts
 
 A job's ID **is** its required-check context, so name it by lane: `test-go`, `lint-go`, `lint-node`,
