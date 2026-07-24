@@ -11,9 +11,7 @@ jobs:
   generated-go-cli:
     # Ensures `go generate ./...` in cli/ produces no diff against what's
     # committed (proto bindings, mocks, etc.). Mirrors the per-service
-    # generated-go job. It gates nothing: lint-go-cli and test-go-cli run on
-    # their own runners against their own checkouts, so this job's verdict
-    # cannot change theirs — it only delayed them.
+    # generated-go job.
     runs-on: ubuntu-latest
     permissions:
       contents: read
