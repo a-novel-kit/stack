@@ -206,11 +206,15 @@ Four behaviours to know before running it:
 - **Required checks are derived, not configured.** They are the jobs in the repo's `main.yaml` (minus
   `report-*` and master-only jobs) plus the always-required set. A new job becomes a required check on
   the next `update`, and not before.
-- **Config comes from the working tree**, not from GitHub. Run it on an up-to-date default branch, or
-  it deploys whatever your checkout holds.
-- **A checkout off its default branch is skipped**, silently and by design — reconciling from an
-  in-progress branch would push half-finished template edits fleet-wide. Check branches before `--all`,
-  or the repos you most care about are the ones quietly missed.
+- **Config comes from the working tree**, not from GitHub — and only `--all` guards that. The
+  batch sweep skips a checkout carrying ongoing work (off its default branch, or a dirty tree) and
+  reports each one as `⏸ <org>/<repo> — on <branch>, skipped`, so a partial run is visible in the
+  output rather than silent. The **single-repo** form has no such guard: run from a feature branch,
+  it reconciles from that branch's `main.yaml`. Be on an up-to-date default branch before running it.
+- **`--all` shares `core sync`'s whitelist.** Both read `workspace-repos.yaml` at the workspace root
+  through the same loader, so the batch covers every whitelisted repo actually cloned under `app/` or
+  `kit/`, plus the stack repo itself. A whitelisted repo not yet cloned is simply absent. (`repo create`
+  takes its `<org> <name>` explicitly — the repo does not exist yet, so no whitelist applies.)
 - **A newer deployed pin survives.** For files pinning `a-novel-kit/workflows` actions, a version
   already ahead of the template's is kept, so `update` never rolls back a bump Renovate landed.
 
@@ -352,11 +356,14 @@ authoring/merge/close are impossible through it.
 `core setup` is interactive; everything else is non-interactive and `.zshrc`-safe.
 
 **Sub-agents spawning fresh stacks**: run `a-novel core sync --root=<new-stack-root>`
-as the first action in the new workspace. It pulls the six whitelisted repos into
-`kit/` and `app/` so later test/build/run commands have something to operate on.
-The whitelist is deliberately narrow (workflows, golib, nodelib, service-template,
-service-json-keys, service-authentication) until the broader workspace stabilises;
-expanding it is a one-line PR.
+as the first action in the new workspace, so later test/build/run commands have
+something to operate on.
+
+**`workspace-repos.yaml` at the workspace root is the whitelist** — the single
+source of truth for which repos exist locally, read at runtime by both
+`core sync` and `repo update --all`. Add a repo by editing that file; no rebuild,
+no code change. Do not restate its contents anywhere (this doc used to name six
+repos and went stale as the list grew); read the file.
 
 ---
 
