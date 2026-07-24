@@ -103,13 +103,6 @@ func TestLoadChecks(t *testing.T) {
 	if len(c.Exclude.IfContains) == 0 {
 		t.Error("exclude.if_contains empty (expected the master-only guard)")
 	}
-	// CodeQL keeps a minimal file-based language detection for codeql.yml.
-	if !slices.Contains(c.CodeQL.Always, "actions") {
-		t.Errorf("codeql.always missing actions; got %v", c.CodeQL.Always)
-	}
-	if len(c.CodeQL.Languages) == 0 {
-		t.Error("codeql.languages empty")
-	}
 }
 
 // TestResolveBotIntegrations pins the per-org [Agent] app id resolution. The two

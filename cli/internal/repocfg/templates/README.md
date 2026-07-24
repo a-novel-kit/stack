@@ -60,21 +60,19 @@ Same schema. A `repos/` file is for a one-off repo and **replaces** the
 class entirely (it still names a base `class` for provenance). All fields
 are required unless noted.
 
-| Field                                                           | Type   | Meaning                                                                                                     |
-| --------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------- |
-| `class`                                                         | string | Class ID (`service`, `library`, `workflows`, `meta`).                                                       |
-| `features.issues` / `.wiki` / `.projects` / `.discussions`      | bool   | Repo feature toggles.                                                                                       |
-| `merge.squash` / `.merge_commit` / `.rebase`                    | bool   | Allowed merge methods (squash-only org-wide).                                                               |
-| `merge.auto_merge`                                              | bool   | Allow auto-merge.                                                                                           |
-| `merge.delete_branch_on_merge`                                  | bool   | Auto-delete head branch on merge.                                                                           |
-| `merge.allow_update_branch`                                     | bool   | Offer "update branch" on out-of-date PRs.                                                                   |
-| `merge.signoff_required`                                        | bool   | Require `Signed-off-by` on web commits.                                                                     |
-| `security.secret_scanning` / `.push_protection` / `.dependabot` | bool   | GHAS toggles (public repos).                                                                                |
-| `codeql.enabled`                                                | bool   | Enable CodeQL advanced setup (commits `.github/workflows/codeql.yml`).                                      |
-| `codeql.query_suite`                                            | string | `default` or `security-and-quality` (the latter feeds the `code_quality` rule). Omit when `enabled: false`. |
-| `pages`                                                         | bool   | Enable a GitHub Pages site (build type: workflow).                                                          |
-| `code_quality`                                                  | bool   | Add the `code_quality` rule to the `master` ruleset.                                                        |
-| `rulesets.master` / `.require_approval` / `.tags`               | bool   | Apply those rulesets. `tags` locks tag (and release) creation to the agent bot + admins.                    |
+| Field                                                           | Type   | Meaning                                                                                              |
+| --------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| `class`                                                         | string | Class ID (`service`, `library`, `workflows`, `meta`).                                                |
+| `features.issues` / `.wiki` / `.projects` / `.discussions`      | bool   | Repo feature toggles.                                                                                |
+| `merge.squash` / `.merge_commit` / `.rebase`                    | bool   | Allowed merge methods (squash-only org-wide).                                                        |
+| `merge.auto_merge`                                              | bool   | Allow auto-merge.                                                                                    |
+| `merge.delete_branch_on_merge`                                  | bool   | Auto-delete head branch on merge.                                                                    |
+| `merge.allow_update_branch`                                     | bool   | Offer "update branch" on out-of-date PRs.                                                            |
+| `merge.signoff_required`                                        | bool   | Require `Signed-off-by` on web commits.                                                              |
+| `security.secret_scanning` / `.push_protection` / `.dependabot` | bool   | GHAS toggles (public repos).                                                                         |
+| `pages`                                                         | bool   | Enable a GitHub Pages site (build type: workflow).                                                   |
+| `code_quality`                                                  | bool   | Add the `code_quality` rule to the `master` ruleset (GitHub Code Quality is a separate repo toggle). |
+| `rulesets.master` / `.require_approval` / `.tags`               | bool   | Apply those rulesets. `tags` locks tag (and release) creation to the agent bot + admins.             |
 
 ## `orgs/<org>.yaml`
 
@@ -114,8 +112,8 @@ The core team is intentionally **not** a bypass actor.
 Decides which CI jobs gate the default branch. The `master` ruleset's required
 checks are:
 
-1. the **`always`** set — required on every repo regardless of class (today
-   GitGuardian); plus
+1. the **`always`** set — required on every repo regardless of class (the
+   [Agent] App's `merge-gate` and `epic-freeze`); plus
 2. **every job declared in the repo's `.github/workflows/main.yaml`**, minus the
    **`exclude`** rules.
 
@@ -130,8 +128,6 @@ this map only decides which of their jobs are required, and the set is applied
 | `always`              | list     | Checks required on every repo, regardless of class.                                                |
 | `exclude.prefixes`    | []string | Job ids starting with one of these are not required (e.g. `report-`: reporting / post-merge jobs). |
 | `exclude.if_contains` | []string | Jobs whose `if:` contains one of these are not required (master-only jobs never run on a PR).      |
-| `codeql.always`       | []string | CodeQL languages analyzed with no detection (e.g. `actions`).                                      |
-| `codeql.languages`    | list     | `{ detect, lang }` — a CodeQL language keyed to a canonical file (the only file detection left).   |
 
 Coverage is deliberately **not** among them. Codecov posts its own commit
 statuses rather than running as a `main.yaml` job, and a required status check

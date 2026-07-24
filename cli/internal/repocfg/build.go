@@ -130,17 +130,17 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		Body:   labels,
 	})
 
-	if c.CodeQL.Enabled && len(t.Discovered.CodeQLLangs) > 0 {
-		content, err := RenderCodeQL(t.Discovered.CodeQLLangs, c.CodeQL.QuerySuite, t.DefaultBranch)
-		if err != nil {
-			return nil, err
-		}
-		p.Ops = append(p.Ops, Op{
-			Method:  http.MethodPut,
-			Path:    repoPath + "/contents/.github/workflows/codeql.yml",
-			Content: content,
-		})
-	}
+	// Code scanning stays off, asserted on every update rather than assumed.
+	// Static analysis is the lint-semgrep and scan-secrets jobs in main.yaml,
+	// which report as ordinary required checks. Default setup used to be held
+	// off as a side effect of committing the advanced-setup workflow; with that
+	// workflow gone, an org-level "enable for all repositories" toggle would
+	// otherwise switch scanning back on here unnoticed. The call is idempotent.
+	p.Ops = append(p.Ops, Op{
+		Method: http.MethodPatch,
+		Path:   repoPath + "/code-scanning/default-setup",
+		Body:   map[string]any{"state": "not-configured"},
+	})
 
 	// Governance workflows, pushed wherever the master ruleset gates merges —
 	// the same repos whose PRs feed the board. They ship as static files: the
@@ -374,52 +374,6 @@ func CODEOWNERS() (string, error) {
 		return "", err
 	}
 	return string(raw), nil
-}
-
-// RenderCodeQL fills the CodeQL advanced-setup workflow template.
-func RenderCodeQL(langs []string, querySuite, defaultBranch string) (string, error) {
-	raw, err := ReadTemplate("security/codeql.yml.tmpl")
-	if err != nil {
-		return "", err
-	}
-	// Build the array prettier-style (`["a", "b"]`, space after comma) so the
-	// committed workflow passes the org's `prettier --check` lint-node gate.
-	quoted := make([]string, len(langs))
-	for i, l := range langs {
-		quoted[i] = `"` + l + `"`
-	}
-	out := string(raw)
-	out = strings.ReplaceAll(out, "__LANGUAGES__", "["+strings.Join(quoted, ", ")+"]")
-	out = strings.ReplaceAll(out, "__DEFAULT_BRANCH__", defaultBranch)
-	out = strings.ReplaceAll(out, "__CODEQL_CONFIG__", codeqlConfigBlock(querySuite))
-	return out, nil
-}
-
-// codeqlConfigBlock builds the init step's inline `config:` input: the query
-// suite plus a filter that drops actions/unpinned-tag.
-//
-// Both the suite and the filter live inside `config:` so query-filters apply
-// cleanly. The separate `queries:` input interacts with config through a `+`
-// prefix that is easy to get wrong.
-//
-// Omitting the queries block selects CodeQL's implicit default suite, so
-// queries are emitted only for an explicit named suite. The literal "default"
-// makes init look for a pack by that name and fail.
-//
-// actions/unpinned-tag is excluded: the org pins GitHub Actions to floating
-// major tags managed by Renovate, and the query reads every `uses: action@vN`
-// as unpinned.
-func codeqlConfigBlock(querySuite string) string {
-	var b strings.Builder
-	b.WriteString("          config: |\n")
-	if querySuite != "" && querySuite != "default" {
-		b.WriteString("            queries:\n")
-		b.WriteString("              - uses: " + querySuite + "\n")
-	}
-	b.WriteString("            query-filters:\n")
-	b.WriteString("              - exclude:\n")
-	b.WriteString("                  id: actions/unpinned-tag")
-	return b.String()
 }
 
 // Render writes the plan as labeled raw JSON, with verbatim file content for

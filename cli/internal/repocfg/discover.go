@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/a-novel-kit/stack/cli/internal/detect"
 )
 
 // integrationActions is the checks.yaml key for the GitHub Actions app — the
@@ -21,22 +19,18 @@ type CheckRef struct {
 	IntegrationID int64
 }
 
-// Discovered is what probing a repo tells us: the required checks (for the
-// master ruleset) and the CodeQL languages (for the codeql.yml workflow).
+// Discovered is what probing a repo tells us: the required checks for the
+// master ruleset.
 type Discovered struct {
-	Checks      []CheckRef
-	CodeQLLangs []string
+	Checks []CheckRef
 }
 
-// Discover computes a repo's required checks and CodeQL languages.
+// Discover computes a repo's required checks.
 //
 // Required checks are the `always` set plus every job declared in the repo's
 // .github/workflows/main.yaml, minus cc.Exclude — the job id is the check
 // context, so there is no class- or file-based derivation to drift. A missing
 // main.yaml (e.g. a docs/meta repo) simply contributes no jobs.
-//
-// CodeQL languages are the one remaining file-based signal, used only to render
-// the codeql.yml workflow.
 func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 	d := &Discovered{}
 	seen := map[string]bool{}
@@ -62,13 +56,6 @@ func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 		}
 		add(j.Context, cc.Integrations[integrationActions])
 	}
-
-	for _, lr := range cc.CodeQL.Languages {
-		if detect.ExistsUnder(repoPath, lr.Detect) {
-			d.CodeQLLangs = appendUnique(d.CodeQLLangs, lr.Lang)
-		}
-	}
-	d.CodeQLLangs = appendUnique(d.CodeQLLangs, cc.CodeQL.Always...)
 
 	sort.Slice(d.Checks, func(i, j int) bool { return d.Checks[i].Context < d.Checks[j].Context })
 	return d, nil
@@ -129,20 +116,4 @@ func (e ExcludeRules) excludes(j workflowJob) bool {
 		}
 	}
 	return false
-}
-
-func appendUnique(dst []string, vs ...string) []string {
-	for _, v := range vs {
-		found := false
-		for _, e := range dst {
-			if e == v {
-				found = true
-				break
-			}
-		}
-		if !found {
-			dst = append(dst, v)
-		}
-	}
-	return dst
 }

@@ -22,9 +22,6 @@ security:
   # registry token for. This toggles dependabot_security_updates only;
   # Dependabot alerts are a separate setting.
   dependabot: false
-codeql:
-  enabled: true
-  query_suite: security-and-quality
 pages: true
 code_quality: true
 rulesets:

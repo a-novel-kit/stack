@@ -23,9 +23,9 @@ import (
 
 // applyPlan executes every operation in a plan against GitHub via `gh`,
 // printing one line per outcome (managed-file lines print once their sync
-// commit lands). It keeps going after a failed op, so a fiddly step such as
-// CodeQL needing the `workflow` token scope does not block the rest, and
-// returns a combined error when any failed.
+// commit lands). It keeps going after a failed op, so a fiddly step such as a
+// managed workflow needing the `workflow` token scope does not block the rest,
+// and returns a combined error when any failed.
 func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) error {
 	var failures []string
 	note := func(ok bool, label, detail string) {
@@ -51,7 +51,7 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 			detail, err := applyRuleset(org, repo, op)
 			note(err == nil, "ruleset "+op.RulesetName, ternErr(err, detail))
 		case op.Content != "":
-			changes, unchanged, err := stageContents(org, repo, op)
+			changes, unchanged, err := stageContents(op)
 			if err != nil {
 				note(false, shortPath(op.Path), ternErr(err, ""))
 				continue
@@ -63,6 +63,9 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 		case strings.HasSuffix(op.Path, "/pages"):
 			detail, err := applyPages(op)
 			note(err == nil, "pages", ternErr(err, detail))
+		case strings.HasSuffix(op.Path, "/code-scanning/default-setup"):
+			detail, err := applyCodeScanning(op)
+			note(err == nil, "code scanning", ternErr(err, detail))
 		case strings.HasSuffix(op.Path, "/labels"):
 			detail, err := applyLabels(org, repo, op)
 			note(err == nil, "labels", ternErr(err, detail))
@@ -150,17 +153,12 @@ const codeownersName = "CODEOWNERS"
 // carry. unchanged reports that the file already matches the desired content,
 // so nothing is staged for it and a sync that changes nothing commits nothing.
 //
-// CodeQL advanced setup is mutually exclusive with default setup, so default
-// setup is switched off before the workflow lands. A stray root CODEOWNERS is
+// A stray root CODEOWNERS is
 // staged as a deletion — GitHub honors the .github/ copy — even when that copy
 // is itself unchanged, so a repo never carries two. For a file that pins
 // a-novel-kit/workflows actions, deployed pins newer than the template's
 // survive (see preserveNewerPins).
-func stageContents(org, repo string, op repocfg.Op) ([]contentChange, bool, error) {
-	if strings.Contains(op.Path, "/workflows/codeql.yml") {
-		// Default setup may already be off, in which case this errors harmlessly.
-		_, _ = gh("api", "-X", "PATCH", fmt.Sprintf("repos/%s/%s/code-scanning/default-setup", org, repo), "-f", "state=not-configured")
-	}
+func stageContents(op repocfg.Op) ([]contentChange, bool, error) {
 	var changes []contentChange
 	if strings.HasSuffix(op.Path, "/contents/.github/"+codeownersName) {
 		rootPath := strings.Replace(op.Path, "/contents/.github/"+codeownersName, "/contents/"+codeownersName, 1)
@@ -351,6 +349,18 @@ func branchHeadOid(org, repo, branch string) (string, error) {
 // applyPages enables a Pages site; a 409 (or an "already exists" message)
 // means one already exists, which is fine. Every other error is returned,
 // including a 422 validation failure.
+// applyCodeScanning turns CodeQL default setup off. Static analysis is the
+// lint-semgrep and scan-secrets jobs, which report as ordinary required checks;
+// leaving default setup reachable would let an org-level toggle switch scanning
+// back on unnoticed. Setting the state it already holds is not an error, so this
+// is safe to reassert on every update.
+func applyCodeScanning(op repocfg.Op) (string, error) {
+	if err := ghJSON("PATCH", op.Path, op.Body); err != nil {
+		return "", err
+	}
+	return "default setup off", nil
+}
+
 func applyPages(op repocfg.Op) (string, error) {
 	if err := ghJSON("POST", op.Path, op.Body); err != nil {
 		if isAlreadyExists(err) {

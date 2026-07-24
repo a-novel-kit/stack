@@ -7,14 +7,20 @@
 
 integrations:
   actions: 15368
-  gitguardian: 46505
   # The [Agent] App posts the merge-gate check-run, and its ID is per-org
   # (a-novel and a-novel-kit run separate Apps), so `agent` is injected from
   # the org profile at discovery time. See ResolveBotIntegrations.
 
 # Always required, regardless of repo or class.
+#
+# GitGuardian was here and is deliberately gone. It is a hosted service on the
+# merge path: when it saturated on 2026-07-23 it fell to roughly one scan a
+# minute against a fleet opening 144 PRs a day, and because a required check
+# that never arrives has no timeout, every affected PR became permanently
+# unmergeable. Secret scanning now runs in CI as the `scan-secrets` job, which
+# main.yaml declares and this map discovers automatically — no `always` entry
+# needed, and nothing off-repo can stall it.
 always:
-  - { context: "GitGuardian Security Checks", integration: gitguardian }
   # merge-gate: the single "may this PR merge?" gate, posted by the [Agent] App
   # from the merge-gate.yaml workflow.
   - { context: "merge-gate", integration: agent }
@@ -30,12 +36,3 @@ exclude:
   # Jobs whose `if:` contains one of these strings — master-only jobs never run
   # on a PR, so they cannot gate one.
   if_contains: ["github.ref == 'refs/heads/master'"]
-
-# CodeQL languages for the codeql.yml workflow (rendered by repo create/update).
-# The only file-based detection here: an always-on language needs no signal,
-# and the rest are keyed to a canonical file.
-codeql:
-  always: ["actions"]
-  languages:
-    - { detect: ["go.mod"], lang: "go" }
-    - { detect: ["package.json"], lang: "javascript-typescript" }

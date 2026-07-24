@@ -20,7 +20,7 @@ func writeTree(root, rel, content string) {
 
 // TestDiscover covers the main.yaml-based discovery: required checks are the
 // always set plus every main.yaml job, minus the report-* and master-only
-// exclusions; CodeQL languages come from the file signals + the always list.
+// exclusions.
 func TestDiscover(t *testing.T) {
 	t.Parallel()
 
@@ -54,9 +54,9 @@ jobs:
 		t.Fatalf("Discover: %v", err)
 	}
 
-	// always (GitGuardian + epic-freeze + merge-gate) + the non-excluded main.yaml jobs.
+	// always (epic-freeze + merge-gate) + the non-excluded main.yaml jobs.
 	got := contextsOf(d.Checks)
-	want := []string{"GitGuardian Security Checks", "epic-freeze", "lint-go", "merge-gate", "test-go"}
+	want := []string{"epic-freeze", "lint-go", "merge-gate", "test-go"}
 	if !slices.Equal(got, want) {
 		t.Errorf("required checks = %v, want %v", got, want)
 	}
@@ -70,12 +70,6 @@ jobs:
 	for _, ex := range []string{"report-codecov", "publish-docs"} {
 		if slices.Contains(got, ex) {
 			t.Errorf("excluded job %q leaked into required checks: %v", ex, got)
-		}
-	}
-	// CodeQL languages from file signals (go.mod, package.json) + always-on actions.
-	for _, lang := range []string{"go", "javascript-typescript", "actions"} {
-		if !slices.Contains(d.CodeQLLangs, lang) {
-			t.Errorf("missing CodeQL lang %q; got %v", lang, d.CodeQLLangs)
 		}
 	}
 }
@@ -94,7 +88,7 @@ func TestDiscover_NoMainYaml(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if got, want := contextsOf(d.Checks), []string{"GitGuardian Security Checks", "epic-freeze", "merge-gate"}; !slices.Equal(got, want) {
+	if got, want := contextsOf(d.Checks), []string{"epic-freeze", "merge-gate"}; !slices.Equal(got, want) {
 		t.Errorf("checks = %v, want %v", got, want)
 	}
 }

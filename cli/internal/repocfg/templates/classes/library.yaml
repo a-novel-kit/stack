@@ -18,9 +18,6 @@ security:
   secret_scanning: true
   push_protection: true
   dependabot: true
-codeql:
-  enabled: true
-  query_suite: security-and-quality
 pages: false
 code_quality: true
 rulesets:
