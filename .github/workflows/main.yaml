@@ -11,13 +11,12 @@ jobs:
   generated-go-cli:
     # Ensures `go generate ./...` in cli/ produces no diff against what's
     # committed (proto bindings, mocks, etc.). Mirrors the per-service
-    # generated-go job; gates lint-go so we don't waste a lint run on stale
-    # generated code.
+    # generated-go job.
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-go@v7
@@ -39,7 +38,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: bufbuild/buf-action@v1
@@ -48,7 +47,6 @@ jobs:
 
   lint-go-cli:
     runs-on: ubuntu-latest
-    needs: [generated-go-cli]
     permissions:
       contents: read
     steps:
@@ -119,10 +117,8 @@ jobs:
   test-go-cli:
     # Go unit tests for the cli/ module. Uses the same shared
     # gotestsum-based action every service runs so test reports and
-    # coverage artifacts land in one consistent place. Gated on
-    # generated-go so we don't waste runners on a stale proto-gen.
+    # coverage artifacts land in one consistent place.
     runs-on: ubuntu-latest
-    needs: [generated-go-cli]
     permissions:
       contents: read
     defaults:
@@ -131,7 +127,7 @@ jobs:
         # checkout-and-setup steps assume the workdir contains go.mod.
         working-directory: cli
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-go@v7
