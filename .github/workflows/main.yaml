@@ -18,6 +18,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v7
         with:
           go-version-file: "cli/go.mod"
@@ -25,7 +27,7 @@ jobs:
         shell: bash
         working-directory: cli
         run: go generate ./...
-      - uses: a-novel-kit/workflows/generic-actions/check-changes@v1.26.0
+      - uses: a-novel-kit/workflows/generic-actions/check-changes@v1.26.1
         with:
           fail_message: cli/ go generate definitions are not up-to-date, please run 'go generate ./...' inside cli/ and commit the changes
 
@@ -38,6 +40,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - uses: bufbuild/buf-action@v1
         with:
           input: cli
@@ -50,7 +54,7 @@ jobs:
     steps:
       # Go module lives under cli/, not the repo root — working-directory is
       # honoured by the shared action (a-novel-kit/workflows#140).
-      - uses: a-novel-kit/workflows/go-actions/lint-go@v1.26.0
+      - uses: a-novel-kit/workflows/go-actions/lint-go@v1.26.1
         with:
           working-directory: cli
 
@@ -60,11 +64,57 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: a-novel-kit/workflows/node-actions/lint-node@v1.26.0
+      - uses: a-novel-kit/workflows/node-actions/lint-node@v1.26.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           app_private_key: ${{ secrets.DEPENDENCY_BOT_PRIVATE_KEY }}
           client_id: ${{ vars.DEPENDENCY_BOT_CLIENT_ID }}
+
+  # Structural conventions golangci-lint cannot express.
+  lint-semgrep:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: a-novel-kit/workflows/security-actions/lint-semgrep@v1.26.1
+        with:
+          ruleset: none
+          # renovate: datasource=docker depName=semgrep/semgrep
+          version: "1.171.0"
+
+  # Replaces GitGuardian, which gated on a hosted service: when it saturated,
+  # every PR in the fleet became unmergeable. This runs offline.
+  scan-secrets:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: a-novel-kit/workflows/security-actions/scan-secrets@v1.26.1
+        with:
+          config: .gitleaks.toml
+          # renovate: datasource=github-releases depName=gitleaks/gitleaks
+          version: "8.30.1"
+
+  # Replaces CodeQL's actions analysis: excessive-permissions is the class it
+  # reported as actions/missing-workflow-permissions.
+  lint-workflows:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: a-novel-kit/workflows/security-actions/lint-workflows@v1.26.1
+        with:
+          # renovate: datasource=docker depName=ghcr.io/zizmorcore/zizmor
+          version: "1.28.0"
 
   test-go-cli:
     # Go unit tests for the cli/ module. Uses the same shared
@@ -82,6 +132,8 @@ jobs:
         working-directory: cli
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v7
         with:
           go-version-file: "cli/go.mod"
@@ -139,9 +191,14 @@ jobs:
 
           echo "MODULES=$(tr '\n' ' ' <modules.txt)" >>"$GITHUB_ENV"
       - name: run tests
+        # MODULES arrives through env rather than ${{ }}: an expression is
+        # substituted into the script before bash sees it, so its contents are
+        # code; as a variable it is data.
+        env:
+          MODULES: ${{ env.MODULES }}
         run: |
           go tool -modfile=gotestsum.mod gotestsum --jsonfile tests.json --format pkgname \
-            -- -count=1 -race -cover -coverprofile=coverage.txt -json ${{ env.MODULES }}
+            -- -count=1 -race -cover -coverprofile=coverage.txt -json $MODULES
           go tool cover -func coverage.txt
       - name: archive coverage
         uses: actions/upload-artifact@v7
