@@ -177,8 +177,8 @@ Rewiring `needs:` is safe against the ruleset: required checks derive from the *
 never needs `a-novel repo update`. Adding or removing a job does.
 
 Sequencing decisions are the skill's job, not the workflow's — do not restate this rationale as a
-comment in a `main.yaml`. Comment what is specific to that file: why *this* postgres needs a longer
-health timeout, why *this* job runs its binary twice. Reviewers get the general rule from here.
+comment in a `main.yaml`. Comment what is specific to that file: why _this_ postgres needs a longer
+health timeout, why _this_ job runs its binary twice. Reviewers get the general rule from here.
 
 ---
 
