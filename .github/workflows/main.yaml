@@ -18,6 +18,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v7
         with:
           go-version-file: "cli/go.mod"
@@ -38,6 +40,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - uses: bufbuild/buf-action@v1
         with:
           input: cli
@@ -128,6 +132,8 @@ jobs:
         working-directory: cli
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v7
         with:
           go-version-file: "cli/go.mod"
@@ -185,9 +191,14 @@ jobs:
 
           echo "MODULES=$(tr '\n' ' ' <modules.txt)" >>"$GITHUB_ENV"
       - name: run tests
+        # MODULES arrives through env rather than ${{ }}: an expression is
+        # substituted into the script before bash sees it, so its contents are
+        # code; as a variable it is data.
+        env:
+          MODULES: ${{ env.MODULES }}
         run: |
           go tool -modfile=gotestsum.mod gotestsum --jsonfile tests.json --format pkgname \
-            -- -count=1 -race -cover -coverprofile=coverage.txt -json ${{ env.MODULES }}
+            -- -count=1 -race -cover -coverprofile=coverage.txt -json $MODULES
           go tool cover -func coverage.txt
       - name: archive coverage
         uses: actions/upload-artifact@v7
