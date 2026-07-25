@@ -86,12 +86,11 @@ Possible states:
 `gh run watch` blocks the terminal until the run finishes, which in a Claude session blocks the
 whole turn and burns context on a 10+ minute run.
 
-Use the Bash tool's `run_in_background` parameter for the wait, then re-check:
+Use the Bash tool's `run_in_background` parameter for a short wait, then re-check:
 
 ```bash
-# Start a background sleep matched to expected remaining time.
-# Typical CI here takes ~8–12 min end-to-end; short jobs finish in ~2 min.
-sleep 90
+# Keep verification responsive; the next status check should happen quickly.
+sleep 5
 ```
 
 Run that with `run_in_background=true`, then on the next turn issue `gh pr checks` (or the
@@ -121,11 +120,14 @@ the new diff. Keep it scoped to `git diff` — this reviews the change, not the 
 
 Rule of thumb for sleep durations:
 
-- First check after push: `30s` — short jobs (lint, generated-go) complete by then
-- Still in progress: `90s` — matches remaining test/build job cadence
-- Known long wait (test-pkg-js after cold image pulls): `180s`
+- First check after push: `5s` — short jobs (lint, generated-go) often complete by then
+- Still in progress: `5s` — keep verification responsive and catch failures quickly
+- Known long wait (test-pkg-js after cold image pulls): `10s` — a small backoff, not a reason to
+  block the turn for a minute or more
 
-Do not poll faster than every 30 seconds — it spams the GitHub API and yields no new info.
+Prefer `5s` polling for CI status checks. If the same run remains unchanged across several
+polls, back off to `10s`; do not default to `30s`, `90s`, or longer sleeps. A short poll is
+especially important when the next action depends on verification completing.
 
 ### 1.3 Get the failing run details
 
@@ -429,7 +431,7 @@ self-review surfaced that you did not fix yourself.
 | Read only failed-step logs of one job | `gh run view <run-id> --log-failed --job <job-id>`                                  |
 | Narrow noisy logs                     | `... \| tail -n 200` or `... \| grep -E "FAIL\|Error" \| head -n 50`                |
 | Rerun failed jobs only (flake retry)  | `gh run rerun <run-id> --failed`                                                    |
-| Wait for in-progress run              | Bash `sleep 90` with `run_in_background=true`, then re-check                        |
+| Wait for in-progress run              | Bash `sleep 5` with `run_in_background=true`, then re-check                         |
 
 | CI Job         | Local fix target                      |
 | -------------- | ------------------------------------- |
