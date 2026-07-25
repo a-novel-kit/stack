@@ -1,0 +1,4 @@
+interface:
+  display_name: "Register AI Agent"
+  short_description: "Verify and register an AI co-author identity"
+  default_prompt: "Use $register-ai-agent to verify and register this missing AI co-author identity."
