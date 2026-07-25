@@ -37,6 +37,9 @@ ensure:
   - name: meta
     color: "bfd4f2"
     description: No-PR work (manual ops / config); also marks Meta Epics
+  - name: append-only-override
+    color: "fbca04"
+    description: Allows a reviewed change to files protected by an append-only CI check
   # automation:paused — on an Epic issue, holds that one epic's [Agent] automation:
   # merge-gate holds its members, and the partial-landing detector and rollback skip
   # it, while other epics keep moving. It is best-effort: a label-read blip fails

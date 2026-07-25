@@ -49,8 +49,7 @@ func TestBuildPlanProvisionsCODEOWNERS(t *testing.T) {
 }
 
 // TestBuildPlanProvisionsLabels checks that the canonical label set is
-// provisioned to every repo regardless of class — like CODEOWNERS — and carries
-// the new `meta` label plus the `triage` retirement.
+// provisioned to every repo regardless of class.
 func TestBuildPlanProvisionsLabels(t *testing.T) {
 	t.Parallel()
 	plan, err := BuildPlan(&RepoTarget{
@@ -75,14 +74,20 @@ func TestBuildPlanProvisionsLabels(t *testing.T) {
 	if cfg == nil {
 		t.Fatalf("BuildPlan emitted no /labels op; ops = %+v", plan.Ops)
 	}
-	var hasMeta bool
+	var hasMeta, hasAppendOnlyOverride bool
 	for _, l := range cfg.Ensure {
 		if l.Name == "meta" {
 			hasMeta = true
 		}
+		if l.Name == "append-only-override" {
+			hasAppendOnlyOverride = true
+		}
 	}
 	if !hasMeta {
 		t.Error("labels op ensure set missing `meta`")
+	}
+	if !hasAppendOnlyOverride {
+		t.Error("labels op ensure set missing `append-only-override`")
 	}
 	if !slices.Contains(cfg.Retire, "triage") {
 		t.Errorf("labels op retire set missing `triage`; got %v", cfg.Retire)
