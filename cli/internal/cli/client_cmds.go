@@ -45,7 +45,7 @@ type stackScope struct {
 }
 
 func (s *stackScope) bind(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&s.stack, "stack", "", "stack name (default: first in $A_NOVEL_STACKS)")
+	cmd.Flags().StringVar(&s.stack, stackLabel, "", "stack name (default: first in $A_NOVEL_STACKS)")
 }
 
 func (s *stackScope) bindAll(cmd *cobra.Command) {
@@ -1240,7 +1240,7 @@ narrow the stream.`,
 				if jsonOut {
 					_ = enc.Encode(map[string]any{
 						"ts":          ev.GetTs().AsTime().Format(time.RFC3339Nano),
-						"stack":       ev.GetStack(),
+						stackLabel:    ev.GetStack(),
 						"service":     ev.GetService(),
 						"target_id":   ev.GetTargetId(),
 						"old_phase":   ev.GetOldPhase().String(),
@@ -1294,7 +1294,7 @@ func runPsWatch(
 		if jsonOut {
 			_ = enc.Encode(map[string]any{
 				"ts":          ev.GetTs().AsTime().Format(time.RFC3339Nano),
-				"stack":       ev.GetStack(),
+				stackLabel:    ev.GetStack(),
 				"service":     ev.GetService(),
 				"target_id":   ev.GetTargetId(),
 				"old_phase":   ev.GetOldPhase().String(),

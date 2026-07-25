@@ -32,7 +32,7 @@ import (
 func newInstallCmd() *cobra.Command {
 	var sourceDir string
 	cmd := &cobra.Command{
-		Use:   "install",
+		Use:   commandInstall,
 		Short: "Rebuild + reinstall the CLI and restart the daemon (state-preserving)",
 		Long: `One command for the dev-loop reinstall cycle. Equivalent to manually
 running:
@@ -95,7 +95,7 @@ running before.`,
 
 			// 3. go install.
 			_, _ = fmt.Fprintln(out, "▸ go install ./cmd/a-novel ...")
-			install := exec.Command("go", "install", "./cmd/a-novel")
+			install := exec.Command("go", commandInstall, "./cmd/a-novel")
 			install.Dir = sourceDir
 			install.Stdout = out
 			install.Stderr = cmd.ErrOrStderr()

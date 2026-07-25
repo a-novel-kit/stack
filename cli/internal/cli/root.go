@@ -5,9 +5,19 @@
 package cli
 
 import (
+	"errors"
+
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/version"
+)
+
+const (
+	commandCore    = "core"
+	commandInstall = "install"
+	commandRun     = "run"
+	commandSync    = "sync"
+	stackLabel     = "stack"
 )
 
 // LegacyHandlers carries the entrypoints for the standalone capabilities
@@ -58,7 +68,19 @@ for the full design.`,
 		SilenceUsage:  true, // don't dump usage on every error — too noisy for the daemon-backed verbs
 		SilenceErrors: false,
 		Version:       version.String(),
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			sandbox, err := cmd.Flags().GetBool("sandbox")
+			if err != nil {
+				return err
+			}
+			if sandbox {
+				return errors.New("--sandbox must be the first argument")
+			}
+			return nil
+		},
 	}
+	root.PersistentFlags().Bool("sandbox", false,
+		"run one standalone command in a fresh temporary stack (must be first)")
 
 	// Standalone capabilities: they scan the working tree, run the build or
 	// test command, report results and exit, with no daemon involved.
@@ -120,7 +142,7 @@ selector), runs the selection, and prints a pass/fail report.`,
 // `a-novel run ps` or `a-novel run start <target>`.
 func newRunCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "run",
+		Use:   commandRun,
 		Short: "Operate on services and targets via the a-novel daemon",
 		Long: `Every verb under 'run' talks to the long-lived a-novel daemon over its
 unix socket. The daemon must be running (see 'a-novel core start') —

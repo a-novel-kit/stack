@@ -44,12 +44,12 @@ const daemonLogTailLimit = 4 << 10
 // version-update check in the detached daemon process, which has no user
 // watching and must not phone home on shutdown.
 func IsDaemonReexec(args []string) bool {
-	return len(args) >= 3 && args[1] == "core" && args[2] == daemonInternalCmd
+	return len(args) >= 3 && args[1] == commandCore && args[2] == daemonInternalCmd
 }
 
 func newCoreCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "core",
+		Use:   commandCore,
 		Short: "Manage the a-novel daemon (long-lived background process)",
 		Long: `The a-novel daemon is a long-lived background process that supervises
 running targets and serves the CLI / TUI / future web UI over a unix socket.
@@ -437,7 +437,7 @@ func startDetached() error {
 	if err != nil {
 		return fmt.Errorf("locate own binary: %w", err)
 	}
-	c := exec.Command(bin, "core", daemonInternalCmd)
+	c := exec.Command(bin, commandCore, daemonInternalCmd)
 	// Detach: new process group, no terminal.
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	c.Stdin = nil
