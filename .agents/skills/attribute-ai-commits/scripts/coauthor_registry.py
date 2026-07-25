@@ -22,6 +22,10 @@ NOREPLY_PATTERN = re.compile(
     r"^(?P<id>[0-9]+)\+(?P<login>.+)@users\.noreply\.github\.com$",
     re.IGNORECASE,
 )
+GITHUB_COMMIT_PATTERN = re.compile(
+    r"^https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/commit/"
+    r"(?P<commit>[0-9a-fA-F]{40})/?$"
+)
 
 
 class RegistryError(RuntimeError):
@@ -91,8 +95,25 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, int]:
             for field in ("label", "github_login", "email", "verification"):
                 if not entry.get(field):
                     raise RegistryError(f"verified provider {provider} lacks {field}")
-            if entry["verification"].get("kind") not in {"github_profile", "rendered_commit"}:
+            verification = entry["verification"]
+            kind = verification.get("kind")
+            if kind not in {"github_profile", "rendered_commit"}:
                 raise RegistryError(f"invalid verification kind for {provider}")
+            if kind == "github_profile" and not isinstance(verification.get("id"), int):
+                raise RegistryError(f"invalid GitHub profile proof for {provider}")
+            if kind == "rendered_commit":
+                repository = verification.get("repository", "")
+                parts = verification.get("commit_parts")
+                if not re.fullmatch(
+                    r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",
+                    repository,
+                ) or not (
+                    isinstance(parts, list)
+                    and len(parts) == 2
+                    and all(isinstance(part, str) and len(part) == 20 for part in parts)
+                    and re.fullmatch(r"[0-9a-fA-F]{40}", "".join(parts))
+                ):
+                    raise RegistryError(f"invalid rendered commit proof for {provider}")
         else:
             for field in ("reason", "evidence", "checked_at"):
                 if not entry.get(field):
@@ -126,7 +147,20 @@ def verify_profile(login: str, email: str) -> tuple[bool, dict[str, Any]]:
     return valid, {"kind": "github_profile", "id": expected_id}
 
 
+def compact_proof_commit(url: str) -> dict[str, Any]:
+    match = GITHUB_COMMIT_PATTERN.fullmatch(url)
+    if not match:
+        raise RegistryError("proof commit must be a canonical GitHub commit URL with a full hash")
+    commit = match.group("commit").lower()
+    return {
+        "kind": "rendered_commit",
+        "repository": match.group("repository"),
+        "commit_parts": [commit[:20], commit[20:]],
+    }
+
+
 def verify_proof_commit(login: str, email: str, url: str) -> tuple[bool, dict[str, Any]]:
+    verification = compact_proof_commit(url)
     document = read_text(url)
     readable_document = html.unescape(document)
     trailer = re.compile(
@@ -140,7 +174,7 @@ def verify_proof_commit(login: str, email: str, url: str) -> tuple[bool, dict[st
         str(author.get("login", "")).casefold() == expected_login
         for author in rendered_authors(document)
     )
-    return valid, {"kind": "rendered_commit", "url": url}
+    return valid, verification
 
 
 def command_list(args: argparse.Namespace) -> int:
@@ -169,7 +203,14 @@ def command_lookup(args: argparse.Namespace) -> int:
         print(json.dumps({"agent": args.agent, "status": "missing"}, indent=2, sort_keys=True))
         return 3
     provider, entry = resolved
-    print(json.dumps({"agent": provider, **entry}, indent=2, sort_keys=True))
+    output = {"agent": provider, **entry}
+    verification = output.get("verification", {})
+    if verification.get("kind") == "rendered_commit":
+        output["proof_url"] = (
+            f"https://github.com/{verification['repository']}/commit/"
+            f"{''.join(verification['commit_parts'])}"
+        )
+    print(json.dumps(output, indent=2, sort_keys=True))
     return 0 if entry.get("status") == "verified" else 2
 
 

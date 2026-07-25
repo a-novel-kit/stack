@@ -41,8 +41,9 @@
       "label": "Claude",
       "status": "verified",
       "verification": {
+        "commit_parts": ["69c0b1a0674149f27b61", "b2635f935524b6add202"],
         "kind": "rendered_commit",
-        "url": "https://github.com/anthropics/skills/commit/69c0b1a0674149f27b61b2635f935524b6add202",
+        "repository": "anthropics/skills",
         "verified_at": "2026-07-25"
       }
     },
@@ -72,8 +73,9 @@
       "label": "Codex",
       "status": "verified",
       "verification": {
+        "commit_parts": ["6db576895a808608d655", "78f9d704971601c23c9b"],
         "kind": "rendered_commit",
-        "url": "https://github.com/openai/codex/commit/6db576895a808608d65578f9d704971601c23c9b",
+        "repository": "openai/codex",
         "verified_at": "2026-07-25"
       }
     },
@@ -96,8 +98,9 @@
       "label": "Cursor Agent",
       "status": "verified",
       "verification": {
+        "commit_parts": ["8d386acdd8fe2d610294", "38940eea66015231a445"],
         "kind": "rendered_commit",
-        "url": "https://github.com/ausdisau/mapableau-new/commit/8d386acdd8fe2d61029438940eea66015231a445",
+        "repository": "ausdisau/mapableau-new",
         "verified_at": "2026-07-25"
       }
     },
@@ -151,8 +154,9 @@
       "label": "Copilot",
       "status": "verified",
       "verification": {
+        "commit_parts": ["82b3cd555790f1e5e2ec", "f5fda965b7f3031339f4"],
         "kind": "rendered_commit",
-        "url": "https://github.com/microsoft/vscode-python/commit/82b3cd555790f1e5e2ecf5fda965b7f3031339f4",
+        "repository": "microsoft/vscode-python",
         "verified_at": "2026-07-25"
       }
     },
