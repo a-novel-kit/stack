@@ -1,0 +1,289 @@
+{
+  "as_of": "2026-07-25",
+  "providers": {
+    "aider": {
+      "aliases": ["aider-ai"],
+      "checked_at": "2026-07-25",
+      "evidence": "https://github.com/Aider-AI/aider/issues/4226",
+      "reason": "Aider uses noreply@aider.chat, which is not linked to a GitHub account",
+      "status": "unavailable"
+    },
+    "amazon-q-developer": {
+      "aliases": ["amazon-q", "q-developer"],
+      "email": "208079219+amazon-q-developer[bot]@users.noreply.github.com",
+      "github_login": "amazon-q-developer[bot]",
+      "label": "Amazon Q Developer",
+      "status": "verified",
+      "verification": {
+        "id": 208079219,
+        "kind": "github_profile",
+        "verified_at": "2026-07-25"
+      }
+    },
+    "amp": {
+      "aliases": ["ampcode"],
+      "checked_at": "2026-07-25",
+      "evidence": "https://ampcode.com/",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "augment-code": {
+      "aliases": ["augment"],
+      "checked_at": "2026-07-25",
+      "evidence": "https://www.augmentcode.com/",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "claude": {
+      "aliases": ["anthropic", "claude-code"],
+      "email": "noreply@anthropic.com",
+      "github_login": "claude",
+      "label": "Claude",
+      "status": "verified",
+      "verification": {
+        "kind": "rendered_commit",
+        "url": "https://github.com/anthropics/skills/commit/69c0b1a0674149f27b61b2635f935524b6add202",
+        "verified_at": "2026-07-25"
+      }
+    },
+    "cline": {
+      "aliases": [],
+      "checked_at": "2026-07-25",
+      "evidence": "https://github.com/cline/cline",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "coderabbit": {
+      "aliases": ["coderabbitai"],
+      "email": "136622811+coderabbitai[bot]@users.noreply.github.com",
+      "github_login": "coderabbitai[bot]",
+      "label": "coderabbitai[bot]",
+      "status": "verified",
+      "verification": {
+        "id": 136622811,
+        "kind": "github_profile",
+        "verified_at": "2026-07-25"
+      }
+    },
+    "codex": {
+      "aliases": ["openai", "openai-codex", "chatgpt-codex", "codex-cli"],
+      "email": "noreply@openai.com",
+      "github_login": "codex",
+      "label": "Codex",
+      "status": "verified",
+      "verification": {
+        "kind": "rendered_commit",
+        "url": "https://github.com/openai/codex/commit/6db576895a808608d65578f9d704971601c23c9b",
+        "verified_at": "2026-07-25"
+      }
+    },
+    "continue": {
+      "aliases": ["continue-dev"],
+      "email": "230936708+continue[bot]@users.noreply.github.com",
+      "github_login": "continue[bot]",
+      "label": "continue[bot]",
+      "status": "verified",
+      "verification": {
+        "id": 230936708,
+        "kind": "github_profile",
+        "verified_at": "2026-07-25"
+      }
+    },
+    "cursor-agent": {
+      "aliases": ["cursor", "cursoragent"],
+      "email": "cursoragent@cursor.com",
+      "github_login": "cursoragent",
+      "label": "Cursor Agent",
+      "status": "verified",
+      "verification": {
+        "kind": "rendered_commit",
+        "url": "https://github.com/ausdisau/mapableau-new/commit/8d386acdd8fe2d61029438940eea66015231a445",
+        "verified_at": "2026-07-25"
+      }
+    },
+    "devin": {
+      "aliases": ["devin-ai"],
+      "email": "158243242+devin-ai-integration[bot]@users.noreply.github.com",
+      "github_login": "devin-ai-integration[bot]",
+      "label": "Devin",
+      "status": "verified",
+      "verification": {
+        "id": 158243242,
+        "kind": "github_profile",
+        "verified_at": "2026-07-25"
+      }
+    },
+    "factory-droid": {
+      "aliases": ["droid", "factory"],
+      "checked_at": "2026-07-25",
+      "evidence": "https://www.factory.ai/",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "gemini-cli": {
+      "aliases": ["gemini"],
+      "email": "218195315+gemini-cli@users.noreply.github.com",
+      "github_login": "gemini-cli",
+      "label": "gemini-cli",
+      "status": "verified",
+      "verification": {
+        "id": 218195315,
+        "kind": "github_profile",
+        "verified_at": "2026-07-25"
+      }
+    },
+    "gemini-code-assist": {
+      "aliases": ["gemini-code-assist-bot"],
+      "email": "176961590+gemini-code-assist[bot]@users.noreply.github.com",
+      "github_login": "gemini-code-assist[bot]",
+      "label": "gemini-code-assist[bot]",
+      "status": "verified",
+      "verification": {
+        "id": 176961590,
+        "kind": "github_profile",
+        "verified_at": "2026-07-25"
+      }
+    },
+    "github-copilot": {
+      "aliases": ["copilot", "copilot-cli", "github-copilot-cli", "copilot-agent"],
+      "email": "223556219+Copilot@users.noreply.github.com",
+      "github_login": "Copilot",
+      "label": "Copilot",
+      "status": "verified",
+      "verification": {
+        "kind": "rendered_commit",
+        "url": "https://github.com/microsoft/vscode-python/commit/82b3cd555790f1e5e2ecf5fda965b7f3031339f4",
+        "verified_at": "2026-07-25"
+      }
+    },
+    "google-antigravity": {
+      "aliases": ["antigravity"],
+      "checked_at": "2026-07-25",
+      "evidence": "https://antigravity.google/",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "google-jules": {
+      "aliases": ["jules"],
+      "email": "161369871+google-labs-jules[bot]@users.noreply.github.com",
+      "github_login": "google-labs-jules[bot]",
+      "label": "Jules",
+      "status": "verified",
+      "verification": {
+        "id": 161369871,
+        "kind": "github_profile",
+        "verified_at": "2026-07-25"
+      }
+    },
+    "greptile": {
+      "aliases": ["greptile-apps"],
+      "email": "165735046+greptile-apps[bot]@users.noreply.github.com",
+      "github_login": "greptile-apps[bot]",
+      "label": "greptile-apps[bot]",
+      "status": "verified",
+      "verification": {
+        "id": 165735046,
+        "kind": "github_profile",
+        "verified_at": "2026-07-25"
+      }
+    },
+    "jetbrains-junie": {
+      "aliases": ["junie"],
+      "checked_at": "2026-07-25",
+      "evidence": "https://www.jetbrains.com/junie/",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "kiro": {
+      "aliases": ["kiro-cli", "kiro-ide"],
+      "checked_at": "2026-07-25",
+      "evidence": "https://github.com/kirodotdev/Kiro",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "mistral-vibe": {
+      "aliases": ["mistral", "vibe", "vibe-code"],
+      "checked_at": "2026-07-25",
+      "evidence": "https://docs.mistral.ai/vibe/code/vibe-code-web/github-repositories-permissions",
+      "reason": "Vibe attributes commits to the authenticated human GitHub user",
+      "status": "unavailable"
+    },
+    "opencode": {
+      "aliases": ["open-code"],
+      "checked_at": "2026-07-25",
+      "evidence": "https://github.com/anomalyco/opencode",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "pi-coding-agent": {
+      "aliases": ["pi"],
+      "checked_at": "2026-07-25",
+      "evidence": "https://github.com/badlogic/pi-mono",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "qoder": {
+      "aliases": [],
+      "checked_at": "2026-07-25",
+      "evidence": "https://qoder.com/",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "qwen-code": {
+      "aliases": ["qwen"],
+      "checked_at": "2026-07-25",
+      "evidence": "https://github.com/QwenLM/qwen-code",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "replit-agent": {
+      "aliases": ["replit"],
+      "email": "129699003+replit[bot]@users.noreply.github.com",
+      "github_login": "replit[bot]",
+      "label": "replit[bot]",
+      "status": "verified",
+      "verification": {
+        "id": 129699003,
+        "kind": "github_profile",
+        "verified_at": "2026-07-25"
+      }
+    },
+    "roo-code": {
+      "aliases": ["roo"],
+      "checked_at": "2026-07-25",
+      "evidence": "https://github.com/RooCodeInc/Roo-Code",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "sourcegraph-cody": {
+      "aliases": ["cody", "sourcegraph"],
+      "checked_at": "2026-07-25",
+      "evidence": "https://sourcegraph.com/docs/cody",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "tabnine": {
+      "aliases": [],
+      "checked_at": "2026-07-25",
+      "evidence": "https://www.tabnine.com/",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "trae": {
+      "aliases": [],
+      "checked_at": "2026-07-25",
+      "evidence": "https://www.trae.ai/",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    },
+    "windsurf": {
+      "aliases": ["codeium"],
+      "checked_at": "2026-07-25",
+      "evidence": "https://windsurf.com/",
+      "reason": "No canonical GitHub-linked co-author identity was documented or verified",
+      "status": "unavailable"
+    }
+  },
+  "schema": 1,
+  "scope": "Mainstream coding and code-review agents that can materially contribute through repository workflows"
+}
