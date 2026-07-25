@@ -57,6 +57,29 @@ func main() {
 	_ = os.Setenv("PODMAN_COMPOSE_PROVIDER", "podman-compose")
 	_ = os.Setenv("PODMAN_COMPOSE_WARNING_LOGS", "false")
 
+	args, sandbox, sandboxErr := anovelcli.SandboxArgs(os.Args[1:])
+	if sandboxErr != nil {
+		fmt.Fprintf(os.Stderr, "a-novel: %v\n", sandboxErr)
+		os.Exit(exitUsage)
+	}
+	if sandbox {
+		sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		err := anovelcli.RunSandbox(sigCtx, args, os.Stdin, os.Stdout, os.Stderr)
+		stop()
+		if err != nil {
+			var exitErr *anovelcli.ExitError
+			if errors.As(err, &exitErr) {
+				if message := strings.TrimSpace(err.Error()); message != "" {
+					fmt.Fprintln(os.Stderr, message)
+				}
+				os.Exit(exitErr.Code)
+			}
+			fmt.Fprintf(os.Stderr, "a-novel --sandbox: %v\n", err)
+			os.Exit(exitFailure)
+		}
+		os.Exit(exitOK)
+	}
+
 	root := anovelcli.NewRoot(anovelcli.LegacyHandlers{
 		Test:  legacyTest,
 		Build: legacyBuild,

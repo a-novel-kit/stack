@@ -50,6 +50,18 @@ a-novel
 `test`, `build`, `publish`, `repo`, `secrets` and `claude` don't need the
 daemon. Everything under `run` does.
 
+Prefix a standalone command with `--sandbox` to run it from a freshly cloned
+and synced temporary stack. The CLI removes the stack after the command exits,
+including failures and interrupts:
+
+```bash
+a-novel --sandbox repo update --all
+```
+
+The flag isolates working trees only; the command keeps normal machine and
+network access. Daemon commands (`run`, `core`, and `install`) are refused
+because their process and socket are user-wide.
+
 ## Quick reference
 
 ```bash

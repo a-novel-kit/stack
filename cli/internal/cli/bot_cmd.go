@@ -305,7 +305,7 @@ func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs
 	}
 
 	dispatchArgs := append([]string{
-		"workflow", "run", botWorkflowFile,
+		"workflow", commandRun, botWorkflowFile,
 		"--repo", dispatchRepo,
 		"-f", "nonce=" + nonce,
 	}, formArgs...)
@@ -322,13 +322,13 @@ func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs
 	// gh run watch streams progress and, with --exit-status, exits non-zero
 	// when the run concluded in failure. It is wired straight to this
 	// command's stdio so the operator sees live progress.
-	watch := exec.Command("gh", "run", "watch", strconv.FormatInt(runID, 10),
+	watch := exec.Command("gh", commandRun, "watch", strconv.FormatInt(runID, 10),
 		"--repo", dispatchRepo, "--exit-status", "--interval", "3")
 	watch.Stdout = cmd.OutOrStdout()
 	watch.Stderr = cmd.ErrOrStderr()
 	if err := watch.Run(); err != nil {
 		// The run failed; pull the failed step's logs to explain why.
-		logs, _ := runGHOut("run", "view", strconv.FormatInt(runID, 10),
+		logs, _ := runGHOut(commandRun, "view", strconv.FormatInt(runID, 10),
 			"--repo", dispatchRepo, "--log-failed")
 		return fmt.Errorf("bot-comment: workflow run %d failed: %w\n%s", runID, err, logs)
 	}
@@ -341,7 +341,7 @@ func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs
 func waitForDispatchedRun(dispatchRepo, nonce string) (int64, error) {
 	deadline := time.Now().Add(botRunLookupTimeout)
 	for {
-		out, err := runGHOut("run", "list",
+		out, err := runGHOut(commandRun, "list",
 			"--repo", dispatchRepo,
 			"--workflow", botWorkflowFile,
 			"--event", "workflow_dispatch",

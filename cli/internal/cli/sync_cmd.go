@@ -131,7 +131,7 @@ func newCoreSyncCmd() *cobra.Command {
 	var allowFlags []string
 	var ignoreFlags []string
 	cmd := &cobra.Command{
-		Use:   "sync",
+		Use:   commandSync,
 		Short: "Clone or fast-forward-pull the curated workspace repos",
 		Long: `Clone or update every repo listed in the workspace whitelist file
 (workspace-repos.yaml at the workspace root). The file is the single
