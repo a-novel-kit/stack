@@ -1,0 +1,4 @@
+interface:
+  display_name: "Attribute AI Commits"
+  short_description: "Add verified AI co-authors to Git commits"
+  default_prompt: "Use $attribute-ai-commits to add a verified AI co-author to this commit."

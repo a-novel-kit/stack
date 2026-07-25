@@ -4,14 +4,15 @@ description: >
   Git workspace hygiene (clean-tree pre-flight, pruning a scratch stack), branch naming, commit
   message format, and workflow conventions for Agora backend services. Use it whenever starting or
   finishing work in a checkout, creating a branch, writing a commit message, or grouping changes.
-  Referenced by implement-feature and any other skill that touches git.
+  Referenced by implement-feature and any other skill that touches git. Pair with
+  attribute-ai-commits whenever an AI agent materially contributed to a commit.
 ---
 
 # Git Conventions
 
 This skill governs workspace state, branch naming, and commit messages across all Agora backend
-services. Every branch and commit produced by Claude follows these conventions exactly — they drive
-automation (Renovate, CI tagging, changelogs) and signal intent to reviewers at a glance.
+services. Every branch and commit produced by an agent follows these conventions exactly — they
+drive automation (Renovate, CI tagging, changelogs) and signal intent to reviewers at a glance.
 
 ---
 
@@ -98,7 +99,7 @@ show**:
 Then keep it to one or two sentences — three lines wrapped at 72 characters is the ceiling. Never
 restate the subject at greater length, summarise the diff, or list touched files.
 
-Footers (`BREAKING CHANGE:`, `Closes`, `Co-Authored-By:`) are not prose and are never trimmed.
+Footers (`BREAKING CHANGE:`, `Closes`, `Co-authored-by:`) are not prose and are never trimmed.
 
 Longer reasoning has better homes, all of which readers actually reach:
 
@@ -107,6 +108,16 @@ Longer reasoning has better homes, all of which readers actually reach:
 | What the change does and why, for reviewers | The PR description                      |
 | A design decision or rejected option        | The planning issue (body or discussion) |
 | Something a reader of the code needs        | A code comment (see `document-code`)    |
+
+### AI co-author attribution
+
+Load `attribute-ai-commits` whenever an AI agent materially contributed content included in the
+commit. Add its standard `Co-authored-by:` footer only when that skill's pushed registry marks the
+agent identity as verified.
+
+Never invent a provider email, use another provider's bot, or add an unlinked display-only footer.
+The attribution skill owns registry lookup, missing-agent verification and registration,
+model-aware display names, and unavailable identities.
 
 ### Breaking Changes
 
