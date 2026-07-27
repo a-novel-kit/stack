@@ -13,7 +13,7 @@ description: >
 > them.** The trigger is a review landing on a PR you opened, however it is phrased ("reviewed",
 > "minor review landed", "see my comments"), and it fires even when the fixes look obvious.
 >
-> Skipping it does not make you get the *fixes* wrong — it makes you skip the parts that are not
+> Skipping it does not make you get the _fixes_ wrong — it makes you skip the parts that are not
 > fixes. Both halves of Phase 5 were missed the last time this happened, on `service-genai#21`:
 >
 > - **[§5.1](#51-reply-on-every-addressed-thread)** — replies went out with bare `gh`, attributing
@@ -390,7 +390,7 @@ the surfaced run log and retry.
 > the wrong person. (Verified 2026-07-27, after doing precisely this on eight threads of
 > `service-genai#21`.)
 >
-> The narrow thing the bot genuinely **cannot** do is create a *review* carrying **new**
+> The narrow thing the bot genuinely **cannot** do is create a _review_ carrying **new**
 > line-anchored comments — that needs `POST /pulls/{n}/reviews`, which the dispatcher does not
 > implement. Replying into an **existing** thread is fully supported. Do not let the real carve-out
 > excuse the reply path.
