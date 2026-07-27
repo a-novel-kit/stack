@@ -9,6 +9,21 @@ description: >
 
 # Resolve PR Feedback
 
+> **Load this skill the moment a review arrives — before reading the comments, not after fixing
+> them.** The trigger is a review landing on a PR you opened, however it is phrased ("reviewed",
+> "minor review landed", "see my comments"), and it fires even when the fixes look obvious.
+>
+> Skipping it does not make you get the _fixes_ wrong — it makes you skip the parts that are not
+> fixes. Both halves of Phase 5 were missed the last time this happened, on `service-genai#21`:
+>
+> - **[§5.1](#51-reply-on-every-addressed-thread)** — replies went out with bare `gh`, attributing
+>   the agent's analysis to the human whose token ran it. Unrecoverable once the human decides a
+>   re-post is not worth it.
+> - **[§5.2](#52-resolve-settled-threads)** — nothing was resolved, leaving the reviewer to walk
+>   seven answered threads by hand.
+>
+> Reply and resolve are one action, not a fix followed by paperwork.
+
 This skill governs how Claude surveys a pull request's state and works through reviewer feedback. It
 runs as a passive read ("check PR 532") and as an active workflow ("address the comments on PR 532").
 Both modes share Phase 1; only the resolve workflow continues through Phases 2–5.
@@ -356,8 +371,29 @@ a-novel core bot-comment <org> <repo> <number> --reply-to <comment-id> \
   --body "Fixed in <short-sha>."
 ```
 
+Answering several threads at once? Use `--batch`, which posts them in one run — a JSON array of
+`{number, body, reply_to?}` on disk or on stdin:
+
+```bash
+echo '[{"number":21,"reply_to":3654568470,"body":"Removed."},
+       {"number":21,"reply_to":3654577321,"body":"Dropped the helper."}]' \
+  | a-novel core bot-comment <org> <repo> --batch -
+```
+
 The command triggers the dispatcher workflow and blocks until it finishes; on a non-zero exit, read
 the surfaced run log and retry.
+
+> **`gh api …/pulls/<n>/comments/<id>/replies` is the trap.** It is the obvious REST call, it works,
+> and it posts as the **human**. There is no capability gap driving you to it — `bot-comment`
+> supports both `--reply-to` and `--batch` against exactly that endpoint. Reaching for `gh` here is
+> a habit, not a workaround, and the damage is silent: the reply reads correctly and is signed by
+> the wrong person. (Verified 2026-07-27, after doing precisely this on eight threads of
+> `service-genai#21`.)
+>
+> The narrow thing the bot genuinely **cannot** do is create a _review_ carrying **new**
+> line-anchored comments — that needs `POST /pulls/{n}/reviews`, which the dispatcher does not
+> implement. Replying into an **existing** thread is fully supported. Do not let the real carve-out
+> excuse the reply path.
 
 ### 5.2 Resolve settled threads
 
