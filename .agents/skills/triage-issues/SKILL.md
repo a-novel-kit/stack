@@ -53,8 +53,11 @@ hand** (see Posture). A milestone is per-repo, so its copies all share a title: 
 gathers every repo's share of it in one pass.
 
 ```bash
-… | jq '.items[] | select(.milestone.title == "<the goal>")'
+gh project item-list 7 --owner a-novel --format json --limit 200 \
+  --jq '.items[] | select(.milestone.title == "<the goal>")'
 ```
+
+`gh`'s own `--jq` flag runs the expression, so this needs no external `jq` on the box.
 
 Drop the filter only for a full sweep the operator has asked for.
 
