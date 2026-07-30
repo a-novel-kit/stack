@@ -77,6 +77,23 @@ conversion.
 
 ---
 
+## Static data definitions
+
+**Never inline a production static data definition in Go.** Keep JSON Schemas, prompt templates,
+policy documents, and other declarative payloads in their native-format files, then embed them with
+`//go:embed`. Go owns loading and typing; the native file owns the definition. Small scalar constants
+remain code.
+
+Place embedded production definitions by audience:
+
+- **`internal/config/`** — definitions internal to service behavior and not exposed to users.
+- **`internal/models/`** — definitions that shape user-facing data or contracts.
+
+Expose each definition through a small package near its files. The binary remains self-contained;
+production code never reads definitions relative to its working directory.
+
+---
+
 ## File names
 
 `write-go` already mandates camelCase for multi-word file names. Within a service, the layer/role

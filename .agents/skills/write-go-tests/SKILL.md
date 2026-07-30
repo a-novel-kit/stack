@@ -114,6 +114,19 @@ postgres.NewContext(ctx, configtest.PostgresPreset)
 
 ---
 
+## Static and large test data
+
+Keep only short values inline when they make a test case easier to read. Put structured definitions
+and large payloads in native-format files under the package's `testdata/` directory, then embed them
+from an `_test.go` file with `//go:embed`.
+
+Reuse existing fixture and mock data before adding another definition. Keep one canonical large value
+and derive small case-specific variants from it. When multiple packages need the same data, let the
+dedicated `*test` fixture subpackage own and expose it instead of copying it into several `testdata/`
+directories.
+
+---
+
 ## Test Function Naming
 
 Test functions are named strictly after the type they test:
