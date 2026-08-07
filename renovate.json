@@ -26,13 +26,6 @@
       }
     },
     {
-      "matchManagers": ["npm"],
-      "postUpgradeTasks": {
-        "commands": ["pnpm i --frozen-lockfile"],
-        "executionMode": "branch"
-      }
-    },
-    {
       "description": "Keep cli/buf.mod on its own branch, and regenerate the proto stubs after a bump. buf is a generator, never imported: the emitted code links google.golang.org/protobuf, which stays in cli/go.mod, while buf's own graph does not.",
       "matchFileNames": ["cli/buf.mod"],
       "additionalBranchPrefix": "buf-",
