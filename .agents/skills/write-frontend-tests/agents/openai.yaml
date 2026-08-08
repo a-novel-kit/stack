@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Testing"
+  short_description: "Test browser behavior and accessibility"
+  default_prompt: "Use $write-frontend-tests to test this frontend behavior from the user perspective."

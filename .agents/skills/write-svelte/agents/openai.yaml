@@ -1,0 +1,4 @@
+interface:
+  display_name: "Svelte Standards"
+  short_description: "Build idiomatic Svelte 5 interfaces"
+  default_prompt: "Use $write-svelte to implement this Svelte component or application change."
