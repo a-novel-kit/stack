@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan Client/Server Boundaries"
+  short_description: "Place trust on servers and workflow in clients"
+  default_prompt: "Use $plan-client-server-boundary to decide which responsibilities belong on the server and which belong in the client."
