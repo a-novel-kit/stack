@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design Systems"
+  short_description: "Build tokenized, documented UI systems"
+  default_prompt: "Use $write-design-system to implement and document this reusable UI foundation."

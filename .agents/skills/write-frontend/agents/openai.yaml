@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Standards"
+  short_description: "Build accessible, robust web frontends"
+  default_prompt: "Use $write-frontend to implement this web change with Agora frontend standards."

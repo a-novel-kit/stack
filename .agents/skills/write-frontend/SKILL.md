@@ -1,0 +1,165 @@
+---
+name: write-frontend
+description: >
+  Base frontend conventions for EVERY browser-facing repository in a-novel and a-novel-kit —
+  semantic HTML, accessible CSS, strict TypeScript, browser security, performance, data/state
+  boundaries, dependency policy, and validation. Load it for ANY HTML, CSS, TypeScript, browser API,
+  platform-* application, uikit, Storybook, or nodelib-browser work. Pair with `write-svelte` for
+  .svelte files, `write-frontend-tests` for frontend tests or stories, and `write-design-system` for
+  tokens or reusable UI. Service REST clients under pkg/js also load `write-js-package`.
+---
+
+# Frontend Conventions (common)
+
+Apply this base layer to every browser-facing change. Read the target file, its nearest siblings,
+the package manifest, TypeScript config, lint config, and public exports before editing. Preserve a
+coherent local pattern unless it conflicts with a rule below or a current platform standard.
+
+Use this authority order when guidance conflicts:
+
+1. Repository contracts and supported-browser policy.
+2. Normative web standards and WCAG.
+3. Official framework or tool documentation for the installed version.
+4. Maintained FOSS guidance from standards bodies and established organizations.
+5. Local convention and personal preference.
+
+Read [references/standards.md](references/standards.md) before choosing a browser API, accessibility
+pattern, security boundary, design-token model, or unfamiliar framework feature. Verify versioned
+APIs against current official documentation rather than relying on memory.
+
+## After every edit
+
+Use repository scripts as declared; do not invent parallel commands:
+
+```bash
+pnpm format                         # write formatting when the repo provides it
+pnpm lint                           # formatting check + types + ESLint
+a-novel test --type=pnpm -y         # all pnpm tests discovered by the workspace CLI
+a-novel build --type=pnpm -y        # production/package builds
+```
+
+Run the narrowest package or test target while iterating, then run all applicable gates before the
+change is ready. Load `use-a-novel-cli` whenever running test or build commands. A production build
+is mandatory for routing, SSR, package-export, bundler, or environment-boundary changes.
+
+## Dependencies
+
+- Load `choose-dependency` before adding, replacing, or evaluating a package.
+- Prefer the web platform, an existing workspace package, or an existing dependency in that order.
+- Require an explicit reason for every runtime dependency: capability, maintenance owner, release
+  health, browser cost, license, security posture, and why the current stack cannot provide it.
+- Prefer standards-body or established-organization ownership. Do not adopt an unmaintained package
+  or a narrow personal utility for code that is straightforward to own.
+- Import the narrowest documented public entry point. Never deep-import private package files.
+- Keep browser bundles free of Node-only modules and server-only transitive dependencies.
+
+## TypeScript and modules
+
+- Keep `strict` enabled. Do not introduce `any`, disable strict checks, or hide errors with broad
+  casts. Use `unknown`, narrow it, and validate untrusted data at the boundary.
+- Model impossible states out with discriminated unions. Represent absence deliberately; do not use
+  empty strings, magic numbers, or non-null assertions as state management.
+- Prefer inference inside a function and explicit types at exported, callback, network, storage, and
+  component boundaries. Use `satisfies` when checking a value without widening it.
+- Use `type` imports for type-only dependencies and ES modules exclusively.
+- Keep domain data serializable unless the boundary explicitly supports richer values.
+- Treat API, URL, storage, message, and DOM data as untrusted at runtime even when TypeScript types it.
+- Catch `unknown`; preserve the original cause when translating errors. Never silently discard a
+  rejected promise.
+
+## Naming and files
+
+- Name Svelte components in PascalCase and plain TypeScript/CSS modules in lowercase camelCase or a
+  single lowercase word, matching the surrounding package.
+- Mirror source names in tests and stories: `Button.svelte.test.ts`, `Button.stories.svelte`, and
+  `retry.test.ts`. Follow SvelteKit route filenames exactly where its router owns the convention.
+- Name exported types and components in PascalCase; functions, values, and props in camelCase; and
+  true constants in SCREAMING_SNAKE_CASE only when the package already uses that distinction.
+- Give booleans a state or capability name (`disabled`, `hasError`, `canRetry`) and event callbacks
+  the behavior they represent (`onSubmit`, `onDismiss`). Avoid generic `data`, `item`, or `handler`
+  when a domain name is available.
+
+## HTML and interaction
+
+- Use the native element with the required behavior: `button` for actions, `a` for navigation,
+  labels and controls for forms, and landmarks/headings for document structure.
+- Add ARIA only when native HTML cannot express the contract. A role is a promise to implement its
+  keyboard interaction, focus behavior, state, and accessible name.
+- Set `type="button"` on non-submit buttons. Keep form submission, validation, autofill, and error
+  association available without pointer input.
+- Preserve logical source order and normal tab order. Never use a positive `tabindex`.
+- Expose a visible focus indicator. Do not remove outlines without an equal or stronger replacement.
+- Support keyboard, pointer, touch, zoom, reflow, text spacing, and assistive technology. Do not make
+  color, hover, drag, or animation the only way to understand or operate a control.
+- Provide useful alternative text and accessible names. Decorative media stays silent.
+- Set document and changed-passage language correctly. Use logical CSS properties so RTL does not
+  require a second component implementation.
+- Treat WCAG 2.2 AA as the minimum acceptance baseline, not a guarantee supplied by automation.
+
+## CSS and responsive layout
+
+- Prefer normal flow, Grid, Flexbox, logical properties, and container/media queries over measured
+  JavaScript layout. Use feature queries for optional enhancements.
+- Start from the smallest supported viewport and let content determine breakpoints. Avoid device-name
+  breakpoints and user-agent sniffing.
+- Use design tokens for product colors, spacing, type, radii, borders, elevation, and motion. A raw
+  value is acceptable only for a local algorithmic constant with no design meaning.
+- Use relative units for type and layout. Keep line height unitless. Reserve pixels for genuinely
+  device-bound details such as a one-device-pixel hairline when the token contract calls for it.
+- Keep selectors shallow and component-scoped. Avoid `!important`; fix cascade ownership instead.
+- Preserve content at 200% text zoom and 400% page zoom/reflow. Do not clip user content to force a
+  mockup height.
+- Respect `prefers-reduced-motion`, forced colors, increased contrast where supported, and user font
+  settings. Motion must not be required to understand state.
+- Animate compositor-friendly properties when possible and never add animation without a purpose.
+
+## State, data, and browser boundaries
+
+- Give each piece of state one owner. Derive values instead of synchronizing duplicate state.
+- Put shareable navigation state in the URL. Keep ephemeral interaction state local to the smallest
+  component that owns it.
+- Represent loading, empty, error, stale, and success states explicitly. Preserve useful content
+  during refresh when the product contract allows it.
+- Cancel or supersede obsolete asynchronous work. Guard against out-of-order responses.
+- Keep rendering pure. Synchronize with external systems in framework lifecycle primitives, not in
+  getters, templates, or module import side effects.
+- Keep server-only code, environment variables, credentials, and privileged API calls out of browser
+  bundles. Assume every shipped byte and source map is public.
+- Use progressive enhancement for navigation and forms when the framework supports it. A network or
+  JavaScript failure should degrade intentionally rather than strand the user.
+
+## Security and privacy
+
+- Never place secrets or long-lived credentials in client code, browser storage, logs, analytics, or
+  error messages. Follow the repository authentication model.
+- Do not render untrusted HTML. Use text interpolation; if rich HTML is a real product requirement,
+  choose and configure a maintained sanitizer through `choose-dependency` and test bypass cases.
+- Use safe URL construction and validate protocols before navigation. Do not concatenate executable
+  markup, CSS, script, or query fragments from untrusted input.
+- Collect and persist only required data. Do not add analytics, remote fonts, third-party scripts,
+  beacons, or cross-origin calls without explicit product and security approval.
+- Preserve CSP compatibility: avoid inline script generation, `eval`, and undocumented third-party
+  origins.
+
+## Performance and compatibility
+
+- Set an explicit browser baseline in project configuration. Use feature detection and progressive
+  enhancement; add a polyfill only after measuring need and bundle cost.
+- Prefer semantic markup and CSS over JavaScript. Lazy-load non-critical routes and heavy features,
+  not primary content or interaction affordances.
+- Reserve media dimensions, serve responsive assets, and avoid layout thrashing. Batch DOM reads and
+  writes only after measurement proves imperative layout is necessary.
+- Measure before optimizing. Track user-facing latency and Core Web Vitals for applications; do not
+  trade correctness or accessibility for an unmeasured micro-optimization.
+- Handle offline, timeout, retry, and partial-response behavior at the owning boundary. Never retry a
+  non-idempotent operation invisibly.
+
+## Completion checklist
+
+- Semantic and keyboard behavior works without a mouse.
+- Focus, zoom/reflow, reduced motion, forced colors, long content, localization, and RTL were
+  considered in proportion to the change.
+- Trust boundaries validate runtime data and do not expose secrets.
+- Loading, empty, error, and success paths are intentional.
+- `write-frontend-tests` covers changed behavior.
+- Format, lint, pnpm tests, and production build pass.
