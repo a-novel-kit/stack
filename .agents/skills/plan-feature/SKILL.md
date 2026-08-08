@@ -519,9 +519,10 @@ plan that is already agreed.
 - **Justify, don't decree.** Every recommendation states its reasoning. "Because it's best practice"
   is not a reason.
 - **Research before asserting.** Read the code; search trusted sources. Cite what you relied on.
-- **Separate protected mechanism from client policy.** For a client/server cut, apply SSS CEC:
-  keep the server simple, secure, and atomic; let the ergonomic client compose independently valid
-  capabilities. Never move trust, cross-resource atomicity, or unmeasured network cost into the client.
+- **Separate protected mechanism from product policy.** For a client/server cut, apply SSS/CEC —
+  Simple Secure Server, Composable Ergonomic Client: keep the server secure and atomic; let the
+  ergonomic client compose independently safe capabilities. Never move security policy,
+  cross-resource atomicity, durable execution, or unmeasured network cost into the client.
 - **Freeze the vocabulary, then keep it.** Name the domain's core concepts deliberately and early,
   with non-overlapping terms — no synonyms, never one word for two things (a reused name is a future
   bug). Once a name is frozen in the issue, use it identically everywhere: code, API, schema, DB,
