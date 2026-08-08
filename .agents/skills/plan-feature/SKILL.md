@@ -2,10 +2,11 @@
 name: plan-feature
 description: >
   The planning and technical-design gate before any non-trivial implementation in the a-novel /
-  a-novel-kit workspace. Use it when a change spans multiple repos, touches an architecture or data
-  model, introduces a service, platform or library, weighs build-vs-buy, or is ambiguous about what
-  to build. It captures the agreed design as a GitHub planning **issue** (Initiative / Epic / Task
-  sub-issues), then hands off to implement-feature. Skip trivial single-repo edits.
+  a-novel-kit workspace. Use it when a change spans multiple repos, touches an architecture, data
+  model, or client/server boundary, introduces a service, platform or library, weighs build-vs-buy,
+  or is ambiguous about what to build. It captures the agreed design as a GitHub planning **issue**
+  (Initiative / Epic / Task sub-issues), then hands off to repo-kind implementation skills. Skip
+  trivial single-repo edits.
 ---
 
 # Plan & design before you build
@@ -15,9 +16,9 @@ partial, or even wrong — into a technical plan that is **exhaustive, secure by
 maintainable**, and get the human to agree to it before a line of production code is written. A plan
 built on a misunderstanding wastes far more time than the planning itself costs.
 
-The output is an agreed **planning issue** (below). This skill decides _what_ and _why_;
-`implement-feature` and `manage-versions` decide _how_ branches and releases are sequenced — delegate
-those mechanics to them.
+The output is an agreed **planning issue** (below). This skill decides _what_ and _why_. Backend
+service execution (`implement-feature`), frontend authoring (`write-frontend` and companions), and
+cross-repo versioning (`manage-versions`) decide _how_; delegate those mechanics to them.
 
 > **Why issues, not plan files.** Plans used to live in gitignored `plan-*.md` files at the workspace
 > root. A gitignored file has **no backup** (one was lost, which is why this workflow exists), and a
@@ -108,10 +109,14 @@ leaves the working tree clean; the plan lives in the issue, not on disk.
 
 ### 3. Design — and challenge — the approach
 
-Propose the approach and evaluate it against four lenses, every time:
+Propose the approach and evaluate it against five lenses, every time:
 
 - **Secure by design.** Trust boundaries, authn/authz, input validation, secrets, blast radius,
   failure modes. Security is a design property, not a later pass.
+- **Client/server boundary.** When a client consumes or composes backend capabilities, load
+  `plan-client-server-boundary`. Keep protected, authoritative, invariant-preserving operations on
+  the server and product-specific workflow policy in the ergonomic client. Loosen server-enforced
+  payload shape only for bounded, versioned, client-owned data.
 - **Efficient.** Appropriate complexity and resource use — without gold-plating. Pragmatism counts.
 - **Maintainable.** Will the next person understand it? Does it fit existing patterns? Is it the
   simplest thing that fully works?
@@ -150,12 +155,17 @@ disagreement as a signal to understand their constraints, not to dig in. The gat
 
 ### 6. Hand off to execution
 
-Once agreed, execution proceeds through the other skills: `implement-feature` decomposes each repo's
-work into branches (named and committed per `git-conventions`) and implements/tests them — typically
-one branch/PR per Task sub-issue, each PR carrying `Closes #<n>`; `manage-versions` sequences
-cross-repo merges and staged rollouts;
-`open-pull-request` / `monitor-ci` / `resolve-pr-feedback` carry each PR to green. Keep the issue
-current as work lands (see completion handling).
+Once agreed, hand each Task to the repo-kind skills:
+
+- For a backend service, `implement-feature` decomposes the layers, implements, and tests the work.
+- For a platform, load `write-frontend` plus `write-svelte`, `write-design-system`, and
+  `write-frontend-tests` as applicable; decompose by user-visible result and ownership, not backend
+  layers.
+- For cross-repo work, let `manage-versions` sequence merges and staged rollouts.
+
+Name and commit branches per `git-conventions`, normally one branch/PR per Task sub-issue with
+`Closes #<n>`. Let `open-pull-request`, `monitor-ci`, and `resolve-pr-feedback` carry each PR to
+green. Keep the issue current as work lands (see completion handling).
 
 ---
 
@@ -315,6 +325,12 @@ The design. **Freeze the domain vocabulary here** (a short glossary of the core 
 consistently from here on. Alternatives — including any prior art — considered and why rejected or
 surpassed. Notes against the secure / efficient / maintainable / UX lenses.
 
+## Client/server boundary (when applicable)
+
+Server authority and atomic capabilities, client-owned workflow and ergonomics, stable envelope
+versus evolvable payload, failure/recovery, and the measured network budget. Follow
+`plan-client-server-boundary` for the full decision table.
+
 ## Cross-repo & rollout
 
 Repos and repo kinds touched, dependency order, and whether it ships in stages
@@ -385,8 +401,9 @@ skills apply.
 | **tooling / meta / workflows** | both          | CLI, `.github`, reusable CI                                                                             | `stack`, `workflows`                          |
 
 `implement-feature`'s layer-by-layer branch decomposition is a **service** pattern — do **not** apply
-it wholesale to a platform repo. Frontend (platform) authoring conventions come later; until those
-skills exist, plan platform work conservatively and flag the gap.
+it wholesale to a platform repo. Plan every platform/API cut with `plan-client-server-boundary`;
+hand implementation to `write-frontend`, `write-svelte`, `write-design-system`, and
+`write-frontend-tests` as applicable.
 
 ---
 
@@ -476,13 +493,17 @@ them honest over time.
 ## How this composes
 
 ```
-plan-feature ─ (choose-dependency for build-vs-buy) ─> agreed planning issue (Epic / Feature + Task sub-issues)
-      │                                                   ├─ typed, labelled, on the org "Tasks" board
-      │                                                   ├─ staged via blocked-by dependencies
-      │                                                   └─ discussion in comments (resolve-pr-feedback loop)
-      ├─ triage-issues (recurring manual pass: prioritise · weigh · due-date · groom drafts)
-      └─ execution: implement-feature (per repo, one PR per Task, Closes #<task>)
-                  + manage-versions (cross-repo order & staging)
+plan-feature
+      ├─ plan-client-server-boundary (client/API cuts)
+      ├─ choose-dependency (build-vs-buy)
+      └─ agreed planning issue (Epic / Feature + Task sub-issues)
+            ├─ typed, labelled, and staged on the org "Tasks" board
+            ├─ discussion in comments (resolve-pr-feedback loop)
+            ├─ triage-issues (recurring grooming)
+            └─ execution
+                  ├─ service: implement-feature
+                  ├─ platform: write-frontend + companion skills
+                  ├─ cross-repo: manage-versions
                   └─ open-pull-request ─> monitor-ci ─> resolve-pr-feedback
 ```
 
@@ -498,6 +519,10 @@ plan that is already agreed.
 - **Justify, don't decree.** Every recommendation states its reasoning. "Because it's best practice"
   is not a reason.
 - **Research before asserting.** Read the code; search trusted sources. Cite what you relied on.
+- **Separate protected mechanism from product policy.** For a client/server cut, apply SSS/CEC —
+  Simple Secure Server, Composable Ergonomic Client: keep the server secure and atomic; let the
+  ergonomic client compose independently safe capabilities. Never move security policy,
+  cross-resource atomicity, durable execution, or unmeasured network cost into the client.
 - **Freeze the vocabulary, then keep it.** Name the domain's core concepts deliberately and early,
   with non-overlapping terms — no synonyms, never one word for two things (a reused name is a future
   bug). Once a name is frozen in the issue, use it identically everywhere: code, API, schema, DB,
