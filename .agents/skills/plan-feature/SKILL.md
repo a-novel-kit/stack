@@ -157,12 +157,11 @@ disagreement as a signal to understand their constraints, not to dig in. The gat
 
 Once agreed, hand each Task to the repo-kind skills:
 
-+- For a backend service, `implement-feature` decomposes the layers, implements, and tests the work.
-+- For a platform, load `write-frontend` plus `write-svelte`, `write-design-system`, and
-
-- `write-frontend-tests` as applicable; decompose by user-visible result and ownership, not backend
-- layers.
-  +- For cross-repo work, let `manage-versions` sequence merges and staged rollouts.
+- For a backend service, `implement-feature` decomposes the layers, implements, and tests the work.
+- For a platform, load `write-frontend` plus `write-svelte`, `write-design-system`, and
+  `write-frontend-tests` as applicable; decompose by user-visible result and ownership, not backend
+  layers.
+- For cross-repo work, let `manage-versions` sequence merges and staged rollouts.
 
 Name and commit branches per `git-conventions`, normally one branch/PR per Task sub-issue with
 `Closes #<n>`. Let `open-pull-request`, `monitor-ci`, and `resolve-pr-feedback` carry each PR to
