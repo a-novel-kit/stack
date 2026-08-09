@@ -3,7 +3,7 @@ name: write-design-system
 description: >
   Design-system conventions for Agora uikit foundations and reusable frontend components — CSS
   design tokens, calculated scales, semantic aliases, typography, themes, accessibility,
-  component APIs, Storybook documentation, package boundaries, and publication hygiene. Load for
+  component APIs, mandatory live Storybook review and handoff links, package boundaries, and publication hygiene. Load for
   any tokens, fonts, icons, theme, Storybook foundation, or shared UI component change. ALWAYS load
   `write-frontend`; add `write-svelte` for Svelte components and `write-frontend-tests` for stories
   and tests.
@@ -15,6 +15,10 @@ Load `write-frontend` first. For Svelte components load `write-svelte`; for ever
 test load `write-frontend-tests`. Treat the design system as a public compatibility layer: visual
 choices may evolve, but token names, component APIs, behavior, accessibility, and package exports
 are consumer contracts.
+
+**Rendered-UI hard gate:** Start the dark-default Storybook with `BROWSER=none` and `--no-open`,
+inspect the exact changed story in the integrated browser, keep it live, and repeat its freshly
+verified Markdown link in every status or final handoff. Never substitute a screenshot or placeholder.
 
 ## Package boundaries
 
@@ -84,8 +88,12 @@ Rules:
   tooling cannot express the contract; do not add a dependency for a decorative docs widget.
 - Default manager, docs, and canvas to the Agora dark theme. Keep a contrasting background option
   for component verification.
-- Start local Storybook with both `BROWSER=none` and `--no-open`; opening a browser is the operator or
-  agent caller's decision.
+- Start local Storybook for every rendered UI change with both `BROWSER=none` and `--no-open`; the
+  process must not launch an external browser tab. Wait for readiness and keep it running for the
+  operator's review unless they ask to stop it.
+- Open the exact changed story or docs route in the integrated browser. Include that live URL as a
+  clickable inline Markdown link in every status or final handoff, re-resolving and repeating it
+  even when it appeared in an earlier response.
 - Run the accessibility panel for every story. Configure automated story accessibility checks to
   fail where supported, while retaining manual keyboard and assistive-technology review.
 
@@ -120,5 +128,6 @@ Do not approve a visual contract from source alone.
 - Semantic names survive a palette or density change.
 - Every interaction state is keyboard-operable, visibly focused, and represented in stories/tests.
 - Foundation and component docs render the actual package code.
-- Storybook remains private and passive on startup.
+- Storybook remains private, starts without opening an external tab, stays live for review, and is
+  linked in the handoff.
 - Package archives contain only supported consumer files and correct licenses.
