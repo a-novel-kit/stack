@@ -3,7 +3,7 @@ name: write-frontend
 description: >
   Base frontend conventions for EVERY browser-facing repository in a-novel and a-novel-kit —
   semantic HTML, accessible CSS, strict TypeScript, browser security, performance, data/state
-  boundaries, dependency policy, and validation. Load it for ANY HTML, CSS, TypeScript, browser API,
+  boundaries, dependency policy, mandatory live-Storybook handoff, and validation. Load it for ANY HTML, CSS, TypeScript, browser API,
   platform-* application, uikit, Storybook, or nodelib-browser work. Pair with `write-svelte` for
   .svelte files, `write-frontend-tests` for frontend tests or stories, and `write-design-system` for
   tokens or reusable UI. Service REST clients under pkg/js also load `write-js-package`.
@@ -14,6 +14,10 @@ description: >
 Apply this base layer to every browser-facing change. Read the target file, its nearest siblings,
 the package manifest, TypeScript config, lint config, and public exports before editing. Preserve a
 coherent local pattern unless it conflicts with a rule below or a current platform standard.
+
+**Rendered-UI hard gate:** Start Storybook with `BROWSER=none` and `--no-open`, inspect the exact
+changed story in the integrated browser, keep the server live, and put its freshly verified actual
+Markdown link in every status or final handoff. A screenshot or placeholder is never a substitute.
 
 Use this authority order when guidance conflicts:
 
@@ -41,6 +45,31 @@ a-novel build --type=pnpm -y        # production/package builds
 Run the narrowest package or test target while iterating, then run all applicable gates before the
 change is ready. Load `use-a-novel-cli` whenever running test or build commands. A production build
 is mandatory for routing, SSR, package-export, bundler, or environment-boundary changes.
+
+## Live UI review — mandatory handoff
+
+Treat Storybook as a mandatory review surface for every change that affects rendered UI. Do not
+declare UI work complete from source inspection, unit tests, screenshots, or a static build alone.
+
+The handoff contract is non-negotiable:
+
+1. Add or update the smallest story or docs page that renders the changed UI and its meaningful
+   states. If the repository has no usable Storybook, establish it within the agreed scope or report
+   the missing review surface as a blocker.
+2. Start the repository's Storybook command with `BROWSER=none` and `--no-open`. The process must
+   not launch an external browser tab and must stay live for the operator unless they ask to stop it.
+3. Wait for readiness, discover the actual listening URL and port, and verify that the exact changed
+   story or docs route responds.
+4. Open that route in the integrated browser and inspect it. Prefer it over the Storybook root when
+   handing off a specific component.
+5. Before every status or final response that hands UI work back, include a clickable inline link in
+   the form `[Button — Storybook](http://127.0.0.1:6006/?path=/docs/button--docs)`, substituting the
+   actual live URL and route. Repeat it even when an earlier response already contained it.
+6. Re-resolve the URL immediately before sending the response. If the server stopped or changed,
+   restart it and verify the new link.
+
+A screenshot, placeholder such as “visual preview,” stale URL, or instruction to find an earlier
+link does not satisfy this contract.
 
 ## Dependencies
 
@@ -162,4 +191,5 @@ is mandatory for routing, SSR, package-export, bundler, or environment-boundary 
 - Trust boundaries validate runtime data and do not expose secrets.
 - Loading, empty, error, and success paths are intentional.
 - `write-frontend-tests` covers changed behavior.
+- Storybook is running, the changed UI was inspected there, and the live link is in the handoff.
 - Format, lint, pnpm tests, and production build pass.
