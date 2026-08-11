@@ -4,9 +4,10 @@ description: >
   Design-system conventions for Agora uikit foundations and reusable frontend components — CSS
   design tokens, calculated scales, semantic aliases, typography, themes, accessibility,
   component APIs, mandatory live Storybook review and handoff links, package boundaries, and publication hygiene. Load for
-  any tokens, fonts, icons, theme, Storybook foundation, or shared UI component change. ALWAYS load
-  `write-frontend`; add `write-svelte` for Svelte components and `write-frontend-tests` for stories
-  and tests.
+  any tokens, fonts, icons, theme, Storybook foundation, or shared UI component change. Load
+  `plan-ui-design` before non-trivial visual direction, interaction-pattern, component-family, or
+  foundation architecture. ALWAYS load `write-frontend`; add `write-svelte` for Svelte components
+  and `write-frontend-tests` for stories and tests.
 ---
 
 # Design-System Conventions
@@ -15,6 +16,10 @@ Load `write-frontend` first. For Svelte components load `write-svelte`; for ever
 test load `write-frontend-tests`. Treat the design system as a public compatibility layer: visual
 choices may evolve, but token names, component APIs, behavior, accessibility, and package exports
 are consumer contracts.
+
+Load `plan-ui-design` first when deciding what a flow, pattern, component family, or visual foundation
+should be. Keep implementation-only maintenance here; do not reopen settled product design without
+evidence.
 
 **Rendered-UI hard gate:** Start the dark-default Storybook with `BROWSER=none` and `--no-open`,
 inspect the exact changed story in the integrated browser, keep it live, and repeat its freshly
@@ -51,9 +56,20 @@ Rules:
   foundation API explicitly exposes them.
 - Keep calculations in CSS when the browser baseline supports them. Do not add a token build system
   merely to repeat CSS-native arithmetic.
-- Use OKLCH for perceptual color relationships when supported by the declared baseline. Derive
-  families from shared lightness/chroma/hue controls; test actual pair contrast because a scale
-  position is not an accessibility guarantee.
+- Treat color as five linked contracts: hue topology, tone/chroma scaling, output gamut and fallback,
+  semantic foreground/background pairs, and optional graphic effects. Generate them from compact
+  parameters, but expose each layer explicitly enough to test and evolve it independently.
+- Use an Oklab-derived model such as OKLCH or OKHSL for perceptual color relationships when it fits
+  the authoring need. Choose absolute or gamut-relative chroma deliberately, inspect every hue after
+  mapping, and record rare optical corrections. Equal parameters do not guarantee equal appearance.
+- Use a maintained constant-hue perceptual gamut-mapping implementation. Never clamp converted RGB
+  channels as a palette algorithm: clipping can shift hue and flatten one family more than another.
+- Emit a complete sRGB fallback before a Display P3 or other wide-gamut enhancement. Keep runtime
+  packages free of the build-time converter and verify both outputs preserve semantic associations.
+- Define grid, trace, outline, glow, gradient, and other visual treatments as semantic effect tokens
+  derived from the same palette and metric scales. Keep them out of text contrast and state meaning;
+  game-like effects default to static and must remain safe under reduced motion and forced colors.
+- Test actual foreground/background pair contrast and rendered vividness in every supported theme.
 - Use `rem`-based spacing and type, unitless line heights, named duration/easing tokens, and logical
   dimensions. Zero and intrinsic keywords need tokens only when they represent a selectable public
   design decision.
@@ -66,10 +82,16 @@ Rules:
 - Start from the native element that already owns the semantics and behavior.
 - Keep APIs small, typed, and composable. Prefer named variants/sizes and snippets over arbitrary
   styling booleans or internal-class hooks.
+- Let content-bearing components accept framework-native children or snippets so consumers can
+  compose text, markup, icons, and components. Use a string-only prop only when the semantic contract
+  truly requires plain text; give icon-only controls a dedicated accessible-name contract.
 - Forward the native attributes consumers reasonably need without permitting invalid state
   combinations. Keep defaults safe, especially button type and form behavior.
 - Define hover, active, focus-visible, disabled, loading, invalid, selected, and high-contrast states
   as applicable. A component is not complete when only its resting screenshot works.
+- Define state precedence explicitly. Persistent selected, checked, expanded, invalid, loading, and
+  disabled states outrank transient hover and active treatments; transient feedback must not visually
+  erase or contradict the persistent state.
 - Keep interactive target size at least the WCAG 2.2 AA minimum; use a larger touch target where the
   product context allows it.
 - Preserve long labels, localization, RTL, text zoom, narrow containers, reduced motion, and forced
@@ -80,8 +102,10 @@ Rules:
 ## Storybook as the review surface
 
 - Document every public component and every foundation that affects rendering.
-- For a component, include intent, API, variants, sizes, composition, behavior, accessibility
-  contract, and meaningful edge states.
+- For a component, use a short stable reference: one-line purpose, rendered examples, usage,
+  variants, composition, states, accessibility, and API as applicable. Explain what exists and how
+  to use it. Keep decision history, rejected alternatives, rollout notes, and nonessential rationale
+  out of consumer docs.
 - For foundations, render color, typography, spacing, shape, border, elevation, iconography, and
   motion systems as applicable. Show token names beside rendered values.
 - Prefer official maintained Storybook blocks/addons. Write a small local block only when official
@@ -94,6 +118,9 @@ Rules:
 - Open the exact changed story or docs route in the integrated browser. Include that live URL as a
   clickable inline Markdown link in every status or final handoff, re-resolving and repeating it
   even when it appeared in an earlier response.
+- Inspect composed content and combined or transient states in the rendered canvas: selected plus
+  hovered, focused, open, loading, invalid, disabled, long-label, and narrow-container cases as
+  applicable. Do not infer them from selectors or isolated snapshots.
 - Run the accessibility panel for every story. Configure automated story accessibility checks to
   fail where supported, while retaining manual keyboard and assistive-technology review.
 
@@ -125,9 +152,15 @@ Do not approve a visual contract from source alone.
 
 - Component CSS contains no raw product colors, spacing, radii, borders, type, or motion values.
 - Bases and multipliers are fewer than generated public choices and have documented meaning.
+- Color documentation states the harmony, tone/chroma formula, gamut mapping, fallback, semantic
+  pairings, and effect layer without hiding family-specific exceptions.
 - Semantic names survive a palette or density change.
 - Every interaction state is keyboard-operable, visibly focused, and represented in stories/tests.
+- Persistent states keep their hierarchy under hover and active input; reusable content slots render
+  text, icon-and-text, and component composition without API workarounds.
 - Foundation and component docs render the actual package code.
+- Wide-gamut and sRGB renderings preserve role, contrast, and hierarchy; decorative effects do not
+  carry meaning and do not flash or move by default.
 - Storybook remains private, starts without opening an external tab, stays live for review, and is
   linked in the handoff.
 - Package archives contain only supported consumer files and correct licenses.
