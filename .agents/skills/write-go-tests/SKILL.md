@@ -117,8 +117,16 @@ postgres.NewContext(ctx, configtest.PostgresPreset)
 ## Static and large test data
 
 Keep only short values inline when they make a test case easier to read. Put structured definitions
-and large payloads in native-format files under the package's `testdata/` directory, then embed them
-from an `_test.go` file with `//go:embed`.
+and large payloads under the package's `testdata/` directory, then embed them from an `_test.go` file
+with `//go:embed`.
+
+Prefer YAML (`.yaml`) for human-authored semantic fixtures. Convert it to the production format only at
+the boundary the test exercises. Keep JSON when its exact representation is part of the behavior:
+parser or encoder cases, exact wire bytes, malformed JSON, and byte-size boundaries. A production JSON
+asset, including a JSON Schema document, keeps its native format when a test embeds it.
+
+Reuse the repository's YAML parser. If none exists, apply `choose-dependency`; this preference does not
+waive approval for a new package.
 
 Reuse existing fixture and mock data before adding another definition. Keep one canonical large value
 and derive small case-specific variants from it. When multiple packages need the same data, let the
