@@ -20,7 +20,11 @@ API. New code uses Svelte 5 idioms unless an existing compatibility boundary req
   arbitrary line count.
 - Keep state in the lowest component that owns it. Pass explicit data and callbacks; use context only
   for stable, tree-wide capabilities that prop threading would obscure.
-- Prefer composition through typed snippets over boolean prop matrices or duplicated variants.
+- Build small semantic components that compose like bricks. Use props for behavior and stable state;
+  use typed snippets, children, and neighboring components for optional content and arrangement.
+  Split an API that grows presentation booleans or position switches.
+- Let one content prop accept text shorthand or a typed snippet when both are valid. Collection items
+  keep a plain text name for accessibility and typeahead and use a separate snippet for visual content.
 - Preserve the native element API where practical. Wrapper components must not silently remove form,
   focus, keyboard, or accessibility behavior.
 - Keep route/business orchestration out of reusable visual components. Keep platform-only imports out

@@ -80,11 +80,15 @@ Rules:
 ## Component contracts
 
 - Start from the native element that already owns the semantics and behavior.
-- Keep APIs small, typed, and composable. Prefer named variants/sizes and snippets over arbitrary
-  styling booleans or internal-class hooks.
-- Let content-bearing components accept framework-native children or snippets so consumers can
-  compose text, markup, icons, and components. Use a string-only prop only when the semantic contract
-  truly requires plain text; give icon-only controls a dedicated accessible-name contract.
+- Design components as small semantic bricks. A prop earns its place when it changes semantics,
+  intrinsic behavior or state, or a stable visual variant the component owns. Compose optional
+  content, adornments, actions, and arrangement from snippets, children, and neighboring primitives.
+- Split a component when its API starts accumulating presentation toggles, position switches, or
+  mutually dependent options. Do not turn common compositions into one configurable super-component.
+- Let a content region accept text shorthand and a framework-native snippet through the same
+  contract. Consumers must be able to compose text, markup, icons, and components without an API
+  workaround. Keep plain strings where the semantic contract requires a stable accessible name or
+  typeahead value; expose a separate visual renderer for collection items.
 - Forward the native attributes consumers reasonably need without permitting invalid state
   combinations. Keep defaults safe, especially button type and form behavior.
 - Define hover, active, focus-visible, disabled, loading, invalid, selected, and high-contrast states
@@ -151,6 +155,8 @@ Do not approve a visual contract from source alone.
 ## Review checklist
 
 - Component CSS contains no raw product colors, spacing, radii, borders, type, or motion values.
+- Public components remain small semantic bricks; optional presentation composes without boolean or
+  position-prop matrices.
 - Bases and multipliers are fewer than generated public choices and have documented meaning.
 - Color documentation states the harmony, tone/chroma formula, gamut mapping, fallback, semantic
   pairings, and effect layer without hiding family-specific exceptions.

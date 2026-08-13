@@ -48,6 +48,7 @@ Cover the states relevant to the changed contract:
 - Default, supported variants, and boundary values.
 - Loading, empty, error, retry, stale, and success.
 - Disabled, readonly, required, invalid, expanded, selected, and pressed states where applicable.
+- Text shorthand, composed snippets, and omitted optional regions for reusable content APIs.
 - Keyboard-only operation, focus entry/exit, and focus restoration.
 - Long text, missing optional content, localization, RTL, narrow viewport, and zoom/reflow.
 - Dark theme, forced colors, reduced motion, and contrast-sensitive states for shared UI.
@@ -85,6 +86,8 @@ Do not manufacture cases that the public contract cannot reach.
 
 - Give every public component stories for meaningful variants and states, including interactive,
   disabled/error, long-content, and narrow-layout cases.
+- Show related variants together. Include the concise text API and one realistic composed example;
+  verify that optional regions can be omitted without leaving empty structure or spacing.
 - Keep stories deterministic, self-contained, and free of production side effects. Use loaders and
   decorators only for shared, explicit environment contracts.
 - Add a docs page for every public component: intent, API, composition, accessibility contract, and
