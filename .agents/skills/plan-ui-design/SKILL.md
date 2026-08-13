@@ -15,9 +15,10 @@ Work one layer above frontend code. Turn a product need into an interaction and 
 can be challenged before implementation. Keep the workflow proportional: amend an existing contract
 for a local change; run every stage for a new flow, pattern, component family, or foundation.
 
-Load [references/sources.md](references/sources.md) when selecting an unfamiliar interaction pattern,
-accessibility behavior, token model, color method, or external design-system precedent. Prefer current
-primary sources over remembered advice.
+Load [references/visual-language.md](references/visual-language.md) when extracting a reusable
+visual direction from screenshots or other references. Load [references/sources.md](references/sources.md)
+when selecting an unfamiliar interaction pattern, accessibility behavior, token model, color method,
+or external design-system precedent. Prefer current primary sources over remembered advice.
 
 ## Position in the workflow
 
@@ -51,6 +52,20 @@ Write down:
 Use real domain content as early as possible. Never present invented personas, metrics, or preferences
 as research. If the brief leaves one decision open, make and label a reversible assumption instead of
 blocking; ask when the choice would materially change the product.
+
+### Study visual references as evidence
+
+When screenshots, recordings, or admired products inform the direction:
+
+- group frames into sequences and distinguish a demonstrated rule from a finished visual example;
+- record role, hierarchy, geometry, contrast, boundary, state, and motion observations before naming
+  a style or sampling a value;
+- treat capture color as uncalibrated, especially for HDR, wide-gamut, compressed, photographed, or
+  color-managed sources. Preserve relationships, then re-measure in the target browser;
+- translate each useful observation into a product rule and mark whether to retain, adapt, or reject
+  it. Do not copy assets, brand signatures, or arbitrary measurements;
+- verify accessibility and platform behavior against primary standards. A designer reference is
+  art-direction evidence, not normative authority.
 
 ## 2. Map the task before the screen
 
@@ -90,9 +105,14 @@ Write one sentence connecting the product's subject, audience, and emotional reg
 direction. Define one memorable signature and two or three anti-goals. Derive imagery, typography,
 structure, and motion from the subject's actual world rather than from a generic application template.
 
-- Spend visual boldness in one place; keep the surrounding field disciplined.
+- Spend visual boldness in one place; keep the surrounding field disciplined. Define a chroma
+  budget: which role may dominate, which role may support, and which regions stay neutral.
+- Define a boundary hierarchy before drawing containers: spacing and alignment, tonal or opacity
+  shift, elevation, then a visible border only when the boundary itself carries meaning.
 - Make hierarchy encode meaning. Do not add numbering, charts, badges, cards, glass, gradients, pills,
   or motion unless each communicates something true.
+- Correct for optical weight when geometry appears misaligned, especially for asymmetric icons and
+  nested marks; mathematical centering is only the starting point.
 - Treat words as interface material. Use plain, specific, active language in the product's voice.
 - Match complexity to the thesis: maximal work needs orchestration; minimal work needs exceptional
   spacing, type, and state precision.
@@ -136,8 +156,16 @@ For color:
 - Meet contrast and non-color signaling requirements in actual foreground/background pairs. A token
   index, harmony label, or color-vision simulation is not a substitute for contrast measurement.
 
-For type, space, shape, elevation, and motion, define role, base, scale, limits, and exceptions. Prefer
+For type, space, shape, elevation, and motion, define role, base, scale, limits, and exceptions.
+Use a compact ratio ladder: a small density ratio for workstation details, a medium hierarchy ratio,
+and the golden ratio only for major composition when it improves the content hierarchy. Prefer
 optical correction over false arithmetic purity, but keep each correction explicit and rare.
+
+For borderless compositions, specify which groups remain invisible and which become semi-opaque
+islands. Require separation to survive without a one-pixel rectangle around every region. For
+gradients between distant hues, define the interpolation space and intentional color route rather
+than accepting a muddy default midpoint. Size glow from the emitting object and local context, keep
+it localized, and reserve it for selected, focused, or intentionally luminous graphic states.
 
 ## 6. Write the component or pattern contract
 

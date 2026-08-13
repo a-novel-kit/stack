@@ -70,6 +70,11 @@ not copy another system's visual identity or component code into Agora.
 - [Roblox Creator Hub: choose an art style](https://create.roblox.com/docs/tutorials/curriculums/user-interface-design/choose-an-art-style)
   — connect game genre to a stable UI palette, limit hot colors to key associations, pair color with
   shape or icon cues, and keep overlaid information legible.
+- [Howard Le UI/UX references](https://www.instagram.com/uxui_howard.le/) — observational
+  art-direction source for role-based color selection, dark-field contrast, harmony exploration,
+  optical balance, localized glow, transition colors, and golden-ratio composition. Treat tutorial
+  heuristics and screenshots as non-normative evidence: do not copy assets or exact values, and never
+  sample HDR or color-managed captures as palette truth.
 - [Apple HIG: designing for games](https://developer.apple.com/design/human-interface-guidelines/designing-for-games)
   — verify game interfaces across display sizes, aspect ratios, input methods, and full-screen use.
 - [Art Direction for AAA UI](https://media.gdcvault.com/gdc2018/presentations/Younas_Omer_Art%20Direction%20for.pdf)

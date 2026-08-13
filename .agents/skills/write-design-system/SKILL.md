@@ -19,7 +19,8 @@ are consumer contracts.
 
 Load `plan-ui-design` first when deciding what a flow, pattern, component family, or visual foundation
 should be. Keep implementation-only maintenance here; do not reopen settled product design without
-evidence.
+evidence. Apply [the visual-language implementation rules](../plan-ui-design/references/visual-language.md)
+when translating screenshot studies or a high-contrast, game-like direction into reusable tokens.
 
 **Rendered-UI hard gate:** Start the dark-default Storybook with `BROWSER=none` and `--no-open`,
 inspect the exact changed story in the integrated browser, keep it live, and repeat its freshly
@@ -49,7 +50,8 @@ Use three deliberate tiers:
 Rules:
 
 - Reduce independent hand-authored values. Derive spacing, control heights, radii, borders, focus,
-  motion, type, and color scales from small bases plus named multipliers.
+  motion, type, and color scales from small bases plus named multipliers. Use named density,
+  hierarchy, and major-composition ratios instead of applying the golden ratio to every dimension.
 - Name semantic tokens by role, not appearance: `surface-canvas`, `text-muted`, `action-primary`, not
   `dark-gray` or `blue-9` in component CSS.
 - Consume semantic tokens in components. Primitive steps are implementation detail unless a public
@@ -69,7 +71,21 @@ Rules:
 - Define grid, trace, outline, glow, gradient, and other visual treatments as semantic effect tokens
   derived from the same palette and metric scales. Keep them out of text contrast and state meaning;
   game-like effects default to static and must remain safe under reduced motion and forced colors.
+- Build dark neutral ramps with a low-chroma field and a deliberately non-linear tone curve so early
+  surfaces remain dark while upper text steps separate clearly. Build accent ramps with perceptual,
+  gamut-aware curves that preserve vivid upper steps without making every step pastel or fluorescent.
+- Set a chroma budget by semantic region. Let one accent dominate, use a second only for a stable
+  distinction, and keep most area neutral; equal access to every palette family is not equal usage.
 - Test actual foreground/background pair contrast and rendered vividness in every supported theme.
+  Gate semantic text and control pairs, not merely adjacent primitive steps.
+- Derive invisible groups and semi-opaque island surfaces from semantic surface, opacity, blur, and
+  elevation tokens. Use backdrop blur as progressive enhancement and retain legible separation
+  without it.
+- Define gradient interpolation in OKLCH or Oklab explicitly. When distant endpoints produce a muddy
+  midpoint, add an intentional transition stop or route instead of falling back to RGB interpolation.
+- Derive localized glow from the emitting object's characteristic size and the metric scale; roughly
+  one eighth is a useful initial blur proportion, not a fixed rule. Layer a tighter bright halo with a
+  weaker outer halo. Keep text unblurred and avoid permanent bloom on ordinary controls.
 - Use `rem`-based spacing and type, unitless line heights, named duration/easing tokens, and logical
   dimensions. Zero and intrinsic keywords need tokens only when they represent a selectable public
   design decision.
@@ -80,6 +96,14 @@ Rules:
 ## Component contracts
 
 - Start from the native element that already owns the semantics and behavior.
+- Choose boundaries in this order: composition and gap, surface or opacity shift, elevation, then a
+  visible border when interaction, structure, or forced-colors fallback requires it. Controls may
+  retain borders for affordance; decorative boxes do not earn them by default.
+- Treat an island as a composable surface primitive, not a universal card. Keep main content groups
+  transparent when spacing and hierarchy are sufficient, and use borderless semi-opaque islands for
+  floating navigation, tools, overlays, or independently scannable regions.
+- Optically align asymmetric icons and marks inside their real control context; do not expose random
+  offsets as consumer props.
 - Design components as small semantic bricks. A prop earns its place when it changes semantics,
   intrinsic behavior or state, or a stable visual variant the component owns. Compose optional
   content, adornments, actions, and arrangement from snippets, children, and neighboring primitives.
@@ -160,6 +184,12 @@ Do not approve a visual contract from source alone.
 - Bases and multipliers are fewer than generated public choices and have documented meaning.
 - Color documentation states the harmony, tone/chroma formula, gamut mapping, fallback, semantic
   pairings, and effect layer without hiding family-specific exceptions.
+- Dark neutral and accent ramps preserve their intended dynamic range in rendered primitive,
+  semantic, control, and navigation contexts; semantic foreground/background pairs pass their gate.
+- Borders are reserved for meaningful affordance or structure. Invisible groups and translucent
+  islands remain distinguishable through composition, surface, and elevation.
+- Glow is localized, stateful, proportional, and absent from text; gradient routes avoid accidental
+  muddy midpoints.
 - Semantic names survive a palette or density change.
 - Every interaction state is keyboard-operable, visibly focused, and represented in stories/tests.
 - Persistent states keep their hierarchy under hover and active input; reusable content slots render
