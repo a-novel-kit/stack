@@ -33,11 +33,18 @@ Keep responsibilities independently consumable:
 - **tokens**: dependency-free CSS custom properties and documented contracts.
 - **fonts/icons/assets**: self-hosted files, declarations, provenance, and third-party licenses.
 - **uikit**: reusable components that consume semantic foundations.
-- **storybook**: private workspace package containing stories, docs, and development-only addons.
+- **storybook-config**: separately consumable development package exporting the shared theme,
+  preview setup, decorators, docs blocks, addons, and test configuration.
+- **storybook-workbench**: private workspace package containing this repository's stories and docs.
 
-Never make a published package depend on Storybook. Set the Storybook package `private: true`; keep
-its exports out of the UI package and release target. A platform imports foundations and components
-explicitly so application code never pays for workbench code.
+Never make a runtime package depend on Storybook. Keep workbench exports out of the UI package and
+release target; consumers install the reusable configuration explicitly as development tooling. A
+platform imports foundations and components explicitly so application code never pays for workbench
+code. Deploy a static Storybook only through an explicit, reusable documentation workflow; never
+publish the private workbench itself as a package.
+
+Use one curated, maintained icon source through typed component exports. Bundle custom SVG icons and
+their provenance with the asset package; do not require a remote icon service or icon font at runtime.
 
 ## Token architecture
 
@@ -58,6 +65,10 @@ Rules:
   foundation API explicitly exposes them.
 - Keep calculations in CSS when the browser baseline supports them. Do not add a token build system
   merely to repeat CSS-native arithmetic.
+- Define canonical product colors once as perceptual components and derive every palette, alpha,
+  overlay, and component state from them with `calc()`, relative color syntax, or `color-mix()`.
+  Do not introduce hexadecimal or RGB design values beside the canonical model. Derive transparency
+  from a semantic color instead of maintaining an opaque duplicate with a hand-authored alpha.
 - Treat color as five linked contracts: hue topology, tone/chroma scaling, output gamut and fallback,
   semantic foreground/background pairs, and optional graphic effects. Generate them from compact
   parameters, but expose each layer explicitly enough to test and evolve it independently.
@@ -81,6 +92,9 @@ Rules:
 - Derive invisible groups and semi-opaque island surfaces from semantic surface, opacity, blur, and
   elevation tokens. Use backdrop blur as progressive enhancement and retain legible separation
   without it.
+- Make overlay and interaction tokens relative to their intended backdrop. A hover layer must remain
+  distinguishable on canvas, island, glass, popover, and dialog surfaces; do not reuse the same
+  opaque surface token for both the backdrop and the control state.
 - Define gradient interpolation in OKLCH or Oklab explicitly. When distant endpoints produce a muddy
   midpoint, add an intentional transition stop or route instead of falling back to RGB interpolation.
 - Derive localized glow from the emitting object's characteristic size and the metric scale; roughly
@@ -102,6 +116,9 @@ Rules:
 - Treat an island as a composable surface primitive, not a universal card. Keep main content groups
   transparent when spacing and hierarchy are sufficient, and use borderless semi-opaque islands for
   floating navigation, tools, overlays, or independently scannable regions.
+- Keep shared layout primitives limited to generic geometry, responsiveness, and composition points.
+  Applications own page landmarks, navigation models, route structure, product labels, workflow
+  steps, and final shell compositions; do not ship a demo-shaped application skeleton from uikit.
 - Optically align asymmetric icons and marks inside their real control context; do not expose random
   offsets as consumer props.
 - Design components as small semantic bricks. A prop earns its place when it changes semantics,
@@ -120,6 +137,21 @@ Rules:
 - Define state precedence explicitly. Persistent selected, checked, expanded, invalid, loading, and
   disabled states outrank transient hover and active treatments; transient feedback must not visually
   erase or contradict the persistent state.
+- Keep an Agora control's selected treatment stable while hovered. Use a modest lightening for hover
+  and localized glow for selection when the component contract calls for it; keep resting, hovered,
+  selected, and disabled emphasis visibly distinct. Preserve each variant's semantic color family
+  unless a cross-family state meaning is explicit.
+- Reset native control appearance only within a component that fully restores focus-visible,
+  disabled, invalid, autofill, high-contrast, and platform input behavior. Prefer native controls;
+  implement a custom select, combobox, menu, or dialog only when the native contract cannot satisfy
+  the required composition or behavior, then follow the corresponding APG keyboard and focus model.
+- Compose form labels, descriptions, errors, start/end adornments, and actions as optional primitives
+  or snippets around the essential control. Present a compound control through its wrapper's
+  `:focus-within` state while focus remains on the native child; suppress hover treatments that obscure
+  focus or invalid state. Keep open lists bounded by a configurable maximum block size with overflow
+  scrolling, disabled options, and an explicit empty selection when the contract permits it.
+- Share surface, option-row, spacing, radius, and elevation tokens across listbox, menu, and popover
+  families while preserving each widget's distinct selection and keyboard model.
 - Keep interactive target size at least the WCAG 2.2 AA minimum; use a larger touch target where the
   product context allows it.
 - Preserve long labels, localization, RTL, text zoom, narrow containers, reduced motion, and forced
@@ -134,12 +166,20 @@ Rules:
   variants, composition, states, accessibility, and API as applicable. Explain what exists and how
   to use it. Keep decision history, rejected alternatives, rollout notes, and nonessential rationale
   out of consumer docs.
+- Use Storybook's generated controls and ArgTypes as the API reference; do not repeat them in a
+  handwritten API table. Keep setup separate from examples, and list only packages consumers can
+  actually install.
+- Show related variants, sizes, colors, and states together in aligned grids or compact custom
+  renderers. The wrapper must not add row, tile, or hover effects that can be mistaken for component
+  behavior.
 - For foundations, render color, typography, spacing, shape, border, elevation, iconography, and
   motion systems as applicable. Show token names beside rendered values.
 - Prefer official maintained Storybook blocks/addons. Write a small local block only when official
   tooling cannot express the contract; do not add a dependency for a decorative docs widget.
 - Default manager, docs, and canvas to the Agora dark theme. Keep a contrasting background option
   for component verification.
+- Align Storybook manager and docs typography and color roles with Agora while retaining Storybook's
+  default spacing and widget geometry unless a verified clash requires a narrow override.
 - Start local Storybook for every rendered UI change with both `BROWSER=none` and `--no-open`; the
   process must not launch an external browser tab. Wait for readiness and keep it running for the
   operator's review unless they ask to stop it.
@@ -175,6 +215,9 @@ Do not approve a visual contract from source alone.
   supported contract.
 - Build Storybook as a verification artifact, never as an automatically published package or public
   deployment unless the user explicitly requests and scopes that publication.
+- When static Storybook publication is requested, use the shared CI workflow, publish only the
+  generated static artifact, verify its base path and asset loading, and exclude secrets and private
+  environment data.
 
 ## Review checklist
 
@@ -186,6 +229,8 @@ Do not approve a visual contract from source alone.
   pairings, and effect layer without hiding family-specific exceptions.
 - Dark neutral and accent ramps preserve their intended dynamic range in rendered primitive,
   semantic, control, and navigation contexts; semantic foreground/background pairs pass their gate.
+- Translucent interaction layers remain distinct across canvas, island, glass, popover, and dialog
+  contexts without introducing a second hard-coded color system.
 - Borders are reserved for meaningful affordance or structure. Invisible groups and translucent
   islands remain distinguishable through composition, surface, and elevation.
 - Glow is localized, stateful, proportional, and absent from text; gradient routes avoid accidental
@@ -194,9 +239,11 @@ Do not approve a visual contract from source alone.
 - Every interaction state is keyboard-operable, visibly focused, and represented in stories/tests.
 - Persistent states keep their hierarchy under hover and active input; reusable content slots render
   text, icon-and-text, and component composition without API workarounds.
+- Shared layout exports are domain-agnostic geometry primitives, not application shells or workflow
+  recipes.
 - Foundation and component docs render the actual package code.
 - Wide-gamut and sRGB renderings preserve role, contrast, and hierarchy; decorative effects do not
   carry meaning and do not flash or move by default.
-- Storybook remains private, starts without opening an external tab, stays live for review, and is
-  linked in the handoff.
+- The Storybook workbench remains private, shared configuration stays development-only, and the local
+  server starts without opening an external tab, stays live for review, and is linked in the handoff.
 - Package archives contain only supported consumer files and correct licenses.

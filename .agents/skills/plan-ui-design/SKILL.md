@@ -98,6 +98,10 @@ Add a pattern only when it is:
 - **versatile**: its contract survives the credible contexts that justify making it reusable.
 
 Keep a product-specific composition local until repeated evidence earns a shared abstraction.
+Treat a demo or reference application as evidence for needs and behavior, not as a component map to
+copy. A shared system owns generic foundations, controls, and geometry primitives; the application
+owns route orchestration, product vocabulary, workflow composition, navigation landmarks, and its
+final shell. Promote only the part that remains useful when those application details disappear.
 
 ## 4. Establish a visual thesis
 
@@ -195,14 +199,19 @@ then document any deviation and verify it with keyboard and assistive technology
 
 Treat Storybook as the design review surface, not a gallery added after coding.
 
-1. Render foundations and every meaningful component state with realistic content.
+1. Render foundations and every meaningful component state with realistic content. For component
+   families, use aligned variant, size, and state matrices so differences can be read at a glance;
+   keep the surrounding documentation visually inert so its own hover or selection styling cannot
+   contaminate the example.
 2. Keep public docs stable and concise: one-sentence purpose, rendered examples, usage, states,
    accessibility, and API as applicable. Describe what exists and how to use it; omit decision
    history, rejected alternatives, rollout status, and rationale that is not needed for safe use.
 3. Start Storybook with `BROWSER=none` and `--no-open`; keep it live for review.
-4. Inspect the exact route in the integrated browser at narrow and wide containers. Exercise
-   transient and combined states such as open menus, focused dialogs, selected-plus-hovered controls,
-   and composed icon-and-text content instead of reviewing only resting examples.
+4. Inspect the exact route in the integrated browser at narrow and wide containers. Review both the
+   Storybook manager/docs chrome and the preview canvas. Exercise transient and combined states such
+   as open menus, focused dialogs, selected-plus-hovered controls, and composed icon-and-text content
+   instead of reviewing only resting examples. Compare surface-sensitive states on the canvas,
+   opaque and translucent islands, popovers, and dialogs when those contexts are supported.
 5. Exercise keyboard-only use, focus order, zoom/reflow, reduced motion, forced colors, long content,
    and the default dark theme in proportion to the change.
 6. Measure rendered contrast and run automated accessibility checks, then perform the manual behavior
@@ -236,6 +245,8 @@ why it best serves the user job.
 
 - The primary task and recovery path are clear without styling.
 - New shared UI passed the useful/unique/usable/consistent/versatile gate.
+- Shared abstractions stop at generic behavior and geometry; application shells and workflows remain
+  application-owned.
 - The visual thesis is specific to this product and has explicit anti-goals.
 - Foundations derive from compact relationships; optical exceptions are documented.
 - Every meaningful state, input mode, content stress, and accessibility behavior has an owner.

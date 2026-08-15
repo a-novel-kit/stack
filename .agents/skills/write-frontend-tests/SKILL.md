@@ -52,6 +52,8 @@ Cover the states relevant to the changed contract:
 - Keyboard-only operation, focus entry/exit, and focus restoration.
 - Long text, missing optional content, localization, RTL, narrow viewport, and zoom/reflow.
 - Dark theme, forced colors, reduced motion, and contrast-sensitive states for shared UI.
+- Variant-by-state comparisons on every materially different backdrop: canvas, opaque island,
+  translucent surface, popover, and dialog where applicable.
 - Cancellation, out-of-order responses, and duplicate submission for asynchronous actions.
 
 Do not manufacture cases that the public contract cannot reach.
@@ -88,17 +90,26 @@ Do not manufacture cases that the public contract cannot reach.
   disabled/error, long-content, and narrow-layout cases.
 - Show related variants together. Include the concise text API and one realistic composed example;
   verify that optional regions can be omitted without leaving empty structure or spacing.
+- Render sizes, colors, variants, and persistent/transient state combinations in aligned matrices.
+  Keep docs wrappers interaction-neutral so table or tile hover styles cannot masquerade as component
+  behavior.
 - Keep stories deterministic, self-contained, and free of production side effects. Use loaders and
   decorators only for shared, explicit environment contracts.
-- Add a docs page for every public component: intent, API, composition, accessibility contract, and
-  examples. Document foundations separately from components.
+- Add a docs page for every public component: intent, composition, accessibility contract, and
+  examples. Use generated controls and ArgTypes for API reference instead of repeating a manual
+  table. Document foundations separately from components.
 - Enable accessibility analysis globally and make violations fail automated story tests when the
   installed Storybook integration supports it. Any exception must identify a documented false
   positive or intentional antipattern story.
+- Run contrast assertions in the real browser against the exact rendered semantic pairs and states,
+  not palette swatches alone. Automated tooling does not credit glow and may not understand every
+  gradient, transparency stack, pseudo-element, or forced-colors result; inspect computed output and
+  visually compare state separation in the supported surface contexts.
 - Treat automated accessibility output as a first pass. Manually verify keyboard/focus behavior and
   relevant browser/assistive-technology combinations for complex widgets.
-- Keep Storybook in its own private workspace package; never publish stories or Storybook runtime as
-  part of the component package.
+- Keep stories and docs in a private workbench. Keep reusable Storybook theme, preview, and test
+  configuration in a separately consumable development package; never publish stories or runtime
+  workbench code as part of the component package.
 
 ## End-to-end tests
 

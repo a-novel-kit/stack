@@ -29,6 +29,9 @@ API. New code uses Svelte 5 idioms unless an existing compatibility boundary req
   focus, keyboard, or accessibility behavior.
 - Keep route/business orchestration out of reusable visual components. Keep platform-only imports out
   of publishable packages.
+- Let shared layout components own only geometry, responsive behavior, and typed composition points.
+  Keep landmarks, navigation, headings, labels, surfaces, route orchestration, and domain workflow in
+  the consuming application unless one is the explicit semantic responsibility of a smaller primitive.
 
 ## Svelte 5 reactivity
 
@@ -97,6 +100,11 @@ API. New code uses Svelte 5 idioms unless an existing compatibility boundary req
 
 - Export only intentional public entry points. Keep internal modules unreachable through package
   `exports`.
+- Add concise JSDoc/TSDoc to exported components, props, snippet contracts, callbacks, and non-obvious
+  invariants. Describe usage and behavior without restating the type; keep maintainer comments for
+  decisions the code cannot make evident.
+- Compile or lint documentation examples as Svelte/HTML/TypeScript with the declared language. Keep
+  setup imports separate from illustrative component composition.
 - Declare Svelte as a compatible peer dependency and emit the documented `svelte` export condition.
 - Keep application, Storybook, fixtures, tests, and source-only tooling out of the tarball. Inspect
   the packed archive before release.
