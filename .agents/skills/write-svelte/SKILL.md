@@ -20,11 +20,18 @@ API. New code uses Svelte 5 idioms unless an existing compatibility boundary req
   arbitrary line count.
 - Keep state in the lowest component that owns it. Pass explicit data and callbacks; use context only
   for stable, tree-wide capabilities that prop threading would obscure.
-- Prefer composition through typed snippets over boolean prop matrices or duplicated variants.
+- Build small semantic components that compose like bricks. Use props for behavior and stable state;
+  use typed snippets, children, and neighboring components for optional content and arrangement.
+  Split an API that grows presentation booleans or position switches.
+- Let one content prop accept text shorthand or a typed snippet when both are valid. Collection items
+  keep a plain text name for accessibility and typeahead and use a separate snippet for visual content.
 - Preserve the native element API where practical. Wrapper components must not silently remove form,
   focus, keyboard, or accessibility behavior.
 - Keep route/business orchestration out of reusable visual components. Keep platform-only imports out
   of publishable packages.
+- Let shared layout components own only geometry, responsive behavior, and typed composition points.
+  Keep landmarks, navigation, headings, labels, surfaces, route orchestration, and domain workflow in
+  the consuming application unless one is the explicit semantic responsibility of a smaller primitive.
 
 ## Svelte 5 reactivity
 
@@ -93,6 +100,11 @@ API. New code uses Svelte 5 idioms unless an existing compatibility boundary req
 
 - Export only intentional public entry points. Keep internal modules unreachable through package
   `exports`.
+- Add concise JSDoc/TSDoc to exported components, props, snippet contracts, callbacks, and non-obvious
+  invariants. Describe usage and behavior without restating the type; keep maintainer comments for
+  decisions the code cannot make evident.
+- Compile or lint documentation examples as Svelte/HTML/TypeScript with the declared language. Keep
+  setup imports separate from illustrative component composition.
 - Declare Svelte as a compatible peer dependency and emit the documented `svelte` export condition.
 - Keep application, Storybook, fixtures, tests, and source-only tooling out of the tarball. Inspect
   the packed archive before release.

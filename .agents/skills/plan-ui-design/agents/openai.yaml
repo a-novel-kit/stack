@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan UI Design"
+  short_description: "Plan evidence-led UI and UX systems"
+  default_prompt: "Use $plan-ui-design to turn this product need into a validated UI/UX design contract."

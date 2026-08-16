@@ -4,9 +4,11 @@ description: >
   Base frontend conventions for EVERY browser-facing repository in a-novel and a-novel-kit —
   semantic HTML, accessible CSS, strict TypeScript, browser security, performance, data/state
   boundaries, dependency policy, mandatory live-Storybook handoff, and validation. Load it for ANY HTML, CSS, TypeScript, browser API,
-  platform-* application, uikit, Storybook, or nodelib-browser work. Pair with `write-svelte` for
-  .svelte files, `write-frontend-tests` for frontend tests or stories, and `write-design-system` for
-  tokens or reusable UI. Service REST clients under pkg/js also load `write-js-package`.
+  platform-* application, uikit, Storybook, or nodelib-browser work. Load `plan-ui-design` before
+  non-trivial user-flow, interaction, information-architecture, or visual-direction work. Pair with
+  `write-svelte` for .svelte files, `write-frontend-tests` for frontend tests or stories, and
+  `write-design-system` for tokens or reusable UI. Service REST clients under pkg/js also load
+  `write-js-package`.
 ---
 
 # Frontend Conventions (common)
@@ -14,6 +16,10 @@ description: >
 Apply this base layer to every browser-facing change. Read the target file, its nearest siblings,
 the package manifest, TypeScript config, lint config, and public exports before editing. Preserve a
 coherent local pattern unless it conflicts with a rule below or a current platform standard.
+
+Load `plan-ui-design` before deciding a new or materially changed flow, interaction pattern,
+information hierarchy, component family, or visual language. This skill owns implementation quality;
+`plan-ui-design` owns the human-facing contract that implementation must preserve.
 
 **Rendered-UI hard gate:** Start Storybook with `BROWSER=none` and `--no-open`, inspect the exact
 changed story in the integrated browser, keep the server live, and put its freshly verified actual
@@ -118,6 +124,10 @@ link does not satisfy this contract.
   association available without pointer input.
 - Preserve logical source order and normal tab order. Never use a positive `tabindex`.
 - Expose a visible focus indicator. Do not remove outlines without an equal or stronger replacement.
+- Treat persistent state as stronger than transient input. Selected, checked, expanded, invalid,
+  loading, and disabled meaning must remain clear while a control is hovered, active, or focused.
+- For reusable content-bearing components, prefer the framework's native composition primitive over
+  a string-only label prop when text, markup, icons, or nested components are semantically safe.
 - Support keyboard, pointer, touch, zoom, reflow, text spacing, and assistive technology. Do not make
   color, hover, drag, or animation the only way to understand or operate a control.
 - Provide useful alternative text and accessible names. Decorative media stays silent.
@@ -188,6 +198,8 @@ link does not satisfy this contract.
 - Semantic and keyboard behavior works without a mouse.
 - Focus, zoom/reflow, reduced motion, forced colors, long content, localization, and RTL were
   considered in proportion to the change.
+- Persistent states remain stable under transient interactions, and reusable content APIs compose
+  naturally without sacrificing native semantics.
 - Trust boundaries validate runtime data and do not expose secrets.
 - Loading, empty, error, and success paths are intentional.
 - `write-frontend-tests` covers changed behavior.
