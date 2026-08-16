@@ -1,6 +1,6 @@
 module github.com/a-novel-kit/stack/cli/buf
 
-go 1.26.5
+go 1.26.6
 
 tool github.com/bufbuild/buf/cmd/buf
 
