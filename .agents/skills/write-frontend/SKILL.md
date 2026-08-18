@@ -17,6 +17,10 @@ Apply this base layer to every browser-facing change. Read the target file, its 
 the package manifest, TypeScript config, lint config, and public exports before editing. Preserve a
 coherent local pattern unless it conflicts with a rule below or a current platform standard.
 
+This skill owns generic implementation quality, not repository placement. In the Agora workspace,
+use `write-platform` for terminal application shells and product policy, `write-design-system` for
+uikit visual contracts, and nodelib for reusable non-visual client runtime or tooling configuration.
+
 Load `plan-ui-design` before deciding a new or materially changed flow, interaction pattern,
 information hierarchy, component family, or visual language. This skill owns implementation quality;
 `plan-ui-design` owns the human-facing contract that implementation must preserve.
@@ -81,6 +85,8 @@ link does not satisfy this contract.
 
 - Load `choose-dependency` before adding, replacing, or evaluating a package.
 - Prefer the web platform, an existing workspace package, or an existing dependency in that order.
+- Before implementing reusable code in a terminal app, route visual contracts to uikit and
+  framework-agnostic runtime or shared build/lint/test/localization configuration to nodelib.
 - Require an explicit reason for every runtime dependency: capability, maintenance owner, release
   health, browser cost, license, security posture, and why the current stack cannot provide it.
 - Prefer standards-body or established-organization ownership. Do not adopt an unmaintained package

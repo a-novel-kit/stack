@@ -23,9 +23,20 @@ backend capability.
 
 ## Ownership boundaries
 
-A platform is one deployable SvelteKit application and one root package. It consumes published
-`@a-novel-kit/uikit` foundations and components; it does not publish app code or copy generic
-components locally.
+A platform is one deployable SvelteKit application and one root package. It is a terminal product,
+not a general-purpose client library. Apply this ownership split before adding code or configuration:
+
+- **Platform** owns its shell and UX: routes, screen and shell compositions, route models, product
+  copy and catalogs, supported locales, product URL and local-storage policy, and service-specific
+  authentication, session, client, and health wiring.
+- **Nodelib** owns reusable non-visual client infrastructure: framework-agnostic runtime helpers and
+  shared build, lint, test, SvelteKit, and localization configuration. A representative extraction
+  fixture belongs beside the shared preset it validates.
+- **Uikit** owns reusable visual contracts: design tokens, components, and shared Storybook theme,
+  preview, decorator, docs, and visual-test defaults.
+
+Consume released kit packages through documented public exports. Do not publish app code or keep a
+platform-local copy of a generic helper, preset, visual primitive, or Storybook default.
 
 Keep responsibilities explicit:
 
@@ -41,9 +52,15 @@ Use the nearest established equivalent when a repository already has a coherent 
 rename working boundaries merely to match these directory names. Dependencies point inward: routes
 and adapters compose pure application/UI code, never the reverse.
 
-Application shells, route models, product labels, and workflow compositions stay in the platform.
-When a missing piece is generic across products, change uikit through its own planned, versioned PR
-and consume the released package; do not grow a second private design system inside the app.
+Keep platform configuration entrypoints thin: import shared factories and supply only product paths,
+catalog policy, environment policy, or test selection. Generic defaults and their representative
+fixtures stay with the shared package; product catalogs, route models, and workflows stay in the
+platform.
+
+When a missing piece is reusable, plan and release it from the owning kit repository first: visual
+contracts go to uikit, while runtime helpers and tooling presets go to nodelib. Then pin the exact
+release in the platform and remove any superseded local implementation. Do not grow either a private
+design system or a private client-infrastructure library inside the app.
 
 Decompose branches and PRs by one user-visible capability or one application boundary. Platform
 work does not use a backend service's layer-by-layer branch stack.
@@ -77,6 +94,10 @@ Build every user-visible screen in this order:
 Stories are an executable design surface, not production fixtures. Keep mocks typed, local,
 deterministic, and incapable of contacting real services. Route containers translate backend and
 framework results into the same view models the stories exercise.
+
+Import shared Storybook preview, theme, decorators, and test defaults from uikit's development
+package. Keep a local Storybook entrypoint only for product-specific context and story discovery; do
+not copy the reusable preview into the platform.
 
 ## State ownership
 
@@ -137,6 +158,10 @@ focus, pending state, and modal behavior, but it must not become the only path t
 Keep source messages in static, reviewable repository files. All visible product copy, accessible
 names, validation messages, titles, and metadata use message keys; logs and protocol tokens do not.
 
+- Import the shared extraction/type/status preset and request-localization runtime from nodelib.
+  Platform configuration supplies only its locales, paths, namespaces, and product exceptions.
+- Keep the preset's framework extraction fixture in nodelib. Platform stories and tests exercise
+  real product copy and translated UI states; they do not duplicate a generic toolchain fixture.
 - Support plurals and contextual variants through the selected message format, not key
   concatenation or runtime grammar.
 - Treat the source locale as authoritative. CI compiles messages and fails for missing, invalid, or

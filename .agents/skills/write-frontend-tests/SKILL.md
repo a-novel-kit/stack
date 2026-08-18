@@ -116,6 +116,9 @@ Do not manufacture cases that the public contract cannot reach.
 - Keep stories and docs in a private workbench. Keep reusable Storybook theme, preview, and test
   configuration in a separately consumable development package; never publish stories or runtime
   workbench code as part of the component package.
+- Keep a representative framework or extraction fixture with the shared nodelib preset it validates.
+  A platform tests its product catalogs, screen states, and wiring instead of copying that generic
+  fixture locally.
 
 ## End-to-end tests
 
