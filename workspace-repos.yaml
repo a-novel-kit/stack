@@ -5,7 +5,7 @@
 #
 # Each entry is "<org>/<repo>". The org selects the target sub-directory:
 #   a-novel-kit/<repo> → kit/<repo>   (shared libraries)
-#   a-novel/<repo>     → app/<repo>   (services)
+#   a-novel/<repo>     → app/<repo>   (services and platforms)
 repos:
   - a-novel-kit/.github
   - a-novel-kit/golib
@@ -16,6 +16,7 @@ repos:
   - a-novel/.github
   - a-novel/service-template
   - a-novel/platform-template
+  - a-novel/platform-studio
   - a-novel/service-json-keys
   - a-novel/service-authentication
   - a-novel/service-narrative-engine

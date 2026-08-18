@@ -17,8 +17,8 @@ maintainable**, and get the human to agree to it before a line of production cod
 built on a misunderstanding wastes far more time than the planning itself costs.
 
 The output is an agreed **planning issue** (below). This skill decides _what_ and _why_. Backend
-service execution (`implement-feature`), frontend authoring (`write-frontend` and companions), and
-cross-repo versioning (`manage-versions`) decide _how_; delegate those mechanics to them.
+service execution (`implement-feature`), platform execution (`write-platform`), and cross-repo
+versioning (`manage-versions`) decide _how_; delegate those mechanics to them.
 
 > **Why issues, not plan files.** Plans used to live in gitignored `plan-*.md` files at the workspace
 > root. A gitignored file has **no backup** (one was lost, which is why this workflow exists), and a
@@ -158,9 +158,8 @@ disagreement as a signal to understand their constraints, not to dig in. The gat
 Once agreed, hand each Task to the repo-kind skills:
 
 - For a backend service, `implement-feature` decomposes the layers, implements, and tests the work.
-- For a platform, load `write-frontend` plus `write-svelte`, `write-design-system`, and
-  `write-frontend-tests` as applicable; decompose by user-visible result and ownership, not backend
-  layers.
+- For a platform, load `write-platform` with the frontend skills it requires; decompose by
+  user-visible result and ownership, not backend layers.
 - For cross-repo work, let `manage-versions` sequence merges and staged rollouts.
 
 Name and commit branches per `git-conventions`, normally one branch/PR per Task sub-issue with

@@ -23,9 +23,9 @@ security:
   # with the node-audit workflow and fail on the private @a-novel / @a-novel-kit
   # deps a platform consumes, which Dependabot has no registry token for.
   dependabot: false
-# A platform deploys as a container, not a Pages site; its component docs live in
-# the uikit's Storybook, not here.
-pages: false
+# Production deploys as a container. Pages hosts the platform's static Storybook
+# so application screens and states have a review surface of their own.
+pages: true
 code_quality: true
 rulesets:
   master: true
