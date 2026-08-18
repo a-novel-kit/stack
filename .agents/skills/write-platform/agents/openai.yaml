@@ -1,0 +1,4 @@
+interface:
+  display_name: "Write Platform Applications"
+  short_description: "Build terminal client-side platform apps"
+  default_prompt: "Use $write-platform to implement a platform application with the repository frontend conventions."
