@@ -81,6 +81,9 @@ Do not manufacture cases that the public contract cannot reach.
   tests should resemble real use.
 - Use the repository user-interaction helper when present. Reserve low-level event dispatch for the
   browser primitive being tested.
+- Put native lifecycle and teardown races in a browser project, not jsdom. Exercise the real element
+  API and event queue, including events delivered as a component unmounts, and assert the user-visible
+  outcome rather than Svelte internals.
 - Name tests as observable behavior in plain language. Group by public function, component, or user
   journey.
 
@@ -105,6 +108,9 @@ Do not manufacture cases that the public contract cannot reach.
   not palette swatches alone. Automated tooling does not credit glow and may not understand every
   gradient, transparency stack, pseudo-element, or forced-colors result; inspect computed output and
   visually compare state separation in the supported surface contexts.
+- Treat a near-threshold contrast violation as a real failure. Fix the owning semantic token and keep
+  a rendered safety margin; do not disable the rule or add a consumer override merely because a
+  calculated source value appeared to meet the minimum.
 - Treat automated accessibility output as a first pass. Manually verify keyboard/focus behavior and
   relevant browser/assistive-technology combinations for complex widgets.
 - Keep stories and docs in a private workbench. Keep reusable Storybook theme, preview, and test
