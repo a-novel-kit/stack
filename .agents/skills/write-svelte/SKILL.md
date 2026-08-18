@@ -70,6 +70,10 @@ API. New code uses Svelte 5 idioms unless an existing compatibility boundary req
   lifecycle or environment boundaries so SSR and prerendering remain valid.
 - Do not repair hydration mismatches by disabling SSR. Make server and client input deterministic.
 - Clean up timers, subscriptions, observers, and global listeners when ownership ends.
+- For native events queued around teardown, read the owning element from `event.currentTarget` inside
+  the handler instead of a component binding that Svelte may already have cleared. Snapshot the
+  element before an `await`; event dispatch state does not remain live after the synchronous handler.
+  Cover teardown-sensitive native behavior in a real browser.
 - Use actions or attachments for reusable DOM integration; keep their setup and teardown symmetric.
 - Avoid imperative component APIs unless integration with a non-Svelte host requires them.
 

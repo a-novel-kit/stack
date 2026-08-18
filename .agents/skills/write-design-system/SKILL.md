@@ -89,6 +89,10 @@ Rules:
   distinction, and keep most area neutral; equal access to every palette family is not equal usage.
 - Test actual foreground/background pair contrast and rendered vividness in every supported theme.
   Gate semantic text and control pairs, not merely adjacent primitive steps.
+- Do not tune a semantic pair to the exact WCAG threshold. Keep a deliberate safety margin and test
+  computed output on every supported backdrop; color conversion, alpha composition, font rendering,
+  and browser rounding can turn a mathematically borderline pair into a real rendered failure.
+  Fix the shared semantic token rather than weakening a consumer accessibility gate.
 - Derive invisible groups and semi-opaque island surfaces from semantic surface, opacity, blur, and
   elevation tokens. Use backdrop blur as progressive enhancement and retain legible separation
   without it.
@@ -213,6 +217,10 @@ Do not approve a visual contract from source alone.
 - Keep runtime dependencies minimal; load `choose-dependency` before adding any library.
 - Test imports through the package root and documented subpaths. Deep source imports are not a
   supported contract.
+- Reproduce a consumer regression against the released package version, then verify the fix through
+  the packed artifact or a released patch in a representative consumer. A workspace link can hide
+  export, dependency, CSS-order, and surface-composition defects that appear only at the public
+  package boundary.
 - Build Storybook as a verification artifact, never as an automatically published package or public
   deployment unless the user explicitly requests and scopes that publication.
 - When static Storybook publication is requested, use the shared CI workflow, publish only the

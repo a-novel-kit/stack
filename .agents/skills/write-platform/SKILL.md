@@ -106,18 +106,26 @@ service:
 
 - Browser forms submit to same-origin server actions. The server validates input, calls the typed
   service client, rotates session cookies, and returns a small serializable result.
-- Validate form and route input through repository-pinned Valibot schemas. Use
-  `sveltekit-superforms` for non-trivial form state and progressive enhancement; uikit owns the
-  rendered fields and errors, so platforms do not import Formsnap or another component layer.
+- Reuse runtime schemas exported by the published typed service client for service-owned fields; do
+  not rewrite the same contract in a second validator. Use repository-pinned Valibot schemas for
+  app-owned input and `sveltekit-superforms` for non-trivial form state and progressive enhancement.
+  Uikit owns rendered fields and errors, so platforms do not import Formsnap or another component layer.
 - Server loads establish the session and authorization context. UI visibility is convenience;
   privileged routes and actions enforce permissions again on the server.
-- Refresh an expiring session at one server-owned boundary. If refresh fails, clear the local
-  session and return a recoverable signed-out state.
+- Create an anonymous service session lazily, only when an anonymous protected operation needs it.
+  An ordinary page load must not mint a token merely to render signed-out UI.
+- Refresh a rejected or expiring session at one server-owned boundary. Clear cookies only after a
+  definitive authentication rejection; preserve them and expose a recoverable unavailable state on
+  network, timeout, or downstream 5xx failures. Do not silently turn an outage into signed-out state.
 - A logout that only clears platform cookies is not token revocation. Describe it accurately and
   plan a backend capability when revocation is required.
-- Short-code URLs may render on `GET`, but completion mutates only through `POST`. Mark responses
-  `Cache-Control: no-store` and `Referrer-Policy: no-referrer`, never persist the code, and remove
-  sensitive search parameters from browser history after completion.
+- A short-code `GET` only parses a sanitized display model; it never verifies or consumes the code.
+  Completion uses `POST` to the current URL so no hidden field duplicates the credential. Return
+  `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, and `X-Robots-Tag: noindex`.
+- Never serialize the raw code, raw target, password, or token through load/action data, rendered
+  HTML, stories, logs, or error copy. After completion, use POST/redirect/GET to a clean status-only
+  URL; collapse rejected, expired, consumed, or unknown targets when the service cannot safely
+  distinguish them.
 - Map service failures to stable user-facing error categories. Log only sanitized operational
   context on the server; do not expose service internals or secrets in UI copy.
 
@@ -151,6 +159,13 @@ names, validation messages, titles, and metadata use message keys; logs and prot
 Ship one multi-stage root `Dockerfile` that builds the locked root package and runs the minimal
 production SvelteKit server as a non-root user. Keep build-only credentials out of image layers and
 the final image. Follow `write-dockerfiles` for implementation details.
+
+Build the real container in CI, not only the Node artifact. Run the frozen install inside the exact
+image and keep its Node pin compatible with every locked dependency engine; a floating host CI
+runtime can hide a stale image pin. When Corepack/pnpm configures a global binary directory, put
+that exact directory on `PATH` before running global config commands. Pass private-registry
+credentials as BuildKit secrets, remove temporary registry config in the same layer, and prove the
+final image contains neither credential nor build-only tooling.
 
 Expose two distinct probes:
 
