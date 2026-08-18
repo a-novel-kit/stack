@@ -133,8 +133,16 @@ names, validation messages, titles, and metadata use message keys; logs and prot
   concatenation or runtime grammar.
 - Treat the source locale as authoritative. CI compiles messages and fails for missing, invalid, or
   stale translations using the repository's pinned tooling.
-- Generated locale code is never hand-edited. Do not require a hosted translation service or a
-  network call at build or runtime.
+- When a product requires runtime message catalogs, keep the static catalogs as the runtime source
+  of truth; generated type declarations or indexes are derived artifacts and are never hand-edited.
+  Do not replace a requested message-catalog workflow with generated per-message functions merely
+  for type safety.
+- Under SSR, create request-scoped localization state. Never keep a mutable process-global locale
+  or dictionary that can leak one user's language into another request.
+- Pin any framework-specific extraction adapter and prove it against a representative component in
+  CI. Prefer statically discoverable keys; prohibit dynamic key construction unless an explicit
+  catalog allowlist keeps missing- and unused-key checks sound.
+- Do not require a hosted translation service or a network call at build or runtime.
 - Exercise long translations and at least one alternate locale in stories. Preserve logical layout
   and leave an RTL path even when the initial locales are left-to-right.
 
