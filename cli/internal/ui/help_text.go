@@ -59,8 +59,8 @@ var commandDocs = []commandDoc{
 		summary: "Build Go modules, pnpm scripts and Podman images",
 		usage:   "a-novel build [flags]",
 		long: "Recursively discovers build targets under the working directory — a " +
-			"Go module per go.mod, every pnpm \"build\"/\"build:*\" script, and each " +
-			"builds/*.Dockerfile — then lets you pick what to build in an interactive " +
+			"Go module per go.mod, every pnpm \"build\"/\"build:*\" script, a root " +
+			"Dockerfile, and each builds/*.Dockerfile — then lets you pick what to build " +
 			"menu (everything selected by default). Selected targets build in a bounded " +
 			"parallel pool and a pass/fail report is printed. With -y or no TTY it runs " +
 			"sequentially and non-interactively.",

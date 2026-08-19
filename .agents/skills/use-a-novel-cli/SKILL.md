@@ -149,9 +149,15 @@ through the `kit/workflows` composite actions, not through the CLI.
 
 ## `a-novel build` — building artifacts
 
-Discovers Go modules, pnpm build scripts, and `builds/*.Dockerfile` targets under
-the working directory. Same interactive-picker / `-y`-non-interactive shape as
-`a-novel test`.
+Discovers Go modules, pnpm build scripts, a root `Dockerfile`, and
+`builds/*.Dockerfile` targets under the working directory. Same
+interactive-picker / `-y`-non-interactive shape as `a-novel test`.
+
+A required Dockerfile secret mount reads from the uppercase environment name
+derived from its ID (`npm_token` → `NPM_TOKEN`). Declare that environment
+name in the repository's value-free `.a-novel/secrets.yaml` manifest so the
+encrypted local value reaches Podman without entering the image or command
+output.
 
 ```bash
 a-novel build                 # interactive picker

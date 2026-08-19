@@ -7,9 +7,8 @@
 //     including nested modules).
 //   - [KindPnpm]   — any package.json whose "scripts" map has one or more keys
 //     starting with "build" (one target per matching script).
-//   - [KindPodman] — any builds/ directory containing *.Dockerfile files (one
-//     target per Dockerfile), with an image tag derived from the Dockerfile
-//     name and the sibling go.mod.
+//   - [KindPodman] — a root Dockerfile or builds/*.Dockerfile file, with an
+//     image tag derived from its repository and filename.
 //
 // Discovery recurses from the scan root so nested modules and workspace
 // sub-packages are found; vendored and generated trees (node_modules, .git, …)
@@ -34,7 +33,7 @@ const (
 	KindGo Kind = "go"
 	// KindPnpm is a package.json script, run through pnpm.
 	KindPnpm Kind = "pnpm"
-	// KindPodman is a Dockerfile under builds/, built into an image.
+	// KindPodman is a root Dockerfile or one under builds/, built into an image.
 	KindPodman Kind = "podman"
 	// KindContainer is a run-mode target: a compose service guarded by a
 	// profile that the runner brings up with `podman compose --profile X
@@ -99,8 +98,9 @@ type Target struct {
 	Kind Kind
 
 	// Name is the unit's short identity within its directory, e.g. the module
-	// name (go), the script name "build:rest" (pnpm), or "rest.Dockerfile"
-	// (podman). It is not unique on its own — pair it with RelDir.
+	// name (go), the script name "build:rest" (pnpm), or "Dockerfile" /
+	// "rest.Dockerfile" (podman). It is not unique on its own — pair it with
+	// RelDir.
 	Name string
 
 	// Service is the owning repo/module short name (e.g. "service-json-keys").
