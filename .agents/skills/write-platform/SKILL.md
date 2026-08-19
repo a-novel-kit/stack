@@ -170,6 +170,16 @@ names, validation messages, titles, and metadata use message keys; logs and prot
   of truth; generated type declarations or indexes are derived artifacts and are never hand-edited.
   Do not replace a requested message-catalog workflow with generated per-message functions merely
   for type safety.
+- Resolve visible messages atomically where they render. Svelte components read the request- or
+  tree-scoped i18next instance from the shared native context and call it with statically
+  discoverable keys; they do not receive pretranslated screen-sized dictionaries.
+- Declare each product message only in its static catalog. Do not mirror catalogs into `*Copy`
+  interfaces, copy-builder functions, story-only dictionaries, or other programmatic message maps.
+  Stable domain and action-result codes remain application state; translate them at the rendering
+  boundary instead of returning visible prose from wiring.
+- Install the same product-owned localization provider around the application, Storybook stories,
+  and component-test render trees. Storybook global decorators and test wrappers may select locale
+  and catalogs, but must not redeclare messages or substitute ad hoc copy objects.
 - Under SSR, create request-scoped localization state. Never keep a mutable process-global locale
   or dictionary that can leak one user's language into another request.
 - Pin any framework-specific extraction adapter and prove it against a representative component in
@@ -219,6 +229,8 @@ API credentials in Storybook.
 
 - Pure screens and their complete state matrix render in Storybook before route wiring lands.
 - Keyboard, focus, narrow layout, long copy, reduced motion, and automated accessibility checks pass.
+- Static catalogs are the sole declaration of visible messages; app, Storybook, and tests use the
+  same request- or tree-scoped localization provider.
 - URL codecs round-trip and invalid parameters normalize predictably; persisted preferences are
   versioned and SSR-safe.
 - No authentication secret reaches browser storage, logs, client bundles, or serialized page data.
