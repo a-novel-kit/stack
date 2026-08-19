@@ -41,7 +41,7 @@ type Verb struct {
 var (
 	VerbBuild = Verb{
 		Base: "build", Ing: "building", Upper: "BUILD",
-		Looks: "a go.mod (Go), a package.json with build* scripts (pnpm), or builds/*.Dockerfile (Podman)",
+		Looks: "a go.mod (Go), a package.json with build* scripts (pnpm), or a root Dockerfile / builds/*.Dockerfile (Podman)",
 	}
 	VerbTest = Verb{
 		Base: "test", Ing: "testing", Upper: "TEST",

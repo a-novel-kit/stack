@@ -20,21 +20,22 @@ var jobBasenames = map[string]struct{}{
 	"cron":        {},
 }
 
-// detectPodman emits one target per *.Dockerfile in dir/builds/. The build
-// context is dir, and the image tag comes from the Dockerfile name plus the
-// go.mod in dir itself. By a-novel convention builds/ always sits at the module
-// root next to go.mod, so this is a same-directory lookup; with no sibling
-// go.mod, registryBase falls back to a localhost/ prefix.
+// detectPodman emits a target for a root Dockerfile and each *.Dockerfile in
+// dir/builds/. The root target uses the repository image name; named targets
+// append their Dockerfile-derived image segment.
 func detectPodman(dir, rel string) []Target {
+	registry := registryBase(dir)
+	var targets []Target
+
+	if fileExists(filepath.Join(dir, "Dockerfile")) {
+		targets = append(targets, podmanTarget(dir, rel, "Dockerfile", "Dockerfile", registry+":local"))
+	}
+
 	buildsDir := filepath.Join(dir, "builds")
 	entries, err := os.ReadDir(buildsDir)
 	if err != nil {
-		return nil
+		return targets
 	}
-
-	registry := registryBase(dir)
-
-	var targets []Target
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".Dockerfile") {
 			continue
@@ -44,19 +45,82 @@ func detectPodman(dir, rel string) []Target {
 		tag := registry + "/" + image + ":local"
 		dockerfileRel := filepath.Join("builds", e.Name())
 
-		targets = append(targets, Target{
-			Kind:   KindPodman,
-			Name:   e.Name(),
-			RelDir: rel,
-			Dir:    dir,
-			Detail: tag,
-			Cmd:    "podman",
-			// docker-format manifest so the image is consumable by
-			// podman-compose without a registry push.
-			Args: []string{buildArg, "--format", "docker", "-f", dockerfileRel, "-t", tag, "."},
-		})
+		targets = append(targets, podmanTarget(dir, rel, e.Name(), dockerfileRel, tag))
 	}
 	return targets
+}
+
+// podmanTarget forwards required Dockerfile secrets from uppercase environment
+// variables derived from their IDs.
+func podmanTarget(dir, rel, name, dockerfileRel, tag string) Target {
+	secretIDs := dockerfileRequiredSecretIDs(filepath.Join(dir, dockerfileRel))
+	args := make([]string, 0, 8+len(secretIDs))
+	args = append(args, buildArg, "--format", "docker")
+	for _, id := range secretIDs {
+		args = append(args, "--secret=id="+id+",env="+dockerfileSecretEnv(id))
+	}
+	args = append(args, "-f", dockerfileRel, "-t", tag, ".")
+
+	return Target{
+		Kind:   KindPodman,
+		Name:   name,
+		RelDir: rel,
+		Dir:    dir,
+		Detail: tag,
+		Cmd:    "podman",
+		Args:   args,
+	}
+}
+
+// dockerfileRequiredSecretIDs returns required secret mount IDs in source order.
+func dockerfileRequiredSecretIDs(path string) []string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	var ids []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		for _, token := range strings.Fields(line) {
+			mount, ok := strings.CutPrefix(token, "--mount=")
+			if !ok {
+				continue
+			}
+
+			var id string
+			secret := false
+			required := false
+			for _, option := range strings.Split(mount, ",") {
+				switch {
+				case option == "type=secret":
+					secret = true
+				case option == "required=true":
+					required = true
+				case strings.HasPrefix(option, "id="):
+					id = strings.TrimPrefix(option, "id=")
+				}
+			}
+			if !secret || !required || id == "" {
+				continue
+			}
+			if _, exists := seen[id]; exists {
+				continue
+			}
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+// dockerfileSecretEnv maps a Dockerfile secret ID to its host environment name.
+func dockerfileSecretEnv(id string) string {
+	replacer := strings.NewReplacer("-", "_", ".", "_")
+	return strings.ToUpper(replacer.Replace(id))
 }
 
 // registryBase computes the ghcr.io image prefix for a service directory from
