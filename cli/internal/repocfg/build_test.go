@@ -94,6 +94,52 @@ func TestBuildPlanProvisionsLabels(t *testing.T) {
 	}
 }
 
+// TestBuildPlanProvisionsPagesByDefault checks that published repository
+// classes enable Pages through a workflow-backed site.
+func TestBuildPlanProvisionsPagesByDefault(t *testing.T) {
+	t.Parallel()
+
+	for _, class := range []Class{ClassLibrary, ClassPlatform} {
+		t.Run(string(class), func(t *testing.T) {
+			t.Parallel()
+
+			preset, err := LoadClass(class)
+			if err != nil {
+				t.Fatalf("LoadClass(%s): %v", class, err)
+			}
+			plan, err := BuildPlan(&RepoTarget{
+				Org:   "a-novel-kit",
+				Repo:  "example",
+				Class: preset,
+				OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{
+					"agent": 1, "dependencies": 2, "publish": 3,
+				}},
+				Discovered: &Discovered{},
+			})
+			if err != nil {
+				t.Fatalf("BuildPlan(%s): %v", class, err)
+			}
+
+			var pagesOps []Op
+			for _, op := range plan.Ops {
+				if op.Method == http.MethodPost && strings.HasSuffix(op.Path, "/pages") {
+					pagesOps = append(pagesOps, op)
+				}
+			}
+			if len(pagesOps) != 1 {
+				t.Fatalf("BuildPlan(%s) emitted %d Pages ops, want 1; ops = %+v", class, len(pagesOps), plan.Ops)
+			}
+			body, ok := pagesOps[0].Body.(map[string]any)
+			if !ok {
+				t.Fatalf("Pages body = %T, want map[string]any", pagesOps[0].Body)
+			}
+			if got := body["build_type"]; got != "workflow" {
+				t.Errorf("Pages build_type = %v, want workflow", got)
+			}
+		})
+	}
+}
+
 // TestLabelsSatisfyGitHubConstraints guards the constraints GitHub enforces only
 // at apply time — the label reconcile runs against live GitHub, so CI never
 // exercises them otherwise. A `description` must be <= 100 characters and a color
