@@ -26,8 +26,9 @@ information hierarchy, component family, or visual language. This skill owns imp
 `plan-ui-design` owns the human-facing contract that implementation must preserve.
 
 **Rendered-UI hard gate:** Start Storybook with `BROWSER=none` and `--no-open`, inspect the exact
-changed story in the integrated browser, keep the server live, and put its freshly verified actual
-Markdown link in every status or final handoff. A screenshot or placeholder is never a substitute.
+changed story in the integrated browser, keep the server live through review, and put its freshly
+verified actual Markdown link in the PR body, the message that announces the PR, and every later UI
+status or final handoff. A screenshot or placeholder is never a substitute.
 
 Use this authority order when guidance conflicts:
 
@@ -72,11 +73,15 @@ The handoff contract is non-negotiable:
    story or docs route responds.
 4. Open that route in the integrated browser and inspect it. Prefer it over the Storybook root when
    handing off a specific component.
-5. Before every status or final response that hands UI work back, include a clickable inline link in
-   the form `[Button — Storybook](http://127.0.0.1:6006/?path=/docs/button--docs)`, substituting the
-   actual live URL and route. Repeat it even when an earlier response already contained it.
-6. Re-resolve the URL immediately before sending the response. If the server stopped or changed,
-   restart it and verify the new link.
+5. Before creating or updating a PR for rendered UI, add a `## Live UI review` section to its body
+   with direct links to the changed stories. Do not open or mark the UI PR ready until those routes
+   are live and freshly inspected.
+6. In the same commentary message that surfaces the PR URL, include at least one direct Storybook
+   link alongside it. Before every later UI status or final response, repeat a clickable inline link
+   in the form `[Button — Storybook](http://127.0.0.1:6006/?path=/docs/button--docs)`, substituting
+   the actual live URL and route; an earlier message does not satisfy the current handoff.
+7. Re-resolve every linked route immediately before editing the PR or sending the response. If the
+   server stopped or changed, restart it, verify the new link, and update the PR body.
 
 A screenshot, placeholder such as “visual preview,” stale URL, or instruction to find an earlier
 link does not satisfy this contract.
@@ -209,5 +214,6 @@ link does not satisfy this contract.
 - Trust boundaries validate runtime data and do not expose secrets.
 - Loading, empty, error, and success paths are intentional.
 - `write-frontend-tests` covers changed behavior.
-- Storybook is running, the changed UI was inspected there, and the live link is in the handoff.
+- Storybook is running, the changed UI was inspected there, and freshly verified direct links are
+  in the PR body, the PR announcement, and the current handoff.
 - Format, lint, pnpm tests, and production build pass.
