@@ -133,8 +133,9 @@ history — add a follow-up `chore(gen): ...` commit instead (per `monitor-ci`).
 
 Honor every active layer skill's review-artifact gate before opening a ready PR. In particular,
 `write-frontend` requires a locally running, freshly inspected Storybook plus direct story links
-ready for the PR body and the PR announcement. A screenshot, static build, stale URL, or Storybook
-root link does not satisfy a direct rendered-UI review route.
+ready for the final completion report. Local-only review links must not enter the PR body. A
+screenshot, static build, stale URL, or Storybook root link does not satisfy a direct rendered-UI
+review route.
 
 ---
 
@@ -301,9 +302,9 @@ Rules:
   leave it "TBD" or blank — reviewers should not have to hunt.
 - **Test plan** is a checklist. Check the boxes you have already verified locally; leave
   `CI green` unchecked (monitor-ci will mark it).
-- **Layer review surfaces are first-class PR sections.** When an active layer skill mandates one,
-  include it in the body. For rendered UI, add `## Live UI review` with freshly verified direct
-  Storybook links, per `write-frontend`.
+- **Local review surfaces stay out of the PR body.** Never put localhost or another local-only URL in
+  durable PR metadata. For rendered UI, `write-frontend` requires the freshly verified direct
+  Storybook link in the completion report instead.
 - **Read the body back after create/edit.** Run
   `gh pr view <n> --json body --jq .body` and verify headings, lists, and line breaks render as
   intended. Literal `\n` text is a quoting defect; fix it before handoff.
@@ -350,8 +351,8 @@ from the title, and from assignee/reviewer (still automation's job, see 5.4).
 
 `gh pr create` prints the PR URL on success. Surface it in the final message so the user can
 jump to it. When an active layer skill requires a companion review surface, include its direct link
-in the same message as the PR URL; for rendered UI, this is the live Storybook route required by
-`write-frontend`.
+in the same completion report as the PR and linked task or issue URLs; for rendered UI, this is the
+live local Storybook route required by `write-frontend`. Do not add that local URL to the PR body.
 
 ---
 
@@ -441,6 +442,10 @@ is outstanding, say so in one line instead of an empty table. This rule is sessi
 authoritative statement lives in memory (`session-recap-table`) so it fires even on turns where
 this skill never loads (e.g. issue-only work under `triage-issues`).
 
+For rendered UI, the same final report must also include the freshly verified direct local Storybook
+link required by `write-frontend`, adjacent to the recap table or in the relevant PR row. Never put
+that local-only link in the PR body.
+
 ---
 
 ## Common Mistakes
@@ -460,8 +465,10 @@ this skill never loads (e.g. issue-only work under `triage-issues`).
   you changed; the formatter is not the linter (1.4).
 - **Opening a PR from master.** Branch first, then PR.
 - **Closing and re-creating a PR to "fix" the title.** Use `gh pr edit --title` instead.
-- **Handing off a UI PR without Storybook beside it.** The PR body, PR announcement, and every later
-  UI handoff need a freshly verified direct Storybook link; see `write-frontend`.
+- **Putting a local Storybook link in a PR body.** Local review URLs are session-scoped and belong in
+  the completion report, not durable GitHub metadata.
+- **Handing off completed UI work without Storybook beside the PR and task links.** The final report
+  needs a freshly verified direct Storybook link; see `write-frontend`.
 - **Manual reviewer/assignee flags.** Automation handles these (5.4); tracking metadata is
   the exception a ready PR carries (5.5).
 - **`--force` without `--lease`.** Always `--force-with-lease` after a rebase.

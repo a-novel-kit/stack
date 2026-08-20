@@ -27,8 +27,8 @@ information hierarchy, component family, or visual language. This skill owns imp
 
 **Rendered-UI hard gate:** Start Storybook with `BROWSER=none` and `--no-open`, inspect the exact
 changed story in the integrated browser, keep the server live through review, and put its freshly
-verified actual Markdown link in the PR body, the message that announces the PR, and every later UI
-status or final handoff. A screenshot or placeholder is never a substitute.
+verified actual Markdown link in the completion report beside the PR and task or issue links. Never
+put a local-only Storybook URL in a GitHub PR body. A screenshot or placeholder is never a substitute.
 
 Use this authority order when guidance conflicts:
 
@@ -73,15 +73,15 @@ The handoff contract is non-negotiable:
    story or docs route responds.
 4. Open that route in the integrated browser and inspect it. Prefer it over the Storybook root when
    handing off a specific component.
-5. Before creating or updating a PR for rendered UI, add a `## Live UI review` section to its body
-   with direct links to the changed stories. Do not open or mark the UI PR ready until those routes
-   are live and freshly inspected.
-6. In the same commentary message that surfaces the PR URL, include at least one direct Storybook
-   link alongside it. Before every later UI status or final response, repeat a clickable inline link
-   in the form `[Button — Storybook](http://127.0.0.1:6006/?path=/docs/button--docs)`, substituting
-   the actual live URL and route; an earlier message does not satisfy the current handoff.
-7. Re-resolve every linked route immediately before editing the PR or sending the response. If the
-   server stopped or changed, restart it, verify the new link, and update the PR body.
+5. Keep localhost and other local-only Storybook links out of GitHub PR descriptions. They are
+   session-scoped review surfaces, not durable PR metadata.
+6. In the final completion report that hands rendered UI work back, include at least one direct
+   Storybook link beside the PR and planning task or issue links. Use a clickable inline link such as
+   `[Button — Storybook](http://127.0.0.1:6006/?path=/docs/button--docs)`, substituting the actual live
+   URL and route. Repeat it in any later report that hands completed UI work back; an earlier report
+   does not satisfy the current handoff.
+7. Re-resolve every linked route immediately before sending the completion report. If the server
+   stopped or changed, restart it and verify the new link before reporting completion.
 
 A screenshot, placeholder such as “visual preview,” stale URL, or instruction to find an earlier
 link does not satisfy this contract.
@@ -214,6 +214,6 @@ link does not satisfy this contract.
 - Trust boundaries validate runtime data and do not expose secrets.
 - Loading, empty, error, and success paths are intentional.
 - `write-frontend-tests` covers changed behavior.
-- Storybook is running, the changed UI was inspected there, and freshly verified direct links are
-  in the PR body, the PR announcement, and the current handoff.
+- Storybook is running, the changed UI was inspected there, and a freshly verified direct local link
+  is in the completion report beside the PR and task or issue links, never in the PR body.
 - Format, lint, pnpm tests, and production build pass.
