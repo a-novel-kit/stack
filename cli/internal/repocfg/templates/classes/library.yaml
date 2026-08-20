@@ -18,7 +18,8 @@ security:
   secret_scanning: true
   push_protection: true
   dependabot: true
-pages: false
+# Pages hosts each library's generated documentation.
+pages: true
 code_quality: true
 rulesets:
   master: true
