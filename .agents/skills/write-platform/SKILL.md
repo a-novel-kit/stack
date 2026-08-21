@@ -79,21 +79,27 @@ in source. A secret-shaped `VITE_*` variable is a build failure, not runtime con
 
 Build every user-visible screen in this order:
 
-1. Define a serializable view model and explicit callbacks for the pure UI boundary.
+1. Define the screen controller contract: serializable rendered state plus semantic transition methods.
 2. Implement the screen or shell composition without route, session, storage, or network imports.
 3. Add deterministic stories for the meaningful state matrix: loading, empty, error, success,
    permissions, narrow/wide layouts, long translations, and interaction states as applicable.
 4. Start Storybook with `BROWSER=none` and `--no-open`; inspect the exact stories in the integrated
    browser at narrow and wide viewports and keep the verified link for the handoff.
 5. Add component and interaction tests at the pure boundary.
-6. Wire routes, server actions, sessions, and browser adapters; unit-test their parsers and state
-   transitions independently.
+6. Implement the pure controller and unit-test its transitions; then let the route file construct it from
+   loads, actions, URL state, storage adapters, and browser adapters.
 7. Add an end-to-end test only for a critical browser or cross-boundary journey that smaller tests
    cannot prove. Any committed browser test runs in CI.
 
 Stories are an executable design surface, not production fixtures. Keep mocks typed, local,
-deterministic, and incapable of contacting real services. Route containers translate backend and
-framework results into the same view models the stories exercise.
+deterministic, and incapable of contacting real services. Route files translate backend and
+framework results into the same controller contracts the stories exercise.
+
+For each routed screen or layout, keep `screen.svelte` and `controller.svelte.ts` beside the SvelteKit
+route files. `screen.svelte` is the pure UI component and accepts one screen controller.
+`controller.svelte.ts` contains pure reactive state and semantic transitions without rendering or DOM
+access. `+page.svelte` or `+layout.svelte` performs only final wiring plus route-owned metadata such as
+the document title. Do not add a connector component that merely renders the screen.
 
 Import shared Storybook preview, theme, decorators, and test defaults from uikit's development
 package. Keep a local Storybook entrypoint only for product-specific context and story discovery; do
