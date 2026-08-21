@@ -120,6 +120,23 @@ link does not satisfy this contract.
   the behavior they represent (`onSubmit`, `onDismiss`). Avoid generic `data`, `item`, or `handler`
   when a domain name is available.
 
+## Components and controllers
+
+- Keep components presentational: render semantic HTML and accessibility state, translate native events
+  into semantic requests, and own only DOM mechanics such as element references, focus movement,
+  measurements, and transient typeahead bookkeeping.
+- Put meaningful rendered state and its transition rules in a pure controller with no DOM access,
+  component rendering, route imports, storage, session, or network calls. A controller may use the
+  framework reactive primitive in a `.svelte.ts` module.
+- Let a stateful component accept at most one controller. Do not split its contract across bindable
+  state props, change callbacks, and a controller; stateless components need no controller.
+- Expose semantic controller methods (`open`, `close`, `select`, `setChecked`) rather than generic
+  setters. The component reports intent; the controller may accept, transform, or reject it.
+- Export the controller contract and a configurable default factory. Callers may supply another
+  implementation that satisfies the same contract, including fixed-state Storybook controllers.
+- Unit-test controller transitions without rendering. Test the component boundary for DOM semantics,
+  accessibility behavior, and rejected transitions.
+
 ## HTML and interaction
 
 - Use the native element with the required behavior: `button` for actions, `a` for navigation,

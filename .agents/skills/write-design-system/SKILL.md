@@ -138,6 +138,13 @@ Rules:
   combinations. Keep defaults safe, especially button type and form behavior.
 - Define hover, active, focus-visible, disabled, loading, invalid, selected, and high-contrast states
   as applicable. A component is not complete when only its resting screenshot works.
+- Give every stateful component one external controller contract and a configurable default controller.
+  Keep rendered state and semantic transitions in the controller; keep native event translation, DOM
+  references, focus movement, measurements, and accessibility attributes in the component. Do not
+  expose both a controller and bindable state props or generic `setState` methods.
+- Export component-specific controller types even when several alias the same generic state shape, so
+  consumer APIs and migration guides remain discoverable. Storybook may supply a fixed controller that
+  rejects transitions to keep a review state pinned.
 - Define state precedence explicitly. Persistent selected, checked, expanded, invalid, loading, and
   disabled states outrank transient hover and active treatments; transient feedback must not visually
   erase or contradict the persistent state.
