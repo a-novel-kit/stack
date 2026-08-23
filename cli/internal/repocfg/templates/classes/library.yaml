@@ -20,7 +20,7 @@ security:
   dependabot: true
 # Pages hosts each library's generated documentation.
 pages: true
-code_quality: true
+code_quality: false
 rulesets:
   master: true
   require_approval: true

@@ -20,7 +20,7 @@ security:
   push_protection: true
   dependabot: true
 pages: false
-code_quality: true
+code_quality: false
 rulesets:
   master: true
   require_approval: true
