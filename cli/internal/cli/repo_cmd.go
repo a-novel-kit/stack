@@ -61,8 +61,9 @@ func newRepoCreateCmd() *cobra.Command {
 		Short: "Create a repository and apply its class config",
 		Long: `Creates <org>/<name> (optionally from a template), then discovers its
 checks and applies the class configuration — settings, security,
-rulesets, Pages. Interactive (human-only); run it from anywhere.`,
-		Args: cobra.ExactArgs(2),
+rulesets and Pages. Interactive (human-only); repositories are public unless --private is set.`,
+		Example: `  a-novel repo create a-novel infra --class infra`,
+		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			org, name := args[0], args[1]
 			if !stdinIsTTY() {
@@ -114,11 +115,12 @@ rulesets, Pages. Interactive (human-only); run it from anywhere.`,
 			// The [Agent] App id is per-org; inject it before discovery so the
 			// merge-gate required check resolves to this org's App.
 			checks.ResolveBotIntegrations(orgProfile)
-			discovered := &repocfg.Discovered{}
-			if _, err := gh("repo", "clone", org+"/"+name, cloneDir); err == nil {
-				if d, derr := repocfg.Discover(cloneDir, checks); derr == nil {
-					discovered = d
-				}
+			if _, err := gh("repo", "clone", org+"/"+name, cloneDir); err != nil {
+				return fmt.Errorf("clone created repo for check discovery: %w", err)
+			}
+			discovered, err := repocfg.Discover(cloneDir, checks)
+			if err != nil {
+				return fmt.Errorf("discover required checks: %w", err)
 			}
 			branch := repoDefaultBranch(org, name)
 			target := &repocfg.RepoTarget{
@@ -145,7 +147,7 @@ rulesets, Pages. Interactive (human-only); run it from anywhere.`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&class, "class", "", "class (service|platform|library|workflows|meta); a repos/<org>_<repo>.yaml override wins")
+	cmd.Flags().StringVar(&class, "class", "", classFlagUsage())
 	cmd.Flags().StringVar(&description, "description", "", "repository description")
 	cmd.Flags().StringVar(&template, "template", "", "create from this org template repo (e.g. service-template)")
 	cmd.Flags().BoolVar(&private, "private", false, "create a private repository (default public)")
@@ -157,6 +159,15 @@ func visibility(private bool) string {
 		return "private"
 	}
 	return "public"
+}
+
+// classFlagUsage derives the accepted values from repocfg.AllClasses.
+func classFlagUsage() string {
+	classes := make([]string, len(repocfg.AllClasses))
+	for i, class := range repocfg.AllClasses {
+		classes[i] = string(class)
+	}
+	return "class (" + strings.Join(classes, "|") + "); a repos/<org>_<repo>.yaml override wins"
 }
 
 func newRepoUpdateCmd() *cobra.Command {
@@ -235,7 +246,7 @@ confirm gates the whole batch.`,
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the API operations that would run, without applying")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "with --dry-run, emit the plan(s) as JSON")
-	cmd.Flags().StringVar(&class, "class", "", "class (service|platform|library|workflows|meta); a repos/<org>_<repo>.yaml override wins")
+	cmd.Flags().StringVar(&class, "class", "", classFlagUsage())
 	cmd.Flags().BoolVar(&all, "all", false, "reconcile every pulled workspace repo (stack + app/ + kit/) in one run")
 	cmd.Flags().StringSliceVar(&exclude, "exclude", nil,
 		"with --all, skip these repos (<org>/<name> or bare <name>); may be repeated")
@@ -331,11 +342,11 @@ func repoFromGitRemote(dir string) (string, string, error) {
 
 // repoDefaultBranch asks GitHub for the repo's default branch; falls back to master.
 func repoDefaultBranch(org, repo string) string {
-	out, err := exec.Command("gh", "api", "repos/"+org+"/"+repo, "--jq", ".default_branch").Output()
+	out, err := gh("api", "repos/"+org+"/"+repo, "--jq", ".default_branch")
 	if err != nil {
 		return branchMaster
 	}
-	if b := strings.TrimSpace(string(out)); b != "" {
+	if b := strings.TrimSpace(out); b != "" {
 		return b
 	}
 	return branchMaster

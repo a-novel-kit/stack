@@ -62,17 +62,24 @@ are required unless noted.
 
 | Field                                                           | Type   | Meaning                                                                                              |
 | --------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
-| `class`                                                         | string | Class ID (`service`, `library`, `workflows`, `meta`).                                                |
+| `class`                                                         | string | Class ID (`service`, `platform`, `infra`, `library`, `workflows`, `meta`).                           |
 | `features.issues` / `.wiki` / `.projects` / `.discussions`      | bool   | Repo feature toggles.                                                                                |
 | `merge.squash` / `.merge_commit` / `.rebase`                    | bool   | Allowed merge methods (squash-only org-wide).                                                        |
 | `merge.auto_merge`                                              | bool   | Allow auto-merge.                                                                                    |
 | `merge.delete_branch_on_merge`                                  | bool   | Auto-delete head branch on merge.                                                                    |
 | `merge.allow_update_branch`                                     | bool   | Offer "update branch" on out-of-date PRs.                                                            |
 | `merge.signoff_required`                                        | bool   | Require `Signed-off-by` on web commits.                                                              |
-| `security.secret_scanning` / `.push_protection` / `.dependabot` | bool   | GHAS toggles (public repos).                                                                         |
-| `pages`                                                         | bool   | Enable a GitHub Pages site (build type: workflow).                                                   |
+| `security.secret_scanning` / `.push_protection` / `.dependabot` | bool   | Secret scanning, push protection, and Dependabot security-update PRs.                                |
+| `security.dependabot_alerts`                                    | bool   | Optional explicit state for Dependabot vulnerability alerts; omission leaves the live state alone.   |
+| `pages`                                                         | bool   | Reconcile Pages on (`workflow`) or off.                                                              |
 | `code_quality`                                                  | bool   | Add the `code_quality` rule to the `master` ruleset (GitHub Code Quality is a separate repo toggle). |
 | `rulesets.master` / `.require_approval` / `.tags`               | bool   | Apply those rulesets. `tags` locks tag (and release) creation to the agent bot + admins.             |
+
+The `infra` class is public-by-default and deployment-only. It keeps Pages,
+wiki, discussions, release workflow callers, and the tag ruleset off; when a
+repo changes to this class, reconciliation also deletes managed `release-train`
+and `hotfix` callers left by a release-bearing class. Create it interactively
+with `a-novel repo create a-novel infra --class infra` after releasing the CLI.
 
 ## `orgs/<org>.yaml`
 

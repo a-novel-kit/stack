@@ -57,20 +57,29 @@ func renderSummary(w io.Writer, t *repocfg.RepoTarget) {
 		mergeStr += ", signoff"
 	}
 	line("Merge", mergeStr)
-	line("Security", strings.Join([]string{
+	security := []string{
 		onOff("secret-scanning", c.Security.SecretScanning),
 		onOff("push-protection", c.Security.PushProtection),
-		onOff("dependabot", c.Security.Dependabot),
-	}, " "))
-	if c.Pages {
-		line("Pages", repoOn.Render("enabled"))
+		onOff("dependabot-updates", c.Security.Dependabot),
 	}
+	if c.Security.DependabotAlerts != nil {
+		security = append(security, onOff("dependabot-alerts", *c.Security.DependabotAlerts))
+	}
+	line("Security", strings.Join(security, " "))
+	pages := repoOff.Render("disabled")
+	if c.Pages {
+		pages = repoOn.Render("enabled")
+	}
+	line("Pages", pages)
 	rs := []string{}
 	if c.Rulesets.Master {
 		rs = append(rs, "master")
 	}
 	if c.Rulesets.RequireApproval {
 		rs = append(rs, "require-approval")
+	}
+	if c.Rulesets.Tags {
+		rs = append(rs, "tags")
 	}
 	line("Rulesets", strings.Join(rs, ", "))
 	if checks := masterChecksFor(t); len(checks) > 0 {

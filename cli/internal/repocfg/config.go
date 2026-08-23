@@ -39,6 +39,7 @@ type Class string
 const (
 	ClassService   Class = "service"
 	ClassPlatform  Class = "platform"
+	ClassInfra     Class = "infra"
 	ClassLibrary   Class = "library"
 	ClassWorkflows Class = "workflows"
 	ClassMeta      Class = "meta"
@@ -46,15 +47,17 @@ const (
 
 // AllClasses is the ordered set of known classes (for the UI picker and
 // flag validation).
-var AllClasses = []Class{ClassService, ClassPlatform, ClassLibrary, ClassWorkflows, ClassMeta}
+var AllClasses = []Class{ClassService, ClassPlatform, ClassInfra, ClassLibrary, ClassWorkflows, ClassMeta}
 
 // DetectClass infers a repo's class from its name, used when neither a
 // repos/<org>_<repo>.yaml override nor the --class flag is given. The
-// strong-semantic classes match exact names (workflows, .github), the service-*
-// and platform-* families map to the service and platform classes, and
-// everything else falls to the freeform library default.
+// strong-semantic classes match exact names (infra, workflows, .github), the
+// service-* and platform-* families map to the service and platform classes,
+// and everything else falls to the freeform library default.
 func DetectClass(repo string) Class {
 	switch {
+	case repo == "infra":
+		return ClassInfra
 	case repo == "workflows":
 		return ClassWorkflows
 	case repo == ".github":
@@ -95,11 +98,14 @@ type Merge struct {
 	SignoffRequired     bool `yaml:"signoff_required"`
 }
 
-// SecurityToggles mirrors the security_and_analysis block we manage.
+// SecurityToggles mirrors the repository security settings we manage.
+// DependabotAlerts is optional because GitHub exposes alerts through a
+// dedicated endpoint; nil leaves that setting unmanaged for older presets.
 type SecurityToggles struct {
-	SecretScanning bool `yaml:"secret_scanning"`
-	PushProtection bool `yaml:"push_protection"`
-	Dependabot     bool `yaml:"dependabot"`
+	SecretScanning   bool  `yaml:"secret_scanning"`
+	PushProtection   bool  `yaml:"push_protection"`
+	Dependabot       bool  `yaml:"dependabot"`
+	DependabotAlerts *bool `yaml:"dependabot_alerts,omitempty"`
 }
 
 // ClassRulesets says which named rulesets the class applies.

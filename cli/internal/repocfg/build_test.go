@@ -174,7 +174,7 @@ func TestBuildPlanProvisionsMergeGateWorkflows(t *testing.T) {
 		Org:           "a-novel-kit",
 		Repo:          "example",
 		DefaultBranch: "master",
-		Class:         &ClassPreset{Rulesets: ClassRulesets{Master: true}},
+		Class:         &ClassPreset{Rulesets: ClassRulesets{Master: true, Tags: true}},
 		OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{
 			"dependencies": 1734926, "publish": 1734949, "agent": 3549379,
 		}},
