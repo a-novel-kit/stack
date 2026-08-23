@@ -104,6 +104,17 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 
 	p.Ops = append(p.Ops, Op{Method: http.MethodPatch, Path: repoPath, Body: SettingsBody(c)})
 
+	// Dependabot alerts use their own endpoint rather than the repository
+	// security_and_analysis block. Older presets omit the field and leave the
+	// live setting untouched; presets that name it get explicit desired state.
+	if c.Security.DependabotAlerts != nil {
+		method := http.MethodDelete
+		if *c.Security.DependabotAlerts {
+			method = http.MethodPut
+		}
+		p.Ops = append(p.Ops, Op{Method: method, Path: repoPath + "/vulnerability-alerts"})
+	}
+
 	// CODEOWNERS is provisioned to every repo regardless of class, so review
 	// requests route automatically. Written to .github/ (GitHub honours that
 	// over a root copy); apply removes any stray root file so a repo never
@@ -142,12 +153,12 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		Body:   map[string]any{"state": "not-configured"},
 	})
 
-	// Governance workflows, pushed wherever the master ruleset gates merges —
-	// the same repos whose PRs feed the board. They ship as static files: the
-	// [Agent] credentials and the per-org board id are GitHub-expression refs
-	// the workflow resolves at run time.
+	// Merge governance workflows ship wherever the master ruleset gates merges.
+	// Release callers are narrower: a deployment-only class without the tags
+	// ruleset explicitly removes them, so changing a repo's class cannot leave
+	// release mechanics behind as drift.
 	if c.Rulesets.Master {
-		for _, wf := range []string{"merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml", "release-train.yaml", "hotfix.yaml"} {
+		for _, wf := range []string{"merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml"} {
 			content, err := ReadTemplate("governance/" + wf)
 			if err != nil {
 				return nil, err
@@ -158,6 +169,21 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 				Content: string(content),
 			})
 		}
+	}
+	for _, wf := range []string{"release-train.yaml", "hotfix.yaml"} {
+		op := Op{
+			Method: http.MethodDelete,
+			Path:   repoPath + "/contents/.github/workflows/" + wf,
+		}
+		if c.Rulesets.Master && c.Rulesets.Tags {
+			content, err := ReadTemplate("governance/" + wf)
+			if err != nil {
+				return nil, err
+			}
+			op.Method = http.MethodPut
+			op.Content = string(content)
+		}
+		p.Ops = append(p.Ops, op)
 	}
 
 	// Auto-approve the trusted dependency bots' PRs so their version bumps don't
@@ -174,9 +200,12 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		})
 	}
 
+	pages := Op{Method: http.MethodDelete, Path: repoPath + "/pages"}
 	if c.Pages {
-		p.Ops = append(p.Ops, Op{Method: http.MethodPost, Path: repoPath + "/pages", Body: map[string]any{"build_type": "workflow"}})
+		pages.Method = http.MethodPost
+		pages.Body = map[string]any{"build_type": "workflow"}
 	}
+	p.Ops = append(p.Ops, pages)
 
 	// Rulesets, reconciled by name (POST when absent, PUT .../{id} when present).
 	// The master ruleset gates exactly the discovered checks (always + the
@@ -388,8 +417,8 @@ func (p *Plan) Render(w io.Writer) error {
 			_, _ = fmt.Fprint(w, op.Content)
 			continue
 		}
-		// A prune carries no request body, so its title stands alone.
-		if op.PruneRulesets {
+		// Deletions and a prune carry no request body, so their titles stand alone.
+		if op.PruneRulesets || op.Body == nil {
 			continue
 		}
 		enc := json.NewEncoder(w)

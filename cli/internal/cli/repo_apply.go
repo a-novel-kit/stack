@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os/exec"
 	"path"
@@ -22,10 +23,10 @@ import (
 )
 
 // applyPlan executes every operation in a plan against GitHub via `gh`,
-// printing one line per outcome (managed-file lines print once their sync
-// commit lands). It keeps going after a failed op, so a fiddly step such as a
-// managed workflow needing the `workflow` token scope does not block the rest,
-// and returns a combined error when any failed.
+// printing one line per outcome. Managed files land before rulesets so a new
+// repository never requires checks whose workflow callers are still absent.
+// Independent operations continue after failures, but rulesets are skipped
+// when managed-file staging or sync fails.
 func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) error {
 	var failures []string
 	note := func(ok bool, label, detail string) {
@@ -42,7 +43,31 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 	}
 
 	var staged []contentChange
+	managedFilesFailed := false
+	flushStaged := func() bool {
+		if len(staged) == 0 {
+			return true
+		}
+		detail, err := commitSync(org, repo, branch, staged)
+		if err == nil {
+			for _, change := range staged {
+				note(true, change.path, change.outcome)
+			}
+		}
+		note(err == nil, "sync commit", ternErr(err, detail))
+		staged = nil
+		return err == nil
+	}
 	for _, op := range plan.Ops {
+		if op.RulesetName != "" || op.PruneRulesets {
+			if !flushStaged() {
+				managedFilesFailed = true
+			}
+			if managedFilesFailed {
+				note(false, op.Title(), "skipped because managed-file sync failed")
+				continue
+			}
+		}
 		switch {
 		case op.PruneRulesets:
 			detail, err := pruneRulesets(org, repo, op)
@@ -50,9 +75,22 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 		case op.RulesetName != "":
 			detail, err := applyRuleset(org, repo, op)
 			note(err == nil, "ruleset "+op.RulesetName, ternErr(err, detail))
+		case op.Method == http.MethodDelete && strings.Contains(op.Path, "/contents/"):
+			change, unchanged, err := stageContentDeletion(op)
+			if err != nil {
+				managedFilesFailed = true
+				note(false, shortPath(op.Path), ternErr(err, ""))
+				continue
+			}
+			if unchanged {
+				note(true, shortPath(op.Path), opUnchanged)
+			} else {
+				staged = append(staged, change)
+			}
 		case op.Content != "":
 			changes, unchanged, err := stageContents(op)
 			if err != nil {
+				managedFilesFailed = true
 				note(false, shortPath(op.Path), ternErr(err, ""))
 				continue
 			}
@@ -60,6 +98,9 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 				note(true, shortPath(op.Path), opUnchanged)
 			}
 			staged = append(staged, changes...)
+		case strings.HasSuffix(op.Path, "/vulnerability-alerts"):
+			detail, err := applyVulnerabilityAlerts(op)
+			note(err == nil, "Dependabot alerts", ternErr(err, detail))
 		case strings.HasSuffix(op.Path, "/pages"):
 			detail, err := applyPages(op)
 			note(err == nil, "pages", ternErr(err, detail))
@@ -75,17 +116,8 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 		}
 	}
 
-	// Every staged change lands in one commit: one push, one CI run on the
-	// target repo. With nothing staged there is no commit at all.
-	if len(staged) > 0 {
-		detail, err := commitSync(org, repo, branch, staged)
-		if err == nil {
-			for _, change := range staged {
-				note(true, change.path, change.outcome)
-			}
-		}
-		note(err == nil, "sync commit", ternErr(err, detail))
-	}
+	// Plans without rulesets still flush their managed files at the end.
+	_ = flushStaged()
 
 	if len(failures) > 0 {
 		return fmt.Errorf("%d operation(s) failed:\n  - %s", len(failures), strings.Join(failures, "\n  - "))
@@ -197,6 +229,18 @@ func stageContents(op repocfg.Op) ([]contentChange, bool, error) {
 		outcome = opUpdated
 	}
 	return append(changes, contentChange{path: shortPath(op.Path), content: desired, outcome: outcome}), false, nil
+}
+
+// stageContentDeletion stages a managed file only when it exists.
+func stageContentDeletion(op repocfg.Op) (contentChange, bool, error) {
+	sha, err := contentSHA(op.Path)
+	if err != nil {
+		return contentChange{}, false, err
+	}
+	if sha == "" {
+		return contentChange{}, true, nil
+	}
+	return contentChange{path: shortPath(op.Path), outcome: opDeleted}, false, nil
 }
 
 // syncCommitQuery applies every staged change as a single commit on the
@@ -346,29 +390,58 @@ func branchHeadOid(org, repo, branch string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// applyPages enables a Pages site; a 409 (or an "already exists" message)
-// means one already exists, which is fine. Every other error is returned,
-// including a 422 validation failure.
 // applyCodeScanning turns CodeQL default setup off. Static analysis is the
-// lint-semgrep and scan-secrets jobs, which report as ordinary required checks;
-// leaving default setup reachable would let an org-level toggle switch scanning
-// back on unnoticed. Setting the state it already holds is not an error, so this
-// is safe to reassert on every update.
+// lint-semgrep and scan-secrets jobs, which report as ordinary required checks.
+// Leaving default setup reachable would let an org-level toggle switch scanning
+// back on unnoticed. Reasserting its current state is idempotent.
 func applyCodeScanning(op repocfg.Op) (string, error) {
-	if err := ghJSON("PATCH", op.Path, op.Body); err != nil {
+	if err := ghJSON(http.MethodPatch, op.Path, op.Body); err != nil {
 		return "", err
 	}
 	return "default setup off", nil
 }
 
+// applyPages reconciles the Pages site. A missing site is already disabled; an
+// existing site reported by POST is already enabled. Other errors still fail.
 func applyPages(op repocfg.Op) (string, error) {
-	if err := ghJSON("POST", op.Path, op.Body); err != nil {
-		if isAlreadyExists(err) {
-			return "already enabled", nil
+	switch op.Method {
+	case http.MethodPost:
+		if err := ghJSON(op.Method, op.Path, op.Body); err != nil {
+			if isAlreadyExists(err) {
+				return "already enabled", nil
+			}
+			return "", err
+		}
+		return "enabled", nil
+	case http.MethodDelete:
+		if _, err := gh("api", "-X", op.Method, op.Path); err != nil {
+			if isNotFound(err) {
+				return "already disabled", nil
+			}
+			return "", err
+		}
+		return "disabled", nil
+	default:
+		return "", fmt.Errorf("unsupported Pages method %q", op.Method)
+	}
+}
+
+// applyVulnerabilityAlerts reconciles Dependabot alerts through their
+// bodyless enable/disable endpoint. Both operations are safe to repeat.
+func applyVulnerabilityAlerts(op repocfg.Op) (string, error) {
+	if op.Method != http.MethodPut && op.Method != http.MethodDelete {
+		return "", fmt.Errorf("unsupported Dependabot alerts method %q", op.Method)
+	}
+	if _, err := gh("api", "-X", op.Method, op.Path); err != nil {
+		if op.Method == http.MethodDelete && isNotFound(err) {
+			return "already disabled", nil
 		}
 		return "", err
 	}
-	return "enabled", nil
+	if op.Method == http.MethodPut {
+		return "enabled", nil
+	}
+	return "disabled", nil
 }
 
 // applyLabels reconciles a repo's labels against the canonical set: every
