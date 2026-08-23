@@ -17,6 +17,9 @@ func TestLoadAllClasses(t *testing.T) {
 			if p.Class != c {
 				t.Fatalf("class field = %q, want %q", p.Class, c)
 			}
+			if p.CodeQuality {
+				t.Error("code_quality = true, want false for every managed class")
+			}
 		})
 	}
 }
@@ -186,6 +189,9 @@ func TestLoadRepoOverride(t *testing.T) {
 	}
 	if p.Class != ClassLibrary {
 		t.Fatalf("stack base class = %q, want %q", p.Class, ClassLibrary)
+	}
+	if p.CodeQuality {
+		t.Error("stack code_quality = true, want false")
 	}
 
 	if _, ok, err := LoadRepoOverride("a-novel", "service-authentication"); err != nil || ok {

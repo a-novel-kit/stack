@@ -23,7 +23,7 @@ security:
   # Dependabot alerts are a separate setting.
   dependabot: false
 pages: true
-code_quality: true
+code_quality: false
 rulesets:
   master: true
   require_approval: true

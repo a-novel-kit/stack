@@ -193,13 +193,7 @@ the stack repo plus each whitelisted checkout present under app/ or kit/ (the
 same set 'core sync' manages, auto-discovered from workspace-repos.yaml). Config
 is discovered from each working tree, so a repo carrying ongoing work — off its
 default branch or with uncommitted changes — is skipped untouched rather than
-reconciled from an in-progress checkout.
-
-The fleet form also reconciles one organization-owned security configuration per
-discovered organization. It keeps CodeQL default setup disabled while retaining
-the other protections, then applies the policy to current and future
-repositories. The dry run reports this organization-wide operation, and the
-single-repository form never performs it. --exclude drops named repos; a single
+reconciled from an in-progress checkout. --exclude drops named repos; a single
 confirm gates the whole batch.`,
 		Example: `  a-novel repo update                       # current repo
   a-novel repo update --all                 # every pulled workspace repo

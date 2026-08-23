@@ -162,7 +162,7 @@ func TestRenderCompactSummary(t *testing.T) {
 }
 
 // TestRenderAllJSON checks the --all --json document shape: an array of
-// organization or repository targets and a clean "[]" when nothing is eligible.
+// {repo, ops} objects, and a clean "[]" when nothing is eligible.
 func TestRenderAllJSON(t *testing.T) {
 	t.Parallel()
 
@@ -173,16 +173,10 @@ func TestRenderAllJSON(t *testing.T) {
 			plan: &repocfg.Plan{Ops: []repocfg.Op{{Method: "PATCH", Path: "repos/a-novel/service-json-keys"}}},
 		}}
 		var buf bytes.Buffer
-		orgPolicies := []plannedOrgPolicy{{
-			org: orgAnovel,
-			plan: &repocfg.Plan{Ops: []repocfg.Op{{
-				Method: "PATCH", Path: "orgs/a-novel/code-security/configurations/17",
-			}}},
-		}}
-		if err := renderAllJSON(&buf, orgPolicies, items); err != nil {
+		if err := renderAllJSON(&buf, items); err != nil {
 			t.Fatalf("renderAllJSON: %v", err)
 		}
-		for _, want := range []string{`"org": "a-novel"`, `"repo": "a-novel/service-json-keys"`, `"ops"`} {
+		for _, want := range []string{`"repo": "a-novel/service-json-keys"`, `"method": "PATCH"`, `"ops"`} {
 			if !strings.Contains(buf.String(), want) {
 				t.Errorf("json missing %q\n%s", want, buf.String())
 			}
@@ -192,7 +186,7 @@ func TestRenderAllJSON(t *testing.T) {
 	t.Run("empty renders as an array", func(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
-		if err := renderAllJSON(&buf, nil, nil); err != nil {
+		if err := renderAllJSON(&buf, nil); err != nil {
 			t.Fatalf("renderAllJSON(nil): %v", err)
 		}
 		if got := strings.TrimSpace(buf.String()); got != "[]" {

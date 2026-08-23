@@ -7,8 +7,7 @@
 // working tree (repocfg.Discover reads .github/workflows/main.yaml), and a repo
 // that is off its default branch or has uncommitted changes is skipped
 // untouched. Only committed config reaches the live repo. A single confirm
-// gates the organization and repository changes, and --dry-run / --json
-// preview without applying.
+// gates the whole batch, and --dry-run / --json preview without applying.
 
 package cli
 
@@ -45,11 +44,11 @@ type plannedUpdate struct {
 	plan   *repocfg.Plan
 }
 
-// runRepoUpdateAll reconciles organization policy and every pulled workspace
-// repo in one pass. It scans the candidate set, skips any repo carrying ongoing
-// work (off its default branch or with a dirty working tree) or named in
-// --exclude, builds the organization and repository plans, then applies them
-// after a single batch confirm. --dry-run prints the plans and --json emits them
+// runRepoUpdateAll reconciles every pulled workspace repo in one pass. It scans
+// the candidate set, skips any repo carrying ongoing work (off its default
+// branch or with a dirty working tree) or named in --exclude, builds a plan for
+// each eligible repo, then — after a single batch confirm — applies them,
+// streaming per-repo results. --dry-run prints the plans and --json emits them
 // as machine-readable output; neither applies anything and neither needs a TTY.
 func runRepoUpdateAll(cmd *cobra.Command, rootDir, class string, exclude []string, dryRun, jsonOut bool) error {
 	root, err := resolveSyncRoot(rootDir)
@@ -72,7 +71,7 @@ func runRepoUpdateAll(cmd *cobra.Command, rootDir, class string, exclude []strin
 		_, _ = fmt.Fprintf(progress,
 			"no pulled workspace repos found at %s — run `a-novel core sync` first.\n", root)
 		if jsonOut {
-			return renderAllJSON(out, nil, nil)
+			return renderAllJSON(out, nil)
 		}
 		return nil
 	}
@@ -99,64 +98,36 @@ func runRepoUpdateAll(cmd *cobra.Command, rootDir, class string, exclude []strin
 		eligible = append(eligible, plannedUpdate{cand: c, target: target, plan: plan})
 	}
 
+	if jsonOut {
+		return renderAllJSON(out, eligible)
+	}
 	if len(eligible) == 0 {
-		if jsonOut {
-			return renderAllJSON(out, nil, nil)
-		}
 		_, _ = fmt.Fprintln(progress, "\nnothing to reconcile — every repo was skipped or excluded.")
 		return nil
 	}
-	orgPolicies, err := planOrgPolicies(eligible)
-	if err != nil {
-		return err
-	}
-	if jsonOut {
-		return renderAllJSON(out, orgPolicies, eligible)
-	}
 	if dryRun {
-		return renderAllDryRun(progress, out, orgPolicies, eligible)
+		for _, p := range eligible {
+			_, _ = fmt.Fprintf(progress, "\n# dry-run %s — class %s\n", p.cand.fullName(), p.target.Class.Class)
+			renderPruneImpact(progress, p.target.Org, p.target.Repo, p.plan)
+			if renderErr := p.plan.Render(out); renderErr != nil {
+				return renderErr
+			}
+			_, _ = fmt.Fprintln(out)
+		}
+		return nil
 	}
 
-	// Interactive: compact organization and repository summaries, then a single
-	// confirm for the batch.
-	_, _ = fmt.Fprintf(out, "\nReconcile %d organization policy change(s) and %d repo(s):\n",
-		len(orgPolicies), len(eligible))
-	for _, policy := range orgPolicies {
-		renderOrgPolicySummary(out, policy)
-	}
+	// Interactive: compact per-repo summary, then a single confirm for the batch.
+	_, _ = fmt.Fprintf(out, "\nReconcile %d repo(s):\n", len(eligible))
 	for _, p := range eligible {
 		renderCompactSummary(out, p.target)
 	}
 	if !stdinIsTTY() {
 		return errors.New("repo update --all is interactive (human-only); run it in a terminal, or use --dry-run")
 	}
-	if !confirm(cmd, fmt.Sprintf(
-		"\nApply %d organization policy change(s) and configuration to %d repo(s)?",
-		len(orgPolicies),
-		len(eligible),
-	)) {
+	if !confirm(cmd, fmt.Sprintf("\nApply configuration to these %d repo(s)?", len(eligible))) {
 		_, _ = fmt.Fprintln(out, "aborted.")
 		return nil
-	}
-
-	// Organization policy applies first because inherited default setup can
-	// override the repository-level desired state. A failure stops the repo
-	// phase, keeping that unsafe mismatch visible for the next run.
-	var orgFailed int
-	for _, policy := range orgPolicies {
-		_, _ = fmt.Fprintf(out, "\n▸ %s organization policy\n", repoHead.Render(policy.org))
-		if applyErr := applyOrgPolicy(policy); applyErr != nil {
-			_, _ = fmt.Fprintf(out, "  %s %s\n", repoOff.Render("✗"), firstLine(applyErr.Error()))
-			orgFailed++
-			continue
-		}
-		_, _ = fmt.Fprintln(out, "  ✓ managed security policy applied to every repository")
-	}
-	if orgFailed > 0 {
-		return fmt.Errorf(
-			"%d organization policy change(s) failed; repository configuration was not applied",
-			orgFailed,
-		)
 	}
 
 	// Apply each in turn; keep going after a failure so one fiddly repo does
@@ -172,40 +143,10 @@ func runRepoUpdateAll(cmd *cobra.Command, rootDir, class string, exclude []strin
 		reconciled++
 	}
 	_, _ = fmt.Fprintln(out, "\nSummary")
-	if len(orgPolicies) > 0 {
-		_, _ = fmt.Fprintf(out, "  ✓ organization policies %d\n", len(orgPolicies))
-	}
 	_, _ = fmt.Fprintf(out, "  ✓ reconciled %d\n", reconciled)
 	_, _ = fmt.Fprintf(out, "  ✗ failed     %d\n", failed)
 	if failed > 0 {
 		return fmt.Errorf("%d repo(s) failed to reconcile", failed)
-	}
-	return nil
-}
-
-// renderAllDryRun writes organization policy operations once per organization,
-// followed by each eligible repository plan. It performs no writes.
-func renderAllDryRun(
-	progress io.Writer,
-	out io.Writer,
-	orgPolicies []plannedOrgPolicy,
-	items []plannedUpdate,
-) error {
-	for _, policy := range orgPolicies {
-		_, _ = fmt.Fprintf(progress, "\n# dry-run %s organization policy\n", policy.org)
-		if err := policy.plan.Render(out); err != nil {
-			return err
-		}
-		_, _ = fmt.Fprintln(out)
-	}
-	for _, item := range items {
-		_, _ = fmt.Fprintf(progress, "\n# dry-run %s — class %s\n",
-			item.cand.fullName(), item.target.Class.Class)
-		renderPruneImpact(progress, item.target.Org, item.target.Repo, item.plan)
-		if err := item.plan.Render(out); err != nil {
-			return err
-		}
-		_, _ = fmt.Fprintln(out)
 	}
 	return nil
 }
@@ -299,27 +240,17 @@ func renderCompactSummary(w io.Writer, t *repocfg.RepoTarget) {
 	}
 }
 
-// renderOrgPolicySummary describes the organization-wide effect before the
-// fleet confirmation.
-func renderOrgPolicySummary(w io.Writer, policy plannedOrgPolicy) {
-	_, _ = fmt.Fprintf(w, "  %s %s — apply managed security policy with CodeQL default setup disabled\n",
-		repoOn.Render("▸"), repoHead.Render(policy.org))
-}
-
-// renderAllJSON writes the previewed plans as a JSON array of organization or
-// repository targets and their operations. An empty plan renders as `[]`.
-func renderAllJSON(w io.Writer, orgPolicies []plannedOrgPolicy, items []plannedUpdate) error {
-	type targetOps struct {
-		Org  string       `json:"org,omitempty"`
-		Repo string       `json:"repo,omitempty"`
+// renderAllJSON writes the previewed plans as a JSON array of {repo, ops}
+// objects, so an operator can inspect or diff the exact operations a bulk run
+// would apply. An empty slice renders as `[]`.
+func renderAllJSON(w io.Writer, items []plannedUpdate) error {
+	type repoOps struct {
+		Repo string       `json:"repo"`
 		Ops  []repocfg.Op `json:"ops"`
 	}
-	arr := make([]targetOps, 0, len(orgPolicies)+len(items))
-	for _, policy := range orgPolicies {
-		arr = append(arr, targetOps{Org: policy.org, Ops: policy.plan.Ops})
-	}
-	for _, item := range items {
-		arr = append(arr, targetOps{Repo: item.cand.fullName(), Ops: item.plan.Ops})
+	arr := make([]repoOps, len(items))
+	for i, p := range items {
+		arr[i] = repoOps{Repo: p.cand.fullName(), Ops: p.plan.Ops}
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

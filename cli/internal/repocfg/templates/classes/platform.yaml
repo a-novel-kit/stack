@@ -26,7 +26,7 @@ security:
 # Production deploys as a container. Pages hosts the platform's static Storybook
 # so application screens and states have a review surface of their own.
 pages: true
-code_quality: true
+code_quality: false
 rulesets:
   master: true
   require_approval: true

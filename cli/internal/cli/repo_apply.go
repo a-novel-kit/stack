@@ -627,17 +627,12 @@ const keyDescription = "description"
 // ghJSON runs `gh api -X <method> <path> --input -` with body marshalled to
 // JSON on stdin.
 func ghJSON(method, path string, body any) error {
-	_, err := ghJSONOut(method, path, body)
-	return err
-}
-
-// ghJSONOut sends one JSON request through GitHub CLI and returns its response.
-func ghJSONOut(method, path string, body any) (string, error) {
 	raw, err := json.Marshal(body)
 	if err != nil {
-		return "", err
+		return err
 	}
-	return ghStdin(string(raw), "api", "-X", method, path, "--input", "-")
+	_, err = ghStdin(string(raw), "api", "-X", method, path, "--input", "-")
+	return err
 }
 
 func gh(args ...string) (string, error) { return ghStdin("", args...) }
