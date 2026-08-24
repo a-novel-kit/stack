@@ -14,6 +14,7 @@ repos:
   - a-novel-kit/uikit
   - a-novel-kit/workflows
   - a-novel/.github
+  - a-novel/infra
   - a-novel/service-template
   - a-novel/platform-template
   - a-novel/platform-studio
