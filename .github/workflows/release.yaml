@@ -51,7 +51,7 @@ jobs:
       tag: ${{ steps.core.outputs.tag }}
     steps:
       - id: core
-        uses: a-novel-kit/workflows/publish-actions/release-core@v1.29.1
+        uses: a-novel-kit/workflows/publish-actions/release-core@v1.30.0
         with:
           # renovate: datasource=go depName=github.com/a-novel-kit/stack/cli
           cli_version: "1.7.5"
@@ -62,7 +62,7 @@ jobs:
       # Everything on the default branch just shipped — clear this repo's
       # awaiting-release items off the board. Skipped on a dry run.
       - if: ${{ !inputs.dry_run }}
-        uses: a-novel-kit/workflows/generic-actions/archive-board-items@v1.29.1
+        uses: a-novel-kit/workflows/generic-actions/archive-board-items@v1.30.0
         with:
           client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
           app_private_key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
