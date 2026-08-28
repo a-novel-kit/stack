@@ -106,6 +106,12 @@ matters, in as few words as it takes, and stop.
   that order; a fronted object or a cleft makes the reader unpack it first. A rhetorical label
   ("The reason:", "Note:", "Why this matters:") is ceremony — delete it and let the sentence carry
   the idea: "This runs first because the cache is cold", not "Why this runs first: the cache."
+- **Give every layer one job.** A heading makes the task easy to find, prose supplies context or a
+  decision rule, code carries the mechanics, and a comment records a hidden constraint. Do not restate
+  one fact across those layers or present a value derived from itself as verification. After
+  `## Check the account` and `tool account`, "This prints the account" adds nothing; say "Continue only
+  if it names the intended account." Delete any sentence, comment, or check whose removal loses no fact
+  or decision.
 - **Name a thing once, and keep the name.** Use one term for one concept. Do not alternate synonyms
   ("the cache," then "the store") for the same thing, or the reader stops to check whether they differ.
   An abstract label earns its place only when tied to something the reader can hold: "the intention" is
