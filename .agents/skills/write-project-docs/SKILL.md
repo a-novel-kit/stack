@@ -315,7 +315,8 @@ Write so a tired reader gets it on the first pass. `document-code`'s **Prose eco
 this rule in full and covers these files: prefer the common, short word and reach for a technical one
 only when it earns its place; state each point as a plain subject-verb-object sentence rather than a
 rhetorical label ("Why this matters:", "Note:"); keep the plain word order, since a fronted object, an
-inversion, or a cleft makes the reader unpack a sentence before reading it. Load it and apply it here.
+inversion, or a cleft makes the reader unpack a sentence before reading it. Load and apply that section
+here, including its anti-tautology check for headings, prose, and examples.
 
 What project docs add: two short sentences beat one long one spliced together. Avoid the em-dash that
 cuts a sentence in half, and the enumeration that only restates what you just wrote. Get the
