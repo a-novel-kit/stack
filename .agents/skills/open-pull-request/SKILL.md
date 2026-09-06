@@ -419,7 +419,7 @@ Do not merge — merges are a developer decision unless explicitly delegated.
 
 ---
 
-## Phase 8: Close With a Session Recap Table (mandatory)
+## Phase 8: Close With a Session Recap Table and Approval Command (mandatory)
 
 **Whenever you finish a stretch of code or issue work, end your reply with a recap table** so the
 operator can jump straight to whatever needs their attention. This is not optional and not limited
@@ -446,6 +446,19 @@ For rendered UI, the same final report must also include the freshly verified di
 link required by `write-frontend`, adjacent to the recap table or in the relevant PR row. Never put
 that local-only link in the PR body.
 
+For every open PR in the recap, also include a copy-pasteable command that lets a repository admin
+record their approval through the repo's `approve-pr` workflow after reviewing the PR:
+
+```bash
+gh workflow run approve-pr.yaml --repo <org>/<repo> --ref <default-branch> --field pull_request=<PR-URL>
+```
+
+Resolve every placeholder before presenting the command: use the PR's exact repository and URL, and
+the repository's actual default branch. Label it **admin-only** and say it is for use after review.
+This is a handoff command, not authorization to dispatch the workflow; never run it unless the user
+explicitly asks. The workflow itself fails closed when the dispatching user is not a repository
+admin.
+
 ---
 
 ## Common Mistakes
@@ -456,7 +469,7 @@ that local-only link in the PR body.
 - **Sitting on committed-but-unpushed work.** Committed and not pushed is one crashed session from
   gone. Push and open a (draft) PR so it is tracked.
 - **Ending a code/issue turn without the recap table.** Close with the Phase 8 table linking
-  everything still outstanding this session.
+  everything still outstanding this session, plus the admin-only approval command for each open PR.
 - **Trying to author a PR as the bot.** There is no bot path — `a-novel core bot-comment`
   only posts comments (5.0).
 - **Treating "PR opened" as task-done.** Carry `monitor-ci` through to CI green or an
@@ -486,18 +499,19 @@ that local-only link in the PR body.
 
 ## Quick Reference
 
-| Situation                           | Command                                                                       |
-| ----------------------------------- | ----------------------------------------------------------------------------- |
-| Pre-flight: lint (scoped)           | `pnpm lint:go` / `go tool -modfile=golangci-lint.mod golangci-lint run ./...` |
-| Pre-flight: tests (scoped)          | `a-novel test --type=go -y` / `a-novel test -y`                               |
-| Pre-flight: build (scoped)          | `a-novel build --type=go -y` (`--type=` matches changes)                      |
-| First push                          | `git push -u origin <branch>`                                                 |
-| Push after rebase                   | `git push --force-with-lease`                                                 |
-| Check for existing PR               | `gh pr view --json number,state,url`                                          |
-| Create ready PR                     | `gh pr create --title "..." --body "$(cat <<'EOF' ... )"`                     |
-| Create draft PR                     | `gh pr create --draft --title ...`                                            |
-| Close a cross-repo planning issue   | PR body: `Closes a-novel-kit/.github#<n>` (see 5.3)                           |
-| Stacked PR (base is another branch) | `gh pr create --base feat/<parent-area>/... ...`                              |
-| Update title on existing PR         | `gh pr edit --title "..."`                                                    |
-| Flip draft → ready                  | `gh pr ready`                                                                 |
-| Flip ready → draft                  | `gh pr ready --undo`                                                          |
+| Situation                           | Command                                                                                                    |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Pre-flight: lint (scoped)           | `pnpm lint:go` / `go tool -modfile=golangci-lint.mod golangci-lint run ./...`                              |
+| Pre-flight: tests (scoped)          | `a-novel test --type=go -y` / `a-novel test -y`                                                            |
+| Pre-flight: build (scoped)          | `a-novel build --type=go -y` (`--type=` matches changes)                                                   |
+| First push                          | `git push -u origin <branch>`                                                                              |
+| Push after rebase                   | `git push --force-with-lease`                                                                              |
+| Check for existing PR               | `gh pr view --json number,state,url`                                                                       |
+| Create ready PR                     | `gh pr create --title "..." --body "$(cat <<'EOF' ... )"`                                                  |
+| Create draft PR                     | `gh pr create --draft --title ...`                                                                         |
+| Close a cross-repo planning issue   | PR body: `Closes a-novel-kit/.github#<n>` (see 5.3)                                                        |
+| Stacked PR (base is another branch) | `gh pr create --base feat/<parent-area>/... ...`                                                           |
+| Update title on existing PR         | `gh pr edit --title "..."`                                                                                 |
+| Flip draft → ready                  | `gh pr ready`                                                                                              |
+| Flip ready → draft                  | `gh pr ready --undo`                                                                                       |
+| Admin approval after review         | `gh workflow run approve-pr.yaml --repo <org>/<repo> --ref <default-branch> --field pull_request=<PR-URL>` |
