@@ -6,7 +6,7 @@ require (
 	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.0.9
 	charm.land/lipgloss/v2 v2.0.6
-	connectrpc.com/connect v1.20.0
+	connectrpc.com/connect v1.21.0
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/klauspost/compress v1.20.0
 	github.com/spf13/cobra v1.10.2
