@@ -1,0 +1,4 @@
+interface:
+  display_name: "Infrastructure Operations"
+  short_description: "Safe, independent infrastructure and deployment changes"
+  default_prompt: "Use $write-infra to audit this infrastructure change and verify its isolation and failure handling."

@@ -1,0 +1,82 @@
+# Tooling and tests
+
+## Choose from the execution environments
+
+Inventory operator machines, CI runners, database hosts, and recovery containers before selecting a
+language. The repository's accepted design owns the choice. Declarative HCL and YAML, SQL executed by
+PostgreSQL, and third-party executables do not require translating everything into a general-purpose
+language. Authored imperative policy should have one home; a thin launcher may only invoke it.
+
+Consider the dependency and artifact distribution cost, credentials, host restrictions, debugging,
+signal handling, and testing. Do not compare interpreter speed for control-plane code. A single
+language hidden inside several shell wrappers with validation and retry logic is still several
+implementations. Conversely, a new compiled CLI is not simpler merely because it is one binary.
+
+Keep production tooling in the infra repository unless a genuinely shared contract justifies moving
+it. The local workspace CLI is not a production dependency. Publish host/job helpers as reviewed,
+pinned artifacts with provenance and a usable rollback version. Prove they can run with the exact
+database image before adopting a runtime that those images do not contain.
+
+## Buy the mechanism, retain the policy
+
+Use `choose-dependency` to compare the standard library, installed tools, and maintained dependencies.
+Prefer provider resource management, official cloud clients, registry tools, and schema validators to
+handwritten HTTP authentication, pagination, upload retries, format parsers, or credential helpers.
+Reuse mature executables through structured argument arrays; never build command strings containing
+untrusted input or secrets.
+
+Keep the repository's service ownership, image-family contract, deletion decision, and receipt rules
+explicit. A generic orchestrator does not automatically preserve them. Before adding a platform,
+identify the custom files it replaces and the new operational services, IAM, state, and deployment
+artifacts it introduces. Do not make both OpenTofu and a deployment controller own the same field.
+
+Native workflow environments and concurrency should do the work they support. Verify their current
+behavior from official documentation rather than recreating it or assuming they guarantee ordering,
+unbounded queues, or recovery after runner loss.
+
+Consolidate duplicated policy into named domain operations rather than a configurable mini-framework.
+Explicit project, region, service, and operation inputs make one-shot commands reproducible. Derive
+ephemeral coordinates instead of requiring users to keep a large shell session alive. Return opaque
+identifiers on stdout and bounded, non-sensitive diagnostics on stderr.
+
+## Replace implementations in bounded batches
+
+Record which entry points, tests, docs, and trusted workflow references each batch replaces. Exercise
+the same fixtures against old and new implementations during the transition. Once parity and rollout
+evidence are accepted, delete the superseded implementation and temporary parity harness in that
+batch. A later incident must not leave two active code paths with different safety behavior.
+
+Separate policy changes from language ports when both are needed. Preserve receipt and backup format
+compatibility until their retention obligations end. Retire one-time migration code only after source,
+state, and supported recovery artifacts no longer depend on it; age alone is not evidence.
+
+## Keep tests that protect a decision
+
+Use a small set of test layers with different jobs:
+
+- Pure contract tests cover scope selection, image-family consistency, schema validation, and plan
+  policy, including malformed and unknown inputs.
+- Workflow tests inspect structured permissions, checkout provenance, environment selection, and
+  credential ordering. Prefer parsing YAML over matching its formatting.
+- Adapter and state-transition tests inject errors before and after each meaningful mutation. Verify
+  private output handling, ambiguous outcomes, bounded retries, and peer preservation.
+- Mocked provider tests check the resource graph and IAM/network contracts. Confirm every provider is
+  mocked and the backend disabled before running them without cloud authority.
+- Human-approved isolated drills establish real restore, traffic, and failure evidence when a change
+  affects those guarantees. Mock success cannot substitute for them; unrelated mechanical edits do
+  not need a new drill.
+
+For each existing test, name the regression it catches and whether another layer already covers that
+contract. Keep one authoritative check at the layer that owns it. Remove assertions about internal
+variable names, incidental wording, or exact source spelling once behavior is covered. Retain focused
+static checks when the trust boundary itself is static, such as an untrusted checkout before cloud
+authentication. Shell syntax checks for documented commands can be valuable until those commands are
+replaced by tested operator entry points.
+
+Use table-driven cases and small fake adapters for important failures. Avoid emulating an entire
+cloud CLI or testing third-party internals. A replacement dependency still needs an adapter contract
+test for the assumptions the repository relies on. Prefer supported dry-run interfaces when testing
+Renovate instead of importing its private modules.
+
+Report test duration and maintenance burden alongside code size. Target confidence in security and
+recovery decisions, with no blanket coverage percentage or deletion quota.
