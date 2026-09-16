@@ -29,6 +29,10 @@ fresh install from an empty store: a small final dependency tree does not prove 
 never fetched or built. Keep development caches out of operational jobs and disable lifecycle scripts
 when the operational dependencies do not need them.
 
+Build reviewed binaries before protected inputs or cloud credentials exist; do not defer dependency
+resolution to a later privileged `go run`. Embed reviewed schemas when that removes working-directory
+or runtime package dependencies, and disable external schema loaders.
+
 Keep production tooling in the infra repository unless a genuinely shared contract justifies moving
 it. The local workspace CLI is not a production dependency. Publish host/job helpers as reviewed,
 pinned artifacts with provenance and a usable rollback version. Prove they can run with the exact
@@ -77,8 +81,9 @@ stdout, failure codes, and cancellation must remain usable from the documented s
 normalizes a program's nonzero exit status; callers must stop on any failure rather than depend on
 its numeric code. Trace indirect callers when replacing a shared helper: a surviving shell command
 or its CI job may now need Go before it can validate its inputs. Reuse an existing toolchain-equipped
-test job where practical rather than multiplying setup steps. Report authored code separately from generated dependency metadata, including
-isolated development-tool pins when explaining the total repository footprint.
+test job where practical rather than multiplying setup steps. Report both the batch delta and the
+cumulative delta from the initiative baseline. Separate authored code from dependency metadata,
+including isolated development-tool pins; a smaller source diff can still grow the repository.
 
 Verify dependency automation discovers isolated tool modules and refreshes their checksums, not just
 their visible version pins. Prefer manager-native artifact updates before allowing custom update commands.
