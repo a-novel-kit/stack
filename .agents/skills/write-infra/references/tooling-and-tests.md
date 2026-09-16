@@ -75,7 +75,9 @@ surface needs further simplification before adoption.
 Treat the launcher contract as part of a language transition: prerequisites, checkout selection,
 stdout, failure codes, and cancellation must remain usable from the documented shell. `go run`
 normalizes a program's nonzero exit status; callers must stop on any failure rather than depend on
-its numeric code. Report authored code separately from generated dependency metadata, including
+its numeric code. Trace indirect callers when replacing a shared helper: a surviving shell command
+or its CI job may now need Go before it can validate its inputs. Reuse an existing toolchain-equipped
+test job where practical rather than multiplying setup steps. Report authored code separately from generated dependency metadata, including
 isolated development-tool pins when explaining the total repository footprint.
 
 Verify dependency automation discovers isolated tool modules and refreshes their checksums, not just
