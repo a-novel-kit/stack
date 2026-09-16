@@ -24,6 +24,11 @@ signal handling, and testing. Do not compare interpreter speed for control-plane
 language hidden inside several shell wrappers with validation and retry logic is still several
 implementations. Conversely, a new compiled CLI is not simpler merely because it is one binary.
 
+Separate runtime dependencies from development tools with native package-manager filters. Verify a
+fresh install from an empty store: a small final dependency tree does not prove unused packages were
+never fetched or built. Keep development caches out of operational jobs and disable lifecycle scripts
+when the operational dependencies do not need them.
+
 Keep production tooling in the infra repository unless a genuinely shared contract justifies moving
 it. The local workspace CLI is not a production dependency. Publish host/job helpers as reviewed,
 pinned artifacts with provenance and a usable rollback version. Prove they can run with the exact
