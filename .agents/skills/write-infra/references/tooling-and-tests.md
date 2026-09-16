@@ -72,6 +72,15 @@ and trusted workflow references. Count the added build steps, wrappers, dependen
 alongside deleted code. A language port that leaves a compatibility layer and increases the maintenance
 surface needs further simplification before adoption.
 
+Treat the launcher contract as part of a language transition: prerequisites, checkout selection,
+stdout, failure codes, and cancellation must remain usable from the documented shell. `go run`
+normalizes a program's nonzero exit status; callers must stop on any failure rather than depend on
+its numeric code. Report authored code separately from generated dependency metadata, including
+isolated development-tool pins when explaining the total repository footprint.
+
+Verify dependency automation discovers isolated tool modules and refreshes their checksums, not just
+their visible version pins. Prefer manager-native artifact updates before allowing custom update commands.
+
 Exercise the same fixtures against old and new implementations during the transition. Once parity and
 rollout evidence are accepted, delete the superseded implementation and temporary parity harness in that
 batch. A later incident must not leave two active code paths with different safety behavior.
