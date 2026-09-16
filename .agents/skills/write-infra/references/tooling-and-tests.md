@@ -55,6 +55,11 @@ Native workflow environments and concurrency should do the work they support. Ve
 behavior from official documentation rather than recreating it or assuming they guarantee ordering,
 unbounded queues, or recovery after runner loss.
 
+Prefer a native operation ID over before/after resource-list discovery. Verify its expected scope and
+commit before reporting success. A lost dispatch response is an uncertain mutation, not proof that
+nothing happened: stop with an inspection path instead of resending unless the API provides a supported
+idempotency guarantee.
+
 Consolidate duplicated policy into named domain operations rather than a configurable mini-framework.
 Explicit project, region, service, and operation inputs make one-shot commands reproducible. Derive
 ephemeral coordinates instead of requiring users to keep a large shell session alive. Return opaque
