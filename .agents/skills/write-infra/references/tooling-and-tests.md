@@ -105,8 +105,10 @@ replaced by tested operator entry points.
 
 Use table-driven cases and small fake adapters for important failures. Avoid emulating an entire
 cloud CLI or testing third-party internals. A replacement dependency still needs an adapter contract
-test for the assumptions the repository relies on. Prefer supported dry-run interfaces when testing
-Renovate instead of importing its private modules.
+test for the assumptions the repository relies on. Prefer documented dry-run interfaces when testing
+Renovate instead of importing its private modules. Verify which stages the dry run reaches: Renovate's
+local lookup reports update candidates but does not create branches or enforce a PR's minimum group
+size. Cover the repository's declared policy separately and limit claims to the exercised stages.
 
 Report test duration and maintenance burden alongside code size. Target confidence in security and
 recovery decisions, with no blanket coverage percentage or deletion quota.
