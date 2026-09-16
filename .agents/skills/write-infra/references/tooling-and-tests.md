@@ -37,6 +37,10 @@ handwritten HTTP authentication, pagination, upload retries, format parsers, or 
 Reuse mature executables through structured argument arrays; never build command strings containing
 untrusted input or secrets.
 
+Schema errors can contain private values and unexpected property names. Expose fixed messages or
+reviewed schema-rule locations in public logs. Compare coercion behavior as well as valid outputs when
+replacing a validator; record intentional input tightening separately from behavioral parity.
+
 Keep the repository's service ownership, image-family contract, deletion decision, and receipt rules
 explicit. A generic orchestrator does not automatically preserve them. Before adding a platform,
 identify the custom files it replaces and the new operational services, IAM, state, and deployment
