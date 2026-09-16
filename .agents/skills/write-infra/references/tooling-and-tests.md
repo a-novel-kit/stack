@@ -104,7 +104,9 @@ authentication. Shell syntax checks for documented commands can be valuable unti
 replaced by tested operator entry points.
 
 Use table-driven cases and small fake adapters for important failures. Avoid emulating an entire
-cloud CLI or testing third-party internals. A replacement dependency still needs an adapter contract
+cloud CLI or testing third-party internals. Assert safety-critical ordering inside the fake mutation:
+a saved plan must already be consumed when apply starts. Checking only the final state misses a
+replay window. A replacement dependency still needs an adapter contract
 test for the assumptions the repository relies on. Prefer documented dry-run interfaces when testing
 Renovate instead of importing its private modules. Verify which stages the dry run reaches: Renovate's
 local lookup reports update candidates but does not create branches or enforce a PR's minimum group
