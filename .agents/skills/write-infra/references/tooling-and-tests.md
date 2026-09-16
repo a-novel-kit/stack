@@ -104,7 +104,9 @@ authentication. Shell syntax checks for documented commands can be valuable unti
 replaced by tested operator entry points.
 
 Use table-driven cases and small fake adapters for important failures. Avoid emulating an entire
-cloud CLI or testing third-party internals. Assert safety-critical ordering inside the fake mutation:
+cloud CLI or testing third-party internals. Give secret-version fixtures distinct values, including
+different current and rollback versions, to detect crossed mappings and checks against the wrong
+configuration. Assert safety-critical ordering inside the fake mutation:
 a saved plan must already be consumed when apply starts. Checking only the final state misses a
 replay window. A replacement dependency still needs an adapter contract
 test for the assumptions the repository relies on. Prefer documented dry-run interfaces when testing
