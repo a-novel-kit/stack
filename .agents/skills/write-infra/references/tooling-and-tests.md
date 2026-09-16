@@ -1,5 +1,17 @@
 # Tooling and tests
 
+## Keep infrastructure declarative
+
+Check OpenTofu and provider capabilities before choosing an imperative implementation. Resource
+configuration, straightforward derivations, input constraints, and resource-graph tests belong in HCL
+when it expresses them clearly. Aim for declarative definitions to dominate the maintained
+implementation by removing custom machinery. Generating HCL from code or hiding scripts in provisioners
+does not advance that goal; do not inflate configuration to meet a file or line ratio.
+
+Use blocking validations or preconditions for deployment gates. OpenTofu `check` assertions only warn;
+their failure does not stop a plan or apply. Preserve the existing fail-closed boundary when moving
+validation out of a script, including private diagnostics and receipt compatibility.
+
 ## Choose from the execution environments
 
 Inventory operator machines, CI runners, database hosts, and recovery containers before selecting a
@@ -41,9 +53,13 @@ identifiers on stdout and bounded, non-sensitive diagnostics on stderr.
 
 ## Replace implementations in bounded batches
 
-Record which entry points, tests, docs, and trusted workflow references each batch replaces. Exercise
-the same fixtures against old and new implementations during the transition. Once parity and rollout
-evidence are accepted, delete the superseded implementation and temporary parity harness in that
+Choose a complete capability each batch can replace and remove. Record its entry points, tests, docs,
+and trusted workflow references. Count the added build steps, wrappers, dependencies, and test scaffolds
+alongside deleted code. A language port that leaves a compatibility layer and increases the maintenance
+surface needs further simplification before adoption.
+
+Exercise the same fixtures against old and new implementations during the transition. Once parity and
+rollout evidence are accepted, delete the superseded implementation and temporary parity harness in that
 batch. A later incident must not leave two active code paths with different safety behavior.
 
 Separate policy changes from language ports when both are needed. Preserve receipt and backup format
