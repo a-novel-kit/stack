@@ -121,8 +121,9 @@ For each existing test, name the regression it catches and whether another layer
 contract. Keep one authoritative check at the layer that owns it. Remove assertions about internal
 variable names, incidental wording, or exact source spelling once behavior is covered. Retain focused
 static checks when the trust boundary itself is static, such as an untrusted checkout before cloud
-authentication. Shell syntax checks for documented commands can be valuable until those commands are
-replaced by tested operator entry points.
+authentication. Parse documented commands with their native shell. Execute credential-sensitive
+examples only with isolated command fakes: verify that failures stop subsequent requests and that
+tokens stay out of arguments and output. Syntax checks alone cannot prove those properties.
 
 Use explicit table cases and small fakes, not Cartesian products of unrelated conditions.
 Prefer standard test servers over CLI emulators. Keep orchestration fixtures minimal; invoke the real
