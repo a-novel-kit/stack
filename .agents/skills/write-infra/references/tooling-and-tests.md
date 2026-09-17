@@ -125,7 +125,11 @@ authentication. Shell syntax checks for documented commands can be valuable unti
 replaced by tested operator entry points.
 
 Use table-driven cases and small fake adapters for important failures. Avoid emulating an entire
-cloud CLI or testing third-party internals. Give secret-version fixtures distinct values, including
+cloud CLI or testing third-party internals. Give subprocess tests an explicit environment and
+allowlisted executable path so a missing fake cannot invoke a real cloud client. Record unexpected
+fake calls separately: an adapter's expected error mapping must not hide a broken fixture.
+Exercise independent rejection conditions separately so one failure cannot mask another missing check.
+Give secret-version fixtures distinct values, including
 different current and rollback versions, to detect crossed mappings and checks against the wrong
 configuration. Assert safety-critical ordering inside the fake mutation:
 a saved plan must already be consumed when apply starts. Checking only the final state misses a
