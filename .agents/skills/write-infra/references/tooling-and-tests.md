@@ -145,5 +145,6 @@ Renovate instead of importing its private modules. Verify which stages the dry r
 local lookup reports update candidates but does not create branches or enforce a PR's minimum group
 size. Cover the repository's declared policy separately and limit claims to the exercised stages.
 
-Report test duration and maintenance burden alongside code size. Target confidence in security and
-recovery decisions, with no blanket coverage percentage or deletion quota.
+Prioritize broad, low-cost behavior coverage plus security-sensitive edge cases. Do not multiply
+fixtures or assertions to chase a coverage percentage. Report test duration and maintenance burden
+alongside code size; removing a critical safety check is not an acceptable line-count reduction.
