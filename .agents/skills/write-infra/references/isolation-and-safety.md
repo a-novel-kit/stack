@@ -44,6 +44,11 @@ roles have different needs. Avoid granting a monitor database passwords or backu
 when a metadata API can answer the check. Keep create-only backup writers and explicitly reviewed
 restore authority. Check IAM inheritance and additive bindings when live evidence is available.
 
+Emergency access revocation must work without a clean checkout or unrelated setup permissions.
+Provisioning cleanup follows the workload's actual parent and verifies both removed temporary grants
+and retained standing access before publishing readiness. Keep conditional grants distinct from
+unconditional ones when selecting a binding for removal.
+
 Review VPC routes, private DNS, ingress and egress, service invocation, database users, secret access,
 and host metadata access together. Private addressing alone is insufficient. Identify paths that
 bypass VPC egress controls, such as public egress from a `PRIVATE_RANGES_ONLY` Cloud Run service.

@@ -69,7 +69,8 @@ commit before reporting success. A lost dispatch response is an uncertain mutati
 nothing happened: stop with an inspection path instead of resending unless the API provides a supported
 idempotency guarantee.
 
-Consolidate duplicated policy into named domain operations rather than a configurable mini-framework.
+Consolidate duplicated policy into named domain operations. Use a standard option parser with a
+separate option set per operation; it can reject irrelevant flags without a second permission matrix.
 Explicit project, region, service, and operation inputs make one-shot commands reproducible. Derive
 ephemeral coordinates instead of requiring users to keep a large shell session alive. Return opaque
 identifiers on stdout and bounded, non-sensitive diagnostics on stderr.
