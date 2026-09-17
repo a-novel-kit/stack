@@ -131,6 +131,9 @@ case. Reuse its receipt builder when testing compensation artifacts, while retai
 contract tests. Give subprocess tests an explicit environment and
 allowlisted executable path so a missing fake cannot invoke a real cloud client. Record unexpected
 fake calls separately: an adapter's expected error mapping must not hide a broken fixture.
+Readiness fixtures should distinguish temporary initialization from the final serving process and
+exercise the real cleanup path. Bound helper-process lifetimes independently of that cleanup; killing
+the parent command does not guarantee its descendants exit.
 Exercise independent rejection conditions separately so one failure cannot mask another missing check.
 Give secret-version fixtures distinct values, including
 different current and rollback versions, to detect crossed mappings and checks against the wrong
