@@ -131,6 +131,8 @@ case. Reuse its receipt builder when testing compensation artifacts, while retai
 contract tests. Give subprocess tests an explicit environment and
 allowlisted executable path so a missing fake cannot invoke a real cloud client. Record unexpected
 fake calls separately: an adapter's expected error mapping must not hide a broken fixture.
+For in-memory Go polling tests, use `testing/synctest` to exercise real timers and cancellation
+without production clock-injection hooks. Keep subprocess fixtures outside the virtual-time bubble.
 Readiness fixtures should distinguish temporary initialization from the final serving process and
 exercise the real cleanup path. Bound helper-process lifetimes independently of that cleanup; killing
 the parent command does not guarantee its descendants exit.
