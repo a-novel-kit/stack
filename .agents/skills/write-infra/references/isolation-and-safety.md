@@ -67,6 +67,9 @@ do not advertise zero downtime without an HA design and measured evidence. Minim
 reduce cold starts but do not make an instance permanent or in-memory work durable.
 
 Model timeout, cancellation, runner loss, and a lost API response alongside ordinary command errors.
+When a coordinator compensates after cancellation, stop and wait for its local child processes first;
+give compensation a separate bounded context. This cannot cancel an already accepted cloud operation,
+so reconcile live state before restoring anything.
 Record sufficient private operation identity before mutation to reconcile an interrupted attempt.
 Retry only operations whose safety is established by preconditions or exact execution identity.
 Do not re-run a migration because its response was lost. Recovery must survive loss of the original
