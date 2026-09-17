@@ -76,10 +76,10 @@ identifiers on stdout and bounded, non-sensitive diagnostics on stderr.
 
 ## Replace implementations in bounded batches
 
-Choose a complete capability each batch can replace and remove. Record its entry points, tests, docs,
-and trusted workflow references. Count the added build steps, wrappers, dependencies, and test scaffolds
-alongside deleted code. A language port that leaves a compatibility layer and increases the maintenance
-surface needs further simplification before adoption.
+Retire a complete production capability and simplify its tests together; porting tests first is not a
+prerequisite. Trace entry points, docs, and trusted workflow references. Measure production shell and
+test scaffolding separately, including new builds, wrappers, and dependencies. A test-only language
+port does not reduce operational Bash; a larger compatibility layer is not consolidation.
 
 Treat the launcher contract as part of a language transition: prerequisites, checkout selection,
 stdout, failure codes, and cancellation must remain usable from the documented shell. `go run`
@@ -124,8 +124,8 @@ static checks when the trust boundary itself is static, such as an untrusted che
 authentication. Shell syntax checks for documented commands can be valuable until those commands are
 replaced by tested operator entry points.
 
-Use table-driven cases and small fake adapters for important failures. Avoid emulating an entire
-cloud CLI or testing third-party internals. Keep orchestration-only fixtures minimal; invoke the real
+Use explicit table cases and small fakes, not Cartesian products of unrelated conditions.
+Prefer standard test servers over CLI emulators. Keep orchestration fixtures minimal; invoke the real
 compiler at compiler-to-adapter boundaries instead of repeating its full setup for every state-machine
 case. Reuse its receipt builder when testing compensation artifacts, while retaining focused CLI
 contract tests. Give subprocess tests an explicit environment and
