@@ -59,6 +59,11 @@ Native workflow environments and concurrency should do the work they support. Ve
 behavior from official documentation rather than recreating it or assuming they guarantee ordering,
 unbounded queues, or recovery after runner loss.
 
+GitHub's job-rerun API also reruns dependent jobs. Pin the reviewed workflow blob and verify the
+dependency graph before automating a gate refresh; a safe job name alone is not an authorization
+boundary. Exercise duplicate notifications, partial reruns, stale commits, and concurrent requests
+without turning a failed assessment into an automatic retry loop.
+
 Prefer a native operation ID over before/after resource-list discovery. Verify its expected scope and
 commit before reporting success. A lost dispatch response is an uncertain mutation, not proof that
 nothing happened: stop with an inspection path instead of resending unless the API provides a supported
