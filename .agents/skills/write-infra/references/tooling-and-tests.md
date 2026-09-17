@@ -125,7 +125,10 @@ authentication. Shell syntax checks for documented commands can be valuable unti
 replaced by tested operator entry points.
 
 Use table-driven cases and small fake adapters for important failures. Avoid emulating an entire
-cloud CLI or testing third-party internals. Give subprocess tests an explicit environment and
+cloud CLI or testing third-party internals. Keep orchestration-only fixtures minimal; invoke the real
+compiler at compiler-to-adapter boundaries instead of repeating its full setup for every state-machine
+case. Reuse its receipt builder when testing compensation artifacts, while retaining focused CLI
+contract tests. Give subprocess tests an explicit environment and
 allowlisted executable path so a missing fake cannot invoke a real cloud client. Record unexpected
 fake calls separately: an adapter's expected error mapping must not hide a broken fixture.
 Exercise independent rejection conditions separately so one failure cannot mask another missing check.
