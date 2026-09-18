@@ -27,6 +27,9 @@ project boundary or an explicitly privileged maintenance operation; a name filte
 For opt-in project provisioning, prove that empty inputs preserve the existing resource graph. Trace
 both the operator's configuration publisher and the recovery compiler before activation: a new HCL
 input is not supported end to end if one path discards it or copies production ownership into recovery.
+Keep the source ownership inventory until the recovery target has been checked against it, then
+remove production ownership from the generated recovery inputs. An empty recovery project map alone
+does not prevent choosing a live service project as the replacement target.
 Shared VPC attachment and subnet access are separate grants; review workload routing and invocation
 authority before claiming that an attached project is deployable or isolated.
 
