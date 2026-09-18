@@ -55,6 +55,17 @@ roles have different needs. Avoid granting a monitor database passwords or backu
 when a metadata API can answer the check. Keep create-only backup writers and explicitly reviewed
 restore authority. Check IAM inheritance and additive bindings when live evidence is available.
 
+Choose roles by their permission sets, not their names. A predefined deployment or invocation role
+can also authorize job execution, advancement or recovery. Prefer resource-scoped standard roles;
+use a small custom role when their bundled permissions cross the required boundary. Verify each
+API's supported IAM resources and condition attributes rather than assuming `resource.name` works
+everywhere. Keep required Google service-agent roles distinct from workload and human authority.
+
+An account allowed to deploy code and attach an application identity can indirectly exercise that
+identity's privileges, even without direct secret access or token-creation permission. Review source,
+images, runtime attachment and inherited IAM together. Keep execution artifacts separate from durable
+receipts so a worker's output-writing permission cannot become release-completion authority.
+
 Shared infrastructure needs disjoint authorization namespaces. Managed-folder IAM is additive: a
 child of an old writer's folder does not isolate a new service. Use sibling paths outside that grant.
 Federated principals are pool-scoped, not provider-scoped; separate providers alone are insufficient.
