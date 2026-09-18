@@ -55,6 +55,12 @@ roles have different needs. Avoid granting a monitor database passwords or backu
 when a metadata API can answer the check. Keep create-only backup writers and explicitly reviewed
 restore authority. Check IAM inheritance and additive bindings when live evidence is available.
 
+Shared infrastructure needs disjoint authorization namespaces. Managed-folder IAM is additive: a
+child of an old writer's folder does not isolate a new service. Use sibling paths outside that grant.
+Federated principals are pool-scoped, not provider-scoped; separate providers alone are insufficient.
+Bind each account to a provider-controlled attribute and validate the exact trusted claims. Test
+denied peer access as well as allowed own-service operations before activating the boundary.
+
 Emergency access revocation must work without a clean checkout or unrelated setup permissions.
 Provisioning cleanup follows the workload's actual parent and verifies both removed temporary grants
 and retained standing access before publishing readiness. Keep conditional grants distinct from
@@ -115,5 +121,8 @@ needs an explicit IAM, retention, format-transition, and restore-proof assessmen
 - [OpenTofu saved plans](https://opentofu.org/docs/cli/commands/plan/) can contain sensitive values.
 - [OpenTofu remote state](https://opentofu.org/docs/language/state/remote-state-data/) explains why
   access to outputs also permits reading the underlying snapshot.
+- [Managed folders](https://docs.cloud.google.com/storage/docs/managed-folders) inherit parent grants;
+  [federation principals](https://docs.cloud.google.com/iam/docs/principal-identifiers#v1)
+  identify identities and attribute sets within a pool.
 - [GitHub concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
   documents queue behavior; a mutex alone does not prove every release will run in dispatch order.
