@@ -150,6 +150,8 @@ examples only with isolated command fakes: verify that failures stop subsequent 
 tokens stay out of arguments and output. Syntax checks alone cannot prove those properties.
 
 Use explicit table cases and small fakes, not Cartesian products of unrelated conditions.
+Keep each case's input change and expected verdict visible together. Prefer a small semantic result
+comparison over assertion walls; do not hide evidence in a fixture DSL or compress cases into long lines.
 Prefer standard test servers over CLI emulators. Keep orchestration fixtures minimal; invoke the real
 compiler at compiler-to-adapter boundaries instead of repeating its full setup for every state-machine
 case. Reuse its receipt builder when testing compensation artifacts, while retaining focused CLI

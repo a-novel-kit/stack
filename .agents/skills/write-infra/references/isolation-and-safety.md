@@ -104,6 +104,10 @@ platform's first-launch, cancellation, retry, and rollback semantics. A skipped 
 not pre-promotion health evidence, and a new rollback rollout is not an instantaneous traffic rewind.
 Platform retry support does not make external migration hooks idempotent.
 
+Observe the exact native rollout through completion, including required deploy/verify jobs: an
+ignored job can coexist with top-level success. Treat lost observation as unknown cloud outcome,
+not failed deployment; report required human action without granting the observer mutation authority.
+
 Locate the verifier's execution environment before choosing its transport. A private service URL
 does not make a hosted build worker part of its VPC. Bind evidence to the exact project, service,
 revision, phase, and probe execution, with candidate and post-promotion checks kept distinct. A
