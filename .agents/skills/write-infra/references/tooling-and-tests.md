@@ -33,6 +33,13 @@ Build reviewed binaries before protected inputs or cloud credentials exist; do n
 resolution to a later privileged `go run`. Embed reviewed schemas when that removes working-directory
 or runtime package dependencies, and disable external schema loaders.
 
+Separate artifact builds from publication authority. Transfer the exact scanned image by the current
+workflow's immutable artifact ID and use the platform's failing integrity check before publication;
+rebuilding after a scan creates another artifact. Keep the publisher free of source execution and
+cloud credentials. Bind provenance to the digest, reviewed source and expected signer workflow, and
+distinguish artifact publication from deployment approval. Check external environment protections
+before enabling a dormant publisher: naming an environment does not establish its reviewer gate.
+
 Keep production tooling in the infra repository unless a genuinely shared contract justifies moving
 it. The local workspace CLI is not a production dependency. Publish host/job helpers as reviewed,
 pinned artifacts with provenance and a usable rollback version. Prove they can run with the exact
