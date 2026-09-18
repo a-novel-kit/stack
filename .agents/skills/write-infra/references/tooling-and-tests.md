@@ -46,6 +46,11 @@ handwritten HTTP authentication, pagination, upload retries, format parsers, or 
 Reuse mature executables through structured argument arrays; never build command strings containing
 untrusted input or secrets.
 
+Check a cloud module's released provider constraints, transitive providers, and default IAM/lifecycle
+behavior against the repository's pinned toolchain. A maintained module can still be incompatible.
+Do not relax its constraints or downgrade a working provider merely to adopt it; a small native HCL
+boundary can be cheaper to maintain until a compatible module removes meaningful responsibility.
+
 Schema errors can contain private values and unexpected property names. Expose fixed messages or
 reviewed schema-rule locations in public logs. Compare coercion behavior as well as valid outputs when
 replacing a validator; record intentional input tightening separately from behavioral parity.

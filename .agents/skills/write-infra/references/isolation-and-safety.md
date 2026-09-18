@@ -24,6 +24,12 @@ root's complete state. Separate state and service accounts do not prove isolatio
 scope each required API supports. If a necessary permission is project-wide, choose an enclosing
 project boundary or an explicitly privileged maintenance operation; a name filter is not authorization.
 
+For opt-in project provisioning, prove that empty inputs preserve the existing resource graph. Trace
+both the operator's configuration publisher and the recovery compiler before activation: a new HCL
+input is not supported end to end if one path discards it or copies production ownership into recovery.
+Shared VPC attachment and subnet access are separate grants; review workload routing and invocation
+authority before claiming that an attached project is deployable or isolated.
+
 ## Preserve the trust boundary
 
 Treat candidate code, manifests, workflow inputs, and artifacts as untrusted until validated by
