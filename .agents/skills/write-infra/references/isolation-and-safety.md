@@ -108,6 +108,11 @@ Observe the exact native rollout through completion, including required deploy/v
 ignored job can coexist with top-level success. Treat lost observation as unknown cloud outcome,
 not failed deployment; report required human action without granting the observer mutation authority.
 
+Keep an operations notification path independent of the CI runner. Prefer native event alerts scoped
+to the exact project, location and pipeline. Match documented event fields: platform failure events
+can have informational log severity. Check log routing, channel delivery and notification limits;
+silence-based incident closure is not recovery evidence and must not authorize another deployment.
+
 Locate the verifier's execution environment before choosing its transport. A private service URL
 does not make a hosted build worker part of its VPC. Bind evidence to the exact project, service,
 revision, phase, and probe execution, with candidate and post-promotion checks kept distinct. A
