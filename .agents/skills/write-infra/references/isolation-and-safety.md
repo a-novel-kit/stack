@@ -98,6 +98,22 @@ response was lost remains ambiguous unless the API provides idempotency or autho
 Retry only with that evidence; never replay a migration merely because its response was lost. Recovery
 must survive loss of the original runner and must not alter an unselected service.
 
+When adopting managed rollouts, transfer the complete API specification and traffic to one writer;
+ignoring only traffic in the old resource can still leave competing revision writers. Verify the
+platform's first-launch, cancellation, retry, and rollback semantics. A skipped bootstrap canary is
+not pre-promotion health evidence, and a new rollback rollout is not an instantaneous traffic rewind.
+Platform retry support does not make external migration hooks idempotent.
+
+Locate the verifier's execution environment before choosing its transport. A private service URL
+does not make a hosted build worker part of its VPC. Bind evidence to the exact project, service,
+revision, phase, and probe execution, with candidate and post-promotion checks kept distinct. A
+private probe needs invocation authority, not the application's database or secret-reading identity.
+
+Keep rollout progress and durable recovery evidence separate. A healthy rollout whose receipt was
+not published is incomplete, but missing evidence alone must not trigger a new rollout or migration.
+An inactive code-only pilot must state its missing runtime contracts and activation gates; mocked
+provider tests cannot prove that the verifier, effective IAM, or interruption recovery works live.
+
 ## Prove recovery rather than backup existence
 
 Bind a recovery point to its source service and database identity, compatible database image and
