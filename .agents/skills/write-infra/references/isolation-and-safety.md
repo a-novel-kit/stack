@@ -108,6 +108,10 @@ Locate the verifier's execution environment before choosing its transport. A pri
 does not make a hosted build worker part of its VPC. Bind evidence to the exact project, service,
 revision, phase, and probe execution, with candidate and post-promotion checks kept distinct. A
 private probe needs invocation authority, not the application's database or secret-reading identity.
+Give it a separate network policy too: reusing the application tag can reintroduce database reachability.
+Validate the probe template before execution and the exact returned execution after completion; a
+job name alone does not bind its current image, identity or overrides. Recheck phase traffic after the
+probe, while retaining external serialization: two snapshots do not constitute a lock.
 
 Keep rollout progress and durable recovery evidence separate. A healthy rollout whose receipt was
 not published is incomplete, but missing evidence alone must not trigger a new rollout or migration.

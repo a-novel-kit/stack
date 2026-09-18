@@ -72,7 +72,10 @@ without turning a failed assessment into an automatic retry loop.
 Prefer a native operation ID over before/after resource-list discovery. Verify its expected scope and
 commit before reporting success. A lost dispatch response is an uncertain mutation, not proof that
 nothing happened: stop with an inspection path instead of resending unless the API provides a supported
-idempotency guarantee.
+idempotency guarantee. Official clients can own typed API decoding, authentication and operation
+waiting without owning policy. Check retry defaults on mutation methods; retain a small adapter test
+using the real client against a local server for ambiguous dispatch and cancellation. Do not build
+another HTTP client, polling engine or interface hierarchy merely to test the SDK boundary.
 
 Consolidate duplicated policy into named domain operations. Use a standard option parser with a
 separate option set per operation; it can reject irrelevant flags without a second permission matrix.
