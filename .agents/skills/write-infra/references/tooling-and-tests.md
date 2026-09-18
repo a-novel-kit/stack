@@ -84,6 +84,14 @@ the exact native identity read-only. Scope reservations to the domain operation;
 must not open another dispatch path for that intent. Bind saved intent to native resource UIDs where
 names can be reused. Keep rendering, rollout and final receipt completion distinct.
 
+Separate artifact publication from operational intent. A create-only upload followed by an exact
+content read can establish publication after a lost acknowledgement; it cannot establish that a
+deployment or migration was never dispatched. Bind executable deployment sources to an independently
+authorized commit, not a commit-shaped object name or the current working tree. Prefer committed
+allowlisted files and native archive tools; exclude filters, replacement objects and implicit fetches
+when reading Git under credentials. Content equality does not replace review authorization, immutable
+object permissions or retention through the lifetime of every referencing release.
+
 Consolidate duplicated policy into named domain operations. Use a standard option parser with a
 separate option set per operation; it can reject irrelevant flags without a second permission matrix.
 Explicit project, region, service, and operation inputs make one-shot commands reproducible. Derive
