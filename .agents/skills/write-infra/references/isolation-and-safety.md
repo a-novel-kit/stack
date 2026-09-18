@@ -20,7 +20,9 @@ boundary.
 
 Keep foundation, release, and recovery responsibilities explicit. Give each mutable resource and field
 one owner. Exchange minimal versioned coordinates instead of giving consumers access to another
-root's complete state. Review any new shared helper for authority aggregation, not just code reuse.
+root's complete state. Separate state and service accounts do not prove isolation: verify the IAM
+scope each required API supports. If a necessary permission is project-wide, choose an enclosing
+project boundary or an explicitly privileged maintenance operation; a name filter is not authorization.
 
 ## Preserve the trust boundary
 
@@ -75,10 +77,11 @@ Model timeout, cancellation, runner loss, and a lost API response alongside ordi
 When a coordinator compensates after cancellation, stop and wait for its local child processes first;
 give compensation a separate bounded context. This cannot cancel an already accepted cloud operation,
 so reconcile live state before restoring anything.
-Record sufficient private operation identity before mutation to reconcile an interrupted attempt.
-Retry only operations whose safety is established by preconditions or exact execution identity.
-Do not re-run a migration because its response was lost. Recovery must survive loss of the original
-runner and must not alter an unselected service.
+Persist private intent and the exact target before mutation, then the server operation/execution ID
+when returned. Do not claim to save a server-generated ID before it exists. An accepted request whose
+response was lost remains ambiguous unless the API provides idempotency or authoritative reconciliation.
+Retry only with that evidence; never replay a migration merely because its response was lost. Recovery
+must survive loss of the original runner and must not alter an unselected service.
 
 ## Prove recovery rather than backup existence
 
