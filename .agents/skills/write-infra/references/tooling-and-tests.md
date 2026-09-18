@@ -77,6 +77,11 @@ waiting without owning policy. Check retry defaults on mutation methods; retain 
 using the real client against a local server for ambiguous dispatch and cancellation. Do not build
 another HTTP client, polling engine or interface hierarchy merely to test the SDK boundary.
 
+Check the lifetime of a provider's request-ID guarantee; a bounded deduplication window is not a
+permanent replay defense. A create-only intent reservation differs from a success receipt: finding
+identical saved intent does not prove dispatch never happened. Preserve ambiguous intent and reconcile
+the exact native identity read-only. Keep rendering, rollout and final receipt completion distinct.
+
 Consolidate duplicated policy into named domain operations. Use a standard option parser with a
 separate option set per operation; it can reject irrelevant flags without a second permission matrix.
 Explicit project, region, service, and operation inputs make one-shot commands reproducible. Derive
