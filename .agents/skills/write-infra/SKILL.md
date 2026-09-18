@@ -50,10 +50,11 @@ the applicable formatting or link checks. They need no architecture issue or rec
 
 ## Deliver reviewable changes
 
-Tie each batch to an observable outcome and, when planning applies, its owning issue. Separate
-behavior-preserving ports from changed authorization, resource ownership, or rollout policy. Count
-handwritten code and tests separately from generated files, locks, and documentation; report actual
-reductions without promising a percentage before measurement.
+Tie each batch to an end-to-end outcome and, when planning applies, its owning issue. For simplification,
+start with responsibility and ownership boundaries, not the next file or language extension to port.
+Separate behavior-preserving ports from changed authorization, resource ownership, or rollout policy.
+Count handwritten code and tests separately from generated files, locks, and documentation; report
+removed responsibilities and handoffs as well as size, without promising a percentage before measurement.
 
 State migrations require a reviewed old-to-new ownership map, private state backup, reconciliation
 plan, and rollback procedure. A moved resource must have exactly one writer throughout the transition.

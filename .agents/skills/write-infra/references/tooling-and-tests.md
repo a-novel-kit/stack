@@ -75,12 +75,27 @@ Explicit project, region, service, and operation inputs make one-shot commands r
 ephemeral coordinates instead of requiring users to keep a large shell session alive. Return opaque
 identifiers on stdout and bounded, non-sensitive diagnostics on stderr.
 
-## Replace implementations in bounded batches
+## Simplify ownership before implementation
 
-Retire a complete production capability and simplify its tests together; porting tests first is not a
-prerequisite. Trace entry points, docs, and trusted workflow references. Measure production shell and
-test scaffolding separately, including new builds, wrappers, and dependencies. A test-only language
-port does not reduce operational Bash; a larger compatibility layer is not consolidation.
+Trace a complete release or recovery, including failure, before choosing a batch. Map its resource
+writers, credentials, durable records, and configuration transformations. Shared ownership can create
+whole families of peer-preservation guards and compensation code; changing that boundary can remove
+more machinery than porting its helpers. Preserve the guards until the replacement boundary is proven.
+
+Compare delegating the whole capability with retaining a small implementation. Name the code, formats,
+and tests each option removes, and the services, IAM, configuration, and recovery obligations it adds.
+Fewer sources of truth and cross-layer handoffs matter more than a short file. A locally larger module
+is worthwhile when it retires a subsystem; a generic step engine wrapped around old scripts is not.
+
+Keep navigation predictable: repeated service declarations, explicit domain operations, typed internal
+contracts, and narrow adapters to maintained tools. Confine untyped external documents to boundaries.
+Do not duplicate schema rules in Go or create interface layers without a real boundary to isolate.
+Keep exceptional bootstrap and recovery paths out of routine rollout logic where their contracts allow.
+
+Retire a complete capability and its redundant tests together; porting tests first is not a prerequisite.
+Trace entry points, docs, and trusted workflow references. Measure production tooling and tests separately,
+including new builds, wrappers, and dependencies. A test-only language port does not reduce operational
+Bash; a larger compatibility layer is not consolidation.
 
 Treat the launcher contract as part of a language transition: prerequisites, checkout selection,
 stdout, failure codes, and cancellation must remain usable from the documented shell. `go run`
