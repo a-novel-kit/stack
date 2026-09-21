@@ -33,6 +33,12 @@ does not prevent choosing a live service project as the replacement target.
 Shared VPC attachment and subnet access are separate grants; review workload routing and invocation
 authority before claiming that an attached project is deployable or isolated.
 
+Treat API enablement, Google service-agent creation, and its role bindings as separate prerequisites.
+Use the native provider resource when declarative consumers need the identity before first use.
+Trace the control-plane principal: Direct VPC subnet use belongs to the Cloud Run service agent,
+not the application's runtime account. Keep host network grants and firewall policy with their
+foundation owner; verify effective routing and IAM separately from mocked resource creation.
+
 ## Preserve the trust boundary
 
 Treat candidate code, manifests, workflow inputs, and artifacts as untrusted until validated by
