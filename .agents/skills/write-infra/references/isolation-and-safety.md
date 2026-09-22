@@ -72,6 +72,11 @@ identity's privileges, even without direct secret access or token-creation permi
 images, runtime attachment and inherited IAM together. Keep execution artifacts separate from durable
 receipts so a worker's output-writing permission cannot become release-completion authority.
 
+Treat verifier images as control-plane code. Keep their publication authority separate from application
+release, including repository-level grants; an image-name convention is not an IAM boundary. Retain
+digests while supported releases or recovery records reference them, and check inherited write/delete
+authority before relying on immutable tags or a reader-only binding.
+
 Shared infrastructure needs disjoint authorization namespaces. Managed-folder IAM is additive: a
 child of an old writer's folder does not isolate a new service. Use sibling paths outside that grant.
 Federated principals are pool-scoped, not provider-scoped; separate providers alone are insufficient.
