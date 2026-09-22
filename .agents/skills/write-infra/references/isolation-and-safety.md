@@ -69,8 +69,9 @@ everywhere. Keep required Google service-agent roles distinct from workload and 
 
 An account allowed to deploy code and attach an application identity can indirectly exercise that
 identity's privileges, even without direct secret access or token-creation permission. Review source,
-images, runtime attachment and inherited IAM together. Keep execution artifacts separate from durable
-receipts so a worker's output-writing permission cannot become release-completion authority.
+images, runtime attachment and inherited IAM together. Mounted secret references describe configuration,
+not the limit of a runtime identity's effective secret access. Keep execution artifacts separate from
+durable receipts so a worker's output-writing permission cannot become release-completion authority.
 
 Treat verifier images as control-plane code. Keep their publication authority separate from application
 release, including repository-level grants; an image-name convention is not an IAM boundary. Retain
@@ -119,6 +120,11 @@ when returned. Do not claim to save a server-generated ID before it exists. An a
 response was lost remains ambiguous unless the API provides idempotency or authoritative reconciliation.
 Retry only with that evidence; never replay a migration merely because its response was lost. Recovery
 must survive loss of the original runner and must not alter an unselected service.
+
+Cloud Run task count, parallelism and retry settings constrain one execution, not independently
+dispatched executions. Keep same-service exclusion across job updates, migrations, scheduled mutations
+and rollout; zero task retries is neither a lock nor a replay defense. A declared job UID and image
+identify configuration, not successful execution evidence.
 
 When adopting managed rollouts, transfer the complete API specification and traffic to one writer;
 ignoring only traffic in the old resource can still leave competing revision writers. Verify the
@@ -177,3 +183,5 @@ needs an explicit IAM, retention, format-transition, and restore-proof assessmen
   identify identities and attribute sets within a pool.
 - [GitHub concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
   documents queue behavior; a mutex alone does not prove every release will run in dispatch order.
+- [Cloud Run task retries](https://docs.cloud.google.com/run/docs/configuring/max-retries) apply to
+  tasks within an execution, not repeated job dispatch.
