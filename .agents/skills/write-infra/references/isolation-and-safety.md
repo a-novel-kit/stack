@@ -131,6 +131,12 @@ dispatched executions. Keep same-service exclusion across job updates, migration
 and rollout; zero task retries is neither a lock nor a replay defense. A declared job UID and image
 identify configuration, not successful execution evidence.
 
+Inspect how a provider establishes an inactive schedule: creation followed by pause is not atomic.
+Delay a fresh caller's invocation grant until pause succeeds, and reconcile in-flight dispatches;
+existing or inherited grants need separate handling. A scheduler's HTTP acknowledgement can precede
+the target job's completion. Pause and drain are separate steps, and zero delivery retries do not
+turn at-least-once scheduling into exclusive execution.
+
 When adopting managed rollouts, transfer the complete API specification and traffic to one writer;
 ignoring only traffic in the old resource can still leave competing revision writers. Verify the
 platform's first-launch, cancellation, retry, and rollback semantics. A skipped bootstrap canary is
