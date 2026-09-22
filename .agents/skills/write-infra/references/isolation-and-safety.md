@@ -152,6 +152,12 @@ to the exact project, location and pipeline. Match documented event fields: plat
 can have informational log severity. Check log routing, channel delivery and notification limits;
 silence-based incident closure is not recovery evidence and must not authorize another deployment.
 
+For periodic-job monitoring, distinguish observed zero successes from absent samples and a never-seen
+series. Native absence policies can require prior metric history; seed and observe the success signal
+after installation or modification before accepting coverage. Check alignment, retest and missing-data
+semantics together so sparse healthy executions do not page between runs. Scope the metric to exact
+owned jobs and project-local channels; an alert is neither execution exclusion nor permission to retry.
+
 Locate the verifier's execution environment before choosing its transport. A private service URL
 does not make a hosted build worker part of its VPC. Bind evidence to the exact project, service,
 revision, phase, and probe execution, with candidate and post-promotion checks kept distinct. A
