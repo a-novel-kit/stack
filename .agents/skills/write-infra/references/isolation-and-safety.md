@@ -67,6 +67,11 @@ use a small custom role when their bundled permissions cross the required bounda
 API's supported IAM resources and condition attributes rather than assuming `resource.name` works
 everywhere. Keep required Google service-agent roles distinct from workload and human authority.
 
+Scope routine job updates to existing application jobs; project-wide mutation also reaches auxiliary
+jobs such as rollout probes. Keep job creation/retirement and IAM maintenance with protected bootstrap
+and foundation owners. Resource-scoped grants require the jobs to exist first: document that ordering
+and the one-writer state handoff without giving routine release bootstrap authority.
+
 An account allowed to deploy code and attach an application identity can indirectly exercise that
 identity's privileges, even without direct secret access or token-creation permission. Review source,
 images, runtime attachment and inherited IAM together. Mounted secret references describe configuration,
