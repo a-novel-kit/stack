@@ -38,6 +38,9 @@ For fleet inspection, discover scopes from converged protected registration and 
 not candidate code. Distinguish an entirely unused scope from state without usable inputs, inputs without
 state, and unregistered state; denied inventory reads are not emptiness. A writer enable flag must not
 hide existing resources from read-only drift and deletion assessment.
+Match discovery to effective IAM: bucket-wide folder metadata access can coexist with object reads
+scoped to individual managed folders. List each authorized folder's objects instead of widening the
+object grant for inventory. Keep inspection available before enabling a root's mutation path.
 
 Compose peer modules in the owning root and pass its existing resource outputs directly. Keep staged
 bootstrap opt-ins explicit: a boolean requests ownership, not evidence that prerequisites succeeded.
