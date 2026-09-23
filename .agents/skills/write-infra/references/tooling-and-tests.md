@@ -29,6 +29,11 @@ read does not prove that binding. A native CLI/SDK download followed by HCL chec
 can avoid a custom adapter. Keep retrieval and approval obligations explicit: validating supplied JSON
 does not prove its source, and consumer-controlled selectors cannot authorize themselves.
 
+When HCL already owns a deployment's inputs, prefer exporting the platform-native request over a
+second Go or shell parameter assembler. Capture operation IDs in approved inputs, not evaluation-time
+generators. A sensitive output still lives in state and is revealed by explicit JSON export; it is
+configuration, not approval, readiness or a durable dispatch reservation.
+
 For fleet inspection, discover scopes from converged protected registration and native state metadata,
 not candidate code. Distinguish an entirely unused scope from state without usable inputs, inputs without
 state, and unregistered state; denied inventory reads are not emptiness. A writer enable flag must not
@@ -203,7 +208,9 @@ Keep each case's input change and expected verdict visible together. Prefer a sm
 comparison over assertion walls; do not hide evidence in a fixture DSL or compress cases into long lines.
 Prefer standard test servers over CLI emulators. Keep orchestration fixtures minimal; invoke the real
 compiler at compiler-to-adapter boundaries instead of repeating its full setup for every state-machine
-case. Reuse its receipt builder when testing compensation artifacts, while retaining focused CLI
+case. A shared native-request fixture checked by both HCL output tests and the real SDK adapter can
+protect the handoff without another test parser or duplicate expected parameter map.
+Reuse the compiler's receipt builder when testing compensation artifacts, while retaining focused CLI
 contract tests. Give subprocess tests an explicit environment and
 allowlisted executable path so a missing fake cannot invoke a real cloud client. Record unexpected
 fake calls separately: an adapter's expected error mapping must not hide a broken fixture.
