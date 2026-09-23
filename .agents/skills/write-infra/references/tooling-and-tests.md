@@ -19,6 +19,11 @@ backend coordinates before initialization: syntax validation is not ownership or
 root's cloud-blind CI registration separate from the live execution allowlist; moving files does not
 transfer existing state or resource ownership.
 
+Compose peer modules in the owning root and pass its existing resource outputs directly. Keep staged
+bootstrap opt-ins explicit: a boolean requests ownership, not evidence that prerequisites succeeded.
+Constrain composition to the verifier's actual service/protocol support; a reusable resource module
+does not make its deployed control-plane image generic.
+
 ## Choose from the execution environments
 
 Inventory operator machines, CI runners, database hosts, and recovery containers before selecting a
