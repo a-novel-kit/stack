@@ -60,6 +60,13 @@ attempt. Recheck the applicable deletion authorization and policy at consumption
 missing evidence fail closed. Keep plans, state, provider diagnostics, and credentials out of public
 logs and artifacts. A label authorizes the reviewed destructive scope; it does not waive data guards.
 
+When one protected workflow selects several roots, authorize project and backend coordinates against
+protected registration before authentication or initialization. Keep state, plan and configuration
+custody in the same selected scope; reject workspace and CLI overrides that can redirect the backend.
+Match native variable names exactly rather than relying on a decoder's case-insensitive field matching.
+An inactive root needs explicit activation that includes trusted assessment and drift coverage;
+adding a manual selector alone must not silently enroll it in live operations.
+
 Inventory IAM by principal and resource. Runtime, backup, metadata-only monitor, restore, and deploy
 roles have different needs. Avoid granting a monitor database passwords or backup payload access
 when a metadata API can answer the check. Keep create-only backup writers and explicitly reviewed
