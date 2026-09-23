@@ -67,6 +67,11 @@ use a small custom role when their bundled permissions cross the required bounda
 API's supported IAM resources and condition attributes rather than assuming `resource.name` works
 everywhere. Keep required Google service-agent roles distinct from workload and human authority.
 
+Audit the plan reader separately from the apply executor: resource metadata access does not imply
+IAM-policy inspection. Provisioning also needs attachment permission on its exact execution identities;
+order those grants before resources that use them. An administrator that can rewrite IAM can escalate
+its authority, so a configuration-only role is an operating contract, not a security sandbox.
+
 Scope routine job updates to existing application jobs; project-wide mutation also reaches auxiliary
 jobs such as rollout probes. Keep job creation/retirement and IAM maintenance with protected bootstrap
 and foundation owners. Resource-scoped grants require the jobs to exist first: document that ordering
