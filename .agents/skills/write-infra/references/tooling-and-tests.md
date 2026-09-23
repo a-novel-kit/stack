@@ -19,6 +19,11 @@ backend coordinates before initialization: syntax validation is not ownership or
 root's cloud-blind CI registration separate from the live execution allowlist; moving files does not
 transfer existing state or resource ownership.
 
+For fleet inspection, discover scopes from converged protected registration and native state metadata,
+not candidate code. Distinguish an entirely unused scope from state without usable inputs, inputs without
+state, and unregistered state; denied inventory reads are not emptiness. A writer enable flag must not
+hide existing resources from read-only drift and deletion assessment.
+
 Compose peer modules in the owning root and pass its existing resource outputs directly. Keep staged
 bootstrap opt-ins explicit: a boolean requests ownership, not evidence that prerequisites succeeded.
 Constrain composition to the verifier's actual service/protocol support; a reusable resource module
