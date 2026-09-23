@@ -64,6 +64,9 @@ When plans share a state folder, use artifact-specific lifecycle selectors and t
 configuration are excluded. Native asynchronous cleanup does not enforce the apply deadline.
 Inventory may recognize saved-plan artifacts without treating them as initialized state or ignoring
 workspace locks. Keep custody within the writer's grant instead of widening IAM to fit an old path.
+Exercise proposed resource changes against the trusted plan policy as well as provider mocks.
+When assessment runs protected-base tooling, land a reviewed policy change before configuration
+that needs it; candidate policy edits cannot authorize their own assessment.
 
 When one protected workflow selects several roots, authorize project and backend coordinates against
 protected registration before authentication or initialization. Keep state, plan and configuration
