@@ -60,6 +60,11 @@ attempt. Recheck the applicable deletion authorization and policy at consumption
 missing evidence fail closed. Keep plans, state, provider diagnostics, and credentials out of public
 logs and artifacts. A label authorizes the reviewed destructive scope; it does not waive data guards.
 
+When plans share a state folder, use artifact-specific lifecycle selectors and test that state and
+configuration are excluded. Native asynchronous cleanup does not enforce the apply deadline.
+Inventory may recognize saved-plan artifacts without treating them as initialized state or ignoring
+workspace locks. Keep custody within the writer's grant instead of widening IAM to fit an old path.
+
 When one protected workflow selects several roots, authorize project and backend coordinates against
 protected registration before authentication or initialization. Keep state, plan and configuration
 custody in the same selected scope; reject workspace and CLI overrides that can redirect the backend.
