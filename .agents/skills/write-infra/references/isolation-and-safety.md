@@ -38,6 +38,10 @@ Use the native provider resource when declarative consumers need the identity be
 Trace the control-plane principal: Direct VPC subnet use belongs to the Cloud Run service agent,
 not the application's runtime account. Keep host network grants and firewall policy with their
 foundation owner; verify effective routing and IAM separately from mocked resource creation.
+For managed VM groups, distinguish the Google APIs MIG agent, Compute Engine service agent and VM
+runtime account. Default execution-account deprivileging does not remove a separate Google agent's
+inherited or primitive grants. Verify its actual policy rather than treating an additive narrow role
+as replacement of broader authority.
 
 ## Preserve the trust boundary
 

@@ -135,7 +135,7 @@ Do not duplicate schema rules in Go or create interface layers without a real bo
 Keep exceptional bootstrap and recovery paths out of routine rollout logic where their contracts allow.
 
 Retire a complete capability and its redundant tests together; porting tests first is not a prerequisite.
-Trace entry points, docs, and trusted workflow references. Measure production tooling and tests separately,
+Trace entry points, change-impact classifiers, docs, and trusted workflow references. Measure production tooling and tests separately,
 including new builds, wrappers, and dependencies. A test-only language port does not reduce operational
 Bash; a larger compatibility layer is not consolidation.
 
