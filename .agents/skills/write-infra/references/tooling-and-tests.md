@@ -19,6 +19,12 @@ backend coordinates before initialization: syntax validation is not ownership or
 root's cloud-blind CI registration separate from the live execution allowlist; moving files does not
 transfer existing state or resource ownership.
 
+Prefer native provider objects for small published foundation contracts. Keep reader grants separate
+from private state and release-writable storage. A content-addressed name still needs consumer checksum
+verification, an approved generation and retention through every referencing consumer's lifetime.
+Publication can survive a partially failed apply; approve consumption only after the protected operation
+converges. Review provider replacement/abandon behavior before promising retained versions.
+
 For fleet inspection, discover scopes from converged protected registration and native state metadata,
 not candidate code. Distinguish an entirely unused scope from state without usable inputs, inputs without
 state, and unregistered state; denied inventory reads are not emptiness. A writer enable flag must not
