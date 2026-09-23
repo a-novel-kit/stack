@@ -194,6 +194,9 @@ Use a small set of test layers with different jobs:
   private output handling, ambiguous outcomes, bounded retries, and peer preservation.
 - Mocked provider tests check the resource graph and IAM/network contracts. Confirm every provider is
   mocked and the backend disabled before running them without cloud authority.
+  Mocks can fill computed attributes that remain unknown in real plans. Declare policy-critical
+  defaults explicitly when supported, and verify the pinned provider's semantics; passing mocked
+  assertions does not prove the trusted live-plan gate will accept the change.
 - Human-approved isolated drills establish real restore, traffic, and failure evidence when a change
   affects those guarantees. Mock success cannot substitute for them; unrelated mechanical edits do
   not need a new drill.
