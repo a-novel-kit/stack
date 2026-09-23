@@ -12,6 +12,13 @@ Use blocking validations or preconditions for deployment gates. OpenTofu `check`
 their failure does not stop a plan or apply. Preserve the existing fail-closed boundary when moving
 validation out of a script, including private diagnostics and receipt compatibility.
 
+When a proven resource definition needs independent state, promote it directly into a root rather
+than adding a pass-through module wrapper. Prefer native backend inputs over a generated backend
+file, and constrain workspaces when another workspace would claim the same resources. Authorize
+backend coordinates before initialization: syntax validation is not ownership or IAM. Keep a dormant
+root's cloud-blind CI registration separate from the live execution allowlist; moving files does not
+transfer existing state or resource ownership.
+
 ## Choose from the execution environments
 
 Inventory operator machines, CI runners, database hosts, and recovery containers before selecting a
