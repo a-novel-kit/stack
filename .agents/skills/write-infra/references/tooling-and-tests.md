@@ -24,6 +24,10 @@ from private state and release-writable storage. A content-addressed name still 
 verification, an approved generation and retention through every referencing consumer's lifetime.
 Publication can survive a partially failed apply; approve consumption only after the protected operation
 converges. Review provider replacement/abandon behavior before promising retained versions.
+Verify the pinned reader can actually select a generation; metadata plus a separate latest-content
+read does not prove that binding. A native CLI/SDK download followed by HCL checksum and scope checks
+can avoid a custom adapter. Keep retrieval and approval obligations explicit: validating supplied JSON
+does not prove its source, and consumer-controlled selectors cannot authorize themselves.
 
 For fleet inspection, discover scopes from converged protected registration and native state metadata,
 not candidate code. Distinguish an entirely unused scope from state without usable inputs, inputs without
