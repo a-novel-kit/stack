@@ -88,6 +88,14 @@ handwritten HTTP authentication, pagination, upload retries, format parsers, or 
 Reuse mature executables through structured argument arrays; never build command strings containing
 untrusted input or secrets.
 
+Share registry inspection and promotion across deploy, recovery and service bootstrap. Let a maintained
+OCI client preserve whole descriptors (single manifests and indexes); retain producer provenance,
+complete-family selection and destination scope in reviewed policy. Check the client's absence and
+no-clobber semantics: a denied lookup is not absence, and a pre-copy read is not a lock. Keep registry
+tag immutability as the concurrent-write guard and confirm every destination, including retention tags.
+Use the client's local test registry for digest preservation and ambiguous acknowledgements instead of
+emulating OCI or a registry CLI. Artifact copying must not silently turn a read-only plan into a write.
+
 Check a cloud module's released provider constraints, transitive providers, and default IAM/lifecycle
 behavior against the repository's pinned toolchain. A maintained module can still be incompatible.
 Do not relax its constraints or downgrade a working provider merely to adopt it; a small native HCL
