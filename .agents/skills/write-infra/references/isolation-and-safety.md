@@ -58,6 +58,8 @@ silently accepting unverified inputs.
 Repeat mutable artifact and exact secret-version metadata checks before both planning and saved-plan
 consumption. An enabled version is point-in-time evidence, not proof of runtime IAM or availability.
 These checks need no payload access and must not query unrelated service secrets.
+Trace those reads to the caller's declared permissions: container administration does not imply
+version-metadata access. Keep that grant with its provisioning owner.
 
 Bind each private plan to its root, service scope, commit, configuration, content hash, and allowed
 attempt. Recheck the applicable deletion authorization and policy at consumption. Unknown values or
