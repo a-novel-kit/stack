@@ -169,7 +169,10 @@ Bind that evidence to the reserved release and task configuration before it can 
 
 Cloud Run task count, parallelism and retry settings constrain one execution, not independently
 dispatched executions. Keep same-service exclusion across job updates, migrations, scheduled mutations
-and rollout; zero task retries is neither a lock nor a replay defense. A declared job UID and image
+and rollout through completion evidence; zero task retries is neither a lock nor a replay defense.
+Trace every writer before choosing a lock. A workflow or backend lock can end while accepted cloud work
+continues; a persistent storage guard does not fence delayed requests to other APIs. Do not expire or
+force-release one without settling the prior writer and native work. A declared job UID and image
 identify configuration, not successful execution evidence.
 
 Inspect how a provider establishes an inactive schedule: creation followed by pause is not atomic.
