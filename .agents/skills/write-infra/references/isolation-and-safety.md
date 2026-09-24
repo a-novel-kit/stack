@@ -175,6 +175,12 @@ continues; a persistent storage guard does not fence delayed requests to other A
 force-release one without settling the prior writer and native work. A declared job UID and image
 identify configuration, not successful execution evidence.
 
+For reviewed service-root applies, hold admission through convergence, configuration publication and
+immutable completion evidence. Bind publication to the same private input snapshot hashed by the plan;
+do not let a standalone configuration writer imply that an apply completed. Keep the acknowledged live
+guard generation in the admitting process and condition removal on that generation, never an archived
+version or a successor. A partial enrollment is not end-to-end exclusion; keep other writers inactive.
+
 Inspect how a provider establishes an inactive schedule: creation followed by pause is not atomic.
 Delay a fresh caller's invocation grant until pause succeeds, and reconcile in-flight dispatches;
 existing or inherited grants need separate handling. A scheduler's HTTP acknowledgement can precede

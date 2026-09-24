@@ -238,7 +238,10 @@ Give secret-version fixtures distinct values, including
 different current and rollback versions, to detect crossed mappings and checks against the wrong
 configuration. Assert safety-critical ordering inside the fake mutation:
 a saved plan must already be consumed when apply starts. Checking only the final state misses a
-replay window. A replacement dependency still needs an adapter contract
+replay window. For guarded operations, use a short failure table spanning admission, mutation,
+publication and release, including committed writes with lost acknowledgements. Compare the surviving
+plan, guard and evidence, not only the exit code; exercise the real client's generation conditions.
+A replacement dependency still needs an adapter contract
 test for the assumptions the repository relies on. Prefer documented dry-run interfaces when testing
 Renovate instead of importing its private modules. Verify which stages the dry run reaches: Renovate's
 local lookup reports update candidates but does not create branches or enforce a PR's minimum group
