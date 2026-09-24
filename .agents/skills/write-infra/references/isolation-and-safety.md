@@ -55,6 +55,10 @@ require them. A required PR check cannot protect against every merge bypass. Ver
 and producer provenance; keep unchanged peer image evidence from a trusted receipt rather than
 silently accepting unverified inputs.
 
+Repeat mutable artifact and exact secret-version metadata checks before both planning and saved-plan
+consumption. An enabled version is point-in-time evidence, not proof of runtime IAM or availability.
+These checks need no payload access and must not query unrelated service secrets.
+
 Bind each private plan to its root, service scope, commit, configuration, content hash, and allowed
 attempt. Recheck the applicable deletion authorization and policy at consumption. Unknown values or
 missing evidence fail closed. Keep plans, state, provider diagnostics, and credentials out of public
