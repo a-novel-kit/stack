@@ -199,6 +199,8 @@ not failed deployment; report required human action without granting the observe
 Keep observation-only retries separate from jobs that dispatch mutations. Their read-only concurrency
 group must remain available while a writer is active; this exception does not loosen writer exclusion.
 Bind inspection to an independently approved service scope before obtaining credentials.
+Trace state and completion-record access separately: an existing state reader may lack the latter.
+Grant only the required evidence reads, not the writer identity or unrelated receipt prefixes.
 For interrupted work, select retained object generations and verify the linked intent, completion
 and configuration hashes; reading the current object name can silently select a successor. Report
 historical completion separately from the live guard and native work. Successful inspection grants
