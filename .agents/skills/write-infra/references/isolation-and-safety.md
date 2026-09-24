@@ -75,7 +75,10 @@ When assessment runs protected-base tooling, land a reviewed policy change befor
 that needs it; candidate policy edits cannot authorize their own assessment.
 
 When one protected workflow selects several roots, authorize project and backend coordinates against
-protected registration before authentication or initialization. Keep state, plan and configuration
+protected registration before authentication or initialization. Reuse the operator's intent validator
+for direct workflow submissions. Shared approval and serialization need not mean shared activation:
+authorize image publication separately from resource creation or execution, and keep plan/apply free
+of implicit image writes. Keep state, plan and configuration
 custody in the same selected scope; reject workspace and CLI overrides that can redirect the backend.
 Match native variable names exactly rather than relying on a decoder's case-insensitive field matching.
 An inactive root needs explicit activation that includes trusted assessment and drift coverage;
