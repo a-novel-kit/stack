@@ -162,6 +162,11 @@ response was lost remains ambiguous unless the API provides idempotency or autho
 Retry only with that evidence; never replay a migration merely because its response was lost. Recovery
 must survive loss of the original runner and must not alter an unselected service.
 
+Only an acknowledged new intent reservation may authorize dispatch. Matching stored intent after a
+lost acknowledgement does not restore that authority. Publishing observed completion evidence is a
+different operation: identical immutable read-back can establish success without repeating work.
+Bind that evidence to the reserved release and task configuration before it can authorize rollout.
+
 Cloud Run task count, parallelism and retry settings constrain one execution, not independently
 dispatched executions. Keep same-service exclusion across job updates, migrations, scheduled mutations
 and rollout; zero task retries is neither a lock nor a replay defense. A declared job UID and image
