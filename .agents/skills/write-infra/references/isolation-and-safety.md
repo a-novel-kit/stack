@@ -182,6 +182,9 @@ Platform retry support does not make external migration hooks idempotent.
 Observe the exact native rollout through completion, including required deploy/verify jobs: an
 ignored job can coexist with top-level success. Treat lost observation as unknown cloud outcome,
 not failed deployment; report required human action without granting the observer mutation authority.
+Keep observation-only retries separate from jobs that dispatch mutations. Their read-only concurrency
+group must remain available while a writer is active; this exception does not loosen writer exclusion.
+Bind inspection to an independently approved service scope before obtaining credentials.
 
 Keep an operations notification path independent of the CI runner. Prefer native event alerts scoped
 to the exact project, location and pipeline. Match documented event fields: platform failure events
