@@ -198,6 +198,9 @@ writer to have ended and its exact guard to remain live before create-only publi
 approved release/rollout and migration job UID/template, not just the shared network/database boundary;
 prove actual traffic and saved successful execution. Missing migration proof or uncertain native work
 stays blocked. Completion repair may write evidence, never replay the operation it describes.
+For acknowledged jobs, prefer the native operation's typed result over another observer or replay.
+Bind it to the saved dispatch, reserved job UID/generation and task template; a current ETag can change
+through status updates. Missing acknowledgement or unavailable native evidence remains blocked.
 
 Inspect how a provider establishes an inactive schedule: creation followed by pause is not atomic.
 Delay a fresh caller's invocation grant until pause succeeds, and reconcile in-flight dispatches;
