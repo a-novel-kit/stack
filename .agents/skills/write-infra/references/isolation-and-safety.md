@@ -20,7 +20,9 @@ boundary.
 
 Keep foundation, release, and recovery responsibilities explicit. Give each mutable resource and field
 one owner. Exchange minimal versioned coordinates instead of giving consumers access to another
-root's complete state. Separate state and service accounts do not prove isolation: verify the IAM
+root's complete state. For a field handoff, retain safe creation defaults and ignore only the runtime-owned
+field; check the provider cannot reapply it through other updates. Ignored drift grants no authority or
+proof of quiescence. Separate state and service accounts do not prove isolation: verify the IAM
 scope each required API supports. If a necessary permission is project-wide, choose an enclosing
 project boundary or an explicitly privileged maintenance operation; a name filter is not authorization.
 
