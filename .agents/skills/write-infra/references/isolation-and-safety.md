@@ -180,6 +180,10 @@ immutable completion evidence. Bind publication to the same private input snapsh
 do not let a standalone configuration writer imply that an apply completed. Keep the acknowledged live
 guard generation in the admitting process and condition removal on that generation, never an archived
 version or a successor. A partial enrollment is not end-to-end exclusion; keep other writers inactive.
+If only final guard removal failed, protected recovery may repeat that conditional deletion after
+verifying immutable convergence/configuration evidence and the completed original workflow attempt.
+Workflow completion alone is insufficient. Keep incomplete applies blocked; do not replay them or
+invent missing completion evidence to unlock. An absent guard is a no-op, not new admission authority.
 
 Inspect how a provider establishes an inactive schedule: creation followed by pause is not atomic.
 Delay a fresh caller's invocation grant until pause succeeds, and reconcile in-flight dispatches;
