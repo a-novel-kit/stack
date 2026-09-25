@@ -1,0 +1,4 @@
+interface:
+  display_name: "Prefer Small Solutions"
+  short_description: "Write less code while preserving project principles"
+  default_prompt: "Use $prefer-small-solutions to find the smallest complete implementation that respects this project's principles."
