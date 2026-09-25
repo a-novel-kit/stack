@@ -226,6 +226,10 @@ For interrupted work, select retained object generations and verify the linked i
 and configuration hashes; reading the current object name can silently select a successor. Report
 historical completion separately from the live guard and native work. Successful inspection grants
 no retry or unlock authority; missing evidence does not prove that no mutation happened.
+When validated intent already determines the completion record's name and the record binds its guard,
+derive that name instead of adding a second pointer write. Pin the selected generation and verify its
+full operation identity. A committed record can prove completion after its write acknowledgement was
+lost; a failed pinned download cannot be treated as an absent record.
 
 Keep an operations notification path independent of the CI runner. Prefer native event alerts scoped
 to the exact project, location and pipeline. Match documented event fields: platform failure events
