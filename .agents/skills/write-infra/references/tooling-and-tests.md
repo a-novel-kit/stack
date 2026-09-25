@@ -126,6 +126,10 @@ idempotency guarantee. Official clients can own typed API decoding, authenticati
 waiting without owning policy. Check retry defaults on mutation methods; retain a small adapter test
 using the real client against a local server for ambiguous dispatch and cancellation. Do not build
 another HTTP client, polling engine or interface hierarchy merely to test the SDK boundary.
+Managed connectors have retry defaults too. Keep non-idempotent dispatch single-attempt when there
+is no request-ID guarantee; use the platform's authenticated HTTP step if its connector would replay
+the mutation. Validate rendered workflow structure locally, then reserve native compilation, IAM
+and interrupted-execution proof for the separately authorized activation drill; do not build an emulator.
 
 Check the lifetime of a provider's request-ID guarantee; a bounded deduplication window is not a
 permanent replay defense. A create-only intent reservation differs from a success receipt: finding

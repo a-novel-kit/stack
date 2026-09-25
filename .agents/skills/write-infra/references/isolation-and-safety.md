@@ -192,6 +192,12 @@ Delay a fresh caller's invocation grant until pause succeeds, and reconcile in-f
 existing or inherited grants need separate handling. A scheduler's HTTP acknowledgement can precede
 the target job's completion. Pause and drain are separate steps, and zero delivery retries do not
 turn at-least-once scheduling into exclusive execution.
+For delayed scheduled requests, acquire admission at the actual dispatcher before submitting work,
+not at schedule acknowledgement. A managed workflow can retain observation after the CI runner exits;
+save its execution/revision and the returned cloud operation before waiting. Failed or cancelled
+dispatchers need their own native alert, including failures before the target job exists.
+Use the platform's actual IAM granularity: project-scoped invocation is not exact-workflow isolation.
+An additional workflow in that project changes the scheduler's effective trust boundary.
 
 When adopting managed rollouts, transfer the complete API specification and traffic to one writer;
 ignoring only traffic in the old resource can still leave competing revision writers. Verify the
