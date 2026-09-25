@@ -189,6 +189,12 @@ Derive the operation kind and original writer from verified evidence; the operat
 and guard generation. Bind workflow action as well as commit before conditional removal.
 Workflow completion alone is insufficient. Keep incomplete applies blocked; do not replay them or
 invent missing completion evidence to unlock. An absent guard is a no-op, not new admission authority.
+For a native rollout whose completion was never saved, reuse the ordinary writer's success proof
+inside the existing protected finisher rather than adding a second coordinator. Require the original
+writer to have ended and its exact guard to remain live before create-only publication. Bind the full
+approved release/rollout and migration job UID/template, not just the shared network/database boundary;
+prove actual traffic and saved successful execution. Missing migration proof or uncertain native work
+stays blocked. Completion repair may write evidence, never replay the operation it describes.
 
 Inspect how a provider establishes an inactive schedule: creation followed by pause is not atomic.
 Delay a fresh caller's invocation grant until pause succeeds, and reconcile in-flight dispatches;
