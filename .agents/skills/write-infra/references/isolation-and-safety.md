@@ -184,10 +184,13 @@ guard generation in the admitting process and condition removal on that generati
 version or a successor. A partial enrollment is not end-to-end exclusion; keep other writers inactive.
 If only final guard removal failed, protected recovery may repeat that conditional deletion after
 verifying immutable convergence/configuration evidence and the completed original workflow attempt.
-Share this cleanup path with native releases whose exact successful completion is already recorded.
+Share this cleanup path with releases and scheduled work whose exact success is already recorded.
 Derive the operation kind and original writer from verified evidence; the operator selects the service
 and guard generation. Bind workflow action as well as commit before conditional removal.
-Workflow completion alone is insufficient. Keep incomplete applies blocked; do not replay them or
+For managed dispatchers, bind the exact execution/revision and read terminal metadata without private
+arguments/results. A failed or cancelled dispatcher may have saved success before cleanup failed:
+its termination proves writer cessation, while the separate success record proves the job outcome.
+Unavailable/expired execution metadata is not termination evidence. Keep incomplete applies blocked; do not replay them or
 invent missing completion evidence to unlock. An absent guard is a no-op, not new admission authority.
 For a native rollout whose completion was never saved, reuse the ordinary writer's success proof
 inside the existing protected finisher rather than adding a second coordinator. Require the original
