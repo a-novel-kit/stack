@@ -184,6 +184,9 @@ guard generation in the admitting process and condition removal on that generati
 version or a successor. A partial enrollment is not end-to-end exclusion; keep other writers inactive.
 If only final guard removal failed, protected recovery may repeat that conditional deletion after
 verifying immutable convergence/configuration evidence and the completed original workflow attempt.
+Share this cleanup path with native releases whose exact successful completion is already recorded.
+Derive the operation kind and original writer from verified evidence; the operator selects the service
+and guard generation. Bind workflow action as well as commit before conditional removal.
 Workflow completion alone is insufficient. Keep incomplete applies blocked; do not replay them or
 invent missing completion evidence to unlock. An absent guard is a no-op, not new admission authority.
 
