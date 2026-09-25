@@ -199,6 +199,12 @@ dispatchers need their own native alert, including failures before the target jo
 Use the platform's actual IAM granularity: project-scoped invocation is not exact-workflow isolation.
 An additional workflow in that project changes the scheduler's effective trust boundary.
 
+If scheduled mutation and release share admission through native completion, leave the schedule
+unchanged instead of adding pause/resume coordination. First retire every bypass and reconcile work
+accepted before enrollment; a shared guard cannot retroactively exclude it. Keep approval waits inside
+the admitting operation's deadline, without giving the observer approval or advancement permission.
+Timeout retains the guard and unknown native outcome; it does not authorize a fresh invocation.
+
 When adopting managed rollouts, transfer the complete API specification and traffic to one writer;
 ignoring only traffic in the old resource can still leave competing revision writers. Verify the
 platform's first-launch, cancellation, retry, and rollback semantics. A skipped bootstrap canary is
@@ -240,6 +246,8 @@ probe, while retaining external serialization: two snapshots do not constitute a
 
 Keep rollout progress and durable recovery evidence separate. A healthy rollout whose receipt was
 not published is incomplete, but missing evidence alone must not trigger a new rollout or migration.
+An immutable native completion record does not become a supported recovery receipt by naming it one;
+its consumer and interruption/finish procedure need explicit format binding and drill evidence.
 An inactive code-only pilot must state its missing runtime contracts and activation gates; mocked
 provider tests cannot prove that the verifier, effective IAM, or interruption recovery works live.
 
