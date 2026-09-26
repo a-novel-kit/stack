@@ -50,8 +50,8 @@ This project separates the main process from maintenance work:
   container and running migrations and rotation before starting the server. Never use standalone
   images in production.
 
-- **Database image** (`database.Dockerfile`): a PostgreSQL image with pg_cron compiled in.
-  Migrations are not baked in — run the migrations job image against it separately.
+- **Database image** (`database.Dockerfile`): PostgreSQL with the service's required extensions and
+  database tools. Run the migrations job image separately.
 
 This separation keeps production images minimal: the server binary doesn't carry migration code
 it never runs, and job images don't carry server code.
@@ -192,49 +192,25 @@ They run to completion and exit.
 
 ## Database Image
 
-The database image is a PostgreSQL image with the `pg_cron` extension compiled in. It uses a
-multi-stage build so build tools (git, make, gcc) never appear in the final image layers.
+Start from the existing service recipe. Prefer compatible distribution packages for required
+extensions and tools. Use a multi-stage build only when compilation is necessary; keep compilers
+and headers in the discarded builder stage. Pin source releases when building from source.
 
-```dockerfile
-FROM docker.io/library/postgres:18.3 AS builder
+For Debian packages, use exact versions in `apt-get install` and configure Renovate's native
+`deb` datasource with the matching suite and package repository. Keep the PostgreSQL image's
+distro suffix explicit when package compatibility depends on it. Package installation and list
+cleanup belong in the same `RUN` instruction.
 
-ARG DEBIAN_FRONTEND=noninteractive
+Installing a backup tool does not authorize backup activation. Preserve the service's entrypoint,
+extensions, authentication, and archive settings unless the task explicitly changes them. Reuse
+existing recovery proofs against the built image instead of copying a test harness into each service.
 
-# Install build tools, compile pg_cron from source. The final stage copies only the
-# compiled extension files, leaving all build tooling in this discarded stage.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    build-essential \
-    postgresql-server-dev-18 \
-  && git clone https://github.com/citusdata/pg_cron.git \
-  && cd pg_cron \
-  && git fetch --tags \
-  && git checkout "$(git describe --tags "$(git rev-list --tags --max-count=1)")" \
-  && make \
-  && make install
+Inspect the freshly pulled base before adding OS security overrides. Apply available stable fixes
+without an incidental PostgreSQL upgrade, and report unresolved inherited advisories. A successful
+build or restore test does not establish that an image is free of vulnerabilities.
 
-FROM docker.io/library/postgres:18.3
-
-# Copy only the compiled extension artifacts; build tools stay in the builder stage.
-# Update these paths when bumping the PostgreSQL major version.
-COPY --from=builder /usr/lib/postgresql/18/lib/pg_cron.so /usr/lib/postgresql/18/lib/
-COPY --from=builder /usr/share/postgresql/18/extension/pg_cron.control /usr/share/postgresql/18/extension/
-COPY --from=builder /usr/share/postgresql/18/extension/pg_cron--*.sql /usr/share/postgresql/18/extension/
-```
-
-**The database image needs multi-stage.** Each `RUN` creates a layer, so a later `apt-get remove` or
-`rm -rf` leaves the build tools sitting in the earlier layers, still taking space. A multi-stage
-build discards the builder entirely — the final image is the postgres base plus the few kilobytes of
-pg_cron files.
-
-**pg_cron version**: built from the latest tagged release (via `git describe --tags`). This is
-intentional — unlike application code, pg_cron's release cadence is slow and the "latest tag"
-strategy is acceptable. To pin a version, replace the `git checkout` with `git checkout v1.6.4` (or
-whichever version).
-
-**Path versioning**: the pg_cron extension files live at paths that include the PostgreSQL major
-version (e.g., `/usr/lib/postgresql/18/lib/`). When bumping the `postgres:18.x` base to
-`postgres:19.x`, update these paths accordingly.
+PostgreSQL extension and binary paths contain its major version. Check those paths and extension
+compatibility when changing the PostgreSQL major.
 
 **Executable files**: use `COPY --chmod=755` when copying shell scripts or other executables into
 the image. It sets the executable bit in a single instruction and avoids a separate `RUN chmod +x`
@@ -244,8 +220,8 @@ layer:
 COPY --chmod=755 ./builds/database.entrypoint.sh /usr/local/bin/database.entrypoint.sh
 ```
 
-**`DEBIAN_FRONTEND=noninteractive`**: only needed in the builder stage (which is Debian-based).
-Never set it in Alpine-based runtime stages — it has no effect and only creates confusion.
+**`DEBIAN_FRONTEND=noninteractive`**: scope it to Debian package-install commands. It has no effect
+on Alpine and should not persist in the image's runtime environment.
 
 ---
 
