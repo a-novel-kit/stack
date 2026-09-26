@@ -170,6 +170,9 @@ Do not duplicate schema rules in Go or create interface layers without a real bo
 Keep exceptional bootstrap and recovery paths out of routine rollout logic where their contracts allow.
 
 Retire a complete capability and its redundant tests together; porting tests first is not a prerequisite.
+When a guarded caller replaces low-level writers, remove their standalone dispatch entry points.
+Exercise dispatch failures through the supported caller; keep reconciliation tests against saved
+evidence. Preserve evidence-only recovery without retaining a mutation bypass or a test-only public API.
 Trace entry points, change-impact classifiers, docs, and trusted workflow references. Measure production tooling and tests separately,
 including new builds, wrappers, and dependencies. A test-only language port does not reduce operational
 Bash; a larger compatibility layer is not consolidation.
