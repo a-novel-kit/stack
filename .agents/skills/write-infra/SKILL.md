@@ -52,8 +52,9 @@ the applicable formatting or link checks. They need no architecture issue or rec
 
 Use version tags for maintained container image dependencies in infra, including Dockerfile bases.
 Keep the complete published version and any required distribution suffix. Do not append SHA digests
-or enable Renovate digest pinning. Digest observations for provenance and historical recovery are
-separate from author-maintained dependency pins.
+or enable Renovate digest pinning. Generated deployments, provenance checks and recovery records may
+retain resolved digests. Keep version selection separate from those exact-runtime records; never
+re-resolve a historical version to decide what a rollback should restore.
 
 Tie each batch to an end-to-end outcome and, when planning applies, its owning issue. For simplification,
 start with responsibility and ownership boundaries, not the next file or language extension to port.
