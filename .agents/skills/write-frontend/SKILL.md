@@ -195,6 +195,12 @@ link does not satisfy this contract.
 - Use progressive enhancement for navigation and forms when the framework supports it. A network or
   JavaScript failure should degrade intentionally rather than strand the user.
 
+## Localization language register
+
+- Use the formal address form for static text when a language distinguishes registers (`vous` in French, `usted` in Spanish).
+- Use the language’s conventional action-label form for buttons, links, and other controls; French uses infinitives such as `Créer le compte`.
+- Apply the same distinction to accessible names and Storybook states.
+
 ## Security and privacy
 
 - Never place secrets or long-lived credentials in client code, browser storage, logs, analytics, or

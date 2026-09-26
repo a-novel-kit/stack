@@ -168,6 +168,9 @@ names, validation messages, titles, and metadata use message keys; logs and prot
   Platform configuration supplies only its locales, paths, namespaces, and product exceptions.
 - Keep the preset's framework extraction fixture in nodelib. Platform stories and tests exercise
   real product copy and translated UI states; they do not duplicate a generic toolchain fixture.
+- Use formal address forms in static text when a locale distinguishes them (`vous` in French,
+  `usted` in Spanish). Use each language's conventional action-label form for controls; French
+  buttons and links use infinitives such as `Créer le compte`.
 - Support plurals and contextual variants through the selected message format, not key
   concatenation or runtime grammar.
 - Treat the source locale as authoritative. CI compiles messages and fails for missing, invalid, or
