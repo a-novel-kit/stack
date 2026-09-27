@@ -286,6 +286,13 @@ Do not change storage lifecycle rules independently of the backup engine. Physic
 form recovery chains; generic age-based deletion can invalidate retained backups. A new backup tool
 needs an explicit IAM, retention, format-transition, and restore-proof assessment.
 
+For mutable object catalogs, distinguish versioning, age-based retention and deletion-time recovery.
+Test an aged dependency still needed by a fresh backup: a writer able to delete exact generations may
+outlive their retention protection. Native soft-delete recovery can create new generations and
+timestamps; recovered bytes do not prove the backup engine's historical selector still works. Prove
+storage semantics with isolated synthetic objects before adding database-host machinery. Keep bucket
+locking, its project lien and delayed cleanup under separate human approval.
+
 ## Primary references
 
 - [Cloud Run runtime contract](https://docs.cloud.google.com/run/docs/container-contract) governs
