@@ -165,6 +165,16 @@ link does not satisfy this contract.
 
 ## CSS and responsive layout
 
+- Build coherence into the code, not into a sequence of visual corrections. Equivalent UI roles
+  and states must reuse the same shared components, variants, tokens, and constants across screens
+  and breakpoints. When they drift, trace the owning styles and remove duplicated definitions or
+  compensating overrides before adding new CSS. Fix reusable behavior in uikit; keep only genuine
+  application composition and layout differences local. Do not recreate a shared element just to
+  tailor its appearance, or invent an abstraction for unrelated roles that merely look similar.
+- Responsive rules normally change geometry, not a control's visual identity: preserve shared
+  foreground, surface, opacity, typography, and interaction-state rules unless the product contract
+  explicitly requires a difference. Verify the shared implementation on each actual backdrop;
+  matching token names alone do not prove matching rendered colors through transparency layers.
 - Prefer normal flow, Grid, Flexbox, logical properties, and container/media queries over measured
   JavaScript layout. Use feature queries for optional enhancements.
 - Start from the smallest supported viewport and let content determine breakpoints. Avoid device-name
