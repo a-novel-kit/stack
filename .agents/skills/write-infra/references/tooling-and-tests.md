@@ -80,6 +80,11 @@ it. The local workspace CLI is not a production dependency. Publish host/job hel
 pinned artifacts with provenance and a usable rollback version. Prove they can run with the exact
 database image before adopting a runtime that those images do not contain.
 
+An offline version check does not prove remote-storage readiness. Package the system CA bundle
+explicitly when an image makes HTTPS requests, and check it as the runtime user during the build.
+Keep the credentialed cloud check separate; a missing issuer certificate calls for a reviewed image
+fix, not disabled TLS verification or broader IAM.
+
 ## Buy the mechanism, retain the policy
 
 Use `choose-dependency` to compare the standard library, installed tools, and maintained dependencies.
