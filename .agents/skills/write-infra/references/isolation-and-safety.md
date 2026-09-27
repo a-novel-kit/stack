@@ -297,8 +297,11 @@ For a permission-denial proof, inspect which request actually failed: a CLI's pr
 read can prevent it from attempting the intended write. Require the target permission denial and a
 positive control on the permitted resource. Keep credentialed instance-identity experiments separate
 from offline images and retained trial state; code approval does not accept outstanding image risks.
-Prefer native runtime limits for disposable hosts, but account separately for disks, NAT and retained
-objects after compute stops. Preserve durable private state until cleanup is reconciled.
+Prefer native runtime limits for disposable hosts. Check machine-family and provisioning-model
+compatibility separately from the duration limit: standard E2 requires live migration during host
+maintenance even when a runtime limit stops the VM. Mocked plans cannot prove API acceptance.
+Account separately for disks, NAT and retained objects after compute stops. Preserve durable private
+state through partial applies and cleanup; replan remaining work instead of replaying the old plan.
 
 ## Primary references
 
