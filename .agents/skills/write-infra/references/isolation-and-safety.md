@@ -289,9 +289,11 @@ needs an explicit IAM, retention, format-transition, and restore-proof assessmen
 For mutable object catalogs, distinguish versioning, age-based retention and deletion-time recovery.
 Test an aged dependency still needed by a fresh backup: a writer able to delete exact generations may
 outlive their retention protection. Native soft-delete recovery can create new generations and
-timestamps; recovered bytes do not prove the backup engine's historical selector still works. Prove
-storage semantics with isolated synthetic objects before adding database-host machinery. Keep bucket
-locking, its project lien and delayed cleanup under separate human approval.
+timestamps. Compare the original repository-time view with explicit-set recovery after repair,
+through SQL validation. Keep a failed cutoff visible; switching selectors needs a separate accepted
+recovery contract. A healthy catalog can coexist with missing dependencies. Prove storage semantics
+with isolated synthetic objects before adding database-host machinery. Keep bucket locking, its
+project lien and delayed cleanup under separate human approval.
 
 For a permission-denial proof, inspect which request actually failed: a CLI's preliminary metadata
 read can prevent it from attempting the intended write. Require the target permission denial and a
@@ -300,8 +302,11 @@ from offline images and retained trial state; code approval does not accept outs
 Prefer native runtime limits for disposable hosts. Check machine-family and provisioning-model
 compatibility separately from the duration limit: standard E2 requires live migration during host
 maintenance even when a runtime limit stops the VM. Mocked plans cannot prove API acceptance.
-Account separately for disks, NAT and retained objects after compute stops. Preserve durable private
-state through partial applies and cleanup; replan remaining work instead of replaying the old plan.
+Account separately for disks, NAT and retained objects after compute stops. Export evidence before
+deleting the host, and verify cleanup with native resource and generation inventories. A protection
+deadline is not deletion evidence. Preserve durable private state through partial applies and teardown;
+replan remaining work instead of replaying an old plan. An ordinary apply can recreate removed resources
+or reverse an identity handoff. Review only the remaining cleanup.
 
 ## Primary references
 
