@@ -293,6 +293,13 @@ timestamps; recovered bytes do not prove the backup engine's historical selector
 storage semantics with isolated synthetic objects before adding database-host machinery. Keep bucket
 locking, its project lien and delayed cleanup under separate human approval.
 
+For a permission-denial proof, inspect which request actually failed: a CLI's preliminary metadata
+read can prevent it from attempting the intended write. Require the target permission denial and a
+positive control on the permitted resource. Keep credentialed instance-identity experiments separate
+from offline images and retained trial state; code approval does not accept outstanding image risks.
+Prefer native runtime limits for disposable hosts, but account separately for disks, NAT and retained
+objects after compute stops. Preserve durable private state until cleanup is reconciled.
+
 ## Primary references
 
 - [Cloud Run runtime contract](https://docs.cloud.google.com/run/docs/container-contract) governs
