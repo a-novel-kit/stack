@@ -171,6 +171,32 @@ Rules:
 - Do not expose implementation selectors as API. Expose a documented CSS custom property only when
   consumer theming is an intentional contract.
 
+## Refinement passes
+
+Preserve the reviewed Agora direction: a dark gray-blue field, border-light surfaces, compact
+metadata, and vivid semantic accents. Keep canonical brand, pressure, and signal colors stable
+unless the brief explicitly changes them. Tune the owning semantic role and compare before/after
+renders across its consumers.
+
+- Judge color with area and backdrop. A small badge can carry a saturated fill; a large status box
+  needs a quieter tint with a clear icon and accent. Improve vividness through chroma and foreground
+  contrast before adding white or increasing opacity everywhere. Keep control variants in their
+  semantic color family through hover and selection.
+- Distinguish external margins from internal padding. Narrow screens benefit from small outer
+  gutters while panels, dialogs, and buttons still need breathing room inside. Separate form actions
+  from inputs, wrap long secondary labels, and preserve source order. Dense metadata can be smaller
+  than controls; compact labels do not justify shrinking touch targets.
+- Share anatomy where the responsibility matches: heading and trailing controls, optional supporting
+  text, content, and actions. Leave omitted regions empty of spacing. Keep native behavior and
+  controller ownership separate from stateless composition; ordinary body content needs no wrapper
+  unless the wrapper owns a real layout invariant.
+- Treat glow as light behind the emitting shape. Compare layered soft shadows with a restrained
+  shape-following halo; avoid a sharp neon outline or an oversized rounded cushion. Keep ordinary
+  surfaces subdued and focus indicators unambiguous.
+
+Finish by removing compensating overrides and duplicated machinery. A coherent pass may leave most
+components unchanged; change only what the rendered comparison or code ownership shows needs work.
+
 ## Storybook as the review surface
 
 - Document every public component and every foundation that affects rendering.
