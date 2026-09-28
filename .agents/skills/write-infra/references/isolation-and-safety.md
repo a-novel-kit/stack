@@ -160,6 +160,12 @@ IAM grant, and disabling stored credentials does not revoke copies already loade
 Define issuance, renewal, trust retirement and connection draining before activation, not as an
 implicit consequence of creating secret containers.
 
+For host credential delivery, prefer an official cloud client and a one-shot process ordered by
+the native supervisor. Check canonical version names and payload integrity explicitly; SDK use
+alone does not verify a secret's CRC32C. Validate the certificate/key pair before atomically
+publishing private ephemeral files without replacement. Keep consumer startup and stopped-consumer
+cleanup with the supervisor; a file loader is not a rotation daemon or a host isolation boundary.
+
 ## Define the failure contract
 
 An established API rollout keeps the serving revision while the candidate receives no ordinary
