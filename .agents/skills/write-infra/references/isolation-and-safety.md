@@ -88,8 +88,10 @@ adding a manual selector alone must not silently enroll it in live operations.
 
 Inventory IAM by principal and resource. Runtime, backup, metadata-only monitor, restore, and deploy
 roles have different needs. Avoid granting a monitor database passwords or backup payload access
-when a metadata API can answer the check. Keep create-only backup writers and explicitly reviewed
-restore authority. Check IAM inheritance and additive bindings when live evidence is available.
+when a metadata API can answer the check. Preserve existing create-only backup writers. A native
+engine that needs mutable catalog or expiry permissions requires a separately accepted custody
+contract and repository, with independent recovery authority; do not widen legacy grants to fit it.
+Check IAM inheritance and additive bindings when live evidence is available.
 
 Choose roles by their permission sets, not their names. A predefined deployment or invocation role
 can also authorize job execution, advancement or recovery. Prefer resource-scoped standard roles;
@@ -136,6 +138,9 @@ Review VPC routes, private DNS, ingress and egress, service invocation, database
 and host metadata access together. Private addressing alone is insufficient. Identify paths that
 bypass VPC egress controls, such as public egress from a `PRIVATE_RANGES_ONLY` Cloud Run service.
 Keep public API access intentional and service-to-service access authenticated.
+Moving a backup engine onto a database host also changes its credential and network path. Review
+container metadata access, host firewall rules and attached identity together before activation;
+success on a disposable host with different networking does not authorize weakening that boundary.
 
 ## Define the failure contract
 
