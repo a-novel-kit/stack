@@ -169,6 +169,12 @@ and tests each option removes, and the services, IAM, configuration, and recover
 Fewer sources of truth and cross-layer handoffs matter more than a short file. A locally larger module
 is worthwhile when it retires a subsystem; a generic step engine wrapped around old scripts is not.
 
+Budget replacements as a whole path, not just an added VM: include retained storage generations,
+requests, networking, monitoring and temporary coexistence. Credit old costs only after their
+resources and retention obligations end. A stopped host still has billable disks; an unproven small
+instance is a capacity candidate, not a cost or recovery guarantee. Define the evidence for retiring
+the old writer and its schedules while keeping readers for retained recovery points.
+
 Keep navigation predictable: repeated service declarations, explicit domain operations, typed internal
 contracts, and narrow adapters to maintained tools. Confine untyped external documents to boundaries.
 Do not duplicate schema rules in Go or create interface layers without a real boundary to isolate.
