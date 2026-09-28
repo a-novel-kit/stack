@@ -127,7 +127,9 @@ link does not satisfy this contract.
 
 ## Components and controllers
 
-- Keep components presentational: render semantic HTML and accessibility state, translate native events
+- UI components are pure presentation. Reactivity that changes rendered state belongs to an injected
+  controller; components must not create hidden state owners or mutate controller state.
+  Render semantic HTML and accessibility state, translate native events
   into semantic requests, and own only DOM mechanics such as element references, focus movement,
   measurements, and transient typeahead bookkeeping.
 - Put meaningful rendered state and its transition rules in a pure controller with no DOM access,
@@ -139,6 +141,9 @@ link does not satisfy this contract.
   setters. The component reports intent; the controller may accept, transform, or reject it.
 - Export the controller contract and a configurable default factory. Callers may supply another
   implementation that satisfies the same contract, including fixed-state Storybook controllers.
+- Keep controllers mockable and composable through structural contracts: inject collaborators, compose
+  child controllers, and derive views of shared state without creating a second state owner. A plain
+  typed object with fixed state and no-op transitions must be a valid replacement.
 - Unit-test controller transitions without rendering. Test the component boundary for DOM semantics,
   accessibility behavior, and rejected transitions.
 

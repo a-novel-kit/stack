@@ -98,6 +98,11 @@ Do not manufacture cases that the public contract cannot reach.
   behavior.
 - Keep stories deterministic, self-contained, and free of production side effects. Use loaders and
   decorators only for shared, explicit environment contracts.
+- Pin visual-review stories through fixed-state controllers. Clicking, submitting, pressing Escape,
+  or clicking outside must not change the displayed scenario. Show distinct states as separate
+  examples; exercise live transitions in controller/component tests. Keep locale, theme, and story
+  inputs configurable. Preserve native focus, scrolling, and text selection; do not freeze previews
+  with event-blocking overlays, `inert`, or `pointer-events: none`.
 - Add a docs page for every public component: intent, composition, accessibility contract, and
   examples. Use generated controls and ArgTypes for API reference instead of repeating a manual
   table. Document foundations separately from components.

@@ -143,8 +143,9 @@ Rules:
   references, focus movement, measurements, and accessibility attributes in the component. Do not
   expose both a controller and bindable state props or generic `setState` methods.
 - Export component-specific controller types even when several alias the same generic state shape, so
-  consumer APIs and migration guides remain discoverable. Storybook may supply a fixed controller that
-  rejects transitions to keep a review state pinned.
+  consumer APIs and migration guides remain discoverable. Storybook supplies fixed-state controllers
+  under the `write-frontend-tests` review contract; the component renders the accepted state even when
+  a native event requests a rejected transition.
 - Define state precedence explicitly. Persistent selected, checked, expanded, invalid, loading, and
   disabled states outrank transient hover and active treatments; transient feedback must not visually
   erase or contradict the persistent state.
