@@ -141,6 +141,11 @@ Keep public API access intentional and service-to-service access authenticated.
 Moving a backup engine onto a database host also changes its credential and network path. Review
 container metadata access, host firewall rules and attached identity together before activation;
 success on a disposable host with different networking does not authorize weakening that boundary.
+Metadata reachability exposes the attached identity and writable guest attributes, including any
+host-published readiness signal. A transport-authenticated repository server is not automatically a
+restricted credential broker: test which configuration and paths an authorized client can override.
+Keep filesystem, egress and identity limits outside client-controlled configuration. An offline TLS
+pass proves the protocol, not the container boundary or effective cloud permissions.
 
 ## Define the failure contract
 
