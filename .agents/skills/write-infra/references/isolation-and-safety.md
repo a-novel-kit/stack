@@ -172,6 +172,11 @@ Prefer one systemd unit when loader and consumer share a lifecycle; native runti
 post-stop cleanup also cover failed startup. On COS, cloud-init recreates `/etc` on every boot.
 A stopped desired state can still boot briefly during creation: disabled preparation may install
 files and reload unit definitions, but must not pull images, read secrets or start consumers.
+Keep database lifecycle and credential selection with protected foundation maintenance, outside
+routine API releases. Give container restart ownership to either Docker or systemd, not both.
+Signal native readiness after database health and credential activation; unit creation is not health.
+Release temporary API-token files before entering long-lived supervision, while retaining consumer
+credentials until the consumer has stopped.
 
 ## Define the failure contract
 
