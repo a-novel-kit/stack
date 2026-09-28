@@ -153,6 +153,13 @@ restricted credential broker: test which configuration and paths an authorized c
 Keep filesystem, egress and identity limits outside client-controlled configuration. An offline TLS
 pass proves the protocol, not the container boundary or effective cloud permissions.
 
+When a native TLS tool accepts a certificate/key PEM bundle, keep the pair in one secret version
+instead of building a custom delivery format. Separate each endpoint's private identity from shared
+public trust; keep signing keys off runtime hosts. A numeric version pin is not a version-scoped
+IAM grant, and disabling stored credentials does not revoke copies already loaded by a process.
+Define issuance, renewal, trust retirement and connection draining before activation, not as an
+implicit consequence of creating secret containers.
+
 ## Define the failure contract
 
 An established API rollout keeps the serving revision while the candidate receives no ordinary
