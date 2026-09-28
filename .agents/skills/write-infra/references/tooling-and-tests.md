@@ -74,6 +74,10 @@ rebuilding after a scan creates another artifact. Keep the publisher free of sou
 cloud credentials. Bind provenance to the digest, reviewed source and expected signer workflow, and
 distinguish artifact publication from deployment approval. Check external environment protections
 before enabling a dormant publisher: naming an environment does not establish its reviewer gate.
+When sharing a publisher across tools, keep each activation decision explicit and bind the selected
+archive, registry destination and attestation together. A workflow filename can be part of a retained
+signer policy; trace provenance consumers before renaming it. Separate approval gates do not narrow
+the publishing token's effective package permissions.
 
 Keep production tooling in the infra repository unless a genuinely shared contract justifies moving
 it. The local workspace CLI is not a production dependency. Publish host/job helpers as reviewed,
