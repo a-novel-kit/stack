@@ -35,6 +35,12 @@ does not prevent choosing a live service project as the replacement target.
 Shared VPC attachment and subnet access are separate grants; review workload routing and invocation
 authority before claiming that an attached project is deployable or isolated.
 
+For VM-to-VM isolation, prefer exact service-account selectors where supported. Google VPC ingress
+combines source identities and source CIDRs with OR, not AND; adding a subnet can admit peers.
+Classic egress cannot select a destination identity, so review the receiving rule as part of the
+same path. Keep the deny fallback, attachment authority and host/container rules in the review:
+VPC rules do not filter the VM metadata server or replace native TLS/API authorization.
+
 Treat API enablement, Google service-agent creation, and its role bindings as separate prerequisites.
 Use the native provider resource when declarative consumers need the identity before first use.
 Trace the control-plane principal: Direct VPC subnet use belongs to the Cloud Run service agent,
