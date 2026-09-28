@@ -168,6 +168,10 @@ the native supervisor. Check canonical version names and payload integrity expli
 alone does not verify a secret's CRC32C. Validate the certificate/key pair before atomically
 publishing private ephemeral files without replacement. Keep consumer startup and stopped-consumer
 cleanup with the supervisor; a file loader is not a rotation daemon or a host isolation boundary.
+Prefer one systemd unit when loader and consumer share a lifecycle; native runtime directories and
+post-stop cleanup also cover failed startup. On COS, cloud-init recreates `/etc` on every boot.
+A stopped desired state can still boot briefly during creation: disabled preparation may install
+files and reload unit definitions, but must not pull images, read secrets or start consumers.
 
 ## Define the failure contract
 
