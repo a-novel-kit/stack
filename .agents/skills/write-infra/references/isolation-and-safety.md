@@ -150,6 +150,9 @@ success on a disposable host with different networking does not authorize weaken
 Metadata reachability exposes the attached identity and writable guest attributes, including any
 host-published readiness signal. A transport-authenticated repository server is not automatically a
 restricted credential broker: test which configuration and paths an authorized client can override.
+Test reads as well as listings with synthetic files: private modes and read-only mounts do not hide
+data from the process that must read it. If the protocol delegates that process's authority, require
+an explicit client/process trust decision; do not silently promise server-key confidentiality.
 Keep filesystem, egress and identity limits outside client-controlled configuration. An offline TLS
 pass proves the protocol, not the container boundary or effective cloud permissions.
 
