@@ -14,6 +14,14 @@ Load `write-frontend` and read the production behavior before writing tests. Rea
 and the official documentation for the installed testing tools. Preserve existing tests unless the
 behavior they specify has been intentionally removed.
 
+## Timing
+
+Follow [develop-feature](../develop-feature/SKILL.md). Early stories make a draft reviewable; early
+tests should only resolve uncertainty, reproduce a defect, or protect a risky invariant. Complete
+the behavior matrix and full relevant regression suite after issue scope is approved. These
+conventions govern the quality of any test written at either stage, without requiring exhaustive
+coverage during exploration.
+
 ## Test at the nearest truthful layer
 
 Use the smallest layer that proves the user-visible contract:
@@ -120,7 +128,20 @@ Do not manufacture cases that the public contract cannot reach.
   A platform tests its product catalogs, screen states, and wiring instead of copying that generic
   fixture locally.
 
-## End-to-end tests
+## End-to-end tests and screenshot comparisons
+
+During stage 3 of `develop-feature`, create or update all affected Playwright tests for client-side
+work. Cover the changed journeys and browser contracts, then run the relevant browser suite. Reuse
+the existing harness; when one is missing, include the smallest suitable Playwright setup in the
+agreed scope, following `choose-dependency`. Do not silently defer required browser validation.
+
+For rendered changes, capture deterministic screenshots of the affected states and supported
+viewports and compare them with reviewed baselines. Stabilize data, fonts, locale, theme, and motion.
+Inspect expected, actual, and diff images. Fix unexpected differences; update a baseline only when
+the new rendering matches the agreed UI, and review initial baselines for new screens. Screenshots
+complement live app/Storybook review and behavioral assertions. For non-visual client changes,
+verify relevant existing visual baselines where applicable and state when no rendered surface is
+affected instead of inventing a screenshot test.
 
 - Test critical journeys and browser contracts, not every visual variant.
 - Use accessible locators and observable readiness conditions. Never use fixed sleeps.
@@ -131,10 +152,11 @@ Do not manufacture cases that the public contract cannot reach.
 
 ## Coverage and completion
 
-Treat coverage as a map, not a target. Missing error, keyboard, security, or state-transition paths
-matter; uncovered generated glue does not justify a test.
+Treat coverage as a map, not a percentage target; 100% is not required. Missing error, keyboard,
+security, or state-transition paths matter; uncovered generated glue does not justify a test.
 
-Run the narrow test during iteration, then:
+Run focused checks during iteration. After scope approval, complete meaningful coverage and run
+the applicable suites; after cleanup, rerun checks affected by the final edits:
 
 ```bash
 pnpm lint

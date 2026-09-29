@@ -29,7 +29,11 @@ the codebase. Fix a stale or failing test; do not delete it.
 
 ---
 
-## After every edit
+## Timing and validation
+
+Load [develop-feature](../develop-feature/SKILL.md). Write only essential tests during drafting and
+issue review; expand to the full relevant regression suite after scope approval. Use the coverage
+guidance below to assess meaningful gaps, without a 100% target or a test quota per file.
 
 Run the narrowest test target that exercises the code you changed:
 

@@ -8,6 +8,10 @@ description: >
 
 # Prefer small solutions
 
+For development work, also load [develop-feature](../develop-feature/SKILL.md). It owns when to
+draft locally, publish a proposal, complete tests, and perform the final cleanup; this skill owns
+the simplicity decisions within each stage.
+
 Choose the shortest clear, idiomatic implementation that fully meets the required behavior and
 project constraints. Judge size across the affected solution, including callers, adapters, state,
 configuration, tests, and dependency glue. A short function that moves complexity elsewhere is no

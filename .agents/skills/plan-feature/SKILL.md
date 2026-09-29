@@ -1,36 +1,32 @@
 ---
 name: plan-feature
 description: >
-  The planning and technical-design gate before any non-trivial implementation in the a-novel /
-  a-novel-kit workspace. Use it when a change spans multiple repos, touches an architecture, data
-  model, or client/server boundary, introduces a service, platform or library, weighs build-vs-buy,
+  Technical design and GitHub planning issues within the develop-feature lifecycle for the
+  a-novel / a-novel-kit workspace. Use it when a change spans multiple repos, touches architecture,
+  a data model or client/server boundary, introduces a service, platform or library, weighs build-vs-buy,
   or is ambiguous about what to build. It captures the agreed design as a GitHub planning **issue**
-  (Initiative / Epic / Task sub-issues), then hands off to repo-kind implementation skills. Skip
-  trivial single-repo edits.
+  (Initiative / Epic / Task sub-issues) after local draft agreement, with issue and draft-PR review
+  in parallel. Skip trivial single-repo edits.
 ---
 
-# Plan & design before you build
+# Plan and refine the design
 
-You are the tech lead on this change, not an order-taker. Turn the request — which may be vague,
-partial, or even wrong — into a technical plan that is **exhaustive, secure by design, efficient, and
-maintainable**, and get the human to agree to it before a line of production code is written. A plan
-built on a misunderstanding wastes far more time than the planning itself costs.
+Load [develop-feature](../develop-feature/SKILL.md) first. Act as technical and UX lead: propose
+improvements, explain boundaries and tradeoffs at the developer's level, and use a working local
+draft to settle uncertainty. This skill owns technical design and planning-issue structure; it does
+not require an issue or abstract plan approval before local code exploration.
 
-The output is an agreed **planning issue** (below). This skill decides _what_ and _why_. Backend
-service execution (`implement-feature`), platform execution (`write-platform`), and cross-repo
-versioning (`manage-versions`) decide _how_; delegate those mechanics to them.
-
-> **Why issues, not plan files.** Plans used to live in gitignored `plan-*.md` files at the workspace
-> root. A gitignored file has **no backup** (one was lost, which is why this workflow exists), and a
-> local file can't carry **type, labels, priority/effort, sub-issue structure, dependencies, or PR
-> links**. A GitHub issue survives context resets, hosts the human's replies, and links directly to
-> the PRs that implement it. The plan is a **typed, linked, trackable issue graph**.
+Keep draft decisions and open questions in the local handoff until the direction is agreed. Then
+capture the design in GitHub planning issues using the conventions below. The issue body becomes
+the current scope reference; comments hold discussion, including decisions needing expertise the
+developer cannot supply. Backend execution (`implement-feature`), platform execution
+(`write-platform`), and cross-repo versioning (`manage-versions`) own their mechanics.
 
 ---
 
 ## When to use this skill — and when to skip it
 
-Invoke it whenever the implementation steps are not already 100% clear, or the change is large
+Invoke it whenever important implementation decisions remain open, or the change is large
 enough that getting it wrong is expensive:
 
 | Signal                                                        | Plan first?                             |
@@ -74,8 +70,9 @@ issue; for now, the table above is the gate for the full planning ritual.)
 ### 1. Frame the problem
 
 Restate the goal in one or two plain sentences — _what_ outcome, and _why_ it matters — and the
-explicit scope boundaries (what is in, what is deliberately out). If the request is ambiguous,
-resolve that **now**, before research: one focused clarifying question beats a plan built on a guess.
+explicit scope boundaries. Ask focused questions where missing context would change the result;
+continue useful investigation and local drafting while they are open. Offer a recommendation and
+make assumptions visible instead of demanding every answer before exploration.
 
 ### 2. Research — the three axes
 
@@ -103,9 +100,10 @@ apply to the change, and say why. Cite what you relied on so the human can verif
   axis is about exploiting what is already on hand; build-vs-buy and _new_ package selection belong
   to `choose-dependency`.
 
-**Spikes are allowed.** If you need to edit code to explore or test a hypothesis, do it — then
-**revert** the exploratory changes before (or immediately after) you capture the plan. Planning
-leaves the working tree clean; the plan lives in the issue, not on disk.
+**Build a local draft.** Edit and run the affected application or service, with Storybook for UI
+review. Preserve useful exploratory code; the draft can be dirty and incompletely tested. Share
+review steps, provisional behavior, boundaries, and open decisions per `develop-feature`. Publish
+nothing until the direction is agreed unless explicitly requested.
 
 ### 3. Design — and challenge — the approach
 
@@ -134,37 +132,36 @@ of a plan. Where the design needs a new dependency or an internal implementation
 order and whether the change must ship in stages (a backward-compatible deployment first, cleanup
 second) — but let `manage-versions` own the mechanics.
 
-### 4. Open the planning issue(s)
+### 4. Agree on the draft, then open the planning issue(s)
 
-Persist the design as a GitHub issue (anatomy below) so it can be iterated, reviewed, linked to PRs,
-and survive context resets. The issue body — not chat, not a local file — is the source of truth.
-Set its **type**, **labels**, **project**, and **fields** on creation; break it into **sub-issues**
-and **dependencies** when it has stages.
+Walk the developer through the working draft and refine it together. Once the direction is agreed,
+persist it as GitHub issues using the anatomy below: types, labels, projects, fields, sub-issues,
+and dependencies. Reuse existing issues. Keep the body concise and current; move open decisions
+into issue discussions with a recommendation, consequences, and the expertise needed to resolve
+them. Agreement on direction does not close unresolved scope questions.
 
-Open it **early**, while the design is still moving, and refine the body in place as it firms up. A
-wrong Epic costs one click to close; a session that ends before anything was written down takes every
-decision with it.
+### 5. Review issues and draft PRs in parallel
 
-### 5. Iterate to agreement
+Draft PRs may accompany the issues now. Use `resolve-pr-feedback` to regularly inspect both issue
+comments and PR feedback during active work and before each stage transition. Fold accepted
+decisions into issue bodies and implementation. Leave decisions the developer cannot assess open
+for the appropriate expertise; do not infer approval from silence or a green check.
 
-Walk the human through it, take feedback, refine the **issue body**. Park open questions and
-back-and-forth in **comments** (not the body — see "Keep the body clean"), so the body always reads
-as the current agreed plan and the human can reply inline. Repeat until you both agree. Treat heated
-disagreement as a signal to understand their constraints, not to dig in. The gate to execution is
-**explicit agreement**, or — for a small, well-scoped task — that the steps are 100% clear.
+### 6. Confirm approved scope and finish
 
-### 6. Hand off to execution
+Once the relevant issues are approved and blocking design questions are settled, reconcile the PR
+diff with the agreed scope. Only then complete the full relevant test suite, including Playwright
+and screenshot comparisons for client-side changes, followed by the final cleanup in
+`develop-feature`. Focused tests needed to validate the draft may be written earlier.
 
-Once agreed, hand each Task to the repo-kind skills:
+- For a backend service, `implement-feature` owns layer decomposition and execution.
+- For a platform, use `write-platform` and its frontend skills; decompose by user-visible result
+  and ownership rather than backend layers.
+- For cross-repo work, use `manage-versions` for compatible merge and release sequencing.
 
-- For a backend service, `implement-feature` decomposes the layers, implements, and tests the work.
-- For a platform, load `write-platform` with the frontend skills it requires; decompose by
-  user-visible result and ownership, not backend layers.
-- For cross-repo work, let `manage-versions` sequence merges and staged rollouts.
-
-Name and commit branches per `git-conventions`, normally one branch/PR per Task sub-issue with
-`Closes #<n>`. Let `open-pull-request`, `monitor-ci`, and `resolve-pr-feedback` carry each PR to
-green. Keep the issue current as work lands (see completion handling).
+Name branches and commits per `git-conventions`. Link each PR to its Task with `Closes #<n>` (or
+the full cross-repo reference). Use `open-pull-request`, `monitor-ci`, and `resolve-pr-feedback` to
+finish review preparation, and keep issues current as work lands.
 
 ---
 
@@ -492,7 +489,8 @@ them honest over time.
 ## How this composes
 
 ```
-plan-feature
+develop-feature (local draft → agreement → review → tests → cleanup)
+  └─ plan-feature
       ├─ plan-client-server-boundary (client/API cuts)
       ├─ choose-dependency (build-vs-buy)
       └─ agreed planning issue (Epic / Feature + Task sub-issues)
@@ -506,15 +504,15 @@ plan-feature
                   └─ open-pull-request ─> monitor-ci ─> resolve-pr-feedback
 ```
 
-This skill is the only one that talks to the human about _what to build and why_. The rest execute a
-plan that is already agreed.
+`develop-feature` owns the discussion and stage transitions across skills. This skill supplies the
+technical design and issue structure; implementation and review can refine that design together.
 
 ---
 
 ## Principles
 
-- **The issue is the artifact.** Decisions live in the planning issue, not in chat or a local file.
-  The body is the agreed plan; comments are the conversation.
+- **Persist after draft agreement.** Local drafts and their handoffs support exploration. Once
+  issues exist, their bodies hold the current plan and their comments hold the discussion.
 - **Justify, don't decree.** Every recommendation states its reasoning. "Because it's best practice"
   is not a reason.
 - **Research before asserting.** Read the code; search trusted sources. Cite what you relied on.
@@ -542,7 +540,7 @@ plan that is already agreed.
 - **Stage what can't ship at once.** Prefer single-step delivery; when deployment forces incompatible
   stages, plan a backward-compatible step then a cleanup step — drafted ahead as `blocked-by`
   sub-issues — and hand the mechanics to `manage-versions`.
-- **Leave the tree clean.** Exploratory edits are reverted; the plan lives in the issue, nothing on
-  disk.
-- **Agreement is the gate.** Don't start production code until the plan is agreed or the task is
-  small enough to be unambiguous.
+- **Preserve the draft.** Keep useful local code through agreement; remove temporary scaffolding
+  in the final cleanup.
+- **Gate the right transition.** Draft agreement precedes publication; issue scope approval
+  precedes full test completion. Clear, simple work can combine stages per `develop-feature`.

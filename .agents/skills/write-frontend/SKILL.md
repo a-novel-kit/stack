@@ -13,6 +13,11 @@ description: >
 
 # Frontend Conventions (common)
 
+Load [develop-feature](../develop-feature/SKILL.md) for local drafting, developer discussion,
+publication timing, test completion, and final cleanup. Run the affected app locally during a draft
+as well as Storybook for rendered review; a component library can use its workbench. Explain the
+flow, expected states, provisional behavior, and boundaries in language the developer can assess.
+
 Apply this base layer to every browser-facing change. Read the target file, its nearest siblings,
 the package manifest, TypeScript config, lint config, and public exports before editing. Preserve a
 coherent local pattern unless it conflicts with a rule below or a current platform standard.
@@ -42,9 +47,14 @@ Read [references/standards.md](references/standards.md) before choosing a browse
 pattern, security boundary, design-token model, or unfamiliar framework feature. Verify versioned
 APIs against current official documentation rather than relying on memory.
 
-## After every edit
+## Validation by stage
 
-Use repository scripts as declared; do not invent parallel commands:
+During drafting and issue review, run the app, inspect changed stories, and use focused checks.
+Add only tests needed to validate the draft. After issue scope approval, complete relevant coverage
+with `write-frontend-tests`, including affected Playwright journeys and screenshot comparisons.
+Perform the final cleanup and rerun affected checks before marking ready.
+
+Use repository scripts as declared for final validation; do not invent parallel commands:
 
 ```bash
 pnpm format                         # write formatting when the repo provides it
@@ -75,8 +85,10 @@ The handoff contract is non-negotiable:
    handing off a specific component.
 5. Keep localhost and other local-only Storybook links out of GitHub PR descriptions. They are
    session-scoped review surfaces, not durable PR metadata.
-6. In the final completion report that hands rendered UI work back, include at least one direct
-   Storybook link beside the PR and planning task or issue links. Use a clickable inline link such as
+6. In each draft or final handoff of rendered UI, include direct app and Storybook routes as
+   applicable, with steps to try, expected results, and limits. Include PR and issue links once they
+   exist; creating them is not a prerequisite to local review. Provide at least one direct
+   Storybook link. Use a clickable inline link such as
    `[Button — Storybook](http://127.0.0.1:6006/?path=/docs/button--docs)`, substituting the actual live
    URL and route. Repeat it in any later report that hands completed UI work back; an earlier report
    does not satisfy the current handoff.
