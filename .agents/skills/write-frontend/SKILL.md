@@ -127,7 +127,9 @@ link does not satisfy this contract.
 
 ## Components and controllers
 
-- Keep components presentational: render semantic HTML and accessibility state, translate native events
+- UI components are pure presentation. Reactivity that changes rendered state belongs to an injected
+  controller; components must not create hidden state owners or mutate controller state.
+  Render semantic HTML and accessibility state, translate native events
   into semantic requests, and own only DOM mechanics such as element references, focus movement,
   measurements, and transient typeahead bookkeeping.
 - Put meaningful rendered state and its transition rules in a pure controller with no DOM access,
@@ -139,6 +141,9 @@ link does not satisfy this contract.
   setters. The component reports intent; the controller may accept, transform, or reject it.
 - Export the controller contract and a configurable default factory. Callers may supply another
   implementation that satisfies the same contract, including fixed-state Storybook controllers.
+- Keep controllers mockable and composable through structural contracts: inject collaborators, compose
+  child controllers, and derive views of shared state without creating a second state owner. A plain
+  typed object with fixed state and no-op transitions must be a valid replacement.
 - Unit-test controller transitions without rendering. Test the component boundary for DOM semantics,
   accessibility behavior, and rejected transitions.
 
@@ -165,6 +170,16 @@ link does not satisfy this contract.
 
 ## CSS and responsive layout
 
+- Build coherence into the code, not into a sequence of visual corrections. Equivalent UI roles
+  and states must reuse the same shared components, variants, tokens, and constants across screens
+  and breakpoints. When they drift, trace the owning styles and remove duplicated definitions or
+  compensating overrides before adding new CSS. Fix reusable behavior in uikit; keep only genuine
+  application composition and layout differences local. Do not recreate a shared element just to
+  tailor its appearance, or invent an abstraction for unrelated roles that merely look similar.
+- Responsive rules normally change geometry, not a control's visual identity: preserve shared
+  foreground, surface, opacity, typography, and interaction-state rules unless the product contract
+  explicitly requires a difference. Verify the shared implementation on each actual backdrop;
+  matching token names alone do not prove matching rendered colors through transparency layers.
 - Prefer normal flow, Grid, Flexbox, logical properties, and container/media queries over measured
   JavaScript layout. Use feature queries for optional enhancements.
 - Start from the smallest supported viewport and let content determine breakpoints. Avoid device-name
@@ -194,6 +209,12 @@ link does not satisfy this contract.
   bundles. Assume every shipped byte and source map is public.
 - Use progressive enhancement for navigation and forms when the framework supports it. A network or
   JavaScript failure should degrade intentionally rather than strand the user.
+
+## Localization language register
+
+- Use the formal address form for static text when a language distinguishes registers (`vous` in French, `usted` in Spanish).
+- Use the language’s conventional action-label form for buttons, links, and other controls; French uses infinitives such as `Créer le compte`.
+- Apply the same distinction to accessible names and Storybook states.
 
 ## Security and privacy
 
