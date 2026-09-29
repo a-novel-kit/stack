@@ -209,6 +209,13 @@ Inspect the freshly pulled base before adding OS security overrides. Apply avail
 without an incidental PostgreSQL upgrade, and report unresolved inherited advisories. A successful
 build or restore test does not establish that an image is free of vulnerabilities.
 
+When changing distributions, check known advisories against upstream fixes as well as the image
+scan: a different package database can report fewer findings without fixing the affected code.
+Keep PostgreSQL, its extensions and runtime libraries ABI-compatible. Test the normal entrypoint,
+initialization scripts, authentication and persistent volumes, not only an overridden test command.
+Treat existing data directories and physical backups as a separate migration decision; successful
+fresh-database tests do not establish cross-distribution or collation compatibility.
+
 PostgreSQL extension and binary paths contain its major version. Check those paths and extension
 compatibility when changing the PostgreSQL major.
 
