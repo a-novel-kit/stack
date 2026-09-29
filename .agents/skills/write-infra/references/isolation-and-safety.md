@@ -332,6 +332,11 @@ major version, backup object generation, integrity evidence, and required secret
 upload is not a restore test. Preserve old backup readers until retained recovery points expire or
 have a reviewed replacement.
 
+Keep restored files, completed PostgreSQL recovery, SQL validation and traffic cutover as separate
+outcomes. A one-shot file restore should reserve a fresh attempt and preserve failures without replay.
+Restored configuration can contain executable archive readers; starting it needs its own reviewed
+credential and network boundary, not just a successful native restore exit code.
+
 Restore into an isolated target before exposing services. Keep schedulers, public ingress, and the
 human-only initializer absent unless the recovery plan explicitly needs them. Verify dependency
 health from the permitted network, measure the full operator recovery time separately from automated
