@@ -182,8 +182,11 @@ For containerized jobs, supervise the work rather than only a `docker exec` clie
 container's lifetime and reap its exact name on interruption. Check dependency restart semantics:
 stopping a database must stop dependent backups, but restarting it must not replay them or let a
 backup request start an idle database. Share native lock storage across cooperating containers;
-private temporary directories do not coordinate conflicting operations. Archiving failure retains
-WAL and can fill the source disk, so require delivery-tested age and disk alerts before activation.
+private temporary directories do not coordinate conflicting operations. Compatible online backups
+can use native coordination without a deployment-wide guard. Disruptive maintenance still needs
+protected admission, stopped timers and drained workers; stopping timers does not quiesce the WAL
+archiver. Archiving failure retains WAL and can fill the source disk, so require delivery-tested
+deadline/freshness and disk alerts before activation.
 
 ## Define the failure contract
 
@@ -299,8 +302,12 @@ silence-based incident closure is not recovery evidence and must not authorize a
 For periodic-job monitoring, distinguish observed zero successes from absent samples and a never-seen
 series. Native absence policies can require prior metric history; seed and observe the success signal
 after installation or modification before accepting coverage. Check alignment, retest and missing-data
-semantics together so sparse healthy executions do not page between runs. Scope the metric to exact
-owned jobs and project-local channels; an alert is neither execution exclusion nor permission to retry.
+semantics together so sparse healthy executions do not page between runs. Check limits for the actual
+metric kind: Cloud Monitoring's extended PromQL lookbacks do not lift the 25-hour log-based metric
+limit. A scheduled deadline check is not continuous age monitoring, and leaving its calendar window
+does not prove recovery. An enabled collector does not collect every unit: verify field routing and
+retain bounded short-lived container logs long enough for collection. Scope the metric to exact owned
+jobs and project-local channels; an alert is neither execution exclusion nor permission to retry.
 
 Locate the verifier's execution environment before choosing its transport. A private service URL
 does not make a hosted build worker part of its VPC. Bind evidence to the exact project, service,
