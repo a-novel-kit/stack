@@ -137,7 +137,9 @@ Use this escalation ladder; stop at the first shape that fully meets the proof a
    total resource cost; lower server CPU alone is not a performance result.
 7. State the supported client/update model and trace a composed journey end to end. Version any
    client-owned payload; define correlation and operation identifiers across calls.
-8. Record the decision in the planning issue before breaking work down by repository.
+8. Explain the boundary and tradeoffs in the local draft handoff. After draft agreement, record
+   them in the planning issue before formal decomposition by repository. Keep specialist decisions
+   the developer cannot resolve open in that issue's discussion.
 
 Add this conditional section to the `plan-feature` issue body:
 

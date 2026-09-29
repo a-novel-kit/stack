@@ -1,0 +1,4 @@
+interface:
+  display_name: "Develop a Feature"
+  short_description: "Draft locally, review scope, test, and tighten code"
+  default_prompt: "Use $develop-feature to guide this change from a local draft through scope agreement, testing, and final cleanup."

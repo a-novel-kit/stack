@@ -144,7 +144,11 @@ Flag any change that:
 
 ### Before you start
 
-**Start every task from _freshly-pulled_ `master`, with a clean tree, in a checkout that is
+Load [develop-feature](../develop-feature/SKILL.md) for stage timing. The clean-tree pre-flight below
+applies when starting new work; an owned, ongoing local draft may be dirty and must be preserved.
+Resume it without resetting, stashing, or discarding the draft to satisfy a new-task pre-flight.
+
+**Start new work from _freshly-pulled_ `master`, with a clean tree, in a checkout that is
 yours.** Check this before the first edit — in the stack root and in each `app/` or `kit/` checkout
 the task will touch, since those are independent repos with independent states:
 
@@ -163,8 +167,8 @@ landed since, collides in review with changes it never saw, and forces a rebase 
 can look, rather than silently tangling histories. A branch whose parent is already merged (as a
 completed task's branch is, once its PR lands) is finished work; leave it and branch from master.
 
-Uncommitted changes, or a checkout sitting on a branch other than `master` that you did not create,
-mean **someone else is working in this checkout** — the operator in another terminal, or a parallel
+Unrecognized uncommitted changes, or a checkout on another task's branch,
+mean **someone else may be working in this checkout** — the operator in another terminal, or a parallel
 agent session. The mere _existence_ of stale unmerged branches is not that signal: a repo that has
 shipped hundreds of PRs carries dozens of finished branches nobody deleted, and none of them blocks
 cutting a fresh one from `master` — which is why the pre-flight keys on the current branch and the
@@ -300,30 +304,25 @@ EOF
 - **Never push to `master`/`main` — not force-push, not a plain push — without explicit consent.**
   This is the one git action that is never safe by default. Most contributors lack the access, so
   the guardrail is already enforced for them; on an admin account it is _yours_ to hold, because you
-  have the rights to bypass it and nothing else will stop you. Feature branches carry no such risk:
-  they cannot damage shared history, so **pushing a branch and opening its PR never needs
-  permission** — see [Branch and PR freedom](#branch-and-pr-freedom).
+  have the rights to bypass it. Publish feature branches at the stage authorized by
+  `develop-feature`; see [Branch and PR freedom](#branch-and-pr-freedom).
 
 ---
 
 ## Branch and PR Freedom
 
-**Pushing a feature branch and opening a pull request are always safe — never ask permission for
-either.** A branch touches no shared history; a pull request only proposes. The sole thing that can
-harm the repo is a push to `master`/`main`, which is prohibited without explicit consent (above).
-Everything short of that is free, and the freedom is the point: work that lives only in your local
-checkout is one crashed session away from gone.
+Follow [develop-feature](../develop-feature/SKILL.md): during local drafting, keep branches and
+checkpoint commits local until the developer agrees on the direction, unless they explicitly
+requested publication. A local commit is not itself a reason to push.
 
-**Once a branch has a commit, open a pull request for it — a draft one if it is not review-ready.**
-A PR is how work becomes _tracked_: it survives session loss, shows the operator what you did, and
-gives CI something to run. Do not sit on committed-but-unpushed work waiting for a "ship it".
+After that agreement, pushing a feature branch and opening a draft PR within the authorized scope
+need no repeated permission. Use `open-pull-request` for the checks appropriate to the stage. Clear,
+small tasks can take the shorter path defined by `develop-feature`.
 
-**A draft PR has no rules.** It requests no review, blocks nothing, and triggers no merge
-automation. You may `--force-with-lease` over it freely, redirect its base, or delete it outright
-if the direction changes — none of that costs anyone anything. So default to opening one early:
-the downside is zero and the upside is that nothing you did is ever stranded. Push and PR
-mechanics live in `open-pull-request`; this rule is only _when_ (always, once committed) and
-_whether to ask_ (never).
+Draft PRs can receive review while their planning issues are still being discussed. Preserve review
+history, keep scope and deferred coverage visible, and follow the normal history-rewrite rules.
+Mark ready after issue scope is approved and testing and cleanup are complete. Never treat a draft
+as exempt from repository safeguards or push directly to `master`/`main` without explicit consent.
 
 ---
 

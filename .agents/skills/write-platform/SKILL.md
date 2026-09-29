@@ -13,7 +13,10 @@ description: >
 
 This skill is the platform counterpart to `write-go-service`: `write-frontend` owns universal web
 rules, `write-svelte` owns framework mechanics, `write-frontend-tests` owns tests and stories, and
-this skill owns the terminal application's architecture and delivery sequence.
+this skill owns the terminal application's architecture. Load
+[develop-feature](../develop-feature/SKILL.md) for stage timing: run a local app and Storybook draft,
+agree on direction, review issues and draft PRs, complete approved-scope coverage, and tighten the
+result. Full state/test matrices below are completion gates, not prerequisites to exploring a draft.
 
 Load `plan-ui-design` before choosing a visual direction or interaction language. Load
 `choose-dependency` before adding a package, `write-dockerfiles` before changing the root
@@ -246,4 +249,7 @@ API credentials in Storybook.
 - Server actions and session transitions have unit tests, including expiry and downstream failure.
 - `/ping`, `/healthcheck`, production build, Storybook build, and the container are verified.
 - `pnpm lint`, `a-novel test --type=pnpm -y`, and `a-novel build --type=pnpm -y` pass.
-- The live Storybook URL and any intentionally deferred end-to-end coverage appear in the handoff.
+- All affected Playwright journeys and screenshot comparisons have been run and reviewed per
+  `write-frontend-tests`; required end-to-end coverage is complete.
+- Final cleanup follows `prefer-small-solutions`, with affected checks rerun.
+- The live app/Storybook routes, developer review steps, and verification limits appear in the handoff.

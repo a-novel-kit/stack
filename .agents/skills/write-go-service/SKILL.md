@@ -34,9 +34,9 @@ exactly; coherence outranks preference.
 Run the base loop from `write-go` (`pnpm generate:go` when interfaces/proto changed →
 `pnpm format:go` → `pnpm lint:go`), then:
 
-1. **`write-go-tests`** — tests for every file touched; run `a-novel test --type=go -y` (or raw
-   `go test` on the one package being iterated), the narrowest target that covers the change.
-   Reserve the full `a-novel test -y` for the final commit.
+1. **`write-go-tests`** — follow `develop-feature` for timing: focused checks and necessary tests
+   during drafting, full relevant behavioral coverage after issue scope approval. Run affected
+   suites before readiness; do not add tests simply because a file was touched.
 2. **`document-code`** — doc comments for every symbol added or changed.
 3. If a REST handler change alters the public API contract (new endpoint, changed parameters,
    changed response shape, added/removed status codes), invoke **`write-openapi`** to update
