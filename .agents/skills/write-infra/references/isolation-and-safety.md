@@ -178,6 +178,13 @@ Signal native readiness after database health and credential activation; unit cr
 Release temporary API-token files before entering long-lived supervision, while retaining consumer
 credentials until the consumer has stopped.
 
+For containerized jobs, supervise the work rather than only a `docker exec` client. Bound the
+container's lifetime and reap its exact name on interruption. Check dependency restart semantics:
+stopping a database must stop dependent backups, but restarting it must not replay them or let a
+backup request start an idle database. Share native lock storage across cooperating containers;
+private temporary directories do not coordinate conflicting operations. Archiving failure retains
+WAL and can fill the source disk, so require delivery-tested age and disk alerts before activation.
+
 ## Define the failure contract
 
 An established API rollout keeps the serving revision while the candidate receives no ordinary
