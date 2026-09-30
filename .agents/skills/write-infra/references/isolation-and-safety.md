@@ -350,6 +350,12 @@ Keep restored files, completed PostgreSQL recovery, SQL validation and traffic c
 outcomes. A one-shot file restore should reserve a fresh attempt and preserve failures without replay.
 Restored configuration can contain executable archive readers; starting it needs its own reviewed
 credential and network boundary, not just a successful native restore exit code.
+For backup-consistency verification, prefer native inclusion of required WAL over a credential proxy
+or another host. Measure the extra stored/transfer bytes; historical backups may lack that WAL.
+Use a separate networkless process with controlled startup configuration and native recovery pause,
+then verify the independent database identity and application contract before confirmed shutdown.
+Missing WAL must fail without online fallback. Paused SQL inspection is not promotion, PITR beyond
+that backup, source fencing or cutover; record its selected outcome under the existing admission.
 
 Restore into an isolated target before exposing services. Keep schedulers, public ingress, and the
 human-only initializer absent unless the recovery plan explicitly needs them. Verify dependency
