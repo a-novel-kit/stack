@@ -195,6 +195,14 @@ stop alone does not prove that Docker-owned work stopped: verify loaded inactive
 jobs and no remaining owned containers. Uncertain transport leaves admission held. Converged
 infrastructure and stopped workers are not authority to restart databases or resume schedules.
 
+For approved bring-up, keep admission through native reconciliation and runtime readiness. Bind the
+actual managed-group member and template incarnation to private post-apply outputs; provider-specific
+template references need not match API URLs. On COS, changed metadata does not mean loaded units
+changed: require a boot with the reviewed configuration before starting consumers. Start the
+repository before the database, verify native readiness and an authenticated repository read, and
+leave schedules under their separate activation gate. A repository server ping is unauthenticated
+liveness, not proof of client authorization or storage access. Never replay an uncertain start.
+
 ## Define the failure contract
 
 An established API rollout keeps the serving revision while the candidate receives no ordinary
