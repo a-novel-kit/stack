@@ -203,6 +203,12 @@ repository before the database, verify native readiness and an authenticated rep
 leave schedules under their separate activation gate. A repository server ping is unauthenticated
 liveness, not proof of client authorization or storage access. Never replay an uncertain start.
 
+For attended managed-group parking, use the group's native stop/start operations and reconcile its
+running/stopped targets with the HCL owner before another apply. An ordinary instance stop can be
+repaired by its group; accepted group work still needs member convergence evidence. Manual power
+commands do not acquire workflow admission: establish exclusive ownership, drain accepted work and
+retain disk/storage costs in the estimate. Limit a rehearsal-only procedure to its approved scope.
+
 ## Define the failure contract
 
 An established API rollout keeps the serving revision while the candidate receives no ordinary
