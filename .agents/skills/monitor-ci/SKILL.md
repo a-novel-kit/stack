@@ -9,9 +9,12 @@ description: >
 
 # Monitor CI
 
-CI is the final gate before review, and every failure must be resolved. It is also long-running
-and noisy, and unstructured polling burns context, so this skill fixes which commands to run, how
-often, and how to act on each failure type.
+Load [develop-feature](../develop-feature/SKILL.md) for stage timing. CI validates both draft and
+ready PRs; green checks alone do not approve issue scope or finish testing and cleanup. Preserve
+existing checks, diagnose failures, and defer new broad coverage until scope approval.
+
+While CI runs, use `resolve-pr-feedback` to check linked issue discussions and PR feedback together.
+This skill owns observation, diagnosis, and retries; the development skill owns readiness.
 
 The loop is **observe → classify → fix → re-push → re-observe**, with a retry budget. When
 the budget runs out, stop and escalate.
@@ -106,8 +109,9 @@ git diff master...HEAD          # or the stacked parent branch
 ```
 
 Look for: leftover debug/print statements, commented-out code, unresolved TODOs, missing or
-thin test coverage for the changed lines, error paths that don't report (see the
-every-span'd-layer rule), naming/layering drift from the relevant `write-*` skill, and
+thin coverage for important behavior (record broad additions for stage 3 on a draft), error paths
+that don't report (see the every-span'd-layer rule), naming/layering drift from the relevant
+`write-*` skill, and
 anything the PR body claims but the diff doesn't do.
 
 - A clear defect is fixed like any CI finding (Phase 3): local-verify, follow-up commit,
@@ -398,10 +402,9 @@ hypothesis, (c) what has been tried, (d) why further attempts are not confidence
 - Push to an open PR → surface the all-green state and stop. Merging is a developer
   decision unless explicitly delegated (see Safety Rules).
 
-This green report is the **terminal state that completes the task** when CI was reached
-via `open-pull-request` Phase 7 — that task is not done until you have reported it (or,
-per Phase 4, an escalated/blocked state instead). Include anything the Phase 1.2
-self-review surfaced that you did not fix yourself.
+This report completes the CI check required by `open-pull-request` Phase 7. A draft may still
+await scope approval, full relevant coverage, or cleanup under `develop-feature`; report those
+remaining steps accurately. Include any unresolved findings from the Phase 1.2 self-review.
 
 ---
 

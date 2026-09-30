@@ -18,7 +18,8 @@ API. New code uses Svelte 5 idioms unless an existing compatibility boundary req
 
 - Give a component one clear semantic responsibility. Split by behavior or ownership, not by an
   arbitrary line count.
-- Keep state in the lowest component that owns it. Pass explicit data and callbacks; use context only
+- Keep rendered state in the controller nearest its owner, following `write-frontend`. Pass explicit
+  controller contracts and data; use context only
   for stable, tree-wide capabilities that prop threading would obscure.
 - Build small semantic components that compose like bricks. Use props for behavior and stable state;
   use typed snippets, children, and neighboring components for optional content and arrangement.

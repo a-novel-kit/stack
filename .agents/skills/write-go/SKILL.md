@@ -11,6 +11,10 @@ description: >
 
 # Go Conventions (common)
 
+Load [develop-feature](../develop-feature/SKILL.md) for drafting, agreement, test timing, and final
+cleanup. Use focused checks while the solution is being discussed; complete the relevant regression
+suite after issue scope approval. The code-quality rules below apply throughout.
+
 This is the base layer for Go in every a-novel / a-novel-kit repository. The rules hold
 **whatever the repo kind** — a backend service, a shared library, or a one-off tool. Repo-kind
 rules live in two companion skills; load the one matching where you work **in addition to** this
@@ -69,10 +73,10 @@ is churn against a false positive.
 
 Then, before the change is done:
 
-1. Invoke **`write-go-tests`** — write or update tests for every file you created or modified, and
-   run the narrowest test target that covers the change (`a-novel test --type=go -y`, or raw
-   `go test ./<pkg>/...` for one package) until it is green. Tests are part of the change, not a
-   follow-up.
+1. Invoke **`write-go-tests`** — after scope approval, complete tests for meaningful changed
+   behavior and regression risks, not a quota per file. Run the affected suites
+   (`a-novel test --type=go -y`; raw `go test ./<pkg>/...` for focused iteration). Earlier tests
+   should be limited to those needed to validate the draft. Coverage is complete before readiness.
 2. Invoke **`document-code`** — doc comments for every symbol you added or changed. Also part of
    the change.
 

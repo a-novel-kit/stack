@@ -11,4 +11,7 @@ shortening individual functions; do not compress formatting or hide complexity t
 
 Before planning, writing, changing, or reviewing code, load
 [prefer-small-solutions](.agents/skills/prefer-small-solutions/SKILL.md). Keep its decision rule active
-through implementation and final review. Load other skills according to the work they govern.
+through implementation and final review. For software development, also load
+[develop-feature](.agents/skills/develop-feature/SKILL.md) to choose the current stage: local draft,
+issue and draft-PR review, approved-scope testing, or final cleanup. Load other skills according to
+the work they govern.

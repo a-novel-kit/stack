@@ -9,36 +9,25 @@ description: >
 
 # Feature Implementation Workflow
 
-Feature work in a-novel **backend services** (the `service-*` repos with the
-`cmd`/`internal/...`/`pkg` clean-architecture layout) runs through three gated phases:
-**Assess → Plan → Implement**. Phase 4 covers recovery when an earlier branch needs to change.
+Load [develop-feature](../develop-feature/SKILL.md) for the lifecycle: draft locally, agree on the
+direction, review issues and draft PRs, complete tests for approved scope, then tighten the code.
+This skill owns backend service layer decomposition and execution within those stages. Use
+`plan-feature` alongside a non-trivial draft; create its planning issues after draft agreement.
 
-> **Where the design comes from.** For non-trivial, multi-repo, or architectural work, `plan-feature`
-> settles the design first and produces a **planning issue** (an Epic, or a Feature with its Task
-> sub-issues). This skill executes it: the **Plan** phase below is the per-repo **branch
-> decomposition** of that agreed design, typically one branch/PR per Task sub-issue. Link every PR to
-> its issue with a `Closes #<n>` line, so merging closes the unit and advances the Epic's sub-issue
-> progress. A PR under an Epic spanning repos also carries the `epic:<N>` label and lands under the
-> gates in "Landing a Task that belongs to an Epic" below. Small, unambiguous changes start directly
-> here.
->
-> **Scope: backend services only.** Frontend **`platform`** repos are deliberately more monolithic, so
-> the layer-by-layer branch decomposition here does **not** apply to them; their authoring conventions
-> arrive in a later stage. Don't force a platform change through this workflow.
+For published work, link each PR to its Task with `Closes #<n>` or the full cross-repo reference.
+An Epic spanning repos also uses the membership and landing rules below. Frontend platforms use
+`write-platform` with `write-frontend` instead of this backend layer strategy.
 
 ---
 
 ## Phase 0: Before Writing Any Code
 
-**Check the workspace is yours.** Every checkout the task will touch must be on `master` with a
-clean tree — see `git-conventions` › Workspace Hygiene. A dirty tree or a foreign unmerged branch
-means another session is already working there: allocate your own stack with
-`a-novel core stacks new <name>` rather than building on top of their work, and prune it at the
-end of the lifecycle (3.6).
+**Check the workspace is yours.** Follow `git-conventions` for a fresh, isolated checkout when
+starting new work. Preserve and resume your own draft even when its tree is dirty. Do not build on
+or discard another contributor's uncommitted work.
 
-**Clarify ambiguous requests first.** If the request is broad ("improve the service", "refactor
-this area") or reads several ways, ask one focused question before reading any code. A plan built on
-a misunderstood requirement wastes read and write effort alike.
+**Lead the exploration.** Follow `develop-feature` to propose a concrete solution, explain
+boundaries at the developer's level, and ask focused questions while continuing independent work.
 
 **Read the code that will change.** Never guess at signatures, error types, or interfaces. Before
 proposing a plan, read:
@@ -109,7 +98,9 @@ care.
 
 ## Phase 2: Plan
 
-Decompose the feature into **one branch per layer boundary**. A branch is the smallest unit that:
+During local drafting, change the needed layers together to prove the behavior. After direction
+agreement, decompose published work into **one branch per layer boundary**. A finished branch is
+the smallest unit that:
 
 - Compiles on its own
 - Passes `a-novel test --type=go -y` (see `use-a-novel-cli` skill)
@@ -135,18 +126,10 @@ pair, which always moves as one unit), creates no migration, and changes no prot
 (multi-layer bug fixes, test additions, doc updates, code cleanup) with no user-facing behavior
 change also stay on a single branch — splitting them would be churn with no review benefit.
 
-**Present the plan to the developer before starting.** Show:
-
-- A numbered list of branches with their name and one-sentence description
-- Any breaking changes, flagged explicitly
-- Any layers deliberately skipped and why
-
-Wait for explicit approval of **the plan** before creating branch 1. The gate here is the
-_design_ — what to build and how to split it — not permission to use git. Once the plan is agreed,
-branching, committing, pushing, and opening (draft) PRs need no further sign-off; that mechanical
-freedom is `git-conventions` → "Branch and PR freedom". For a change small enough to skip this
-planning phase (a single-branch fix or improvement round), there is no plan to approve — just
-branch from fresh master and go.
+Present the proposed branch split, breaking changes, and any omitted layers when recording the
+agreed draft as issues. Do not require branch decomposition or repeated approvals before exploring
+locally. Existing agreement authorizes execution within scope; keep new material decisions open for
+discussion. Small, clear changes can use a single branch and the shorter development path.
 
 ---
 
@@ -190,18 +173,24 @@ that branch's changes.
   and Go interface mocks. Commit the generated files (`internal/models/proto/gen/`, `internal/handlers/mocks/`, `internal/core/mocks/`)
   in the same commit as the change that required them — never in a separate cleanup commit.
 - **Only change what the feature requires** (see "Surgical changes" under Key Principles).
-- Keep diffs small and reviewable. A handler + its test + the mock update = one commit.
+- Keep published diffs small and reviewable. Focused tests may accompany a draft; complete the
+  regression suite after issue scope approval per `develop-feature`.
+- Run the changed service locally and provide concrete steps, expected results, limits, and open
+  decisions for the developer to review.
 
 ### 3.3 Test
 
-Run the narrowest target that covers the changed layer:
+During drafting and issue review, run focused checks and add only tests needed to validate a bug,
+risky invariant, or uncertain design. Once issue scope is approved, complete relevant regression
+coverage with `write-go-tests` or `write-js-package`, then run the affected suites:
 
 ```bash
 a-novel test --type=go -y    # Go: DAO, services, handlers, lib + pkg/go
 a-novel test --type=pnpm -y  # pkg/js (containerised service env, auto-managed)
 ```
 
-Tests must pass before the branch is ready. Never mark a branch done with failing tests.
+Tests must pass before the branch is ready. A draft PR may still be awaiting the planned coverage
+expansion; describe that explicitly. Do not disable existing checks or mark failing work done.
 
 ### 3.4 Commit
 
@@ -218,14 +207,13 @@ git add <specific files>
 git commit -m "feat(dao): add revoke repository"
 ```
 
-### 3.5 Wait for developer approval
+### 3.5 Tighten and hand off
 
-**Do not proceed to the next branch until the developer says the current one is ready.** Present:
-
-- A brief description of what changed
-- The test result
-- Any decisions made (e.g., "I chose to add ErrJwkRevokeNotFound rather than reuse ErrJwkDeleteNotFound because…")
-- Any open questions or deferred work
+Apply `develop-feature`'s mandatory final cleanup and `prefer-small-solutions` across the complete
+affected path. Re-run checks affected by cleanup. Report scope, verification, decisions, limitations,
+and review guidance. Use `open-pull-request` for publication at the appropriate stage and check both
+issues and PRs with `resolve-pr-feedback`. Continue agreed work without a new approval for every
+branch; discuss material scope or design changes before depending on them.
 
 ### 3.6 Give the workspace back
 
@@ -311,10 +299,9 @@ makes the final PR harder to review.
 
 ## Key Principles
 
-**Surgical changes.** Every line changed must be required by the feature. Refactoring, style fixes,
-and "while we're here" improvements belong on a separate branch with their own commit — mixed
-changes are hard to review and bisect. When you spot an unrelated issue, note it as a separate
-improvement and continue on the feature.
+**Surgical changes.** Keep implementation and final simplification within the agreed behavior and
+affected path. Removing draft scaffolding or redundant code belongs to this change. Unrelated
+refactoring and improvements belong to separate work; record them without expanding the scope.
 
 **Additive over destructive.** Prefer adding new fields, methods, and endpoints over removing or
 changing existing ones. When removal is unavoidable, mark it `BREAKING CHANGE` and flag it to the
@@ -323,9 +310,8 @@ developer.
 **One concern per commit.** A commit answers exactly one "what changed?" question. A commit you
 cannot describe in a single conventional-commit line contains more than one concern.
 
-**Test every branch.** The relevant test target must pass on every branch, not just the final
-one: `a-novel test --type=go -y` for Go layers (internal + pkg/go), `a-novel test --type=pnpm -y` for pkg/js.
-A branch that compiles but fails tests is not ready for review.
+**Validate for the stage.** Drafts need focused evidence; full relevant coverage is completed after
+scope approval. Each finished branch must pass its applicable suites before being marked ready.
 
 **Verify before proposing.** Read the code first; a plan built on assumed file locations or
 signatures wastes the developer's review time.

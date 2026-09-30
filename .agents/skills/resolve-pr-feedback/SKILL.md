@@ -9,6 +9,13 @@ description: >
 
 # Resolve PR Feedback
 
+Load [develop-feature](../develop-feature/SKILL.md) to determine whether this work is in issue/draft
+review or final verification. During active development, survey linked issues and PRs together when
+resuming, after meaningful revisions or pushes, during CI waits, and before stage transitions or
+handoff. Read issue bodies/comments as well as all PR feedback surfaces below. Keep decisions needing
+expertise the developer lacks open on the relevant issue, with a recommendation and their impact on
+scope; do not mistake an unanswered discussion for approval.
+
 > **Load this skill the moment a review arrives — before reading the comments, not after fixing
 > them.** The trigger is a review landing on a PR you opened, however it is phrased ("reviewed",
 > "minor review landed", "see my comments"), and it fires even when the fixes look obvious.
@@ -83,8 +90,9 @@ Fields that matter:
 
 - **state**: OPEN / CLOSED / MERGED. Never act on non-OPEN PRs without confirmation — reopening a
   closed discussion is a different kind of decision.
-- **isDraft**: draft PRs rarely need the full review-cycle. If the reviewer left comments anyway,
-  confirm with the user whether they want them addressed now.
+- **isDraft**: draft PRs and issues receive review in parallel. Address feedback within the already
+  authorized development task; draft status does not require fresh permission. A read-only survey
+  request remains read-only.
 - **reviewDecision**: APPROVED / CHANGES_REQUESTED / REVIEW_REQUIRED. Shapes Phase 5.
 - **baseRefName** / **headRefName**: land fixes as new commits on `headRefName`. Force-push with
   `--force-with-lease` only if a rebase was required.
@@ -335,7 +343,9 @@ rule from `git-conventions`.)
 
 ### 4.2 Run the narrowest test target
 
-After each logical change, before pushing:
+After each logical change, before pushing, apply the current `develop-feature` stage. Use focused
+checks during issue/draft review; complete the full relevant coverage only after scope approval.
+For final verification, use the affected suites:
 
 - Go changes (internal or `pkg/go`) → `a-novel test --type=go -y`
 - `pkg/js` changes → `a-novel test --type=pnpm -y`
@@ -419,7 +429,9 @@ The `thread-node-id` comes from the Phase 1.3 GraphQL response, not the REST com
 
 Only after:
 
-- Every accepted fix has been pushed.
+- Every accepted fix has been pushed, and linked issue discussions have been checked for scope changes.
+- The request is appropriate to the current stage; completed-work review requires the testing and
+  cleanup gates in `develop-feature`.
 - CI is green — hand off to `monitor-ci` while it runs.
 - Any decline replies have been posted so the reviewer has context when they look again.
 

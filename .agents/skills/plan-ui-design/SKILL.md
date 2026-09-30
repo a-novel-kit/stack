@@ -5,15 +5,17 @@ description: >
   materially reshaping user flows, pages, navigation, forms, data views, interaction patterns,
   component families, visual foundations, design tokens, or product-facing interface content; also
   use when comparing visual directions or reviewing whether proposed UI is coherent, distinctive,
-  accessible, reusable, and ready for implementation. Produces a rendered, testable design contract
-  before `write-frontend` or `write-design-system` implementation.
+  accessible, reusable, and ready to finish. Refines a rendered, testable design contract through
+  local drafting with `write-frontend` or `write-design-system`, before publication and final tests.
 ---
 
 # Plan UI Design
 
-Work one layer above frontend code. Turn a product need into an interaction and visual contract that
-can be challenged before implementation. Keep the workflow proportional: amend an existing contract
-for a local change; run every stage for a new flow, pattern, component family, or foundation.
+Load [develop-feature](../develop-feature/SKILL.md). Turn the product need into an interaction and
+visual contract through a local working draft and discussion. Act as UX and technical lead: propose
+improvements, explain boundaries at the developer's level, and preserve unresolved specialist
+decisions for the relevant issue. Keep the workflow proportional to the changed flow or component;
+the design contract can evolve alongside draft code.
 
 Load [references/visual-language.md](references/visual-language.md) when extracting a reusable
 visual direction from screenshots or other references. Load [references/sources.md](references/sources.md)
@@ -25,8 +27,9 @@ or external design-system precedent. Prefer current primary sources over remembe
 - Let `plan-feature` own technical architecture, cross-repository scope, and the planning issue.
 - Own user intent, task flow, information hierarchy, interaction behavior, content, visual language,
   component need, and validation evidence here.
-- Hand the approved contract to `write-frontend`; add `write-design-system` for foundations or reusable
-  components, `write-svelte` for Svelte, and `write-frontend-tests` for stories and tests.
+- Build and refine the local contract with `write-frontend`; add `write-design-system` for
+  foundations or reusable components, `write-svelte` for Svelte, and `write-frontend-tests` for
+  stories and tests. Complete broad automated coverage after issue scope approval.
 - Do not let a mockup silently decide product behavior, and do not let implementation convenience
   silently decide the user experience.
 
@@ -173,7 +176,7 @@ it localized, and reserve it for selected, focused, or intentionally luminous gr
 
 ## 6. Write the component or pattern contract
 
-Specify before coding:
+Specify and refine alongside the local draft; settle before finalizing scope:
 
 - purpose, non-goals, anatomy, composition, and content ownership;
 - framework-native composition points for text, markup, icons, and nested components. Do not reduce
@@ -197,7 +200,8 @@ then document any deviation and verify it with keyboard and assistive technology
 
 ## 7. Render and challenge the contract
 
-Treat Storybook as the design review surface, not a gallery added after coding.
+Use Storybook as the design review surface. Start with the states needed to assess the local draft;
+complete the relevant state matrix and automated coverage after scope approval.
 
 1. Render foundations and every meaningful component state with realistic content. For component
    families, use aligned variant, size, and state matrices so differences can be read at a glance;
@@ -222,8 +226,9 @@ Do not approve visual work from source, generated values, or a screenshot alone.
 
 ## Design contract output
 
-Capture the result in the planning issue, Storybook docs, or the smallest durable artifact the task
-already uses:
+Keep the draft contract in the local handoff and Storybook while iterating. After direction
+agreement, capture it in the planning issue with `plan-feature`; keep specialist decisions the
+developer cannot resolve open in issue discussions. Use the smallest applicable form:
 
 ```text
 Outcome and audience
