@@ -344,7 +344,7 @@ numeric VM/disk incarnations, not reusable names. Recheck that binding under adm
 the destination durably before host mutation; a blank disk alone does not establish an unused
 attempt. Let the native supervisor own the one-shot worker and its timeout. Lost SSH or runner
 acknowledgement leaves unknown work, not permission to replay. Record private files-only evidence
-and confirm the host stopped before release; keep the reservation until reviewed target cleanup.
+and confirm the host stopped before release; keep the reservation after target cleanup to block reuse.
 
 Keep restored files, completed PostgreSQL recovery, SQL validation and traffic cutover as separate
 outcomes. A one-shot file restore should reserve a fresh attempt and preserve failures without replay.
@@ -361,6 +361,13 @@ Restore into an isolated target before exposing services. Keep schedulers, publi
 human-only initializer absent unless the recovery plan explicitly needs them. Verify dependency
 health from the permitted network, measure the full operator recovery time separately from automated
 restore time, then revoke temporary access and remove only the approved disposable target.
+
+When the disposable project is already the teardown boundary, share its native deletion path rather
+than adding a resource-by-resource controller. Bind cleanup to the exact project number, completed
+exported recovery evidence and revoked-access attestation; keep source admission through one dispatch
+and completion recording. Lost acknowledgement requires read-only outcome reconciliation, never
+another delete. Retain management state, backups and destination reservations. `DELETE_REQUESTED`
+is not permanent erasure or final billing settlement; verify those separately.
 
 Do not change storage lifecycle rules independently of the backup engine. Physical backups and WAL
 form recovery chains; generic age-based deletion can invalidate retained backups. A new backup tool
