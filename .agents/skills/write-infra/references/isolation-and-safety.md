@@ -378,6 +378,14 @@ Do not change storage lifecycle rules independently of the backup engine. Physic
 form recovery chains; generic age-based deletion can invalidate retained backups. A new backup tool
 needs an explicit IAM, retention, format-transition, and restore-proof assessment.
 
+Test native expiry failures before and after catalog changes; failure need not mean rollback.
+Prove retained chains through SQL, then explicitly reconcile with the native engine rather than
+repairing its catalog. A dry run must not mutate content, but cannot guarantee a later deletion.
+For versioned object storage, separate live-chain expiry from noncurrent-generation disposal:
+name-based deletion may only make an object noncurrent. Prefer native noncurrent-age lifecycle
+rules, never live-age or version-count shortcuts for physical chains. Keep historical-view windows,
+soft-delete lag and all billable generations explicit; POSIX denial tests do not prove GCS retention.
+
 For mutable object catalogs, distinguish versioning, age-based retention and deletion-time recovery.
 Test an aged dependency still needed by a fresh backup: a writer able to delete exact generations may
 outlive their retention protection. Native soft-delete recovery can create new generations and
