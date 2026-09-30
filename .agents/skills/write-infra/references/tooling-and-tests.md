@@ -181,7 +181,12 @@ the old writer and its schedules while keeping readers for retained recovery poi
 
 Acceptance preparation should exercise the current topology through its existing owners and native
 units, not add a second proof coordinator. Distinguish configuration, runtime health and recovered
-data evidence; a schema-only SQL check cannot prove expected rows survived. Keep monitoring opt-in
+data evidence; a schema-only SQL check cannot prove expected rows survived. Bind an independent
+source expectation to the exact backup selection and completion. For a rehearsal fingerprint,
+quiesce application writes through backup completion, compare persisted fields rather than
+clock-dependent views, and keep payloads inside the database using native serialization/hashing.
+An omitted expectation remains schema-only evidence; never learn it from the restored destination.
+Keep monitoring opt-in
 separate from writer activation, and price attended trials separately from recurring operation.
 
 Keep navigation predictable: repeated service declarations, explicit domain operations, typed internal
