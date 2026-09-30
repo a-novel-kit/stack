@@ -179,6 +179,11 @@ resources and retention obligations end. A stopped host still has billable disks
 instance is a capacity candidate, not a cost or recovery guarantee. Define the evidence for retiring
 the old writer and its schedules while keeping readers for retained recovery points.
 
+Acceptance preparation should exercise the current topology through its existing owners and native
+units, not add a second proof coordinator. Distinguish configuration, runtime health and recovered
+data evidence; a schema-only SQL check cannot prove expected rows survived. Keep monitoring opt-in
+separate from writer activation, and price attended trials separately from recurring operation.
+
 Keep navigation predictable: repeated service declarations, explicit domain operations, typed internal
 contracts, and narrow adapters to maintained tools. Confine untyped external documents to boundaries.
 Do not duplicate schema rules in Go or create interface layers without a real boundary to isolate.
