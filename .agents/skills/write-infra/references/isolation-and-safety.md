@@ -339,6 +339,13 @@ read-only assessment even while mutation is disabled. A stopped-host preparation
 restore receipt. Execution, source fencing and cutover need separately admitted outcomes; uncertain
 preparation retains the source guard. Registration alone grants no IAM or image-provenance proof.
 
+Before formatting a prepared recovery disk, bind execution to the recorded state generation and
+numeric VM/disk incarnations, not reusable names. Recheck that binding under admission and reserve
+the destination durably before host mutation; a blank disk alone does not establish an unused
+attempt. Let the native supervisor own the one-shot worker and its timeout. Lost SSH or runner
+acknowledgement leaves unknown work, not permission to replay. Record private files-only evidence
+and confirm the host stopped before release; keep the reservation until reviewed target cleanup.
+
 Keep restored files, completed PostgreSQL recovery, SQL validation and traffic cutover as separate
 outcomes. A one-shot file restore should reserve a fresh attempt and preserve failures without replay.
 Restored configuration can contain executable archive readers; starting it needs its own reviewed
