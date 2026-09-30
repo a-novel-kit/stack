@@ -332,6 +332,13 @@ major version, backup object generation, integrity evidence, and required secret
 upload is not a restore test. Preserve old backup readers until retained recovery points expire or
 have a reviewed replacement.
 
+For disposable recovery preparation, separate the source service's admission guard from the
+destination's state and plan namespace. Reuse protected plan custody instead of a second coordinator.
+Validate the complete protected project set before authentication; keep registered state visible to
+read-only assessment even while mutation is disabled. A stopped-host preparation record is not a
+restore receipt. Execution, source fencing and cutover need separately admitted outcomes; uncertain
+preparation retains the source guard. Registration alone grants no IAM or image-provenance proof.
+
 Keep restored files, completed PostgreSQL recovery, SQL validation and traffic cutover as separate
 outcomes. A one-shot file restore should reserve a fresh attempt and preserve failures without replay.
 Restored configuration can contain executable archive readers; starting it needs its own reviewed
