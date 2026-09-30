@@ -332,6 +332,11 @@ major version, backup object generation, integrity evidence, and required secret
 upload is not a restore test. Preserve old backup readers until retained recovery points expire or
 have a reviewed replacement.
 
+Check native verifier report semantics before using process completion as integrity evidence:
+pgBackRest can exit zero with damaged files or an empty repository. Reuse the bounded worker and
+native report, test damaged fixtures with repaired positive controls, and scope alerts to that worker.
+An incomplete scan or missing expected backup/WAL coverage is not success; keep SQL restore drills.
+
 For disposable recovery preparation, separate the source service's admission guard from the
 destination's state and plan namespace. Reuse protected plan custody instead of a second coordinator.
 Validate the complete protected project set before authentication; keep registered state visible to
