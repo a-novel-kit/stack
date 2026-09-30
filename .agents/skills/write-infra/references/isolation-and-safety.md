@@ -188,6 +188,13 @@ protected admission, stopped timers and drained workers; stopping timers does no
 archiver. Archiving failure retains WAL and can fill the source disk, so require delivery-tested
 deadline/freshness and disk alerts before activation.
 
+Connect pre-apply quiescence to existing plan custody and admission before introducing another
+maintenance-session coordinator. Bind observed hosts to the reviewed prior state, including numeric
+instance identity; a template update does not prove its MIG member changed. A successful systemd
+stop alone does not prove that Docker-owned work stopped: verify loaded inactive units, no pending
+jobs and no remaining owned containers. Uncertain transport leaves admission held. Converged
+infrastructure and stopped workers are not authority to restart databases or resume schedules.
+
 ## Define the failure contract
 
 An established API rollout keeps the serving revision while the candidate receives no ordinary
