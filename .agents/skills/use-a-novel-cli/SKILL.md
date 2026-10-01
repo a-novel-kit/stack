@@ -1,8 +1,8 @@
 ---
 name: use-a-novel-cli
 description: >
-  Use a-novel for local tests, builds, releases, and service lifecycle. Always load alongside
-  skills performing those operations; route to the needed command reference.
+  Operate a-novel for tests, builds, releases, services, workspace/repository management, and
+  secrets. Always load alongside skills that test, build, release, or start/stop services.
 ---
 
 # Use the `a-novel` CLI

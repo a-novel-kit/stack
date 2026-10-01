@@ -1,8 +1,8 @@
 ---
 name: coordinate-landing
 description: >
-  Coordinate atomic landing, recovery, rollback, and release of a cross-repo Epic. Load when
-  preparing or operating the landing saga and its workflow gates.
+  Coordinate atomic landing, recovery, rollback, and release of a cross-repo Epic. Load whenever
+  one Epic spans several repositories, including planning its landing saga.
 ---
 
 # The landing saga

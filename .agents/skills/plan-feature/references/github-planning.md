@@ -46,7 +46,6 @@ silently degrade the plan to fit a missing scope.
 
 ---
 
-
 ## Operating the board
 
 **One board per org, scaled by _views_ not boards.** Each org has exactly one "Tasks" project, and

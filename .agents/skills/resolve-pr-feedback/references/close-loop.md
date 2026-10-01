@@ -116,7 +116,6 @@ Only prune a stack you allocated. Work done in the default stack leaves nothing 
 
 ---
 
-
 ## Starting your own thread
 
 Claude may initiate a thread when:

@@ -1,8 +1,8 @@
 ---
 name: write-frontend-tests
 description: >
-  Write or change browser tests, stories, fixtures, mocks, and test configuration. Load for Vitest,
-  Testing Library, Storybook interactions, accessibility, and browser journeys.
+  Test frontend behavior and change tests, stories, fixtures, mocks, or test configuration. Load
+  when behavior needs coverage; always pair with write-frontend.
 ---
 
 # Frontend Test Conventions

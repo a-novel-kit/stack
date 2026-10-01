@@ -61,7 +61,6 @@ value)` on the happy path. See the Telemetry section.
 
 ---
 
-
 ## Transaction scoping
 
 `postgres.GetContext(ctx)` returns the current DB handle from the context — a `*bun.DB`

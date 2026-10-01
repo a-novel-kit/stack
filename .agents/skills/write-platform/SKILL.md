@@ -1,8 +1,9 @@
 ---
 name: write-platform
 description: >
-  Build or review SvelteKit platform apps: routes, sessions, state, localization, app composition,
-  health, and CI. Load with write-frontend; add Svelte and test skills as needed.
+  Create, edit, review, or debug SvelteKit platform apps: routes, sessions, state, localization,
+  app composition, health, and CI. Always load write-frontend; add Svelte and test skills as
+  needed.
 ---
 
 # Platform Application Conventions

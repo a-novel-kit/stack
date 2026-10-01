@@ -37,7 +37,6 @@ through the `kit/workflows` composite actions, not through the CLI.
 
 ---
 
-
 ## `a-novel build` — building artifacts
 
 Discovers Go modules, pnpm build scripts, a root `Dockerfile`, and
@@ -64,7 +63,6 @@ change. Avoid raw `podman build -f ...`: `a-novel build --type=podman` discovers
 Dockerfiles, builds them with the same convention CI uses, and prints a pass/fail report.
 
 ---
-
 
 ## `a-novel publish` — release doc helpers
 

@@ -18,7 +18,6 @@ Configuration structs + loading from env vars or YAML. No logic beyond parsing a
 
 ---
 
-
 ## Lib layer (`internal/lib/`)
 
 Only tools unavailable from dependencies or stdlib. Keep it **as small as possible — ideally
@@ -27,7 +26,6 @@ belongs here at all (vs. inside the relevant package). During maintenance, look 
 newer upstream now subsumes, and delete it.
 
 ---
-
 
 ## Models (`internal/models/`)
 
@@ -48,7 +46,6 @@ enter `core` or `dao`; handlers own all proto↔core conversion.
 
 ---
 
-
 ## pkg/go (exported Go client)
 
 Optional — create only when another service consumes this one as a library. When it exists: export
@@ -57,7 +54,6 @@ provide a `NewClient()` that wraps connection setup and returns a clean interfac
 implementation detail through the public API.
 
 ---
-
 
 ## cmd/ (targets)
 

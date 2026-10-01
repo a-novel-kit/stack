@@ -1,8 +1,8 @@
 ---
 name: prepare-release
 description: >
-  Prepare a release: inspect commits, recommend a version bump, and document required consumer
-  migrations before tagging. Major versions require a planned version-line initiative.
+  Advise on release size, unpublished changes, and consumer migration guides. Use before a release
+  or when asked about version bumps or migration needs; never tag, push, or publish.
 ---
 
 # Prepare a release — size it, and write its migration guide

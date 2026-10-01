@@ -63,7 +63,6 @@ the field blank.
 
 ---
 
-
 ## Phase 3: Handling Missing Values
 
 When an input is required but not available, write an HTML TODO comment at the exact

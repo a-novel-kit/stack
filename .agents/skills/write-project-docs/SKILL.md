@@ -18,12 +18,12 @@ one source file (see `document-code`). Keep that wide-angle view current, so the
 can stay local and specific.
 
 `README.md` is a reference **entrypoint**: how to install, configure, and call the project, plus that
-global picture. Closer to an extension of the code comments than to a guide, it follows the section
-order below rather than a narrative. `CONTRIBUTING.md` and `SECURITY.md` are **guides**: they walk a
+global picture. Closer to an extension of the code comments than to a guide, it follows the
+[fleet section order](references/structure.md) rather than a narrative. `CONTRIBUTING.md` and `SECURITY.md` are **guides**: they walk a
 reader through a process, as do the pages they link (onboarding, a board-lifecycle walkthrough).
 
 The skill has two modes, detected in Phase 2: **scaffold** generates a missing file from the
-templates here, **update** edits the relevant section of an existing one in place.
+[templates](references/templates.md), **update** edits the relevant section of an existing one in place.
 
 Separate concerns:
 
@@ -33,7 +33,7 @@ Separate concerns:
 - `document-code` — governs doc comments inside source files (Go, SQL, TS, etc.), not these
   project-level Markdown files. Its **Prose economy** section does reach here: it owns
   sentence-level prose craft on every surface we write, README sections included. Load it alongside
-  this skill and treat it as the base layer the Editorial Principles below build on.
+  this skill and treat it as the base layer for the [editorial principles](references/editorial.md).
 
 ---
 
@@ -63,7 +63,8 @@ ls README.md SECURITY.md CONTRIBUTING.md 2>/dev/null
 - File missing → scaffold mode: generate from template in Phase 4
 - File present → update mode: read it first, edit the relevant section only (Phase 5)
 
-Never overwrite an existing file with the full template — see Principle 7.
+Never overwrite an existing file with the full template — see
+[Principle 7](references/editorial.md#7-edit-in-place-preserve-unknown-content).
 
 ---
 
@@ -132,11 +133,10 @@ project documentation to verified project capabilities while retaining the fleet
 
 ## Quick Reference
 
-| Situation                                    | Skill phase                                                  |
-| -------------------------------------------- | ------------------------------------------------------------ |
-| New project, all docs missing                | Phase 1 (collect inputs) → Phase 4 (scaffold all three)      |
-| "Add env var X to README"                    | Phase 5 (update mode, edit the config table)                 |
-| "Update security contact email"              | Phase 5 (edit SECURITY.md only)                              |
-| "Docs for a project split off from monorepo" | Phase 1 → Phase 4, then port custom sections from the parent |
-| "Port these skills to new-repo"              | [Portability to New Projects](#portability-to-new-projects)  |
-| Required value unavailable                   | [Handling Missing Values](references/inputs.md#phase-3-handling-missing-values)  |
+- **New project, all docs missing:** collect [inputs](references/inputs.md), then
+  scaffold the three [templates](references/templates.md).
+- **Add a configuration variable or update a security contact:** use update mode and change
+  only the relevant table or section.
+- **Project split from a monorepo:** collect inputs, scaffold, then port the parent's custom sections.
+- **Use the skills in another project:** follow [Portability to New Projects](#portability-to-new-projects).
+- **Required value unavailable:** use [Handling Missing Values](references/inputs.md#phase-3-handling-missing-values).

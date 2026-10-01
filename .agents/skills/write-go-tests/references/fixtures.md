@@ -50,7 +50,6 @@ postgres.NewContext(ctx, configtest.PostgresPreset)
 
 ---
 
-
 ## Static and large test data
 
 Keep only short values inline when they make a test case easier to read. Put structured definitions

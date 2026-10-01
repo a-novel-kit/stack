@@ -46,7 +46,6 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
 
 ---
 
-
 ## Handlers layer (`internal/handlers/`)
 
 Translate transport requests into service calls and serialize the response. HTTP status codes, JSON

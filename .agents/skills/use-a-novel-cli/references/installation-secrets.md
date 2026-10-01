@@ -23,7 +23,6 @@ automatically into the child env of `a-novel test`, `a-novel run` and `a-novel r
 declared-but-unset secret is **skipped with a descriptive warning**, never failed silently. The
 manifest carries no values, so it is safe to commit.
 
-
 ## `a-novel install` — rebuild and reinstall the CLI
 
 The dev-loop reinstall cycle in one command: checkpoint daemon state, rebuild and install the binary
@@ -40,7 +39,6 @@ Source defaults to `<default-stack>/cli` (typically `~/git-projects/a-novel/cli`
 `a-novel core status` reports the freshly-built binary's version and the same targets that were
 running before. Run it after editing the CLI itself.
 
-
 ## `a-novel claude` — launch Claude Code from the stack root
 
 Launches Claude Code with the stack root as its working directory, so the domain skills in
@@ -51,7 +49,6 @@ from. Arguments pass straight through to the underlying `claude` CLI.
 a-novel claude                                    # interactive session, rooted at the stack
 a-novel claude -p "<prompt>"                      # non-interactive: print and exit
 ```
-
 
 ## `a-novel version` — print the CLI version
 
