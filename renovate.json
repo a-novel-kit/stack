@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>a-novel-kit/workflows//renovate/library#v1.35.0"],
+  "extends": ["github>a-novel-kit/workflows//renovate/library#v1.36.2"],
   "packageRules": [
     {
       "description": "Keep cli/golangci-lint.mod on its own branch. A Renovate artifact update receives the whole branch config, inherited from whichever upgrade sorts first, so a shared branch would let this modfile impose its goGetDirs on cli/go.mod \u2014 and would run only one modfile's post-upgrade task. One branch per modfile keeps every rule pointed at the file it names.",
