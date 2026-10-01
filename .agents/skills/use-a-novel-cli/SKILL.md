@@ -25,8 +25,9 @@ a-novel
 └── version       standalone — print the CLI version
 ```
 
-`secrets`, `install`, `claude` and `version` complete the surface and have their own sections
-below; `cli/README.md` in the stack repo remains the exhaustive reference.
+`secrets`, `install`, `claude` and `version` complete the surface; their details live in
+[installation and secrets](references/installation-secrets.md). `cli/README.md` in the stack repo
+remains the exhaustive reference.
 
 **Always prefer `a-novel <verb>` over the equivalent raw command** when one exists.
 Makefiles are gone from every repo — `make` is never the answer. What the CLI doesn't

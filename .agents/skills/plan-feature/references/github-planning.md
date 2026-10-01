@@ -64,8 +64,8 @@ see the board's own statuses (_Awaiting release_, _Tracking_, _Applied_), and Gi
 merged → Done_ directly contradicts the bot's _merged → Awaiting release_. The one built-in that stays
 **on** is _Item added to project → Triage_: at add-time there is no Pull Request to read from, so the
 bot has no opinion yet, and anything boarded outside the skills lands in the Triage queue instead of
-sitting status-less and unseen — including an item whose field edits were forgotten (see the footgun
-above). Planned work never lingers there, because the skills set its real status in the same breath.
+sitting status-less and unseen — including an item whose field edits were forgotten (see the
+[issue field requirements](planning-issues.md#the-planning-issue)). Planned work never lingers there, because the skills set its real status in the same breath.
 **Keep the _auto-add_ workflows OFF** too — both _Auto-add to project_ (repo) and _Auto-add
 sub-issues to project_. **The bot sets Status, the skills add the items:** every issue and sub-issue
 joins the board explicitly via `--project` on `gh issue create` (or `gh project item-add`), so board

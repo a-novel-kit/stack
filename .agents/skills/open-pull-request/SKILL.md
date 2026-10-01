@@ -28,6 +28,9 @@ update an open PR rather than recreating it.
 
 - Before creating or editing a PR, changing draft/ready status, or mirroring tracking metadata,
   read [authoring and metadata](references/authoring.md).
+- After every push to an existing draft PR, recheck its draft reason using the
+  [readiness rule](references/authoring.md#61-flip-a-draft-to-ready-the-moment-it-qualifies-mandatory).
+  Mark it ready in the same turn once all applicable completion gates pass.
 - Before a final code/issue handoff, read [the session recap contract](references/handoff.md).
   Include every outstanding session item and each PR's admin-only approval command after review.
 - After a push, use `monitor-ci` through green or a documented escalation, and inspect feedback

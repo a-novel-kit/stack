@@ -29,8 +29,9 @@ the codebase. Fix a stale or failing test; do not delete it.
 
 ## Load the test pattern you need
 
-Before writing or modifying a test body, read [table-driven tests and mocks](references/patterns.md).
-When adding, moving, or sharing test data or setup, also read [fixtures](references/fixtures.md).
+Before writing, modifying, or reviewing a test body, read
+[table-driven tests and mocks](references/patterns.md). For work involving test data or setup,
+including changes to existing fixtures and fixture reviews, also read [fixtures](references/fixtures.md).
 For layer-specific behavior load `write-go-service` or `write-go-kit` as appropriate.
 
 Pick the closest truthful layer that exposes the changed behavior. Reuse established cases and
@@ -74,7 +75,7 @@ Test files take the name of the production file they cover, plus a `_test.go` su
 underscore) from production builds. A file named `something.test.go` (with a dot) is **compiled
 into the production binary** — `.test.` is text in the filename, not a build-tag signal. Such a
 file carrying test-only globals has leaked into the shipped binary and must be moved (see
-"Cross-package test fixtures" below).
+[Cross-package test fixtures](references/fixtures.md#cross-package-test-fixtures)).
 
 ---
 

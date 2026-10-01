@@ -19,6 +19,9 @@ coherent local pattern unless it conflicts with a rule below or a current platfo
 This skill owns generic implementation quality, not repository placement. In the Agora workspace,
 use `write-platform` for terminal application shells and product policy, `write-design-system` for
 uikit visual contracts, and nodelib for reusable non-visual client runtime or tooling configuration.
+Load `write-svelte` for Svelte files, `write-frontend-tests` for tests or stories, and
+`write-design-system` for tokens or reusable UI. Service REST clients under `pkg/js` also load
+`write-js-package`.
 
 Load `plan-ui-design` before deciding a new or materially changed flow, interaction pattern,
 information hierarchy, component family, or visual language. This skill owns implementation quality;

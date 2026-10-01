@@ -1,8 +1,9 @@
 ---
 name: manage-versions
 description: >
-  Keep cross-repo versions and contracts compatible through development, staged rollout, dependency
-  releases, and consumer pins. Load for unreleased dependencies or breaking published APIs.
+  Keep cross-repo changes version-compatible through development, releases, and consumer pins.
+  Load when repos must remain compatible to merge: unreleased dependencies, proto/REST contract
+  changes, or breaking published symbols.
 ---
 
 # Cross-repo version management

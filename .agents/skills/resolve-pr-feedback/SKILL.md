@@ -1,8 +1,9 @@
 ---
 name: resolve-pr-feedback
 description: >
-  Inspect PRs and linked issues, evaluate review feedback, reply, resolve settled threads, and
-  request re-review. Load before reading a new review or working on issue discussions.
+  Inspect PR status and linked issues, evaluate review feedback, reply, resolve settled threads,
+  and request re-review. Load for PR status checks, before reading a new review, or for issue
+  discussions.
 ---
 
 # Resolve PR Feedback
@@ -14,7 +15,7 @@ handoff. Read issue bodies/comments as well as all PR feedback surfaces below. K
 expertise the developer lacks open on the relevant issue, with a recommendation and their impact on
 scope; do not mistake an unanswered discussion for approval.
 
-Read this skill before acting on a review, even when a proposed fix looks obvious. A status check
+Read this skill before reading review comments, even when a proposed fix looks obvious. A status check
 and an instruction to address feedback both start with the survey; only authorized feedback work
 continues through classification, fixes, replies, and resolution. Settled threads require both a
 reply and resolution, using the identity and verification rules in the closing-the-loop reference.

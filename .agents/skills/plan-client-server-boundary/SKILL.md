@@ -1,8 +1,9 @@
 ---
 name: plan-client-server-boundary
 description: >
-  Design client/server responsibility, authorization, invariants, atomicity, retries, and workflow
-  ownership. Load with plan-feature for public APIs or changes crossing that boundary.
+  Design client/server authority, validation, invariants, atomicity, retries, and workflows.
+  Load with plan-feature for public API changes, moving client/server behavior, composing service
+  calls, client-defined JSON, or long-running or paid operations.
 ---
 
 # Plan client/server boundaries

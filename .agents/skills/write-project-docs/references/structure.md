@@ -11,7 +11,8 @@ Contents:
 
 ## Fleet standard (current)
 
-This section is **authoritative and supersedes any older guidance below** where they conflict.
+This fleet standard is **authoritative and supersedes older guidance in the
+[templates](templates.md) and [editorial principles](editorial.md)** where they conflict.
 It applies to EVERY repo in the `a-novel` and `a-novel-kit` orgs — backend services, the Go
 library (`golib`), the JS/TS packages (`nodelib`), the reusable Actions repo (`workflows`),
 and the `stack` CLI. Reference implementations: the

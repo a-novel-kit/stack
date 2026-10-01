@@ -7,7 +7,8 @@ description: >
 
 # Frontend Test Conventions
 
-Load `write-frontend` and read the production behavior before writing tests. Read neighboring tests
+Load `write-frontend`, plus `write-svelte` for Svelte targets and `write-design-system` for uikit.
+Read the production behavior before writing tests. Read neighboring tests
 and the official documentation for the installed testing tools. Preserve existing tests unless the
 behavior they specify has been intentionally removed.
 

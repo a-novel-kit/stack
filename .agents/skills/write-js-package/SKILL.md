@@ -2,7 +2,7 @@
 name: write-js-package
 description: >
   Write or review service JavaScript/TypeScript REST clients under pkg/js, including exports,
-  package/build configuration, and integration tests. Add write-frontend where applicable.
+  package/build configuration, and integration tests. Also load write-frontend.
 ---
 
 # JS Package Writing Skill

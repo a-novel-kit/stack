@@ -2,7 +2,7 @@
 name: develop-feature
 description: >
   Guide software changes through local draft, agreement, issue/PR review, scoped tests, and
-  cleanup. Load for planning, implementation, review, or publication in any repo kind.
+  cleanup. Load for planning, implementation, testing, review, or publication in any repo kind.
 ---
 
 # Develop a feature

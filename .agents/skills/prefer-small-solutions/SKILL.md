@@ -21,7 +21,8 @@ accessibility, compatibility, and performance remain binding.
 
 Read the task, affected implementation, and relevant tests. Identify required behavior, failure
 cases, ownership boundaries, and the project's supported versions before choosing a shortcut.
-Keep this brief for a small edit; use the planning workflow when the decision warrants it.
+Trace the affected path through callers, data ownership, transformations, and outputs for every
+change, not only bug fixes. Keep this brief for a small edit; use the planning workflow when the decision warrants it.
 
 For a bug, search callers of the changed operation and trace the failing value or state to its
 owner. Check sibling paths that rely on the same invariant. Repair the owning boundary when the
@@ -59,7 +60,8 @@ it could change that choice; routine edits need no extra plan, approval, or narr
 
 Before deleting or replacing logic, establish which invariant or existing capability makes it
 redundant. Preserve evaluation order, mutation, absence semantics, errors, resource use, and public
-behavior. Keep one authoritative representation of each fact where the contract permits it.
+behavior. Retain validation at trust boundaries. Keep one authoritative representation of each
+fact where the contract permits it.
 
 A native control still has to satisfy the agreed interaction, browser, accessibility, localization,
 and design-system contract. A database constraint can enforce an invariant without replacing

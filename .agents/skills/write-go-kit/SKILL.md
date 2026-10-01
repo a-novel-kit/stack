@@ -1,8 +1,9 @@
 ---
 name: write-go-kit
 description: >
-  Write or review shared Go libraries under a-novel-kit, including golib and jwt. Apply the
-  stricter dependency and package-boundary rules alongside write-go; excludes JS libraries.
+  Write or review shared Go libraries under a-novel-kit, including golib and jwt, or decide whether
+  a capability belongs in golib. Apply stricter dependency/package rules alongside write-go;
+  excludes JS/TS and kit/workflows.
 ---
 
 # Go — a-novel-kit shared libraries

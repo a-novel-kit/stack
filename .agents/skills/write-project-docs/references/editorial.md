@@ -33,7 +33,8 @@ economy** section, which owns the sentence-level craft for every prose surface �
 
 All of them apply to every file except the narrative ones, which shape the **guides** only: principle
 12 (tell a story), and principle 10's natural headings, give way in a `README.md` to the fixed section
-order above — though principle 10's show-over-tell holds anywhere.
+order in [the fleet standard](structure.md#section-order--one-order-every-repo) — though
+principle 10's show-over-tell holds anywhere.
 
 ### 1. Audience-first — name the reader before writing the section
 
@@ -115,7 +116,7 @@ into apparent design and no one revisits it when the limitation lifts.
 When a service has several deployment shapes (REST × gRPC × standalone × split = four combinations),
 do not paste four near-identical compose blocks in sequence: the reader who wants the simplest path
 scans past three they will not use, and any future update becomes a four-place edit. Show one
-canonical block inline — the **production / expected shape**, per the Fleet standard above (lead with
+canonical block inline — the **production / expected shape**, per [the fleet standard](structure.md) (lead with
 production, relegate the dev one-liner to "Running locally") — then list the other shapes in a table or
 collapse them under a `<details>` block. Any time two blocks differ by one line, the second belongs in
 a diff, table, or collapsible block, not in line.

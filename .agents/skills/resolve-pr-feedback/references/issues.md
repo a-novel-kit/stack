@@ -4,7 +4,7 @@ Read this reference when routed here by [resolve-pr-feedback](../SKILL.md). Its 
 
 ## Issue discussions (planning & triage)
 
-Everything above is written for pull requests, but the same posture — **a conversation, not a
+The [entry point](../SKILL.md) describes pull requests, but the same posture — **a conversation, not a
 checklist** — governs **issues**, above all the planning issues `plan-feature` produces. Use this
 section when reading and responding to comments under an issue: answering the human's questions on a
 plan, posting your own open questions, or triaging an incoming report.

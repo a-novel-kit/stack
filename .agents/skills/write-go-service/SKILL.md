@@ -27,13 +27,15 @@ exactly; coherence outranks preference.
 
 ## Load the affected layer
 
-Keep the architecture, interface, and security rules in this entry point active. Before editing,
-read each reference matching an affected layer; a change crossing layers needs each matching entry.
+Keep the architecture, interface, and security rules in this entry point active. Before planning,
+editing, or reviewing service behavior, read each reference matching an affected layer. Read the
+layer rules when testing its contract too; crossing layers requires each matching reference.
 
 - DAO operations or transaction ownership, including core/job transactions: [data access](references/data-access.md).
 - Core validation/orchestration or REST/gRPC handlers: [operations](references/operations.md).
 - Config, internal helpers, models, exported clients, or command wiring: [wiring](references/wiring.md).
-- Any operation with a span or changed error/success path: [telemetry](references/telemetry.md).
+- New or changed DAO/core operations or handlers, and any other operation with a span:
+  [telemetry](references/telemetry.md). Apply this to reviews even when the existing code lacks a span.
   Every layer that propagates or surfaces an error reports it on its own span.
 - Tests, regression coverage, or test review: [layer test patterns](references/testing.md), alongside
   `write-go-tests`. DAO integration tests and generated mocks remain required where applicable.

@@ -1,8 +1,9 @@
 ---
 name: write-design-system
 description: >
-  Implement uikit tokens, themes, typography, icons, and reusable component contracts with live
-  Storybook review. Load for shared UI; pair with write-frontend and applicable framework/tests.
+  Implement or review uikit tokens, fonts, icons, themes, Storybook foundations, and shared UI
+  components. Load for these changes; always pair with write-frontend, plus applicable Svelte/tests.
+  Use plan-ui-design for material visual, interaction, component-family, or foundation decisions.
 ---
 
 # Design-System Conventions

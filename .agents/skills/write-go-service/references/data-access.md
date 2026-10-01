@@ -55,7 +55,7 @@ func NewPgUserSelect() *PgUserSelect { return &PgUserSelect{} }
   **including the not-found case**. A missing row is a real outcome the DAO encountered; whether
   it's benign is the caller's call (ultimately the handler's, by discarding it).
 - **Telemetry:** `otel.ReportError(span, err)` on every failure path; `otel.ReportSuccess(span,
-value)` on the happy path. See the Telemetry section.
+value)` on the happy path. See [Telemetry](telemetry.md).
 - **Entity types** (bun models) go in their own `pg.<entity>.go` file, separate from the operations
   that use them.
 

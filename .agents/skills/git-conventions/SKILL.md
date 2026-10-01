@@ -2,7 +2,8 @@
 name: git-conventions
 description: >
   Manage checkout hygiene, branches, commits, and history. Load when starting or finishing checkout
-  work, grouping changes, or writing commits; pair with attribute-ai-commits.
+  work, creating or naming branches, grouping changes, or writing commits; pair with
+  attribute-ai-commits.
 ---
 
 # Git Conventions
@@ -17,7 +18,8 @@ drive automation (Renovate, CI tagging, changelogs) and signal intent to reviewe
 
 - Before starting or finishing checkout work, read [workspace hygiene](references/workspace.md).
   Preserve other contributors' work and use an isolated checkout for sustained work.
-- Before writing, amending, or reviewing a commit message, read [commit conventions](references/commits.md).
+- Before naming a branch, grouping changes, or writing, amending, or reviewing a commit message,
+  read [commit conventions](references/commits.md).
   Use `attribute-ai-commits` for material AI contributions.
 - For branch names and history changes, apply the rules below.
 - For publication, PR descriptions, metadata, readiness, and final handoff, load
@@ -33,7 +35,7 @@ tree nor a local commit alone authorizes publication, merging, or changes to ano
 ```
 
 - **type**: same vocabulary as commit types (`feat`, `fix`, `refactor`, `chore`, `ci`, `docs`)
-- **area**: the layer or subsystem being changed — use the scope name from the table above
+- **area**: the layer or subsystem being changed — use the [commit scope](references/commits.md#scopes)
 - **short-description**: kebab-case, 2–5 words, describes what the branch achieves
 
 ### Examples

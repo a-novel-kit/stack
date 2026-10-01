@@ -46,6 +46,31 @@ walkthrough does not prove how a model will behave.
     conversion. Verify atomicity, absence semantics, public error mapping, and observability before
     deletion. A database constraint does not replace authorization.
 
+## Routing regression checks
+
+These cases verify that shorter descriptions and split files still reach the original rules. Check
+the catalog trigger first, then the entry point and selected references; preserved text alone is
+insufficient if the task no longer loads it.
+
+- **Testing-only request:** `develop-feature` still governs test timing without a production edit.
+- **Compatible API addition across repos:** `manage-versions` loads for proto/REST contract changes,
+  including non-breaking ones; it is not limited to breaking symbols or unreleased dependencies.
+- **Existing API composition:** client-defined JSON, several service calls, or a long-running/paid
+  operation loads `plan-client-server-boundary` even without changing an endpoint signature.
+- **Review without edits:** Go service reviews load the affected layer and telemetry references;
+  Go test reviews load patterns and applicable fixtures. Missing spans must not bypass telemetry.
+- **Existing fixture change:** editing or reviewing test data reaches the fixture rules for
+  `testdata/`, format choice, reuse, and isolation from production packages.
+- **Branch naming only:** Git routing reaches the commit types and scope table before naming.
+- **Push to an existing draft:** readiness is rechecked after the push; when completion gates pass,
+  load authoring and tracking metadata and mark ready in the same turn.
+- **Frontend companion skills:** Svelte tests/stories reach framework and test rules; uikit reaches
+  design-system rules; a service REST client reaches both `write-js-package` and `write-frontend`.
+- **Debugging a Svelte module:** the trigger reaches `write-svelte` for `.svelte.ts`, route loads,
+  actions/hooks, package exports, and compiler configuration.
+- **Library placement without implementation:** deciding whether something belongs in `golib`
+  loads `write-go-kit` and its stricter admission/dependency rules.
+
 ## Optional agent comparison
 
 When evaluating behavioral claims, run the same representative repository tasks in fresh, isolated

@@ -2,7 +2,8 @@
 name: plan-feature
 description: >
   Design non-trivial software changes and record agreed scope in planning issues. Load for
-  architecture, data models, APIs, cross-repo work, new dependencies, or ambiguous scope.
+  architecture, data models, client/server boundaries, cross-repo work, new services, platforms,
+  or libraries, build-vs-buy or dependency decisions, or ambiguous scope; skip trivial edits.
 ---
 
 # Plan and refine the design
