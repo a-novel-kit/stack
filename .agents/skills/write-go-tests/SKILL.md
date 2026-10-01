@@ -1,11 +1,9 @@
 ---
 name: write-go-tests
 description: >
-  Test conventions for ALL Go code in the a-novel and a-novel-kit organizations — file/function
-  naming, table-driven structure, mockery, assertions, parallelism, cross-package fixtures,
-  helpers, coverage. Load it whenever writing or modifying a Go test file in a backend service OR
-  a shared library. Pairs with `write-go`; layer-specific patterns live in `write-go-service`.
-  Does NOT apply to JS/TS tests.
+  Write or modify Go tests in services or shared libraries. Own table-driven cases, generated
+  mocks, assertions, fixtures, parallelism, and coverage; pair with write-go and the repo-kind
+  skill.
 ---
 
 # Go Test Conventions
@@ -28,6 +26,16 @@ false-positives and missed failures.
 the codebase. Fix a stale or failing test; do not delete it.
 
 ---
+
+## Load the test pattern you need
+
+Before writing or modifying a test body, read [table-driven tests and mocks](references/patterns.md).
+When adding, moving, or sharing test data or setup, also read [fixtures](references/fixtures.md).
+For layer-specific behavior load `write-go-service` or `write-go-kit` as appropriate.
+
+Pick the closest truthful layer that exposes the changed behavior. Reuse established cases and
+fixtures; do not create a second assertion of the same fact at every layer. Preserve coverage of
+different contracts and failure paths. The selected references are conventions, not optional examples.
 
 ## Timing and validation
 
@@ -67,75 +75,6 @@ underscore) from production builds. A file named `something.test.go` (with a dot
 into the production binary** — `.test.` is text in the filename, not a build-tag signal. Such a
 file carrying test-only globals has leaked into the shipped binary and must be moved (see
 "Cross-package test fixtures" below).
-
----
-
-## Cross-Package Test Fixtures
-
-Some fixtures are shared across packages — a Postgres preset reused by both `dao_test` and
-`handlers_test`, say. Go's `_test.go` rule is per-package (package X's `_test.go` cannot be
-imported from package Y's), so a shared fixture has to live in a regular `.go` file, which is
-compiled into production binaries.
-
-**Always isolate cross-package fixtures into a dedicated subpackage.** Name the directory and
-package after the layer plus the suffix `test`, mirroring Go stdlib conventions like
-`net/http/httptest` and `testing/iotest`:
-
-| Layer     | Subpackage path               | Package name |
-| --------- | ----------------------------- | ------------ |
-| `config/` | `internal/config/configtest/` | `configtest` |
-| `lib/`    | `internal/lib/libtest/`       | `libtest`    |
-| `core/`   | `internal/core/coretest/`     | `coretest`   |
-
-```go
-// internal/config/configtest/postgres.go
-package configtest
-
-// PostgresPreset is the PostgreSQL configuration used in integration tests.
-var PostgresPreset = postgrespresets.NewDefault(pgdriver.WithDSN(env.PostgresDsn))
-```
-
-Test files import it as `configtest`:
-
-```go
-import (
-    "github.com/a-novel/service-json-keys/v2/internal/config/configtest"
-)
-
-postgres.NewContext(ctx, configtest.PostgresPreset)
-```
-
-**Never:**
-
-- Define test fixtures in the production package (e.g., `internal/config/postgres.config.go`)
-  guarded only by a `Test` prefix on the variable. The variable is exported and compiled in, and a
-  future change can wire it into a production code path without a single review flag.
-- Use `.test.go` (with a dot) as a substitute for `_test.go` — the Go toolchain does not recognize
-  the dot, so the file is compiled into the production binary.
-- Reuse the bare name `testutils` for several fixture subpackages in one project. Two imports of
-  `testutils` from different paths force aliasing at every call site. Use the layer-prefixed name
-  (`configtest`, `libtest`) so each fixture subpackage has a unique, descriptive name.
-
----
-
-## Static and large test data
-
-Keep only short values inline when they make a test case easier to read. Put structured definitions
-and large payloads under the package's `testdata/` directory, then embed them from an `_test.go` file
-with `//go:embed`.
-
-Prefer YAML (`.yaml`) for human-authored semantic fixtures. Convert it to the production format only at
-the boundary the test exercises. Keep JSON when its exact representation is part of the behavior:
-parser or encoder cases, exact wire bytes, malformed JSON, and byte-size boundaries. A production JSON
-asset, including a JSON Schema document, keeps its native format when a test embeds it.
-
-Reuse the repository's YAML parser. If none exists, apply `choose-dependency`; this preference does not
-waive approval for a new package.
-
-Reuse existing fixture and mock data before adding another definition. Keep one canonical large value
-and derive small case-specific variants from it. When multiple packages need the same data, let the
-dedicated `*test` fixture subpackage own and expose it instead of copying it into several `testdata/`
-directories.
 
 ---
 
@@ -179,69 +118,6 @@ This keeps tests off unexported internals, and honest about the public API.
 
 ---
 
-## Table-Driven Structure
-
-Every test uses a table of cases. The top-level test function sets up shared state and defines the
-table; each case runs in a sub-test.
-
-```go
-func TestGrpcJwkGet(t *testing.T) {
-    t.Parallel()
-
-    errFoo := errors.New("foo")  // generic internal error for error-path cases
-
-    type serviceMock struct {
-        resp *core.Jwk
-        err  error
-    }
-
-    testCases := []struct {
-        name string
-
-        request *protogen.JwkGetRequest
-
-        serviceMock *serviceMock  // nil → mock must not be called
-
-        expect       *protogen.JwkGetResponse
-        expectStatus codes.Code
-    }{
-        {
-            name: "Success",
-            // ...
-        },
-        {
-            name: "Error/NotFound",
-            // ...
-        },
-        {
-            name: "Error/Internal",
-            // ...
-        },
-    }
-
-    for _, testCase := range testCases {
-        t.Run(testCase.name, func(t *testing.T) {
-            t.Parallel()
-            // ...
-        })
-    }
-}
-```
-
-**Key rules:**
-
-- Call `t.Parallel()` at the top of the outer test function.
-- Call `t.Parallel()` at the top of every sub-test body.
-- Exception: when the test genuinely cannot be parallelized (it mutates global state, or uses a
-  non-parallelizable resource), suppress the linter with `//nolint:paralleltest` on the outer
-  function and `//nolint:tparallel` inside sub-tests — and add a comment explaining why.
-- Define inline mock structs (`type serviceMock struct{...}`) inside the test function, not at
-  package level, so each test stays self-contained.
-- Use `errors.New("foo")` (typically named `errFoo`) as a sentinel for generic internal error
-  paths that need a non-nil, non-sentinel error.
-
----
-
 ## Sub-test Naming
 
 Sub-test names describe the scenario:
@@ -251,53 +127,6 @@ Sub-test names describe the scenario:
 - Use `"Error/<What>"` for error paths (`"Error/NotFound"`, `"Error/Internal"`, `"Error/InvalidID"`).
 
 Never use spaces in sub-test names — Go test filtering uses `/` and spaces break it.
-
----
-
-## Mocks
-
-Mocks are generated by `mockery` from the interfaces defined in each production file. Run
-`pnpm generate:go` after adding or changing any interface. Never write mocks by hand.
-
-**Instantiate** a mock with the generated constructor:
-
-```go
-service := handlersmocks.NewMockGrpcJwkGetService(t)
-daoSearch := coremocks.NewMockJwkSearchDao(t)
-```
-
-**Set expectations** with `.EXPECT()`:
-
-```go
-service.EXPECT().
-    Exec(mock.Anything, &core.JwkSelectRequest{
-        ID: uuid.MustParse(testCase.request.GetId()),
-    }).
-    Return(testCase.serviceMock.resp, testCase.serviceMock.err)
-```
-
-- Use `mock.Anything` for the `ctx` argument — context identity is not meaningful to assert.
-- Use concrete expected values for all other arguments. They are the contract being enforced.
-- Add `.Once()` when the same mock method is registered several times in a loop (e.g., for each
-  item in a slice).
-
-**Nil-mock pattern**: declare mock fields as pointers in the test case struct. A nil field means
-the mock must not be called at all, so skip registering the expectation:
-
-```go
-if testCase.serviceMock != nil {
-    service.EXPECT().Exec(...).Return(...)
-}
-```
-
-**Always call `AssertExpectations`** at the end of each sub-test for every mock:
-
-```go
-service.AssertExpectations(t)
-repository.AssertExpectations(t)
-```
-
-It verifies every registered expectation was called.
 
 ---
 

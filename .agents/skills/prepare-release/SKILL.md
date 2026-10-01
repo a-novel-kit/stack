@@ -1,12 +1,8 @@
 ---
 name: prepare-release
 description: >
-  Run BEFORE cutting a release: it reads the commits since the last tag, proposes the version bump
-  (`fix`/`chore`→patch, `feat` or an absorbable breaking change→minor; a major is never derived from
-  commits — it is a planned `vX`-line initiative), and drafts the per-version migration guide
-  (`docs/migrations/vX.Y.Z.md`) when consumers must act. Use it when asked "is this patch / minor /
-  major?", "what changed since the last release?", or "does this need a migration guide?".
-  ADVISORY — the human cuts the release; this never tags, pushes, or publishes.
+  Prepare a release: inspect commits, recommend a version bump, and document required consumer
+  migrations before tagging. Major versions require a planned version-line initiative.
 ---
 
 # Prepare a release — size it, and write its migration guide

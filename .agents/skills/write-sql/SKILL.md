@@ -1,10 +1,8 @@
 ---
 name: write-sql
 description: >
-  Write, review, and maintain PostgreSQL SQL for Agora backend services. Use whenever creating
-  or editing SQL — DAO query files (internal/dao/*.sql), schema migrations
-  (internal/models/migrations/*.sql), or raw SQL embedded in Go: SELECT/INSERT/UPDATE/DELETE
-  queries, DDL (tables, views, indexes, constraints), materialized views, pg_cron jobs.
+  Write or review PostgreSQL queries, migrations, schema objects, and SQL embedded in Go. Load for
+  any SQL work, including DAO files and internal/models/migrations.
 ---
 
 # SQL Writing Skill

@@ -1,9 +1,8 @@
 ---
 name: write-proto
 description: >
-  Write, review, and modify Protobuf definitions for Agora backend services. Use whenever
-  creating or editing .proto files — new RPCs, messages, shared types, enums, or breaking-change
-  assessment. Covers internal/models/proto/ and the buf toolchain.
+  Write or review Protobuf messages, RPCs, types, and enums with buf and compatibility checks. Load
+  for any .proto change; public REST specifications use write-openapi.
 ---
 
 # Protobuf Writing Skill

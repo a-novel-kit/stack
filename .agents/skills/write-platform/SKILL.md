@@ -1,12 +1,8 @@
 ---
 name: write-platform
 description: >
-  Application-architecture conventions for a-novel client-side PLATFORM repos (`app/platform-*`):
-  SvelteKit route and server boundaries, app-owned screen composition, Storybook-first delivery,
-  URL and browser-state ownership, secure sessions, localization, container health, and CI. Load it
-  whenever creating, editing, reviewing, or debugging a platform application. ALWAYS load
-  `write-frontend`; add `write-svelte` for Svelte/SvelteKit files and `write-frontend-tests` for
-  tests or stories. Use `write-design-system` only when changing reusable uikit contracts.
+  Build or review SvelteKit platform apps: routes, sessions, state, localization, app composition,
+  health, and CI. Load with write-frontend; add Svelte and test skills as needed.
 ---
 
 # Platform Application Conventions

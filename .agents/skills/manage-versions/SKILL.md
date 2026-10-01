@@ -1,12 +1,8 @@
 ---
 name: manage-versions
 description: >
-  Cross-repo version management for a-novel / a-novel-kit. Load it whenever a change spans repos
-  that must stay version-compatible to merge — an unreleased `golib` or `pkg/go` dependency, a
-  proto or REST contract change, a breaking change to a published symbol. Covers git-tag semver,
-  exact `go.mod` pins, commit-SHA pseudo-versions, the dependency-releases-FIRST merge order (the
-  consumer re-pins to the released tag), and staged rollouts. Pairs with `git-conventions`,
-  `implement-feature`, `open-pull-request`, `write-*`.
+  Keep cross-repo versions and contracts compatible through development, staged rollout, dependency
+  releases, and consumer pins. Load for unreleased dependencies or breaking published APIs.
 ---
 
 # Cross-repo version management

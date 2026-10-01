@@ -1,9 +1,8 @@
 ---
 name: write-bash-scripts
 description: >
-  Write, review, and maintain Bash shell scripts for Agora backend services. Use whenever creating
-  or editing any .sh file — test runners, build or publish scripts, entrypoints, env setup. Covers
-  error handling, cleanup traps, argument validation, service readiness waits, and portability.
+  Write or review Bash scripts: errors, cleanup, arguments, readiness, and portability. Load for
+  any .sh change, including build, test, entrypoint, and environment scripts.
 ---
 
 # Bash Script Writing Skill

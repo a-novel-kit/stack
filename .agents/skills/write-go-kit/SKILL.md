@@ -1,12 +1,8 @@
 ---
 name: write-go-kit
 description: >
-  Go conventions for the a-novel-kit shared-library repos under `kit/` (`golib`, `jwt`, …) — the
-  golib-stays-minimal bar, the stricter kit dependency policy, graduating a sub-package into its
-  own community package, and kit test conventions. Load it to write or review Go there, or to
-  decide whether something belongs in `golib` at all. ALWAYS load `write-go` alongside it; a-novel
-  services use `write-go-service`. Pairs with `write-go-tests`, `document-code`,
-  `manage-versions`. Not JS/TS, `kit/nodelib`, or `kit/workflows`.
+  Write or review shared Go libraries under a-novel-kit, including golib and jwt. Apply the
+  stricter dependency and package-boundary rules alongside write-go; excludes JS libraries.
 ---
 
 # Go — a-novel-kit shared libraries

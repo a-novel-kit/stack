@@ -1,10 +1,8 @@
 ---
 name: develop-feature
 description: >
-  Shared development lifecycle for a-novel and a-novel-kit: local drafting, developer agreement,
-  issue and draft-PR review, scoped test completion, and final code cleanup. Load when planning,
-  implementing, testing, reviewing, or preparing to publish a software change in any repo kind.
-  Adapt the stages for clear, simple, or purely technical work; use specialist skills for mechanics.
+  Guide software changes through local draft, agreement, issue/PR review, scoped tests, and
+  cleanup. Load for planning, implementation, review, or publication in any repo kind.
 ---
 
 # Develop a feature
@@ -14,6 +12,23 @@ agreed direction → complete tests for approved scope → tighten and hand off*
 stage timing; specialist skills own architecture, implementation, testing conventions, issue
 metadata, Git, and review mechanics. Load [prefer-small-solutions](../prefer-small-solutions/SKILL.md)
 throughout, plus the skills for the affected layers.
+
+## Load guidance for the current decision
+
+Load each applicable skill once and follow its reference routing. A linked skill is required when
+its stated condition applies; a mention of a later stage is not a command to load that stage's
+entire runbook now. Reuse already-read guidance until it changes or is no longer available in
+context. Before entering a new stage, load its owner and the references needed for that operation.
+
+- This skill owns agreement, stage transitions, and test timing.
+- `prefer-small-solutions` owns simplicity; `choose-dependency` owns package selection.
+- `plan-feature` and `plan-ui-design` own technical and product design, respectively.
+- Language, architecture, and test skills own their contracts and conventions.
+- `git-conventions`, `open-pull-request`, `monitor-ci`, and `resolve-pr-feedback` own their
+  operational procedures; `use-a-novel-cli` owns local command routing.
+
+Follow each applicable rule at its owning boundary. Simplicity guidance never relaxes a specialist
+constraint; uncertain scope stays open under the existing approval rules.
 
 ## Choose the starting stage
 

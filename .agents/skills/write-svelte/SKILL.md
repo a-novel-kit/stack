@@ -1,11 +1,9 @@
 ---
 name: write-svelte
 description: >
-  Svelte 5 and SvelteKit conventions for a-novel frontend applications and shared components. Load
-  it whenever creating, editing, reviewing, or debugging a .svelte file, .svelte.ts module,
-  SvelteKit route/load/action/hook, Svelte package export, or Svelte compiler configuration. ALWAYS
-  load `write-frontend` alongside it; add `write-frontend-tests` for tests or stories and
-  `write-design-system` for uikit components or tokens.
+  Write or review Svelte 5 components, reactive modules, SvelteKit routes/hooks, and Svelte
+  package/compiler configuration. Always load write-frontend; add tests or uikit skills when
+  affected.
 ---
 
 # Svelte Conventions

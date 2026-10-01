@@ -1,13 +1,8 @@
 ---
 name: write-design-system
 description: >
-  Design-system conventions for Agora uikit foundations and reusable frontend components — CSS
-  design tokens, calculated scales, semantic aliases, typography, themes, accessibility,
-  component APIs, mandatory live Storybook review and handoff links, package boundaries, and publication hygiene. Load for
-  any tokens, fonts, icons, theme, Storybook foundation, or shared UI component change. Load
-  `plan-ui-design` before non-trivial visual direction, interaction-pattern, component-family, or
-  foundation architecture. ALWAYS load `write-frontend`; add `write-svelte` for Svelte components
-  and `write-frontend-tests` for stories and tests.
+  Implement uikit tokens, themes, typography, icons, and reusable component contracts with live
+  Storybook review. Load for shared UI; pair with write-frontend and applicable framework/tests.
 ---
 
 # Design-System Conventions

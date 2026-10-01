@@ -1,10 +1,8 @@
 ---
 name: implement-feature
 description: >
-  Implement a change to an a-novel backend SERVICE repo using a layered branch strategy. Use whenever
-  implementing a new API endpoint, schema change, business logic, or client update. Covers branch
-  decomposition, per-branch testing, and backtracking. Run plan-feature first for non-trivial,
-  multi-repo, or architectural work. Backend services only — not platform (frontend) repos.
+  Implement backend service endpoints, schemas, business logic, and clients through layered
+  branches. Use for service execution; frontend platforms use write-platform.
 ---
 
 # Feature Implementation Workflow

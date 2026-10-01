@@ -1,11 +1,8 @@
 ---
 name: plan-client-server-boundary
 description: >
-  Plan responsibility boundaries between browser/app clients and backend services: trusted state,
-  authorization, validation, invariants, atomic operations, workflow orchestration, evolvable data,
-  retries, and performance. Load it with `plan-feature` whenever a feature adds or changes a public
-  API, moves behavior between frontend and backend, composes several service calls, stores
-  client-defined JSON, or introduces a long-running or paid operation.
+  Design client/server responsibility, authorization, invariants, atomicity, retries, and workflow
+  ownership. Load with plan-feature for public APIs or changes crossing that boundary.
 ---
 
 # Plan client/server boundaries

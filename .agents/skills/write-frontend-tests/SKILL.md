@@ -1,11 +1,8 @@
 ---
 name: write-frontend-tests
 description: >
-  Frontend test conventions for a-novel and a-novel-kit — Vitest unit tests, Testing Library DOM
-  and Svelte component tests, Storybook stories and interaction tests, accessibility checks, and
-  browser end-to-end tests. Load whenever adding or modifying frontend test/spec files, stories,
-  fixtures, mocks, test configuration, or behavior that needs frontend coverage. ALWAYS load
-  `write-frontend`; pair with `write-svelte` for Svelte targets and `write-design-system` for uikit.
+  Write or change browser tests, stories, fixtures, mocks, and test configuration. Load for Vitest,
+  Testing Library, Storybook interactions, accessibility, and browser journeys.
 ---
 
 # Frontend Test Conventions

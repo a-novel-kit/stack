@@ -1,12 +1,8 @@
 ---
 name: plan-ui-design
 description: >
-  Product UI/UX and design-system planning gate for browser interfaces. Use before creating or
-  materially reshaping user flows, pages, navigation, forms, data views, interaction patterns,
-  component families, visual foundations, design tokens, or product-facing interface content; also
-  use when comparing visual directions or reviewing whether proposed UI is coherent, distinctive,
-  accessible, reusable, and ready to finish. Refines a rendered, testable design contract through
-  local drafting with `write-frontend` or `write-design-system`, before publication and final tests.
+  Plan or review material UI flows, interactions, content, visual direction, component families,
+  and foundations. Establish a rendered design contract before publication and final tests.
 ---
 
 # Plan UI Design

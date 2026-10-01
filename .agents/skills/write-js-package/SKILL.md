@@ -1,10 +1,8 @@
 ---
 name: write-js-package
 description: >
-  Write, review, and maintain any Agora service's JavaScript/TypeScript REST client package. Use
-  whenever creating or editing files under pkg/js/ — the published client library (pkg/js/rest/),
-  its integration tests (pkg/js/test/rest/), or the package and build config. Covers API methods,
-  type definitions, exports, and test cases.
+  Write or review service JavaScript/TypeScript REST clients under pkg/js, including exports,
+  package/build configuration, and integration tests. Add write-frontend where applicable.
 ---
 
 # JS Package Writing Skill

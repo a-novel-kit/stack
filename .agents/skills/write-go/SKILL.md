@@ -1,12 +1,8 @@
 ---
 name: write-go
 description: >
-  Base Go conventions for EVERY Go repo in the a-novel and a-novel-kit orgs — naming, error
-  handling, dependency policy, context, the format/lint discipline, time, and secrets. Load it for
-  ANY Go work in either org, alongside the matching repo-kind skill: `write-go-service` (a-novel
-  services) or `write-go-kit` (a-novel-kit libraries — `golib`, `jwt`). Pairs with `write-go-tests`
-  and `document-code`. Not JS/TS, SQL (`write-sql`), Protobuf (`write-proto`), Dockerfiles
-  (`write-dockerfiles`), or shell scripts (`write-bash-scripts`).
+  Apply base Go conventions in either organization: naming, errors, context, time, secrets,
+  dependencies, formatting, and lint. Add write-go-service or write-go-kit where applicable.
 ---
 
 # Go Conventions (common)
