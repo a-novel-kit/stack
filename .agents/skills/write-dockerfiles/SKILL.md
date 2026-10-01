@@ -1,10 +1,8 @@
 ---
 name: write-dockerfiles
 description: >
-  Write, review, and maintain Dockerfiles and compose files for Agora backend services. Use
-  whenever creating or editing anything in builds/ — Dockerfiles, podman-compose files, database
-  init scripts, entrypoint scripts. Covers Go service, job, database, and standalone dev images,
-  and the compose files wiring them together.
+  Write or review Dockerfiles, compose files, and builds/ assets for services and development
+  images. Load for any builds/ change; add language skills for scripts or SQL.
 ---
 
 # Dockerfile and Compose Writing Skill

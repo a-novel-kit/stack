@@ -1,11 +1,8 @@
 ---
 name: document-code
 description: >
-  Write and improve code documentation. Use whenever asked to document code, add comments, write a doc
-  comment, annotate a function, document a package, explain a file's purpose, or clean up unclear or
-  outdated comments — however phrased ("doc this"). Applies to Go, Bash/shell, YAML, Svelte, SQL,
-  TypeScript, and other source or config files. Invoke before writing any documentation, even for one
-  function.
+  Write or review source comments, doc comments, package docs, and prose craft. Load before
+  documenting any source/config element, including a single function; supports all languages.
 ---
 
 # Code Documentation Skill

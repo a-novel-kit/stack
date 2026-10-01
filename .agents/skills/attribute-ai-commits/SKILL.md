@@ -1,10 +1,8 @@
 ---
 name: attribute-ai-commits
 description: >
-  Add GitHub-linked AI co-authors to Git commit trailers without inventing provider identities.
-  Use whenever an AI agent that created or materially changed committed content writes, amends, or
-  reviews a commit message. Trust the repository registry for known agents and defer missing-agent
-  discovery to the register-ai-agent skill.
+  Attribute AI contributions when writing, amending, or reviewing commit messages. Use the verified
+  repository registry; delegate missing identities to register-ai-agent.
 ---
 
 # Attribute AI Commits

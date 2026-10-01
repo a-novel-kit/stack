@@ -1,14 +1,8 @@
 ---
 name: write-frontend
 description: >
-  Base frontend conventions for EVERY browser-facing repository in a-novel and a-novel-kit —
-  semantic HTML, accessible CSS, strict TypeScript, browser security, performance, data/state
-  boundaries, dependency policy, mandatory live-Storybook handoff, and validation. Load it for ANY HTML, CSS, TypeScript, browser API,
-  platform-* application, uikit, Storybook, or nodelib-browser work. Load `plan-ui-design` before
-  non-trivial user-flow, interaction, information-architecture, or visual-direction work. Pair with
-  `write-svelte` for .svelte files, `write-frontend-tests` for frontend tests or stories, and
-  `write-design-system` for tokens or reusable UI. Service REST clients under pkg/js also load
-  `write-js-package`.
+  Apply browser conventions to HTML, CSS, TypeScript, platform apps, uikit, Storybook, and browser
+  libraries. Load for browser work; add framework, architecture, and test skills as needed.
 ---
 
 # Frontend Conventions (common)
@@ -25,6 +19,9 @@ coherent local pattern unless it conflicts with a rule below or a current platfo
 This skill owns generic implementation quality, not repository placement. In the Agora workspace,
 use `write-platform` for terminal application shells and product policy, `write-design-system` for
 uikit visual contracts, and nodelib for reusable non-visual client runtime or tooling configuration.
+Load `write-svelte` for Svelte files, `write-frontend-tests` for tests or stories, and
+`write-design-system` for tokens or reusable UI. Service REST clients under `pkg/js` also load
+`write-js-package`.
 
 Load `plan-ui-design` before deciding a new or materially changed flow, interaction pattern,
 information hierarchy, component family, or visual language. This skill owns implementation quality;

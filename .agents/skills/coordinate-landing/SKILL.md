@@ -1,12 +1,8 @@
 ---
 name: coordinate-landing
 description: >
-  Vocabulary, invariants, and operator runbook for the cross-repo **landing saga**: how a multi-repo
-  Epic lands atomically, recovers from a partial landing, rolls back, and releases through the
-  `a-novel-kit/workflows` actions (merge-gate, epic-freeze, epic-rollback, release-train, the
-  AGENT_KILL_SWITCH halt). Load it when a change spans several repos under one Epic. It owns the
-  saga vocabulary and the **Epic Atomicity Rule**, and defers version mechanics to
-  `manage-versions`, per-repo release mechanics to `prepare-release`.
+  Coordinate atomic landing, recovery, rollback, and release of a cross-repo Epic. Load whenever
+  one Epic spans several repositories, including planning its landing saga.
 ---
 
 # The landing saga

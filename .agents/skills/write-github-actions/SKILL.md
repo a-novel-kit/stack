@@ -1,9 +1,8 @@
 ---
 name: write-github-actions
 description: >
-  Write and maintain GitHub Actions workflows, composite actions (action.yaml), and repo CI config
-  across the a-novel / a-novel-kit orgs. Use whenever adding or editing a workflow, a shared action
-  in a-novel-kit/workflows, a CI job, a required check, or a ruleset.
+  Write or review GitHub Actions workflows, composite actions, CI jobs, required checks, and
+  rulesets across both organizations. Load before changing CI or governance configuration.
 ---
 
 # Writing GitHub Actions

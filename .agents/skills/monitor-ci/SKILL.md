@@ -1,10 +1,8 @@
 ---
 name: monitor-ci
 description: >
-  Monitor GitHub Actions CI runs on a pushed branch or open PR, classify failures, and fix them
-  where safe. Use whenever waiting on CI, investigating a failing check, judging a failure real or
-  flaky, or iterating a branch to green. Covers the Agora CI job map and the retry/fix loop.
-  Pairs with open-pull-request (the post-push handoff) and git-conventions.
+  Observe GitHub Actions, diagnose failing checks, fix scoped defects, and retry confirmed flakes
+  within budget. Load after pushes or whenever investigating or waiting on CI.
 ---
 
 # Monitor CI
@@ -21,43 +19,16 @@ the budget runs out, stop and escalate.
 
 ---
 
-## CI Job Map (typical Agora service repo)
+## Choose the next action
 
-The `main` workflow on Agora service repos under `a-novel/service-*` runs on every push to any
-branch. The job set varies by repo; the table below is the common surface across those services.
-For the jobs on the current checkout, run `gh pr checks <n>` (or read
-`.github/workflows/main.yaml`) and intersect with the rows below; anything unlisted is
-repo-specific or downstream of a base table entry.
-
-| CI Job                        | What it checks                             | Local equivalent              | Typical failure                                                              |
-| ----------------------------- | ------------------------------------------ | ----------------------------- | ---------------------------------------------------------------------------- |
-| `generated-go`                | `go generate ./...` is up to date          | `pnpm generate:go`            | Forgot to run `pnpm generate:go` after proto/interface                       |
-| `lint-go`                     | `golangci-lint run` clean                  | `pnpm lint:go`                | New Go code violates style or has a bug                                      |
-| `lint-proto`                  | `buf lint` clean                           | `pnpm lint:proto`             | Proto file violates buf style                                                |
-| `lint-node`                   | `pnpm lint:ci` clean                       | `pnpm lint:ci`                | JS/TS code violates eslint/prettier                                          |
-| `test-go`                     | Go unit tests in `/internal`               | `a-novel test --type=go -y`   | Broken Go code or test                                                       |
-| `test-pkg`                    | Go integration tests in `/pkg/go`          | `a-novel test --type=go -y`   | gRPC contract mismatch OR flake                                              |
-| `test-pkg-js`                 | JS integration tests in `/pkg/js`          | `a-novel test --type=pnpm -y` | REST contract mismatch OR flake                                              |
-| `build-database`              | Docker build for Postgres image            | `a-novel build --type=podman` | Dockerfile error, bad init script                                            |
-| `build-migrations`            | Docker build for migrations job            | (none)                        | Migration file issue                                                         |
-| `build-job-rotate-keys`       | Docker build for rotate-keys job           | (none)                        | Go build error in cmd/rotatekeys                                             |
-| `build-grpc`                  | Docker build for gRPC service image        | (none)                        | Go build error                                                               |
-| `build-standalone-grpc`       | Docker build for standalone gRPC dev image | (none)                        | Go build error                                                               |
-| `build-rest`                  | Docker build for REST service image        | (none)                        | Go build error                                                               |
-| `build-standalone-rest`       | Docker build for standalone REST dev image | (none)                        | Go build error                                                               |
-| `build-js`                    | `pnpm build:rest` for pkg/js               | `pnpm -C pkg/js build:rest`   | TS compile error or broken export                                            |
-| `report-grc` / `publish-docs` | Post-success reporting, **master only**    | (none)                        | Rarely actionable; usually transient                                         |
-| `report-codecov`              | Coverage upload, runs on **every branch**  | (none)                        | Upload failure can still mark the run failed in PR checks; usually transient |
-
-`test-go` blocks most application `build-*` jobs (`build-grpc`, `build-rest`,
-`build-standalone-*`, `build-job-rotate-keys`); when it fails they are cancelled, so fix `test-go`
-first. `build-database` does **not** depend on `test-go`, and `build-migrations` depends only on
-`build-database`, so failures in those two surface independently and need their own diagnosis.
-
-Check contexts are lane-suffixed (`test-go`, `lint-node`, …); `write-github-actions` owns that rule
-and the reasons for it. A repo not yet migrated may still emit a bare `test`.
-
----
+1. Identify the current branch/PR commit and its actual checks. Use the observation loop below.
+2. If checks are pending, review the diff once and inspect available feedback while waiting.
+3. For a failure, read the failed step and the matching section of
+   [failure diagnosis](references/failures.md) before choosing a fix or retry.
+4. Use [the service job map](references/job-map.md) when interpreting an unfamiliar service job;
+   the current repository workflow is the source of truth.
+5. Re-run the affected verification, preserve history, and observe the new commit. Stop at green
+   or the escalation conditions below; green CI does not authorize a merge.
 
 ## Phase 1: Observe
 
@@ -163,187 +134,6 @@ gh run view <run-id> --log-failed --job <job-id> | grep -E "FAIL|Error|error:" |
 ```
 
 Never read the full run log unprefiltered. Never fetch logs for passing jobs.
-
----
-
-## Phase 2: Classify
-
-Map the failed-step log to one of these categories; the category determines the fix path.
-
-### 2.1 `generated-go` failure
-
-**Symptom**: job fails with a message like `go generate definitions are not up-to-date`.
-
-**Root cause**: a `.proto` file or Go interface (used by a mock) changed without
-`pnpm generate:go` being run afterward.
-
-**Fix**: the original commit is already pushed and `git-conventions` forbids amending
-pushed history, so the regenerated files land as their own follow-up:
-
-```bash
-pnpm generate:go
-git status --porcelain
-git add internal/handlers/protogen/ internal/handlers/mocks/ internal/core/mocks/
-git commit -m "chore(gen): regenerate Go bindings for <scope>"
-git push
-```
-
-That splits the proto/interface change and its regen across two commits, the cost of
-noticing after push. The "generated files belong in the same commit" guidance in
-`git-conventions` is a structure preference; the "never amend a pushed commit" rule is
-categorical and wins here.
-
-### 2.2 `lint-go` / `lint-proto` / `lint-node` failure
-
-**Symptom**: linter reports specific files + line numbers.
-
-**Fix**: run the matching local script, read its output, edit the flagged files, re-run
-until clean, then commit:
-
-```bash
-pnpm lint:go        # or lint-proto / lint-node
-# edit flagged files
-pnpm lint:go        # re-run to confirm clean
-git add <files>
-git commit -m "fix(<scope>): resolve lint findings"
-git push
-```
-
-Use a `fix(<scope>): resolve lint findings` commit for trivial mechanical changes and a
-`refactor` or `fix` commit for invasive rewrites. `git-conventions` forbids amending pushed
-commits unconditionally, so a noisy `fix(lint): ...` follow-up is the right call; under
-squash-merge the PR author squashes or absorbs it at merge time.
-
-#### When the findings do not reproduce locally
-
-Before editing anything, confirm the finding is real. Two traps produce lint failures that exist
-only on the runner, and "fixing" either one edits correct code or buries a `//nolint` in it.
-
-**Reproduce with the binary the action installs, not the repo-pinned tool.**
-`go tool -modfile=golangci-lint.mod golangci-lint` builds from the repo's own module graph; the
-action downloads a released binary built against a different toolchain. Same version number, two
-different builds. Take the version from the job log and run that:
-
-```bash
-gh run view <run-id> --repo <org>/<repo> --log | grep -i 'golangci-lint binary v'
-curl -sSL https://github.com/golangci/golangci-lint/releases/download/vX.Y.Z/golangci-lint-X.Y.Z-linux-amd64.tar.gz | tar xz
-./golangci-lint-X.Y.Z-linux-amd64/golangci-lint run --path-mode=abs   # from the module dir, as CI does
-```
-
-**Suspect the analyzer cache when the same key gives two verdicts.** The cache key
-(`golangci-lint.cache-Linux-<mod>-<n>-<hash>`) derives from the Go version and the modfiles, never
-from source, while results inside it are stored per package by content hash. A PR that edits a
-package invalidates only that package, which is re-analyzed against stale inter-package facts left
-in the cache — and stale facts are how staticcheck loses knowledge like "`(*testing.T).Fatalf` never
-returns", turning every `if x == nil { t.Fatalf(...) }` into a bogus `SA5011`. `master` passes on the
-identical key because its packages were unchanged and their verdicts were replayed, not recomputed.
-
-The signature: findings on lines the PR never touched, in packages it merely brushed, that reproduce
-on no local configuration — warm cache, cold `GOCACHE`/`GOLANGCI_LINT_CACHE`, released binary, same
-Go version. Confirm by comparing cache keys, then evict:
-
-```bash
-gh run view <failing-run> --repo <org>/<repo> --log | grep 'Restored cache'
-gh run view <last-green-master-run> --repo <org>/<repo> --log | grep 'Restored cache'  # same key?
-gh cache list --repo <org>/<repo>          # find the id
-gh cache delete <id> --repo <org>/<repo>   # ask the operator first — shared CI state
-```
-
-A re-run alone does not help: it restores the same cache. Caches regenerate on the next lint job, so
-eviction is reversible, but it affects every run on the repo — surface it rather than doing it
-silently. And note what this means for the green check on `master`: it is not evidence the package
-still lints clean, only that nothing forced it to be re-examined.
-
-### 2.3 `test-go` (Go unit) failure
-
-**Symptom**: `--- FAIL: TestXxx` in the log, optionally a stack trace.
-
-**Fix**:
-
-1. Reproduce locally first — never fix blind:
-
-   ```bash
-   # Run just the failing package and test for fast iteration
-   go test ./internal/<package>/... -run TestXxx -v
-   # Or the full suite if multiple tests fail
-   a-novel test --type=go -y
-   ```
-
-2. Decide from the failure: **is the test wrong, or is the code wrong?**
-   - New test for behaviour the code doesn't yet implement → fix the code
-   - Existing test that used to pass → fix the new code that broke it
-   - Test assertion out of date vs. new intended behaviour → fix the test
-   - Follow `write-go-service` / `write-go-tests` for the actual fix
-
-3. Re-run until green locally, then commit. This skill always runs on an already-pushed
-   branch, so `git-conventions`' "never amend a pushed commit" rule applies unconditionally:
-   - A fix belonging with the feature: follow-up commit on the branch, collapsed by
-     squash-merge at PR merge time (if configured).
-   - A genuine separate fix: new `fix(<scope>)` commit.
-
-4. Push and go back to Phase 1.
-
-### 2.4 `test-pkg` / `test-pkg-js` failure
-
-**Symptom**: integration test failure against a running gRPC or REST service.
-
-**First check for flake**, since these jobs depend on cold image startup:
-
-- `connection refused` / `dial tcp` / `EOF` / `context deadline exceeded` before any
-  assertion → likely flake, service wasn't ready
-- Sudden `502 Bad Gateway` or transport-level error → likely flake
-- Timeout on first request only, subsequent requests pass locally → likely flake
-
-For a suspected flake, retry the failed jobs only — do not rerun the whole workflow:
-
-```bash
-gh run rerun <run-id> --failed
-```
-
-If the same job fails twice with the same transport-level symptom, stop treating it as a
-flake and investigate as real.
-
-**If the failure is real** (assertion mismatch, wrong status code, unexpected field):
-
-1. Reproduce locally — these suites need a running service:
-
-   ```bash
-   a-novel test --type=go -y       # starts gRPC standalone
-   a-novel test --type=pnpm -y    # starts REST standalone
-   ```
-
-2. The failure usually means a contract mismatch between handler and client:
-   - `test-pkg` failing → gRPC handler vs. `pkg/go` client drift — check `write-proto`
-   - `test-pkg-js` failing → REST handler vs. `openapi.yaml` vs. `pkg/js/rest/` drift —
-     all three must match, see `implement-feature`'s OpenAPI / REST / JS sync rule
-
-3. Fix the out-of-date side, re-run until green, commit, push.
-
-### 2.5 `build-*` (Docker) failure
-
-**Symptom**: `docker build` step fails. Root causes:
-
-- **Go compilation error** in the image's entrypoint binary → the real failure is in Go
-  source; fix via Phase 2.3 approach (edit, `go build ./...`, commit). The `build-*`
-  failure is a downstream symptom.
-- **Dockerfile syntax / COPY path wrong** → follow `write-dockerfiles` to fix
-- **Base image pull failure** → usually transient; retry with `gh run rerun --failed`
-- **Migration init script failure** (`build-database`, `build-migrations`) → follow
-  `write-sql` for migration fixes
-
-Always read the `--log-failed` output before guessing. `undefined: Foo` or `type Bar has no
-field Baz` is a Go source issue, not a Dockerfile one.
-
-### 2.6 `build-js` failure
-
-**Symptom**: `pnpm build:rest` fails in `pkg/js/`.
-
-**Fix**: follow `write-js-package`. Reproduce with `pnpm -C pkg/js build:rest`. Typical
-causes:
-
-- TypeScript compile error after an API change
-- Missing export in `pkg/js/rest/index.ts`
-- Broken import path after a file rename
 
 ---
 
