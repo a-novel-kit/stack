@@ -11,7 +11,8 @@ name: auto-approve dependencies
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  workflow_run:
+  # Only fixed API calls and pinned actions consume validated metadata; no PR checkout, artifacts, caches or environment files.
+  workflow_run: # zizmor: ignore[dangerous-triggers] Privileged bot approval requires base-branch Actions secrets.
     workflows: [main]
     types: [completed]
 
