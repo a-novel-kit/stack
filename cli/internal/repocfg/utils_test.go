@@ -22,13 +22,13 @@ case "$*" in
  *) exit 91;;
 esac
 `
-	if err := os.WriteFile(filepath.Join(directory, "gh"), []byte(stub), 0700); err != nil {
+	if err := os.WriteFile(filepath.Join(directory, "gh"), []byte(stub), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	outputPath := filepath.Join(directory, "output")
 	callsPath := filepath.Join(directory, "calls")
 	for _, p := range []string{outputPath, callsPath} {
-		if err := os.WriteFile(p, nil, 0600); err != nil {
+		if err := os.WriteFile(p, nil, 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
