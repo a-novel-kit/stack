@@ -29,7 +29,7 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
         return nil, otel.ReportError(span, fmt.Errorf("search users: %w", err))
     }
     // map dao entities → core models, then:
-    return otel.ReportSuccess(span, results), nil
+    return results, nil
 }
 ```
 
@@ -95,8 +95,8 @@ func NewRestUserList(service RestUserListService, logger logging.Log) *RestUserL
 
 - **REST is public-facing.** Never leak internal error detail. Map each expected sentinel to a
   status with the project's error-mapping helper (`httpf.HandleError` + `httpf.ErrMap`); the
-  helper's fallback covers unmapped errors as 500. `httpf.HandleError` already calls
-  `otel.ReportError` for you, so never add a separate one on a path that goes through it (see
+  helper's fallback covers unmapped errors as 500. `httpf.HandleError` marks the span failed for a
+  5xx and leaves a 4xx unset, so never add a separate report on a path that goes through it (see
   Telemetry).
 - Conventional short names `w` / `r`. JSON in via `json.NewDecoder(r.Body)` or `gorilla/schema` for
   query params; out via the project's `httpf.SendJSON`.
@@ -125,7 +125,6 @@ func (h *GrpcOrderCreate) OrderCreate(
 
     result, err := h.service.Exec(ctx, &core.OrderCreateRequest{UserID: req.GetUserId()})
     if errors.Is(err, core.ErrUserNotFound) {
-        _ = otel.ReportError(span, err)
         return nil, status.Error(codes.NotFound, "create order: user not found")
     }
     if err != nil {
@@ -133,7 +132,7 @@ func (h *GrpcOrderCreate) OrderCreate(
         return nil, status.Error(codes.Internal, "create order: internal error")
     }
 
-    return otel.ReportSuccess(span, &protogen.OrderCreateResponse{OrderId: result.ID.String()}), nil
+    return &protogen.OrderCreateResponse{OrderId: result.ID.String()}, nil
 }
 
 func NewGrpcOrderCreate(service GrpcOrderCreateService) *GrpcOrderCreate {

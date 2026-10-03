@@ -41,7 +41,7 @@ func (r *PgUserSelect) Exec(ctx context.Context, request *UserSelectRequest) (*U
         return nil, otel.ReportError(span, fmt.Errorf("execute query: %w", err))
     }
 
-    return otel.ReportSuccess(span, &user), nil
+    return &user, nil
 }
 
 func NewPgUserSelect() *PgUserSelect { return &PgUserSelect{} }
@@ -54,8 +54,8 @@ func NewPgUserSelect() *PgUserSelect { return &PgUserSelect{} }
   (`err = errors.Join(err, ErrXxxNotFound)`), then `otel.ReportError` it like any other failure —
   **including the not-found case**. A missing row is a real outcome the DAO encountered; whether
   it's benign is the caller's call (ultimately the handler's, by discarding it).
-- **Telemetry:** `otel.ReportError(span, err)` on every failure path; `otel.ReportSuccess(span,
-value)` on the happy path. See [Telemetry](telemetry.md).
+- **Telemetry:** `otel.ReportError(span, err)` on every failure path; the happy path returns its
+  value directly. See [Telemetry](telemetry.md).
 - **Entity types** (bun models) go in their own `pg.<entity>.go` file, separate from the operations
   that use them.
 

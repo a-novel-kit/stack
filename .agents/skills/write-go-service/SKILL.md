@@ -14,7 +14,7 @@ idiomatic, minimal code that strictly respects the layered architecture.
 **This skill is layered on `write-go`.** Everything there — read-before-edit, the
 `pnpm format:go`/`pnpm lint:go` discipline, dependency policy, naming of packages/files/variables,
 constructors, error sentinels and `%w` wrapping, context rules, time-capture-once, secrets
-hygiene, the layer-relative span-reporting rule — applies here unchanged; this skill adds the
+hygiene, the span-reporting rule — applies here unchanged; this skill adds the
 **service-architecture-specific** rules on top. Load `write-go` and `write-go-tests` (and
 `document-code` when documenting) alongside it. For shared libraries under `a-novel-kit` (`golib`,
 `jwt`, …) load `write-go-kit` instead of this skill.
@@ -36,7 +36,7 @@ layer rules when testing its contract too; crossing layers requires each matchin
 - Config, internal helpers, models, exported clients, or command wiring: [wiring](references/wiring.md).
 - New or changed DAO/core operations or handlers, and any other operation with a span:
   [telemetry](references/telemetry.md). Apply this to reviews even when the existing code lacks a span.
-  Every layer that propagates or surfaces an error reports it on its own span.
+  Every operation that fails reports its error on its own span.
 - Tests, regression coverage, or test review: [layer test patterns](references/testing.md), alongside
   `write-go-tests`. DAO integration tests and generated mocks remain required where applicable.
 
