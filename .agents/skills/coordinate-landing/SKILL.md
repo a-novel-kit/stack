@@ -53,7 +53,7 @@ two things. The vocabulary is a contract, and a reused name is a future bug.
 | **Epic**                                   | The planning issue grouping a multi-repo change; its number is `N`.                                                                                                                                                                                                |
 | **`epic:<N>` membership**                  | The label binding a PR to Epic N. Author-role-gated (only a maintainer can add it), so membership is trusted. It defines the set until activation freezes it — see **Activation snapshot**.                                                                        |
 | **Activation snapshot**                    | The member set frozen into the Epic issue body once it has held merge-ready long enough to settle. From then on the snapshot _is_ the set: a PR de-labelled, closed, or relabelled afterwards stays a member.                                                      |
-| **Wave**                                   | One frozen set landing. A PR labelled after the freeze belongs to the **next** wave, and waits — the snapshot retires when every member is terminal, and the next ready set freezes its own.                                                                       |
+| **Wave**                                   | One frozen set landing. A PR labelled after the freeze joins the **next** wave; the snapshot retires once every member merged (or, after a rollback, none is open).                                                                                                |
 | **Atomic landing**                         | All member PRs merging together — INV-1 satisfied.                                                                                                                                                                                                                 |
 | **merge-gate**                             | The required status check that **holds** an `epic:<N>` PR until the whole member set is ready + approved, then lets the merge queue land them together. A standalone (unlabelled) PR fast-paths to pass. On engagement of the halt it posts `failure` on every PR. |
 | **merge queue**                            | GitHub's native queue. The merge-gate re-evaluates over each frozen `gh-readonly-queue/...` head so the set greens and commits together.                                                                                                                           |
@@ -61,7 +61,7 @@ two things. The vocabulary is a contract, and a reused name is a future bug.
 | **epic-freeze / partial-landing detector** | The action + sweep pass that detects a partial landing and **freezes** every surviving sibling (posts `failure` on their heads + dequeues live groups) so no further member lands.                                                                                 |
 | **Grace window**                           | The 45-minute interval (3× the 15-min sweep) a stray sibling has to re-enter the queue before the freeze trips — absorbs normal queue churn.                                                                                                                       |
 | **Roll-forward**                           | Re-enqueuing a _landable_ stray within grace (enable auto-merge). Recovery **forward**, not a rollback — the preferred repair.                                                                                                                                     |
-| **epic-rollback**                          | The human-triggered, admin-gated, VCS-layer compensator: reconstruct the merged `epic:<N>` ledger, `git revert` each squash newest-first, group the reverts under a **fresh** rollback-Epic, and land them in reverse through the unchanged merge-gate.            |
+| **epic-rollback**                          | The human-triggered, admin-gated, VCS-layer compensator: reconstruct the current wave's merged `epic:<N>` ledger, revert each squash newest-first under a **fresh** rollback-Epic, and land them in reverse through the merge-gate.                                |
 | **Release train**                          | One admin dispatch that releases every repo an Epic landed in — derive each repo's bump, drive its `release.yaml`, record the tag.                                                                                                                                 |
 | **Receipt**                                | The tag a repo's release cut, recorded on the Epic. The release train's output **and** its idempotent-resume ledger.                                                                                                                                               |
 | **AGENT_KILL_SWITCH**                      | The org-wide fail-safe emergency halt (an org variable).                                                                                                                                                                                                           |
@@ -178,9 +178,13 @@ Dispatch **`epic-rollback`** for Epic N. It is admin-only, `dry_run`-default, an
 (`revert-epic-<N>`). Always **dry-run first** — it prints the reconstructed ledger + the planned
 per-repo reverts and does no writes. Then run live:
 
-- It reconstructs the merged `epic:<N>` ledger from GitHub (REST-authoritative squash SHAs), git-reverts
-  each squash **newest-first**, opens one revert PR per repo, and groups them under a **fresh**
-  rollback-Epic `epic:<M>` through the unchanged merge-gate.
+- It reconstructs the **current wave's** merged `epic:<N>` ledger from the snapshot's wave boundary
+  on (earlier waves landed whole and are left alone; an unreadable boundary stops the run), using
+  REST-authoritative squash SHAs, git-reverts each squash **newest-first**, opens one revert PR per
+  repo, and groups them under a **fresh** rollback-Epic `epic:<M>` through the unchanged merge-gate.
+- It labels Epic N **`rolled-back`**. merge-gate then retires N's frozen wave once **no member is
+  open**, on the next PR labelled `epic:<N>`, so the Epic can carry a new wave. Close or land any
+  member still open first. A new wave's freeze clears the label, so it never applies to a later wave.
 - The App authored the reverts, and **GitHub 422s a self-approval**, so the wave **PARKS pending a
   human approval** — forced four-eyes on a destructive op. Review + approve each revert PR; the gate
   then greens and the wave lands in reverse, atomically.
