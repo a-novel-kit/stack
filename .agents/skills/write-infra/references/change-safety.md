@@ -25,6 +25,11 @@
   left behind as unmanaged orphans.
 - **`prevent_destroy` blocks destroying a `for_each` instance removed from the map.** Retiring one
   needs a deliberate, reviewed lifting of that protection.
+- **A green plan does not prove the writer's permissions.** Plans run as the read-only identity,
+  and an apply also polls each long-running operation. Operations carry no tags, so the writer's
+  tag-conditioned roles never cover `run.operations.get`; it lives on an unconditional read role.
+  When the writer starts managing a new resource type, add its write and operation permissions in
+  foundation first.
 
 ## Read the live state before trusting the code
 
