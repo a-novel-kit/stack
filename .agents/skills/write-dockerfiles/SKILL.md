@@ -48,8 +48,9 @@ This project separates the main process from maintenance work:
   container and running migrations and rotation before starting the server. Never use standalone
   images in production.
 
-- **Database image** (`database.Dockerfile`): a PostgreSQL image with pg_cron compiled in.
-  Migrations are not baked in — run the migrations job image against it separately.
+- **Database image** (`database.Dockerfile`): PostgreSQL and pgBackRest on Wolfi, plus whatever
+  extensions the service needs. Migrations are not baked in — run the migrations job image against
+  it separately.
 
 This separation keeps production images minimal: the server binary doesn't carry migration code
 it never runs, and job images don't carry server code.
@@ -190,49 +191,25 @@ They run to completion and exit.
 
 ## Database Image
 
-The database image is a PostgreSQL image with the `pg_cron` extension compiled in. It uses a
-multi-stage build so build tools (git, make, gcc) never appear in the final image layers.
+Every service with a database ships the same image recipe, which infra's database hosts and backup
+repositories run: signed Wolfi packages assembled by apko, plus pgBackRest built from its
+checksum-verified upstream release. Copy `builds/database.Dockerfile` and `builds/database.apko.yaml`
+from `service-json-keys`, then add the service's own packages and init SQL. Infra relies on what the
+recipe preserves: UID/GID 999, `PGDATA=/var/lib/postgresql/18/docker`, the upstream
+`docker-entrypoint.sh`, `bash`, `pg_isready`, and `pgbackrest` on the `PATH`.
 
-```dockerfile
-FROM docker.io/library/postgres:18.3 AS builder
-
-ARG DEBIAN_FRONTEND=noninteractive
-
-# Install build tools, compile pg_cron from source. The final stage copies only the
-# compiled extension files, leaving all build tooling in this discarded stage.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    build-essential \
-    postgresql-server-dev-18 \
-  && git clone https://github.com/citusdata/pg_cron.git \
-  && cd pg_cron \
-  && git fetch --tags \
-  && git checkout "$(git describe --tags "$(git rev-list --tags --max-count=1)")" \
-  && make \
-  && make install
-
-FROM docker.io/library/postgres:18.3
-
-# Copy only the compiled extension artifacts; build tools stay in the builder stage.
-# Update these paths when bumping the PostgreSQL major version.
-COPY --from=builder /usr/lib/postgresql/18/lib/pg_cron.so /usr/lib/postgresql/18/lib/
-COPY --from=builder /usr/share/postgresql/18/extension/pg_cron.control /usr/share/postgresql/18/extension/
-COPY --from=builder /usr/share/postgresql/18/extension/pg_cron--*.sql /usr/share/postgresql/18/extension/
-```
-
-**The database image needs multi-stage.** Each `RUN` creates a layer, so a later `apt-get remove` or
-`rm -rf` leaves the build tools sitting in the earlier layers, still taking space. A multi-stage
-build discards the builder entirely — the final image is the postgres base plus the few kilobytes of
-pg_cron files.
-
-**pg_cron version**: built from the latest tagged release (via `git describe --tags`). This is
-intentional — unlike application code, pg_cron's release cadence is slow and the "latest tag"
-strategy is acceptable. To pin a version, replace the `git checkout` with `git checkout v1.6.4` (or
-whichever version).
-
-**Path versioning**: the pg_cron extension files live at paths that include the PostgreSQL major
-version (e.g., `/usr/lib/postgresql/18/lib/`). When bumping the `postgres:18.x` base to
-`postgres:19.x`, update these paths accordingly.
+- **Pin service packages in the apko manifest** (`postgresql-18=18.6-r5`, `pg_cron-18=1.6.8-r0`).
+  The shared Renovate preset tracks every `name=version` line; base libraries stay unpinned.
+- **Extensions come from Wolfi packages.** Find the exact release in Wolfi's `APKINDEX` before
+  pinning. Only pgBackRest is source-built, in a discarded stage, so compilers never reach the runtime.
+- **Server settings an extension needs at init** go in `postgresql.conf.sample`
+  (`/usr/share/postgresql18/`), which initdb copies: the server that runs the init SQL has them too.
+- **pg_cron needs `cron.use_background_workers = on`.** By default a job logs in over TCP without a
+  password, and SCRAM authentication rejects it, so every run fails with `connection failed`. Set
+  `cron.database_name` from `POSTGRES_DB` in an entrypoint wrapper, and only for the `postgres`
+  command: infra also runs the image with other commands.
+- **A Wolfi data directory is not portable from the Debian image.** Moving between them needs a fresh
+  volume, or a logical dump and restore.
 
 **Executable files**: use `COPY --chmod=755` when copying shell scripts or other executables into
 the image. It sets the executable bit in a single instruction and avoids a separate `RUN chmod +x`
@@ -241,9 +218,6 @@ layer:
 ```dockerfile
 COPY --chmod=755 ./builds/database.entrypoint.sh /usr/local/bin/database.entrypoint.sh
 ```
-
-**`DEBIAN_FRONTEND=noninteractive`**: only needed in the builder stage (which is Debian-based).
-Never set it in Alpine-based runtime stages — it has no effect and only creates confusion.
 
 ---
 
@@ -347,17 +321,11 @@ Always exclude:
   and produces different binaries on different dates. Pin to a specific version tag.
 - **`apk add curl` in Alpine runtime.** Use the BusyBox `wget -qO /dev/null <url>` already present in
   any Alpine image.
-- **`ARG DEBIAN_FRONTEND=noninteractive` in Alpine stages.** This Debian/Ubuntu flag is a no-op in
-  Alpine and should not appear in Alpine-based runtime stages.
-- **Missing `ca-certificates` with `--no-install-recommends`.** That flag stops `ca-certificates`
-  from being pulled in transitively, so HTTPS connections (e.g., `git clone`) fail with an SSL error.
-  Always install it explicitly in a Debian/Ubuntu stage that makes HTTPS requests.
-- **Build tools in the database final stage.** A cleanup `RUN` removes files from new layers but not
-  from previous ones, so `apt-get install` and `git clone` layers survive. Always use multi-stage
-  builds when compiling extensions from source.
-- **Hardcoded paths after a major PostgreSQL version bump.** After upgrading from `postgres:18.x` to
-  `postgres:19.x`, update the builder's `postgresql-server-dev-18` package and the COPY paths
-  `/usr/lib/postgresql/18/lib/` and `/usr/share/postgresql/18/extension/`.
+- **Build tools in the database runtime.** A cleanup `RUN` removes files from new layers but not
+  from previous ones. Compile in a discarded stage and copy only the binary, as pgBackRest is.
+- **Hardcoded paths after a major PostgreSQL version bump.** Moving from PostgreSQL 18 to 19 changes
+  the package names in the apko manifest, the `postgresql18` paths and symlinks in the Dockerfile,
+  and `PGDATA`.
 - **Using standalone images in production.** They run migrations and key rotation at startup, which
   is unsafe where multiple replicas start concurrently. Use the dedicated job images instead.
 - **Forgetting to update `.dockerignore` when adding new top-level directories.** Large directories
