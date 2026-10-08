@@ -64,3 +64,7 @@ imports, in-place changes and deletions, with the reason for each. Separate stag
 deletion label from those that do not. Stack them when they depend on one another. In the handoff,
 list what the user must do by hand: label, admin-bypass merge after a required-check rename, GitHub
 settings, then `a-novel repo update`.
+
+`master` requires an approval the author's account cannot give. The user reviews, then records it
+with `gh workflow run approve-pr.yaml --repo a-novel/infra -f pull_request=<PR URL>`. Never
+dispatch it yourself: that records a review nobody did.

@@ -1,5 +1,11 @@
 # Change safety
 
+- [Prove the plan before review](#prove-the-plan-before-review): zero-diff proofs, moves, imports
+- [Retire protected resources](#retire-protected-resources): unlock, retire, forget
+- [Read the live state](#read-the-live-state-before-trusting-the-code)
+- [Release contract](#release-contract), [Database and backup hosts](#database-and-backup-hosts),
+  [Trust boundaries](#trust-boundaries), [Recovery](#recovery)
+
 ## Prove the plan before review
 
 - **Pure refactors must plan to zero changes.** Locally, run
@@ -19,12 +25,29 @@
   plan with the read-only identity then proves the import IDs.
 - **After the import applies,** delete the import blocks. Leave the old state objects in place:
   nothing reads them, and versioning keeps them recoverable.
-- **Forget, don't destroy,** what still holds data, using `removed { lifecycle { destroy = false } }`.
-  GCS refuses to delete a non-empty managed folder.
+- **Forget, don't destroy,** what still holds data you keep, using
+  `removed { lifecycle { destroy = false } }`. A managed folder with `force_destroy = true` is
+  deleted while its objects stay.
 - **Grants that served retired tooling** are better adopted and then deleted under the label than
   left behind as unmanaged orphans.
-- **`prevent_destroy` blocks destroying a `for_each` instance removed from the map.** Retiring one
-  needs a deliberate, reviewed lifting of that protection.
+
+## Retire protected resources
+
+- **Unlock in one apply, retire in the next.** The provider reads `deletion_policy` and
+  `force_destroy` from state, so a resource whose state says `PREVENT` refuses to be destroyed
+  even after its block is gone. Both pull requests need the deletion label.
+- **One instance of a protected `for_each`:** `moved` it to an address outside the configuration,
+  plus a `removed` block (`destroy = true`, or `false` to forget). `prevent_destroy` stays on the
+  other instances.
+- **That move drops the instance's dependency edges.** Its grants no longer wait for it, so a
+  service account can be deleted before the grants that name it. Remove an identity's grants in
+  the apply before the identity.
+- **IAM writes fail for a few minutes after a service account is deleted** with
+  `Deleted member '…?uid=…' is not deleted`. The deletion is still propagating: wait about ten
+  minutes, then re-run the failed jobs.
+- **Forget, don't revoke, the deploy identity's own grant on a resource it deletes in the same
+  apply.** Revoking could run first and turn the deletion into a 403. The grant goes with the
+  resource.
 - **A green plan does not prove the writer's permissions.** Plans run as the read-only identity,
   and an apply also polls each long-running operation. Operations carry no tags, so the writer's
   tag-conditioned roles never cover `run.operations.get`; it lives on an unconditional read role.
