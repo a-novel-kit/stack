@@ -1,13 +1,9 @@
 ---
 name: write-design-system
 description: >
-  Design-system conventions for Agora uikit foundations and reusable frontend components — CSS
-  design tokens, calculated scales, semantic aliases, typography, themes, accessibility,
-  component APIs, mandatory live Storybook review and handoff links, package boundaries, and publication hygiene. Load for
-  any tokens, fonts, icons, theme, Storybook foundation, or shared UI component change. Load
-  `plan-ui-design` before non-trivial visual direction, interaction-pattern, component-family, or
-  foundation architecture. ALWAYS load `write-frontend`; add `write-svelte` for Svelte components
-  and `write-frontend-tests` for stories and tests.
+  Implement or review uikit tokens, fonts, icons, themes, Storybook foundations, and shared UI
+  components. Load for these changes; always pair with write-frontend, plus applicable Svelte/tests.
+  Use plan-ui-design for material visual, interaction, component-family, or foundation decisions.
 ---
 
 # Design-System Conventions
@@ -143,8 +139,9 @@ Rules:
   references, focus movement, measurements, and accessibility attributes in the component. Do not
   expose both a controller and bindable state props or generic `setState` methods.
 - Export component-specific controller types even when several alias the same generic state shape, so
-  consumer APIs and migration guides remain discoverable. Storybook may supply a fixed controller that
-  rejects transitions to keep a review state pinned.
+  consumer APIs and migration guides remain discoverable. Storybook supplies fixed-state controllers
+  under the `write-frontend-tests` review contract; the component renders the accepted state even when
+  a native event requests a rejected transition.
 - Define state precedence explicitly. Persistent selected, checked, expanded, invalid, loading, and
   disabled states outrank transient hover and active treatments; transient feedback must not visually
   erase or contradict the persistent state.
@@ -169,6 +166,32 @@ Rules:
   colors.
 - Do not expose implementation selectors as API. Expose a documented CSS custom property only when
   consumer theming is an intentional contract.
+
+## Refinement passes
+
+Preserve the reviewed Agora direction: a dark gray-blue field, border-light surfaces, compact
+metadata, and vivid semantic accents. Keep canonical brand, pressure, and signal colors stable
+unless the brief explicitly changes them. Tune the owning semantic role and compare before/after
+renders across its consumers.
+
+- Judge color with area and backdrop. A small badge can carry a saturated fill; a large status box
+  needs a quieter tint with a clear icon and accent. Improve vividness through chroma and foreground
+  contrast before adding white or increasing opacity everywhere. Keep control variants in their
+  semantic color family through hover and selection.
+- Distinguish external margins from internal padding. Narrow screens benefit from small outer
+  gutters while panels, dialogs, and buttons still need breathing room inside. Separate form actions
+  from inputs, wrap long secondary labels, and preserve source order. Dense metadata can be smaller
+  than controls; compact labels do not justify shrinking touch targets.
+- Share anatomy where the responsibility matches: heading and trailing controls, optional supporting
+  text, content, and actions. Leave omitted regions empty of spacing. Keep native behavior and
+  controller ownership separate from stateless composition; ordinary body content needs no wrapper
+  unless the wrapper owns a real layout invariant.
+- Treat glow as light behind the emitting shape. Compare layered soft shadows with a restrained
+  shape-following halo; avoid a sharp neon outline or an oversized rounded cushion. Keep ordinary
+  surfaces subdued and focus indicators unambiguous.
+
+Finish by removing compensating overrides and duplicated machinery. A coherent pass may leave most
+components unchanged; change only what the rendered comparison or code ownership shows needs work.
 
 ## Storybook as the review surface
 

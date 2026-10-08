@@ -1,10 +1,8 @@
 ---
 name: register-ai-agent
 description: >
-  Discover, programmatically verify, and register a GitHub-linked AI co-author identity. Use only
-  when attribute-ai-commits reports status missing for the current agent, or when explicitly asked
-  to add a new agent to the repository co-author registry. Publish the registry change
-  through a pull request.
+  Verify and register a GitHub-linked AI co-author through a PR. Use only for a missing identity
+  reported by attribute-ai-commits or an explicit registration request.
 ---
 
 # Register AI Agent

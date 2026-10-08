@@ -1,38 +1,48 @@
 ---
 name: open-pull-request
 description: >
-  Push a branch and open a GitHub pull request for Agora backend services. Use whenever
-  shipping work — features, fixes, refactors, chores. Covers pre-flight checks, base branch,
-  PR title and body, draft mode, and updating an existing PR instead of re-creating it.
-  Pairs with git-conventions (commit/branch format) and monitor-ci (post-push CI).
+  Publish branches and create or update PRs with correct bases, metadata, readiness, and handoff.
+  Load when shipping changes; use monitor-ci through the checks' conclusion.
 ---
 
 # Open Pull Request
 
-This skill governs how Claude pushes a branch and opens a pull request. **Pushing a feature
-branch and opening a PR never need permission — do both as soon as a branch has a commit, and
-open the PR as a _draft_ if the work is not review-ready.** A branch and a (draft) PR harm
-nothing: they touch no shared history and request no review, while leaving committed work
-unpushed risks losing it to a crashed session. See `git-conventions` → "Branch and PR freedom"
-for the underlying rule.
+Load [develop-feature](../develop-feature/SKILL.md) before publishing. Keep an exploratory draft
+local until direction agreement, unless publication was explicitly requested. After agreement,
+feature-branch pushes and draft PRs within scope need no repeated permission. Clear, simple tasks
+may take the shorter path defined there.
 
-The one hard prohibition is upstream: **never push to `master`/`main` without explicit consent**
-(`git-conventions`). Most contributors cannot; on an admin account it is your guardrail to hold.
-
-So the pre-flight below gates on _quality_ (lint, tests, a clean tree), not on _permission_. When
-a check fails you fix it, not ask to skip it. And "not review-ready" is never a reason to withhold
-a PR — it is the reason to open a **draft** one, which has no rules (force-push, redirect, or delete
-it freely).
+Issue discussion and draft-PR review can run together. Keep the PR draft while scope approval,
+full relevant tests, or final cleanup remain outstanding. Drafts follow repository safeguards and
+history rules. Never push to `master`/`main` without explicit consent (`git-conventions`).
 
 Every PR in this repo follows the same contract: Conventional-Commits title, structured
 body, correct base, and no manual reviewer/assignee assignment (workflows handle that).
 
 ---
 
+## Choose the publication path
+
+Use the checks and stage rules below before publication. Inspect the existing branch/PR first;
+update an open PR rather than recreating it.
+
+- Before creating or editing a PR, changing draft/ready status, or mirroring tracking metadata,
+  read [authoring and metadata](references/authoring.md).
+- After every push to an existing draft PR, recheck its draft reason using the
+  [readiness rule](references/authoring.md#61-flip-a-draft-to-ready-the-moment-it-qualifies-mandatory).
+  Mark it ready in the same turn once all applicable completion gates pass.
+- Before a final code/issue handoff, read [the session recap contract](references/handoff.md).
+  Include every outstanding session item and each PR's admin-only approval command after review.
+- After a push, use `monitor-ci` through green or a documented escalation, and inspect feedback
+  with `resolve-pr-feedback`. Publication alone does not complete the task.
+
+Local rendered-UI links belong in the handoff, never the PR body. Keep all approval, readiness,
+identity, history, and layer-specific verification rules when taking a shorter publication path.
+
 ## Phase 1: Pre-Flight Checks
 
-Before any push or PR creation, verify all of the following. If any check fails, stop and
-surface the problem to the user instead of pushing.
+Before any push or PR creation, confirm that `develop-feature` permits publication and apply the
+stage-appropriate checks below. Fix failures within scope; surface genuine blockers.
 
 ### 1.1 You are on a feature branch
 
@@ -73,15 +83,16 @@ follow-up commit (or, for a cosmetic title fix, a PR-title adjustment the author
 squash at merge time). For any earlier malformed commit — even if unpushed — ask the
 user before rewriting history.
 
-### 1.4 Basic CI passes locally
+### 1.4 Validate for the current stage
 
-**Always run basic CI locally before pushing.** CI is not a debugger: a red push wastes a
-CI cycle and reviewer attention. Never push expecting "CI will tell me what's wrong".
+**Draft PR:** run focused existing checks and the lint/build checks needed to validate the changed
+path. Describe new regression coverage deferred until issue scope approval. Do not demand the full
+test suite to publish an agreed draft, disable CI, or weaken existing assertions.
 
-**Basic CI = lint + tests + build.** Scope each to what the branch changed — run the checks
-for the layers/languages you touched, and skip the ones your change cannot affect (no
-`builds/` file or copied file structure touched → no image rebuild; a Go-only change → no
-pnpm tests).
+**Ready PR:** after scope approval, complete and run the full relevant regression suite, review
+coverage, and finish code cleanup. Client-side changes include affected Playwright tests and
+reviewed screenshot comparisons. Run applicable lint, type, test, and build checks; skip targets
+the change cannot affect. CI confirms local verification.
 
 ```bash
 # 1. LINT — pnpm scripts (lint/format/generate are NOT a-novel CLI verbs):
@@ -112,7 +123,7 @@ go tool -modfile=golangci-lint.mod golangci-lint run ./...
 That form resolves the version the repo pins, so local and CI run the identical linter. Pulling
 `@latest` instead invites a disagreement that is pure version drift.
 
-If lint, tests, or build fail locally, CI will fail too. Fix before pushing.
+Fix failures in the applicable checks before pushing; disclose any verification blocker.
 
 ### 1.5 Generated files are in sync
 
@@ -174,22 +185,16 @@ parent first and make sure its PR is open.
 
 ## Phase 3: Decide PR Status (Ready vs. Draft)
 
-**Ready for review is the default. Draft is the narrow exception, only for a reason below.**
-Finished work with passing tests and a green tree is review-ready — open it ready. Do **not**
-default to draft "to be safe": a draft withholds the PR from the reviewer, and leaving
-review-ready work in draft is exactly the failure this phase exists to prevent.
+Open a **draft** after direction agreement when any of these remain:
 
-Open as **draft** only when one of these genuinely holds:
+- Issue scope approval or a blocking design discussion.
+- Full relevant test coverage, Playwright/screenshot verification, or final cleanup.
+- A required layer, documentation, or stacked dependency still being completed.
+- An explicit developer request for draft/WIP or early directional review.
 
-- The developer explicitly said "draft" or "WIP"
-- The branch is a non-tip link in a stack still being built — only the tip is review-ready
-- The branch intentionally omits tests, docs, or a related layer landing in a later PR
-- The developer wants early directional feedback before a full review
-
-If none of these hold, open **ready for review**. And a draft is not a resting state — it is a
-standing claim that one of the reasons above still applies. It is something you _own and must
-clear_, never something you leave behind. The moment the claim stops being true, flip it to ready
-(Phase 6).
+Review feedback on the issue and the draft PR in parallel with `resolve-pr-feedback`. Draft does
+not mean feedback should wait. Open **ready for review** only once the applicable
+`develop-feature` completion gates pass. Clear, finished work need not be held in draft.
 
 ```bash
 gh pr create --draft ...   # draft
@@ -214,190 +219,6 @@ gh pr view --json number,state,url 2>/dev/null
 
 ---
 
-## Phase 5: Create the PR
-
-### 5.0 PR authoring runs as the operator — the bot can only comment
-
-`gh pr create` (and every `gh pr edit` / `gh pr ready` in this skill) runs with the plain
-`gh` credential, the operator's **user token**. The operator authors the PR, so the
-`auto-assign-author` workflow can assign them and `CODEOWNERS` routing works.
-
-Authoring a PR as the bot is impossible by construction. There is no local bot token, and
-the only bot entry point — `a-novel core bot-comment <org> <repo> <number> --body …` —
-does one thing: trigger the centralized dispatcher workflow, which _posts a comment_. So
-`pr create|edit|ready|merge|close` are always operator actions; commenting (top-level
-PR/issue comments and review-thread replies in `resolve-pr-feedback`) is the only thing
-that attributes to `<app-slug>[bot]`.
-
-If a `gh pr create`/`edit`/`ready` call fails with an auth/permission error, surface it
-to the user — there is no bot fallback to route around it.
-
-### 5.1 Choose the base branch
-
-- Default: `master`
-- Stacked: the parent feature branch (e.g., `feat/dao/jwk-revoke`)
-
-Pass the base explicitly with `--base` when it is not `master`:
-
-```bash
-gh pr create --base feat/dao/jwk-revoke ...
-```
-
-### 5.2 Title
-
-The title is a Conventional-Commits line matching the primary commit on the branch. Under
-70 characters. No period.
-
-```
-feat(dao): add soft-delete repository for key revocation
-```
-
-With multiple commits touching one scope, use the scope that best describes the branch's
-goal. When the commits are genuinely cross-cutting (rename across layers), omit the scope.
-
-### 5.3 Body
-
-Use this template, passed via HEREDOC to preserve formatting. Skip sections that do not
-apply — do not write "no changes" placeholders.
-
-```bash
-gh pr create --title "feat(dao): add soft-delete repository for key revocation" --body "$(cat <<'EOF'
-## Summary
-
-- Adds `PgJwkRevoke` DAO for marking keys as revoked.
-- Returns `ErrJwkRevokeNotFound` when the target is already revoked or expired.
-
-## Layers changed
-
-- **DAO**: new `pg.jwkRevoke.go` + test; sentinel error added.
-
-## Breaking changes
-
-None.
-
-## Test plan
-
-- [x] `a-novel test --type=go -y` passes
-- [ ] CI green
-EOF
-)"
-```
-
-Rules:
-
-- **Summary** is 1–3 bullets describing what changed _and why_. Readers see the diff; they
-  need the intent.
-- **Linked issues — close a planning issue with the FULL cross-repo ref.** A PR implementing
-  a planning issue must close it in the body so merging advances the board. Planning issues
-  (Epic / Feature / Task) live in the org **`.github`** repos (`a-novel-kit/.github`,
-  `a-novel/.github`), so from another repo a bare `Closes #<n>` resolves to _this_ repo and
-  links **nothing** — the issue then freezes on the board (a Feature stuck at Backlog though
-  its PR merged). Use `Closes a-novel-kit/.github#<n>` (or `a-novel/.github#<n>`): only that
-  form lands in the PR's `closingIssuesReferences`, the sole signal `derive-status` reads to
-  move the issue's board **Status**. A Task filed in _this same_ repo keeps the bare
-  `Closes #<n>`.
-- **Layers changed** lists only the layers actually touched. Omit the section entirely if
-  only one layer is affected and the title already conveys it.
-- **Breaking changes** is either `None.` or an itemized list with migration steps. Never
-  leave it "TBD" or blank — reviewers should not have to hunt.
-- **Test plan** is a checklist. Check the boxes you have already verified locally; leave
-  `CI green` unchecked (monitor-ci will mark it).
-- **Local review surfaces stay out of the PR body.** Never put localhost or another local-only URL in
-  durable PR metadata. For rendered UI, `write-frontend` requires the freshly verified direct
-  Storybook link in the completion report instead.
-- **Read the body back after create/edit.** Run
-  `gh pr view <n> --json body --jq .body` and verify headings, lists, and line breaks render as
-  intended. Literal `\n` text is a quoting defect; fix it before handoff.
-
-**Writing style — rationale-dense, zero filler.** The body's job is what the diff cannot say:
-why the change, what tradeoff was taken, what a reviewer should scrutinize. Never narrate the
-diff — file lists, mechanical renames, and "updated X to Y" bullets restate what review tooling
-already shows. Exhaustive on decisions, silent on mechanics. The same bar applies to PR thread
-comments (`resolve-pr-feedback`), where prose may lean more technical.
-
-### 5.4 Do NOT pass these flags
-
-- `--assignee` / `--reviewer` — the `auto-assign-author` workflow handles assignees; the
-  repo decides reviewers via its `CODEOWNERS` file (at repo root) or team routing. Manual
-  assignment duplicates or conflicts with that automation, so set reviewers only when the
-  user asks for a specific person.
-- `--label` — downstream automation derives labels from the title's Conventional-Commits
-  type. Add one manually only when the user requests it.
-- `--milestone` / project board / **Priority** / **Size** / tracking labels — **not** left to humans:
-  a **ready** PR mirrors the milestone, project board, its board fields (Priority, Size), and labels
-  of the issue it closes. See [Tracking metadata](#55-tracking-metadata--match-the-linked-issue).
-
-### 5.5 Tracking metadata — match the linked issue
-
-A PR that is **ready for review** should be as trackable as the planning issue it closes: add it
-to the org **"Tasks"** board and give it the **same milestone**, the **same board fields
-(Priority, Size)**, and the relevant **tracking labels** as that issue — so a glance at the board
-shows the work whether you look at the issue or its PR. A draft skips this; apply it when opening
-ready, or at the **draft → ready** flip (Phase 6).
-
-```bash
-gh pr edit <n> --repo <org>/<repo> --add-label <label> --milestone "<milestone-title>"
-gh project item-add <project-number> --owner <org> --url <pr-url>
-# then mirror the issue's Priority and Size (single-select board fields — discover ids with
-# `gh project field-list <num> --owner <org>`):
-gh project item-edit --id <pr-item-id> --project-id <proj-id> --field-id <priority-field> --single-select-option-id <opt>
-gh project item-edit --id <pr-item-id> --project-id <proj-id> --field-id <size-field>     --single-select-option-id <opt>
-```
-
-This is **tracking** metadata mirroring the issue — distinct from the type label automation derives
-from the title, and from assignee/reviewer (still automation's job, see 5.4).
-
-### 5.6 Capture the PR URL
-
-`gh pr create` prints the PR URL on success. Surface it in the final message so the user can
-jump to it. When an active layer skill requires a companion review surface, include its direct link
-in the same completion report as the PR and linked task or issue URLs; for rendered UI, this is the
-live local Storybook route required by `write-frontend`. Do not add that local URL to the PR body.
-
----
-
-## Phase 6: Updating an Existing PR
-
-When a PR is already open for this branch and you need to change its metadata (not code):
-
-```bash
-# Change the title
-gh pr edit --title "feat(dao): add revoke repository with soft-delete"
-
-# Replace the body (use HEREDOC as in Phase 5.3)
-gh pr edit --body "$(cat <<'EOF'
-...
-EOF
-)"
-
-# Flip from draft to ready — then apply tracking metadata (5.5): board + milestone + labels
-gh pr ready
-
-# Flip from ready back to draft
-gh pr ready --undo
-```
-
-When the change is code, push new commits instead — the PR updates automatically. Never
-close and re-open a PR to change its code; that loses review comments and CI history.
-
-### 6.1 Flip a draft to ready the moment it qualifies (mandatory)
-
-A draft exists for a Phase 3 reason. **Every time you push to a draft PR, re-check whether that
-reason still holds** — status is not decided once at creation and forgotten. When the latest work
-makes the branch review-ready — the stacked parent merged, the omitted tests/docs/layer landed,
-the requested directional feedback incorporated, the WIP finished — flip it in the same turn:
-
-```bash
-gh pr ready   # then apply Phase 5.5 tracking metadata: board + milestone + labels
-```
-
-**Never end a turn with review-ready work sitting in a draft PR.** If the branch is done and green
-and no Phase 3 reason still applies, the PR is ready — say so and run `gh pr ready`. Silently
-leaving it draft withholds it from the reviewer and stalls the task; waiting for the user to say
-"flip it" is the failure, not the courtesy.
-
----
-
 ## Phase 7: Hand-Off to monitor-ci (mandatory — gates task completion)
 
 After `gh pr create` or `git push` succeeds, CI starts. **Opening the PR does not
@@ -412,66 +233,21 @@ complete only once you have reported one of:
 Never end the turn at "PR opened, CI running" — that leaves the result unverified. Carry
 the CI watch to a reported conclusion before closing out.
 
-While CI runs, use the wait windows for a **self-review** of the branch's diff (see
-`monitor-ci` Phase 1.2). Surface anything it turns up alongside the CI result.
+While CI runs, inspect both linked issue discussions and PR feedback with `resolve-pr-feedback`.
+Use the wait windows for a self-review of the branch's diff (`monitor-ci` Phase 1.2); full coverage
+and readiness still depend on the current `develop-feature` stage. Green CI on a draft does not
+approve its scope or complete the task. If no checks apply or are configured, report that accurately.
 
 Do not merge — merges are a developer decision unless explicitly delegated.
 
 ---
 
-## Phase 8: Close With a Session Recap Table and Approval Command (mandatory)
-
-**Whenever you finish a stretch of code or issue work, end your reply with a recap table** so the
-operator can jump straight to whatever needs their attention. This is not optional and not limited
-to what changed since the last prompt: **list every item from this whole session that still needs
-attention** — PRs awaiting review or merge, issues to act on, branches pushed, CI still running —
-even ones you reported turns ago, until they are actually resolved.
-
-Each row's identifier is an **inline markdown link** to the PR or issue, so the target is one click
-away. Every PR row also carries its approval handoff in a dedicated **Admin-only approval (after
-review)** column; use an em dash for non-PR rows. A minimal shape:
-
-```markdown
-| Item                                    | State           | Needs               | Admin-only approval (after review)                                                                                                                                   |
-| --------------------------------------- | --------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [#321](https://github.com/…/321)        | Ready, CI green | Your review → merge | `gh workflow run approve-pr.yaml --repo a-novel/service-authentication --ref master --field pull_request=https://github.com/a-novel/service-authentication/pull/321` |
-| [.github#432](https://github.com/…/432) | Task, blocked   | Decide ownership    | —                                                                                                                                                                    |
-```
-
-Drop the table only when the turn touched no code or issues at all (a pure question). If nothing
-is outstanding, say so in one line instead of an empty table. This rule is session-global — its
-authoritative statement lives in memory (`session-recap-table`) so it fires even on turns where
-this skill never loads (e.g. issue-only work under `triage-issues`).
-
-For rendered UI, the same final report must also include the freshly verified direct local Storybook
-link required by `write-frontend`, adjacent to the recap table or in the relevant PR row. Never put
-that local-only link in the PR body.
-
-For every open PR in the recap, put a copy-pasteable command **inside that PR's table row** that lets
-a repository admin record their approval through the repo's `approve-pr` workflow after reviewing
-the PR:
-
-```bash
-gh workflow run approve-pr.yaml --repo <org>/<repo> --ref <default-branch> --field pull_request=<PR-URL>
-```
-
-Resolve every placeholder before presenting the command: use the PR's exact repository and URL, and
-the repository's actual default branch. Label it **admin-only** and say it is for use after review.
-Never place the command only in prose beside or after the table: condensed task summaries may retain
-the recap table while omitting surrounding prose.
-This is a handoff command, not authorization to dispatch the workflow; never run it unless the user
-explicitly asks. The workflow itself fails closed when the dispatching user is not a repository
-admin.
-
----
-
 ## Common Mistakes
 
-- **Asking permission to push a branch or open a PR.** Neither ever needs it — do both once a
-  branch has a commit (open a draft if not review-ready). The only push that needs consent is to
-  `master`/`main`.
-- **Sitting on committed-but-unpushed work.** Committed and not pushed is one crashed session from
-  gone. Push and open a (draft) PR so it is tracked.
+- **Publishing before draft agreement.** Local checkpoint commits stay local unless publication
+  was explicitly requested. After agreement, do not ask again for already-authorized publication.
+- **Treating a green draft as ready.** Scope approval, full relevant coverage, visual verification,
+  and final cleanup must be complete before the ready transition.
 - **Ending a code/issue turn without the recap table.** Close with the Phase 8 table linking
   everything still outstanding this session, with the admin-only approval command inside each open
   PR's row rather than in adjacent prose.
@@ -479,8 +255,8 @@ admin.
   only posts comments (5.0).
 - **Treating "PR opened" as task-done.** Carry `monitor-ci` through to CI green or an
   escalated/blocked state (Phase 7).
-- **Pushing before basic CI passes locally.** Run lint + tests + build first, scoped to what
-  you changed; the formatter is not the linter (1.4).
+- **Skipping stage-appropriate verification.** Apply 1.4, keep existing checks intact, and record
+  deferred coverage on drafts; the formatter is not the linter.
 - **Opening a PR from master.** Branch first, then PR.
 - **Closing and re-creating a PR to "fix" the title.** Use `gh pr edit --title` instead.
 - **Putting a local Storybook link in a PR body.** Local review URLs are session-scoped and belong in

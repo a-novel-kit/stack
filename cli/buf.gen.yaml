@@ -4,11 +4,13 @@ managed:
   override:
     - file_option: go_package_prefix
       value: github.com/a-novel-kit/stack/cli/proto/gen
+# Both generators run from go.mod, so they always match the runtime the code links; Renovate's
+# bump of either module regenerates in the same branch.
 plugins:
-  - remote: buf.build/protocolbuffers/go
+  - local: [go, run, google.golang.org/protobuf/cmd/protoc-gen-go]
     out: proto/gen
     opt: paths=source_relative
-  - remote: buf.build/connectrpc/go
+  - local: [go, run, connectrpc.com/connect/v2/cmd/protoc-gen-connect-go]
     out: proto/gen
     opt: paths=source_relative
 inputs:

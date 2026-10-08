@@ -1,19 +1,19 @@
 ---
 name: write-platform
 description: >
-  Application-architecture conventions for a-novel client-side PLATFORM repos (`app/platform-*`):
-  SvelteKit route and server boundaries, app-owned screen composition, Storybook-first delivery,
-  URL and browser-state ownership, secure sessions, localization, container health, and CI. Load it
-  whenever creating, editing, reviewing, or debugging a platform application. ALWAYS load
-  `write-frontend`; add `write-svelte` for Svelte/SvelteKit files and `write-frontend-tests` for
-  tests or stories. Use `write-design-system` only when changing reusable uikit contracts.
+  Create, edit, review, or debug SvelteKit platform apps: routes, sessions, state, localization,
+  app composition, health, and CI. Always load write-frontend; add Svelte and test skills as
+  needed.
 ---
 
 # Platform Application Conventions
 
 This skill is the platform counterpart to `write-go-service`: `write-frontend` owns universal web
 rules, `write-svelte` owns framework mechanics, `write-frontend-tests` owns tests and stories, and
-this skill owns the terminal application's architecture and delivery sequence.
+this skill owns the terminal application's architecture. Load
+[develop-feature](../develop-feature/SKILL.md) for stage timing: run a local app and Storybook draft,
+agree on direction, review issues and draft PRs, complete approved-scope coverage, and tighten the
+result. Full state/test matrices below are completion gates, not prerequisites to exploring a draft.
 
 Load `plan-ui-design` before choosing a visual direction or interaction language. Load
 `choose-dependency` before adding a package, `write-dockerfiles` before changing the root
@@ -168,6 +168,9 @@ names, validation messages, titles, and metadata use message keys; logs and prot
   Platform configuration supplies only its locales, paths, namespaces, and product exceptions.
 - Keep the preset's framework extraction fixture in nodelib. Platform stories and tests exercise
   real product copy and translated UI states; they do not duplicate a generic toolchain fixture.
+- Use formal address forms in static text when a locale distinguishes them (`vous` in French,
+  `usted` in Spanish). Use each language's conventional action-label form for controls; French
+  buttons and links use infinitives such as `Créer le compte`.
 - Support plurals and contextual variants through the selected message format, not key
   concatenation or runtime grammar.
 - Treat the source locale as authoritative. CI compiles messages and fails for missing, invalid, or
@@ -243,4 +246,7 @@ API credentials in Storybook.
 - Server actions and session transitions have unit tests, including expiry and downstream failure.
 - `/ping`, `/healthcheck`, production build, Storybook build, and the container are verified.
 - `pnpm lint`, `a-novel test --type=pnpm -y`, and `a-novel build --type=pnpm -y` pass.
-- The live Storybook URL and any intentionally deferred end-to-end coverage appear in the handoff.
+- All affected Playwright journeys and screenshot comparisons have been run and reviewed per
+  `write-frontend-tests`; required end-to-end coverage is complete.
+- Final cleanup follows `prefer-small-solutions`, with affected checks rerun.
+- The live app/Storybook routes, developer review steps, and verification limits appear in the handoff.

@@ -1,17 +1,16 @@
 ---
 name: write-frontend
 description: >
-  Base frontend conventions for EVERY browser-facing repository in a-novel and a-novel-kit —
-  semantic HTML, accessible CSS, strict TypeScript, browser security, performance, data/state
-  boundaries, dependency policy, mandatory live-Storybook handoff, and validation. Load it for ANY HTML, CSS, TypeScript, browser API,
-  platform-* application, uikit, Storybook, or nodelib-browser work. Load `plan-ui-design` before
-  non-trivial user-flow, interaction, information-architecture, or visual-direction work. Pair with
-  `write-svelte` for .svelte files, `write-frontend-tests` for frontend tests or stories, and
-  `write-design-system` for tokens or reusable UI. Service REST clients under pkg/js also load
-  `write-js-package`.
+  Apply browser conventions to HTML, CSS, TypeScript, platform apps, uikit, Storybook, and browser
+  libraries. Load for browser work; add framework, architecture, and test skills as needed.
 ---
 
 # Frontend Conventions (common)
+
+Load [develop-feature](../develop-feature/SKILL.md) for local drafting, developer discussion,
+publication timing, test completion, and final cleanup. Run the affected app locally during a draft
+as well as Storybook for rendered review; a component library can use its workbench. Explain the
+flow, expected states, provisional behavior, and boundaries in language the developer can assess.
 
 Apply this base layer to every browser-facing change. Read the target file, its nearest siblings,
 the package manifest, TypeScript config, lint config, and public exports before editing. Preserve a
@@ -20,6 +19,9 @@ coherent local pattern unless it conflicts with a rule below or a current platfo
 This skill owns generic implementation quality, not repository placement. In the Agora workspace,
 use `write-platform` for terminal application shells and product policy, `write-design-system` for
 uikit visual contracts, and nodelib for reusable non-visual client runtime or tooling configuration.
+Load `write-svelte` for Svelte files, `write-frontend-tests` for tests or stories, and
+`write-design-system` for tokens or reusable UI. Service REST clients under `pkg/js` also load
+`write-js-package`.
 
 Load `plan-ui-design` before deciding a new or materially changed flow, interaction pattern,
 information hierarchy, component family, or visual language. This skill owns implementation quality;
@@ -42,9 +44,14 @@ Read [references/standards.md](references/standards.md) before choosing a browse
 pattern, security boundary, design-token model, or unfamiliar framework feature. Verify versioned
 APIs against current official documentation rather than relying on memory.
 
-## After every edit
+## Validation by stage
 
-Use repository scripts as declared; do not invent parallel commands:
+During drafting and issue review, run the app, inspect changed stories, and use focused checks.
+Add only tests needed to validate the draft. After issue scope approval, complete relevant coverage
+with `write-frontend-tests`, including affected Playwright journeys and screenshot comparisons.
+Perform the final cleanup and rerun affected checks before marking ready.
+
+Use repository scripts as declared for final validation; do not invent parallel commands:
 
 ```bash
 pnpm format                         # write formatting when the repo provides it
@@ -75,8 +82,10 @@ The handoff contract is non-negotiable:
    handing off a specific component.
 5. Keep localhost and other local-only Storybook links out of GitHub PR descriptions. They are
    session-scoped review surfaces, not durable PR metadata.
-6. In the final completion report that hands rendered UI work back, include at least one direct
-   Storybook link beside the PR and planning task or issue links. Use a clickable inline link such as
+6. In each draft or final handoff of rendered UI, include direct app and Storybook routes as
+   applicable, with steps to try, expected results, and limits. Include PR and issue links once they
+   exist; creating them is not a prerequisite to local review. Provide at least one direct
+   Storybook link. Use a clickable inline link such as
    `[Button — Storybook](http://127.0.0.1:6006/?path=/docs/button--docs)`, substituting the actual live
    URL and route. Repeat it in any later report that hands completed UI work back; an earlier report
    does not satisfy the current handoff.
@@ -127,7 +136,9 @@ link does not satisfy this contract.
 
 ## Components and controllers
 
-- Keep components presentational: render semantic HTML and accessibility state, translate native events
+- UI components are pure presentation. Reactivity that changes rendered state belongs to an injected
+  controller; components must not create hidden state owners or mutate controller state.
+  Render semantic HTML and accessibility state, translate native events
   into semantic requests, and own only DOM mechanics such as element references, focus movement,
   measurements, and transient typeahead bookkeeping.
 - Put meaningful rendered state and its transition rules in a pure controller with no DOM access,
@@ -139,6 +150,9 @@ link does not satisfy this contract.
   setters. The component reports intent; the controller may accept, transform, or reject it.
 - Export the controller contract and a configurable default factory. Callers may supply another
   implementation that satisfies the same contract, including fixed-state Storybook controllers.
+- Keep controllers mockable and composable through structural contracts: inject collaborators, compose
+  child controllers, and derive views of shared state without creating a second state owner. A plain
+  typed object with fixed state and no-op transitions must be a valid replacement.
 - Unit-test controller transitions without rendering. Test the component boundary for DOM semantics,
   accessibility behavior, and rejected transitions.
 
@@ -165,6 +179,16 @@ link does not satisfy this contract.
 
 ## CSS and responsive layout
 
+- Build coherence into the code, not into a sequence of visual corrections. Equivalent UI roles
+  and states must reuse the same shared components, variants, tokens, and constants across screens
+  and breakpoints. When they drift, trace the owning styles and remove duplicated definitions or
+  compensating overrides before adding new CSS. Fix reusable behavior in uikit; keep only genuine
+  application composition and layout differences local. Do not recreate a shared element just to
+  tailor its appearance, or invent an abstraction for unrelated roles that merely look similar.
+- Responsive rules normally change geometry, not a control's visual identity: preserve shared
+  foreground, surface, opacity, typography, and interaction-state rules unless the product contract
+  explicitly requires a difference. Verify the shared implementation on each actual backdrop;
+  matching token names alone do not prove matching rendered colors through transparency layers.
 - Prefer normal flow, Grid, Flexbox, logical properties, and container/media queries over measured
   JavaScript layout. Use feature queries for optional enhancements.
 - Start from the smallest supported viewport and let content determine breakpoints. Avoid device-name
@@ -194,6 +218,12 @@ link does not satisfy this contract.
   bundles. Assume every shipped byte and source map is public.
 - Use progressive enhancement for navigation and forms when the framework supports it. A network or
   JavaScript failure should degrade intentionally rather than strand the user.
+
+## Localization language register
+
+- Use the formal address form for static text when a language distinguishes registers (`vous` in French, `usted` in Spanish).
+- Use the language’s conventional action-label form for buttons, links, and other controls; French uses infinitives such as `Créer le compte`.
+- Apply the same distinction to accessible names and Storybook states.
 
 ## Security and privacy
 

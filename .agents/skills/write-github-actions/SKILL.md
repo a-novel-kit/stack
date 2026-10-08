@@ -1,9 +1,8 @@
 ---
 name: write-github-actions
 description: >
-  Write and maintain GitHub Actions workflows, composite actions (action.yaml), and repo CI config
-  across the a-novel / a-novel-kit orgs. Use whenever adding or editing a workflow, a shared action
-  in a-novel-kit/workflows, a CI job, a required check, or a ruleset.
+  Write or review GitHub Actions workflows, composite actions, CI jobs, required checks, and
+  rulesets across both organizations. Load before changing CI or governance configuration.
 ---
 
 # Writing GitHub Actions
@@ -56,9 +55,10 @@ The failure is invisible on the PR that introduces it. The workflows repo's own 
 stay pinned to the previous release tag while the PR is open, and its `main.yaml` exercises only the
 node lane through `./node-actions/lint-node`, so nothing loads the edited manifest. The breakage
 surfaces the moment a consumer pins the new tag — which is how a `vars` reference in an input
-description took `merge-gate` offline across both orgs until the next patch. The `lint-action-manifests`
-job in the workflows repo's `main.yaml` now greps every composite manifest for these contexts and is
-a required check; keep it passing rather than working around it.
+description took `merge-gate` offline across both orgs until the next patch. The workflows repo's
+`pnpm lint` now parses every composite manifest for these contexts
+(`.github/scripts/lint-action-manifests.mjs`), and the required `lint-node` job runs it; keep it
+passing rather than working around it.
 
 Caller **workflows** carry `${{ vars.* }}` and `${{ secrets.* }}` legally. Thread the value into the
 action as an ordinary input.
@@ -228,8 +228,8 @@ There is no local runner, so verification is reading plus CI.
 - Run `pnpm lint:stylecheck` — workflow YAML is prettier-formatted like any other file, and an
   unformatted one fails the node lane.
 - For a composite action, grep the manifest for `${{ vars.`, `${{ secrets.`, `${{ needs.`,
-  `${{ matrix.` and `${{ strategy.` before pushing. The workflows repo has a job for this; a repo-local
-  action under `.github/actions/` does not.
+  `${{ matrix.` and `${{ strategy.` before pushing. The workflows repo's `pnpm lint` checks this; a
+  repo-local action under `.github/actions/` does not.
 - A change to a shared action is not exercised by the workflows repo's own PR CI. It is proven when a
   consumer re-pins to the released tag, which `manage-versions` sequences.
 - Never trigger `release.yaml` to test a change — it cuts a real release. Use its `dry_run` input.

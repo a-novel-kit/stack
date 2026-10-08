@@ -747,7 +747,6 @@ current/latest session.`,
 			if err != nil {
 				return err
 			}
-			defer func() { _ = stream.Close() }()
 			// --since: filter client-side by line timestamp.
 			var cutoff time.Time
 			if since > 0 {
@@ -755,8 +754,11 @@ current/latest session.`,
 			}
 			// --tail: ring buffer client-side.
 			var ring []*anovelv1.LogLine
-			for stream.Receive() {
-				ln := stream.Msg()
+			for ln, err := range stream {
+				if err != nil {
+					return err
+				}
+
 				if !cutoff.IsZero() && ln.GetTs().AsTime().Before(cutoff) {
 					continue
 				}
@@ -768,9 +770,6 @@ current/latest session.`,
 					continue
 				}
 				printLogLine(cmd.OutOrStdout(), ln)
-			}
-			if err := stream.Err(); err != nil {
-				return err
 			}
 			// Drain the ring for --tail mode.
 			for _, ln := range ring {
@@ -1126,12 +1125,18 @@ the underlying command's success.`,
 			if err != nil {
 				return err
 			}
-			defer func() { _ = stream.Close() }()
 			// A pointer, so an unreported exit status stays distinct
 			// from a reported 0.
 			var exitCode *int32
-			for stream.Receive() {
-				ev := stream.Msg()
+			for ev, err := range stream {
+				if err != nil {
+					if ctx.Err() == nil {
+						return err
+					}
+
+					break
+				}
+
 				if ev.ExitCode != nil {
 					exitCode = ev.ExitCode
 
@@ -1142,9 +1147,6 @@ the underlying command's success.`,
 					w = cmd.ErrOrStderr()
 				}
 				_, _ = fmt.Fprintln(w, ev.GetLine())
-			}
-			if err := stream.Err(); err != nil && ctx.Err() == nil {
-				return err
 			}
 			return execResult(exitCode)
 		},
@@ -1233,10 +1235,16 @@ narrow the stream.`,
 			if err != nil {
 				return err
 			}
-			defer func() { _ = stream.Close() }()
 			enc := json.NewEncoder(cmd.OutOrStdout())
-			for stream.Receive() {
-				ev := stream.Msg()
+			for ev, err := range stream {
+				if err != nil {
+					if ctx.Err() == nil {
+						return err
+					}
+
+					break
+				}
+
 				if jsonOut {
 					_ = enc.Encode(map[string]any{
 						"ts":          ev.GetTs().AsTime().Format(time.RFC3339Nano),
@@ -1252,9 +1260,6 @@ narrow the stream.`,
 						ev.GetTs().AsTime().Format("15:04:05.000"),
 						ev.GetDescription())
 				}
-			}
-			if err := stream.Err(); err != nil && ctx.Err() == nil {
-				return err
 			}
 			return nil
 		},
@@ -1287,10 +1292,16 @@ func runPsWatch(
 	if err != nil {
 		return err
 	}
-	defer func() { _ = stream.Close() }()
 	enc := json.NewEncoder(out)
-	for stream.Receive() {
-		ev := stream.Msg()
+	for ev, err := range stream {
+		if err != nil {
+			if ctx.Err() == nil {
+				return err
+			}
+
+			break
+		}
+
 		if jsonOut {
 			_ = enc.Encode(map[string]any{
 				"ts":          ev.GetTs().AsTime().Format(time.RFC3339Nano),
@@ -1337,9 +1348,6 @@ func runPsWatch(
 		renderPs(out, fresh, false)
 		_, _ = fmt.Fprintf(out, "\n%s  %s\n",
 			ev.GetTs().AsTime().Format("15:04:05"), ev.GetDescription())
-	}
-	if err := stream.Err(); err != nil && ctx.Err() == nil {
-		return err
 	}
 	return nil
 }

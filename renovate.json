@@ -1,5 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>a-novel-kit/workflows//renovate/library#v1.38.4"],
   "packageRules": [
     {
       "description": "Keep cli/golangci-lint.mod on its own branch. A Renovate artifact update receives the whole branch config, inherited from whichever upgrade sorts first, so a shared branch would let this modfile impose its goGetDirs on cli/go.mod \u2014 and would run only one modfile's post-upgrade task. One branch per modfile keeps every rule pointed at the file it names.",
@@ -43,6 +44,15 @@
       "description": "Tidy cli/go.mod after a Go bump so go.sum gets the module-content (h1:) hashes, not just the /go.mod hashes; without it any job that compiles cli/ fails with `missing go.sum entry`. This works because each Go modfile has its own branch (see the rules above), so cli/go.mod is the only upgrade on its branch and the option reaches it. Do not merge those branches back together: a Renovate artifact update reads the branch config, which is inherited from whichever upgrade sorts first.",
       "matchFileNames": ["cli/go.mod"],
       "postUpdateOptions": ["gomodTidy"]
+    },
+    {
+      "description": "Regenerate cli/proto/gen when a generator module moves. cli/buf.gen.yaml runs protoc-gen-go and protoc-gen-connect-go from cli/go.mod, so generated code always matches the runtime it links, and must change in the same branch as the bump or generated-go-cli fails.",
+      "matchFileNames": ["cli/go.mod"],
+      "matchPackageNames": ["google.golang.org/protobuf", "connectrpc.com/connect/v2"],
+      "postUpgradeTasks": {
+        "commands": ["rm -rf cli/proto/gen", "go -C cli tool -modfile=buf.mod buf generate"],
+        "executionMode": "branch"
+      }
     }
   ],
   "customManagers": [
@@ -54,13 +64,5 @@
       "depNameTemplate": "a-novel-kit/workflows",
       "datasourceTemplate": "github-releases"
     }
-  ],
-  "gomod": {
-    "managerFilePatterns": [
-      "/(^|/)go\\.mod$/",
-      "/(^|/)golangci-lint\\.mod$/",
-      "/(^|/)gotestsum\\.mod$/",
-      "/(^|/)buf\\.mod$/"
-    ]
-  }
+  ]
 }

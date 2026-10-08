@@ -1,10 +1,8 @@
 ---
 name: choose-dependency
 description: >
-  Decide whether a need is met by the standard library, an existing dependency, a new third-party
-  library, or an internal implementation — and which package to pick when importing. Use it whenever
-  a change adds a library, weighs build-vs-buy, swaps an internal helper for a dependency (or back),
-  or picks between competing packages. Feeds plan-feature's build-vs-buy section.
+  Choose stdlib, existing packages, a new dependency, or an internal implementation. Use for
+  build-vs-buy decisions, package additions, replacements, or comparisons.
 ---
 
 # Choosing a dependency
@@ -37,7 +35,15 @@ actual need, not by analogy.
 
 ## The decision procedure
 
-Work top to bottom; stop at the first answer that fits.
+First name the required behavior, supported versions, and the boundary that owns it. Use
+`prefer-small-solutions` to check whether the work itself can disappear. Then work top to bottom;
+stop at the first answer that satisfies the same contract. An existing package is a reuse candidate,
+not a reason to bypass its documented API or the project's ownership rules.
+
+Keep research proportional to the unresolved choice. Reusing a documented installed capability
+does not require a new market survey; adding or replacing a dependency still requires the candidate
+evaluation below. Record consequential tradeoffs in the existing plan, without creating a second
+decision document.
 
 1. **Is it already solved in-house?** Standard library, a dependency already in `go.mod` /
    `package.json`, or `golib` / `nodelib`? Use that. Adding a second library to do what an existing

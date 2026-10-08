@@ -4,6 +4,10 @@ app/
 kit/
 tmp/
 
+/.codex/
+/.codex-worktrees/
+/.pnpm-store/
+
 .claude/*.local.*
 
 # Scratch planning files used by the planning workflow (see the plan-feature

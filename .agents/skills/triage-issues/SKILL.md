@@ -1,11 +1,8 @@
 ---
 name: triage-issues
 description: >
-  Manual triage and board-grooming pass over open GitHub issues in the a-novel / a-novel-kit orgs.
-  Use it when asked to "run triage", "groom the backlog", "prioritise the issues", or prep a planning
-  meeting. It surveys both org "Tasks" boards, drains the `Triage` queue, sets Priority, Size, due
-  dates and Status, and refines Backlog drafts. Trigger it MANUALLY. Pairs with plan-feature, which
-  creates the issues.
+  Manually triage and groom a-novel/a-novel-kit issue boards: refine scope, priority, size, dates,
+  and status. Use when asked to triage, groom, prioritize, or prepare planning.
 ---
 
 # Triage & groom the issue set

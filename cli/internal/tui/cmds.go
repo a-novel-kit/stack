@@ -144,12 +144,11 @@ func (m *model) followSelectedLogs() tea.Cmd {
 			m.program.Send(errMsg{err: err})
 			return
 		}
-		defer func() { _ = stream.Close() }()
-		for stream.Receive() {
-			if ctx.Err() != nil {
+		for ln, err := range stream {
+			if err != nil || ctx.Err() != nil {
 				return
 			}
-			m.program.Send(logsMsg{lines: []*anovelv1.LogLine{stream.Msg()}, gen: gen})
+			m.program.Send(logsMsg{lines: []*anovelv1.LogLine{ln}, gen: gen})
 		}
 	}()
 	return nil

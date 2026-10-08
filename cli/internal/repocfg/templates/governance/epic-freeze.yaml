@@ -27,13 +27,15 @@ jobs:
   # Named `evaluate`: the [Agent] App posts the `epic-freeze` check-run itself, so
   # the job name stays clear of it (as in merge-gate.yaml).
   evaluate:
+    # Dependabot is evaluated by the trusted CI-completion job.
+    if: github.event_name == 'merge_group' || github.actor != vars.DEPENDABOT_SECURITY_LOGIN
     runs-on: ubuntu-latest
     # No permissions of its own: the detector mints its own [Agent] tokens. In
     # per-PR mode that is checks:write plus read scopes; the write token that rolls
     # a stray forward is sweep-only, so a per-PR run can never re-enqueue.
     permissions: {}
     steps:
-      - uses: a-novel-kit/workflows/generic-actions/detect-partial-landing@v1.30.1
+      - uses: a-novel-kit/workflows/generic-actions/detect-partial-landing@v1.38.4
         with:
           client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
           app_private_key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}

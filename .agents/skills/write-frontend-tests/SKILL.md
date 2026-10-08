@@ -1,18 +1,24 @@
 ---
 name: write-frontend-tests
 description: >
-  Frontend test conventions for a-novel and a-novel-kit — Vitest unit tests, Testing Library DOM
-  and Svelte component tests, Storybook stories and interaction tests, accessibility checks, and
-  browser end-to-end tests. Load whenever adding or modifying frontend test/spec files, stories,
-  fixtures, mocks, test configuration, or behavior that needs frontend coverage. ALWAYS load
-  `write-frontend`; pair with `write-svelte` for Svelte targets and `write-design-system` for uikit.
+  Test frontend behavior and change tests, stories, fixtures, mocks, or test configuration. Load
+  when behavior needs coverage; always pair with write-frontend.
 ---
 
 # Frontend Test Conventions
 
-Load `write-frontend` and read the production behavior before writing tests. Read neighboring tests
+Load `write-frontend`, plus `write-svelte` for Svelte targets and `write-design-system` for uikit.
+Read the production behavior before writing tests. Read neighboring tests
 and the official documentation for the installed testing tools. Preserve existing tests unless the
 behavior they specify has been intentionally removed.
+
+## Timing
+
+Follow [develop-feature](../develop-feature/SKILL.md). Early stories make a draft reviewable; early
+tests should only resolve uncertainty, reproduce a defect, or protect a risky invariant. Complete
+the behavior matrix and full relevant regression suite after issue scope is approved. These
+conventions govern the quality of any test written at either stage, without requiring exhaustive
+coverage during exploration.
 
 ## Test at the nearest truthful layer
 
@@ -98,6 +104,17 @@ Do not manufacture cases that the public contract cannot reach.
   behavior.
 - Keep stories deterministic, self-contained, and free of production side effects. Use loaders and
   decorators only for shared, explicit environment contracts.
+- Use realistic interface content in visual examples. Explain controller transitions and keyboard
+  mechanics in docs and tests instead of making them the example's title or body.
+- Isolate screens and top-layer content in subdocuments on docs pages. Show desktop/mobile examples
+  together with responsive wrapping; modest scaling helps comparison, but verify geometry and touch
+  targets at the native viewport size. Check the docs page itself as well as individual stories.
+- Pin visual-review stories through fixed-state controllers. Clicking, submitting, pressing Escape,
+  or clicking outside must not change the displayed scenario. Show distinct states as separate
+  examples; exercise live transitions in controller/component tests. Keep locale, theme, and story
+  inputs configurable instead of duplicating scenarios per locale. Preserve native focus, scrolling,
+  and text selection; do not freeze previews
+  with event-blocking overlays, `inert`, or `pointer-events: none`.
 - Add a docs page for every public component: intent, composition, accessibility contract, and
   examples. Use generated controls and ArgTypes for API reference instead of repeating a manual
   table. Document foundations separately from components.
@@ -120,7 +137,20 @@ Do not manufacture cases that the public contract cannot reach.
   A platform tests its product catalogs, screen states, and wiring instead of copying that generic
   fixture locally.
 
-## End-to-end tests
+## End-to-end tests and screenshot comparisons
+
+During stage 3 of `develop-feature`, create or update all affected Playwright tests for client-side
+work. Cover the changed journeys and browser contracts, then run the relevant browser suite. Reuse
+the existing harness; when one is missing, include the smallest suitable Playwright setup in the
+agreed scope, following `choose-dependency`. Do not silently defer required browser validation.
+
+For rendered changes, capture deterministic screenshots of the affected states and supported
+viewports and compare them with reviewed baselines. Stabilize data, fonts, locale, theme, and motion.
+Inspect expected, actual, and diff images. Fix unexpected differences; update a baseline only when
+the new rendering matches the agreed UI, and review initial baselines for new screens. Screenshots
+complement live app/Storybook review and behavioral assertions. For non-visual client changes,
+verify relevant existing visual baselines where applicable and state when no rendered surface is
+affected instead of inventing a screenshot test.
 
 - Test critical journeys and browser contracts, not every visual variant.
 - Use accessible locators and observable readiness conditions. Never use fixed sleeps.
@@ -131,10 +161,11 @@ Do not manufacture cases that the public contract cannot reach.
 
 ## Coverage and completion
 
-Treat coverage as a map, not a target. Missing error, keyboard, security, or state-transition paths
-matter; uncovered generated glue does not justify a test.
+Treat coverage as a map, not a percentage target; 100% is not required. Missing error, keyboard,
+security, or state-transition paths matter; uncovered generated glue does not justify a test.
 
-Run the narrow test during iteration, then:
+Run focused checks during iteration. After scope approval, complete meaningful coverage and run
+the applicable suites; after cleanup, rerun checks affected by the final edits:
 
 ```bash
 pnpm lint

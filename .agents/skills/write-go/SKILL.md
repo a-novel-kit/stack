@@ -1,15 +1,15 @@
 ---
 name: write-go
 description: >
-  Base Go conventions for EVERY Go repo in the a-novel and a-novel-kit orgs — naming, error
-  handling, dependency policy, context, the format/lint discipline, time, and secrets. Load it for
-  ANY Go work in either org, alongside the matching repo-kind skill: `write-go-service` (a-novel
-  services) or `write-go-kit` (a-novel-kit libraries — `golib`, `jwt`). Pairs with `write-go-tests`
-  and `document-code`. Not JS/TS, SQL (`write-sql`), Protobuf (`write-proto`), Dockerfiles
-  (`write-dockerfiles`), or shell scripts (`write-bash-scripts`).
+  Apply base Go conventions in either organization: naming, errors, context, time, secrets,
+  dependencies, formatting, and lint. Add write-go-service or write-go-kit where applicable.
 ---
 
 # Go Conventions (common)
+
+Load [develop-feature](../develop-feature/SKILL.md) for drafting, agreement, test timing, and final
+cleanup. Use focused checks while the solution is being discussed; complete the relevant regression
+suite after issue scope approval. The code-quality rules below apply throughout.
 
 This is the base layer for Go in every a-novel / a-novel-kit repository. The rules hold
 **whatever the repo kind** — a backend service, a shared library, or a one-off tool. Repo-kind
@@ -69,10 +69,10 @@ is churn against a false positive.
 
 Then, before the change is done:
 
-1. Invoke **`write-go-tests`** — write or update tests for every file you created or modified, and
-   run the narrowest test target that covers the change (`a-novel test --type=go -y`, or raw
-   `go test ./<pkg>/...` for one package) until it is green. Tests are part of the change, not a
-   follow-up.
+1. Invoke **`write-go-tests`** — after scope approval, complete tests for meaningful changed
+   behavior and regression risks, not a quota per file. Run the affected suites
+   (`a-novel test --type=go -y`; raw `go test ./<pkg>/...` for focused iteration). Earlier tests
+   should be limited to those needed to validate the draft. Coverage is complete before readiness.
 2. Invoke **`document-code`** — doc comments for every symbol you added or changed. Also part of
    the change.
 
@@ -183,40 +183,38 @@ errors.Join(err, ErrUserNotFound)` — so callers keep both identities.
 - **Never silently discard an error.** If one truly can be dropped, write `_ = ...` with a
   comment saying why.
 
-### Reporting errors on spans / telemetry — the layer-relative rule
+### Reporting errors on spans — once, where they start
 
-When a function instruments itself with a span (or any other per-operation telemetry), one rule
-governs reporting: **every layer that has a span records, on its own span, every error it sees —
-whether it raises it, propagates it, or maps it to a transport response.** Two moves are forbidden:
-_suppressing_ reporting based on the error's _identity_ at a propagating layer, and a bare `return
-nil, ErrXxx` from a layer that has a span. "Expected" is never a property the error value carries,
-nor something one layer guesses on a caller's behalf.
+Span telemetry follows OpenTelemetry's
+[recording-errors guidance](https://opentelemetry.io/docs/specs/semconv/general/recording-errors/).
+A trace already links its spans, so each fact is recorded once.
 
-- A layer that _raises_ an error (a DAO hitting `sql.ErrNoRows`, a validator producing
-  `ErrInvalidRequest`, a service detecting a mismatch) → `otel.ReportError(span, err)`.
-- A layer that _receives_ an error and returns it upward → still `otel.ReportError`. Returning
-  upward is _propagating_; wrapping it (`errors.Join`, `fmt.Errorf("...: %w", err)`) changes
-  nothing.
-- The handler that maps the error to a transport response → still reports. `golib/httpf.HandleError`
-  calls `otel.ReportError` unconditionally before writing the HTTP status, so the REST handler span
-  records the error whatever status it maps to; the gRPC manual mapping should do the same by hand
-  (`_ = otel.ReportError(span, err)` before `status.Error(...)`). The handler span exists to show
-  which error a request ended on.
-- **Anti-pattern**: a helper that suppresses reporting based on the error's _identity_ at a layer
-  that still propagates or surfaces it (a `reportUnexpected(span, err)` keyed on a list of "known"
-  sentinels). It couples the layer to an error registry and silently drops real signal. The
-  layer-local question is just "did I see this error?" — if yes, report it.
+- **Every failed operation reports its error on its own span** with `otel.ReportError(span, err)`,
+  whether it raises the error or propagates it. Two moves are forbidden: a bare `return nil, ErrXxx`
+  from a function that has a span, and suppressing the report based on the error's _identity_ (a
+  `reportUnexpected(span, err)` keyed on "known" sentinels). "Expected" is never a property the error
+  value carries.
+- **The detail is recorded once.** `ReportError` describes the error on the first span that reports
+  it; each span it then propagates through takes the `Error` status alone. Wrapping
+  (`fmt.Errorf("...: %w", err)`) keeps that mark, so compare a reported error with `errors.Is`, never
+  `==`.
+- **Success records nothing.** Leave the status `Unset` and return the value directly.
+  `otel.ReportSuccess` and `otel.ReportSuccessNoContent` record nothing; omit them.
+- **A handled error is not a span error.** When an operation recovers and completes, such as a
+  best-effort cleanup that failed, it records nothing: the child span that failed already holds it.
+- **A transport handler span fails only on a server fault**, as the OpenTelemetry HTTP and gRPC server
+  conventions do. `golib/httpf.HandleError` marks the span for a 5xx and leaves a 4xx unset. A gRPC
+  handler calls `ReportError` before a server-fault code (`Internal`, `Unavailable`, `Unknown`,
+  `DataLoss`, `DeadlineExceeded`) and returns a client-error code (`InvalidArgument`, `NotFound`, …)
+  without it.
+- **No span events.** OpenTelemetry is deprecating them, and a progress marker or exception event
+  repeats what the span's status and duration already show.
 
-Spans are independent — a child span ending `Error` does not taint the parent. So the DAO, service,
-_and_ handler spans all say "no row" for a 404, while the "is the service broken" view is built on
-the **HTTP status code** (recorded by the otel HTTP instrumentation), which counts a 404 as a 404.
-Span status answers "did an error occur in processing", which is `true` even for a deliberate 404,
-and that is fine. For bulk-anomaly visibility on a specific security sentinel, use a counter, an
-audit log, or a dedicated event rather than `span.status`. The helpers
-`otel.ReportError` / `otel.ReportSuccess` / `otel.ReportSuccessNoContent` live in `golib/otel`;
-`ReportError` only sets `RecordError` + `SetStatus(Error)` — it does **not** end the span (a
-`defer span.End()` does), and returning a sentinel with no `Report*` call leaves the span `Unset`,
-which backends treat as "completed, not a failure". `write-go-service` covers span naming and the
+Spans are independent: a child span ending `Error` does not taint the parent. The DAO and core spans
+both end `Error` for a 404 while the handler span stays `Unset`; the "is the service broken" view is
+built on the server span's HTTP status code. For bulk-anomaly visibility on a specific security
+sentinel, use a counter or an audit log rather than span status. `ReportError` does not end the span;
+a `defer span.End()` does. `write-go-service` covers span naming, attributes, and the
 span-per-operation rule.
 
 ---
@@ -279,7 +277,7 @@ loop when you encounter one — it is dead code on this minimum version.
 - **A new dependency added without asking.** Explicit developer approval, every time.
 - **Logging / tracing secret material.** Identifiers only — never the secret.
 - **Multiple `time.Now()` for timestamps that should share one instant.** Capture once, reuse.
-- **Suppressing span reporting for an error.** Every span'd layer reports every error it sees — no
+- **Suppressing span reporting for an error.** Every span'd layer reports every error it returns — no
   identity-keyed `reportUnexpected` helper, no bare `return nil, ErrXxx` from a layer with a span.
 - **`new(T)` in a constructor.** Use `&T{}`.
 - **snake_case or run-together multi-word file names.** camelCase.

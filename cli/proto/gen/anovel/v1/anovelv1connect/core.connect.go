@@ -15,810 +15,1079 @@
 package anovelv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// CoreServiceName is the fully-qualified name of the CoreService service.
 	CoreServiceName = "anovel.v1.CoreService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// CoreServicePingProcedure is the fully-qualified name of the CoreService's Ping RPC.
+	// CoreServicePingProcedure is the procedure name of the CoreService's Ping RPC.
 	CoreServicePingProcedure = "/anovel.v1.CoreService/Ping"
-	// CoreServiceStatusProcedure is the fully-qualified name of the CoreService's Status RPC.
+	// CoreServiceStatusProcedure is the procedure name of the CoreService's Status RPC.
 	CoreServiceStatusProcedure = "/anovel.v1.CoreService/Status"
-	// CoreServicePrepareReinstallProcedure is the fully-qualified name of the CoreService's
-	// PrepareReinstall RPC.
+	// CoreServicePrepareReinstallProcedure is the procedure name of the CoreService's PrepareReinstall
+	// RPC.
 	CoreServicePrepareReinstallProcedure = "/anovel.v1.CoreService/PrepareReinstall"
-	// CoreServiceShutdownProcedure is the fully-qualified name of the CoreService's Shutdown RPC.
+	// CoreServiceShutdownProcedure is the procedure name of the CoreService's Shutdown RPC.
 	CoreServiceShutdownProcedure = "/anovel.v1.CoreService/Shutdown"
-	// CoreServiceListStacksProcedure is the fully-qualified name of the CoreService's ListStacks RPC.
+	// CoreServiceListStacksProcedure is the procedure name of the CoreService's ListStacks RPC.
 	CoreServiceListStacksProcedure = "/anovel.v1.CoreService/ListStacks"
-	// CoreServiceListServicesProcedure is the fully-qualified name of the CoreService's ListServices
-	// RPC.
+	// CoreServiceListServicesProcedure is the procedure name of the CoreService's ListServices RPC.
 	CoreServiceListServicesProcedure = "/anovel.v1.CoreService/ListServices"
-	// CoreServiceDescribeServiceProcedure is the fully-qualified name of the CoreService's
-	// DescribeService RPC.
-	CoreServiceDescribeServiceProcedure = "/anovel.v1.CoreService/DescribeService"
-	// CoreServiceGetTopologyProcedure is the fully-qualified name of the CoreService's GetTopology RPC.
-	CoreServiceGetTopologyProcedure = "/anovel.v1.CoreService/GetTopology"
-	// CoreServiceStartTargetProcedure is the fully-qualified name of the CoreService's StartTarget RPC.
-	CoreServiceStartTargetProcedure = "/anovel.v1.CoreService/StartTarget"
-	// CoreServiceKillTargetProcedure is the fully-qualified name of the CoreService's KillTarget RPC.
-	CoreServiceKillTargetProcedure = "/anovel.v1.CoreService/KillTarget"
-	// CoreServiceRestartTargetProcedure is the fully-qualified name of the CoreService's RestartTarget
+	// CoreServiceDescribeServiceProcedure is the procedure name of the CoreService's DescribeService
 	// RPC.
+	CoreServiceDescribeServiceProcedure = "/anovel.v1.CoreService/DescribeService"
+	// CoreServiceGetTopologyProcedure is the procedure name of the CoreService's GetTopology RPC.
+	CoreServiceGetTopologyProcedure = "/anovel.v1.CoreService/GetTopology"
+	// CoreServiceStartTargetProcedure is the procedure name of the CoreService's StartTarget RPC.
+	CoreServiceStartTargetProcedure = "/anovel.v1.CoreService/StartTarget"
+	// CoreServiceKillTargetProcedure is the procedure name of the CoreService's KillTarget RPC.
+	CoreServiceKillTargetProcedure = "/anovel.v1.CoreService/KillTarget"
+	// CoreServiceRestartTargetProcedure is the procedure name of the CoreService's RestartTarget RPC.
 	CoreServiceRestartTargetProcedure = "/anovel.v1.CoreService/RestartTarget"
-	// CoreServiceStartInfraProcedure is the fully-qualified name of the CoreService's StartInfra RPC.
+	// CoreServiceStartInfraProcedure is the procedure name of the CoreService's StartInfra RPC.
 	CoreServiceStartInfraProcedure = "/anovel.v1.CoreService/StartInfra"
-	// CoreServiceKillInfraProcedure is the fully-qualified name of the CoreService's KillInfra RPC.
+	// CoreServiceKillInfraProcedure is the procedure name of the CoreService's KillInfra RPC.
 	CoreServiceKillInfraProcedure = "/anovel.v1.CoreService/KillInfra"
-	// CoreServiceKillInfraContainerProcedure is the fully-qualified name of the CoreService's
+	// CoreServiceKillInfraContainerProcedure is the procedure name of the CoreService's
 	// KillInfraContainer RPC.
 	CoreServiceKillInfraContainerProcedure = "/anovel.v1.CoreService/KillInfraContainer"
-	// CoreServiceRestartInfraContainerProcedure is the fully-qualified name of the CoreService's
+	// CoreServiceRestartInfraContainerProcedure is the procedure name of the CoreService's
 	// RestartInfraContainer RPC.
 	CoreServiceRestartInfraContainerProcedure = "/anovel.v1.CoreService/RestartInfraContainer"
-	// CoreServiceStreamLogsProcedure is the fully-qualified name of the CoreService's StreamLogs RPC.
+	// CoreServiceStreamLogsProcedure is the procedure name of the CoreService's StreamLogs RPC.
 	CoreServiceStreamLogsProcedure = "/anovel.v1.CoreService/StreamLogs"
-	// CoreServiceListRunsProcedure is the fully-qualified name of the CoreService's ListRuns RPC.
+	// CoreServiceListRunsProcedure is the procedure name of the CoreService's ListRuns RPC.
 	CoreServiceListRunsProcedure = "/anovel.v1.CoreService/ListRuns"
-	// CoreServiceGetEnvProcedure is the fully-qualified name of the CoreService's GetEnv RPC.
+	// CoreServiceGetEnvProcedure is the procedure name of the CoreService's GetEnv RPC.
 	CoreServiceGetEnvProcedure = "/anovel.v1.CoreService/GetEnv"
-	// CoreServiceListVolumesProcedure is the fully-qualified name of the CoreService's ListVolumes RPC.
+	// CoreServiceListVolumesProcedure is the procedure name of the CoreService's ListVolumes RPC.
 	CoreServiceListVolumesProcedure = "/anovel.v1.CoreService/ListVolumes"
-	// CoreServiceBackupVolumeProcedure is the fully-qualified name of the CoreService's BackupVolume
-	// RPC.
+	// CoreServiceBackupVolumeProcedure is the procedure name of the CoreService's BackupVolume RPC.
 	CoreServiceBackupVolumeProcedure = "/anovel.v1.CoreService/BackupVolume"
-	// CoreServiceRestoreVolumeProcedure is the fully-qualified name of the CoreService's RestoreVolume
-	// RPC.
+	// CoreServiceRestoreVolumeProcedure is the procedure name of the CoreService's RestoreVolume RPC.
 	CoreServiceRestoreVolumeProcedure = "/anovel.v1.CoreService/RestoreVolume"
-	// CoreServiceClearVolumeProcedure is the fully-qualified name of the CoreService's ClearVolume RPC.
+	// CoreServiceClearVolumeProcedure is the procedure name of the CoreService's ClearVolume RPC.
 	CoreServiceClearVolumeProcedure = "/anovel.v1.CoreService/ClearVolume"
-	// CoreServiceExecProcedure is the fully-qualified name of the CoreService's Exec RPC.
+	// CoreServiceExecProcedure is the procedure name of the CoreService's Exec RPC.
 	CoreServiceExecProcedure = "/anovel.v1.CoreService/Exec"
-	// CoreServiceDebugProcedure is the fully-qualified name of the CoreService's Debug RPC.
+	// CoreServiceDebugProcedure is the procedure name of the CoreService's Debug RPC.
 	CoreServiceDebugProcedure = "/anovel.v1.CoreService/Debug"
-	// CoreServiceWatchProcedure is the fully-qualified name of the CoreService's Watch RPC.
+	// CoreServiceWatchProcedure is the procedure name of the CoreService's Watch RPC.
 	CoreServiceWatchProcedure = "/anovel.v1.CoreService/Watch"
+)
+
+var (
+	coreServicePingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("Ping"),
+			Procedure:  CoreServicePingProcedure,
+		}
+	})
+	coreServiceStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("Status"),
+			Procedure:  CoreServiceStatusProcedure,
+		}
+	})
+	coreServicePrepareReinstallSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("PrepareReinstall"),
+			Procedure:  CoreServicePrepareReinstallProcedure,
+		}
+	})
+	coreServiceShutdownSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("Shutdown"),
+			Procedure:  CoreServiceShutdownProcedure,
+		}
+	})
+	coreServiceListStacksSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("ListStacks"),
+			Procedure:  CoreServiceListStacksProcedure,
+		}
+	})
+	coreServiceListServicesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("ListServices"),
+			Procedure:  CoreServiceListServicesProcedure,
+		}
+	})
+	coreServiceDescribeServiceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("DescribeService"),
+			Procedure:  CoreServiceDescribeServiceProcedure,
+		}
+	})
+	coreServiceGetTopologySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("GetTopology"),
+			Procedure:  CoreServiceGetTopologyProcedure,
+		}
+	})
+	coreServiceStartTargetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("StartTarget"),
+			Procedure:  CoreServiceStartTargetProcedure,
+		}
+	})
+	coreServiceKillTargetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("KillTarget"),
+			Procedure:  CoreServiceKillTargetProcedure,
+		}
+	})
+	coreServiceRestartTargetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("RestartTarget"),
+			Procedure:  CoreServiceRestartTargetProcedure,
+		}
+	})
+	coreServiceStartInfraSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("StartInfra"),
+			Procedure:  CoreServiceStartInfraProcedure,
+		}
+	})
+	coreServiceKillInfraSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("KillInfra"),
+			Procedure:  CoreServiceKillInfraProcedure,
+		}
+	})
+	coreServiceKillInfraContainerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("KillInfraContainer"),
+			Procedure:  CoreServiceKillInfraContainerProcedure,
+		}
+	})
+	coreServiceRestartInfraContainerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("RestartInfraContainer"),
+			Procedure:  CoreServiceRestartInfraContainerProcedure,
+		}
+	})
+	coreServiceStreamLogsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("StreamLogs"),
+			Procedure:  CoreServiceStreamLogsProcedure,
+		}
+	})
+	coreServiceListRunsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("ListRuns"),
+			Procedure:  CoreServiceListRunsProcedure,
+		}
+	})
+	coreServiceGetEnvSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("GetEnv"),
+			Procedure:  CoreServiceGetEnvProcedure,
+		}
+	})
+	coreServiceListVolumesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("ListVolumes"),
+			Procedure:  CoreServiceListVolumesProcedure,
+		}
+	})
+	coreServiceBackupVolumeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("BackupVolume"),
+			Procedure:  CoreServiceBackupVolumeProcedure,
+		}
+	})
+	coreServiceRestoreVolumeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("RestoreVolume"),
+			Procedure:  CoreServiceRestoreVolumeProcedure,
+		}
+	})
+	coreServiceClearVolumeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("ClearVolume"),
+			Procedure:  CoreServiceClearVolumeProcedure,
+		}
+	})
+	coreServiceExecSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("Exec"),
+			Procedure:  CoreServiceExecProcedure,
+		}
+	})
+	coreServiceDebugSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("Debug"),
+			Procedure:  CoreServiceDebugProcedure,
+		}
+	})
+	coreServiceWatchSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("Watch"),
+			Procedure:  CoreServiceWatchProcedure,
+		}
+	})
 )
 
 // CoreServiceClient is a client for the anovel.v1.CoreService service.
 type CoreServiceClient interface {
 	// Daemon control
-	Ping(context.Context, *connect.Request[v1.PingRequest]) (*connect.Response[v1.PingResponse], error)
-	Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error)
-	PrepareReinstall(context.Context, *connect.Request[v1.PrepareReinstallRequest]) (*connect.Response[v1.PrepareReinstallResponse], error)
-	Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error)
+	Ping(context.Context, *v1.PingRequest) (*v1.PingResponse, error)
+	Status(context.Context, *v1.StatusRequest) (*v1.StatusResponse, error)
+	PrepareReinstall(context.Context, *v1.PrepareReinstallRequest) (*v1.PrepareReinstallResponse, error)
+	Shutdown(context.Context, *v1.ShutdownRequest) (*v1.ShutdownResponse, error)
 	// Discovery
-	ListStacks(context.Context, *connect.Request[v1.ListStacksRequest]) (*connect.Response[v1.ListStacksResponse], error)
-	ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error)
-	DescribeService(context.Context, *connect.Request[v1.DescribeServiceRequest]) (*connect.Response[v1.DescribeServiceResponse], error)
-	GetTopology(context.Context, *connect.Request[v1.GetTopologyRequest]) (*connect.Response[v1.GetTopologyResponse], error)
+	ListStacks(context.Context, *v1.ListStacksRequest) (*v1.ListStacksResponse, error)
+	ListServices(context.Context, *v1.ListServicesRequest) (*v1.ListServicesResponse, error)
+	DescribeService(context.Context, *v1.DescribeServiceRequest) (*v1.DescribeServiceResponse, error)
+	GetTopology(context.Context, *v1.GetTopologyRequest) (*v1.GetTopologyResponse, error)
 	// Targets
-	StartTarget(context.Context, *connect.Request[v1.StartTargetRequest]) (*connect.Response[v1.StartTargetResponse], error)
-	KillTarget(context.Context, *connect.Request[v1.KillTargetRequest]) (*connect.Response[v1.KillTargetResponse], error)
-	RestartTarget(context.Context, *connect.Request[v1.RestartTargetRequest]) (*connect.Response[v1.RestartTargetResponse], error)
+	StartTarget(context.Context, *v1.StartTargetRequest) (*v1.StartTargetResponse, error)
+	KillTarget(context.Context, *v1.KillTargetRequest) (*v1.KillTargetResponse, error)
+	RestartTarget(context.Context, *v1.RestartTargetRequest) (*v1.RestartTargetResponse, error)
 	// Service infrastructure
-	StartInfra(context.Context, *connect.Request[v1.StartInfraRequest]) (*connect.Response[v1.StartInfraResponse], error)
-	KillInfra(context.Context, *connect.Request[v1.KillInfraRequest]) (*connect.Response[v1.KillInfraResponse], error)
+	StartInfra(context.Context, *v1.StartInfraRequest) (*v1.StartInfraResponse, error)
+	KillInfra(context.Context, *v1.KillInfraRequest) (*v1.KillInfraResponse, error)
 	// Per-infra container lifecycle, which lets the TUI treat infra entries
 	// like targets: kill or restart one container while the rest of the
 	// service's infra stays up. StartInfra and KillInfra remain the
 	// whole-service cold-start and teardown.
-	KillInfraContainer(context.Context, *connect.Request[v1.KillInfraContainerRequest]) (*connect.Response[v1.KillInfraContainerResponse], error)
-	RestartInfraContainer(context.Context, *connect.Request[v1.RestartInfraContainerRequest]) (*connect.Response[v1.RestartInfraContainerResponse], error)
+	KillInfraContainer(context.Context, *v1.KillInfraContainerRequest) (*v1.KillInfraContainerResponse, error)
+	RestartInfraContainer(context.Context, *v1.RestartInfraContainerRequest) (*v1.RestartInfraContainerResponse, error)
 	// Logs (streaming)
-	StreamLogs(context.Context, *connect.Request[v1.StreamLogsRequest]) (*connect.ServerStreamForClient[v1.LogLine], error)
-	ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error)
+	StreamLogs(context.Context, *v1.StreamLogsRequest) (CoreServiceStreamLogsClientStream, error)
+	ListRuns(context.Context, *v1.ListRunsRequest) (*v1.ListRunsResponse, error)
 	// Environment
-	GetEnv(context.Context, *connect.Request[v1.GetEnvRequest]) (*connect.Response[v1.GetEnvResponse], error)
+	GetEnv(context.Context, *v1.GetEnvRequest) (*v1.GetEnvResponse, error)
 	// Volumes
-	ListVolumes(context.Context, *connect.Request[v1.ListVolumesRequest]) (*connect.Response[v1.ListVolumesResponse], error)
-	BackupVolume(context.Context, *connect.Request[v1.BackupVolumeRequest]) (*connect.Response[v1.BackupVolumeResponse], error)
-	RestoreVolume(context.Context, *connect.Request[v1.RestoreVolumeRequest]) (*connect.Response[v1.RestoreVolumeResponse], error)
-	ClearVolume(context.Context, *connect.Request[v1.ClearVolumeRequest]) (*connect.Response[v1.ClearVolumeResponse], error)
+	ListVolumes(context.Context, *v1.ListVolumesRequest) (*v1.ListVolumesResponse, error)
+	BackupVolume(context.Context, *v1.BackupVolumeRequest) (*v1.BackupVolumeResponse, error)
+	RestoreVolume(context.Context, *v1.RestoreVolumeRequest) (*v1.RestoreVolumeResponse, error)
+	ClearVolume(context.Context, *v1.ClearVolumeRequest) (*v1.ClearVolumeResponse, error)
 	// Exec / debug
-	Exec(context.Context, *connect.Request[v1.ExecRequest]) (*connect.ServerStreamForClient[v1.ExecOutput], error)
-	Debug(context.Context, *connect.Request[v1.DebugRequest]) (*connect.Response[v1.DebugResponse], error)
+	Exec(context.Context, *v1.ExecRequest) (CoreServiceExecClientStream, error)
+	Debug(context.Context, *v1.DebugRequest) (*v1.DebugResponse, error)
 	// State events
-	Watch(context.Context, *connect.Request[v1.WatchRequest]) (*connect.ServerStreamForClient[v1.StateEvent], error)
+	Watch(context.Context, *v1.WatchRequest) (CoreServiceWatchClientStream, error)
 }
 
-// NewCoreServiceClient constructs a client for the anovel.v1.CoreService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) CoreServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	coreServiceMethods := v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods()
-	return &coreServiceClient{
-		ping: connect.NewClient[v1.PingRequest, v1.PingResponse](
-			httpClient,
-			baseURL+CoreServicePingProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("Ping")),
-			connect.WithClientOptions(opts...),
-		),
-		status: connect.NewClient[v1.StatusRequest, v1.StatusResponse](
-			httpClient,
-			baseURL+CoreServiceStatusProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("Status")),
-			connect.WithClientOptions(opts...),
-		),
-		prepareReinstall: connect.NewClient[v1.PrepareReinstallRequest, v1.PrepareReinstallResponse](
-			httpClient,
-			baseURL+CoreServicePrepareReinstallProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("PrepareReinstall")),
-			connect.WithClientOptions(opts...),
-		),
-		shutdown: connect.NewClient[v1.ShutdownRequest, v1.ShutdownResponse](
-			httpClient,
-			baseURL+CoreServiceShutdownProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("Shutdown")),
-			connect.WithClientOptions(opts...),
-		),
-		listStacks: connect.NewClient[v1.ListStacksRequest, v1.ListStacksResponse](
-			httpClient,
-			baseURL+CoreServiceListStacksProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("ListStacks")),
-			connect.WithClientOptions(opts...),
-		),
-		listServices: connect.NewClient[v1.ListServicesRequest, v1.ListServicesResponse](
-			httpClient,
-			baseURL+CoreServiceListServicesProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("ListServices")),
-			connect.WithClientOptions(opts...),
-		),
-		describeService: connect.NewClient[v1.DescribeServiceRequest, v1.DescribeServiceResponse](
-			httpClient,
-			baseURL+CoreServiceDescribeServiceProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("DescribeService")),
-			connect.WithClientOptions(opts...),
-		),
-		getTopology: connect.NewClient[v1.GetTopologyRequest, v1.GetTopologyResponse](
-			httpClient,
-			baseURL+CoreServiceGetTopologyProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("GetTopology")),
-			connect.WithClientOptions(opts...),
-		),
-		startTarget: connect.NewClient[v1.StartTargetRequest, v1.StartTargetResponse](
-			httpClient,
-			baseURL+CoreServiceStartTargetProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("StartTarget")),
-			connect.WithClientOptions(opts...),
-		),
-		killTarget: connect.NewClient[v1.KillTargetRequest, v1.KillTargetResponse](
-			httpClient,
-			baseURL+CoreServiceKillTargetProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("KillTarget")),
-			connect.WithClientOptions(opts...),
-		),
-		restartTarget: connect.NewClient[v1.RestartTargetRequest, v1.RestartTargetResponse](
-			httpClient,
-			baseURL+CoreServiceRestartTargetProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("RestartTarget")),
-			connect.WithClientOptions(opts...),
-		),
-		startInfra: connect.NewClient[v1.StartInfraRequest, v1.StartInfraResponse](
-			httpClient,
-			baseURL+CoreServiceStartInfraProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("StartInfra")),
-			connect.WithClientOptions(opts...),
-		),
-		killInfra: connect.NewClient[v1.KillInfraRequest, v1.KillInfraResponse](
-			httpClient,
-			baseURL+CoreServiceKillInfraProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("KillInfra")),
-			connect.WithClientOptions(opts...),
-		),
-		killInfraContainer: connect.NewClient[v1.KillInfraContainerRequest, v1.KillInfraContainerResponse](
-			httpClient,
-			baseURL+CoreServiceKillInfraContainerProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("KillInfraContainer")),
-			connect.WithClientOptions(opts...),
-		),
-		restartInfraContainer: connect.NewClient[v1.RestartInfraContainerRequest, v1.RestartInfraContainerResponse](
-			httpClient,
-			baseURL+CoreServiceRestartInfraContainerProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("RestartInfraContainer")),
-			connect.WithClientOptions(opts...),
-		),
-		streamLogs: connect.NewClient[v1.StreamLogsRequest, v1.LogLine](
-			httpClient,
-			baseURL+CoreServiceStreamLogsProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("StreamLogs")),
-			connect.WithClientOptions(opts...),
-		),
-		listRuns: connect.NewClient[v1.ListRunsRequest, v1.ListRunsResponse](
-			httpClient,
-			baseURL+CoreServiceListRunsProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("ListRuns")),
-			connect.WithClientOptions(opts...),
-		),
-		getEnv: connect.NewClient[v1.GetEnvRequest, v1.GetEnvResponse](
-			httpClient,
-			baseURL+CoreServiceGetEnvProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("GetEnv")),
-			connect.WithClientOptions(opts...),
-		),
-		listVolumes: connect.NewClient[v1.ListVolumesRequest, v1.ListVolumesResponse](
-			httpClient,
-			baseURL+CoreServiceListVolumesProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("ListVolumes")),
-			connect.WithClientOptions(opts...),
-		),
-		backupVolume: connect.NewClient[v1.BackupVolumeRequest, v1.BackupVolumeResponse](
-			httpClient,
-			baseURL+CoreServiceBackupVolumeProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("BackupVolume")),
-			connect.WithClientOptions(opts...),
-		),
-		restoreVolume: connect.NewClient[v1.RestoreVolumeRequest, v1.RestoreVolumeResponse](
-			httpClient,
-			baseURL+CoreServiceRestoreVolumeProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("RestoreVolume")),
-			connect.WithClientOptions(opts...),
-		),
-		clearVolume: connect.NewClient[v1.ClearVolumeRequest, v1.ClearVolumeResponse](
-			httpClient,
-			baseURL+CoreServiceClearVolumeProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("ClearVolume")),
-			connect.WithClientOptions(opts...),
-		),
-		exec: connect.NewClient[v1.ExecRequest, v1.ExecOutput](
-			httpClient,
-			baseURL+CoreServiceExecProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("Exec")),
-			connect.WithClientOptions(opts...),
-		),
-		debug: connect.NewClient[v1.DebugRequest, v1.DebugResponse](
-			httpClient,
-			baseURL+CoreServiceDebugProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("Debug")),
-			connect.WithClientOptions(opts...),
-		),
-		watch: connect.NewClient[v1.WatchRequest, v1.StateEvent](
-			httpClient,
-			baseURL+CoreServiceWatchProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("Watch")),
-			connect.WithClientOptions(opts...),
-		),
+// NewCoreServiceClient constructs a client for the anovel.v1.CoreService service. Multiple service
+// clients may share a single connect.Client.
+func NewCoreServiceClient(client *connect.Client) CoreServiceClient {
+	return &coreServiceClient{client: client}
+}
+
+// CoreServiceStreamLogsClientStream is the client stream for the CoreService's StreamLogs RPC.
+type CoreServiceStreamLogsClientStream struct {
+	stream connect.ClientStream
+}
+
+// Receive returns the next response message from the server.
+func (s CoreServiceStreamLogsClientStream) Receive() (*v1.LogLine, error) {
+	var res v1.LogLine
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
 	}
+	return &res, nil
 }
 
-// coreServiceClient implements CoreServiceClient.
-type coreServiceClient struct {
-	ping                  *connect.Client[v1.PingRequest, v1.PingResponse]
-	status                *connect.Client[v1.StatusRequest, v1.StatusResponse]
-	prepareReinstall      *connect.Client[v1.PrepareReinstallRequest, v1.PrepareReinstallResponse]
-	shutdown              *connect.Client[v1.ShutdownRequest, v1.ShutdownResponse]
-	listStacks            *connect.Client[v1.ListStacksRequest, v1.ListStacksResponse]
-	listServices          *connect.Client[v1.ListServicesRequest, v1.ListServicesResponse]
-	describeService       *connect.Client[v1.DescribeServiceRequest, v1.DescribeServiceResponse]
-	getTopology           *connect.Client[v1.GetTopologyRequest, v1.GetTopologyResponse]
-	startTarget           *connect.Client[v1.StartTargetRequest, v1.StartTargetResponse]
-	killTarget            *connect.Client[v1.KillTargetRequest, v1.KillTargetResponse]
-	restartTarget         *connect.Client[v1.RestartTargetRequest, v1.RestartTargetResponse]
-	startInfra            *connect.Client[v1.StartInfraRequest, v1.StartInfraResponse]
-	killInfra             *connect.Client[v1.KillInfraRequest, v1.KillInfraResponse]
-	killInfraContainer    *connect.Client[v1.KillInfraContainerRequest, v1.KillInfraContainerResponse]
-	restartInfraContainer *connect.Client[v1.RestartInfraContainerRequest, v1.RestartInfraContainerResponse]
-	streamLogs            *connect.Client[v1.StreamLogsRequest, v1.LogLine]
-	listRuns              *connect.Client[v1.ListRunsRequest, v1.ListRunsResponse]
-	getEnv                *connect.Client[v1.GetEnvRequest, v1.GetEnvResponse]
-	listVolumes           *connect.Client[v1.ListVolumesRequest, v1.ListVolumesResponse]
-	backupVolume          *connect.Client[v1.BackupVolumeRequest, v1.BackupVolumeResponse]
-	restoreVolume         *connect.Client[v1.RestoreVolumeRequest, v1.RestoreVolumeResponse]
-	clearVolume           *connect.Client[v1.ClearVolumeRequest, v1.ClearVolumeResponse]
-	exec                  *connect.Client[v1.ExecRequest, v1.ExecOutput]
-	debug                 *connect.Client[v1.DebugRequest, v1.DebugResponse]
-	watch                 *connect.Client[v1.WatchRequest, v1.StateEvent]
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s CoreServiceStreamLogsClientStream) Close() error {
+	return s.stream.Close()
 }
 
-// Ping calls anovel.v1.CoreService.Ping.
-func (c *coreServiceClient) Ping(ctx context.Context, req *connect.Request[v1.PingRequest]) (*connect.Response[v1.PingResponse], error) {
-	return c.ping.CallUnary(ctx, req)
+// CoreServiceExecClientStream is the client stream for the CoreService's Exec RPC.
+type CoreServiceExecClientStream struct {
+	stream connect.ClientStream
 }
 
-// Status calls anovel.v1.CoreService.Status.
-func (c *coreServiceClient) Status(ctx context.Context, req *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error) {
-	return c.status.CallUnary(ctx, req)
+// Receive returns the next response message from the server.
+func (s CoreServiceExecClientStream) Receive() (*v1.ExecOutput, error) {
+	var res v1.ExecOutput
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
-// PrepareReinstall calls anovel.v1.CoreService.PrepareReinstall.
-func (c *coreServiceClient) PrepareReinstall(ctx context.Context, req *connect.Request[v1.PrepareReinstallRequest]) (*connect.Response[v1.PrepareReinstallResponse], error) {
-	return c.prepareReinstall.CallUnary(ctx, req)
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s CoreServiceExecClientStream) Close() error {
+	return s.stream.Close()
 }
 
-// Shutdown calls anovel.v1.CoreService.Shutdown.
-func (c *coreServiceClient) Shutdown(ctx context.Context, req *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error) {
-	return c.shutdown.CallUnary(ctx, req)
+// CoreServiceWatchClientStream is the client stream for the CoreService's Watch RPC.
+type CoreServiceWatchClientStream struct {
+	stream connect.ClientStream
 }
 
-// ListStacks calls anovel.v1.CoreService.ListStacks.
-func (c *coreServiceClient) ListStacks(ctx context.Context, req *connect.Request[v1.ListStacksRequest]) (*connect.Response[v1.ListStacksResponse], error) {
-	return c.listStacks.CallUnary(ctx, req)
+// Receive returns the next response message from the server.
+func (s CoreServiceWatchClientStream) Receive() (*v1.StateEvent, error) {
+	var res v1.StateEvent
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
-// ListServices calls anovel.v1.CoreService.ListServices.
-func (c *coreServiceClient) ListServices(ctx context.Context, req *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error) {
-	return c.listServices.CallUnary(ctx, req)
-}
-
-// DescribeService calls anovel.v1.CoreService.DescribeService.
-func (c *coreServiceClient) DescribeService(ctx context.Context, req *connect.Request[v1.DescribeServiceRequest]) (*connect.Response[v1.DescribeServiceResponse], error) {
-	return c.describeService.CallUnary(ctx, req)
-}
-
-// GetTopology calls anovel.v1.CoreService.GetTopology.
-func (c *coreServiceClient) GetTopology(ctx context.Context, req *connect.Request[v1.GetTopologyRequest]) (*connect.Response[v1.GetTopologyResponse], error) {
-	return c.getTopology.CallUnary(ctx, req)
-}
-
-// StartTarget calls anovel.v1.CoreService.StartTarget.
-func (c *coreServiceClient) StartTarget(ctx context.Context, req *connect.Request[v1.StartTargetRequest]) (*connect.Response[v1.StartTargetResponse], error) {
-	return c.startTarget.CallUnary(ctx, req)
-}
-
-// KillTarget calls anovel.v1.CoreService.KillTarget.
-func (c *coreServiceClient) KillTarget(ctx context.Context, req *connect.Request[v1.KillTargetRequest]) (*connect.Response[v1.KillTargetResponse], error) {
-	return c.killTarget.CallUnary(ctx, req)
-}
-
-// RestartTarget calls anovel.v1.CoreService.RestartTarget.
-func (c *coreServiceClient) RestartTarget(ctx context.Context, req *connect.Request[v1.RestartTargetRequest]) (*connect.Response[v1.RestartTargetResponse], error) {
-	return c.restartTarget.CallUnary(ctx, req)
-}
-
-// StartInfra calls anovel.v1.CoreService.StartInfra.
-func (c *coreServiceClient) StartInfra(ctx context.Context, req *connect.Request[v1.StartInfraRequest]) (*connect.Response[v1.StartInfraResponse], error) {
-	return c.startInfra.CallUnary(ctx, req)
-}
-
-// KillInfra calls anovel.v1.CoreService.KillInfra.
-func (c *coreServiceClient) KillInfra(ctx context.Context, req *connect.Request[v1.KillInfraRequest]) (*connect.Response[v1.KillInfraResponse], error) {
-	return c.killInfra.CallUnary(ctx, req)
-}
-
-// KillInfraContainer calls anovel.v1.CoreService.KillInfraContainer.
-func (c *coreServiceClient) KillInfraContainer(ctx context.Context, req *connect.Request[v1.KillInfraContainerRequest]) (*connect.Response[v1.KillInfraContainerResponse], error) {
-	return c.killInfraContainer.CallUnary(ctx, req)
-}
-
-// RestartInfraContainer calls anovel.v1.CoreService.RestartInfraContainer.
-func (c *coreServiceClient) RestartInfraContainer(ctx context.Context, req *connect.Request[v1.RestartInfraContainerRequest]) (*connect.Response[v1.RestartInfraContainerResponse], error) {
-	return c.restartInfraContainer.CallUnary(ctx, req)
-}
-
-// StreamLogs calls anovel.v1.CoreService.StreamLogs.
-func (c *coreServiceClient) StreamLogs(ctx context.Context, req *connect.Request[v1.StreamLogsRequest]) (*connect.ServerStreamForClient[v1.LogLine], error) {
-	return c.streamLogs.CallServerStream(ctx, req)
-}
-
-// ListRuns calls anovel.v1.CoreService.ListRuns.
-func (c *coreServiceClient) ListRuns(ctx context.Context, req *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error) {
-	return c.listRuns.CallUnary(ctx, req)
-}
-
-// GetEnv calls anovel.v1.CoreService.GetEnv.
-func (c *coreServiceClient) GetEnv(ctx context.Context, req *connect.Request[v1.GetEnvRequest]) (*connect.Response[v1.GetEnvResponse], error) {
-	return c.getEnv.CallUnary(ctx, req)
-}
-
-// ListVolumes calls anovel.v1.CoreService.ListVolumes.
-func (c *coreServiceClient) ListVolumes(ctx context.Context, req *connect.Request[v1.ListVolumesRequest]) (*connect.Response[v1.ListVolumesResponse], error) {
-	return c.listVolumes.CallUnary(ctx, req)
-}
-
-// BackupVolume calls anovel.v1.CoreService.BackupVolume.
-func (c *coreServiceClient) BackupVolume(ctx context.Context, req *connect.Request[v1.BackupVolumeRequest]) (*connect.Response[v1.BackupVolumeResponse], error) {
-	return c.backupVolume.CallUnary(ctx, req)
-}
-
-// RestoreVolume calls anovel.v1.CoreService.RestoreVolume.
-func (c *coreServiceClient) RestoreVolume(ctx context.Context, req *connect.Request[v1.RestoreVolumeRequest]) (*connect.Response[v1.RestoreVolumeResponse], error) {
-	return c.restoreVolume.CallUnary(ctx, req)
-}
-
-// ClearVolume calls anovel.v1.CoreService.ClearVolume.
-func (c *coreServiceClient) ClearVolume(ctx context.Context, req *connect.Request[v1.ClearVolumeRequest]) (*connect.Response[v1.ClearVolumeResponse], error) {
-	return c.clearVolume.CallUnary(ctx, req)
-}
-
-// Exec calls anovel.v1.CoreService.Exec.
-func (c *coreServiceClient) Exec(ctx context.Context, req *connect.Request[v1.ExecRequest]) (*connect.ServerStreamForClient[v1.ExecOutput], error) {
-	return c.exec.CallServerStream(ctx, req)
-}
-
-// Debug calls anovel.v1.CoreService.Debug.
-func (c *coreServiceClient) Debug(ctx context.Context, req *connect.Request[v1.DebugRequest]) (*connect.Response[v1.DebugResponse], error) {
-	return c.debug.CallUnary(ctx, req)
-}
-
-// Watch calls anovel.v1.CoreService.Watch.
-func (c *coreServiceClient) Watch(ctx context.Context, req *connect.Request[v1.WatchRequest]) (*connect.ServerStreamForClient[v1.StateEvent], error) {
-	return c.watch.CallServerStream(ctx, req)
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s CoreServiceWatchClientStream) Close() error {
+	return s.stream.Close()
 }
 
 // CoreServiceHandler is an implementation of the anovel.v1.CoreService service.
 type CoreServiceHandler interface {
 	// Daemon control
-	Ping(context.Context, *connect.Request[v1.PingRequest]) (*connect.Response[v1.PingResponse], error)
-	Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error)
-	PrepareReinstall(context.Context, *connect.Request[v1.PrepareReinstallRequest]) (*connect.Response[v1.PrepareReinstallResponse], error)
-	Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error)
+	Ping(context.Context, *v1.PingRequest) (*v1.PingResponse, error)
+	Status(context.Context, *v1.StatusRequest) (*v1.StatusResponse, error)
+	PrepareReinstall(context.Context, *v1.PrepareReinstallRequest) (*v1.PrepareReinstallResponse, error)
+	Shutdown(context.Context, *v1.ShutdownRequest) (*v1.ShutdownResponse, error)
 	// Discovery
-	ListStacks(context.Context, *connect.Request[v1.ListStacksRequest]) (*connect.Response[v1.ListStacksResponse], error)
-	ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error)
-	DescribeService(context.Context, *connect.Request[v1.DescribeServiceRequest]) (*connect.Response[v1.DescribeServiceResponse], error)
-	GetTopology(context.Context, *connect.Request[v1.GetTopologyRequest]) (*connect.Response[v1.GetTopologyResponse], error)
+	ListStacks(context.Context, *v1.ListStacksRequest) (*v1.ListStacksResponse, error)
+	ListServices(context.Context, *v1.ListServicesRequest) (*v1.ListServicesResponse, error)
+	DescribeService(context.Context, *v1.DescribeServiceRequest) (*v1.DescribeServiceResponse, error)
+	GetTopology(context.Context, *v1.GetTopologyRequest) (*v1.GetTopologyResponse, error)
 	// Targets
-	StartTarget(context.Context, *connect.Request[v1.StartTargetRequest]) (*connect.Response[v1.StartTargetResponse], error)
-	KillTarget(context.Context, *connect.Request[v1.KillTargetRequest]) (*connect.Response[v1.KillTargetResponse], error)
-	RestartTarget(context.Context, *connect.Request[v1.RestartTargetRequest]) (*connect.Response[v1.RestartTargetResponse], error)
+	StartTarget(context.Context, *v1.StartTargetRequest) (*v1.StartTargetResponse, error)
+	KillTarget(context.Context, *v1.KillTargetRequest) (*v1.KillTargetResponse, error)
+	RestartTarget(context.Context, *v1.RestartTargetRequest) (*v1.RestartTargetResponse, error)
 	// Service infrastructure
-	StartInfra(context.Context, *connect.Request[v1.StartInfraRequest]) (*connect.Response[v1.StartInfraResponse], error)
-	KillInfra(context.Context, *connect.Request[v1.KillInfraRequest]) (*connect.Response[v1.KillInfraResponse], error)
+	StartInfra(context.Context, *v1.StartInfraRequest) (*v1.StartInfraResponse, error)
+	KillInfra(context.Context, *v1.KillInfraRequest) (*v1.KillInfraResponse, error)
 	// Per-infra container lifecycle, which lets the TUI treat infra entries
 	// like targets: kill or restart one container while the rest of the
 	// service's infra stays up. StartInfra and KillInfra remain the
 	// whole-service cold-start and teardown.
-	KillInfraContainer(context.Context, *connect.Request[v1.KillInfraContainerRequest]) (*connect.Response[v1.KillInfraContainerResponse], error)
-	RestartInfraContainer(context.Context, *connect.Request[v1.RestartInfraContainerRequest]) (*connect.Response[v1.RestartInfraContainerResponse], error)
+	KillInfraContainer(context.Context, *v1.KillInfraContainerRequest) (*v1.KillInfraContainerResponse, error)
+	RestartInfraContainer(context.Context, *v1.RestartInfraContainerRequest) (*v1.RestartInfraContainerResponse, error)
 	// Logs (streaming)
-	StreamLogs(context.Context, *connect.Request[v1.StreamLogsRequest], *connect.ServerStream[v1.LogLine]) error
-	ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error)
+	StreamLogs(context.Context, *v1.StreamLogsRequest, CoreServiceStreamLogsServerStream) error
+	ListRuns(context.Context, *v1.ListRunsRequest) (*v1.ListRunsResponse, error)
 	// Environment
-	GetEnv(context.Context, *connect.Request[v1.GetEnvRequest]) (*connect.Response[v1.GetEnvResponse], error)
+	GetEnv(context.Context, *v1.GetEnvRequest) (*v1.GetEnvResponse, error)
 	// Volumes
-	ListVolumes(context.Context, *connect.Request[v1.ListVolumesRequest]) (*connect.Response[v1.ListVolumesResponse], error)
-	BackupVolume(context.Context, *connect.Request[v1.BackupVolumeRequest]) (*connect.Response[v1.BackupVolumeResponse], error)
-	RestoreVolume(context.Context, *connect.Request[v1.RestoreVolumeRequest]) (*connect.Response[v1.RestoreVolumeResponse], error)
-	ClearVolume(context.Context, *connect.Request[v1.ClearVolumeRequest]) (*connect.Response[v1.ClearVolumeResponse], error)
+	ListVolumes(context.Context, *v1.ListVolumesRequest) (*v1.ListVolumesResponse, error)
+	BackupVolume(context.Context, *v1.BackupVolumeRequest) (*v1.BackupVolumeResponse, error)
+	RestoreVolume(context.Context, *v1.RestoreVolumeRequest) (*v1.RestoreVolumeResponse, error)
+	ClearVolume(context.Context, *v1.ClearVolumeRequest) (*v1.ClearVolumeResponse, error)
 	// Exec / debug
-	Exec(context.Context, *connect.Request[v1.ExecRequest], *connect.ServerStream[v1.ExecOutput]) error
-	Debug(context.Context, *connect.Request[v1.DebugRequest]) (*connect.Response[v1.DebugResponse], error)
+	Exec(context.Context, *v1.ExecRequest, CoreServiceExecServerStream) error
+	Debug(context.Context, *v1.DebugRequest) (*v1.DebugResponse, error)
 	// State events
-	Watch(context.Context, *connect.Request[v1.WatchRequest], *connect.ServerStream[v1.StateEvent]) error
+	Watch(context.Context, *v1.WatchRequest, CoreServiceWatchServerStream) error
 }
 
-// NewCoreServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	coreServiceMethods := v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods()
-	coreServicePingHandler := connect.NewUnaryHandler(
-		CoreServicePingProcedure,
-		svc.Ping,
-		connect.WithSchema(coreServiceMethods.ByName("Ping")),
-		connect.WithHandlerOptions(opts...),
+// RegisterCoreServiceHandler registers svc as the anovel.v1.CoreService implementation on server.
+func RegisterCoreServiceHandler(server *connect.Server, svc CoreServiceHandler) {
+	adapter := coreServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: coreServicePingSpec(), Handler: adapter.ping},
+		connect.Method{Spec: coreServiceStatusSpec(), Handler: adapter.status},
+		connect.Method{Spec: coreServicePrepareReinstallSpec(), Handler: adapter.prepareReinstall},
+		connect.Method{Spec: coreServiceShutdownSpec(), Handler: adapter.shutdown},
+		connect.Method{Spec: coreServiceListStacksSpec(), Handler: adapter.listStacks},
+		connect.Method{Spec: coreServiceListServicesSpec(), Handler: adapter.listServices},
+		connect.Method{Spec: coreServiceDescribeServiceSpec(), Handler: adapter.describeService},
+		connect.Method{Spec: coreServiceGetTopologySpec(), Handler: adapter.getTopology},
+		connect.Method{Spec: coreServiceStartTargetSpec(), Handler: adapter.startTarget},
+		connect.Method{Spec: coreServiceKillTargetSpec(), Handler: adapter.killTarget},
+		connect.Method{Spec: coreServiceRestartTargetSpec(), Handler: adapter.restartTarget},
+		connect.Method{Spec: coreServiceStartInfraSpec(), Handler: adapter.startInfra},
+		connect.Method{Spec: coreServiceKillInfraSpec(), Handler: adapter.killInfra},
+		connect.Method{Spec: coreServiceKillInfraContainerSpec(), Handler: adapter.killInfraContainer},
+		connect.Method{Spec: coreServiceRestartInfraContainerSpec(), Handler: adapter.restartInfraContainer},
+		connect.Method{Spec: coreServiceStreamLogsSpec(), Handler: adapter.streamLogs},
+		connect.Method{Spec: coreServiceListRunsSpec(), Handler: adapter.listRuns},
+		connect.Method{Spec: coreServiceGetEnvSpec(), Handler: adapter.getEnv},
+		connect.Method{Spec: coreServiceListVolumesSpec(), Handler: adapter.listVolumes},
+		connect.Method{Spec: coreServiceBackupVolumeSpec(), Handler: adapter.backupVolume},
+		connect.Method{Spec: coreServiceRestoreVolumeSpec(), Handler: adapter.restoreVolume},
+		connect.Method{Spec: coreServiceClearVolumeSpec(), Handler: adapter.clearVolume},
+		connect.Method{Spec: coreServiceExecSpec(), Handler: adapter.exec},
+		connect.Method{Spec: coreServiceDebugSpec(), Handler: adapter.debug},
+		connect.Method{Spec: coreServiceWatchSpec(), Handler: adapter.watch},
 	)
-	coreServiceStatusHandler := connect.NewUnaryHandler(
-		CoreServiceStatusProcedure,
-		svc.Status,
-		connect.WithSchema(coreServiceMethods.ByName("Status")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServicePrepareReinstallHandler := connect.NewUnaryHandler(
-		CoreServicePrepareReinstallProcedure,
-		svc.PrepareReinstall,
-		connect.WithSchema(coreServiceMethods.ByName("PrepareReinstall")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceShutdownHandler := connect.NewUnaryHandler(
-		CoreServiceShutdownProcedure,
-		svc.Shutdown,
-		connect.WithSchema(coreServiceMethods.ByName("Shutdown")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceListStacksHandler := connect.NewUnaryHandler(
-		CoreServiceListStacksProcedure,
-		svc.ListStacks,
-		connect.WithSchema(coreServiceMethods.ByName("ListStacks")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceListServicesHandler := connect.NewUnaryHandler(
-		CoreServiceListServicesProcedure,
-		svc.ListServices,
-		connect.WithSchema(coreServiceMethods.ByName("ListServices")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceDescribeServiceHandler := connect.NewUnaryHandler(
-		CoreServiceDescribeServiceProcedure,
-		svc.DescribeService,
-		connect.WithSchema(coreServiceMethods.ByName("DescribeService")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceGetTopologyHandler := connect.NewUnaryHandler(
-		CoreServiceGetTopologyProcedure,
-		svc.GetTopology,
-		connect.WithSchema(coreServiceMethods.ByName("GetTopology")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceStartTargetHandler := connect.NewUnaryHandler(
-		CoreServiceStartTargetProcedure,
-		svc.StartTarget,
-		connect.WithSchema(coreServiceMethods.ByName("StartTarget")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceKillTargetHandler := connect.NewUnaryHandler(
-		CoreServiceKillTargetProcedure,
-		svc.KillTarget,
-		connect.WithSchema(coreServiceMethods.ByName("KillTarget")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceRestartTargetHandler := connect.NewUnaryHandler(
-		CoreServiceRestartTargetProcedure,
-		svc.RestartTarget,
-		connect.WithSchema(coreServiceMethods.ByName("RestartTarget")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceStartInfraHandler := connect.NewUnaryHandler(
-		CoreServiceStartInfraProcedure,
-		svc.StartInfra,
-		connect.WithSchema(coreServiceMethods.ByName("StartInfra")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceKillInfraHandler := connect.NewUnaryHandler(
-		CoreServiceKillInfraProcedure,
-		svc.KillInfra,
-		connect.WithSchema(coreServiceMethods.ByName("KillInfra")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceKillInfraContainerHandler := connect.NewUnaryHandler(
-		CoreServiceKillInfraContainerProcedure,
-		svc.KillInfraContainer,
-		connect.WithSchema(coreServiceMethods.ByName("KillInfraContainer")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceRestartInfraContainerHandler := connect.NewUnaryHandler(
-		CoreServiceRestartInfraContainerProcedure,
-		svc.RestartInfraContainer,
-		connect.WithSchema(coreServiceMethods.ByName("RestartInfraContainer")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceStreamLogsHandler := connect.NewServerStreamHandler(
-		CoreServiceStreamLogsProcedure,
-		svc.StreamLogs,
-		connect.WithSchema(coreServiceMethods.ByName("StreamLogs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceListRunsHandler := connect.NewUnaryHandler(
-		CoreServiceListRunsProcedure,
-		svc.ListRuns,
-		connect.WithSchema(coreServiceMethods.ByName("ListRuns")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceGetEnvHandler := connect.NewUnaryHandler(
-		CoreServiceGetEnvProcedure,
-		svc.GetEnv,
-		connect.WithSchema(coreServiceMethods.ByName("GetEnv")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceListVolumesHandler := connect.NewUnaryHandler(
-		CoreServiceListVolumesProcedure,
-		svc.ListVolumes,
-		connect.WithSchema(coreServiceMethods.ByName("ListVolumes")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceBackupVolumeHandler := connect.NewUnaryHandler(
-		CoreServiceBackupVolumeProcedure,
-		svc.BackupVolume,
-		connect.WithSchema(coreServiceMethods.ByName("BackupVolume")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceRestoreVolumeHandler := connect.NewUnaryHandler(
-		CoreServiceRestoreVolumeProcedure,
-		svc.RestoreVolume,
-		connect.WithSchema(coreServiceMethods.ByName("RestoreVolume")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceClearVolumeHandler := connect.NewUnaryHandler(
-		CoreServiceClearVolumeProcedure,
-		svc.ClearVolume,
-		connect.WithSchema(coreServiceMethods.ByName("ClearVolume")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceExecHandler := connect.NewServerStreamHandler(
-		CoreServiceExecProcedure,
-		svc.Exec,
-		connect.WithSchema(coreServiceMethods.ByName("Exec")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceDebugHandler := connect.NewUnaryHandler(
-		CoreServiceDebugProcedure,
-		svc.Debug,
-		connect.WithSchema(coreServiceMethods.ByName("Debug")),
-		connect.WithHandlerOptions(opts...),
-	)
-	coreServiceWatchHandler := connect.NewServerStreamHandler(
-		CoreServiceWatchProcedure,
-		svc.Watch,
-		connect.WithSchema(coreServiceMethods.ByName("Watch")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/anovel.v1.CoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case CoreServicePingProcedure:
-			coreServicePingHandler.ServeHTTP(w, r)
-		case CoreServiceStatusProcedure:
-			coreServiceStatusHandler.ServeHTTP(w, r)
-		case CoreServicePrepareReinstallProcedure:
-			coreServicePrepareReinstallHandler.ServeHTTP(w, r)
-		case CoreServiceShutdownProcedure:
-			coreServiceShutdownHandler.ServeHTTP(w, r)
-		case CoreServiceListStacksProcedure:
-			coreServiceListStacksHandler.ServeHTTP(w, r)
-		case CoreServiceListServicesProcedure:
-			coreServiceListServicesHandler.ServeHTTP(w, r)
-		case CoreServiceDescribeServiceProcedure:
-			coreServiceDescribeServiceHandler.ServeHTTP(w, r)
-		case CoreServiceGetTopologyProcedure:
-			coreServiceGetTopologyHandler.ServeHTTP(w, r)
-		case CoreServiceStartTargetProcedure:
-			coreServiceStartTargetHandler.ServeHTTP(w, r)
-		case CoreServiceKillTargetProcedure:
-			coreServiceKillTargetHandler.ServeHTTP(w, r)
-		case CoreServiceRestartTargetProcedure:
-			coreServiceRestartTargetHandler.ServeHTTP(w, r)
-		case CoreServiceStartInfraProcedure:
-			coreServiceStartInfraHandler.ServeHTTP(w, r)
-		case CoreServiceKillInfraProcedure:
-			coreServiceKillInfraHandler.ServeHTTP(w, r)
-		case CoreServiceKillInfraContainerProcedure:
-			coreServiceKillInfraContainerHandler.ServeHTTP(w, r)
-		case CoreServiceRestartInfraContainerProcedure:
-			coreServiceRestartInfraContainerHandler.ServeHTTP(w, r)
-		case CoreServiceStreamLogsProcedure:
-			coreServiceStreamLogsHandler.ServeHTTP(w, r)
-		case CoreServiceListRunsProcedure:
-			coreServiceListRunsHandler.ServeHTTP(w, r)
-		case CoreServiceGetEnvProcedure:
-			coreServiceGetEnvHandler.ServeHTTP(w, r)
-		case CoreServiceListVolumesProcedure:
-			coreServiceListVolumesHandler.ServeHTTP(w, r)
-		case CoreServiceBackupVolumeProcedure:
-			coreServiceBackupVolumeHandler.ServeHTTP(w, r)
-		case CoreServiceRestoreVolumeProcedure:
-			coreServiceRestoreVolumeHandler.ServeHTTP(w, r)
-		case CoreServiceClearVolumeProcedure:
-			coreServiceClearVolumeHandler.ServeHTTP(w, r)
-		case CoreServiceExecProcedure:
-			coreServiceExecHandler.ServeHTTP(w, r)
-		case CoreServiceDebugProcedure:
-			coreServiceDebugHandler.ServeHTTP(w, r)
-		case CoreServiceWatchProcedure:
-			coreServiceWatchHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
+}
+
+// CoreServiceStreamLogsServerStream is the server stream for the CoreService's StreamLogs RPC.
+type CoreServiceStreamLogsServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s CoreServiceStreamLogsServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s CoreServiceStreamLogsServerStream) Send(res *v1.LogLine) error {
+	return s.stream.Send(res)
+}
+
+// CoreServiceExecServerStream is the server stream for the CoreService's Exec RPC.
+type CoreServiceExecServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s CoreServiceExecServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s CoreServiceExecServerStream) Send(res *v1.ExecOutput) error {
+	return s.stream.Send(res)
+}
+
+// CoreServiceWatchServerStream is the server stream for the CoreService's Watch RPC.
+type CoreServiceWatchServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s CoreServiceWatchServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s CoreServiceWatchServerStream) Send(res *v1.StateEvent) error {
+	return s.stream.Send(res)
 }
 
 // UnimplementedCoreServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedCoreServiceHandler struct{}
 
-func (UnimplementedCoreServiceHandler) Ping(context.Context, *connect.Request[v1.PingRequest]) (*connect.Response[v1.PingResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.Ping is not implemented"))
+func (UnimplementedCoreServiceHandler) Ping(context.Context, *v1.PingRequest) (*v1.PingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.Ping is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.Status is not implemented"))
+func (UnimplementedCoreServiceHandler) Status(context.Context, *v1.StatusRequest) (*v1.StatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.Status is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) PrepareReinstall(context.Context, *connect.Request[v1.PrepareReinstallRequest]) (*connect.Response[v1.PrepareReinstallResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.PrepareReinstall is not implemented"))
+func (UnimplementedCoreServiceHandler) PrepareReinstall(context.Context, *v1.PrepareReinstallRequest) (*v1.PrepareReinstallResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.PrepareReinstall is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.Shutdown is not implemented"))
+func (UnimplementedCoreServiceHandler) Shutdown(context.Context, *v1.ShutdownRequest) (*v1.ShutdownResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.Shutdown is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) ListStacks(context.Context, *connect.Request[v1.ListStacksRequest]) (*connect.Response[v1.ListStacksResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.ListStacks is not implemented"))
+func (UnimplementedCoreServiceHandler) ListStacks(context.Context, *v1.ListStacksRequest) (*v1.ListStacksResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.ListStacks is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.ListServices is not implemented"))
+func (UnimplementedCoreServiceHandler) ListServices(context.Context, *v1.ListServicesRequest) (*v1.ListServicesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.ListServices is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) DescribeService(context.Context, *connect.Request[v1.DescribeServiceRequest]) (*connect.Response[v1.DescribeServiceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.DescribeService is not implemented"))
+func (UnimplementedCoreServiceHandler) DescribeService(context.Context, *v1.DescribeServiceRequest) (*v1.DescribeServiceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.DescribeService is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) GetTopology(context.Context, *connect.Request[v1.GetTopologyRequest]) (*connect.Response[v1.GetTopologyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.GetTopology is not implemented"))
+func (UnimplementedCoreServiceHandler) GetTopology(context.Context, *v1.GetTopologyRequest) (*v1.GetTopologyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.GetTopology is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) StartTarget(context.Context, *connect.Request[v1.StartTargetRequest]) (*connect.Response[v1.StartTargetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.StartTarget is not implemented"))
+func (UnimplementedCoreServiceHandler) StartTarget(context.Context, *v1.StartTargetRequest) (*v1.StartTargetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.StartTarget is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) KillTarget(context.Context, *connect.Request[v1.KillTargetRequest]) (*connect.Response[v1.KillTargetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.KillTarget is not implemented"))
+func (UnimplementedCoreServiceHandler) KillTarget(context.Context, *v1.KillTargetRequest) (*v1.KillTargetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.KillTarget is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) RestartTarget(context.Context, *connect.Request[v1.RestartTargetRequest]) (*connect.Response[v1.RestartTargetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.RestartTarget is not implemented"))
+func (UnimplementedCoreServiceHandler) RestartTarget(context.Context, *v1.RestartTargetRequest) (*v1.RestartTargetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.RestartTarget is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) StartInfra(context.Context, *connect.Request[v1.StartInfraRequest]) (*connect.Response[v1.StartInfraResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.StartInfra is not implemented"))
+func (UnimplementedCoreServiceHandler) StartInfra(context.Context, *v1.StartInfraRequest) (*v1.StartInfraResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.StartInfra is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) KillInfra(context.Context, *connect.Request[v1.KillInfraRequest]) (*connect.Response[v1.KillInfraResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.KillInfra is not implemented"))
+func (UnimplementedCoreServiceHandler) KillInfra(context.Context, *v1.KillInfraRequest) (*v1.KillInfraResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.KillInfra is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) KillInfraContainer(context.Context, *connect.Request[v1.KillInfraContainerRequest]) (*connect.Response[v1.KillInfraContainerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.KillInfraContainer is not implemented"))
+func (UnimplementedCoreServiceHandler) KillInfraContainer(context.Context, *v1.KillInfraContainerRequest) (*v1.KillInfraContainerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.KillInfraContainer is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) RestartInfraContainer(context.Context, *connect.Request[v1.RestartInfraContainerRequest]) (*connect.Response[v1.RestartInfraContainerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.RestartInfraContainer is not implemented"))
+func (UnimplementedCoreServiceHandler) RestartInfraContainer(context.Context, *v1.RestartInfraContainerRequest) (*v1.RestartInfraContainerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.RestartInfraContainer is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) StreamLogs(context.Context, *connect.Request[v1.StreamLogsRequest], *connect.ServerStream[v1.LogLine]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.StreamLogs is not implemented"))
+func (UnimplementedCoreServiceHandler) StreamLogs(context.Context, *v1.StreamLogsRequest, CoreServiceStreamLogsServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.StreamLogs is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.ListRuns is not implemented"))
+func (UnimplementedCoreServiceHandler) ListRuns(context.Context, *v1.ListRunsRequest) (*v1.ListRunsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.ListRuns is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) GetEnv(context.Context, *connect.Request[v1.GetEnvRequest]) (*connect.Response[v1.GetEnvResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.GetEnv is not implemented"))
+func (UnimplementedCoreServiceHandler) GetEnv(context.Context, *v1.GetEnvRequest) (*v1.GetEnvResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.GetEnv is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) ListVolumes(context.Context, *connect.Request[v1.ListVolumesRequest]) (*connect.Response[v1.ListVolumesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.ListVolumes is not implemented"))
+func (UnimplementedCoreServiceHandler) ListVolumes(context.Context, *v1.ListVolumesRequest) (*v1.ListVolumesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.ListVolumes is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) BackupVolume(context.Context, *connect.Request[v1.BackupVolumeRequest]) (*connect.Response[v1.BackupVolumeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.BackupVolume is not implemented"))
+func (UnimplementedCoreServiceHandler) BackupVolume(context.Context, *v1.BackupVolumeRequest) (*v1.BackupVolumeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.BackupVolume is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) RestoreVolume(context.Context, *connect.Request[v1.RestoreVolumeRequest]) (*connect.Response[v1.RestoreVolumeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.RestoreVolume is not implemented"))
+func (UnimplementedCoreServiceHandler) RestoreVolume(context.Context, *v1.RestoreVolumeRequest) (*v1.RestoreVolumeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.RestoreVolume is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) ClearVolume(context.Context, *connect.Request[v1.ClearVolumeRequest]) (*connect.Response[v1.ClearVolumeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.ClearVolume is not implemented"))
+func (UnimplementedCoreServiceHandler) ClearVolume(context.Context, *v1.ClearVolumeRequest) (*v1.ClearVolumeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.ClearVolume is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) Exec(context.Context, *connect.Request[v1.ExecRequest], *connect.ServerStream[v1.ExecOutput]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.Exec is not implemented"))
+func (UnimplementedCoreServiceHandler) Exec(context.Context, *v1.ExecRequest, CoreServiceExecServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.Exec is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) Debug(context.Context, *connect.Request[v1.DebugRequest]) (*connect.Response[v1.DebugResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.Debug is not implemented"))
+func (UnimplementedCoreServiceHandler) Debug(context.Context, *v1.DebugRequest) (*v1.DebugResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.Debug is not implemented")
 }
 
-func (UnimplementedCoreServiceHandler) Watch(context.Context, *connect.Request[v1.WatchRequest], *connect.ServerStream[v1.StateEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("anovel.v1.CoreService.Watch is not implemented"))
+func (UnimplementedCoreServiceHandler) Watch(context.Context, *v1.WatchRequest, CoreServiceWatchServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.Watch is not implemented")
+}
+
+type coreServiceClient struct {
+	client *connect.Client
+}
+
+func (c *coreServiceClient) Ping(ctx context.Context, req *v1.PingRequest) (*v1.PingResponse, error) {
+	var res v1.PingResponse
+	if err := c.client.CallUnary(ctx, coreServicePingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) Status(ctx context.Context, req *v1.StatusRequest) (*v1.StatusResponse, error) {
+	var res v1.StatusResponse
+	if err := c.client.CallUnary(ctx, coreServiceStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) PrepareReinstall(ctx context.Context, req *v1.PrepareReinstallRequest) (*v1.PrepareReinstallResponse, error) {
+	var res v1.PrepareReinstallResponse
+	if err := c.client.CallUnary(ctx, coreServicePrepareReinstallSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) Shutdown(ctx context.Context, req *v1.ShutdownRequest) (*v1.ShutdownResponse, error) {
+	var res v1.ShutdownResponse
+	if err := c.client.CallUnary(ctx, coreServiceShutdownSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) ListStacks(ctx context.Context, req *v1.ListStacksRequest) (*v1.ListStacksResponse, error) {
+	var res v1.ListStacksResponse
+	if err := c.client.CallUnary(ctx, coreServiceListStacksSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) ListServices(ctx context.Context, req *v1.ListServicesRequest) (*v1.ListServicesResponse, error) {
+	var res v1.ListServicesResponse
+	if err := c.client.CallUnary(ctx, coreServiceListServicesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) DescribeService(ctx context.Context, req *v1.DescribeServiceRequest) (*v1.DescribeServiceResponse, error) {
+	var res v1.DescribeServiceResponse
+	if err := c.client.CallUnary(ctx, coreServiceDescribeServiceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) GetTopology(ctx context.Context, req *v1.GetTopologyRequest) (*v1.GetTopologyResponse, error) {
+	var res v1.GetTopologyResponse
+	if err := c.client.CallUnary(ctx, coreServiceGetTopologySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) StartTarget(ctx context.Context, req *v1.StartTargetRequest) (*v1.StartTargetResponse, error) {
+	var res v1.StartTargetResponse
+	if err := c.client.CallUnary(ctx, coreServiceStartTargetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) KillTarget(ctx context.Context, req *v1.KillTargetRequest) (*v1.KillTargetResponse, error) {
+	var res v1.KillTargetResponse
+	if err := c.client.CallUnary(ctx, coreServiceKillTargetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) RestartTarget(ctx context.Context, req *v1.RestartTargetRequest) (*v1.RestartTargetResponse, error) {
+	var res v1.RestartTargetResponse
+	if err := c.client.CallUnary(ctx, coreServiceRestartTargetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) StartInfra(ctx context.Context, req *v1.StartInfraRequest) (*v1.StartInfraResponse, error) {
+	var res v1.StartInfraResponse
+	if err := c.client.CallUnary(ctx, coreServiceStartInfraSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) KillInfra(ctx context.Context, req *v1.KillInfraRequest) (*v1.KillInfraResponse, error) {
+	var res v1.KillInfraResponse
+	if err := c.client.CallUnary(ctx, coreServiceKillInfraSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) KillInfraContainer(ctx context.Context, req *v1.KillInfraContainerRequest) (*v1.KillInfraContainerResponse, error) {
+	var res v1.KillInfraContainerResponse
+	if err := c.client.CallUnary(ctx, coreServiceKillInfraContainerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) RestartInfraContainer(ctx context.Context, req *v1.RestartInfraContainerRequest) (*v1.RestartInfraContainerResponse, error) {
+	var res v1.RestartInfraContainerResponse
+	if err := c.client.CallUnary(ctx, coreServiceRestartInfraContainerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) StreamLogs(ctx context.Context, req *v1.StreamLogsRequest) (CoreServiceStreamLogsClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, coreServiceStreamLogsSpec(), req)
+	if err != nil {
+		return CoreServiceStreamLogsClientStream{}, err
+	}
+	return CoreServiceStreamLogsClientStream{stream: stream}, nil
+}
+
+func (c *coreServiceClient) ListRuns(ctx context.Context, req *v1.ListRunsRequest) (*v1.ListRunsResponse, error) {
+	var res v1.ListRunsResponse
+	if err := c.client.CallUnary(ctx, coreServiceListRunsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) GetEnv(ctx context.Context, req *v1.GetEnvRequest) (*v1.GetEnvResponse, error) {
+	var res v1.GetEnvResponse
+	if err := c.client.CallUnary(ctx, coreServiceGetEnvSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) ListVolumes(ctx context.Context, req *v1.ListVolumesRequest) (*v1.ListVolumesResponse, error) {
+	var res v1.ListVolumesResponse
+	if err := c.client.CallUnary(ctx, coreServiceListVolumesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) BackupVolume(ctx context.Context, req *v1.BackupVolumeRequest) (*v1.BackupVolumeResponse, error) {
+	var res v1.BackupVolumeResponse
+	if err := c.client.CallUnary(ctx, coreServiceBackupVolumeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) RestoreVolume(ctx context.Context, req *v1.RestoreVolumeRequest) (*v1.RestoreVolumeResponse, error) {
+	var res v1.RestoreVolumeResponse
+	if err := c.client.CallUnary(ctx, coreServiceRestoreVolumeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) ClearVolume(ctx context.Context, req *v1.ClearVolumeRequest) (*v1.ClearVolumeResponse, error) {
+	var res v1.ClearVolumeResponse
+	if err := c.client.CallUnary(ctx, coreServiceClearVolumeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) Exec(ctx context.Context, req *v1.ExecRequest) (CoreServiceExecClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, coreServiceExecSpec(), req)
+	if err != nil {
+		return CoreServiceExecClientStream{}, err
+	}
+	return CoreServiceExecClientStream{stream: stream}, nil
+}
+
+func (c *coreServiceClient) Debug(ctx context.Context, req *v1.DebugRequest) (*v1.DebugResponse, error) {
+	var res v1.DebugResponse
+	if err := c.client.CallUnary(ctx, coreServiceDebugSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coreServiceClient) Watch(ctx context.Context, req *v1.WatchRequest) (CoreServiceWatchClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, coreServiceWatchSpec(), req)
+	if err != nil {
+		return CoreServiceWatchClientStream{}, err
+	}
+	return CoreServiceWatchClientStream{stream: stream}, nil
+}
+
+type coreServiceHandler struct{ svc CoreServiceHandler }
+
+func (h coreServiceHandler) ping(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Ping(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) status(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Status(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) prepareReinstall(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PrepareReinstallRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PrepareReinstall(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) shutdown(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ShutdownRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Shutdown(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) listStacks(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListStacksRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListStacks(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) listServices(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListServicesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListServices(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) describeService(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DescribeServiceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DescribeService(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) getTopology(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetTopologyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetTopology(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) startTarget(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartTargetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartTarget(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) killTarget(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.KillTargetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.KillTarget(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) restartTarget(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RestartTargetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RestartTarget(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) startInfra(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartInfraRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartInfra(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) killInfra(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.KillInfraRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.KillInfra(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) killInfraContainer(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.KillInfraContainerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.KillInfraContainer(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) restartInfraContainer(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RestartInfraContainerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RestartInfraContainer(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) streamLogs(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StreamLogsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.StreamLogs(ctx, &req, CoreServiceStreamLogsServerStream{stream: stream})
+}
+
+func (h coreServiceHandler) listRuns(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListRunsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListRuns(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) getEnv(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetEnvRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetEnv(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) listVolumes(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListVolumesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListVolumes(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) backupVolume(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BackupVolumeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BackupVolume(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) restoreVolume(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RestoreVolumeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RestoreVolume(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) clearVolume(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ClearVolumeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ClearVolume(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) exec(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ExecRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.Exec(ctx, &req, CoreServiceExecServerStream{stream: stream})
+}
+
+func (h coreServiceHandler) debug(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DebugRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Debug(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coreServiceHandler) watch(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.WatchRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.Watch(ctx, &req, CoreServiceWatchServerStream{stream: stream})
 }

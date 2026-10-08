@@ -1,10 +1,8 @@
 ---
 name: write-openapi
 description: >
-  Write, review, and maintain the OpenAPI 3.1 specification for Agora backend services.
-  Use whenever editing openapi.yaml — adding endpoints, parameters, schemas, responses,
-  or updating descriptions and examples. Covers the REST public API only; gRPC contracts
-  belong to the write-proto skill.
+  Write or review openapi.yaml for public REST APIs: endpoints, parameters, schemas, responses,
+  examples, and contract compatibility. Internal gRPC contracts use write-proto.
 ---
 
 # OpenAPI Specification Skill
