@@ -1,66 +1,66 @@
 ---
 name: write-infra
 description: >
-  Plan, audit, and maintain a-novel/infra: OpenTofu roots, deployment tooling, Google Cloud
-  identities and networks, database hosts, backups, recovery, and operator runbooks. Use for
-  infrastructure isolation, rollout safety, or tooling simplification. Application migrations
-  and service business logic belong to their service skills.
+  Plan, change, review or operate a-novel/infra: OpenTofu roots and modules, the plan-on-PR and
+  apply-on-merge pipeline, Google Cloud identities and networks, database and backup hosts, recovery
+  drills, and runbooks. Load for any change under that repository. Service code and migrations
+  belong to their service skills.
 ---
 
 # Maintain infrastructure
 
-Treat infrastructure as a set of independently owned service lifecycles. A successful apply proves
-that a resource operation completed; it does not prove application health, data recovery, or isolation.
+`a-novel/infra` is a standard GitOps OpenTofu repository:
 
-Load `plan-feature` for architecture changes and `choose-dependency` for build-versus-buy decisions.
-Use `git-conventions` for the checkout and `document-code` for prose. Pair workflow edits with
-`write-github-actions`; pair implementation and tests with the relevant language skills. Use
-`use-a-novel-cli` for local validation and `open-pull-request` when shipping.
+- a pull request shows each root's plan from a read-only identity;
+- merging to `master` applies;
+- a daily drift check re-plans everything.
 
-## Establish the boundary
+Keep it that way. Prefer OpenTofu, provider features and native GitHub Actions over custom code.
+Custom code exists only for software that runs **on the VMs**: the TLS loader and the restore worker.
 
-For an operational change or audit, read the checked-out architecture, relevant root READMEs,
-applicable runbook, workflow, and called tooling. Record the commit being inspected. Reconstruct the
-current resource owners from source; old receipts, incident commands, and conversation history can
-describe retired infrastructure.
+Load `prefer-small-solutions` throughout, `write-github-actions` for workflows, `plan-feature` for
+architecture, and `choose-dependency` before adding a tool. Prose follows `document-code`.
 
-Distinguish an audit, a repository change, and a live operation. Each has its own authority. Honor the
-repository's human-only cloud execution rules: an agent must not run `gcloud` or a live OpenTofu apply.
-Do not turn authorization to prepare a PR into permission to execute its migration, approve an
-environment, change IAM, or bypass a deletion gate. A prior prelaunch data-loss exception belongs to
-that operation. Leave unrelated automation enabled unless the maintainer explicitly requests a change.
+## The repository
 
-For read-only work, inspect source, public documentation, GitHub metadata, and supplied sanitized
-outputs. Never fetch secret payloads to prove configuration. Ask for the narrowest human-run check
-when cloud evidence is necessary, using explicit project and location arguments where the command
-supports them, from the documented environment variables. Say which conclusions are static findings
-and which have live evidence.
+| Path                                 | Owns                                                                         |
+| ------------------------------------ | ---------------------------------------------------------------------------- |
+| `bootstrap/`                         | Management project: state bucket, CI identities and trust, secret containers |
+| `environments/production/foundation` | Projects, VPC, firewall, database hosts, shared IAM, budget, alerts          |
+| `environments/production/<service>`  | One service: Cloud Run services and jobs, backup repository, alerts          |
+| `environments/recovery`              | One manual disaster-recovery drill host per disposable project               |
+| `modules/`                           | Only code with two callers or one shared invariant                           |
 
-Keep mechanical documentation edits proportional: inspect the changed text and its context, then run
-the applicable formatting or link checks. They need no architecture issue or recovery drill.
+- **Inputs live in each root's committed `terraform.tfvars`.** Secret values never do: humans add
+  them with `gcloud`.
+- **Images are pinned** as `ghcr.io/…:tag@sha256:…`. Deploy verifies their attestation and copies
+  them to Artifact Registry with `skopeo --preserve-digests`.
+- **Secrets are pinned** as numeric versions.
+- **The docs** are in `docs/ops-basics.md`, `docs/architecture.md` and `docs/runbooks/`.
+
+## Authority
+
+- **Agents never apply, dispatch production workflows or change IAM by hand.** Push a branch and let
+  the pull request plan it.
+- **Use `gcloud` only for reads,** and only when the user allows it in the session. A useful read:
+  `tofu plan -refresh=false -lock=false` with `GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)`.
+- **Humans** hold read access, IAP SSH and secret-version rights. Everything else goes through
+  `deploy.yaml`, or `recovery.yaml` for drills.
+- **Write runbook commands for the identity that actually runs them.** A command a human cannot
+  run belongs in a workflow.
+- **Deleting, replacing or forgetting a resource, or weakening its protection,** needs the
+  `allow-resource-deletion` label on the pull request.
 
 ## Route the work
 
-- For deployment, IAM, networking, state ownership, database lifecycle, or recovery changes, read
-  [Service isolation and failure safety](references/isolation-and-safety.md).
-- For language consolidation, dependencies, code reduction, CI validation, or test removal, read
-  [Tooling and tests](references/tooling-and-tests.md).
-- For an operator runbook, read both references and exercise its non-mutating command path with
-  fixtures. Keep human-only actions explicit and make failure stop the sequence.
+- Changing resources, state layout, releases, database hosts or recovery: read
+  [Change safety](references/change-safety.md).
+- Workflows, tests, linting or tooling: read [Tooling and tests](references/tooling-and-tests.md).
 
-## Deliver reviewable changes
+## Deliver
 
-Tie each batch to an observable outcome and, when planning applies, its owning issue. Separate
-behavior-preserving ports from changed authorization, resource ownership, or rollout policy. Count
-handwritten code and tests separately from generated files, locks, and documentation; report actual
-reductions without promising a percentage before measurement.
-
-State migrations require a reviewed old-to-new ownership map, private state backup, reconciliation
-plan, and rollback procedure. A moved resource must have exactly one writer throughout the transition.
-Keep deployment serialization until shared state, receipts, credentials, and cleanup paths are proven
-safe for independent operation.
-
-In the handoff, distinguish code tested locally, CI results, planned cloud changes, and actions still
-requiring a human. A green mocked test suite is not a completed live drill. Keep unresolved migration
-safety and configurable shutdown work as linked follow-ups instead of claiming they are solved by a
-tooling refactor.
+Prove a refactor is a no-op before review. Report each root's expected plan in the pull request:
+imports, in-place changes and deletions, with the reason for each. Separate stages that need the
+deletion label from those that do not. Stack them when they depend on one another. In the handoff,
+list what the user must do by hand: label, admin-bypass merge after a required-check rename, GitHub
+settings, then `a-novel repo update`.
