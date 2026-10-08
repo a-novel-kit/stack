@@ -29,8 +29,9 @@ information hierarchy, component family, or visual language. This skill owns imp
 
 **Rendered-UI hard gate:** Start Storybook with `BROWSER=none` and `--no-open`, inspect the exact
 changed story in the integrated browser, keep the server live through review, and put its freshly
-verified actual Markdown link in the completion report beside the PR and task or issue links. Never
-put a local-only Storybook URL in a GitHub PR body. A screenshot or placeholder is never a substitute.
+verified actual Markdown link in the completion report beside the PR and task or issue links. Send
+screenshots of the changed screens in the conversation as well. Never put a local-only Storybook URL
+in a GitHub PR body. A screenshot or placeholder never substitutes for the live link.
 
 Use this authority order when guidance conflicts:
 
@@ -77,7 +78,8 @@ The handoff contract is non-negotiable:
 2. Start the repository's Storybook command with `BROWSER=none` and `--no-open`. The process must
    not launch an external browser tab and must stay live for the operator unless they ask to stop it.
 3. Wait for readiness, discover the actual listening URL and port, and verify that the exact changed
-   story or docs route responds.
+   story or docs route responds from where the developer opens it. Behind WSL or another VM boundary,
+   bind IPv4 with `--host 0.0.0.0`: an IPv6-only listener is not forwarded to the host's `127.0.0.1`.
 4. Open that route in the integrated browser and inspect it. Prefer it over the Storybook root when
    handing off a specific component.
 5. Keep localhost and other local-only Storybook links out of GitHub PR descriptions. They are
@@ -89,11 +91,15 @@ The handoff contract is non-negotiable:
    `[Button — Storybook](http://127.0.0.1:6006/?path=/docs/button--docs)`, substituting the actual live
    URL and route. Repeat it in any later report that hands completed UI work back; an earlier report
    does not satisfy the current handoff.
-7. Re-resolve every linked route immediately before sending the completion report. If the server
+7. Send screenshots of every new or changed screen and state in the conversation, with the host's
+   file-sharing tool, at the reviewed viewports and in each supported locale. The developer may be
+   unable to reach the local server, from another device or across a VM's network boundary, so the
+   screenshots are their first look. Send them again when the screens change.
+8. Re-resolve every linked route immediately before sending the completion report. If the server
    stopped or changed, restart it and verify the new link before reporting completion.
 
-A screenshot, placeholder such as “visual preview,” stale URL, or instruction to find an earlier
-link does not satisfy this contract.
+Screenshots accompany the live link; a screenshot, placeholder such as “visual preview,” stale URL,
+or instruction to find an earlier link does not replace it.
 
 ## Dependencies
 

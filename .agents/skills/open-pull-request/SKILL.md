@@ -144,7 +144,8 @@ history — add a follow-up `chore(gen): ...` commit instead (per `monitor-ci`).
 
 Honor every active layer skill's review-artifact gate before opening a ready PR. In particular,
 `write-frontend` requires a locally running, freshly inspected Storybook plus direct story links
-ready for the final completion report. Local-only review links must not enter the PR body. A
+ready for the final completion report, and screenshots of the changed screens sent in the
+conversation. Local-only review links must not enter the PR body. A
 screenshot, static build, stale URL, or Storybook root link does not satisfy a direct rendered-UI
 review route.
 
