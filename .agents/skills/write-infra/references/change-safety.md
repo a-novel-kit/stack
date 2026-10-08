@@ -77,9 +77,10 @@ pins in the same change.
 
 - **The host groups use an `OPPORTUNISTIC` update policy.** Merging a template, image or TLS change
   restarts nothing.
-- **Rolling is a manual `deploy.yaml` dispatch** with `roll_database=<service>`. It restarts the
-  host, or replaces it when the template changed; the stateful disk and IP stay. Then it restarts
-  the repository VM and checks health. Ask for a full backup before rolling.
+- **Rolling is a manual `roll-database.yaml` dispatch** with `service=<service>`, once that
+  service's deploy finished. It restarts the host, or replaces it when the template changed; the
+  stateful disk and IP stay. Then it restarts the repository VM and checks health. Ask for a full
+  backup before rolling.
 - **Database images are pinned** by `tag@digest` in foundation and in the service root. Both
   Artifact Registry copies (`agora-production`, `agora-<service>-private-production`) derive from
   that one pin.
@@ -95,8 +96,8 @@ pins in the same change.
   - Renovate delays OpenTofu and provider updates by 7 days (6 hours for patches) to bound a
     compromised release.
   - State holds no secret values, because those are added outside OpenTofu.
-- **The writer's federation condition** pins `deploy.yaml` and `recovery.yaml` on `master` behind
-  the `production` environment. Changing it is a bootstrap change, applied by the last trusted
+- **The writer's federation condition** pins `deploy.yaml`, `roll-database.yaml` and
+  `recovery.yaml` on `master` behind the `production` environment. Changing it is a bootstrap change, applied by the last trusted
   workflow before a new one depends on it.
 - **Inventory IAM by principal and resource:**
   - runtime accounts read only their own secrets;

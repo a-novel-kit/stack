@@ -12,8 +12,12 @@ description: >
 `a-novel/infra` is a standard GitOps OpenTofu repository:
 
 - a pull request shows each root's plan from a read-only identity;
-- merging to `master` applies;
+- merging to `master` applies the roots the merge changed since the last successful deploy:
+  bootstrap, then foundation, then the services in parallel;
 - a daily drift check re-plans everything.
+
+Services deploy independently. When one needs a change from another, that change merges first, in
+its own pull request.
 
 Keep it that way. Prefer OpenTofu, provider features and native GitHub Actions over custom code.
 Custom code exists only for software that runs **on the VMs**: the TLS loader and the restore worker.
@@ -45,7 +49,7 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 - **Use `gcloud` only for reads,** and only when the user allows it in the session. A useful read:
   `tofu plan -refresh=false -lock=false` with `GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)`.
 - **Humans** hold read access, IAP SSH and secret-version rights. Everything else goes through
-  `deploy.yaml`, or `recovery.yaml` for drills.
+  `deploy.yaml`, `roll-database.yaml` for database hosts, or `recovery.yaml` for drills.
 - **Write runbook commands for the identity that actually runs them.** A command a human cannot
   run belongs in a workflow.
 - **Deleting, replacing or forgetting a resource, or weakening its protection,** needs the
