@@ -15,6 +15,9 @@ import (
 	"syscall"
 	"time"
 
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/env"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/logs"
@@ -162,9 +165,10 @@ func Run(ctx context.Context, opts Options) error {
 		}
 		_ = reinstall.Delete()
 	}
+	rpcServer := connect.NewServer()
+	anovelv1connect.RegisterCoreServiceHandler(rpcServer, srv)
 	mux := http.NewServeMux()
-	path, handler := anovelv1connect.NewCoreServiceHandler(srv)
-	mux.Handle(path, handler)
+	connecthttp.Mount(mux, rpcServer)
 
 	httpServer := &http.Server{
 		Handler:           mux,
