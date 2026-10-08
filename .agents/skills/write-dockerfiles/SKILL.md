@@ -48,8 +48,9 @@ This project separates the main process from maintenance work:
   container and running migrations and rotation before starting the server. Never use standalone
   images in production.
 
-- **Database image** (`database.Dockerfile`): PostgreSQL with the service's required extensions and
-  database tools. Run the migrations job image separately.
+- **Database image** (`database.Dockerfile`): PostgreSQL and pgBackRest on Wolfi, plus whatever
+  extensions the service needs. Migrations are not baked in — run the migrations job image against
+  it separately.
 
 This separation keeps production images minimal: the server binary doesn't carry migration code
 it never runs, and job images don't carry server code.
@@ -190,32 +191,31 @@ They run to completion and exit.
 
 ## Database Image
 
-Start from the existing service recipe. Prefer compatible distribution packages for required
-extensions and tools. Use a multi-stage build only when compilation is necessary; keep compilers
-and headers in the discarded builder stage. Pin source releases when building from source.
+Every service with a database ships the same image recipe, which infra's database hosts and backup
+repositories run: signed Wolfi packages assembled by apko, plus pgBackRest built from its
+checksum-verified upstream release. Copy `builds/database.Dockerfile` and `builds/database.apko.yaml`
+from `service-json-keys`, then add the service's own packages and init SQL. Infra relies on what the
+recipe preserves: UID/GID 999, `PGDATA=/var/lib/postgresql/18/docker`, the upstream
+`docker-entrypoint.sh`, `bash`, `pg_isready`, and `pgbackrest` on the `PATH`.
 
-For Debian packages, use exact versions in `apt-get install` and configure Renovate's native
-`deb` datasource with the matching suite and package repository. Keep the PostgreSQL image's
-distro suffix explicit when package compatibility depends on it. Package installation and list
-cleanup belong in the same `RUN` instruction.
-
-Installing a backup tool does not authorize backup activation. Preserve the service's entrypoint,
-extensions, authentication, and archive settings unless the task explicitly changes them. Reuse
-existing recovery proofs against the built image instead of copying a test harness into each service.
-
-Inspect the freshly pulled base before adding OS security overrides. Apply available stable fixes
-without an incidental PostgreSQL upgrade, and report unresolved inherited advisories. A successful
-build or restore test does not establish that an image is free of vulnerabilities.
-
-When changing distributions, check known advisories against upstream fixes as well as the image
-scan: a different package database can report fewer findings without fixing the affected code.
-Keep PostgreSQL, its extensions and runtime libraries ABI-compatible. Test the normal entrypoint,
-initialization scripts, authentication and persistent volumes, not only an overridden test command.
-Treat existing data directories and physical backups as a separate migration decision; successful
-fresh-database tests do not establish cross-distribution or collation compatibility.
-
-PostgreSQL extension and binary paths contain its major version. Check those paths and extension
-compatibility when changing the PostgreSQL major.
+- **Pin service packages in the apko manifest** (`postgresql-18=18.6-r5`, `pg_cron-18=1.6.8-r0`).
+  The shared Renovate preset tracks every `name=version` line; base libraries stay unpinned.
+- **Extensions come from Wolfi packages.** Find the exact release in Wolfi's `APKINDEX` before
+  pinning. Only pgBackRest is source-built, in a discarded stage, so compilers never reach the runtime.
+- **Server settings an extension needs at init** go in `postgresql.conf.sample`
+  (`/usr/share/postgresql18/`), which initdb copies: the server that runs the init SQL has them too.
+- **pg_cron needs `cron.use_background_workers = on`.** By default a job logs in over TCP without a
+  password, and SCRAM authentication rejects it, so every run fails with `connection failed`. Set
+  `cron.database_name` from `POSTGRES_DB` in an entrypoint wrapper, and only for the `postgres`
+  command: infra also runs the image with other commands.
+- **A Wolfi data directory is not portable from the Debian image.** Moving between them needs a fresh
+  volume, or a logical dump and restore.
+- **Installing pgBackRest does not activate backups.** Keep the entrypoint, extensions,
+  authentication and archive settings unless the task changes them.
+- **Test the normal entrypoint**, init scripts, authentication and persistent volumes, not only an
+  overridden command. A green build or restore test does not prove the image free of advisories.
+- **Paths carry the PostgreSQL major** (`PGDATA`, `/usr/share/postgresql18/`): check them, and every
+  extension's compatibility, when changing the major.
 
 **Executable files**: use `COPY --chmod=755` when copying shell scripts or other executables into
 the image. It sets the executable bit in a single instruction and avoids a separate `RUN chmod +x`
@@ -224,9 +224,6 @@ layer:
 ```dockerfile
 COPY --chmod=755 ./builds/database.entrypoint.sh /usr/local/bin/database.entrypoint.sh
 ```
-
-**`DEBIAN_FRONTEND=noninteractive`**: scope it to Debian package-install commands. It has no effect
-on Alpine and should not persist in the image's runtime environment.
 
 ---
 
@@ -330,17 +327,11 @@ Always exclude:
   and produces different binaries on different dates. Pin to a specific version tag.
 - **`apk add curl` in Alpine runtime.** Use the BusyBox `wget -qO /dev/null <url>` already present in
   any Alpine image.
-- **`ARG DEBIAN_FRONTEND=noninteractive` in Alpine stages.** This Debian/Ubuntu flag is a no-op in
-  Alpine and should not appear in Alpine-based runtime stages.
-- **Missing `ca-certificates` with `--no-install-recommends`.** That flag stops `ca-certificates`
-  from being pulled in transitively, so HTTPS connections (e.g., `git clone`) fail with an SSL error.
-  Always install it explicitly in a Debian/Ubuntu stage that makes HTTPS requests.
-- **Build tools in the database final stage.** A cleanup `RUN` removes files from new layers but not
-  from previous ones, so `apt-get install` and `git clone` layers survive. Always use multi-stage
-  builds when compiling extensions from source.
-- **Hardcoded paths after a major PostgreSQL version bump.** After upgrading from `postgres:18.x` to
-  `postgres:19.x`, update the builder's `postgresql-server-dev-18` package and the COPY paths
-  `/usr/lib/postgresql/18/lib/` and `/usr/share/postgresql/18/extension/`.
+- **Build tools in the database runtime.** A cleanup `RUN` removes files from new layers but not
+  from previous ones. Compile in a discarded stage and copy only the binary, as pgBackRest is.
+- **Hardcoded paths after a major PostgreSQL version bump.** Moving from PostgreSQL 18 to 19 changes
+  the package names in the apko manifest, the `postgresql18` paths and symlinks in the Dockerfile,
+  and `PGDATA`.
 - **Using standalone images in production.** They run migrations and key rotation at startup, which
   is unsafe where multiple replicas start concurrently. Use the dedicated job images instead.
 - **Forgetting to update `.dockerignore` when adding new top-level directories.** Large directories

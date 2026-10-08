@@ -20,7 +20,8 @@ when translating screenshot studies or a high-contrast, game-like direction into
 
 **Rendered-UI hard gate:** Start the dark-default Storybook with `BROWSER=none` and `--no-open`,
 inspect the exact changed story in the integrated browser, keep it live, and repeat its freshly
-verified Markdown link in every status or final handoff. Never substitute a screenshot or placeholder.
+verified Markdown link in every status or final handoff, with screenshots of the changed screens sent
+in the conversation. A screenshot or placeholder never substitutes for the live link.
 
 ## Package boundaries
 
