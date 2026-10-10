@@ -84,12 +84,6 @@ func (s *Server) SignalShutdown() {
 	s.shutdownOnce.Do(func() { close(s.shutdownCh) })
 }
 
-// allServiceNames returns every service name across every stack, which the env
-// builder needs to detect cross-service prefixes.
-func (s *Server) allServiceNames() []string {
-	return s.discovered.ServiceNames()
-}
-
 // findStack returns the discovered Stack named `name`, or the default stack
 // when the name is empty. An unknown name yields a connect.Error.
 func (s *Server) findStack(name string) (*discovery.Stack, error) {
@@ -183,17 +177,13 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *anovelv1.PrepareReinstal
 		if err != nil {
 			continue
 		}
-		envEntries, _, err := s.envBuilder.ForTarget(tgt, s.allServiceNames())
+		envEntries, _, err := s.envBuilder.ForTarget(tgt)
 		if err != nil {
 			continue
 		}
-		envList := osEnviron()
-		for _, e := range envEntries {
-			envList = append(envList, e.Key+"="+e.Value)
-		}
 		cp.GoExec = append(cp.GoExec, reinstall.GoExecCheckpoint{
 			TargetID: inst.ID,
-			Env:      envList,
+			Env:      env.Environ(envEntries),
 		})
 	}
 	if err := reinstall.Write(cp); err != nil {
@@ -439,23 +429,18 @@ func (s *Server) StartTarget(ctx context.Context, req *anovelv1.StartTargetReque
 	// runs before the env build, so the `${*_PORT}` slots it allocates land in
 	// the snapshot the builder reads next.
 	depMode := convertModeFromProto(mode) // mode for any auto-run one-shots
-	// The dep walker's env argument goes unused, since runner.StartInfra
-	// builds its own; the inherited daemon env satisfies the signature.
-	if err := s.runner.EnsureDepsReady(ctx, tgt, svc, depMode, osEnviron()); err != nil {
+	if err := s.runner.EnsureDepsReady(ctx, tgt, svc, depMode); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
 	// Rebuild the env now that infra-up has allocated the service-level ports:
 	// the builder's snapshot fill picks up POSTGRES_PORT from the allocator and
 	// synthesizes POSTGRES_DSN with localhost:<port>.
-	envEntries, warnings, err := s.envBuilder.ForTarget(tgt, s.allServiceNames())
+	envEntries, warnings, err := s.envBuilder.ForTarget(tgt)
 	if err != nil {
 		return nil, connect.Errorf(connect.CodeInternal,
 			"env build: %v", err).WithCause(err)
 	}
-	envList := osEnviron()
-	for _, e := range envEntries {
-		envList = append(envList, e.Key+"="+e.Value)
-	}
+	envList := env.Environ(envEntries)
 	switch mode {
 	case anovelv1.Mode_MODE_GO_EXEC:
 		inst, err := s.runner.StartGoExec(ctx, req.GetTargetId(), envList, warnings)
@@ -546,28 +531,12 @@ func (s *Server) lookupTargetForInstance(inst *runner.Instance) *discovery.Targe
 // StartInfra brings up a service's infrastructure containers and auto-runs
 // every one-shot target the long-runners depend on. It is idempotent.
 func (s *Server) StartInfra(ctx context.Context, req *anovelv1.StartInfraRequest) (*anovelv1.StartInfraResponse, error) {
-	stack := req.GetStack()
-	if stack == "" && len(s.discovered) > 0 {
-		stack = s.discovered[0].Name
-	}
-	svc, err := s.findService(stack, req.GetService())
+	svc, err := s.findService(req.GetStack(), req.GetService())
 	if err != nil {
 		return nil, err
 	}
-	// ForServiceUp allocates the `${*_PORT}` slots infra services reference
-	// under the service-level consumer ID, so KillInfra's Release fires
-	// cleanly and compose's substitution sees a real port number.
-	consumer := stack + "/" + svc.Name + "-infra"
-	envEntries, err := s.envBuilder.ForServiceUp(svc, s.allServiceNames(), consumer)
-	if err != nil {
-		return nil, connect.Errorf(connect.CodeInternal, "env build: %v", err).WithCause(err)
-	}
-	envList := osEnviron()
-	for _, e := range envEntries {
-		envList = append(envList, e.Key+"="+e.Value)
-	}
 	oneShotsMode := convertModeFromProto(req.GetOneShotsMode())
-	if err := s.runner.StartInfra(ctx, stack, svc.Name, oneShotsMode, envList); err != nil {
+	if err := s.runner.StartInfra(ctx, svc.Stack, svc.Name, oneShotsMode); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
 	return &anovelv1.StartInfraResponse{
@@ -834,10 +803,9 @@ func lineStreamToProto(s logs.Stream) anovelv1.LogStream {
 // scope. It is read-only and never allocates a port, so a variable whose slot
 // is unallocated appears with an empty value and the user still sees the shape.
 func (s *Server) GetEnv(_ context.Context, req *anovelv1.GetEnvRequest) (*anovelv1.GetEnvResponse, error) {
-	allNames := s.allServiceNames()
 	out := &anovelv1.GetEnvResponse{}
 	gather := func(svc *discovery.Service) error {
-		entries, err := s.envBuilder.ForService(svc, allNames)
+		entries, err := s.envBuilder.ForService(svc, "")
 		if err != nil {
 			return err
 		}
@@ -880,13 +848,6 @@ func (s *Server) GetEnv(_ context.Context, req *anovelv1.GetEnvRequest) (*anovel
 		}
 	}
 	return out, nil
-}
-
-// osEnviron returns the daemon process's environment as a fresh slice, the base
-// layer a spawned target inherits PATH, HOME, and GOPATH through. The
-// synthesized env layers over it and overrides any shared key.
-func osEnviron() []string {
-	return append([]string(nil), os.Environ()...)
 }
 
 // ListVolumes returns one read-only Volume row per compose-declared volume on
@@ -1051,19 +1012,15 @@ func (s *Server) Exec(ctx context.Context, req *anovelv1.ExecRequest, stream ano
 		// A go-exec sibling gets the same directory and env as the target.
 		// The builder allocates when needed under the target's own consumer
 		// ID, which the usual refcounting releases.
-		envEntries, _, err := s.envBuilder.ForTarget(tgt, s.allServiceNames())
+		envEntries, _, err := s.envBuilder.ForTarget(tgt)
 		if err != nil {
 			return connect.Errorf(connect.CodeInternal, "exec: env: %v", err).WithCause(err)
-		}
-		envList := osEnviron()
-		for _, e := range envEntries {
-			envList = append(envList, e.Key+"="+e.Value)
 		}
 		execCmd = exec.CommandContext(ctx, cmdv[0], cmdv[1:]...)
 		// Run in the service directory, one level up from cmd/<target>, so
 		// relative paths match what the target sees.
 		execCmd.Dir = filepath.Dir(filepath.Dir(tgt.CmdDir))
-		execCmd.Env = envList
+		execCmd.Env = env.Environ(envEntries)
 	}
 	stdoutR, err := execCmd.StdoutPipe()
 	if err != nil {

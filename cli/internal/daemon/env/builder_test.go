@@ -2,6 +2,7 @@ package env
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -50,12 +51,12 @@ func TestForTarget_DSNRewriteForGoExec(t *testing.T) {
 			"POSTGRES_DSN": "postgres://postgres:postgres@postgres-svc:5432/postgres?sslmode=disable",
 		},
 	}
-	entries, _, err := b.ForTarget(tgt, alloc.Services())
+	entries, _, err := b.ForTarget(tgt)
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := toMap(entries)
-	wantDSN := "postgres://postgres:postgres@localhost:" + itoa(port) + "/postgres?sslmode=disable"
+	wantDSN := "postgres://postgres:postgres@localhost:" + strconv.Itoa(port) + "/postgres?sslmode=disable"
 	if m["POSTGRES_DSN"] != wantDSN {
 		t.Errorf("POSTGRES_DSN: got %q want %q", m["POSTGRES_DSN"], wantDSN)
 	}
@@ -77,7 +78,7 @@ func TestForTarget_CrossServiceRef(t *testing.T) {
 			"DEP_PORT": "${SERVICE_X_GRPC_PORT}",
 		},
 	}
-	entries, _, err := b.ForTarget(tgt, alloc.Services())
+	entries, _, err := b.ForTarget(tgt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +95,7 @@ func TestForTarget_CrossServiceRef(t *testing.T) {
 	if !ok {
 		t.Error("Lookup of allocated cross-service slot failed")
 	}
-	if itoa(p) != m["DEP_PORT"] {
+	if strconv.Itoa(p) != m["DEP_PORT"] {
 		t.Errorf("Lookup port %d disagrees with substituted DEP_PORT %s", p, m["DEP_PORT"])
 	}
 }
@@ -103,7 +104,7 @@ func TestForTarget_PortsBlockTriggersAllocation(t *testing.T) {
 	// Compose's `ports:` block is the daemon's only signal to allocate a port
 	// the `environment:` block never references, and mergePortRefs folds it
 	// into the same resolution pass.
-	b, alloc := newBuilderWith([]string{"svc"})
+	b, _ := newBuilderWith([]string{"svc"})
 	tgt := &discovery.Target{
 		Name:        "rest",
 		Service:     "svc",
@@ -111,7 +112,7 @@ func TestForTarget_PortsBlockTriggersAllocation(t *testing.T) {
 		Ports:       []string{"${REST_PORT}:8080"},
 		Environment: map[string]string{}, // intentionally empty
 	}
-	entries, _, err := b.ForTarget(tgt, alloc.Services())
+	entries, _, err := b.ForTarget(tgt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +132,7 @@ func TestForTarget_PrefixedAndUnprefixedOwnView(t *testing.T) {
 	// A target's own service prefix is stripped for its process env, so
 	// service-foo with REST_PORT allocated sees both the local `REST_PORT` and
 	// the cross-service `SERVICE_FOO_REST_PORT`, resolving to one number.
-	b, alloc := newBuilderWith([]string{"service-foo"})
+	b, _ := newBuilderWith([]string{"service-foo"})
 	tgt := &discovery.Target{
 		Name:        "rest",
 		Service:     "service-foo",
@@ -139,7 +140,7 @@ func TestForTarget_PrefixedAndUnprefixedOwnView(t *testing.T) {
 		Ports:       []string{"${REST_PORT}:8080"},
 		Environment: map[string]string{},
 	}
-	entries, _, err := b.ForTarget(tgt, alloc.Services())
+	entries, _, err := b.ForTarget(tgt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +158,7 @@ func TestForTarget_NoDoublePrefix(t *testing.T) {
 	// An unguarded un-prefix and re-prefix pair yields
 	// SERVICE_FOO_SERVICE_BAR_GRPC_PORT, so the builder must skip
 	// already-prefixed cross-service keys when adding its own-prefix view.
-	b, alloc := newBuilderWith([]string{"service-foo", "service-bar"})
+	b, _ := newBuilderWith([]string{"service-foo", "service-bar"})
 	tgt := &discovery.Target{
 		Name:    "rest",
 		Service: "service-foo",
@@ -167,7 +168,7 @@ func TestForTarget_NoDoublePrefix(t *testing.T) {
 			"DEP_PORT": "${SERVICE_BAR_GRPC_PORT}",
 		},
 	}
-	entries, _, err := b.ForTarget(tgt, alloc.Services())
+	entries, _, err := b.ForTarget(tgt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +184,7 @@ func TestForService_LookupOnlyLeavesUnknownEmpty(t *testing.T) {
 	// ForService is the read-only path (`a-novel run env`). The allocator
 	// is never mutated, and a var with no existing allocation comes back
 	// empty.
-	b, _ := newBuilderWith([]string{"service-a", "service-b"})
+	b, alloc := newBuilderWith([]string{"service-a", "service-b"})
 	svc := &discovery.Service{
 		Name:  "service-a",
 		Stack: "default",
@@ -196,15 +197,88 @@ func TestForService_LookupOnlyLeavesUnknownEmpty(t *testing.T) {
 			},
 		},
 	}
-	entries, err := b.ForService(svc, []string{"service-a", "service-b"})
+	entries, err := b.ForService(svc, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := toMap(entries)
 	// The substitute pass writes "" for a ref that does not resolve, matching
-	// compose's behavior. Whether the key appears depends on substitution
-	// order, so the assertion above is that the allocator stayed untouched.
-	_ = m
+	// compose's behavior.
+	if got := toMap(entries)["DEP_PORT"]; got != "" {
+		t.Errorf("DEP_PORT: got %q, want empty for an unallocated port", got)
+	}
+	if snap := alloc.Snapshot(); len(snap) != 0 {
+		t.Errorf("read-only ForService allocated: %+v", snap)
+	}
+}
+
+// TestBuilder_OverlappingServiceNamesResolveLongestFirst covers service names
+// registered in discovery order, which is alphabetical, so service-template
+// precedes the service-template-extra it shadows. Every builder path must still
+// route SERVICE_TEMPLATE_EXTRA_* to service-template-extra.
+func TestBuilder_OverlappingServiceNamesResolveLongestFirst(t *testing.T) {
+	b, alloc := newBuilderWith([]string{"service-consumer", "service-template", "service-template-extra"})
+	tgt := &discovery.Target{
+		Name:        "rest",
+		Service:     "service-consumer",
+		Stack:       "default",
+		Environment: map[string]string{"DEP_PORT": "${SERVICE_TEMPLATE_EXTRA_GRPC_PORT}"},
+	}
+
+	entries, _, err := b.ForTarget(tgt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, ok := alloc.Lookup("service-template-extra", "GRPC_PORT")
+	if !ok {
+		t.Fatalf("ForTarget allocated %+v, want service-template-extra/GRPC_PORT", alloc.Snapshot())
+	}
+	if got := toMap(entries)["DEP_PORT"]; got != strconv.Itoa(port) {
+		t.Errorf("ForTarget DEP_PORT: got %q, want %d", got, port)
+	}
+
+	svc := &discovery.Service{Name: "service-consumer", Stack: "default", Targets: []*discovery.Target{tgt}}
+	viewed, err := b.ForService(svc, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := toMap(viewed)["DEP_PORT"]; got != strconv.Itoa(port) {
+		t.Errorf("ForService DEP_PORT: got %q, want %d", got, port)
+	}
+}
+
+// TestForService_ConsumerAllocatesInfraPorts covers the infra-up path: with a
+// consumer, the ports the infra references are acquired for it, and Release
+// frees them again.
+func TestForService_ConsumerAllocatesInfraPorts(t *testing.T) {
+	b, alloc := newBuilderWith([]string{"svc"})
+	svc := &discovery.Service{
+		Name:  "svc",
+		Stack: "default",
+		Infra: []*discovery.Infra{{
+			Name:        "postgres-svc",
+			Service:     "svc",
+			Stack:       "default",
+			Ports:       []string{"${POSTGRES_PORT}:5432"},
+			Environment: map[string]string{"POSTGRES_USER": "postgres"},
+		}},
+	}
+
+	entries, err := b.ForService(svc, "default/svc-infra")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, ok := alloc.Lookup("svc", "POSTGRES_PORT")
+	if !ok {
+		t.Fatal("infra-up ForService did not allocate POSTGRES_PORT")
+	}
+	m := toMap(entries)
+	if m["POSTGRES_USER"] != "postgres" || m["POSTGRES_HOST"] != "localhost" {
+		t.Errorf("infra env: got %v, want the constant and the derived host", m)
+	}
+	alloc.Release("default/svc-infra")
+	if _, ok := alloc.Lookup("svc", "POSTGRES_PORT"); ok {
+		t.Errorf("port %d still allocated after releasing the infra consumer", port)
+	}
 }
 
 func TestForTarget_PORTAloneDoesNotAllocate(t *testing.T) {
@@ -219,7 +293,7 @@ func TestForTarget_PORTAloneDoesNotAllocate(t *testing.T) {
 			"PORT": "9999", // literal, not a ref
 		},
 	}
-	entries, _, err := b.ForTarget(tgt, alloc.Services())
+	entries, _, err := b.ForTarget(tgt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +317,7 @@ func TestForTarget_InjectsRepoSecrets(t *testing.T) {
 	}
 	t.Cleanup(func() { injectSecrets = orig })
 
-	b, alloc := newBuilderWith([]string{"svc"})
+	b, _ := newBuilderWith([]string{"svc"})
 	tgt := &discovery.Target{
 		Name:    "rest",
 		Service: "svc",
@@ -253,7 +327,7 @@ func TestForTarget_InjectsRepoSecrets(t *testing.T) {
 		CmdDir:      filepath.Join("/tmp", "service-svc", "cmd", "rest"),
 		Environment: map[string]string{},
 	}
-	entries, _, err := b.ForTarget(tgt, alloc.Services())
+	entries, _, err := b.ForTarget(tgt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,9 +348,9 @@ func TestForTarget_NoCmdDirSkipsInjection(t *testing.T) {
 	}
 	t.Cleanup(func() { injectSecrets = orig })
 
-	b, alloc := newBuilderWith([]string{"svc"})
+	b, _ := newBuilderWith([]string{"svc"})
 	tgt := &discovery.Target{Name: "rest", Service: "svc", Stack: "default", Environment: map[string]string{}}
-	if _, _, err := b.ForTarget(tgt, alloc.Services()); err != nil {
+	if _, _, err := b.ForTarget(tgt); err != nil {
 		t.Fatal(err)
 	}
 	if called {
@@ -297,7 +371,7 @@ func TestForTarget_MissingSecretWarns(t *testing.T) {
 	}
 	t.Cleanup(func() { injectSecrets = orig })
 
-	b, alloc := newBuilderWith([]string{"svc"})
+	b, _ := newBuilderWith([]string{"svc"})
 	tgt := &discovery.Target{
 		Name:        "rest",
 		Service:     "svc",
@@ -305,7 +379,7 @@ func TestForTarget_MissingSecretWarns(t *testing.T) {
 		CmdDir:      filepath.Join("/tmp", "service-svc", "cmd", "rest"),
 		Environment: map[string]string{},
 	}
-	entries, warnings, err := b.ForTarget(tgt, alloc.Services())
+	entries, warnings, err := b.ForTarget(tgt)
 	if err != nil {
 		t.Fatal(err)
 	}

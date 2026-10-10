@@ -24,7 +24,7 @@ import (
 //     failed (caller must re-start infra or fix the underlying issue).
 //   - long-runner target: must already be running. A long-runner is never
 //     auto-started; that stays an explicit user action.
-func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *discovery.Service, oneShotsMode Mode, env []string) error {
+func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *discovery.Service, oneShotsMode Mode) error {
 	if len(t.DependsOn) == 0 {
 		return nil
 	}
@@ -32,7 +32,7 @@ func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *
 		// Classify the dep against the service's discovered targets and
 		// infra.
 		if svc.FindInfra(depName) != nil {
-			if err := r.ensureInfraReady(ctx, svc, oneShotsMode, env); err != nil {
+			if err := r.ensureInfraReady(ctx, svc, oneShotsMode); err != nil {
 				return fmt.Errorf("infra dep %s: %w", depName, err)
 			}
 			continue
@@ -72,11 +72,11 @@ func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *
 
 // ensureInfraReady triggers StartInfra if the service's session isn't Up.
 // Idempotent — StartInfra is itself a no-op when already running.
-func (r *Runner) ensureInfraReady(ctx context.Context, svc *discovery.Service, oneShotsMode Mode, env []string) error {
+func (r *Runner) ensureInfraReady(ctx context.Context, svc *discovery.Service, oneShotsMode Mode) error {
 	if sess, ok := r.InfraSession(svc.Stack, svc.Name); ok && sess.Up {
 		return nil
 	}
-	return r.StartInfra(ctx, svc.Stack, svc.Name, oneShotsMode, env)
+	return r.StartInfra(ctx, svc.Stack, svc.Name, oneShotsMode)
 }
 
 // ensureOneShotSatisfied verifies the one-shot has succeeded in the

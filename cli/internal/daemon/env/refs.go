@@ -10,13 +10,15 @@
 //	            and cross-service references resolved against other
 //	            services' allocations.
 //
-// The runner calls Builder.ForTarget at process spawn time and
-// Allocator.Release when the process terminates. The server's GetEnv RPC
-// calls Builder.ForService for read-only inspection.
+// The runner calls Builder.ForTarget at process spawn time, Builder.ForService
+// to claim infra ports at infra-up, and Allocator.Release when the process
+// terminates. The server's GetEnv RPC calls Builder.ForService for read-only
+// inspection.
 package env
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -72,13 +74,12 @@ func ServicePrefix(serviceName string) string {
 // local to its own service.
 //
 // When two service names share a prefix, such as `service-template` and
-// `service-template-extra`, the longer match wins, so the caller must pass
-// allServices sorted longest-first.
-func resolveOwner(varName string, allServices []string) (string, string) {
-	for _, svc := range allServices {
-		prefix := ServicePrefix(svc) + "_"
-		if strings.HasPrefix(varName, prefix) {
-			return svc, strings.TrimPrefix(varName, prefix)
+// `service-template-extra`, the longer match wins, so services must come
+// longest-first, as Allocator.Services returns them.
+func resolveOwner(varName string, services []string) (string, string) {
+	for _, svc := range services {
+		if localVar, ok := strings.CutPrefix(varName, ServicePrefix(svc)+"_"); ok {
+			return svc, localVar
 		}
 	}
 	return "", varName
@@ -95,12 +96,10 @@ func isAllocatedKind(localVar string) bool {
 // re-prefix them for cross-service exposure.
 func derivedFor(localPortVar string, port int) map[string]string {
 	base := strings.TrimSuffix(localPortVar, "_PORT")
-	host := hostLocalhost
-	url := urlFor(base, port)
 	return map[string]string{
-		localPortVar:   itoa(port),
-		base + "_HOST": host,
-		base + "_URL":  url,
+		localPortVar:   strconv.Itoa(port),
+		base + "_HOST": hostLocalhost,
+		base + "_URL":  urlFor(base, port),
 	}
 }
 
@@ -108,26 +107,9 @@ func derivedFor(localPortVar string, port int) map[string]string {
 // schemeless `localhost:port` form that grpc-go clients take as-is; everything
 // else gets `http://`.
 func urlFor(base string, port int) string {
-	switch base {
-	case "GRPC":
-		return hostLocalhost + ":" + itoa(port)
-	default:
-		return "http://" + hostLocalhost + ":" + itoa(port)
+	hostPort := hostLocalhost + ":" + strconv.Itoa(port)
+	if base == "GRPC" {
+		return hostPort
 	}
-}
-
-// itoa formats a non-negative int as a decimal string.
-func itoa(n int) string {
-	const digits = "0123456789"
-	if n == 0 {
-		return "0"
-	}
-	var buf [10]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = digits[n%10]
-		n /= 10
-	}
-	return string(buf[i:])
+	return "http://" + hostPort
 }

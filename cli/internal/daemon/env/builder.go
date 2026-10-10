@@ -1,9 +1,13 @@
 package env
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
+	"os"
 	"path/filepath"
-	"sort"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
@@ -29,6 +33,17 @@ type Entry struct {
 	Value string
 }
 
+// Environ returns the daemon's own environment with entries layered over it, in
+// the KEY=VALUE form exec.Cmd.Env takes. A spawned process inherits PATH, HOME,
+// and GOPATH this way, and an entry wins over an inherited key.
+func Environ(entries []Entry) []string {
+	out := os.Environ()
+	for _, e := range entries {
+		out = append(out, e.Key+"="+e.Value)
+	}
+	return out
+}
+
 // ForTarget builds the env block to pass to a spawned process. It creates the
 // allocations, recording the target as the consumer of every `*_PORT` it
 // references, directly or across services, until Allocator.Release frees them.
@@ -36,120 +51,74 @@ type Entry struct {
 // It returns the resolved entries plus a value-free warning line for each
 // missing secret, which the caller writes to the target's log so the operator
 // sees what to set.
-func (b *Builder) ForTarget(t *discovery.Target, allServices []string) ([]Entry, []string, error) {
-	entries, err := b.buildEnv(t, allServices, true /* allocate */, t.ID())
+func (b *Builder) ForTarget(t *discovery.Target) ([]Entry, []string, error) {
+	vars, err := b.buildEnv(t, b.alloc.Services(), true /* allocate */, t.ID())
 	if err != nil {
 		return nil, nil, err
 	}
-	// Inject the service repo's decrypted secrets as plain entries, so they ride
-	// into the runner's cmd.Env. The value-free .a-novel/secrets.yaml manifest
-	// at the service repo root drives them; an absent manifest is a no-op, and
-	// an absent key or store reports every declared secret missing. The inspect
-	// paths, ForService and ForServiceUp, skip this, so no value ever reaches a
-	// log. A declared-but-unset secret becomes a warning.
+	// Inject the service repo's decrypted secrets, so they ride into the
+	// runner's cmd.Env. The value-free .a-novel/secrets.yaml manifest at the
+	// service repo root drives them; an absent manifest is a no-op, and an
+	// absent key or store reports every declared secret missing. ForService
+	// skips this, so no value ever reaches a log. A declared-but-unset secret
+	// becomes a warning.
 	var warnings []string
-	if root := serviceRoot(t); root != "" {
-		res, err := injectSecrets(root)
+	if t.CmdDir != "" {
+		// CmdDir is `.../service-X/cmd/<name>/`, so the service repo root is
+		// its grandparent.
+		res, err := injectSecrets(filepath.Dir(filepath.Dir(t.CmdDir)))
 		if err != nil {
 			return nil, nil, err
 		}
-		for name, value := range res.Env {
-			entries = append(entries, Entry{Key: name, Value: value})
-		}
+		maps.Copy(vars, res.Env)
 		warnings = res.Warnings()
 	}
-	return entries, warnings, nil
-}
-
-// serviceRoot returns the service repo root for a target — the directory that
-// may hold .a-novel/secrets.yaml. CmdDir is `.../service-X/cmd/<name>/`, so the
-// service dir is its grandparent.
-func serviceRoot(t *discovery.Target) string {
-	if t.CmdDir == "" {
-		return ""
-	}
-	return filepath.Dir(filepath.Dir(t.CmdDir))
+	return entriesOf(vars), warnings, nil
 }
 
 // injectSecrets is the seam to the secrets package, indirected through a package
 // var so the env-builder tests can stub it without touching the local key store.
 var injectSecrets = secrets.InjectForRepo
 
-// ForServiceUp is the allocating variant of ForService, used when bringing
-// infra up so the daemon claims the `${*_PORT}` slots infra services reference.
-// consumer is the service-level synthetic ID ("<stack>/<service>-infra"), which
-// lets KillInfra release those slots cleanly.
-func (b *Builder) ForServiceUp(svc *discovery.Service, allServices []string, consumer string) ([]Entry, error) {
-	merged := make(map[string]string)
-	for _, t := range svc.Targets {
-		entries, err := b.buildEnv(t, allServices, false, "")
-		if err != nil {
-			return nil, err
-		}
-		for _, e := range entries {
-			merged[e.Key] = e.Value
-		}
-	}
-	for _, in := range svc.Infra {
-		entries, err := b.buildInfraEnv(in, svc, allServices, true /* allocate */, consumer)
-		if err != nil {
-			return nil, err
-		}
-		for _, e := range entries {
-			if _, exists := merged[e.Key]; !exists {
-				merged[e.Key] = e.Value
-			}
-		}
-	}
-	out := make([]Entry, 0, len(merged))
-	for k, v := range merged {
-		out = append(out, Entry{Key: k, Value: v})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
-	return out, nil
-}
-
-// ForService is the read-only variant, backing the GetEnv RPC so a user can
-// inspect the env without side-effecting the allocator. A var whose allocation
-// has not been acquired appears with an empty value.
-func (b *Builder) ForService(svc *discovery.Service, allServices []string) ([]Entry, error) {
+// ForService builds the env block of every target and infra in svc, which
+// GetEnv shows and infra-up hands to compose. Target ports are only looked up.
+// With a consumer, the `${*_PORT}` slots the infra references are acquired for
+// it, so compose's substitution sees real port numbers and KillInfra can release
+// them. With an empty consumer the allocator stays untouched, and a var whose
+// port is unallocated appears with an empty value.
+func (b *Builder) ForService(svc *discovery.Service, consumer string) ([]Entry, error) {
+	services := b.alloc.Services()
 	// Every target in the service shares the same env block, since compose's
 	// environment is per-compose-service and maps one-to-one to a target here.
 	merged := make(map[string]string)
 	for _, t := range svc.Targets {
-		entries, err := b.buildEnv(t, allServices, false /* lookup-only */, "")
+		vars, err := b.buildEnv(t, services, false /* lookup-only */, "")
 		if err != nil {
 			return nil, err
 		}
-		for _, e := range entries {
-			merged[e.Key] = e.Value
-		}
+		maps.Copy(merged, vars)
 	}
 	// Each infra env block contributes its constants and derived vars, which is
 	// where `run env` picks up the Postgres credentials.
 	for _, in := range svc.Infra {
-		entries, err := b.buildInfraEnv(in, svc, allServices, false, "")
+		vars, err := b.buildInfraEnv(in, services, consumer != "", consumer)
 		if err != nil {
 			return nil, err
 		}
-		for _, e := range entries {
-			if _, exists := merged[e.Key]; !exists {
-				merged[e.Key] = e.Value
+		for k, v := range vars {
+			if _, exists := merged[k]; !exists {
+				merged[k] = v
 			}
 		}
 	}
-	out := make([]Entry, 0, len(merged))
-	for k, v := range merged {
-		out = append(out, Entry{Key: k, Value: v})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
-	return out, nil
+	return entriesOf(merged), nil
 }
 
 // buildEnv is the shared core of ForTarget and ForService. With allocate set,
 // every `*_PORT` reference is acquired for consumer; otherwise it is looked up,
-// and an unallocated slot resolves empty.
-func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate bool, consumer string) ([]Entry, error) {
+// and an unallocated slot resolves empty. services is the allocator's
+// longest-first service list.
+func (b *Builder) buildEnv(t *discovery.Target, services []string, allocate bool, consumer string) (map[string]string, error) {
 	owner := t.Service
 	// Two passes: resolve every referenced var into the substitution context,
 	// then substitute the compose values against it.
@@ -158,27 +127,19 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 	// alongside the environment block's. A mapping like "${POSTGRES_PORT}:5432"
 	// is often the daemon's only signal to allocate POSTGRES_PORT, since a
 	// service need never name it in its environment.
-	combined := mergePortRefs(t.Environment, t.Ports)
-	ctx, err := b.resolveContext(combined, owner, allServices, allocate, consumer)
+	ctx, err := b.resolveContext(mergePortRefs(t.Environment, t.Ports), owner, services, allocate, consumer)
 	if err != nil {
 		return nil, err
 	}
 	// Substitute every compose value, and emit the derivedFor entries built
 	// into ctx.
-	out := make(map[string]string, len(ctx)+len(t.Environment))
-	for k, v := range ctx {
-		out[k] = v
-	}
+	out := maps.Clone(ctx)
 	for k, raw := range t.Environment {
 		out[k] = substitute(raw, ctx)
 	}
 	// The synthetic __port_N keys exist only for reference collection, so drop
 	// them from the user view.
-	for k := range out {
-		if strings.HasPrefix(k, "__port_") {
-			delete(out, k)
-		}
-	}
+	maps.DeleteFunc(out, func(k, _ string) bool { return strings.HasPrefix(k, "__port_") })
 	// Pull in service-level allocations the target's compose never references.
 	// A one-shot like `migrations` declares POSTGRES_DSN as a literal while the
 	// service itself holds the POSTGRES_PORT allocation for its postgres infra.
@@ -201,11 +162,12 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 
 	// With an allocated POSTGRES_PORT the daemon owns POSTGRES_DSN and
 	// overwrites whatever the compose file declared, that being the
-	// in-container `postgres-<svc>:5432` form, wrong for go-exec.
-	if portStr, ok := out["POSTGRES_PORT"]; ok && portStr != "" {
-		user := nonEmptyOr(out["POSTGRES_USER"], "postgres")
-		pass := nonEmptyOr(out["POSTGRES_PASSWORD"], "postgres")
-		db := nonEmptyOr(out["POSTGRES_DB"], "postgres")
+	// in-container `postgres-<svc>:5432` form, wrong for go-exec. Unset
+	// credentials fall back to postgres, so the DSN stays well-formed.
+	if portStr := out["POSTGRES_PORT"]; portStr != "" {
+		user := cmp.Or(out["POSTGRES_USER"], "postgres")
+		pass := cmp.Or(out["POSTGRES_PASSWORD"], "postgres")
+		db := cmp.Or(out["POSTGRES_DB"], "postgres")
 		out["POSTGRES_DSN"] = "postgres://" + user + ":" + pass + "@" + hostLocalhost + ":" + portStr + "/" + db + "?sslmode=disable"
 	}
 
@@ -216,8 +178,7 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 	for k, v := range out {
 		// A prefixed view of one of our own ports also gets the un-prefixed
 		// form.
-		base, isPrefixed := stripPrefix(k, ownerPrefix)
-		if isPrefixed {
+		if base, isPrefixed := strings.CutPrefix(k, ownerPrefix); isPrefixed && base != "" {
 			if _, exists := out[base]; !exists {
 				out[base] = v
 			}
@@ -230,7 +191,7 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 		if !isAllocatedKind(k) && !isSynthesizedKind(k) {
 			continue
 		}
-		if owner2, _ := resolveOwner(k, allServices); owner2 != "" {
+		if keyOwner, _ := resolveOwner(k, services); keyOwner != "" {
 			continue // already prefixed
 		}
 		prefixed := ownerPrefix + k
@@ -238,43 +199,36 @@ func (b *Builder) buildEnv(t *discovery.Target, allServices []string, allocate b
 			out[prefixed] = v
 		}
 	}
-	entries := make([]Entry, 0, len(out))
-	for k, v := range out {
-		entries = append(entries, Entry{Key: k, Value: v})
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Key < entries[j].Key })
-	return entries, nil
+	return out, nil
 }
 
 // buildInfraEnv is buildEnv for an infra service, which has no profile and no
 // cmd-target counterpart. ForService uses it so `a-novel run env` shows the
 // database credentials too.
-func (b *Builder) buildInfraEnv(in *discovery.Infra, svc *discovery.Service, allServices []string, allocate bool, consumer string) ([]Entry, error) {
-	combined := mergePortRefs(in.Environment, in.Ports)
-	ctx, err := b.resolveContext(combined, svc.Name, allServices, allocate, consumer)
+func (b *Builder) buildInfraEnv(in *discovery.Infra, services []string, allocate bool, consumer string) (map[string]string, error) {
+	ctx, err := b.resolveContext(mergePortRefs(in.Environment, in.Ports), in.Service, services, allocate, consumer)
 	if err != nil {
 		return nil, err
 	}
-	entries := make([]Entry, 0, len(in.Environment))
-	for k, raw := range in.Environment {
-		entries = append(entries, Entry{Key: k, Value: substitute(raw, ctx)})
-	}
 	// Include the synthesized HOST and URL vars for every port allocation
-	// resolved while building the context.
+	// resolved while building the context, under the substituted compose values.
+	out := make(map[string]string, len(in.Environment))
 	for k, v := range ctx {
 		if isSynthesizedKind(k) {
-			entries = append(entries, Entry{Key: k, Value: v})
+			out[k] = v
 		}
 	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Key < entries[j].Key })
-	return entries, nil
+	for k, raw := range in.Environment {
+		out[k] = substitute(raw, ctx)
+	}
+	return out, nil
 }
 
 // resolveContext walks every ${VAR} reference in env and builds the
 // substitution context map, allocating along the way or, in read-only mode,
 // looking up. A constant carrying no reference is added as-is, so later
 // substitutions can resolve against it.
-func (b *Builder) resolveContext(env map[string]string, owner string, allServices []string, allocate bool, consumer string) (map[string]string, error) {
+func (b *Builder) resolveContext(env map[string]string, owner string, services []string, allocate bool, consumer string) (map[string]string, error) {
 	ctx := make(map[string]string)
 	// Seed with the constants, the entries holding no ${VAR} reference.
 	for k, v := range env {
@@ -288,7 +242,7 @@ func (b *Builder) resolveContext(env map[string]string, owner string, allService
 			if _, already := ctx[ref]; already {
 				continue
 			}
-			val, err := b.resolveOne(ref, owner, allServices, allocate, consumer, ctx)
+			val, err := b.resolveOne(ref, owner, services, allocate, consumer, ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -308,107 +262,63 @@ func (b *Builder) resolveContext(env map[string]string, owner string, allService
 //     `*_PORT` resolves.
 //   - anything else is a constant from the same env block, already in ctx or
 //     empty — the value compose gives an unset variable.
-func (b *Builder) resolveOne(varName, owner string, allServices []string, allocate bool, consumer string, ctx map[string]string) (string, error) {
-	resOwner, localVar := resolveOwner(varName, allServices)
+func (b *Builder) resolveOne(varName, owner string, services []string, allocate bool, consumer string, ctx map[string]string) (string, error) {
+	resOwner, localVar := resolveOwner(varName, services)
 	if resOwner == "" {
 		resOwner = owner
 	}
-	// *_PORT → allocate / lookup.
-	if isAllocatedKind(localVar) {
+	switch {
+	case isAllocatedKind(localVar):
 		var port int
-		var err error
 		if allocate {
-			port, err = b.alloc.Acquire(resOwner, localVar, consumer)
-		} else {
-			p, ok := b.alloc.Lookup(resOwner, localVar)
-			if !ok {
-				return "", nil
+			p, err := b.alloc.Acquire(resOwner, localVar, consumer)
+			if err != nil {
+				return "", err
 			}
 			port = p
-		}
-		if err != nil {
-			return "", err
+		} else if p, ok := b.alloc.Lookup(resOwner, localVar); ok {
+			port = p
+		} else {
+			return "", nil
 		}
 		// Splat the derived HOST and URL into ctx, so a later substitution of
-		// a value like "http://${HOST}:${PORT}/..." resolves cleanly.
+		// a value like "http://${HOST}:${PORT}/..." resolves cleanly. The
+		// derived vars are local when the owner is the current target's;
+		// otherwise they carry the owner's service prefix so the consumer can
+		// reach them.
+		prefix := ""
+		if resOwner != owner {
+			prefix = ServicePrefix(resOwner) + "_"
+		}
 		for k, v := range derivedFor(localVar, port) {
-			// The derived vars are local when the owner is the current
-			// target's; otherwise they carry the owner's service prefix so
-			// the consumer can reach them.
-			if resOwner == owner {
-				if _, exists := ctx[k]; !exists {
-					ctx[k] = v
-				}
-			} else {
-				prefixed := ServicePrefix(resOwner) + "_" + k
-				if _, exists := ctx[prefixed]; !exists {
-					ctx[prefixed] = v
-				}
+			if _, exists := ctx[prefix+k]; !exists {
+				ctx[prefix+k] = v
 			}
 		}
-		return itoa(port), nil
-	}
-	// *_HOST → synthesized.
-	if isHostKind(localVar) {
+		return strconv.Itoa(port), nil
+	case isHostKind(localVar):
 		return hostLocalhost, nil
-	}
-	// *_URL → synthesized from the matching _PORT, which must already be
-	// resolved for the URL to compose.
-	if isURLKind(localVar) {
-		base := stripURLSuffix(localVar)
-		if portStr, ok := ctx[base+"_PORT"]; ok && portStr != "" {
-			port := atoi(portStr)
+	case isURLKind(localVar):
+		// The URL composes from the matching _PORT, which must already be
+		// resolved.
+		base := strings.TrimSuffix(localVar, "_URL")
+		if portStr := ctx[base+"_PORT"]; portStr != "" {
+			port, _ := strconv.Atoi(portStr)
 			return urlFor(base, port), nil
 		}
 		return "", nil
+	default:
+		// A constant from this env block, already in ctx, or a value carrying
+		// references that substitute() resolves in the second pass.
+		return ctx[varName], nil
 	}
-	// Anything else is a constant from this env block, already in ctx, or a
-	// value carrying references that substitute() resolves in the second pass.
-	return ctx[varName], nil
 }
 
-// stripPrefix returns (suffix, true) if s starts with prefix, else ("", false).
-func stripPrefix(s, prefix string) (string, bool) {
-	if len(s) > len(prefix) && s[:len(prefix)] == prefix {
-		return s[len(prefix):], true
-	}
-	return "", false
-}
+func isSynthesizedKind(k string) bool { return isHostKind(k) || isURLKind(k) }
 
-func isSynthesizedKind(k string) bool {
-	return isHostKind(k) || isURLKind(k)
-}
+func isHostKind(k string) bool { return k != "_HOST" && strings.HasSuffix(k, "_HOST") }
 
-func isHostKind(k string) bool {
-	return len(k) > len("_HOST") && k[len(k)-len("_HOST"):] == "_HOST"
-}
-
-func isURLKind(k string) bool {
-	return len(k) > len("_URL") && k[len(k)-len("_URL"):] == "_URL"
-}
-func stripURLSuffix(k string) string { return k[:len(k)-len("_URL")] }
-
-// atoi is the inverse of itoa, for the rare derived-URL recomposition.
-func atoi(s string) int {
-	n := 0
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0
-		}
-		n = n*10 + int(c-'0')
-	}
-	return n
-}
-
-// nonEmptyOr returns v when it is non-empty, otherwise fallback. It keeps
-// POSTGRES_DSN well-formed when the compose file leaves the standard
-// credentials unset.
-func nonEmptyOr(v, fallback string) string {
-	if v == "" {
-		return fallback
-	}
-	return v
-}
+func isURLKind(k string) bool { return k != "_URL" && strings.HasSuffix(k, "_URL") }
 
 // mergePortRefs returns a copy of env with one synthetic `__port_N` entry per
 // raw compose ports: mapping. The synthetic keys carry those mapping strings
@@ -416,11 +326,18 @@ func nonEmptyOr(v, fallback string) string {
 // references; they never reach the final output.
 func mergePortRefs(env map[string]string, ports []string) map[string]string {
 	out := make(map[string]string, len(env)+len(ports))
-	for k, v := range env {
-		out[k] = v
-	}
+	maps.Copy(out, env)
 	for i, p := range ports {
 		out[fmt.Sprintf("__port_%d", i)] = p
 	}
 	return out
+}
+
+// entriesOf returns vars as entries sorted by key, so output is deterministic.
+func entriesOf(vars map[string]string) []Entry {
+	entries := make([]Entry, 0, len(vars))
+	for _, k := range slices.Sorted(maps.Keys(vars)) {
+		entries = append(entries, Entry{Key: k, Value: vars[k]})
+	}
+	return entries
 }

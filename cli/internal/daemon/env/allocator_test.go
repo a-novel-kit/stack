@@ -1,6 +1,7 @@
 package env
 
 import (
+	"strconv"
 	"sync"
 	"testing"
 )
@@ -169,7 +170,7 @@ func TestAllocator_ConcurrentAcquireSameKey(t *testing.T) {
 	for i := range N {
 		go func(idx int) {
 			defer wg.Done()
-			p, err := a.Acquire("svc", "REST_PORT", "consumer-"+itoa(idx))
+			p, err := a.Acquire("svc", "REST_PORT", "consumer-"+strconv.Itoa(idx))
 			if err != nil {
 				t.Errorf("goroutine %d Acquire: %v", idx, err)
 				return

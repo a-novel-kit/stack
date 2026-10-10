@@ -183,13 +183,3 @@ func TestUrlFor_GRPC_Schemeless(t *testing.T) {
 		t.Errorf("urlFor(REST, 8080): got %q want %q", got, want)
 	}
 }
-
-func TestItoaAtoi_Roundtrip(t *testing.T) {
-	// urlFor is the one consumer of the in-package itoa and atoi, so the pair
-	// has to round-trip exactly.
-	for _, n := range []int{0, 1, 9, 10, 99, 100, 65535} {
-		if got := atoi(itoa(n)); got != n {
-			t.Errorf("itoa/atoi roundtrip for %d: got %d", n, got)
-		}
-	}
-}

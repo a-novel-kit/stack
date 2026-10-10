@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -76,11 +75,10 @@ func (r *Runner) ActiveInfraSessions() []InfraSessionRef {
 // is idempotent: an already-up service is a no-op.
 //
 // oneShotsMode selects the mode for the auto-run one-shots, defaulting to
-// go-exec. extraEnv is the daemon's inherited env, which the synthesized port
-// allocations layer over. The runner allocates the infra ports itself through
-// env.Builder.ForServiceUp, so compose's `${POSTGRES_PORT}` substitutes to a
-// real number even on the dep-walk path, where the caller cannot pre-allocate.
-func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShotsMode Mode, extraEnv []string) error {
+// go-exec. The runner allocates the infra ports itself through
+// env.Builder.ForService, so compose's `${POSTGRES_PORT}` substitutes to a real
+// number on every path, the dependency walk included.
+func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShotsMode Mode) error {
 	// `compose up` creates containers the next ListServices must see. The
 	// idempotent early return changes no state, so invalidating there is
 	// harmless.
@@ -107,17 +105,15 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 	r.sessMu.Unlock()
 
 	// Allocate the port slots infra services reference, so compose's
-	// substitution at infra-up time produces real port numbers. The
-	// synthesized env layers over the caller's inherited env.
-	envEntries, err := r.builder.ForServiceUp(svc, r.alloc.Services(), sess.AllocationConsumer)
+	// substitution at infra-up time produces real port numbers.
+	envEntries, err := r.builder.ForService(svc, sess.AllocationConsumer)
 	if err != nil {
 		r.sessMu.Lock()
 		delete(r.infraSessions, key)
 		r.sessMu.Unlock()
 		return fmt.Errorf("infra env for %s/%s: %w", stack, service, err)
 	}
-	env := append([]string(nil), extraEnv...)
-	env = append(env, envEntriesToList(envEntries)...)
+	environ := env.Environ(envEntries)
 
 	// 1. Bring up the profile-less compose services, which compose's default
 	//    rules resolve to exactly the infra entries.
@@ -130,7 +126,7 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 		"up", "-d", "--build",
 	}
 	cmd := exec.CommandContext(ctx, "podman", args...)
-	cmd.Env = env
+	cmd.Env = environ
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		r.sessMu.Lock()
@@ -238,14 +234,11 @@ func (r *Runner) runOneShot(ctx context.Context, t *discovery.Target, mode Mode)
 	// Build the env after infra-up has allocated: the builder's snapshot fill
 	// picks up POSTGRES_PORT from the service-level consumer, so the target's
 	// POSTGRES_DSN synthesizes to localhost:<port>.
-	envEntries, warnings, err := r.builder.ForTarget(t, r.alloc.Services())
+	envEntries, warnings, err := r.builder.ForTarget(t)
 	if err != nil {
 		return fmt.Errorf("env for %s: %w", t.ID(), err)
 	}
-	// Inherit the daemon's env so `go run` finds its toolchain and module
-	// cache. The synthesized env layers over it and wins any overlapping key.
-	envList := append([]string(nil), os.Environ()...)
-	envList = append(envList, envEntriesToList(envEntries)...)
+	envList := env.Environ(envEntries)
 	switch mode {
 	case ModeContainer:
 		_, err = r.StartContainer(ctx, t.ID(), envList, warnings)
@@ -396,16 +389,6 @@ func (r *Runner) waitInfraHealthy(ctx context.Context, svc *discovery.Service, t
 	}
 
 	return fmt.Errorf("infra not healthy within %s", timeout)
-}
-
-// envEntriesToList converts the env package's Entry slice to the
-// "KEY=VALUE" string form that exec.Cmd.Env expects.
-func envEntriesToList(entries []env.Entry) []string {
-	out := make([]string, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, e.Key+"="+e.Value)
-	}
-	return out
 }
 
 // topoSortOneShots returns the service's one-shot targets with dependencies
