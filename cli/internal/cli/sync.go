@@ -98,6 +98,9 @@ and app/.`,
 			if len(skipped) > 0 {
 				_, _ = fmt.Fprintf(out, "  left out: %s\n", strings.Join(skipped, ", "))
 			}
+			if len(list) == 0 {
+				return nil
+			}
 			batch := ui.RunJobs(cmd.Context(), list, limit, stdoutIsTTY())
 			_, _ = fmt.Fprint(out, ui.Report("SYNC", batch, func(r jobs.Result) bool {
 				return r.Err != nil || r.Status == syncSkipped
