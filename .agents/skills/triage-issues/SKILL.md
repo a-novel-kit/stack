@@ -88,7 +88,7 @@ For each item in the `Triage` status, with the operator:
   cli/cli "First Responder" model). In a scoped pass, drain only what belongs to the work in hand; an
   unrelated arrival is worth one line as a signal, not a detour.
 - **Escalation tickets** (label `escalation`) are a distinct intake — the governance automation files
-  them in `Triage` when something needs a human (a stuck hotfix reconcile, a stale required check, a
+  them in `Triage` when something needs a human (a stale backport, a stale required check, a
   failed emergency path; see `coordinate-landing`). Don't size them as planning work: act on the
   underlying condition, then let the `escalate` action resolve the ticket (Status → `Applied`) as it
   self-heals, or close it once handled. A pile of open `escalation` tickets is an ops signal.
