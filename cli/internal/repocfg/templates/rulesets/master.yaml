@@ -45,3 +45,12 @@ rules:
     min_entries_to_merge_wait_minutes: 5
   code_quality:
     severity: errors
+  # The default branch takes only Conventional Commits subjects. The merge queue
+  # squashes, so the rule checks the subject GitHub writes from the PR title, or
+  # from the lone commit of a one-commit PR. The bots' direct version-bump
+  # commits bypass the ruleset. Commit metadata rules need GitHub Enterprise.
+  commit_message_pattern:
+    name: Conventional Commits subject
+    operator: regex
+    pattern: '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]+\))?!?: \S'
+    negate: false

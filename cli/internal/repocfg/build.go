@@ -344,6 +344,9 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRu
 	if r.CodeQuality != nil {
 		rs.Rules = append(rs.Rules, APIRule{Type: "code_quality", Parameters: map[string]any{"severity": r.CodeQuality.Severity}})
 	}
+	if r.CommitMessagePattern != nil {
+		rs.Rules = append(rs.Rules, APIRule{Type: "commit_message_pattern", Parameters: r.CommitMessagePattern})
+	}
 	return rs, nil
 }
 

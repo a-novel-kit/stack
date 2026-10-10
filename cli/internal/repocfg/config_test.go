@@ -1,6 +1,7 @@
 package repocfg
 
 import (
+	"regexp"
 	"slices"
 	"testing"
 )
@@ -288,5 +289,52 @@ func TestBuildRulesetCreationRule(t *testing.T) {
 	}
 	if got["deletion"] {
 		t.Fatalf("deletion rule emitted without the flag set")
+	}
+}
+
+// TestBuildRulesetCommitMessagePattern pins the master ruleset's Conventional
+// Commits rule: it reaches the API body, and its pattern accepts the subjects the
+// fleet writes while rejecting the rest. GitHub evaluates metadata patterns as
+// RE2, the dialect Go's regexp implements, so a pattern verified here behaves
+// the same there.
+func TestBuildRulesetCommitMessagePattern(t *testing.T) {
+	t.Parallel()
+	spec, err := LoadRuleset("master")
+	if err != nil {
+		t.Fatalf("LoadRuleset(master): %v", err)
+	}
+	org := &OrgProfile{Org: "a-novel", Bots: map[string]int64{"agent": 3549319, "publish": 1718144}}
+	rs, err := BuildRuleset(spec, org, nil)
+	if err != nil {
+		t.Fatalf("BuildRuleset: %v", err)
+	}
+	var params map[string]any
+	for _, r := range rs.Rules {
+		if r.Type == "commit_message_pattern" {
+			params = r.Parameters
+		}
+	}
+	if params == nil {
+		t.Fatal("master ruleset emitted no commit_message_pattern rule")
+	}
+	if params["operator"] != "regex" || params["negate"] != false {
+		t.Fatalf("operator/negate = %v/%v, want regex/false", params["operator"], params["negate"])
+	}
+	pattern := regexp.MustCompile(params["pattern"].(string))
+
+	for _, subject := range []string{
+		"feat(repocfg): restrict pull requests to collaborators (#530)",
+		"chore(deps): update module golang.org/x/text to v0.41.0 [security] (#525)",
+		"fix!: drop the legacy flag",
+		"refactor(pkg-js)!: rename the client\n\nBody text.",
+	} {
+		if !pattern.MatchString(subject) {
+			t.Errorf("pattern rejects conventional subject %q", subject)
+		}
+	}
+	for _, subject := range []string{"2.9.0", "Update README.md", "feat: ", "feat(repocfg) missing colon", "Feat: capitalised type"} {
+		if pattern.MatchString(subject) {
+			t.Errorf("pattern accepts non-conventional subject %q", subject)
+		}
 	}
 }
