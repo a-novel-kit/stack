@@ -2,10 +2,7 @@ package runner
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
@@ -27,14 +24,19 @@ type infraSession struct {
 	// ran during this session, keyed by target name. Cleared when the
 	// session is reset (KillInfra).
 	OneShotResults map[string]anovelv1.ExitReason
-	// AllocationConsumer is the synthetic ID this session uses as the
-	// allocator consumer for any infra-level ports it needs. Released
-	// when the session ends.
-	AllocationConsumer string
+}
+
+// newInfraSession returns an empty, not-yet-Up session for the service.
+func newInfraSession(stack, service string) *infraSession {
+	return &infraSession{Stack: stack, Service: service, OneShotResults: make(map[string]anovelv1.ExitReason)}
 }
 
 // sessionKey is the map key for infraSessions.
 func sessionKey(stack, service string) string { return stack + "/" + service }
+
+// infraConsumer is the allocator consumer holding the ports a service's infra
+// references, released when KillInfra tears the infra down.
+func infraConsumer(stack, service string) string { return sessionKey(stack, service) + "-infra" }
 
 // InfraSession returns a snapshot of the per-service infra session, or
 // (zero, false) if no session is recorded yet.
@@ -54,18 +56,16 @@ func (r *Runner) InfraSession(stack, service string) (infraSession, bool) {
 type InfraSessionRef struct {
 	Stack   string
 	Service string
-	Up      bool // false if the session was registered but never reached Up
 }
 
 // ActiveInfraSessions returns one InfraSessionRef per currently-tracked
-// infra session. Both Up and not-yet-Up sessions are included; the caller
-// can filter on Ref.Up if only fully-running sessions matter.
+// infra session, whether or not it reached Up.
 func (r *Runner) ActiveInfraSessions() []InfraSessionRef {
 	r.sessMu.RLock()
 	defer r.sessMu.RUnlock()
 	out := make([]InfraSessionRef, 0, len(r.infraSessions))
 	for _, s := range r.infraSessions {
-		out = append(out, InfraSessionRef{Stack: s.Stack, Service: s.Service, Up: s.Up})
+		out = append(out, InfraSessionRef{Stack: s.Stack, Service: s.Service})
 	}
 	return out
 }
@@ -78,7 +78,7 @@ func (r *Runner) ActiveInfraSessions() []InfraSessionRef {
 // go-exec. The runner allocates the infra ports itself through
 // env.Builder.ForService, so compose's `${POSTGRES_PORT}` substitutes to a real
 // number on every path, the dependency walk included.
-func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShotsMode Mode) error {
+func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShotsMode anovelv1.Mode) error {
 	// `compose up` creates containers the next ListServices must see. The
 	// idempotent early return changes no state, so invalidating there is
 	// harmless.
@@ -87,52 +87,39 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 	if err != nil {
 		return err
 	}
-	r.sessMu.Lock()
 	key := sessionKey(stack, service)
-	sess, ok := r.infraSessions[key]
-	if ok && sess.Up {
+	r.sessMu.Lock()
+	if sess, ok := r.infraSessions[key]; ok && sess.Up {
 		r.sessMu.Unlock()
 		return nil // idempotent — already up
 	}
-	sess = &infraSession{
-		Stack:              stack,
-		Service:            service,
-		Up:                 false, // flipped after compose up succeeds
-		OneShotResults:     make(map[string]anovelv1.ExitReason),
-		AllocationConsumer: key + "-infra",
-	}
+	sess := newInfraSession(stack, service)
 	r.infraSessions[key] = sess
 	r.sessMu.Unlock()
+	dropSession := func() {
+		r.sessMu.Lock()
+		delete(r.infraSessions, key)
+		r.sessMu.Unlock()
+	}
 
 	// Allocate the port slots infra services reference, so compose's
 	// substitution at infra-up time produces real port numbers.
-	envEntries, err := r.builder.ForService(svc, sess.AllocationConsumer)
+	envEntries, err := r.builder.ForService(svc, infraConsumer(stack, service))
 	if err != nil {
-		r.sessMu.Lock()
-		delete(r.infraSessions, key)
-		r.sessMu.Unlock()
+		dropSession()
 		return fmt.Errorf("infra env for %s/%s: %w", stack, service, err)
 	}
-	environ := env.Environ(envEntries)
 
 	// 1. Bring up the profile-less compose services, which compose's default
 	//    rules resolve to exactly the infra entries.
-	project := composeProjectName(stack, service)
-	args := []string{
-		"compose",
-		"-p", project,
+	if err := podman(ctx, env.Environ(envEntries), "compose",
+		"-p", composeProjectName(stack, service),
 		"-f", svc.ComposePath,
-		containerLabelArgs(stack, service, "" /* infra-wide, no specific target */),
+		containerLabelArgs(stack, service),
 		"up", "-d", "--build",
-	}
-	cmd := exec.CommandContext(ctx, "podman", args...)
-	cmd.Env = environ
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		r.sessMu.Lock()
-		delete(r.infraSessions, key)
-		r.sessMu.Unlock()
-		return fmt.Errorf("infra up for %s/%s: %w\n%s", stack, service, err, string(out))
+	); err != nil {
+		dropSession()
+		return fmt.Errorf("infra up for %s/%s: %w", stack, service, err)
 	}
 
 	// 2. Wait for healthchecks (where declared). Bounded — 60s default.
@@ -147,17 +134,18 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 
 	// 3. Auto-run one-shots. Walk in compose-dep order so a one-shot
 	//    that depends on another runs after.
-	order := topoSortOneShots(svc)
-	for _, ts := range order {
-		if err := r.runOneShot(ctx, ts, oneShotsMode); err != nil {
-			r.sessMu.Lock()
-			sess.OneShotResults[ts.Name] = anovelv1.ExitReason_EXIT_REASON_ERROR
-			r.sessMu.Unlock()
-			return fmt.Errorf("one-shot %s/%s failed: %w", service, ts.Name, err)
+	for _, ts := range topoSortOneShots(svc) {
+		err := r.runOneShot(ctx, ts, oneShotsMode)
+		result := anovelv1.ExitReason_EXIT_REASON_SUCCESS
+		if err != nil {
+			result = anovelv1.ExitReason_EXIT_REASON_ERROR
 		}
 		r.sessMu.Lock()
-		sess.OneShotResults[ts.Name] = anovelv1.ExitReason_EXIT_REASON_SUCCESS
+		sess.OneShotResults[ts.Name] = result
 		r.sessMu.Unlock()
+		if err != nil {
+			return fmt.Errorf("one-shot %s/%s failed: %w", service, ts.Name, err)
+		}
 	}
 	return nil
 }
@@ -171,81 +159,48 @@ func (r *Runner) KillInfra(ctx context.Context, stack, service string, force boo
 	if err != nil {
 		return err
 	}
-	if !force {
-		// Check for running targets of this service.
-		r.mu.RLock()
-		for _, inst := range r.instances {
-			if inst.Service != service || inst.Stack != stack {
-				continue
-			}
-			if inst.Phase == anovelv1.Phase_PHASE_RUNNING || inst.Phase == anovelv1.Phase_PHASE_STARTING {
-				r.mu.RUnlock()
-				return fmt.Errorf("%s/%s has running targets (e.g., %s); kill them first or use --force", stack, service, inst.Target)
-			}
+	// Collect the service's live targets: they refuse the teardown, or with
+	// force get cascade-killed first.
+	r.mu.RLock()
+	var live []*Instance
+	for _, inst := range r.instances {
+		if inst.Service == service && inst.Stack == stack && inst.Live() {
+			live = append(live, inst)
 		}
+	}
+	if len(live) > 0 && !force {
+		target := live[0].Target
 		r.mu.RUnlock()
-	} else {
-		// Cascade-kill every target of this service.
-		r.mu.RLock()
-		var ids []string
-		for id, inst := range r.instances {
-			if inst.Service == service && inst.Stack == stack &&
-				(inst.Phase == anovelv1.Phase_PHASE_RUNNING || inst.Phase == anovelv1.Phase_PHASE_STARTING) {
-				ids = append(ids, id)
-			}
-		}
-		r.mu.RUnlock()
-		for _, id := range ids {
-			_ = r.Kill(ctx, id, 5*time.Second)
-		}
+		return fmt.Errorf("%s/%s has running targets (e.g., %s); kill them first or use --force", stack, service, target)
+	}
+	r.mu.RUnlock()
+	for _, inst := range live {
+		_ = r.Kill(ctx, inst.ID, 5*time.Second)
 	}
 	// `compose down` tears down the project's infra and any orphaned
 	// containers. Without --volume the postgres data survives; only
 	// `volume clear` destroys volumes.
-	project := composeProjectName(stack, service)
-	cmd := exec.CommandContext(ctx, "podman", "compose",
-		"-p", project, "-f", svc.ComposePath,
+	err = podman(ctx, nil, "compose",
+		"-p", composeProjectName(stack, service), "-f", svc.ComposePath,
 		"down", "--remove-orphans", "-t", "10")
-	out, err := cmd.CombinedOutput()
 	// Reset session regardless of compose's exit; the user can re-run
 	// to recover from a half-stuck state.
 	r.sessMu.Lock()
-	consumer := ""
-	if s, ok := r.infraSessions[sessionKey(stack, service)]; ok {
-		consumer = s.AllocationConsumer
-	}
 	delete(r.infraSessions, sessionKey(stack, service))
 	r.sessMu.Unlock()
-	if r.alloc != nil && consumer != "" {
-		r.alloc.Release(consumer)
+	if r.alloc != nil {
+		r.alloc.Release(infraConsumer(stack, service))
 	}
 	if err != nil {
-		return fmt.Errorf("compose down for %s/%s: %w\n%s", stack, service, err, string(out))
+		return fmt.Errorf("compose down for %s/%s: %w", stack, service, err)
 	}
 	return nil
 }
 
 // runOneShot spawns a one-shot target and blocks until it terminates.
 // Returns nil iff it terminated with EXIT_REASON_SUCCESS.
-func (r *Runner) runOneShot(ctx context.Context, t *discovery.Target, mode Mode) error {
-	if r.alloc == nil {
-		return errors.New("runner has no allocator (internal misconfiguration)")
-	}
-	// Build the env after infra-up has allocated: the builder's snapshot fill
-	// picks up POSTGRES_PORT from the service-level consumer, so the target's
-	// POSTGRES_DSN synthesizes to localhost:<port>.
-	envEntries, warnings, err := r.builder.ForTarget(t)
-	if err != nil {
-		return fmt.Errorf("env for %s: %w", t.ID(), err)
-	}
-	envList := env.Environ(envEntries)
-	switch mode {
-	case ModeContainer:
-		_, err = r.StartContainer(ctx, t.ID(), envList, warnings)
-	default:
-		_, err = r.StartGoExec(ctx, t.ID(), envList, warnings)
-	}
-	if err != nil {
+func (r *Runner) runOneShot(ctx context.Context, t *discovery.Target, mode anovelv1.Mode) error {
+	if _, err := r.launch(ctx, t, mode); err != nil {
 		return err
 	}
 	// Block until terminated, polling every 500ms, with a 5-minute bound as a
@@ -271,10 +226,6 @@ func (r *Runner) runOneShot(ctx context.Context, t *discovery.Target, mode Mode)
 	return fmt.Errorf("one-shot %s did not terminate within 5m", t.ID())
 }
 
-// waitInfraHealthy polls every container in the project until each one
-// is either running+healthy (long-runners) or exited+success (one-shots).
-// Bounded by `timeout`. Returns nil on full readiness or an error
-// listing the still-unhealthy containers.
 // infraContainerState is one container's inspected state, or the fact that its
 // inspect failed.
 type infraContainerState struct {
@@ -288,10 +239,9 @@ type infraContainerState struct {
 //
 // declaredInfra is len(svc.Infra). A service that declares no infra is ready
 // with nothing to wait for. One that declares infra but whose containers have
-// not been resolved yet is NOT ready: no containers found is a state to keep
-// waiting through, not a green light. Conflating the two let a service march on
-// to run migrations against a Postgres still running initdb, because the label
-// query saw nothing.
+// not been resolved yet is not ready: an empty container query is a state to
+// wait through, since the label query sees nothing while Postgres still runs
+// initdb.
 func infraHealthy(declaredInfra int, states []infraContainerState) bool {
 	if declaredInfra == 0 {
 		return true
@@ -319,20 +269,14 @@ func infraHealthy(declaredInfra int, states []infraContainerState) bool {
 
 // resolveInfraContainerIDs returns the container IDs of a service's infra,
 // preferring the adoption labels and falling back to the compose naming
-// convention — the same fallback StartContainer uses for podman-compose
-// versions that swallow the --podman-args label flag. Without it, those
-// versions make the label query come back empty and the wait mistake that for
-// "no infra".
-func (r *Runner) resolveInfraContainerIDs(ctx context.Context, svc *discovery.Service, project string) ([]string, error) {
-	out, err := exec.CommandContext(ctx, "podman", "ps", "-a",
-		"--filter", "label=anovel.stack="+svc.Stack,
-		"--filter", "label=anovel.service="+svc.Name,
-		"--format", "{{.ID}}").Output()
+// convention, the same fallback startContainer uses. Without it, versions that
+// swallow the label flag make the label query come back empty, and the wait
+// mistakes that for "no infra".
+func resolveInfraContainerIDs(ctx context.Context, svc *discovery.Service) ([]string, error) {
+	ids, err := podmanIDs(ctx, labelFilters(svc.Stack, svc.Name)...)
 	if err != nil {
-		return nil, fmt.Errorf("list infra containers for %s: %w", project, err)
+		return nil, fmt.Errorf("list infra containers for %s: %w", composeProjectName(svc.Stack, svc.Name), err)
 	}
-
-	ids := strings.Fields(string(out))
 	if len(ids) > 0 {
 		return ids, nil
 	}
@@ -340,7 +284,7 @@ func (r *Runner) resolveInfraContainerIDs(ctx context.Context, svc *discovery.Se
 	// The label filter found nothing. Resolve each declared infra by name before
 	// concluding there is nothing running.
 	for _, in := range svc.Infra {
-		if cid := findContainerByName(ctx, project, in.Name); cid != "" {
+		if cid := containerByName(ctx, composeProjectName(svc.Stack, svc.Name), in.Name); cid != "" {
 			ids = append(ids, cid)
 		}
 	}
@@ -348,6 +292,9 @@ func (r *Runner) resolveInfraContainerIDs(ctx context.Context, svc *discovery.Se
 	return ids, nil
 }
 
+// waitInfraHealthy polls every container in the project until each one is
+// either running and healthy (long-runners) or exited with success
+// (one-shots). It gives up after timeout with an error.
 func (r *Runner) waitInfraHealthy(ctx context.Context, svc *discovery.Service, timeout time.Duration) error {
 	// A service that declares no infra has nothing to wait for, and this is the
 	// only place that is known for certain rather than inferred from an empty
@@ -356,11 +303,10 @@ func (r *Runner) waitInfraHealthy(ctx context.Context, svc *discovery.Service, t
 		return nil
 	}
 
-	project := composeProjectName(svc.Stack, svc.Name)
 	deadline := time.Now().Add(timeout)
 
 	for time.Now().Before(deadline) {
-		ids, err := r.resolveInfraContainerIDs(ctx, svc, project)
+		ids, err := resolveInfraContainerIDs(ctx, svc)
 		if err != nil {
 			return err
 		}
@@ -393,6 +339,7 @@ func (r *Runner) waitInfraHealthy(ctx context.Context, svc *discovery.Service, t
 
 // topoSortOneShots returns the service's one-shot targets with dependencies
 // first, so migrations runs before a rotate-keys that depends on it.
+// Independent one-shots keep discovery's name order.
 func topoSortOneShots(svc *discovery.Service) []*discovery.Target {
 	// Build a name → Target map of one-shots.
 	byName := make(map[string]*discovery.Target)
@@ -417,14 +364,10 @@ func topoSortOneShots(svc *discovery.Service) []*discovery.Target {
 		}
 		out = append(out, t)
 	}
-	// Map iteration fixes the visit order, so independent one-shots come out in
-	// an arbitrary order while the walk still puts every dependency first.
-	names := make([]string, 0, len(byName))
-	for n := range byName {
-		names = append(names, n)
-	}
-	for _, n := range names {
-		visit(byName[n])
+	for _, t := range svc.Targets {
+		if byName[t.ComposeName] == t {
+			visit(t)
+		}
 	}
 	return out
 }

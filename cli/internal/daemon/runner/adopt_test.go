@@ -72,8 +72,8 @@ func newRunnerForAdopt() *Runner {
 }
 
 func TestAdoptEntriesMarksTheSessionUpFromRunningContainersOnly(t *testing.T) {
-	infra := func(status string) podmanEntry {
-		return podmanEntry{
+	infra := func(status string) psEntry {
+		return psEntry{
 			ID:     "cid-" + status,
 			Status: status,
 			Labels: map[string]string{
@@ -98,7 +98,7 @@ func TestAdoptEntriesMarksTheSessionUpFromRunningContainersOnly(t *testing.T) {
 
 	for _, c := range cases {
 		r := newRunnerForAdopt()
-		r.adoptEntries(t.Context(), []podmanEntry{infra(c.status)})
+		r.adoptEntries(t.Context(), []psEntry{infra(c.status)})
 
 		sess, _ := r.InfraSession("default", "service-json-keys")
 		got := sess.Up
@@ -114,7 +114,7 @@ func TestAdoptEntriesLeavesTheSessionDownWhenEveryContainerIsStopped(t *testing.
 	r := newRunnerForAdopt()
 
 	labels := map[string]string{"anovel.stack": "default", "anovel.service": "service-json-keys"}
-	r.adoptEntries(t.Context(), []podmanEntry{
+	r.adoptEntries(t.Context(), []psEntry{
 		{ID: "cid-pg", Status: "Exited (0) 2 minutes ago", Labels: labels},
 		{ID: "cid-mail", Status: "Exited (137) 2 minutes ago", Labels: labels},
 	})

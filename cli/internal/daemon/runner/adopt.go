@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"os/exec"
@@ -25,43 +24,23 @@ import (
 //
 // It returns the number of containers and of targets adopted.
 func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
-	// `--format json` is the parseable contract: `{{.Labels}}` renders Go's
-	// `map[k:v k:v]`, which has no documented parser and breaks on values
-	// holding spaces or colons, such as image tags.
-	out, err := exec.CommandContext(ctx, "podman", "ps", "-a",
-		"--filter", "label=anovel.stack",
-		"--format", "json").Output()
+	entries, err := podmanPS(ctx, "--filter", "label="+labelStack)
 	if err != nil {
 		return 0, 0
 	}
-	var entries []podmanEntry
-	if err := json.Unmarshal(out, &entries); err != nil {
-		return 0, 0
-	}
-
 	return r.adoptEntries(ctx, entries)
-}
-
-// podmanEntry is the slice of `podman ps -a --format json` adoption reads.
-type podmanEntry struct {
-	ID      string            `json:"Id"`
-	Status  string            `json:"Status"`
-	Labels  map[string]string `json:"Labels"`
-	Created int64             `json:"Created"` // unix seconds — parseable, unlike podman's "11 minutes ago" status text
 }
 
 // adoptEntries reconstitutes state from a scan's entries, separated from the scan itself so the
 // decisions it makes can be exercised against a fixture.
-func (r *Runner) adoptEntries(ctx context.Context, entries []podmanEntry) (int, int) {
+func (r *Runner) adoptEntries(ctx context.Context, entries []psEntry) (int, int) {
 	var containers, targets int
 
 	for _, e := range entries {
 		cid := e.ID
-		status := e.Status
-		labels := e.Labels
-		stack := labels["anovel.stack"]
-		service := labels["anovel.service"]
-		target := labels["anovel.target"]
+		stack := e.Labels[labelStack]
+		service := e.Labels[labelService]
+		target := e.Labels[labelTarget]
 		if stack == "" || service == "" {
 			continue
 		}
@@ -70,7 +49,7 @@ func (r *Runner) adoptEntries(ctx context.Context, entries []podmanEntry) (int, 
 		// `podman ps -a` lists exited containers too, and an infra session marked Up short-circuits
 		// EnsureDepsReady: the target then starts against a database that is not running. Only a
 		// container podman reports as running counts.
-		phase, health := translatePodmanStatus(status)
+		phase, health := translatePodmanStatus(e.Status)
 		if phase == anovelv1.Phase_PHASE_RUNNING {
 			r.markInfraSessionUp(stack, service)
 		}
@@ -93,17 +72,16 @@ func (r *Runner) adoptEntries(ctx context.Context, entries []podmanEntry) (int, 
 			// for a manual `podman rm`.
 			continue
 		}
-		startedAt := time.Unix(e.Created, 0)
 		inst := &Instance{
 			ID:          tgt.ID(),
 			Target:      tgt.Name,
 			Service:     tgt.Service,
 			Stack:       tgt.Stack,
 			Phase:       phase,
-			Mode:        ModeContainer,
+			Mode:        anovelv1.Mode_MODE_CONTAINER,
 			Health:      health,
 			ContainerID: cid,
-			StartedAt:   startedAt,
+			StartedAt:   time.Unix(e.Created, 0),
 		}
 		r.mu.Lock()
 		// Skip a target that already holds a live record.
@@ -163,18 +141,12 @@ func (r *Runner) reseedAllocator(ctx context.Context, stack, service, cid string
 	if err != nil {
 		return
 	}
-	pipe := bytes.IndexByte(out, '|')
-	if pipe < 0 {
+	rawName, portsJSON, ok := strings.Cut(string(out), "|")
+	if !ok {
 		return
 	}
-	rawName := strings.TrimSpace(string(out)[:pipe])
-	rawName = strings.TrimPrefix(rawName, "/") // podman sometimes prefixes
-	portsJSON := strings.TrimSpace(string(out)[pipe+1:])
-	infraName := extractInfraNameFromContainerName(rawName, composeProjectName(stack, service))
-	if infraName == "" {
-		return
-	}
-	infra := svc.FindInfra(infraName)
+	rawName = strings.TrimPrefix(strings.TrimSpace(rawName), "/") // podman sometimes prefixes
+	infra := svc.FindInfra(extractInfraNameFromContainerName(rawName, composeProjectName(stack, service)))
 	if infra == nil {
 		return
 	}
@@ -183,7 +155,7 @@ func (r *Runner) reseedAllocator(ctx context.Context, stack, service, cid string
 		HostIP   string `json:"HostIp"`
 		HostPort string `json:"HostPort"`
 	}
-	if err := json.Unmarshal([]byte(portsJSON), &portMap); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimSpace(portsJSON)), &portMap); err != nil {
 		return
 	}
 	// Build container-side port → host port lookup.
@@ -193,10 +165,7 @@ func (r *Runner) reseedAllocator(ctx context.Context, stack, service, cid string
 			continue
 		}
 		// cport is "5432/tcp"; trim the proto.
-		port := cport
-		if slash := strings.IndexByte(port, '/'); slash > 0 {
-			port = port[:slash]
-		}
+		port, _, _ := strings.Cut(cport, "/")
 		host, err := strconv.Atoi(bindings[0].HostPort)
 		if err != nil {
 			continue
@@ -204,7 +173,7 @@ func (r *Runner) reseedAllocator(ctx context.Context, stack, service, cid string
 		containerToHost[port] = host
 	}
 	// Walk Infra.Ports and re-seed.
-	consumer := sessionKey(stack, service) + "-infra"
+	consumer := infraConsumer(stack, service)
 	for _, raw := range infra.Ports {
 		varName, containerPort := parseInfraPortMapping(raw)
 		if varName == "" || containerPort == "" {
@@ -226,12 +195,10 @@ var containerInfraNameRe = regexp.MustCompile(`_(\d+)$`)
 // (e.g., "postgres-template") from a compose-generated container name
 // like "default_service-template_postgres-template_1".
 func extractInfraNameFromContainerName(containerName, projectName string) string {
-	// Strip the project prefix.
-	prefix := projectName + "_"
-	if !strings.HasPrefix(containerName, prefix) {
+	rest, ok := strings.CutPrefix(containerName, projectName+"_")
+	if !ok {
 		return ""
 	}
-	rest := containerName[len(prefix):]
 	// Trim trailing `_<replica>` if present.
 	if m := containerInfraNameRe.FindStringIndex(rest); m != nil {
 		rest = rest[:m[0]]
@@ -261,43 +228,28 @@ func (r *Runner) markInfraSessionUp(stack, service string) {
 	r.sessMu.Lock()
 	defer r.sessMu.Unlock()
 	key := sessionKey(stack, service)
-	if sess, ok := r.infraSessions[key]; ok {
-		sess.Up = true
-		return
+	sess, ok := r.infraSessions[key]
+	if !ok {
+		sess = newInfraSession(stack, service)
+		r.infraSessions[key] = sess
 	}
-	r.infraSessions[key] = &infraSession{
-		Stack:              stack,
-		Service:            service,
-		Up:                 true,
-		OneShotResults:     make(map[string]anovelv1.ExitReason),
-		AllocationConsumer: key + "-infra",
-	}
+	sess.Up = true
 }
 
-// translatePodmanStatus maps podman's status string into our Phase +
-// Health enums. Examples of podman status: "Up 5 seconds (healthy)",
-// "Exited (0) 2 minutes ago", "Created".
+// translatePodmanStatus maps podman's status text, such as "Up 5 seconds
+// (healthy)", "Exited (0) 2 minutes ago", or "Created", into our Phase and
+// Health enums. Its first word is the state, "up" standing for running, and
+// the parenthesized word after it the health.
 func translatePodmanStatus(status string) (anovelv1.Phase, anovelv1.Health) {
-	s := strings.ToLower(status)
-	health := anovelv1.Health_HEALTH_UNKNOWN
-	switch {
-	case strings.Contains(s, "(healthy)"):
-		health = anovelv1.Health_HEALTH_HEALTHY
-	case strings.Contains(s, "(unhealthy)"):
-		health = anovelv1.Health_HEALTH_UNHEALTHY
-	case strings.Contains(s, "(starting)"):
-		health = anovelv1.Health_HEALTH_STARTING
+	state, rest, _ := strings.Cut(strings.ToLower(status), " ")
+	if state == "up" {
+		state = pmPhaseRunning
 	}
-	switch {
-	case strings.HasPrefix(s, "up"):
-		return anovelv1.Phase_PHASE_RUNNING, health
-	case strings.HasPrefix(s, "created"):
-		return anovelv1.Phase_PHASE_STARTING, health
-	case strings.HasPrefix(s, "paused"):
-		return anovelv1.Phase_PHASE_RUNNING, health
-	case strings.HasPrefix(s, "exited"), strings.HasPrefix(s, "stopped"):
-		return anovelv1.Phase_PHASE_TERMINATED, anovelv1.Health_HEALTH_UNSPECIFIED
-	default:
-		return anovelv1.Phase_PHASE_RUNNING, health
+	phase := podmanPhase(state)
+	if phase == anovelv1.Phase_PHASE_TERMINATED {
+		return phase, anovelv1.Health_HEALTH_UNSPECIFIED
 	}
+	_, health, _ := strings.Cut(rest, "(")
+	health, _, _ = strings.Cut(health, ")")
+	return phase, podmanHealth(health)
 }

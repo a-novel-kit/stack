@@ -63,7 +63,7 @@ func TestKillContainerReportsAFailedStop(t *testing.T) {
 		Service:     "svc",
 		Stack:       "default",
 		Phase:       anovelv1.Phase_PHASE_STOPPING,
-		Mode:        ModeContainer,
+		Mode:        anovelv1.Mode_MODE_CONTAINER,
 		ContainerID: "a-novel-test-container-that-does-not-exist",
 	}
 

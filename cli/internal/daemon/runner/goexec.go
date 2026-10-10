@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -14,36 +13,16 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// StartGoExec spawns target `id` as a `go run ./cmd/<target>` invocation inside
-// the owning service's directory, with env as the process environment.
-//
-// It returns the resulting Instance. Idempotency for an already-running target,
-// mutual exclusion against container mode, and the PENDING → STARTING → RUNNING
-// transitions all happen here, so no RPC handler reimplements them.
-func (r *Runner) StartGoExec(ctx context.Context, id string, env []string, warnings []string) (*Instance, error) {
-	// 1. Resolve target metadata from discovery.
-	tgt, svc, err := r.resolveTarget(id)
-	if err != nil {
-		return nil, err
-	}
-	_ = svc
-
-	// 2. Invariant checks (mutual exclusion, already-running idempotency).
-	if existing, idempotent, err := r.canStart(id, ModeGoExec); err != nil {
-		return nil, err
-	} else if idempotent {
-		out := *existing
-		return &out, nil
-	}
-
-	// 3. Build the command. Running go from the service directory picks up
-	//    that service's own go.mod, and each target gets its own context so
-	//    Kill can cancel cleanly.
+// startGoExec spawns t as a `go run ./cmd/<target>` invocation inside the
+// owning service's directory, with env as the process environment, and moves
+// it through PENDING, STARTING, and RUNNING.
+func (r *Runner) startGoExec(_ context.Context, t *discovery.Target, env, warnings []string) (*Instance, error) {
+	id := t.ID()
+	// Running go from the service directory picks up that service's own
+	// go.mod, and each target gets its own context so Kill can cancel cleanly.
 	procCtx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(procCtx, "go", "run", "./cmd/"+tgt.Name)
-	// CmdDir is `.../service-X/cmd/<target>/`. Service dir is its
-	// grandparent — that's where go.mod lives.
-	cmd.Dir = filepath.Dir(filepath.Dir(tgt.CmdDir))
+	cmd := exec.CommandContext(procCtx, "go", "run", "./cmd/"+t.Name)
+	cmd.Dir = t.ServiceDir()
 	cmd.Env = env
 	// New process group so Kill can take down the entire subtree
 	// (`go run` itself spawns a temp build + the actual binary).
@@ -51,7 +30,7 @@ func (r *Runner) StartGoExec(ctx context.Context, id string, env []string, warni
 	// Redirect stdout and stderr through the log store, which JSON-encodes
 	// each line into the per-target current.log and fans it out to live
 	// StreamLogs subscribers.
-	logWriter, err := r.logs.OpenForWrite(id, tgt.Stack, tgt.Service, tgt.Name)
+	logWriter, err := r.logs.OpenForWrite(id, t.Stack, t.Service, t.Name)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("open log writer for %s: %w", id, err)
@@ -64,41 +43,23 @@ func (r *Runner) StartGoExec(ctx context.Context, id string, env []string, warni
 		_, _ = fmt.Fprintln(logWriter.Stderr(), w)
 	}
 
-	// 4. Register the instance in PENDING so concurrent Start callers see
-	//    the slot taken before we exec.
-	now := time.Now()
-	inst := &Instance{
-		ID:        id,
-		Target:    tgt.Name,
-		Service:   tgt.Service,
-		Stack:     tgt.Stack,
-		Phase:     anovelv1.Phase_PHASE_PENDING,
-		Mode:      ModeGoExec,
-		StartedAt: now,
-		cmd:       cmd,
-		cancel:    cancel,
-	}
-	r.mu.Lock()
-	r.instances[id] = inst
-	r.mu.Unlock()
-
-	// 5. Transition to STARTING + actually exec.
+	// Register the instance in PENDING so concurrent Start callers see the
+	// slot taken before the exec.
+	inst := r.register(t, anovelv1.Mode_MODE_GO_EXEC, cmd, cancel)
 	r.transition(id, anovelv1.Phase_PHASE_STARTING)
 	if err := cmd.Start(); err != nil {
-		cancel()
 		_ = logWriter.Close()
 		r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_ERROR, "spawn: "+err.Error())
 		return nil, fmt.Errorf("start %s: %w", id, err)
 	}
-	// 6. PID known; transition to RUNNING and start the watcher.
 	r.mu.Lock()
 	inst.PID = int32(cmd.Process.Pid)
 	r.mu.Unlock()
-	// Every phase change goes through transition, which emits the
-	// STARTING→RUNNING PhaseEvent for Watch subscribers.
 	r.transition(id, anovelv1.Phase_PHASE_RUNNING)
-	go r.watchGoExec(id, logWriter)
+	go r.watchGoExec(inst, cmd, logWriter)
 
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	out := *inst
 	return &out, nil
 }
@@ -106,20 +67,14 @@ func (r *Runner) StartGoExec(ctx context.Context, id string, env []string, warni
 // watchGoExec blocks on cmd.Wait() and transitions the instance to
 // TERMINATED with the appropriate ExitReason. The log writer is closed
 // here so its file handle + subscriber channels release cleanly.
-func (r *Runner) watchGoExec(id string, logWriter *logs.Writer) {
-	r.mu.RLock()
-	inst, ok := r.instances[id]
-	cmd := inst.cmd
-	r.mu.RUnlock()
-	if !ok || cmd == nil {
-		_ = logWriter.Close()
-		return
-	}
+func (r *Runner) watchGoExec(inst *Instance, cmd *exec.Cmd, logWriter *logs.Writer) {
 	err := cmd.Wait()
 	_ = logWriter.Close()
 	reason := anovelv1.ExitReason_EXIT_REASON_SUCCESS
 	msg := ""
 	if err != nil {
+		msg = err.Error()
+		reason = anovelv1.ExitReason_EXIT_REASON_CRASHED
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			// Supervising `go run` means a SIGTERM to the process
@@ -140,16 +95,10 @@ func (r *Runner) watchGoExec(id string, logWriter *logs.Writer) {
 				// The stop was requested and the process is gone,
 				// whether SIGTERM or an escalated SIGKILL ended it.
 				reason = anovelv1.ExitReason_EXIT_REASON_SUCCESS
-			default:
-				reason = anovelv1.ExitReason_EXIT_REASON_CRASHED
 			}
-			msg = err.Error()
-		} else {
-			reason = anovelv1.ExitReason_EXIT_REASON_CRASHED
-			msg = err.Error()
 		}
 	}
-	r.markTerminated(id, reason, msg)
+	r.markTerminated(inst.ID, reason, msg)
 }
 
 // killGoExec implements the SIGTERM → wait grace → SIGKILL escalation for
@@ -157,51 +106,48 @@ func (r *Runner) watchGoExec(id string, logWriter *logs.Writer) {
 func (r *Runner) killGoExec(ctx context.Context, id string, grace time.Duration) error {
 	r.mu.RLock()
 	inst, ok := r.instances[id]
+	var cmd *exec.Cmd
+	if ok {
+		cmd = inst.cmd
+	}
 	r.mu.RUnlock()
-	if !ok || inst.cmd == nil || inst.cmd.Process == nil {
+	if cmd == nil || cmd.Process == nil {
 		return nil
 	}
-	pid := inst.cmd.Process.Pid
+	pid := cmd.Process.Pid
 
 	// Signal the whole process group through the negative pid, so the binary
 	// `go run` compiled and spawned receives it too.
 	if grace > 0 {
 		_ = syscall.Kill(-pid, syscall.SIGTERM)
-		// Poll for termination up to grace.
-		deadline := time.Now().Add(grace)
-		for time.Now().Before(deadline) {
-			r.mu.RLock()
-			done := inst.Phase == anovelv1.Phase_PHASE_TERMINATED
-			r.mu.RUnlock()
-			if done {
-				return nil
-			}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(50 * time.Millisecond):
-			}
+		if done, err := r.awaitTerminated(ctx, inst, grace); done || err != nil {
+			return err
 		}
 	}
-
-	// SIGKILL.
 	_ = syscall.Kill(-pid, syscall.SIGKILL)
 	// Brief wait for the watcher to mark terminated.
-	deadline := time.Now().Add(2 * time.Second)
+	_, err := r.awaitTerminated(ctx, inst, 2*time.Second)
+	return err
+}
+
+// awaitTerminated polls inst every 50ms until it reaches TERMINATED or timeout
+// passes, reporting whether it did. It returns ctx's error when ctx ends first.
+func (r *Runner) awaitTerminated(ctx context.Context, inst *Instance, timeout time.Duration) (bool, error) {
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		r.mu.RLock()
 		done := inst.Phase == anovelv1.Phase_PHASE_TERMINATED
 		r.mu.RUnlock()
 		if done {
-			return nil
+			return true, nil
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return false, ctx.Err()
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
-	return nil
+	return false, nil
 }
 
 // transition applies an atomic phase change and emits a PhaseEvent so Watch
@@ -214,18 +160,14 @@ func (r *Runner) transition(id string, phase anovelv1.Phase) {
 		r.mu.Unlock()
 		return
 	}
-	old := inst.Phase
-	inst.Phase = phase
 	ev := PhaseEvent{
 		TargetID: inst.ID,
 		Service:  inst.Service,
 		Stack:    inst.Stack,
-		OldPhase: old,
+		OldPhase: inst.Phase,
 		NewPhase: phase,
 	}
+	inst.Phase = phase
 	r.mu.Unlock()
 	r.emitPhase(ev)
 }
-
-// Keeps the discovery import referenced from this file.
-var _ = discovery.TargetKindOneShot

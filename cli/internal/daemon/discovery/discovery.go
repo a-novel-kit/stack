@@ -56,6 +56,12 @@ func (t *Target) ID() string {
 	return t.Stack + "/" + t.Service + "/" + t.Name
 }
 
+// ServiceDir returns the service repo root the target runs from, which holds
+// its go.mod: the grandparent of cmd/<name>/.
+func (t *Target) ServiceDir() string {
+	return filepath.Dir(filepath.Dir(t.CmdDir))
+}
+
 // Infra is a compose service with no profile assignment and no matching
 // cmd/<name>/ directory.
 type Infra struct {

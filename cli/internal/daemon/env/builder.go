@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -64,9 +63,7 @@ func (b *Builder) ForTarget(t *discovery.Target) ([]Entry, []string, error) {
 	// becomes a warning.
 	var warnings []string
 	if t.CmdDir != "" {
-		// CmdDir is `.../service-X/cmd/<name>/`, so the service repo root is
-		// its grandparent.
-		res, err := injectSecrets(filepath.Dir(filepath.Dir(t.CmdDir)))
+		res, err := injectSecrets(t.ServiceDir())
 		if err != nil {
 			return nil, nil, err
 		}

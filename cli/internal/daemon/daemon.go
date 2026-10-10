@@ -5,7 +5,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -31,27 +30,7 @@ import (
 
 // Options configures Run.
 type Options struct {
-	Version    string         // daemon binary version
-	SocketPath string         // override; default paths.Socket()
-	Stacks     []stacks.Stack // override; default stacks.ParseEnv()
-}
-
-// registeredAndDiscovered narrows the configured stacks to those discovery
-// kept, preserving the configured order and therefore which entry is default.
-// It answers which stacks the daemon manages, where the registration list alone
-// over-answers once a vanished stack is skipped.
-func registeredAndDiscovered(configured []stacks.Stack, disc []*discovery.Stack) []stacks.Stack {
-	kept := make(map[string]bool, len(disc))
-	for _, st := range disc {
-		kept[st.Name] = true
-	}
-	out := make([]stacks.Stack, 0, len(disc))
-	for _, s := range configured {
-		if kept[s.Name] {
-			out = append(out, s)
-		}
-	}
-	return out
+	Version string // daemon binary version
 }
 
 // Run starts the daemon: it binds the unix socket, serves connect-rpc until ctx
@@ -59,62 +38,54 @@ func registeredAndDiscovered(configured []stacks.Stack, disc []*discovery.Stack)
 // blocks until the daemon exits, so a caller wanting a background daemon forks
 // the process itself.
 func Run(ctx context.Context, opts Options) error {
-	if opts.SocketPath == "" {
-		opts.SocketPath = paths.Socket()
-	}
-	if opts.Stacks == nil {
-		stk, err := stacks.ParseEnv()
-		if err != nil {
-			return fmt.Errorf("parse %s: %w", stacks.EnvVar, err)
-		}
-		opts.Stacks = stk
+	socketPath := paths.Socket()
+	registered, err := stacks.ParseEnv()
+	if err != nil {
+		return fmt.Errorf("parse %s: %w", stacks.EnvVar, err)
 	}
 
 	// A responsive listener means another daemon already owns this socket.
 	// Reporting it here names the socket and the command that frees it.
-	if live, _ := isLive(opts.SocketPath); live {
-		return fmt.Errorf("daemon already running on %s — use `a-novel core kill` to stop it first", opts.SocketPath)
+	if isLive(socketPath) {
+		return fmt.Errorf("daemon already running on %s — use `a-novel core kill` to stop it first", socketPath)
 	}
 
 	// A path with no listener is a stale socket file, removed here so the bind
 	// can proceed — the recovery path after `kill -9`.
-	if _, err := os.Stat(opts.SocketPath); err == nil {
-		if err := os.Remove(opts.SocketPath); err != nil {
-			return fmt.Errorf("remove stale socket %s: %w", opts.SocketPath, err)
+	if _, err := os.Stat(socketPath); err == nil {
+		if err := os.Remove(socketPath); err != nil {
+			return fmt.Errorf("remove stale socket %s: %w", socketPath, err)
 		}
 	}
 
 	// The parent is normally an existing /run/user/<uid> or the /tmp fallback;
 	// this only creates one when XDG_RUNTIME_DIR points somewhere unusual.
-	if err := os.MkdirAll(filepath.Dir(opts.SocketPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
 		return fmt.Errorf("mkdir socket parent: %w", err)
 	}
 
-	ln, err := net.Listen("unix", opts.SocketPath)
+	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
-		return fmt.Errorf("listen on %s: %w", opts.SocketPath, err)
+		return fmt.Errorf("listen on %s: %w", socketPath, err)
 	}
 	// Only the owning user may connect. XDG_RUNTIME_DIR is already 0700, and
 	// pinning the socket itself keeps a permissive parent directory from
 	// exposing the daemon.
-	if err := os.Chmod(opts.SocketPath, 0o600); err != nil {
+	if err := os.Chmod(socketPath, 0o600); err != nil {
 		_ = ln.Close()
 		return fmt.Errorf("chmod socket: %w", err)
 	}
 
-	// Discover every service in every registered stack before listening.
+	// Discover every service in every registered stack before serving.
 	// Per-service classification errors surface through Status and the startup
 	// logs, and a non-default stack whose path has vanished is skipped, so a
 	// swept scratch checkout cannot keep the daemon down. Only an unreadable
-	// default stack is fatal.
-	disc, err := discovery.DiscoverStacks(opts.Stacks)
+	// default stack is fatal. The stacks discovery keeps are the ones the
+	// daemon manages and reports.
+	disc, err := discovery.DiscoverStacks(registered)
 	if err != nil {
 		return fmt.Errorf("discover stacks: %w", err)
 	}
-	// The server reports the stacks it manages, so it gets the registered set
-	// narrowed to what discovery accepted. ListStacks then matches what every
-	// other RPC serves.
-	opts.Stacks = registeredAndDiscovered(opts.Stacks, disc)
 	// Surface per-service discovery errors at daemon start. The daemon keeps
 	// running: well-formed services still work, and a broken one refuses with
 	// this same error.
@@ -137,7 +108,13 @@ func Run(ctx context.Context, opts Options) error {
 	// discovery snapshot to resolve target IDs without round-tripping through
 	// the server, and the allocator to release port refcounts on termination.
 	run := runner.New(disc, alloc, builder, logStore)
-	srv := server.New(opts.Version, opts.SocketPath, opts.Stacks, disc, run, alloc, builder, logStore)
+
+	// The daemon stops on SIGINT or SIGTERM, when ctx ends, or when an RPC
+	// calls stop, as Shutdown and PrepareReinstall do. After PrepareReinstall,
+	// `a-novel install` or `core restart` starts the next daemon.
+	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	srv := server.New(opts.Version, socketPath, disc, run, builder, logStore, stop)
 
 	// Reconstitute the Instance and InfraSession records of every podman
 	// container carrying the adoption labels, so containers that outlived a
@@ -147,13 +124,13 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	// Replay the go-exec targets a prior PrepareReinstall checkpointed, then
-	// drop the checkpoint. A failed relaunch surfaces through the supervisor as
-	// "terminated, exit_reason=crashed" without blocking startup.
+	// drop the checkpoint. A relaunch that fails is reported and skipped, so it
+	// never blocks startup.
 	if cp, err := reinstall.Read(); err == nil && cp != nil {
 		fmt.Fprintf(os.Stderr, "reinstall: replaying %d go-exec target(s) from %s\n",
 			len(cp.GoExec), reinstall.Path())
 		for _, gx := range cp.GoExec {
-			if _, err := run.StartGoExec(ctx, gx.TargetID, gx.Env, nil); err != nil {
+			if err := run.Relaunch(ctx, gx.TargetID, gx.Env); err != nil {
 				fmt.Fprintf(os.Stderr, "reinstall: relaunch %s failed: %v\n", gx.TargetID, err)
 			}
 		}
@@ -169,41 +146,16 @@ func Run(ctx context.Context, opts Options) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	// Listen for SIGINT/SIGTERM and the server's PrepareReinstall
-	// shutdown signal in parallel with ctx cancellation.
-	shutdownCtx, cancelShutdown := context.WithCancel(ctx)
-	defer cancelShutdown()
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		select {
-		case <-sigCh:
-			cancelShutdown()
-		case <-srv.ShutdownCh():
-			// PrepareReinstall fired: shut down gracefully, and the
-			// install script restarts the daemon.
-			cancelShutdown()
-		case <-shutdownCtx.Done():
-		}
-	}()
-
-	// Serve in a goroutine so we can intercept shutdown signals here.
+	// Serve in a goroutine so we can intercept shutdown signals here. Serve
+	// returns before Shutdown only on a failure.
 	serveErr := make(chan error, 1)
-	go func() {
-		err := httpServer.Serve(ln)
-		// http.ErrServerClosed is what Shutdown returns on success.
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serveErr <- err
-			return
-		}
-		serveErr <- nil
-	}()
+	go func() { serveErr <- httpServer.Serve(ln) }()
 
 	select {
 	case err := <-serveErr:
-		_ = os.Remove(opts.SocketPath)
+		_ = os.Remove(socketPath)
 		return err
-	case <-shutdownCtx.Done():
+	case <-ctx.Done():
 	}
 
 	// Graceful shutdown: 10s for in-flight RPCs to complete. Streaming RPCs
@@ -211,7 +163,7 @@ func Run(ctx context.Context, opts Options) error {
 	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	shutErr := httpServer.Shutdown(shutCtx)
-	_ = os.Remove(opts.SocketPath)
+	_ = os.Remove(socketPath)
 	if shutErr != nil {
 		return fmt.Errorf("shutdown: %w", shutErr)
 	}
@@ -220,11 +172,11 @@ func Run(ctx context.Context, opts Options) error {
 
 // isLive reports whether the socket at path is bound by a responsive daemon. A
 // plain unix dial is enough to tell a stale socket file from a live listener.
-func isLive(path string) (bool, error) {
+func isLive(path string) bool {
 	conn, err := net.DialTimeout("unix", path, 200*time.Millisecond)
 	if err != nil {
-		return false, err
+		return false
 	}
 	_ = conn.Close()
-	return true, nil
+	return true
 }
