@@ -129,7 +129,7 @@ func TestLoadLabels(t *testing.T) {
 		if !slices.Contains(l.Retire, name) {
 			t.Errorf("retire set missing `%s`; got %v", name, l.Retire)
 		}
-		if slices.ContainsFunc(l.Ensure, func(d LabelDef) bool { return d.Name == name }) {
+		if named(name) >= 0 {
 			t.Errorf("`%s` is both ensured and retired", name)
 		}
 	}
