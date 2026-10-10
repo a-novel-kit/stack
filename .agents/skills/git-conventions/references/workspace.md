@@ -73,10 +73,11 @@ Resuming a branch **you** created earlier in the same session is your own work; 
 
 ### When you are done
 
-**Cleanup only ever touches what this session created**, unless the developer explicitly names a
-wider scope. A request to clear worktrees, branches, stacks or issues means yours: the worktrees and
-branches you added, your subagents' worktrees, your scratch stacks and containers, and the issues and
-pull requests you opened. List them as you create them, so cleanup removes exactly that list.
+**Touch only what this session created**, unless the developer explicitly says otherwise. A request
+to clean up or clear worktrees, branches, stacks or issues means yours: the worktrees and branches
+you added, your subagents' worktrees, your scratch stacks and containers, and the issues and pull
+requests you opened. List them as you create them, so cleanup removes exactly that list. A global
+cleanup that owns the whole workspace is always requested explicitly; a bare "clean up" never is one.
 
 Everything else stays, however finished it looks. A clean worktree on a merged branch can still be
 the working directory of a live parallel session, and removing it, deleting its branch, or

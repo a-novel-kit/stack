@@ -17,8 +17,9 @@ drive automation (Renovate, CI tagging, changelogs) and signal intent to reviewe
 ## Load the Git procedure for this operation
 
 - Before starting or finishing checkout work, or cleaning anything up, read
-  [workspace hygiene](references/workspace.md). Cleanup touches only what this session created;
-  preserve other contributors' work and use an isolated checkout for sustained work.
+  [workspace hygiene](references/workspace.md). Touch only what this session created, cleanup
+  included, unless told otherwise; preserve other contributors' work and use an isolated checkout
+  for sustained work.
 - Before naming a branch, grouping changes, or writing, amending, or reviewing a commit message,
   read [commit conventions](references/commits.md).
   Use `attribute-ai-commits` for material AI contributions.
