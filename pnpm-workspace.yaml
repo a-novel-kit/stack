@@ -1,3 +1,7 @@
 allowBuilds:
   "@swc/core": true
   esbuild: true
+
+minimumReleaseAgeExclude:
+  - "@a-novel-kit/*"
+  - "@a-novel/*"
