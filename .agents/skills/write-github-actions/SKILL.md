@@ -232,6 +232,10 @@ Two GitHub constraints shape the bypass lists:
 Pull requests are for collaborators: every class sets `features.pull_requests: collaborators_only`,
 and `lock-pr.yaml` locks each new PR's conversation. Outsiders use issues and discussions.
 
+The enterprise subscription is the only spend. Standard runners on public repos and the free security
+features cost nothing; GitHub Code Quality bills per active committer and per AI credit on every
+default-branch push, so every class sets `code_quality: false` and `repo update` keeps it off.
+
 The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.yaml`,
 `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`,
 `auto-approve-dependabot.yaml`, `lock-pr.yaml`) are rendered from
