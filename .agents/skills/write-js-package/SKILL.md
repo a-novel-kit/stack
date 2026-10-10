@@ -47,6 +47,16 @@ published package is `@a-novel/<service-slug>-rest`, the private test project is
 workspace members, listed in `pnpm-workspace.yaml` and in the root `package.json` `workspaces`
 array.
 
+`vite.config.ts` keeps every peer dependency out of the bundle, subpaths included. Rollup matches
+`external` entries by exact specifier, so a list of package names bundles `@a-novel-kit/nodelib-browser/http`
+while excluding `@a-novel-kit/nodelib-browser`. The client then carries a stale copy of the peer's
+classes, and `instanceof` checks and new fields silently diverge from the consumer's version. Match
+by prefix:
+
+```ts
+external: (id) => Object.keys(peerDependencies).some((peer) => id === peer || id.startsWith(`${peer}/`)),
+```
+
 A new resource domain follows the same split: one `<domain>.ts` source file, one `<domain>.test.ts`
 test file. Never merge unrelated domains into a single file.
 
@@ -349,6 +359,7 @@ Every entry is stated in full above; this list is the review checklist.
 - Adding a domain file without its `export *` line in `index.ts`.
 - Diverging from the OpenAPI spec on URL paths, query parameter names, response field names, or HTTP
   methods — they must match it exactly.
+- Listing peer dependencies by name in `external`, which bundles their subpath imports.
 - Calling global `fetch` instead of `api.fetch` / `api.fetchVoid`.
 - Dropping the Zod validator on an `api.fetch` call whose response the service defines.
 - Skipping JSDoc on an exported symbol.
