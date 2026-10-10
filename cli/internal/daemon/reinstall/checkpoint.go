@@ -11,7 +11,8 @@
 //  3. `a-novel install` rebuilds the binary; `a-novel core restart
 //     --preserve-targets` goes straight to the next step.
 //  4. New daemon starts, observes the checkpoint at well-known path,
-//     re-launches the listed go-exec targets, deletes the checkpoint.
+//     re-launches the listed go-exec targets on their recorded ports, deletes
+//     the checkpoint.
 //
 // The checkpoint is handoff state only: losing it degrades behavior without
 // breaking it, which keeps the daemon's recovery stateless.
@@ -45,8 +46,11 @@ type Checkpoint struct {
 // targets stay out: podman keeps them alive across a daemon restart, and orphan
 // adoption picks them up.
 type GoExecCheckpoint struct {
-	TargetID string   `json:"target_id"`
-	Env      []string `json:"env"`
+	TargetID string `json:"target_id"`
+	// Env holds the host ports the target's env references, as KEY=port
+	// entries. An older daemon wrote the whole env here; a relaunch reads the
+	// same entries out of it.
+	Env []string `json:"env"`
 }
 
 // Path returns the canonical checkpoint location.

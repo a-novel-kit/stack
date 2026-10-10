@@ -25,7 +25,8 @@ import (
 
 // TestPrepareReinstallStopsGoExecTargets covers the reinstall handoff. A
 // go-exec process outlives its daemon, so a target left running keeps the
-// ports the next daemon relaunches it on.
+// ports the next daemon relaunches it on. The checkpoint records those ports
+// and nothing else, so no env value, secrets included, reaches the file.
 func TestPrepareReinstallStopsGoExecTargets(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	// The runner spawns `go run`. A stand-in go that only sleeps keeps the
@@ -36,20 +37,24 @@ func TestPrepareReinstallStopsGoExecTargets(t *testing.T) {
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	tgt := &discovery.Target{Name: "rest", Service: "svc", Stack: "default", CmdDir: filepath.Join(t.TempDir(), "cmd", "rest")}
+	tgt := &discovery.Target{
+		Name: "rest", Service: "svc", Stack: "default", CmdDir: filepath.Join(t.TempDir(), "cmd", "rest"),
+		Ports: []string{"${REST_PORT}:8080"},
+	}
 	stacks := discovery.Stacks{{
 		Name:     "default",
 		Default:  true,
 		Services: []*discovery.Service{{Name: "svc", Stack: "default", Targets: []*discovery.Target{tgt}}},
 	}}
 	alloc := env.NewAllocator()
+	alloc.SetServices([]string{"svc"})
 	builder := env.NewBuilder(alloc)
 	logStore := logs.New()
 	run := runner.New(stacks, alloc, builder, logStore)
 	stopped := make(chan struct{})
 	srv := New("test", "", stacks, run, builder, logStore, func() { close(stopped) })
 
-	if err := run.Relaunch(t.Context(), tgt.ID(), os.Environ()); err != nil {
+	if err := run.Relaunch(t.Context(), tgt.ID(), []string{"REST_PORT=41235"}); err != nil {
 		t.Fatalf("Relaunch: %v", err)
 	}
 	t.Cleanup(func() { _ = run.Kill(context.Background(), tgt.ID(), 0) })
@@ -62,8 +67,10 @@ func TestPrepareReinstallStopsGoExecTargets(t *testing.T) {
 	if resp.GetGoExecTargetCount() != 1 {
 		t.Errorf("checkpointed %d target(s), want 1", resp.GetGoExecTargetCount())
 	}
-	if cp, err := reinstall.Read(); err != nil || cp == nil || len(cp.GoExec) != 1 || cp.GoExec[0].TargetID != tgt.ID() {
-		t.Errorf("checkpoint = %+v (err %v), want %s listed", cp, err, tgt.ID())
+	cp, err := reinstall.Read()
+	if err != nil || cp == nil || len(cp.GoExec) != 1 || cp.GoExec[0].TargetID != tgt.ID() ||
+		strings.Join(cp.GoExec[0].Env, ",") != "REST_PORT=41235" {
+		t.Errorf("checkpoint = %+v (err %v), want %s listed with only REST_PORT=41235", cp, err, tgt.ID())
 	}
 	if inst, _ := run.Instance(tgt.ID()); inst.Phase != anovelv1.Phase_PHASE_TERMINATED {
 		t.Errorf("target phase after the handoff: got %v, want TERMINATED", inst.Phase)

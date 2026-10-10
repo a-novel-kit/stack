@@ -74,6 +74,60 @@ func (b *Builder) ForTarget(t *discovery.Target) ([]Entry, []string, error) {
 	return entriesOf(vars), warnings, nil
 }
 
+// HeldPorts lists the host ports t's env references, as the KEY=port entries it
+// names them by, read without allocating. The reinstall checkpoint records
+// them, so the next daemon relaunches t on the same ports.
+func (b *Builder) HeldPorts(t *discovery.Target) []string {
+	var out []string
+	for _, ref := range b.portRefs(t) {
+		if port, ok := b.alloc.Lookup(ref.owner, ref.localVar); ok {
+			out = append(out, ref.name+"="+strconv.Itoa(port))
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// KeepPorts reserves for t the host ports held lists as KEY=port entries, so
+// its next env build, and every other consumer of those slots, resolves to
+// them. Only the `*_PORT` variables t references are kept, and a slot already
+// allocated keeps its own port.
+func (b *Builder) KeepPorts(t *discovery.Target, held []string) {
+	ports := make(map[string]int, len(held))
+	for _, kv := range held {
+		name, value, _ := strings.Cut(kv, "=")
+		if port, err := strconv.Atoi(value); err == nil {
+			ports[name] = port
+		}
+	}
+	for _, ref := range b.portRefs(t) {
+		if port, ok := ports[ref.name]; ok {
+			b.alloc.Reserve(ref.owner, ref.localVar, port, t.ID())
+		}
+	}
+}
+
+// portRef is a `*_PORT` variable a target references, with the slot it
+// resolves to.
+type portRef struct{ name, owner, localVar string }
+
+// portRefs lists the `*_PORT` variables t's environment and port mappings
+// reference, resolved the way an env build claims them.
+func (b *Builder) portRefs(t *discovery.Target) []portRef {
+	services := b.alloc.Services()
+	var out []portRef
+	for _, value := range mergePortRefs(t.Environment, t.Ports) {
+		for _, name := range compose.Refs(value) {
+			owner, localVar := resolveOwner(name, services)
+			known := slices.ContainsFunc(out, func(r portRef) bool { return r.name == name })
+			if isAllocatedKind(localVar) && !known {
+				out = append(out, portRef{name: name, owner: cmp.Or(owner, t.Service), localVar: localVar})
+			}
+		}
+	}
+	return out
+}
+
 // injectSecrets is the seam to the secrets package, indirected through a package
 // var so the env-builder tests can stub it without touching the local key store.
 var injectSecrets = secrets.InjectForRepo

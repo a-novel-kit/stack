@@ -177,9 +177,11 @@ func (r *Runner) StartTarget(ctx context.Context, t *discovery.Target, svc *disc
 	return r.launch(ctx, t, mode)
 }
 
-// Relaunch spawns target id as go-exec with a prepared environ, the way the
-// reinstall replay restarts what a checkpoint recorded.
-func (r *Runner) Relaunch(ctx context.Context, id string, environ []string) error {
+// Relaunch restarts target id as go-exec from a reinstall checkpoint, on the
+// host ports the previous daemon gave it, listed as KEY=port entries in held.
+// Reserving them before the env builds keeps the allocator in step with what
+// the process binds, so every other consumer resolves the same ports.
+func (r *Runner) Relaunch(ctx context.Context, id string, held []string) error {
 	t, _ := r.stacks.Target(id)
 	if t == nil {
 		return fmt.Errorf("unknown target %q", id)
@@ -187,7 +189,8 @@ func (r *Runner) Relaunch(ctx context.Context, id string, environ []string) erro
 	if _, running, err := r.canStart(id, anovelv1.Mode_MODE_GO_EXEC); err != nil || running {
 		return err
 	}
-	_, err := r.startGoExec(ctx, t, environ, nil)
+	r.builder.KeepPorts(t, held)
+	_, err := r.launch(ctx, t, anovelv1.Mode_MODE_GO_EXEC)
 	return err
 }
 
