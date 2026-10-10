@@ -51,9 +51,9 @@ Possible states:
 - `queued` / `in_progress` / `pending` → wait and re-check (Phase 1.2)
 - `completed` + `success` → done, hand off to the developer
 - `completed` + `failure` → classify and fix (Phase 2)
-- `completed` + `cancelled` → usually a dependency failed; fix the root-cause job
-- `completed` + `skipped` → not an error; only reporting jobs are typically skipped on
-  non-master branches
+- `completed` + `cancelled` → superseded, timed out, or stopped by hand; read why before retrying
+- `completed` + `skipped` → a job it `needs:` failed or skipped, so fix that job; on a green
+  run, only jobs with an `if:` skip
 
 ### 1.2 Polling pattern — do NOT use `gh run watch`
 
