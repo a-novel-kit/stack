@@ -7,20 +7,21 @@ Read this reference when routed here by [use-a-novel-cli](../SKILL.md). Its rule
 Discovers every Go test target (`go test ./...` per module, scoped by
 `builds/podman-compose.go[.<path>].test.yaml` when present) and every pnpm
 `test`/`test:*` script in the working tree, lets you pick which to run via a TUI
-picker, runs the selection, and prints a pass/fail report. Test envs come up and down
-per-target, so independent envs run in parallel safely.
+picker, runs the selection in parallel, and prints a pass/fail report with coverage and
+the full output of every failure. Test envs come up and down per-target, so independent
+envs run in parallel safely.
 
 Common patterns:
 
 ```bash
 a-novel test                  # interactive picker (everything selected by default)
-a-novel test -y               # run everything non-interactively (CI-safe)
+a-novel test -y               # run everything non-interactively, one at a time (CI-safe)
 a-novel test --type=go        # only Go tests
 a-novel test --type=pnpm      # only pnpm tests
 a-novel test --type=go -y     # all Go tests, no prompt
 a-novel test --dry-run        # show what would run; exit without running
 a-novel test --no-cover       # skip coverage (on by default)
-a-novel test -j 4             # cap parallelism at 4 (interactive only)
+a-novel test -j 4             # run at most 4 targets at once (with or without -y)
 ```
 
 **When to use:** ALWAYS for local-dev test runs — there is no `make` fallback
