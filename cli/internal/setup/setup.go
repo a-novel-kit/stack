@@ -1,18 +1,9 @@
-// Package setup implements `a-novel core setup` — the interactive
-// first-time bootstrap. Idempotent: re-running on an
-// already-set-up system performs zero filesystem writes and exits 0.
+// Package setup implements `a-novel core setup`, the interactive first-time
+// bootstrap. It checks the host tools, creates the state directories, clones
+// missing stacks, manages a marker-delimited block in the user's shell rc and
+// starts the daemon.
 //
-// Sequence:
-//
-//  1. Detect environment (podman + git + GitHub SSH access).
-//  2. Verify state directories ($XDG_STATE_HOME/a-novel,
-//     $XDG_DATA_HOME/a-novel) exist with 0700 perms.
-//  3. Per-stack bootstrap: for every entry in $A_NOVEL_STACKS, run the
-//     three-way check (exists+valid / exists+invalid / missing). Default
-//     stack prompts on missing; non-default clones unconditionally.
-//  4. Shell rc integration: manage a marker-delimited block in the
-//     user's shell rc (zshrc / bashrc / fish), with a pre-edit backup.
-//  5. Print a summary with the "next step" hint.
+// Re-running it on a system that is already set up changes nothing and exits 0.
 package setup
 
 import (
@@ -20,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
@@ -29,111 +19,74 @@ import (
 
 // Options carries CLI-supplied overrides for the setup run.
 type Options struct {
-	RCPath         string // explicit shell rc path; empty = autodetect
-	NoShellRC      bool   // skip the shell rc step entirely
-	NoStartDaemon  bool   // skip the auto-start-daemon step at the end
-	NonInteractive bool   // disables prompts (for CI / tests)
+	RCPath        string // explicit shell rc path; empty = autodetect
+	NoShellRC     bool   // skip the shell rc step entirely
+	NoStartDaemon bool   // skip the auto-start-daemon step at the end
 	// StartDaemon, if non-nil, is invoked as the final step of Run after
-	// rc edits succeed. It should start the daemon (idempotent: a no-op
-	// when one is already running). Wiring it from the cli package
-	// (which already has `startDetached`) keeps setup free of an import
-	// cycle with internal/cli.
+	// rc edits succeed. It should start the daemon, and do nothing when one
+	// is already running. The cli package wires it from its own
+	// startDetached, which keeps setup free of an import cycle.
 	StartDaemon func() error
 }
 
-// Result reports what setup did, for the summary at the end.
-type Result struct {
-	PodmanOK      bool
-	GitOK         bool
-	GitHubSSHOK   bool
-	StateDir      string
-	DataDir       string
-	Stacks        []StackResult
-	RCEdited      bool
-	RCPath        string
-	BackupPath    string   // path of the pre-edit backup, if we wrote one
-	DaemonStarted bool     // true if Run successfully launched the daemon
-	DaemonNote    string   // failure reason when DaemonStarted is false
-	Notes         []string // free-form messages (e.g., "stack X already cloned")
-}
-
-// StackResult is the per-stack bootstrap outcome.
-type StackResult struct {
-	Name   string
-	Path   string
-	Status string // "valid" | "cloned" | "skipped" | "refused"
-	Detail string
-}
-
-// Run executes the full bootstrap sequence with the given Options. The
-// `prompter` reads user input when interactive prompts are needed
-// (default-stack clone confirmation). Pass nil for non-interactive
-// modes — missing default stack then becomes a "refused" outcome.
-//
-// Writes step-by-step progress to `w` so the user can follow along.
-func Run(opts Options, w io.Writer, prompter Prompter) (*Result, error) {
-	res := &Result{StateDir: paths.State(), DataDir: paths.Data()}
-
+// Run executes the full bootstrap sequence with the given Options, writing
+// step-by-step progress to w. The prompter confirms cloning a missing default
+// stack. A nil prompter makes the run non-interactive, and that stack is then
+// skipped.
+func Run(opts Options, w io.Writer, prompter Prompter) error {
 	// 1. Environment checks.
 	_, _ = fmt.Fprintln(w, "▸ Checking environment...")
 	if err := checkPodman(); err != nil {
-		return res, fmt.Errorf("podman check: %w", err)
+		return fmt.Errorf("podman check: %w", err)
 	}
-	res.PodmanOK = true
 	_, _ = fmt.Fprintln(w, "  ✓ podman")
 	if err := checkGit(); err != nil {
-		return res, fmt.Errorf("git check: %w", err)
+		return fmt.Errorf("git check: %w", err)
 	}
-	res.GitOK = true
 	_, _ = fmt.Fprintln(w, "  ✓ git")
+	// GitHub SSH only matters when a stack needs cloning, so a failure is a
+	// warning.
 	if err := checkGitHubSSH(); err != nil {
-		// Non-fatal — the user may genuinely not have GitHub SSH set
-		// up if their default stack is already cloned and no
-		// non-default stacks need fetching. Surface as a note.
-		res.Notes = append(res.Notes,
-			"GitHub SSH check failed: "+err.Error()+
-				" (only matters if a stack needs cloning)")
 		_, _ = fmt.Fprintln(w, "  ⚠ GitHub SSH ("+err.Error()+")")
 	} else {
-		res.GitHubSSHOK = true
 		_, _ = fmt.Fprintln(w, "  ✓ GitHub SSH")
 	}
 
 	// 2. State directories.
 	_, _ = fmt.Fprintln(w, "▸ Verifying state directories...")
-	if err := ensureDir(res.StateDir); err != nil {
-		return res, err
+	stateDir, dataDir := paths.State(), paths.Data()
+	if err := ensureDir(stateDir); err != nil {
+		return err
 	}
-	if err := ensureDir(res.DataDir); err != nil {
-		return res, err
+	if err := ensureDir(dataDir); err != nil {
+		return err
 	}
-	_, _ = fmt.Fprintf(w, "  ✓ %s\n  ✓ %s\n", res.StateDir, res.DataDir)
+	_, _ = fmt.Fprintf(w, "  ✓ %s\n  ✓ %s\n", stateDir, dataDir)
 
 	// 3. Stack bootstrap.
 	stk, err := stacks.ParseEnv()
 	if err != nil {
-		return res, fmt.Errorf("parse %s: %w", stacks.EnvVar, err)
+		return fmt.Errorf("parse %s: %w", stacks.EnvVar, err)
 	}
 	_, _ = fmt.Fprintf(w, "▸ Bootstrapping %d stack(s)...\n", len(stk))
 	for _, s := range stk {
-		sr := bootstrapStack(s, opts.NonInteractive, prompter)
-		res.Stacks = append(res.Stacks, sr)
-		_, _ = fmt.Fprintf(w, "  %s %s (%s)\n", statusGlyph(sr.Status), sr.Name, sr.Detail)
+		status, detail := bootstrapStack(s, prompter)
+		_, _ = fmt.Fprintf(w, "  %s %s (%s)\n", statusGlyph(status), s.Name, detail)
 	}
 
 	// 4. Shell rc integration.
+	var rcPath string
+	var rcEdited bool
 	if !opts.NoShellRC {
 		_, _ = fmt.Fprintln(w, "▸ Managing shell rc block...")
-		rcPath, shell := resolveRC(opts.RCPath)
-		res.RCPath = rcPath
-		block := renderRCBlock(stk, shell)
-		backupPath, changed, err := upsertRCBlock(rcPath, block)
+		var shell string
+		rcPath, shell = resolveRC(opts.RCPath)
+		backupPath, changed, err := upsertRCBlock(rcPath, renderRCBlock(stk, shell))
 		if err != nil {
-			return res, fmt.Errorf("update %s: %w", rcPath, err)
+			return fmt.Errorf("update %s: %w", rcPath, err)
 		}
+		rcEdited = changed
 		if changed {
-			res.RCEdited = true
-			res.BackupPath = backupPath
 			_, _ = fmt.Fprintf(w, "  ✓ updated %s (backup: %s)\n", rcPath, backupPath)
 		} else {
 			_, _ = fmt.Fprintf(w, "  ✓ %s already up-to-date\n", rcPath)
@@ -142,67 +95,64 @@ func Run(opts Options, w io.Writer, prompter Prompter) (*Result, error) {
 		_, _ = fmt.Fprintln(w, "▸ Shell rc step skipped (--no-shell-rc)")
 	}
 
-	// 5. Start the daemon now so the user doesn't have to open a new
-	// shell or hand-run `a-novel core start` before the CLI is usable.
-	// Skipped on --no-start-daemon, or when no callback was wired
-	// (e.g., a test harness calling Run without the CLI bridge).
+	// 5. Start the daemon now so the CLI is usable without a new shell or a
+	// manual `a-novel core start`. A nil callback skips it, as in a test
+	// harness that calls Run without the CLI bridge.
+	var daemonStarted bool
 	if !opts.NoStartDaemon && opts.StartDaemon != nil {
 		_, _ = fmt.Fprintln(w, "▸ Starting the a-novel daemon...")
 		if err := opts.StartDaemon(); err != nil {
-			res.DaemonNote = err.Error()
 			_, _ = fmt.Fprintf(w, "  ⚠ daemon start failed: %v\n", err)
 		} else {
-			res.DaemonStarted = true
+			daemonStarted = true
 			_, _ = fmt.Fprintln(w, "  ✓ daemon running")
 		}
 	}
 
-	// 6. Summary + next step. The hint is context-sensitive: with the
-	// daemon up the user can run `a-novel run ui` right away; otherwise
-	// point at the manual start path. When the rc was edited, also nudge
-	// the user to source it so shell completion (`a-novel <TAB>`) lights
-	// up in the CURRENT shell — the block is only auto-loaded by future
-	// shells.
+	// 6. Summary and next step. With the daemon up, `a-novel run ui` works
+	// right away; otherwise the hint points at the manual start. An edited
+	// rc only loads in future shells, so the hint also suggests sourcing it
+	// for completion in the current one.
 	_, _ = fmt.Fprintln(w, "")
 	_, _ = fmt.Fprintln(w, "Setup complete.")
 	switch {
-	case res.DaemonStarted:
+	case daemonStarted:
 		_, _ = fmt.Fprintln(w, "  → Daemon is up. Try `a-novel run ui` or `a-novel run ps`.")
-		if res.RCEdited {
-			_, _ = fmt.Fprintf(w, "  → For tab-completion in THIS shell: `source %s`\n", res.RCPath)
+		if rcEdited {
+			_, _ = fmt.Fprintf(w, "  → For tab-completion in THIS shell: `source %s`\n", rcPath)
 			_, _ = fmt.Fprintln(w, "    (future shells load it automatically.)")
 		}
-	case res.RCEdited:
-		_, _ = fmt.Fprintf(w, "  → Open a new shell, or `source %s`, then `a-novel core start`.\n", res.RCPath)
+	case rcEdited:
+		_, _ = fmt.Fprintf(w, "  → Open a new shell, or `source %s`, then `a-novel core start`.\n", rcPath)
 	default:
 		_, _ = fmt.Fprintln(w, "  → Run `a-novel core start` to bring the daemon up.")
 	}
-	return res, nil
+	return nil
 }
 
-// ensureDir creates dir with 0700 perms (idempotent). Errors only if
-// dir exists with wrong type or perms can't be set.
+// ensureDir creates dir with 0700 perms. An existing dir is tightened to 0700
+// on a best-effort basis.
 func ensureDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
-	// Tighten perms in case it pre-existed with looser ones.
-	_ = os.Chmod(dir, 0o700)
+	_ = os.Chmod(dir, 0o700) // best effort: MkdirAll keeps an existing dir's perms
 	return nil
 }
 
-// Prompter is the interactive prompt interface used for default-stack
-// clone confirmation. Implementations should write the prompt + read
-// one line; return ("y" | "yes") for yes, anything else for no.
+// Prompter asks the user a yes/no question. Setup uses it to confirm cloning a
+// missing default stack.
 type Prompter interface {
 	YesNo(prompt string) (bool, error)
 }
 
-// StdinPrompter is the canonical implementation backed by os.Stdin.
+// StdinPrompter is the Prompter backed by os.Stdin.
 type StdinPrompter struct {
-	Out io.Writer
+	Out io.Writer // where the prompt is written; nil means os.Stderr
 }
 
+// YesNo writes prompt to Out and reads one line from stdin. Only "y" or
+// "yes", in any case, counts as yes.
 func (p *StdinPrompter) YesNo(prompt string) (bool, error) {
 	w := p.Out
 	if w == nil {
@@ -217,6 +167,7 @@ func (p *StdinPrompter) YesNo(prompt string) (bool, error) {
 	return ans == "y" || ans == "yes", nil
 }
 
+// statusGlyph returns the summary glyph for a stack-bootstrap status.
 func statusGlyph(status string) string {
 	switch status {
 	case statusValid, statusCloned:
@@ -229,8 +180,3 @@ func statusGlyph(status string) string {
 		return "•"
 	}
 }
-
-// Every path in this file is built via the paths.* helpers, so filepath
-// is otherwise unused here; reference filepath.Join to keep the import
-// valid.
-var _ = filepath.Join

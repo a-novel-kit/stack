@@ -1,12 +1,14 @@
 package detect
 
 import (
-	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
+
+	"github.com/a-novel-kit/stack/cli/internal/shared/compose"
 )
 
 // DetectTests is the test-suite counterpart of [Detect]. It discovers:
@@ -23,50 +25,10 @@ import (
 // is the environment ("go"/"pnpm") followed by the dotted test path it covers
 // ("go.internal", "go.pkg", "pnpm"); a bare env id covers the whole suite.
 func DetectTests(root string) ([]Target, error) {
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return nil, err
-	}
-
-	ignored := gitIgnoredDirs(absRoot)
-	var targets []Target
-
-	walkErr := filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			if d != nil && d.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !d.IsDir() {
-			return nil
-		}
-		if skipDir(absRoot, path, d.Name(), ignored) {
-			return filepath.SkipDir
-		}
-
-		rel, _ := filepath.Rel(absRoot, path)
-		envs := composeEnvs(path)
-
-		targets = append(targets, goTests(path, rel, envs)...)
-		targets = append(targets, pnpmTests(path, rel, envs)...)
-		return nil
+	return walk(root, func(dir, rel string) []Target {
+		envs := composeEnvs(dir)
+		return slices.Concat(goTests(dir, rel, envs), pnpmTests(dir, rel, envs))
 	})
-	if walkErr != nil {
-		return nil, walkErr
-	}
-
-	sort.SliceStable(targets, func(i, j int) bool {
-		a, b := targets[i], targets[j]
-		if a.Kind != b.Kind {
-			return kindOrder(a.Kind) < kindOrder(b.Kind)
-		}
-		if a.RelDir != b.RelDir {
-			return a.RelDir < b.RelDir
-		}
-		return a.Name < b.Name
-	})
-	return targets, nil
 }
 
 // envFile is one parsed builds/podman-compose.<id>.test.yaml.
@@ -92,11 +54,8 @@ func composeEnvs(dir string) []envFile {
 	}
 	var out []envFile
 	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
 		m := composeNameRe.FindStringSubmatch(e.Name())
-		if m == nil {
+		if e.IsDir() || m == nil {
 			continue
 		}
 		segs := strings.Split(m[1], ".")
@@ -116,193 +75,52 @@ var nonProjectChar = regexp.MustCompile(`[^a-z0-9]+`)
 // is unique per (location, env id), so concurrent test targets never share a
 // compose project.
 func composeProject(rel, id string) string {
-	return composeProjectP("anovel-test-", rel, id)
-}
-
-// composeProjectP is composeProject with a caller-chosen prefix, so `run`
-// projects (anovel-run-…) never collide with `test` projects (anovel-test-…)
-// even for the same repo/env.
-func composeProjectP(prefix, rel, id string) string {
 	loc := rel
 	if loc == "." {
 		loc = "root"
 	}
 	slug := nonProjectChar.ReplaceAllString(strings.ToLower(loc+"-"+id), "-")
-	return prefix + strings.Trim(slug, "-")
+	return "anovel-test-" + strings.Trim(slug, "-")
 }
 
-// hostPortVar matches a `${NAME}:1234` host→container port mapping. The
-// `:digits` after the brace distinguishes a ports entry from environment
-// (`KEY: "${NAME}"`) or volumes (`${NAME}:/path`).
-var hostPortVar = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}:\d`)
-
-// anyVar matches every `${NAME}` interpolation, ports/env/anything.
-var anyVar = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)`)
-
-// distinct returns the first capture group of every match, de-duplicated in
-// first-seen order.
-func distinct(re *regexp.Regexp, src string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, m := range re.FindAllStringSubmatch(src, -1) {
-		if !seen[m[1]] {
-			seen[m[1]] = true
-			out = append(out, m[1])
-		}
-	}
-	return out
-}
-
-// composeParse reads the compose file once and returns the distinct host-side
-// port vars and the distinct set of every interpolated var.
-func composeParse(file string) ([]string, []string) {
-	raw, err := os.ReadFile(file)
+// toEnv describes the env file f as the runner needs it: its services, split
+// into dependency-free ones and dependents, the host ports to allocate, and every
+// variable it references. build.composeUpPhased starts dependency-free services
+// first and dependents second, so ordering never relies on the provider's
+// `depends_on` wait. A file that does not parse lists nothing, and its env comes
+// up in one piece.
+func (f envFile) toEnv(rel string) *ComposeEnv {
+	env := &ComposeEnv{File: f.file, Project: composeProject(rel, f.id), ID: f.id}
+	raw, err := os.ReadFile(f.file)
 	if err != nil {
-		return nil, nil
+		return env
 	}
-	src := string(raw)
-	return distinct(hostPortVar, src), distinct(anyVar, src)
-}
-
-// profilesHeadRe matches a compose service heading at the canonical 2-space
-// indent: e.g. `  service-json-keys-rest:`.
-var profilesHeadRe = regexp.MustCompile(`^  ([a-zA-Z0-9_-]+):\s*(?:#.*)?$`)
-
-// profilesLineRe matches the inline-list profile line this codebase uses:
-// `    profiles: ["rest"]`. The multi-line YAML list form is unsupported.
-var profilesLineRe = regexp.MustCompile(`^    profiles:\s*\[(.+?)\]\s*(?:#.*)?$`)
-
-// profilesItemRe extracts individual profile names from the inline list,
-// tolerating bare, double- and single-quoted forms.
-var profilesItemRe = regexp.MustCompile(`"([^"]+)"|'([^']+)'|([A-Za-z0-9_-]+)`)
-
-// composeTopLevelRe matches a top-level YAML key at column 0
-// (e.g. `services:`, `volumes:`, `networks:`). Used to enter/leave the
-// services block in the lightweight YAML scan.
-var composeTopLevelRe = regexp.MustCompile(`^[a-zA-Z_]+:\s*(?:#.*)?$`)
-
-// dependsOnHeadRe matches a service's `depends_on:` key at the canonical
-// 4-space indent (one level under the 2-space service heading). It keys on the
-// heading only, not the body, so it catches both the map form
-// (`depends_on:\n  svc:\n    condition: …`) and the short-list form
-// (`depends_on:\n  - svc`).
-var dependsOnHeadRe = regexp.MustCompile(`^    depends_on:`)
-
-// composeServices lists every service name declared under `services:` in a
-// compose file, in source order. Global-mode env-up skips duplicates from it,
-// since a service repo's compose may declare a containerized sibling that is
-// also running from its own repo.
-func composeServices(file string) []string {
-	raw, err := os.ReadFile(file)
+	env.Refs = compose.Refs(string(raw))
+	parsed, err := compose.Parse(raw)
 	if err != nil {
-		return nil
+		return env
 	}
-	var out []string
-	inServices := false
-	for _, line := range strings.Split(string(raw), "\n") {
-		if composeTopLevelRe.MatchString(line) {
-			inServices = strings.HasPrefix(line, "services:")
-			continue
+	env.Services = slices.Sorted(maps.Keys(parsed.Services))
+	for _, name := range env.Services {
+		svc := parsed.Services[name]
+		if len(svc.DependsOn) > 0 {
+			env.Dependents = append(env.Dependents, name)
 		}
-		if !inServices {
-			continue
-		}
-		if m := profilesHeadRe.FindStringSubmatch(line); m != nil {
-			out = append(out, m[1])
-		}
-	}
-	return out
-}
-
-// composeDependents lists the services that declare a `depends_on:` block, in
-// source order, using the same lightweight services-block scan as
-// composeServices. build.composeUpPhased brings a test env up in dependency
-// waves from it — dependency-free services first, dependents second — so
-// ordering never relies on the external provider's `depends_on` wait.
-func composeDependents(file string) []string {
-	raw, err := os.ReadFile(file)
-	if err != nil {
-		return nil
-	}
-	var out []string
-	var svc string
-	inServices := false
-	for _, line := range strings.Split(string(raw), "\n") {
-		if composeTopLevelRe.MatchString(line) {
-			inServices = strings.HasPrefix(line, "services:")
-			svc = ""
-			continue
-		}
-		if !inServices {
-			continue
-		}
-		if m := profilesHeadRe.FindStringSubmatch(line); m != nil {
-			svc = m[1]
-			continue
-		}
-		if svc != "" && dependsOnHeadRe.MatchString(line) {
-			out = append(out, svc)
-			svc = "" // record each service once, even if the scan continues
-		}
-	}
-	return out
-}
-
-// composeProfiles returns a profile-name → compose-service-name map for the
-// inline-list `profiles: ["x"]` form. Used to map a run-target name to the
-// compose service that would run it in dockerized mode.
-func composeProfiles(file string) map[string]string {
-	raw, err := os.ReadFile(file)
-	if err != nil {
-		return nil
-	}
-	out := map[string]string{}
-	var svc string
-	for _, line := range strings.Split(string(raw), "\n") {
-		if m := profilesHeadRe.FindStringSubmatch(line); m != nil {
-			svc = m[1]
-			continue
-		}
-		if m := profilesLineRe.FindStringSubmatch(line); m != nil && svc != "" {
-			for _, it := range profilesItemRe.FindAllStringSubmatch(m[1], -1) {
-				p := it[1]
-				if p == "" {
-					p = it[2]
-				}
-				if p == "" {
-					p = it[3]
-				}
-				if p != "" {
-					out[p] = svc
-				}
+		for _, mapping := range svc.Ports {
+			if port, _, ok := compose.HostPort(mapping); ok && !slices.Contains(env.Ports, port) {
+				env.Ports = append(env.Ports, port)
 			}
 		}
 	}
-	return out
-}
-
-func (f envFile) toEnv(rel string) *ComposeEnv {
-	ports, refs := composeParse(f.file)
-	return &ComposeEnv{
-		File:       f.file,
-		Project:    composeProject(rel, f.id),
-		ID:         f.id,
-		Ports:      ports,
-		Refs:       refs,
-		Services:   composeServices(f.file),
-		Dependents: composeDependents(f.file),
-	}
+	return env
 }
 
 // goTests emits the Go test target(s) for a module at dir.
 func goTests(dir, rel string, envs []envFile) []Target {
-	if !fileExists(filepath.Join(dir, "go.mod")) {
+	if !IsFile(filepath.Join(dir, "go.mod")) {
 		return nil
 	}
-	module := goModuleName(filepath.Join(dir, "go.mod"))
-	if module == "" {
-		module = filepath.Base(dir)
-	}
+	module := goModuleName(dir)
 
 	var goEnvs []envFile
 	for _, e := range envs {
@@ -412,7 +230,7 @@ func goTestPackageDirs(dir string) [][]string {
 				return filepath.SkipDir
 			}
 
-			if path != absRoot && fileExists(filepath.Join(path, "go.mod")) {
+			if path != absRoot && IsFile(filepath.Join(path, "go.mod")) {
 				return filepath.SkipDir
 			}
 
@@ -454,97 +272,34 @@ func goTestPackageDirs(dir string) [][]string {
 // not pkg/go.
 func uncoveredGoSelectors(testPkgs, scoped [][]string) []string {
 	var sels []string
-
 	for _, pkg := range testPkgs {
-		if coveredByScopedPath(pkg, scoped) {
-			continue
-		}
-
-		if len(pkg) == 0 {
+		covered := slices.ContainsFunc(scoped, func(prefix []string) bool {
+			return len(prefix) <= len(pkg) && slices.Equal(pkg[:len(prefix)], prefix)
+		})
+		switch {
+		case covered:
+		case len(pkg) == 0:
 			sels = append(sels, ".")
-
-			continue
+		default:
+			sels = append(sels, "./"+strings.Join(pkg, "/"))
 		}
-
-		sels = append(sels, "./"+strings.Join(pkg, "/"))
 	}
-
-	sort.Strings(sels)
-
+	slices.Sort(sels)
 	return sels
 }
 
-// coveredByScopedPath reports whether any scoped prefix is a leading segment-run
-// of pkg.
-func coveredByScopedPath(pkg []string, scoped [][]string) bool {
-	for _, prefix := range scoped {
-		if hasSegmentPrefix(pkg, prefix) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// hasSegmentPrefix reports whether prefix matches the leading segments of pkg.
-// An empty prefix matches everything, but a scoped env never has one.
-func hasSegmentPrefix(pkg, prefix []string) bool {
-	if len(prefix) > len(pkg) {
-		return false
-	}
-
-	for i, seg := range prefix {
-		if pkg[i] != seg {
-			return false
-		}
-	}
-
-	return true
-}
-
 // pnpmTests emits a target per "test"/"test:*" script, attaching a matching
-// pnpm compose env when one exists.
+// pnpm compose env when one exists: "test" takes the bare pnpm env, "test:rest"
+// takes pnpm.rest.
 func pnpmTests(dir, rel string, envs []envFile) []Target {
-	pkgPath := filepath.Join(dir, "package.json")
-	if !fileExists(pkgPath) {
-		return nil
-	}
-	raw, err := os.ReadFile(pkgPath)
-	if err != nil {
-		return nil
-	}
-	var pkg packageJSON
-	if json.Unmarshal(raw, &pkg) != nil {
-		return nil
-	}
-
-	scripts := make([]string, 0, len(pkg.Scripts))
-	for name := range pkg.Scripts {
-		if pnpmScript(name, testArg) {
-			scripts = append(scripts, name)
-		}
-	}
-	sort.Strings(scripts)
-
+	scripts := pnpmScripts(dir, testArg)
 	targets := make([]Target, 0, len(scripts))
 	for _, s := range scripts {
-		t := Target{
-			Kind:   KindPnpm,
-			Name:   s,
-			RelDir: rel,
-			Dir:    dir,
-			Detail: truncate(pkg.Scripts[s], 60),
-			Cmd:    string(KindPnpm),
-			Args:   []string{runArg, s},
-		}
-		// "test" ↔ pnpm (no path); "test:rest" ↔ pnpm.rest.
-		want := strings.TrimPrefix(s, testArg+":")
+		t := pnpmTarget(dir, rel, s)
+		want := strings.TrimPrefix(s.name, testArg+":")
 		for _, e := range envs {
-			if e.env != string(KindPnpm) {
-				continue
-			}
-			if (s == testArg && len(e.path) == 0) ||
-				(s != testArg && strings.Join(e.path, ":") == want) {
+			if e.env == string(KindPnpm) &&
+				((s.name == testArg && len(e.path) == 0) || (s.name != testArg && strings.Join(e.path, ":") == want)) {
 				t.Env = e.toEnv(rel)
 				t.Detail += "  ·  env " + filepath.Base(e.file)
 				break

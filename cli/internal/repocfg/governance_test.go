@@ -2,30 +2,38 @@ package repocfg_test
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
-
-	"gopkg.in/yaml.v3"
 )
 
+// TestDependabotGovernance runs the auto-approval scripts against a stubbed gh.
+// The engine must also hold Renovate's release age: it triggers on the status
+// event that reports it and reads the statuses the App lacks, since a nested
+// job asking for more than its caller grants fails.
 func TestDependabotGovernance(t *testing.T) {
 	t.Parallel()
-	content, err := os.ReadFile("templates/governance/auto-approve-dependabot.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
 	var workflow struct {
+		On   map[string]any `yaml:"on"`
 		Jobs map[string]struct {
-			Steps []struct {
+			If          string            `yaml:"if"`
+			Permissions map[string]string `yaml:"permissions"`
+			Steps       []struct {
 				ID   string `yaml:"id"`
 				Name string `yaml:"name"`
 				Run  string `yaml:"run"`
 			} `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
-	if err := yaml.Unmarshal(content, &workflow); err != nil {
-		t.Fatal(err)
+	loadWorkflow(t, "auto-approve-dependabot.yaml", &workflow)
+	if _, ok := workflow.On["status"]; !ok {
+		t.Error("auto-approve must trigger on status to approve once renovate/stability-days turns green")
+	}
+	job := workflow.Jobs["auto-approve"]
+	if job.Permissions["statuses"] != "read" {
+		t.Errorf("auto-approve permissions = %v, want statuses: read", job.Permissions)
+	}
+	if !strings.Contains(job.If, "'renovate/stability-days'") || !strings.Contains(job.If, "'success'") {
+		t.Error("auto-approve must only run for the stability status turning green")
 	}
 	scripts := map[string]string{}
 	for _, step := range workflow.Jobs["dependabot"].Steps {
@@ -128,10 +136,6 @@ func TestDependabotGovernance(t *testing.T) {
 // GITHUB_TOKEN pushes a commit that triggers no workflow on master.
 func TestRecoverPRsGovernance(t *testing.T) {
 	t.Parallel()
-	content, err := os.ReadFile("templates/governance/recover-prs.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
 	var workflow struct {
 		On struct {
 			PullRequest struct {
@@ -146,9 +150,7 @@ func TestRecoverPRsGovernance(t *testing.T) {
 			} `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
-	if err := yaml.Unmarshal(content, &workflow); err != nil {
-		t.Fatal(err)
-	}
+	loadWorkflow(t, "recover-prs.yaml", &workflow)
 	if got := strings.Join(workflow.On.PullRequest.Types, ","); got != "dequeued,closed" {
 		t.Errorf("recover-prs pull_request types = %q, want dequeued,closed", got)
 	}
@@ -165,47 +167,12 @@ func TestRecoverPRsGovernance(t *testing.T) {
 	}
 }
 
-// TestAutoApproveHoldsReleaseAge pins what the approval engine needs to enforce
-// Renovate's release age: the status event that reports it, and the statuses
-// read the App lacks. A nested job asking for more than its caller grants fails.
-func TestAutoApproveHoldsReleaseAge(t *testing.T) {
-	t.Parallel()
-	content, err := os.ReadFile("templates/governance/auto-approve-dependabot.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var workflow struct {
-		On   map[string]any `yaml:"on"`
-		Jobs map[string]struct {
-			If          string            `yaml:"if"`
-			Permissions map[string]string `yaml:"permissions"`
-		} `yaml:"jobs"`
-	}
-	if err := yaml.Unmarshal(content, &workflow); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := workflow.On["status"]; !ok {
-		t.Error("auto-approve must trigger on status to approve once renovate/stability-days turns green")
-	}
-	job := workflow.Jobs["auto-approve"]
-	if job.Permissions["statuses"] != "read" {
-		t.Errorf("auto-approve permissions = %v, want statuses: read", job.Permissions)
-	}
-	if !strings.Contains(job.If, "'renovate/stability-days'") || !strings.Contains(job.If, "'success'") {
-		t.Error("auto-approve must only run for the stability status turning green")
-	}
-}
-
 // TestHotfixGovernance pins the two hotfix paths of the caller. A dispatch
 // backports, and a backport merged into a release line cuts the patch. The cut
 // rides pull_request_target, the event GitHub runs from the default branch's
 // copy of the caller, and names its line from the merged pull request's base.
 func TestHotfixGovernance(t *testing.T) {
 	t.Parallel()
-	content, err := os.ReadFile("templates/governance/hotfix.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
 	var workflow struct {
 		On struct {
 			Dispatch struct {
@@ -227,9 +194,7 @@ func TestHotfixGovernance(t *testing.T) {
 			} `yaml:"concurrency"`
 		} `yaml:"jobs"`
 	}
-	if err := yaml.Unmarshal(content, &workflow); err != nil {
-		t.Fatal(err)
-	}
+	loadWorkflow(t, "hotfix.yaml", &workflow)
 	if _, ok := workflow.On.Dispatch.Inputs["fix_refs"]; !ok {
 		t.Error("the dispatch takes no fix_refs input")
 	}
@@ -272,10 +237,6 @@ func TestHotfixGovernance(t *testing.T) {
 // locking an open pull request would block the dependency bots' approval.
 func TestLockClosedGovernance(t *testing.T) {
 	t.Parallel()
-	content, err := os.ReadFile("templates/governance/lock-closed.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
 	type trigger struct {
 		Types []string `yaml:"types"`
 	}
@@ -285,9 +246,7 @@ func TestLockClosedGovernance(t *testing.T) {
 			PullRequest trigger `yaml:"pull_request"`
 		} `yaml:"on"`
 	}
-	if err := yaml.Unmarshal(content, &workflow); err != nil {
-		t.Fatal(err)
-	}
+	loadWorkflow(t, "lock-closed.yaml", &workflow)
 	for event, types := range map[string][]string{"issues": workflow.On.Issues.Types, "pull_request": workflow.On.PullRequest.Types} {
 		if got := strings.Join(types, ","); got != "closed,reopened" {
 			t.Errorf("lock-closed %s types = %q, want closed,reopened", event, got)

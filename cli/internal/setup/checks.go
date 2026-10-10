@@ -42,9 +42,10 @@ func checkGitHubSSH() error {
 		truncate(strings.TrimSpace(string(out)), 100))
 }
 
+// truncate keeps the first maxLen runes of s, marking a cut with "...".
 func truncate(s string, maxLen int) string {
-	if len(s) > maxLen {
-		return s[:maxLen] + "..."
+	if r := []rune(s); len(r) > maxLen {
+		return string(r[:maxLen]) + "..."
 	}
 	return s
 }

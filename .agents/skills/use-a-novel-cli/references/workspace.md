@@ -13,7 +13,8 @@ a-novel core kill [--force]   # graceful shutdown (--force also tears down infra
 a-novel core prepare-reinstall  # used by `a-novel install` — checkpoints + exits
 
 # Workspace tooling (ported from the old sync / bot-token bash scripts, now deleted).
-a-novel core sync                          # clone/ff-pull the curated workspace whitelist
+a-novel core sync                          # clone/ff-pull the curated workspace whitelist, all repos at once
+a-novel core sync -j 4                     # cap how many repos sync concurrently (default: one per CPU)
 a-novel core sync --allow=a-novel-kit/golib  # subset to specific repos
 a-novel core sync --ignore=<org>/<repo>      # skip specific repos
 a-novel core bot-comment <org> <repo> <number> --body <text> [--reply-to <id>]

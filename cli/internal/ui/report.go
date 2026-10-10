@@ -1,81 +1,110 @@
 package ui
 
 import (
+	"cmp"
 	"image/color"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/a-novel-kit/stack/cli/internal/build"
+	"github.com/a-novel-kit/stack/cli/internal/jobs"
 )
 
-// RenderTextReport produces the authoritative, scrollback-safe build report. It
-// never truncates failure output, so it is the copy a user pastes into an issue.
-//
-// It is printed two ways:
-//   - after the interactive TUI tears down, so the full failing logs survive
-//     the tail the in-TUI report shows;
-//   - as the entire output of non-interactive mode (`a-novel build -y`).
-//
-// elapsed is the real wall-clock run time tracked by the runner, shown as
-// "took". Summary.CumulativeDuration overstates the wait under parallelism.
-func RenderTextReport(results []build.Result, aborted bool, elapsed time.Duration, verb Verb) string {
-	s := build.Summarize(results)
+// Report renders a finished batch under title ("TEST", "SYNC"): a headline,
+// outcome counts, coverage when the output carries it, then the full output of
+// every job show selects, so nothing is lost to a truncated view.
+func Report(title string, b Batch, show func(jobs.Result) bool) string {
 	w := termWidth()
-
-	var b strings.Builder
-	b.WriteString("\n")
-
-	headline := styleOK.Render("✓ " + verb.Upper + " PASSED")
-	lead := "Every selected target passed."
-	switch {
-	case aborted:
-		headline = styleWarn.Render("! " + verb.Upper + " ABORTED")
-		lead = "Interrupted before every target finished — results below are partial."
-	case s.Failed > 0:
-		headline = styleCrit.Render("✗ " + verb.Upper + " FAILED")
-		lead = "One or more targets failed. The summary is below; full output for each " +
-			"failure follows so nothing is lost to scrollback."
+	var failed int
+	counts := map[string]int{}
+	var outcomes []string
+	for _, r := range b.Results {
+		if r.Err != nil {
+			failed++
+			continue
+		}
+		status := cmp.Or(r.Status, "passed")
+		if counts[status] == 0 {
+			outcomes = append(outcomes, status)
+		}
+		counts[status]++
 	}
-	b.WriteString(headline + "\n")
-	b.WriteString(para(lead, w) + "\n\n")
 
-	// Headline stats as pills: failed turns critical only when non-zero so a
-	// clean run is calm, a broken one shouts.
+	headline, lead := OK.Render(glyphOK+" "+title+" PASSED"), "Every job succeeded."
+	switch {
+	case b.Aborted:
+		headline, lead = Warn.Render("! "+title+" ABORTED"), "Interrupted before every job finished — results below are partial."
+	case failed > 0:
+		headline, lead = Crit.Render(glyphFail+" "+title+" FAILED"), "One or more jobs failed; their full output follows."
+	}
+
+	var s strings.Builder
+	s.WriteString("\n" + headline + "\n" + para(lead, w) + "\n\n")
+
 	var failColor color.Color = colMuted
-	if s.Failed > 0 {
+	if failed > 0 {
 		failColor = colCrit
 	}
-	b.WriteString(pillRow(
-		pill("passed", strconv.Itoa(s.Passed), colOK),
-		pill("failed", strconv.Itoa(s.Failed), failColor),
-		pill("total", strconv.Itoa(s.Total), colGold),
-		pill("took", elapsed.Round(1e7).String(), colAccent),
-	))
-	b.WriteString("\n\n")
+	if len(outcomes) == 0 {
+		outcomes = []string{"passed"}
+	}
+	pills := make([]string, 0, len(outcomes)+3)
+	for _, o := range outcomes {
+		pills = append(pills, pill(o, strconv.Itoa(counts[o]), colOK))
+	}
+	pills = append(pills,
+		pill("failed", strconv.Itoa(failed), failColor),
+		pill("total", strconv.Itoa(len(b.Results)), colGold),
+		pill("took", b.Elapsed.Round(10*time.Millisecond).String(), colAccent),
+	)
+	s.WriteString(pillRow(pills...) + "\n")
 
-	b.WriteString(section("results", colGold, w) + "\n\n")
-	b.WriteString(resultsTable(results))
-	b.WriteString("\n")
-
-	// Self-gating: empty unless `go test -cover` produced coverage lines.
-	if cv := CoverageView(results, w); cv != "" {
-		b.WriteString("\n" + cv)
+	if cv := CoverageView(b.Results, w); cv != "" {
+		s.WriteString("\n" + cv)
 	}
 
-	if s.Failed > 0 {
-		b.WriteString("\n" + section("failures", colCrit, w) + "\n\n")
-		b.WriteString(para(
-			"Full, untruncated output for each failed target — this is the copy to "+
-				"read or paste into an issue.", w) + "\n")
-		for _, r := range results {
-			if r.Success {
-				continue
-			}
-			// tail <= 0 → full log; this report is the source of truth.
-			b.WriteString("\n" + failurePanel(r, 0, w) + "\n")
+	var shown []jobs.Result
+	for _, r := range b.Results {
+		if show(r) {
+			shown = append(shown, r)
 		}
 	}
+	if len(shown) > 0 {
+		heading := "failures"
+		for _, r := range shown {
+			if r.Err == nil {
+				heading = "output"
+			}
+		}
+		s.WriteString("\n" + section(heading, colGold, w) + "\n")
+		for _, r := range shown {
+			s.WriteString("\n" + outputPanel(r, w) + "\n")
+		}
+	}
+	return s.String()
+}
 
-	return b.String()
+// Failed selects the failed jobs, the usual [Report] filter.
+func Failed(r jobs.Result) bool { return r.Err != nil }
+
+// outputPanel renders one job's full output, its error first, in a card titled
+// with its outcome.
+func outputPanel(r jobs.Result, width int) string {
+	var body strings.Builder
+	if r.Err != nil {
+		body.WriteString(Err.Render("error: "+r.Err.Error()) + "\n\n")
+	}
+	if out := cleanOutput(r.Output); out != "" {
+		body.WriteString(out)
+	} else {
+		body.WriteString(Muted.Render("(no output captured)"))
+	}
+	title, c := glyphOK+" "+r.Name, colOK
+	if r.Err != nil {
+		title, c = glyphFail+" "+r.Name, colErr
+	}
+	if r.Detail != "" {
+		title += "  [" + relLabel(r.Detail) + "]"
+	}
+	return panel(title, c, body.String(), width)
 }

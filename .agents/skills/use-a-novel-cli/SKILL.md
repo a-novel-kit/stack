@@ -92,9 +92,13 @@ and the `run ui` TUI. Everything else runs to completion and returns. Agents, CI
 jobs and scripts drive it like this:
 
 - **`test` / `build`: always pass `-y`.** It skips the picker and runs every
-  discovered target sequentially (CI-safe). Both fall back to that path with no
-  TTY, but pass `-y` explicitly — it states intent and survives a stray PTY.
-  Pair with `--dry-run` to inspect the target list first.
+  discovered target, sequentially unless `-j` sets a limit (CI-safe). Both fall
+  back to that path with no TTY, but pass `-y` explicitly — it states intent and
+  survives a stray PTY. Pair with `--dry-run` to inspect the target list first.
+- **Batch commands print one line per job.** `test`, `build`, `core sync` and
+  `repo update --all` share a parallel runner. Without a TTY, each job prints a
+  line as it starts and as it finishes, never interleaved, and a report with the
+  full output of every failure closes the run.
 
   ```bash
   a-novel test -y --type=go        # all Go tests, no prompt

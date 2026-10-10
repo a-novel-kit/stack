@@ -1,6 +1,7 @@
 package logs
 
 import (
+	"bytes"
 	"io"
 	"sync"
 	"time"
@@ -45,29 +46,15 @@ func (sw *streamWriter) Write(p []byte) (int, error) {
 	now := time.Now()
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
-	// Combine the previous Write's partial with the new bytes, then hand
-	// ownership to buf: the loop below either flushes complete lines or stashes
-	// a new tail back onto sw.partial.
+	// Flush every complete line of the previous partial plus p, then keep the
+	// unterminated tail for the next Write.
 	sw.partial = append(sw.partial, p...)
 	buf := sw.partial
-	sw.partial = nil
-	// Split on newlines; flush each complete line; carry the tail.
-	for {
-		i := -1
-		for j := range buf {
-			if buf[j] == '\n' {
-				i = j
-				break
-			}
-		}
-		if i < 0 {
-			sw.partial = append(sw.partial[:0], buf...)
-			break
-		}
-		line := string(buf[:i])
+	for i := bytes.IndexByte(buf, '\n'); i >= 0; i = bytes.IndexByte(buf, '\n') {
+		sw.flush(Line{Ts: now, Stream: sw.stream, Line: string(buf[:i])})
 		buf = buf[i+1:]
-		sw.flush(Line{Ts: now, Stream: sw.stream, Line: line})
 	}
+	sw.partial = append(sw.partial[:0], buf...)
 	return len(p), nil
 }
 

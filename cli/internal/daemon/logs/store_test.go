@@ -3,6 +3,7 @@ package logs
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -17,8 +18,7 @@ import (
 // adjacent test cannot pick up this directory.
 func withStore(t *testing.T) (*Store, string, *Writer) {
 	t.Helper()
-	tmp := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", tmp)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	s := New()
 	const id = "default/test/x"
 	w, err := s.OpenForWrite(id, "default", "test", "x")
@@ -26,7 +26,6 @@ func withStore(t *testing.T) (*Store, string, *Writer) {
 		t.Fatalf("OpenForWrite: %v", err)
 	}
 	t.Cleanup(func() { _ = w.Close() })
-	t.Cleanup(func() { _ = os.RemoveAll(tmp) })
 	return s, id, w
 }
 
@@ -44,11 +43,8 @@ func TestStore_SubscribeRoundtrip(t *testing.T) {
 	}
 	select {
 	case ln := <-ch:
-		if ln.Line != "hello" {
-			t.Errorf("subscriber line: got %q want hello", ln.Line)
-		}
-		if ln.Stream != StreamStdout {
-			t.Errorf("subscriber stream: got %s want stdout", ln.Stream)
+		if ln.Line != "hello" || ln.Stream != StreamStdout {
+			t.Errorf("subscriber got %q on %s, want hello on stdout", ln.Line, ln.Stream)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("subscriber didn't receive line")
@@ -146,22 +142,36 @@ func TestStore_FullBufferDrops(t *testing.T) {
 // TestStore_NoSubscriberStillWritesFile pins that the no-subscriber path still
 // reaches the file.
 func TestStore_NoSubscriberStillWritesFile(t *testing.T) {
-	s, _, w := withStore(t)
-	_ = s // silence "declared but not used"
+	_, _, w := withStore(t)
 	if _, err := w.Stdout().Write([]byte("orphan\n")); err != nil {
 		t.Fatal(err)
 	}
-	// Find the current.log on disk.
-	tmp := os.Getenv("XDG_STATE_HOME")
-	path := filepath.Join(tmp, "a-novel", "logs", "default", "test", "x", "current.log")
 	// Give the encoder a moment.
 	time.Sleep(50 * time.Millisecond)
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Join(os.Getenv("XDG_STATE_HOME"), "a-novel", "logs", "default", "test", "x", "current.log"))
 	if err != nil {
 		t.Fatalf("read log file: %v", err)
 	}
 	if len(data) == 0 {
 		t.Error("log file is empty after a write")
+	}
+}
+
+// TestStore_ListRunsSkipsMalformedNames covers archive names outside the
+// run-<stamp>.log shape, such as a stray run-x, which once panicked the listing.
+func TestStore_ListRunsSkipsMalformedNames(t *testing.T) {
+	s, _, _ := withStore(t)
+	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "a-novel", "logs", "default", "test", "x")
+	for _, name := range []string{"run-x", "run-", "run-2026-07-01.log", "run-2026-07-02.log", "notes.log"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got := s.ListRuns("default", "test", "x")
+
+	if want := []string{"2026-07-02", "2026-07-01"}; !slices.Equal(got, want) {
+		t.Errorf("ListRuns: got %q, want %q", got, want)
 	}
 }
 

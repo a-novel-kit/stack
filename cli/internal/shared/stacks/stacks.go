@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
 // DefaultName is the stack name used when A_NOVEL_STACKS is unset.
@@ -41,11 +43,11 @@ func Parse(raw string) ([]Stack, error) {
 		if p == "" {
 			continue
 		}
-		colon := strings.IndexByte(p, ':')
-		if colon <= 0 || colon == len(p)-1 {
+		name, path, ok := strings.Cut(p, ":")
+		if !ok || name == "" || path == "" {
 			return nil, fmt.Errorf("%s entry %d: expected name:path, got %q", EnvVar, i+1, p)
 		}
-		name, path := strings.TrimSpace(p[:colon]), strings.TrimSpace(p[colon+1:])
+		name, path = strings.TrimSpace(name), strings.TrimSpace(path)
 		if seen[name] {
 			return nil, fmt.Errorf("%s entry %d: duplicate stack name %q", EnvVar, i+1, name)
 		}
@@ -70,7 +72,7 @@ func ParseEnv() ([]Stack, error) { return Parse(os.Getenv(EnvVar)) }
 func implicitDefault() Stack {
 	return Stack{
 		Name:      DefaultName,
-		Path:      filepath.Join(homeDir(), "git-projects", "a-novel"),
+		Path:      filepath.Join(paths.Home(), "git-projects", "a-novel"),
 		IsDefault: true,
 	}
 }
@@ -79,18 +81,20 @@ func implicitDefault() Stack {
 // everything else is returned unchanged, so a shell-expansion mistake surfaces
 // as a broken path.
 func expandHome(p string) string {
-	if strings.HasPrefix(p, "~/") {
-		return filepath.Join(homeDir(), p[2:])
+	if rest, ok := strings.CutPrefix(p, "~/"); ok {
+		return filepath.Join(paths.Home(), rest)
 	}
 	if p == "~" {
-		return homeDir()
+		return paths.Home()
 	}
 	return p
 }
 
-func homeDir() string {
-	if v := os.Getenv("HOME"); v != "" {
-		return v
+// Default is the default stack, the first entry of $A_NOVEL_STACKS.
+func Default() (Stack, error) {
+	stk, err := ParseEnv()
+	if err != nil {
+		return Stack{}, err
 	}
-	return "/"
+	return stk[0], nil
 }

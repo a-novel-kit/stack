@@ -28,9 +28,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
@@ -38,10 +39,9 @@ import (
 const (
 	// keyLen is the AES-256 key length in bytes.
 	keyLen = 32
-	// dirMode / keyMode are the strict permissions for the secrets dir and the
-	// at-rest files (key + store). 0700 dir, 0600 files: owner-only.
-	dirMode  os.FileMode = 0o700
-	keyMode  os.FileMode = 0o600
+	// dirMode keeps the secrets directory owner-only.
+	dirMode os.FileMode = 0o700
+	// fileMode keeps the at-rest files, the key and the store, owner-only.
 	fileMode os.FileMode = 0o600
 )
 
@@ -89,7 +89,7 @@ func initAt(root string) (bool, error) {
 	if _, err := rand.Read(key); err != nil {
 		return false, fmt.Errorf("secrets: generate key: %w", err)
 	}
-	if err := os.WriteFile(keyPath, key, keyMode); err != nil {
+	if err := os.WriteFile(keyPath, key, fileMode); err != nil {
 		return false, fmt.Errorf("secrets: write key: %w", err)
 	}
 	return true, nil
@@ -122,7 +122,6 @@ func openAt(root string) (*Store, error) {
 func (st *Store) load() error {
 	raw, err := os.ReadFile(filepath.Join(st.root, storeFile))
 	if errors.Is(err, os.ErrNotExist) {
-		st.values = map[string]string{}
 		return nil
 	}
 	if err != nil {
@@ -160,12 +159,7 @@ func (st *Store) Remove(id string) {
 
 // List returns the sorted secret IDs only — never the values.
 func (st *Store) List() []string {
-	ids := make([]string, 0, len(st.values))
-	for id := range st.values {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	return ids
+	return slices.Sorted(maps.Keys(st.values))
 }
 
 // Save encrypts the in-memory map and writes it atomically (temp file + rename)
@@ -183,7 +177,7 @@ func (st *Store) Save() error {
 	if err := os.MkdirAll(st.root, dirMode); err != nil {
 		return fmt.Errorf("secrets: create %s: %w", st.root, err)
 	}
-	return writeFileAtomic(filepath.Join(st.root, storeFile), blob, fileMode)
+	return writeFileAtomic(filepath.Join(st.root, storeFile), blob)
 }
 
 // encrypt seals plain with AES-256-GCM under key, returning `nonce || ciphertext`.
@@ -233,33 +227,29 @@ func newGCM(key []byte) (cipher.AEAD, error) {
 	return gcm, nil
 }
 
-// writeFileAtomic writes data to a temp file in the same directory and renames
-// it over path, so a crash mid-write never leaves a half-written store. The temp
-// file is created at the target mode and removed if the rename fails.
-func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".store-*.tmp")
+// writeFileAtomic writes data at fileMode to a temp file in the same directory
+// and renames it over path, so a crash mid-write never leaves a half-written
+// store. A failed write removes the temp file.
+func writeFileAtomic(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".store-*.tmp")
 	if err != nil {
 		return fmt.Errorf("secrets: create temp store: %w", err)
 	}
-	tmpName := tmp.Name()
-	cleanup := func() { _ = os.Remove(tmpName) }
-	if err := tmp.Chmod(mode); err != nil {
+	// Both calls are no-ops once the file is closed and renamed.
+	defer func() {
 		_ = tmp.Close()
-		cleanup()
+		_ = os.Remove(tmp.Name())
+	}()
+	if err := tmp.Chmod(fileMode); err != nil {
 		return fmt.Errorf("secrets: chmod temp store: %w", err)
 	}
 	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		cleanup()
 		return fmt.Errorf("secrets: write temp store: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		cleanup()
 		return fmt.Errorf("secrets: close temp store: %w", err)
 	}
-	if err := os.Rename(tmpName, path); err != nil {
-		cleanup()
+	if err := os.Rename(tmp.Name(), path); err != nil {
 		return fmt.Errorf("secrets: finalize store: %w", err)
 	}
 	return nil

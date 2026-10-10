@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
@@ -24,20 +25,17 @@ import (
 //     failed (caller must re-start infra or fix the underlying issue).
 //   - long-runner target: must already be running. A long-runner is never
 //     auto-started; that stays an explicit user action.
-func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *discovery.Service, oneShotsMode Mode, env []string) error {
-	if len(t.DependsOn) == 0 {
-		return nil
-	}
+func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *discovery.Service, oneShotsMode anovelv1.Mode) error {
 	for _, depName := range t.DependsOn {
 		// Classify the dep against the service's discovered targets and
 		// infra.
-		if isInfra(svc, depName) {
-			if err := r.ensureInfraReady(ctx, svc, oneShotsMode, env); err != nil {
+		if svc.FindInfra(depName) != nil {
+			if err := r.ensureInfraReady(ctx, svc, oneShotsMode); err != nil {
 				return fmt.Errorf("infra dep %s: %w", depName, err)
 			}
 			continue
 		}
-		if depTarget := findTarget(svc, depName); depTarget != nil {
+		if depTarget := svc.FindTargetByComposeName(depName); depTarget != nil {
 			if depTarget.Kind == discovery.TargetKindOneShot {
 				if err := r.ensureOneShotSatisfied(ctx, svc, depTarget, oneShotsMode); err != nil {
 					return err
@@ -54,11 +52,11 @@ func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *
 			// For container long-runners with a healthcheck, require
 			// healthy. go-exec or no-healthcheck containers count as
 			// ready when running.
-			if inst.Mode == ModeContainer && depTarget.Kind == discovery.TargetKindLongRunner {
+			if inst.Mode == anovelv1.Mode_MODE_CONTAINER && depTarget.Kind == discovery.TargetKindLongRunner {
 				if inst.Health == anovelv1.Health_HEALTH_UNHEALTHY || inst.Health == anovelv1.Health_HEALTH_STARTING {
 					return fmt.Errorf(
 						"long-runner dep %s/%s is %s — wait for it to become healthy",
-						svc.Name, depTarget.Name, healthLabel(inst.Health))
+						svc.Name, depTarget.Name, strings.ToLower(strings.TrimPrefix(inst.Health.String(), "HEALTH_")))
 				}
 			}
 			continue
@@ -72,17 +70,17 @@ func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *
 
 // ensureInfraReady triggers StartInfra if the service's session isn't Up.
 // Idempotent — StartInfra is itself a no-op when already running.
-func (r *Runner) ensureInfraReady(ctx context.Context, svc *discovery.Service, oneShotsMode Mode, env []string) error {
+func (r *Runner) ensureInfraReady(ctx context.Context, svc *discovery.Service, oneShotsMode anovelv1.Mode) error {
 	if sess, ok := r.InfraSession(svc.Stack, svc.Name); ok && sess.Up {
 		return nil
 	}
-	return r.StartInfra(ctx, svc.Stack, svc.Name, oneShotsMode, env)
+	return r.StartInfra(ctx, svc.Stack, svc.Name, oneShotsMode)
 }
 
 // ensureOneShotSatisfied verifies the one-shot has succeeded in the
 // current infra session, OR runs it now. Refuses-with-hint if a previous
 // run failed (caller must fix the failure and re-run infra).
-func (r *Runner) ensureOneShotSatisfied(ctx context.Context, svc *discovery.Service, t *discovery.Target, mode Mode) error {
+func (r *Runner) ensureOneShotSatisfied(ctx context.Context, svc *discovery.Service, t *discovery.Target, mode anovelv1.Mode) error {
 	sess, ok := r.InfraSession(svc.Stack, svc.Name)
 	if !ok || !sess.Up {
 		return fmt.Errorf("one-shot dep %s/%s requires infra up — call `a-novel run service infra start %s` first",
@@ -106,38 +104,4 @@ func (r *Runner) ensureOneShotSatisfied(ctx context.Context, svc *discovery.Serv
 		s.OneShotResults[t.Name] = anovelv1.ExitReason_EXIT_REASON_SUCCESS
 	}
 	return nil
-}
-
-// isInfra reports whether `name` is one of the service's infra entries.
-func isInfra(svc *discovery.Service, name string) bool {
-	for _, in := range svc.Infra {
-		if in.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-// findTarget returns the target with compose-name `name`, or nil.
-func findTarget(svc *discovery.Service, name string) *discovery.Target {
-	for _, t := range svc.Targets {
-		if t.ComposeName == name {
-			return t
-		}
-	}
-	return nil
-}
-
-// healthLabel renders a Health enum for error messages.
-func healthLabel(h anovelv1.Health) string {
-	switch h {
-	case anovelv1.Health_HEALTH_HEALTHY:
-		return pmHealthHealthy
-	case anovelv1.Health_HEALTH_UNHEALTHY:
-		return pmHealthUnhealthy
-	case anovelv1.Health_HEALTH_STARTING:
-		return pmHealthStarting
-	default:
-		return "unknown"
-	}
 }

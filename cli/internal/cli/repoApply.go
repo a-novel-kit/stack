@@ -1,0 +1,757 @@
+package cli
+
+import (
+	"crypto/sha1"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"maps"
+	"net/http"
+	"net/url"
+	"path"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+
+	"golang.org/x/mod/semver"
+
+	"github.com/a-novel-kit/stack/cli/internal/repocfg"
+)
+
+// applyPlan executes every operation in a plan against GitHub via `gh`,
+// printing one line per outcome. Managed files land before rulesets so a new
+// repository never requires checks whose workflow callers are still absent.
+// Independent operations continue after failures, but rulesets are skipped
+// when managed-file staging or sync fails.
+func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
+	org, repo, branch := t.Org, t.Repo, t.DefaultBranch
+	var failures []string
+	note := func(label, detail string, err error) {
+		mark := "✓"
+		if err != nil {
+			mark = "✗"
+			if detail == "" {
+				detail = firstLine(err.Error())
+			}
+			failures = append(failures, label+": "+detail)
+		}
+		line := "  " + mark + " " + label
+		if detail != "" {
+			line += " — " + detail
+		}
+		_, _ = fmt.Fprintln(out, line)
+	}
+	// The live rulesets are read once: a reconcile only adds kept rulesets, so
+	// the prune's candidates are fixed before the first write.
+	rulesets := sync.OnceValues(func() (map[string]string, error) { return liveRulesets(org, repo) })
+
+	var staged []contentChange
+	managedFilesFailed := false
+	flushStaged := func() bool {
+		if len(staged) == 0 {
+			return true
+		}
+		detail, err := commitSync(org, repo, branch, staged)
+		if err == nil {
+			for _, change := range staged {
+				note(change.path, change.outcome, nil)
+			}
+		}
+		note("sync commit", detail, err)
+		staged = nil
+		return err == nil
+	}
+	for _, op := range plan.Ops {
+		if op.RulesetName != "" || op.PruneRulesets {
+			if !flushStaged() {
+				managedFilesFailed = true
+			}
+			if managedFilesFailed {
+				note(op.Title(), "skipped because managed-file sync failed", errSkipped)
+				continue
+			}
+		}
+		switch {
+		case op.PruneRulesets:
+			detail, err := pruneRulesets(org, repo, rulesets, op)
+			note("rulesets (prune)", detail, err)
+		case op.RulesetName != "":
+			detail, err := applyRuleset(op, rulesets)
+			note("ruleset "+op.RulesetName, detail, err)
+		case op.Method == http.MethodDelete && strings.Contains(op.Path, "/contents/"):
+			change, unchanged, err := stageContentDeletion(op)
+			switch {
+			case err != nil:
+				managedFilesFailed = true
+				note(shortPath(op.Path), "", err)
+			case unchanged:
+				note(shortPath(op.Path), opUnchanged, nil)
+			default:
+				staged = append(staged, change)
+			}
+		case op.Content != "":
+			changes, unchanged, err := stageContents(op)
+			if err != nil {
+				managedFilesFailed = true
+				note(shortPath(op.Path), "", err)
+				continue
+			}
+			if unchanged {
+				note(shortPath(op.Path), opUnchanged, nil)
+			}
+			staged = append(staged, changes...)
+		case strings.HasSuffix(op.Path, "/vulnerability-alerts"):
+			detail, err := applyVulnerabilityAlerts(op)
+			note("Dependabot alerts", detail, err)
+		case strings.HasSuffix(op.Path, "/pages"):
+			detail, err := applyPages(op)
+			note("pages", detail, err)
+		case strings.HasSuffix(op.Path, "/code-scanning/default-setup"):
+			detail, err := applyCodeScanning(op)
+			note("code scanning", detail, err)
+		case strings.HasSuffix(op.Path, "/code-quality/setup"):
+			detail, err := applyCodeQuality(op)
+			note("code quality", detail, err)
+		case strings.HasSuffix(op.Path, "/labels"):
+			detail, err := applyLabels(org, repo, op)
+			note("labels", detail, err)
+		default: // settings PATCH
+			note("settings ("+op.Method+" "+shortPath(op.Path)+")", "", applySettings(op))
+		}
+	}
+
+	// Plans without rulesets still flush their managed files at the end.
+	_ = flushStaged()
+
+	if len(failures) > 0 {
+		return fmt.Errorf("%d operation(s) failed:\n  - %s", len(failures), strings.Join(failures, "\n  - "))
+	}
+	return nil
+}
+
+// errSkipped marks an operation applyPlan did not attempt.
+var errSkipped = errors.New("skipped")
+
+// applySettings PATCHes the repo settings. The a-novel org enforces
+// web_commit_signoff_required org-wide, which locks the repo-level field: a
+// PATCH that includes it is rejected with 422 even when the value matches.
+// Detect that and retry once without the field.
+func applySettings(op repocfg.Op) error {
+	body, ok := op.Body.(map[string]any)
+	if !ok {
+		return fmt.Errorf("settings body is %T, want map", op.Body)
+	}
+	if err := ghJSON("PATCH", op.Path, body); err != nil {
+		if isSignoffLocked(err) {
+			retry := maps.Clone(body)
+			delete(retry, "web_commit_signoff_required")
+			return ghJSON("PATCH", op.Path, retry)
+		}
+		return err
+	}
+	return nil
+}
+
+// applyRuleset reconciles a ruleset by name: PUT when one with the same name
+// already exists, POST otherwise, so a ruleset is never duplicated. The plan's
+// prune op owns removal (see pruneRulesets).
+func applyRuleset(op repocfg.Op, live func() (map[string]string, error)) (string, error) {
+	body, ok := op.Body.(*repocfg.APIRuleset)
+	if !ok {
+		return "", fmt.Errorf("ruleset body is %T, want *repocfg.APIRuleset", op.Body)
+	}
+	ids, err := live()
+	if err != nil {
+		return "", err
+	}
+	if id := ids[op.RulesetName]; id != "" {
+		if err := ghJSON("PUT", op.Path+"/"+id, body); err != nil {
+			return "", err
+		}
+		return opUpdated, nil
+	}
+	if err := ghJSON("POST", op.Path, body); err != nil {
+		return "", err
+	}
+	return opCreated, nil
+}
+
+// contentChange is one staged managed-file write, applied as part of the
+// repo's single sync commit.
+type contentChange struct {
+	path    string // repo-relative file path
+	content string // new file text; unused for a deletion
+	outcome string // opCreated, opUpdated or opDeleted
+}
+
+// codeownersName is the CODEOWNERS file name, at the repo root (where a stray
+// copy is deleted from) and under .github/ (where the managed copy lives).
+const codeownersName = "CODEOWNERS"
+
+// stageContents turns a managed-file op into the changes the sync commit must
+// carry. unchanged reports that the file already matches the desired content,
+// so nothing is staged for it and a sync that changes nothing commits nothing.
+//
+// A stray root CODEOWNERS is
+// staged as a deletion — GitHub honors the .github/ copy — even when that copy
+// is itself unchanged, so a repo never carries two. For a file that pins
+// a-novel-kit/workflows actions, deployed pins newer than the template's
+// survive (see preserveNewerPins).
+func stageContents(op repocfg.Op) ([]contentChange, bool, error) {
+	var changes []contentChange
+	if strings.HasSuffix(op.Path, "/contents/.github/"+codeownersName) {
+		rootPath := strings.Replace(op.Path, "/contents/.github/"+codeownersName, "/contents/"+codeownersName, 1)
+		if rootSHA, shaErr := contentSHA(rootPath); shaErr == nil && rootSHA != "" {
+			changes = append(changes, contentChange{path: codeownersName, outcome: opDeleted})
+		}
+	}
+
+	// Pin-bearing files are compared against the deployed text, at the cost of
+	// one extra read, so a newer deployed pin survives; everything else takes
+	// the cheaper sha-only path.
+	desired := op.Content
+	var sha string
+	if workflowsPinRe.MatchString(op.Content) {
+		deployed, deployedSHA, err := contentText(op.Path)
+		if err != nil {
+			return nil, false, err
+		}
+		if deployed != "" {
+			desired = preserveNewerPins(op.Content, deployed)
+		}
+		sha = deployedSHA
+	} else {
+		s, err := contentSHA(op.Path)
+		if err != nil {
+			return nil, false, err
+		}
+		sha = s
+	}
+
+	if sha == blobSHA(desired) {
+		return changes, true, nil
+	}
+	outcome := opCreated
+	if sha != "" {
+		outcome = opUpdated
+	}
+	return append(changes, contentChange{path: shortPath(op.Path), content: desired, outcome: outcome}), false, nil
+}
+
+// stageContentDeletion stages a managed file only when it exists.
+func stageContentDeletion(op repocfg.Op) (contentChange, bool, error) {
+	sha, err := contentSHA(op.Path)
+	if err != nil {
+		return contentChange{}, false, err
+	}
+	if sha == "" {
+		return contentChange{}, true, nil
+	}
+	return contentChange{path: shortPath(op.Path), outcome: opDeleted}, false, nil
+}
+
+// syncCommitQuery applies every staged change as a single commit on the
+// branch. createCommitOnBranch signs the commit as GitHub (verified) and
+// rejects the write with STALE_DATA when the branch tip no longer matches
+// expectedHeadOid.
+const syncCommitQuery = `mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }`
+
+// commitSync commits the staged changes to the branch in one
+// createCommitOnBranch mutation and returns the short commit id.
+func commitSync(org, repo, branch string, changes []contentChange) (string, error) {
+	headline, body := syncCommitMessage(changes)
+	// The mutation accepts [], so both slices start empty.
+	additions, deletions := []map[string]string{}, []map[string]string{}
+	for _, change := range changes {
+		if change.outcome == opDeleted {
+			deletions = append(deletions, map[string]string{keyPath: change.path})
+			continue
+		}
+		additions = append(additions, map[string]string{
+			keyPath:    change.path,
+			"contents": base64.StdEncoding.EncodeToString([]byte(change.content)),
+		})
+	}
+
+	// One retry when the branch tip moves between the oid read and the commit
+	// (STALE_DATA). repocfg is the only writer of the staged files, so a moved
+	// tip means unrelated commits landed — the staged content stays valid.
+	for attempt := 0; ; attempt++ {
+		oid, err := branchHeadOid(org, repo, branch)
+		if err != nil {
+			// A freshly created repo has no commit, so createCommitOnBranch has
+			// no branch to build on (a ref read answers 409 "empty"). Seed the
+			// first commit via the Contents API, then land the rest here.
+			if isEmptyRepo(err) {
+				return bootstrapEmpty(org, repo, branch, changes)
+			}
+			return "", err
+		}
+		payload, err := json.Marshal(map[string]any{
+			"query": syncCommitQuery,
+			"variables": map[string]any{"input": map[string]any{
+				"branch":          map[string]string{"repositoryNameWithOwner": org + "/" + repo, "branchName": branch},
+				"expectedHeadOid": oid,
+				"message":         map[string]string{"headline": headline, "body": body},
+				"fileChanges":     map[string]any{"additions": additions, "deletions": deletions},
+			}},
+		})
+		if err != nil {
+			return "", err
+		}
+		out, err := ghRun(string(payload), "api", "graphql",
+			"--jq", ".data.createCommitOnBranch.commit.oid", "--input", "-")
+		switch {
+		case err == nil:
+			return shortOid(out), nil
+		case isStaleHead(out, err) && attempt == 0:
+			continue
+		case isWorkflowScope(err):
+			return "needs the `workflow` token scope (gh auth refresh -s workflow)", err
+		default:
+			return "", err
+		}
+	}
+}
+
+// bootstrapEmpty seeds a repository that has no commits yet. Both
+// createCommitOnBranch and the Git Data API (blobs/trees/commits) build on an
+// existing object store and 409 on an empty repo, so the initial commit has to
+// come from the Contents API — the one endpoint that creates a repo's first
+// commit and its default branch. It seeds the first managed file that way (a
+// GitHub-verified commit, so required_signatures is satisfied), then lands any
+// remaining files through the normal createCommitOnBranch path now that the
+// branch exists. Deletions are dropped: an empty repo has nothing to remove,
+// and the staging pass never produces one against a repo with no files.
+func bootstrapEmpty(org, repo, branch string, changes []contentChange) (string, error) {
+	adds := make([]contentChange, 0, len(changes))
+	for _, change := range changes {
+		if change.outcome != opDeleted {
+			adds = append(adds, change)
+		}
+	}
+	if len(adds) == 0 {
+		return "", nil
+	}
+	seeded, err := putContent(org, repo, branch, adds[0])
+	if err != nil {
+		return "", fmt.Errorf("bootstrap %s: %w", adds[0].path, err)
+	}
+	if len(adds) == 1 {
+		return seeded, nil
+	}
+	// The branch now exists; the rest land in one normal sync commit.
+	return commitSync(org, repo, branch, adds[1:])
+}
+
+// putContent creates or updates a single file through the Contents API and
+// returns the short id of the commit it makes. On an empty repository this is
+// the call that lays down the initial commit and the default branch; the
+// resulting commit is GitHub-verified.
+func putContent(org, repo, branch string, change contentChange) (string, error) {
+	headline, body := syncCommitMessage([]contentChange{change})
+	payload, err := json.Marshal(map[string]string{
+		"message": headline + "\n\n" + body,
+		"content": base64.StdEncoding.EncodeToString([]byte(change.content)),
+		"branch":  branch,
+	})
+	if err != nil {
+		return "", err
+	}
+	out, err := ghRun(string(payload), "api", "-X", "PUT",
+		fmt.Sprintf("repos/%s/%s/contents/%s", org, repo, change.path),
+		"--jq", ".commit.sha", "--input", "-")
+	if err != nil {
+		return "", err
+	}
+	return shortOid(out), nil
+}
+
+// syncCommitMessage derives the sync commit's headline and body from the
+// staged changes: the headline names the touched files (or counts them when
+// the names would overflow a 72-char subject), the body is the per-file
+// manifest plus a stable marker line history stays greppable by.
+func syncCommitMessage(changes []contentChange) (string, string) {
+	names := make([]string, len(changes))
+	for i, change := range changes {
+		names[i] = strings.TrimSuffix(path.Base(change.path), path.Ext(change.path))
+	}
+	headline := "ci: sync managed config (" + strings.Join(names, ", ") + ")"
+	if len(headline) > 72 {
+		headline = fmt.Sprintf("ci: sync managed config (%d files)", len(changes))
+	}
+	var body strings.Builder
+	for _, change := range changes {
+		fmt.Fprintf(&body, "%s %s\n", change.outcome, change.path)
+	}
+	body.WriteString("\nManaged by a-novel repo sync.")
+	return headline, body.String()
+}
+
+// branchHeadOid returns the commit id at the tip of the branch.
+func branchHeadOid(org, repo, branch string) (string, error) {
+	out, err := gh("api", fmt.Sprintf("repos/%s/%s/git/ref/heads/%s", org, repo, branch), "--jq", ".object.sha")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// applyCodeScanning turns CodeQL default setup off. Static analysis is the
+// lint-semgrep and scan-secrets jobs, which report as ordinary required checks.
+// Leaving default setup reachable would let an org-level toggle switch scanning
+// back on unnoticed. Reasserting its current state is idempotent.
+func applyCodeScanning(op repocfg.Op) (string, error) {
+	if err := ghJSON(http.MethodPatch, op.Path, op.Body); err != nil {
+		return "", err
+	}
+	return "default setup off", nil
+}
+
+// applyCodeQuality reconciles the GitHub Code Quality setup state. It writes
+// only on a change: an update starts a setup run, so reasserting a matching
+// state would spend one for nothing.
+func applyCodeQuality(op repocfg.Op) (string, error) {
+	body, ok := op.Body.(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("code quality body is %T, want map", op.Body)
+	}
+	current, err := gh("api", op.Path, "--jq", ".state")
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(current) == body["state"] {
+		return opUnchanged, nil
+	}
+	if err := ghJSON(http.MethodPatch, op.Path, body); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%v", body["state"]), nil
+}
+
+// applyPages reconciles the Pages site. A missing site is already disabled; an
+// existing site reported by POST is already enabled. Other errors still fail.
+func applyPages(op repocfg.Op) (string, error) {
+	switch op.Method {
+	case http.MethodPost:
+		if err := ghJSON(op.Method, op.Path, op.Body); err != nil {
+			if isAlreadyExists(err) {
+				return "already enabled", nil
+			}
+			return "", err
+		}
+		return "enabled", nil
+	case http.MethodDelete:
+		if _, err := gh("api", "-X", op.Method, op.Path); err != nil {
+			if isNotFound(err) {
+				return "already disabled", nil
+			}
+			return "", err
+		}
+		return "disabled", nil
+	default:
+		return "", fmt.Errorf("unsupported Pages method %q", op.Method)
+	}
+}
+
+// applyVulnerabilityAlerts reconciles Dependabot alerts through their
+// bodyless enable/disable endpoint. Both operations are safe to repeat.
+func applyVulnerabilityAlerts(op repocfg.Op) (string, error) {
+	if op.Method != http.MethodPut && op.Method != http.MethodDelete {
+		return "", fmt.Errorf("unsupported Dependabot alerts method %q", op.Method)
+	}
+	if _, err := gh("api", "-X", op.Method, op.Path); err != nil {
+		if op.Method == http.MethodDelete && isNotFound(err) {
+			return "already disabled", nil
+		}
+		return "", err
+	}
+	if op.Method == http.MethodPut {
+		return "enabled", nil
+	}
+	return "disabled", nil
+}
+
+// applyLabels reconciles a repo's labels against the canonical set: every
+// `ensure` label is created, or PATCHed when its color / description drifts;
+// every `retire` label is deleted. Labels in neither list are left untouched, so
+// a repo's incidental labels survive.
+func applyLabels(org, repo string, op repocfg.Op) (string, error) {
+	cfg, ok := op.Body.(*repocfg.LabelsConfig)
+	if !ok {
+		return "", fmt.Errorf("labels body is %T, want *repocfg.LabelsConfig", op.Body)
+	}
+	existing, err := listLabels(org, repo)
+	if err != nil {
+		return "", err
+	}
+	base := fmt.Sprintf("repos/%s/%s/labels", org, repo)
+	var created, updated, retired int
+	for _, l := range cfg.Ensure {
+		switch cur, found := existing[l.Name]; {
+		case !found:
+			if err := ghJSON("POST", base, map[string]any{
+				"name": l.Name, "color": l.Color, keyDescription: l.Description,
+			}); err != nil {
+				return "", err
+			}
+			created++
+		case cur.Color != l.Color || cur.Description != l.Description:
+			if err := ghJSON("PATCH", base+"/"+url.PathEscape(l.Name), map[string]any{
+				"new_name": l.Name, "color": l.Color, keyDescription: l.Description,
+			}); err != nil {
+				return "", err
+			}
+			updated++
+		}
+	}
+	for _, name := range cfg.Retire {
+		if _, found := existing[name]; found {
+			if _, err := gh("api", "-X", "DELETE", base+"/"+url.PathEscape(name)); err != nil {
+				return "", err
+			}
+			retired++
+		}
+	}
+	return fmt.Sprintf("%d created, %d updated, %d retired", created, updated, retired), nil
+}
+
+// ghLabel is the subset of a GitHub label object we reconcile against.
+type ghLabel struct {
+	Name        string `json:"name"`
+	Color       string `json:"color"`
+	Description string `json:"description"`
+}
+
+// listLabels returns a repo's current labels keyed by name. Repos carry far
+// fewer than 100 labels, so a single page is enough — no pagination.
+func listLabels(org, repo string) (map[string]ghLabel, error) {
+	out, err := gh("api", fmt.Sprintf("repos/%s/%s/labels?per_page=100", org, repo))
+	if err != nil {
+		return nil, err
+	}
+	var labels []ghLabel
+	if err := json.Unmarshal([]byte(out), &labels); err != nil {
+		return nil, fmt.Errorf("parse labels: %w", err)
+	}
+	m := make(map[string]ghLabel, len(labels))
+	for _, l := range labels {
+		m[l.Name] = l
+	}
+	return m, nil
+}
+
+// liveRulesets maps the repo's current ruleset names to their ids.
+func liveRulesets(org, repo string) (map[string]string, error) {
+	out, err := gh("api", fmt.Sprintf("repos/%s/%s/rulesets", org, repo),
+		"--jq", `.[]|"\(.name)\t\(.id)"`)
+	if err != nil {
+		return nil, err
+	}
+	live := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		name, id, ok := strings.Cut(line, "\t")
+		if !ok {
+			continue
+		}
+		live[name] = id
+	}
+	return live, nil
+}
+
+// pruneRulesets reconciles the repo's ruleset set: every live ruleset the plan
+// did not name is deleted.
+//
+// This is what keeps repo config derived. The desired set follows entirely
+// from the class preset, the org profile and code-driven discovery, so
+// anything else on the repo is drift — a ruleset this version no longer ships,
+// or one added by hand in the UI — and a reconcile removes it.
+func pruneRulesets(org, repo string, rulesets func() (map[string]string, error), op repocfg.Op) (string, error) {
+	live, err := rulesets()
+	if err != nil {
+		return "", err
+	}
+	dropped := make([]string, 0, len(live))
+	for name, id := range live {
+		if slices.Contains(op.KeepRulesets, name) {
+			continue
+		}
+		if _, err := gh("api", "-X", "DELETE", fmt.Sprintf("repos/%s/%s/rulesets/%s", org, repo, id)); err != nil {
+			return "", fmt.Errorf("delete ruleset %q: %w", name, err)
+		}
+		dropped = append(dropped, name)
+	}
+	if len(dropped) == 0 {
+		return opUnchanged, nil
+	}
+	slices.Sort(dropped)
+	return opDeleted + " " + strings.Join(dropped, ", "), nil
+}
+
+// pruneImpact names the rulesets a plan's prune op would delete.
+//
+// The plan is computed offline, so the op itself can only state what survives,
+// and "keep only: master, require-approval, tags" reads the same whether it
+// removes nothing or strips a repo of every protection it has. A preview of
+// the one destructive operation has to name its casualties, so this resolves
+// them live. A read failure is reported as UNRESOLVED, because an operator who
+// sees "none" will confirm without looking.
+func pruneImpact(t *repocfg.RepoTarget, plan *repocfg.Plan) string {
+	i := slices.IndexFunc(plan.Ops, func(op repocfg.Op) bool { return op.PruneRulesets })
+	if i < 0 {
+		return ""
+	}
+	live, err := liveRulesets(t.Org, t.Repo)
+	if err != nil {
+		return "# rulesets to delete: UNRESOLVED — " + err.Error()
+	}
+	var drop []string
+	for name := range live {
+		if !slices.Contains(plan.Ops[i].KeepRulesets, name) {
+			drop = append(drop, name)
+		}
+	}
+	if len(drop) == 0 {
+		return "# rulesets to delete: none"
+	}
+	slices.Sort(drop)
+	return "# rulesets to DELETE: " + strings.Join(drop, ", ")
+}
+
+// outcome labels for staged managed-file changes.
+const (
+	opCreated   = "created"
+	opUpdated   = "updated"
+	opUnchanged = "unchanged"
+	opDeleted   = "deleted"
+)
+
+// keyPath is the JSON/tree "path" field name and encodingBase64 the blob
+// encoding literal, hoisted so their repeated use across the sync and bootstrap
+// paths satisfies goconst.
+const (
+	keyPath        = "path"
+	encodingBase64 = "base64"
+)
+
+// keyDescription is the JSON "description" field name, a constant so the
+// package's repeated use of it satisfies goconst.
+const keyDescription = "description"
+
+// contentSHA returns the blob sha of an existing file at path, or "" when the
+// file does not exist yet (a 404, the create case). Only a 404 reads as the
+// create case. Any other error — auth, network, rate limit — is returned to
+// the caller.
+func contentSHA(path string) (string, error) {
+	out, err := gh("api", path, "--jq", ".sha")
+	if err != nil {
+		if isNotFound(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// ghContent is the subset of the contents API's file object we read: the blob
+// sha and the base64-encoded content.
+type ghContent struct {
+	SHA      string `json:"sha"`
+	Content  string `json:"content"`
+	Encoding string `json:"encoding"`
+}
+
+// contentText returns the decoded text and blob sha of an existing file at
+// path, or ("", "", nil) when it does not exist yet (a 404). Like contentSHA,
+// any other error is propagated. An encoding the contents API does not base64
+// — files over 1MB use a separate blob endpoint — yields ("", sha, nil); the
+// managed files are a few KB, so that is a safe no-splice fallback.
+func contentText(path string) (string, string, error) {
+	out, err := gh("api", path)
+	if err != nil {
+		if isNotFound(err) {
+			return "", "", nil
+		}
+		return "", "", err
+	}
+	var obj ghContent
+	if err := json.Unmarshal([]byte(out), &obj); err != nil {
+		return "", "", fmt.Errorf("parse contents %s: %w", path, err)
+	}
+	if obj.Encoding != encodingBase64 {
+		return "", obj.SHA, nil
+	}
+	// The contents API wraps its base64 at 60 columns; strip the newlines the
+	// standard decoder rejects.
+	raw, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(obj.Content, "\n", ""))
+	if err != nil {
+		return "", "", fmt.Errorf("decode contents %s: %w", path, err)
+	}
+	return string(raw), obj.SHA, nil
+}
+
+// workflowsPinRe matches an a-novel-kit/workflows action pin, capturing the
+// action sub-path and the exact vX.Y.Z tag: e.g.
+// `a-novel-kit/workflows/generic-actions/merge-gate@v1.14.0` →
+// ("generic-actions/merge-gate", "v1.14.0").
+var workflowsPinRe = regexp.MustCompile(`a-novel-kit/workflows/([^@\s"']+)@(v\d+\.\d+\.\d+)`)
+
+// preserveNewerPins rewrites each a-novel-kit/workflows pin in desired to the
+// version the deployed file already carries whenever that deployed version is
+// a higher semver, matched by action sub-path. It stops `repo update` from
+// downgrading a pin Renovate has already advanced on the deployed caller while
+// the CLI template lags a workflows release. Pins only move forward, and every
+// other byte of the template is left intact so a genuine template edit still
+// lands.
+func preserveNewerPins(desired, deployed string) string {
+	deployedVers := map[string]string{}
+	for _, m := range workflowsPinRe.FindAllStringSubmatch(deployed, -1) {
+		subpath, ver := m[1], m[2]
+		if cur, ok := deployedVers[subpath]; !ok || semver.Compare(ver, cur) > 0 {
+			deployedVers[subpath] = ver
+		}
+	}
+	if len(deployedVers) == 0 {
+		return desired
+	}
+	return workflowsPinRe.ReplaceAllStringFunc(desired, func(pin string) string {
+		m := workflowsPinRe.FindStringSubmatch(pin)
+		subpath, ver := m[1], m[2]
+		if dv, ok := deployedVers[subpath]; ok && semver.Compare(dv, ver) > 0 {
+			return "a-novel-kit/workflows/" + subpath + "@" + dv
+		}
+		return pin
+	})
+}
+
+// blobSHA returns the git blob object id of content: SHA-1 over the
+// "blob <len>\0" header plus the bytes. That is the .sha the contents API
+// reports for an existing file, so an unchanged write is detected without an
+// extra API call.
+func blobSHA(content string) string {
+	//nolint:gosec // git object identity, not a cryptographic guarantee.
+	sum := sha1.Sum([]byte("blob " + strconv.Itoa(len(content)) + "\x00" + content))
+	return hex.EncodeToString(sum[:])
+}
+
+// shortOid abbreviates a commit id to the usual 7 characters for display.
+func shortOid(out string) string {
+	oid := strings.TrimSpace(out)
+	if len(oid) > 7 {
+		oid = oid[:7]
+	}
+	return oid
+}
+
+// shortPath trims the repos/<org>/<repo>/contents/ prefix for a readable label.
+func shortPath(path string) string {
+	if i := strings.Index(path, "/contents/"); i >= 0 {
+		return path[i+len("/contents/"):]
+	}
+	return path
+}

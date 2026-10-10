@@ -18,7 +18,7 @@ library (`golib`, `nodelib`, `jwt`, `stack`). A repo needing a different class c
 ```bash
 a-novel repo update --dry-run    # print the API operations, no writes — the agent-safe form
 a-novel repo update              # interactive, human-only: a human must run this
-a-novel repo update --all        # every whitelisted checkout present under app/ or kit/
+a-novel repo update --all        # every whitelisted checkout present under app/ or kit/, in parallel
 ```
 
 Four behaviours to know before running it:
@@ -35,6 +35,10 @@ Four behaviours to know before running it:
   through the same loader, so the batch covers every whitelisted repo actually cloned under `app/` or
   `kit/`, plus the stack repo itself. A whitelisted repo not yet cloned is simply absent. (`repo create`
   takes its `<org> <name>` explicitly — the repo does not exist yet, so no whitelist applies.)
+- **`--all` runs in parallel.** It plans every repo at once, then applies `--jobs` repos at a time
+  (default 6): the cap is GitHub's secondary rate limit on writes, not CPU, and a rate-limited call
+  is retried after a minute. Each repo prints one status line as it finishes; the closing report
+  carries every repo's per-operation log.
 - **A newer deployed pin survives.** For files pinning `a-novel-kit/workflows` actions, a version
   already ahead of the template's is kept, so `update` never rolls back a bump Renovate landed.
 

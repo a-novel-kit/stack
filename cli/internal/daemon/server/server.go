@@ -1,12 +1,13 @@
 // Package server implements the daemon-side handler for the
 // anovel.v1.CoreService connect-rpc API. The Server type holds the
-// long-lived daemon state — registered stacks, the target supervisor,
-// the env allocator and builder, and the log hub — and exposes each RPC
-// as a method that reads or mutates that state.
+// long-lived daemon state — discovered stacks, the target supervisor,
+// the env builder, and the log hub — and exposes each RPC as a method
+// that reads or mutates that state.
 package server
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,8 +15,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -30,7 +30,6 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/daemon/reinstall"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/runner"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/volumes"
-	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
@@ -39,79 +38,51 @@ import (
 // proto without a handler fails the build.
 var _ anovelv1connect.CoreServiceHandler = (*Server)(nil)
 
+// allStacks is the stack name that addresses every discovered stack at once.
+const allStacks = "*"
+
+// shutdownDelay is how long Shutdown and PrepareReinstall wait before stopping
+// the daemon, so their response reaches the client before the socket closes.
+const shutdownDelay = 50 * time.Millisecond
+
 // Server is the daemon's connect-rpc handler, owning the state that survives
 // across RPC calls.
 type Server struct {
-	mu         sync.RWMutex
-	version    string             // daemon binary version (from build info)
-	startedAt  time.Time          // for uptime calculation
-	socketPath string             // for Status responses
-	stacks     []stacks.Stack     // raw config from $A_NOVEL_STACKS
-	discovered []*discovery.Stack // per-stack service tree
-	runner     *runner.Runner     // process / container supervisor
-	envAlloc   *env.Allocator     // port allocator + refcount
-	envBuilder *env.Builder       // env block synthesis
-	logs       *logs.Store        // per-target log files + streaming hub
-	// shutdownCh closes to tell the daemon's main loop to exit cleanly.
-	// SignalShutdown fires it, idempotently.
-	shutdownCh   chan struct{}
-	shutdownOnce sync.Once
+	version    string           // daemon binary version (from build info)
+	startedAt  time.Time        // for uptime calculation
+	socketPath string           // for Status responses
+	stacks     discovery.Stacks // the managed stacks and their service trees
+	runner     *runner.Runner   // process / container supervisor
+	envBuilder *env.Builder     // env block synthesis
+	logs       *logs.Store      // per-target log files + streaming hub
+	// stop tells the daemon's main loop to exit cleanly. It is idempotent.
+	stop func()
 }
 
-// New constructs a Server with every daemon-side subsystem wired up.
-func New(version, socketPath string, stk []stacks.Stack, disc []*discovery.Stack, run *runner.Runner, alloc *env.Allocator, builder *env.Builder, logStore *logs.Store) *Server {
+// New constructs a Server with every daemon-side subsystem wired up. stop is
+// what Shutdown and PrepareReinstall call to end the daemon.
+func New(version, socketPath string, disc discovery.Stacks, run *runner.Runner, builder *env.Builder, logStore *logs.Store, stop func()) *Server {
 	return &Server{
 		version:    version,
 		startedAt:  time.Now(),
 		socketPath: socketPath,
-		stacks:     stk,
-		discovered: disc,
+		stacks:     disc,
 		runner:     run,
-		envAlloc:   alloc,
 		envBuilder: builder,
 		logs:       logStore,
-		shutdownCh: make(chan struct{}),
+		stop:       stop,
 	}
 }
 
-// ShutdownCh returns the channel the daemon's main loop waits on. It closes
-// when SignalShutdown is called, as PrepareReinstall does once its checkpoint
-// is durable.
-func (s *Server) ShutdownCh() <-chan struct{} { return s.shutdownCh }
-
-// SignalShutdown closes the shutdown channel. Idempotent.
-func (s *Server) SignalShutdown() {
-	s.shutdownOnce.Do(func() { close(s.shutdownCh) })
-}
-
-// allServiceNames returns every service name across every stack, which the env
-// builder needs to detect cross-service prefixes.
-func (s *Server) allServiceNames() []string {
-	var out []string
-	for _, st := range s.discovered {
-		for _, svc := range st.Services {
-			out = append(out, svc.Name)
-		}
-	}
-	return out
-}
-
-// findStack returns the discovered Stack named `name`, or the default first
-// stack when the name is empty. An unknown name yields a connect.Error.
+// findStack returns the discovered Stack named `name`, or the default stack
+// when the name is empty. An unknown name yields a connect.Error.
 func (s *Server) findStack(name string) (*discovery.Stack, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if len(s.discovered) == 0 {
+	if len(s.stacks) == 0 {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			"no stacks registered (set A_NOVEL_STACKS)")
 	}
-	if name == "" {
-		return s.discovered[0], nil
-	}
-	for _, st := range s.discovered {
-		if st.Name == name {
-			return st, nil
-		}
+	if st := s.stacks.Stack(name); st != nil {
+		return st, nil
 	}
 	return nil, connect.Errorf(connect.CodeNotFound,
 		"stack %q not registered", name)
@@ -124,13 +95,32 @@ func (s *Server) findService(stackName, serviceName string) (*discovery.Service,
 	if err != nil {
 		return nil, err
 	}
-	for _, svc := range st.Services {
-		if svc.Name == serviceName {
-			return svc, nil
-		}
+	if svc := s.stacks.Service(st.Name, serviceName); svc != nil {
+		return svc, nil
 	}
 	return nil, connect.Errorf(connect.CodeNotFound,
 		"service %q not found in stack %q", serviceName, st.Name)
+}
+
+// scope returns the stacks a request names: every stack for "*", otherwise
+// the one findStack resolves.
+func (s *Server) scope(name string) ([]*discovery.Stack, error) {
+	if name == allStacks {
+		return s.stacks, nil
+	}
+	st, err := s.findStack(name)
+	if err != nil {
+		return nil, err
+	}
+	return []*discovery.Stack{st}, nil
+}
+
+// findTarget returns the discovered target with the given ID.
+func (s *Server) findTarget(id string) (*discovery.Target, *discovery.Service, error) {
+	if t, svc := s.stacks.Target(id); t != nil {
+		return t, svc, nil
+	}
+	return nil, nil, connect.Errorf(connect.CodeNotFound, "unknown target %q", id)
 }
 
 // =============================================================================
@@ -140,41 +130,25 @@ func (s *Server) findService(stackName, serviceName string) (*discovery.Service,
 // Ping is the cheap handshake clients use to verify the daemon is alive.
 // `core start` uses it to detect an already-running instance.
 func (s *Server) Ping(_ context.Context, _ *anovelv1.PingRequest) (*anovelv1.PingResponse, error) {
-	return &anovelv1.PingResponse{
-		DaemonVersion: s.version,
-		Now:           timestamppb.Now(),
-	}, nil
+	return &anovelv1.PingResponse{DaemonVersion: s.version}, nil
 }
 
 // Status reports everything `a-novel core status` needs in one round-trip.
 func (s *Server) Status(_ context.Context, _ *anovelv1.StatusRequest) (*anovelv1.StatusResponse, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := &anovelv1.StatusResponse{
-		DaemonVersion: s.version,
-		SocketPath:    s.socketPath,
-		StartedAt:     timestamppb.New(s.startedAt),
-		Uptime:        durationpb.New(time.Since(s.startedAt)),
-		Stacks:        make([]*anovelv1.Stack, 0, len(s.stacks)),
-	}
-	for _, st := range s.stacks {
-		out.Stacks = append(out.Stacks, &anovelv1.Stack{
-			Name:      st.Name,
-			Path:      st.Path,
-			IsDefault: st.IsDefault,
-		})
-	}
-	out.ReinstallCheckpointPending = reinstall.Exists()
-	return out, nil
+	return &anovelv1.StatusResponse{
+		DaemonVersion:              s.version,
+		SocketPath:                 s.socketPath,
+		StartedAt:                  timestamppb.New(s.startedAt),
+		Uptime:                     durationpb.New(time.Since(s.startedAt)),
+		Stacks:                     stacksToProto(s.stacks),
+		ReinstallCheckpointPending: reinstall.Exists(),
+	}, nil
 }
 
-// =============================================================================
-// RPC handlers
-// =============================================================================
-
 // PrepareReinstall writes a checkpoint listing every running go-exec target
-// with the env to relaunch it, fsyncs it, then signals the daemon to shut down.
-// Containers stay out, surviving the daemon's death on their own.
+// with the env to relaunch it, fsyncs it, stops those targets, then signals the
+// daemon to shut down. Containers stay out, surviving the daemon's death on
+// their own.
 //
 // A second PrepareReinstall is rejected while one is pending, guarded by the
 // checkpoint file's existence.
@@ -182,50 +156,40 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *anovelv1.PrepareReinstal
 	if err := reinstall.EnsureSinglePending(); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
-	// Gather the running go-exec instances. An instance never stores the env
-	// it started with, so relaunch re-derives it from the env builder and the
-	// target comes back on freshly allocated ports, as a manual restart does.
+	// An instance never stores the env it started with, so the checkpoint
+	// re-derives it from the env builder. The target still holds its port
+	// claims, so the env names the ports it runs on, and the new daemon
+	// relaunches it on those same ports.
+	ids := s.liveGoExecIDs()
 	cp := reinstall.Checkpoint{}
-	for _, inst := range s.runner.AllInstances() {
-		if inst.Mode != runner.ModeGoExec {
+	for _, id := range ids {
+		t, _ := s.stacks.Target(id)
+		if t == nil {
 			continue
 		}
-		if inst.Phase != anovelv1.Phase_PHASE_RUNNING && inst.Phase != anovelv1.Phase_PHASE_STARTING {
-			continue
-		}
-		// Re-derive env for relaunch.
-		tgt, _, err := s.findTargetByID(inst.ID)
+		envEntries, _, err := s.envBuilder.ForTarget(t)
 		if err != nil {
 			continue
-		}
-		envEntries, _, err := s.envBuilder.ForTarget(tgt, s.allServiceNames())
-		if err != nil {
-			continue
-		}
-		envList := osEnviron()
-		for _, e := range envEntries {
-			envList = append(envList, e.Key+"="+e.Value)
 		}
 		cp.GoExec = append(cp.GoExec, reinstall.GoExecCheckpoint{
-			TargetID: inst.ID,
-			Env:      envList,
+			TargetID: id,
+			Env:      env.Environ(envEntries),
 		})
 	}
 	if err := reinstall.Write(cp); err != nil {
 		return nil, connect.Errorf(connect.CodeInternal, "write checkpoint: %v", err).WithCause(err)
 	}
-	resp := &anovelv1.PrepareReinstallResponse{
+	// Stop the targets before the daemon exits, since a go-exec process
+	// outlives its daemon and keeps the ports its relaunch needs. The 5s grace
+	// keeps the RPC inside the 10s `a-novel install` gives it.
+	for _, failure := range s.stopAll(ids, nil, 5*time.Second).failures {
+		fmt.Fprintf(os.Stderr, "reinstall: %s\n", failure)
+	}
+	time.AfterFunc(shutdownDelay, s.stop)
+	return &anovelv1.PrepareReinstallResponse{
 		CheckpointPath:    reinstall.Path(),
 		GoExecTargetCount: int32(len(cp.GoExec)),
-	}
-	// Delay the signal so the client has the response before the socket
-	// closes. The daemon's main select loop then wakes and shuts down
-	// gracefully, SIGTERMing the go-exec children and leaving containers.
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		s.SignalShutdown()
-	}()
-	return resp, nil
+	}, nil
 }
 
 // Shutdown is the no-checkpoint daemon stop. With force=false it SIGTERMs every
@@ -234,53 +198,46 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *anovelv1.PrepareReinstal
 // an active infra session, cascade-killing the remaining targets and tearing
 // down their infra containers.
 //
-// The shutdown signal fires after the response is sent, so the client gets a
-// clean reply.
-func (s *Server) Shutdown(ctx context.Context, req *anovelv1.ShutdownRequest) (*anovelv1.ShutdownResponse, error) {
-	force := req.GetForce()
-	// 1) Snapshot the go-exec instances that need stopping.
-	var goExecIDs []string
-	for _, inst := range s.runner.AllInstances() {
-		if inst.Mode != runner.ModeGoExec {
-			continue
-		}
-		if inst.Phase != anovelv1.Phase_PHASE_RUNNING && inst.Phase != anovelv1.Phase_PHASE_STARTING {
-			continue
-		}
-		goExecIDs = append(goExecIDs, inst.ID)
-	}
-	// 2) Kill them in parallel: runner.Kill blocks until its grace expires,
-	//    so one goroutine per target bounds the total by the longest grace.
-	//    The background context keeps a cancelled RPC from leaving
-	//    half-killed targets, since shutdown is a commitment.
-	//    The response names every target that could not be stopped. Whoever ran
-	//    this asked for a clean environment, and a partial one that reports
-	//    success is one they will not go back and check.
-	killCtx, cancelKill := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancelKill()
-	// 3) If force, also tear down every active infra session.
+// The response names every target that could not be stopped. Whoever ran this
+// asked for a clean environment, and a partial one that reports success is one
+// they will not go back and check. The shutdown signal fires after the
+// response is sent, so the client gets a clean reply.
+func (s *Server) Shutdown(_ context.Context, req *anovelv1.ShutdownRequest) (*anovelv1.ShutdownResponse, error) {
 	var sessions []runner.InfraSessionRef
-	if force {
+	if req.GetForce() {
 		sessions = s.runner.ActiveInfraSessions()
 	}
-	outcome := tearDown(goExecIDs, sessions,
-		func(id string) error { return s.runner.Kill(killCtx, id, 10*time.Second) },
-		func(ref runner.InfraSessionRef) error {
-			return s.runner.KillInfra(killCtx, ref.Stack, ref.Service, true /* force */)
-		})
-	resp := &anovelv1.ShutdownResponse{
+	outcome := s.stopAll(s.liveGoExecIDs(), sessions, 10*time.Second)
+	time.AfterFunc(shutdownDelay, s.stop)
+	return &anovelv1.ShutdownResponse{
 		GoExecKilled:          int32(outcome.goExecKilled),
 		InfraServicesTornDown: int32(outcome.infraTornDown),
 		Failures:              outcome.failures,
+	}, nil
+}
+
+// liveGoExecIDs returns the IDs of every starting or running go-exec target.
+func (s *Server) liveGoExecIDs() []string {
+	var ids []string
+	for _, inst := range s.runner.AllInstances() {
+		if inst.Mode == anovelv1.Mode_MODE_GO_EXEC && inst.Live() {
+			ids = append(ids, inst.ID)
+		}
 	}
-	// 4) Fire the shutdown signal after the response is on the wire; the 50ms
-	//    delay lets the runtime flush it before the listener closes.
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		s.SignalShutdown()
-	}()
-	_ = ctx // keep signature parity with the rest of the handlers
-	return resp, nil
+	return ids
+}
+
+// stopAll kills the go-exec targets in ids with grace and tears down sessions.
+// It runs on its own 30s context, so a cancelled RPC never leaves half-killed
+// targets: a shutdown is a commitment.
+func (s *Server) stopAll(ids []string, sessions []runner.InfraSessionRef, grace time.Duration) teardownOutcome {
+	killCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return tearDown(ids, sessions,
+		func(id string) error { return s.runner.Kill(killCtx, id, grace) },
+		func(ref runner.InfraSessionRef) error {
+			return s.runner.KillInfra(killCtx, ref.Stack, ref.Service, true /* force */)
+		})
 }
 
 // teardownOutcome is what a shutdown achieved. The counts are successes, and
@@ -310,10 +267,8 @@ func tearDown(
 		out teardownOutcome
 		wg  sync.WaitGroup
 	)
-	wg.Add(len(goExecIDs))
 	for _, id := range goExecIDs {
-		go func(id string) {
-			defer wg.Done()
+		wg.Go(func() {
 			err := killGoExec(id)
 			mu.Lock()
 			defer mu.Unlock()
@@ -322,7 +277,7 @@ func tearDown(
 				return
 			}
 			out.goExecKilled++
-		}(id)
+		})
 	}
 	wg.Wait()
 	for _, ref := range sessions {
@@ -334,68 +289,39 @@ func tearDown(
 	}
 	// Goroutine completion order is not stable, so the same failures would
 	// otherwise come back in a different order run to run.
-	sort.Strings(out.failures)
+	slices.Sort(out.failures)
 	return out
 }
 
-// ListStacks returns every registered stack. Stacks are fixed at startup,
-// so this reads them straight from state.
+// =============================================================================
+// Discovery
+// =============================================================================
+
+// ListStacks returns every stack the daemon manages: the registered ones
+// discovery accepted, in registration order.
 func (s *Server) ListStacks(_ context.Context, _ *anovelv1.ListStacksRequest) (*anovelv1.ListStacksResponse, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := &anovelv1.ListStacksResponse{
-		Stacks: make([]*anovelv1.Stack, 0, len(s.stacks)),
-	}
-	for _, st := range s.stacks {
-		out.Stacks = append(out.Stacks, &anovelv1.Stack{
-			Name:      st.Name,
-			Path:      st.Path,
-			IsDefault: st.IsDefault,
-		})
-	}
-	return out, nil
+	return &anovelv1.ListStacksResponse{Stacks: stacksToProto(s.stacks)}, nil
 }
 
 // ListServices returns every service in the requested stack. An empty
 // Request.Stack means the default stack, and "*" the union across every
 // registered stack, where each returned Service keeps its stack name.
 func (s *Server) ListServices(_ context.Context, req *anovelv1.ListServicesRequest) (*anovelv1.ListServicesResponse, error) {
-	out := &anovelv1.ListServicesResponse{}
-	if req.GetStack() == "*" {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-		// Build one infraStates cache per stack so each service in the
-		// stack reuses the same podman scan.
-		stackCaches := make(map[string]map[string]runner.InfraState, len(s.discovered))
-		for _, st := range s.discovered {
-			stackCaches[st.Name] = s.liveInfraStates(st.Name)
-		}
-		for _, st := range s.discovered {
-			cache := stackCaches[st.Name]
-			for _, svc := range st.Services {
-				out.Services = append(out.Services, s.convertService(svc, cache))
-			}
-		}
-		// Stable order: stack name, then service name.
-		sort.Slice(out.Services, func(i, j int) bool {
-			if out.Services[i].GetStack() != out.Services[j].GetStack() {
-				return out.Services[i].GetStack() < out.Services[j].GetStack()
-			}
-			return out.Services[i].GetName() < out.Services[j].GetName()
-		})
-		return out, nil
-	}
-	st, err := s.findStack(req.GetStack())
+	scope, err := s.scope(req.GetStack())
 	if err != nil {
 		return nil, err
 	}
-	cache := s.liveInfraStates(st.Name)
-	for _, svc := range st.Services {
-		out.Services = append(out.Services, s.convertService(svc, cache))
+	out := &anovelv1.ListServicesResponse{}
+	for _, st := range scope {
+		// One batched podman scan serves every service of the stack.
+		states := s.liveInfraStates(st.Name)
+		for _, svc := range st.Services {
+			out.Services = append(out.Services, s.serviceToProto(svc, states))
+		}
 	}
-	sort.Slice(out.Services, func(i, j int) bool {
-		return out.Services[i].GetName() < out.Services[j].GetName()
-	})
+	// Discovery lists each stack's services by name, so a stable sort on the
+	// stack orders the union by stack, then service.
+	slices.SortStableFunc(out.Services, func(a, b *anovelv1.Service) int { return cmp.Compare(a.GetStack(), b.GetStack()) })
 	return out, nil
 }
 
@@ -406,7 +332,7 @@ func (s *Server) DescribeService(_ context.Context, req *anovelv1.DescribeServic
 		return nil, err
 	}
 	return &anovelv1.DescribeServiceResponse{
-		Service: s.convertService(svc, s.liveInfraStates(svc.Stack)),
+		Service: s.serviceToProto(svc, s.liveInfraStates(svc.Stack)),
 	}, nil
 }
 
@@ -436,95 +362,48 @@ func (s *Server) GetTopology(_ context.Context, req *anovelv1.GetTopologyRequest
 	return &anovelv1.GetTopologyResponse{Rendered: b.String()}, nil
 }
 
+// =============================================================================
+// Targets
+// =============================================================================
+
 // StartTarget brings up the named target in the requested mode, defaulting to
-// go-exec, and synthesizes the target's env before launch.
+// go-exec, once its dependencies are ready.
 func (s *Server) StartTarget(ctx context.Context, req *anovelv1.StartTargetRequest) (*anovelv1.StartTargetResponse, error) {
-	mode := req.GetMode()
-	if mode == anovelv1.Mode_MODE_UNSPECIFIED {
-		mode = anovelv1.Mode_MODE_GO_EXEC
+	mode := cmp.Or(req.GetMode(), anovelv1.Mode_MODE_GO_EXEC)
+	if mode != anovelv1.Mode_MODE_GO_EXEC && mode != anovelv1.Mode_MODE_CONTAINER {
+		return nil, connect.Errorf(connect.CodeInvalidArgument, "unknown mode %v", mode)
 	}
-	// The discovery target backs both the dependency walk and the env
-	// synthesis.
-	tgt, svc, err := s.findTargetByID(req.GetTargetId())
+	t, svc, err := s.findTarget(req.GetTargetId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, err
 	}
-	// Gate on the dependency walk: infra up, one-shots satisfied, and a
-	// refusal-with-hint for a long-runner dep that is not already running. It
-	// runs before the env build, so the `${*_PORT}` slots it allocates land in
-	// the snapshot the builder reads next.
-	depMode := convertModeFromProto(mode) // mode for any auto-run one-shots
-	// The dep walker's env argument goes unused, since runner.StartInfra
-	// builds its own; the inherited daemon env satisfies the signature.
-	if err := s.runner.EnsureDepsReady(ctx, tgt, svc, depMode, osEnviron()); err != nil {
+	inst, err := s.runner.StartTarget(ctx, t, svc, mode)
+	switch {
+	case errors.Is(err, runner.ErrEnv):
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	case err != nil:
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
-	// Rebuild the env now that infra-up has allocated the service-level ports:
-	// the builder's snapshot fill picks up POSTGRES_PORT from the allocator and
-	// synthesizes POSTGRES_DSN with localhost:<port>.
-	envEntries, warnings, err := s.envBuilder.ForTarget(tgt, s.allServiceNames())
-	if err != nil {
-		return nil, connect.Errorf(connect.CodeInternal,
-			"env build: %v", err).WithCause(err)
-	}
-	envList := osEnviron()
-	for _, e := range envEntries {
-		envList = append(envList, e.Key+"="+e.Value)
-	}
-	switch mode {
-	case anovelv1.Mode_MODE_GO_EXEC:
-		inst, err := s.runner.StartGoExec(ctx, req.GetTargetId(), envList, warnings)
-		if err != nil {
-			s.envAlloc.Release(req.GetTargetId())
-			return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-		}
-		return &anovelv1.StartTargetResponse{
-			Target: instanceToProto(inst, s.lookupTargetForInstance(inst)),
-		}, nil
-	case anovelv1.Mode_MODE_CONTAINER:
-		inst, err := s.runner.StartContainer(ctx, req.GetTargetId(), envList, warnings)
-		if err != nil {
-			s.envAlloc.Release(req.GetTargetId())
-			return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-		}
-		return &anovelv1.StartTargetResponse{
-			Target: instanceToProto(inst, s.lookupTargetForInstance(inst)),
-		}, nil
-	default:
-		return nil, connect.Errorf(connect.CodeInvalidArgument,
-			"unknown mode %v", mode)
-	}
-}
-
-// findTargetByID resolves a "<stack>/<service>/<target>" ID into its discovery
-// objects.
-func (s *Server) findTargetByID(id string) (*discovery.Target, *discovery.Service, error) {
-	for _, st := range s.discovered {
-		for _, svc := range st.Services {
-			for _, t := range svc.Targets {
-				if t.ID() == id {
-					return t, svc, nil
-				}
-			}
-		}
-	}
-	return nil, nil, fmt.Errorf("unknown target %q", id)
+	return &anovelv1.StartTargetResponse{Target: targetToProto(t, inst)}, nil
 }
 
 // KillTarget stops the named instance with the requested SIGTERM grace,
-// defaulting to 10s, where 0 means an immediate SIGKILL. It is idempotent.
+// defaulting to 10s, where 0 means an immediate SIGKILL. It is idempotent, and
+// the response carries no target when the runner never held an instance.
 func (s *Server) KillTarget(ctx context.Context, req *anovelv1.KillTargetRequest) (*anovelv1.KillTargetResponse, error) {
-	grace := req.GetTimeout().AsDuration()
-	if grace == 0 && req.GetTimeout() == nil {
-		grace = 10 * time.Second
+	grace := 10 * time.Second
+	if req.GetTimeout() != nil {
+		grace = req.GetTimeout().AsDuration()
 	}
 	if err := s.runner.Kill(ctx, req.GetTargetId(), grace); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	inst, _ := s.runner.Instance(req.GetTargetId())
-	return &anovelv1.KillTargetResponse{
-		Target: instanceToProto(&inst, s.lookupTargetForInstance(&inst)),
-	}, nil
+	resp := &anovelv1.KillTargetResponse{}
+	inst, ok := s.runner.Instance(req.GetTargetId())
+	if t, _ := s.stacks.Target(req.GetTargetId()); ok && t != nil {
+		resp.Target = targetToProto(t, &inst)
+	}
+	return resp, nil
 }
 
 // RestartTarget is Kill and Start in one RPC. The kill completes before the
@@ -536,99 +415,49 @@ func (s *Server) RestartTarget(ctx context.Context, req *anovelv1.RestartTargetR
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	mode := req.GetMode()
-	if mode == anovelv1.Mode_MODE_UNSPECIFIED {
-		// Keep the previous mode when an instance record survives,
-		// defaulting to go-exec otherwise.
-		if prev, ok := s.runner.Instance(id); ok && prev.Mode != 0 {
-			mode = modeToProto(prev.Mode)
-		} else {
-			mode = anovelv1.Mode_MODE_GO_EXEC
-		}
+	if prev, ok := s.runner.Instance(id); ok && mode == anovelv1.Mode_MODE_UNSPECIFIED {
+		// Keep the previous mode when an instance record survives;
+		// StartTarget defaults to go-exec otherwise.
+		mode = prev.Mode
 	}
-	startResp, err := s.StartTarget(ctx, &anovelv1.StartTargetRequest{
-		TargetId: id,
-		Mode:     mode,
-	})
+	startResp, err := s.StartTarget(ctx, &anovelv1.StartTargetRequest{TargetId: id, Mode: mode})
 	if err != nil {
 		return nil, err
 	}
-	return &anovelv1.RestartTargetResponse{
-		Target: startResp.GetTarget(),
-	}, nil
+	return &anovelv1.RestartTargetResponse{Target: startResp.GetTarget()}, nil
 }
 
-// lookupTargetForInstance returns the discovery.Target behind an Instance, so a
-// proto response can carry the static metadata the runner does not track.
-func (s *Server) lookupTargetForInstance(inst *runner.Instance) *discovery.Target {
-	if inst.ID == "" {
-		return nil
-	}
-	for _, st := range s.discovered {
-		if st.Name != inst.Stack {
-			continue
-		}
-		for _, svc := range st.Services {
-			if svc.Name != inst.Service {
-				continue
-			}
-			for _, t := range svc.Targets {
-				if t.Name == inst.Target {
-					return t
-				}
-			}
-		}
-	}
-	return nil
-}
+// =============================================================================
+// Service infrastructure
+// =============================================================================
 
 // StartInfra brings up a service's infrastructure containers and auto-runs
 // every one-shot target the long-runners depend on. It is idempotent.
 func (s *Server) StartInfra(ctx context.Context, req *anovelv1.StartInfraRequest) (*anovelv1.StartInfraResponse, error) {
-	stack := req.GetStack()
-	if stack == "" && len(s.discovered) > 0 {
-		stack = s.discovered[0].Name
-	}
-	svc, err := s.findService(stack, req.GetService())
+	svc, err := s.findService(req.GetStack(), req.GetService())
 	if err != nil {
 		return nil, err
 	}
-	// ForServiceUp allocates the `${*_PORT}` slots infra services reference
-	// under the service-level consumer ID, so KillInfra's Release fires
-	// cleanly and compose's substitution sees a real port number.
-	consumer := stack + "/" + svc.Name + "-infra"
-	envEntries, err := s.envBuilder.ForServiceUp(svc, s.allServiceNames(), consumer)
-	if err != nil {
-		return nil, connect.Errorf(connect.CodeInternal, "env build: %v", err).WithCause(err)
-	}
-	envList := osEnviron()
-	for _, e := range envEntries {
-		envList = append(envList, e.Key+"="+e.Value)
-	}
-	oneShotsMode := convertModeFromProto(req.GetOneShotsMode())
-	if err := s.runner.StartInfra(ctx, stack, svc.Name, oneShotsMode, envList); err != nil {
+	if err := s.runner.StartInfra(ctx, svc.Stack, svc.Name, req.GetOneShotsMode()); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
 	return &anovelv1.StartInfraResponse{
-		Service: s.convertService(svc, s.liveInfraStates(svc.Stack)),
+		Service: s.serviceToProto(svc, s.liveInfraStates(svc.Stack)),
 	}, nil
 }
 
 // KillInfra refuses while any long-runner of the service is still running.
 // --force cascade-kills those targets first.
 func (s *Server) KillInfra(ctx context.Context, req *anovelv1.KillInfraRequest) (*anovelv1.KillInfraResponse, error) {
-	stack := req.GetStack()
-	if stack == "" && len(s.discovered) > 0 {
-		stack = s.discovered[0].Name
-	}
-	svc, err := s.findService(stack, req.GetService())
+	svc, err := s.findService(req.GetStack(), req.GetService())
 	if err != nil {
 		return nil, err
 	}
-	if err := s.runner.KillInfra(ctx, stack, svc.Name, req.GetForce()); err != nil {
+	if err := s.runner.KillInfra(ctx, svc.Stack, svc.Name, req.GetForce()); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
 	return &anovelv1.KillInfraResponse{
-		Service: s.convertService(svc, s.liveInfraStates(svc.Stack)),
+		Service: s.serviceToProto(svc, s.liveInfraStates(svc.Stack)),
 	}, nil
 }
 
@@ -636,71 +465,44 @@ func (s *Server) KillInfra(ctx context.Context, req *anovelv1.KillInfraRequest) 
 // leaving the rest of the service's infra and its running targets untouched.
 // The TUI uses it to manage infra entries like any other tab.
 func (s *Server) KillInfraContainer(ctx context.Context, req *anovelv1.KillInfraContainerRequest) (*anovelv1.KillInfraContainerResponse, error) {
-	stack := req.GetStack()
-	if stack == "" && len(s.discovered) > 0 {
-		stack = s.discovered[0].Name
-	}
-	svc, err := s.findService(stack, req.GetService())
+	in, err := s.infraContainer(ctx, req.GetStack(), req.GetService(), req.GetName(), "stop")
 	if err != nil {
 		return nil, err
 	}
-	in := findInfra(svc, req.GetName())
-	if in == nil {
-		return nil, connect.Errorf(connect.CodeNotFound,
-			"infra %q not declared in %s/%s", req.GetName(), stack, svc.Name)
-	}
-	if err := s.runner.KillInfraContainer(ctx, stack, svc.Name, in.Name); err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-	}
-	return &anovelv1.KillInfraContainerResponse{
-		Infra: s.convertInfraWithLive(in, s.liveInfraStates(svc.Stack)),
-	}, nil
+	return &anovelv1.KillInfraContainerResponse{Infra: in}, nil
 }
 
 // RestartInfraContainer restarts one infra container in place with `podman
 // restart`, preserving its volume bindings.
 func (s *Server) RestartInfraContainer(ctx context.Context, req *anovelv1.RestartInfraContainerRequest) (*anovelv1.RestartInfraContainerResponse, error) {
-	stack := req.GetStack()
-	if stack == "" && len(s.discovered) > 0 {
-		stack = s.discovered[0].Name
-	}
-	svc, err := s.findService(stack, req.GetService())
+	in, err := s.infraContainer(ctx, req.GetStack(), req.GetService(), req.GetName(), "restart")
 	if err != nil {
 		return nil, err
 	}
-	in := findInfra(svc, req.GetName())
+	return &anovelv1.RestartInfraContainerResponse{Infra: in}, nil
+}
+
+// infraContainer runs the podman verb on one declared infra container and
+// returns its refreshed state.
+func (s *Server) infraContainer(ctx context.Context, stack, service, name, verb string) (*anovelv1.Infra, error) {
+	svc, err := s.findService(stack, service)
+	if err != nil {
+		return nil, err
+	}
+	in := svc.FindInfra(name)
 	if in == nil {
 		return nil, connect.Errorf(connect.CodeNotFound,
-			"infra %q not declared in %s/%s", req.GetName(), stack, svc.Name)
+			"infra %q not declared in %s/%s", name, svc.Stack, svc.Name)
 	}
-	if err := s.runner.RestartInfraContainer(ctx, stack, svc.Name, in.Name); err != nil {
+	if err := s.runner.InfraContainer(ctx, svc.Stack, svc.Name, in.Name, verb); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
-	return &anovelv1.RestartInfraContainerResponse{
-		Infra: s.convertInfraWithLive(in, s.liveInfraStates(svc.Stack)),
-	}, nil
+	return infraToProto(in, s.liveInfraStates(svc.Stack)), nil
 }
 
-// findInfra returns the named infra in a discovery.Service, or nil when the
-// service does not declare it.
-func findInfra(svc *discovery.Service, name string) *discovery.Infra {
-	for _, in := range svc.Infra {
-		if in.Name == name {
-			return in
-		}
-	}
-	return nil
-}
-
-// convertModeFromProto maps proto Mode → runner.Mode.
-func convertModeFromProto(m anovelv1.Mode) runner.Mode {
-	switch m {
-	case anovelv1.Mode_MODE_CONTAINER:
-		return runner.ModeContainer
-	default:
-		return runner.ModeGoExec
-	}
-}
+// =============================================================================
+// Logs
+// =============================================================================
 
 // StreamLogs server-streams log lines for a target:
 //   - by default, one snapshot of current.log from start to end
@@ -723,16 +525,14 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 		}
 		return streamPodmanLogs(ctx, st.ContainerID, req.GetFollow(), stream)
 	}
-	tgt, _, err := s.findTargetByID(tid)
+	tgt, _, err := s.findTarget(tid)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return err
 	}
 	// Pick the file to stream.
-	var path string
+	path := s.logs.CurrentPath(tgt.Stack, tgt.Service, tgt.Name)
 	if req.GetRunId() != "" {
 		path = s.logs.RunPath(tgt.Stack, tgt.Service, tgt.Name, req.GetRunId())
-	} else {
-		path = s.logs.CurrentPath(tgt.Stack, tgt.Service, tgt.Name)
 	}
 	follow := req.GetFollow() && req.GetRunId() == ""
 
@@ -740,12 +540,11 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 	// between snapshot and subscribe is lost. The unsub fires on handler exit,
 	// keeping dead channels out of the target's subscriber slice.
 	var sub <-chan logs.Line
-	var unsubLogs func()
 	if follow {
+		var unsub func()
 		var ok bool
-		sub, unsubLogs, ok = s.logs.Subscribe(tid)
-		if ok && unsubLogs != nil {
-			defer unsubLogs()
+		if sub, unsub, ok = s.logs.Subscribe(tid); ok {
+			defer unsub()
 		}
 	}
 
@@ -757,7 +556,7 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 				"read log %s: %v", path, err).WithCause(err)
 		}
 	}
-	if !follow || sub == nil {
+	if sub == nil {
 		return nil
 	}
 	// Forward new lines until subscription closes or client disconnects.
@@ -769,15 +568,7 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 			if !ok {
 				return nil
 			}
-			if req.GetStream() != anovelv1.LogStream_LOG_STREAM_UNSPECIFIED &&
-				lineStreamToProto(ln.Stream) != req.GetStream() {
-				continue
-			}
-			if err := stream.Send(&anovelv1.LogLine{
-				Ts:     timestamppb.New(ln.Ts),
-				Stream: lineStreamToProto(ln.Stream),
-				Line:   ln.Line,
-			}); err != nil {
+			if err := sendLogLine(stream.Send, req.GetStream(), ln); err != nil {
 				return err
 			}
 		}
@@ -787,9 +578,9 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 // ListRuns returns the timestamps of archived runs for the target,
 // newest first.
 func (s *Server) ListRuns(_ context.Context, req *anovelv1.ListRunsRequest) (*anovelv1.ListRunsResponse, error) {
-	tgt, _, err := s.findTargetByID(req.GetTargetId())
+	tgt, _, err := s.findTarget(req.GetTargetId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, err
 	}
 	return &anovelv1.ListRunsResponse{
 		RunIds: s.logs.ListRuns(tgt.Stack, tgt.Service, tgt.Name),
@@ -857,6 +648,11 @@ func emitLogLine(send func(*anovelv1.LogLine) error, filter anovelv1.LogStream, 
 			Line:   fmt.Sprintf("a-novel: log line %d is unreadable and was skipped (%v)", lineNo, err),
 		})
 	}
+	return sendLogLine(send, filter, ln)
+}
+
+// sendLogLine forwards ln unless filter selects the other stream.
+func sendLogLine(send func(*anovelv1.LogLine) error, filter anovelv1.LogStream, ln logs.Line) error {
 	ps := lineStreamToProto(ln.Stream)
 	if filter != anovelv1.LogStream_LOG_STREAM_UNSPECIFIED && ps != filter {
 		return nil
@@ -879,16 +675,107 @@ func lineStreamToProto(s logs.Stream) anovelv1.LogStream {
 	}
 }
 
-// GetEnv assembles the env block for one service, or for every service in
-// scope. It is read-only and never allocates a port, so a variable whose slot
-// is unallocated appears with an empty value and the user still sees the shape.
-func (s *Server) GetEnv(_ context.Context, req *anovelv1.GetEnvRequest) (*anovelv1.GetEnvResponse, error) {
-	allNames := s.allServiceNames()
-	out := &anovelv1.GetEnvResponse{}
-	gather := func(svc *discovery.Service) error {
-		entries, err := s.envBuilder.ForService(svc, allNames)
-		if err != nil {
+// parseInfraLogID recognizes the "<stack>/<service>/infra/<name>" form
+// StreamLogs uses to address an infra container's log stream. It returns
+// (stack, service, name, true) on a match and ("", "", "", false) otherwise.
+//
+// The "infra" sentinel segment cannot collide with a target, since target IDs
+// come from compose service names.
+func parseInfraLogID(id string) (string, string, string, bool) {
+	parts := strings.Split(id, "/")
+	if len(parts) != 4 || parts[2] != "infra" {
+		return "", "", "", false
+	}
+	return parts[0], parts[1], parts[3], true
+}
+
+// streamPodmanLogs forwards `podman logs [-f] <cid>` output to a client log
+// stream. The container's stdout and stderr merge into one pipe, reported as
+// stdout, since service images write to stdout anyway.
+//
+// Each line is stamped at read time, which is accurate enough for the log
+// viewer and skips parsing podman's optional --timestamps prefix.
+func streamPodmanLogs(ctx context.Context, cid string, follow bool, stream anovelv1connect.CoreServiceStreamLogsServerStream) error {
+	args := []string{"logs"}
+	if follow {
+		args = append(args, "-f")
+	}
+	args = append(args, cid)
+	cmd := exec.CommandContext(ctx, "podman", args...)
+	pipeR, pipeW := io.Pipe()
+	cmd.Stdout = pipeW
+	cmd.Stderr = pipeW
+	if err := cmd.Start(); err != nil {
+		return connect.Errorf(connect.CodeInternal,
+			"start podman logs %s: %v", cid, err).WithCause(err)
+	}
+	// Close the writer when the command exits so the scanner sees EOF.
+	go func() {
+		_ = cmd.Wait()
+		_ = pipeW.Close()
+	}()
+	defer func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+	}()
+	scanner := lineScanner(pipeR)
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		if err := stream.Send(&anovelv1.LogLine{
+			Ts:     timestamppb.Now(),
+			Stream: anovelv1.LogStream_LOG_STREAM_STDOUT,
+			Line:   scanner.Text(),
+		}); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// lineScanner scans r line by line. Command output carries long lines, such as
+// panics and JSON dumps, so the per-token cap goes up to 1 MiB to keep the
+// scanner from bisecting one.
+func lineScanner(r io.Reader) *bufio.Scanner {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 64*1024), 1024*1024)
+	return sc
+}
+
+// =============================================================================
+// Environment
+// =============================================================================
+
+// GetEnv assembles the env block for one service, or for every service in
+// scope, "*" covering every stack. It is read-only and never allocates a port,
+// so a variable whose slot is unallocated appears with an empty value and the
+// user still sees the shape.
+func (s *Server) GetEnv(_ context.Context, req *anovelv1.GetEnvRequest) (*anovelv1.GetEnvResponse, error) {
+	var services []*discovery.Service
+	if req.GetService() != "" && req.GetStack() != allStacks {
+		svc, err := s.findService(req.GetStack(), req.GetService())
+		if err != nil {
+			return nil, err
+		}
+		services = append(services, svc)
+	} else {
+		scope, err := s.scope(req.GetStack())
+		if err != nil {
+			return nil, err
+		}
+		for _, st := range scope {
+			services = append(services, st.Services...)
+		}
+	}
+	out := &anovelv1.GetEnvResponse{}
+	for _, svc := range services {
+		entries, err := s.envBuilder.ForService(svc, "")
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		for _, e := range entries {
 			out.Entries = append(out.Entries, &anovelv1.EnvEntry{
@@ -898,45 +785,13 @@ func (s *Server) GetEnv(_ context.Context, req *anovelv1.GetEnvRequest) (*anovel
 				Value:   e.Value,
 			})
 		}
-		return nil
-	}
-	switch {
-	case req.GetAllStacks():
-		for _, st := range s.discovered {
-			for _, svc := range st.Services {
-				if err := gather(svc); err != nil {
-					return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-				}
-			}
-		}
-	case req.GetService() != "":
-		svc, err := s.findService(req.GetStack(), req.GetService())
-		if err != nil {
-			return nil, err
-		}
-		if err := gather(svc); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-		}
-	default:
-		st, err := s.findStack(req.GetStack())
-		if err != nil {
-			return nil, err
-		}
-		for _, svc := range st.Services {
-			if err := gather(svc); err != nil {
-				return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-			}
-		}
 	}
 	return out, nil
 }
 
-// osEnviron returns the daemon process's environment as a fresh slice, the base
-// layer a spawned target inherits PATH, HOME, and GOPATH through. The
-// synthesized env layers over it and overrides any shared key.
-func osEnviron() []string {
-	return append([]string(nil), os.Environ()...)
-}
+// =============================================================================
+// Volumes
+// =============================================================================
 
 // ListVolumes returns one read-only Volume row per compose-declared volume on
 // the service, with its size and backup count.
@@ -945,12 +800,8 @@ func (s *Server) ListVolumes(_ context.Context, req *anovelv1.ListVolumesRequest
 	if err != nil {
 		return nil, err
 	}
-	vols, err := volumes.List(svc)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
 	out := &anovelv1.ListVolumesResponse{}
-	for _, v := range vols {
+	for _, v := range volumes.List(svc) {
 		out.Volumes = append(out.Volumes, &anovelv1.Volume{
 			Name:        v.Name,
 			Service:     v.Service,
@@ -1017,16 +868,20 @@ func (s *Server) ClearVolume(ctx context.Context, req *anovelv1.ClearVolumeReque
 // It refuses with a hint while any target or infra is up; with force it
 // cascade-kills both first.
 func (s *Server) ensureServiceDown(ctx context.Context, svc *discovery.Service, force bool, op string) error {
-	running := s.runningInstances(svc.Stack, svc.Name)
+	var running []string
+	for _, inst := range s.runner.AllInstances() {
+		if inst.Stack == svc.Stack && inst.Service == svc.Name && inst.Phase != anovelv1.Phase_PHASE_TERMINATED {
+			running = append(running, inst.Target)
+		}
+	}
 	sess, _ := s.runner.InfraSession(svc.Stack, svc.Name)
-	infraUp := sess.Up
-	if len(running) == 0 && !infraUp {
+	if len(running) == 0 && !sess.Up {
 		return nil // all clear
 	}
 	if !force {
 		return connect.Errorf(connect.CodeFailedPrecondition,
 			"refusing to %s while %s/%s is up — kill targets + infra first (or pass --force):\n  running targets: %v\n  infra session up: %v",
-			op, svc.Stack, svc.Name, runningNames(running), infraUp)
+			op, svc.Stack, svc.Name, running, sess.Up)
 	}
 	// A forced KillInfra cascades through the targets and the infra alike.
 	if err := s.runner.KillInfra(ctx, svc.Stack, svc.Name, true /* force */); err != nil {
@@ -1036,26 +891,9 @@ func (s *Server) ensureServiceDown(ctx context.Context, svc *discovery.Service, 
 	return nil
 }
 
-// runningInstances returns the service's runner Instances that have yet to
-// reach TERMINATED.
-func (s *Server) runningInstances(stack, service string) []runner.Instance {
-	var out []runner.Instance
-	for _, inst := range s.runner.AllInstances() {
-		if inst.Stack == stack && inst.Service == service &&
-			inst.Phase != anovelv1.Phase_PHASE_TERMINATED {
-			out = append(out, inst)
-		}
-	}
-	return out
-}
-
-func runningNames(insts []runner.Instance) []string {
-	out := make([]string, 0, len(insts))
-	for _, i := range insts {
-		out = append(out, i.Target)
-	}
-	return out
-}
+// =============================================================================
+// Exec / debug
+// =============================================================================
 
 // Exec runs an arbitrary command "as if it were a sibling of the target":
 //
@@ -1079,44 +917,33 @@ func (s *Server) Exec(ctx context.Context, req *anovelv1.ExecRequest, stream ano
 	if id == "" {
 		return connect.NewError(connect.CodeInvalidArgument, "exec: target_id required")
 	}
-	tgt, _, err := s.findTargetByID(id)
+	tgt, _, err := s.findTarget(id)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return err
 	}
 	// A running instance decides the mode. Without one, go-exec is the only
 	// mode that works, there being no live container to attach to.
-	mode := runner.ModeGoExec
-	containerID := ""
-	if inst, ok := s.runner.Instance(id); ok && inst.Phase == anovelv1.Phase_PHASE_RUNNING {
-		mode = inst.Mode
-		containerID = inst.ContainerID
-	}
 	var execCmd *exec.Cmd
-	switch mode {
-	case runner.ModeContainer:
-		if containerID == "" {
+	if inst, ok := s.runner.Instance(id); ok && inst.Phase == anovelv1.Phase_PHASE_RUNNING &&
+		inst.Mode == anovelv1.Mode_MODE_CONTAINER {
+		if inst.ContainerID == "" {
 			return connect.NewError(connect.CodeFailedPrecondition,
 				"exec: target running in container mode but containerId is empty")
 		}
-		args := append([]string{"exec", containerID}, cmdv...)
-		execCmd = exec.CommandContext(ctx, "podman", args...)
-	default:
+		execCmd = exec.CommandContext(ctx, "podman", append([]string{"exec", inst.ContainerID}, cmdv...)...)
+	} else {
 		// A go-exec sibling gets the same directory and env as the target.
 		// The builder allocates when needed under the target's own consumer
 		// ID, which the usual refcounting releases.
-		envEntries, _, err := s.envBuilder.ForTarget(tgt, s.allServiceNames())
+		envEntries, _, err := s.envBuilder.ForTarget(tgt)
 		if err != nil {
 			return connect.Errorf(connect.CodeInternal, "exec: env: %v", err).WithCause(err)
 		}
-		envList := osEnviron()
-		for _, e := range envEntries {
-			envList = append(envList, e.Key+"="+e.Value)
-		}
 		execCmd = exec.CommandContext(ctx, cmdv[0], cmdv[1:]...)
-		// Run in the service directory, one level up from cmd/<target>, so
-		// relative paths match what the target sees.
-		execCmd.Dir = filepath.Dir(filepath.Dir(tgt.CmdDir))
-		execCmd.Env = envList
+		// Run in the service directory so relative paths match what the
+		// target sees.
+		execCmd.Dir = tgt.ServiceDir()
+		execCmd.Env = env.Environ(envEntries)
 	}
 	stdoutR, err := execCmd.StdoutPipe()
 	if err != nil {
@@ -1133,29 +960,19 @@ func (s *Server) Exec(ctx context.Context, req *anovelv1.ExecRequest, stream ano
 	// stderr and forward to the connect stream under a mutex, since
 	// Stream.Send is unsafe for concurrent calls.
 	var sendMu sync.Mutex
-	send := func(s anovelv1.LogStream, line string) {
+	send := func(msg *anovelv1.ExecOutput) {
 		sendMu.Lock()
 		defer sendMu.Unlock()
-		_ = stream.Send(&anovelv1.ExecOutput{Stream: s, Line: line})
+		_ = stream.Send(msg)
+	}
+	pump := func(r io.Reader, tag anovelv1.LogStream) {
+		for sc := lineScanner(r); sc.Scan(); {
+			send(&anovelv1.ExecOutput{Stream: tag, Line: sc.Text()})
+		}
 	}
 	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		sc := bufio.NewScanner(stdoutR)
-		sc.Buffer(make([]byte, 64*1024), 1024*1024)
-		for sc.Scan() {
-			send(anovelv1.LogStream_LOG_STREAM_STDOUT, sc.Text())
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		sc := bufio.NewScanner(stderrR)
-		sc.Buffer(make([]byte, 64*1024), 1024*1024)
-		for sc.Scan() {
-			send(anovelv1.LogStream_LOG_STREAM_STDERR, sc.Text())
-		}
-	}()
+	wg.Go(func() { pump(stdoutR, anovelv1.LogStream_LOG_STREAM_STDOUT) })
+	wg.Go(func() { pump(stderrR, anovelv1.LogStream_LOG_STREAM_STDERR) })
 	wg.Wait()
 
 	waitErr := execCmd.Wait()
@@ -1169,13 +986,11 @@ func (s *Server) Exec(ctx context.Context, req *anovelv1.ExecRequest, stream ano
 		// The human-readable line survives being piped to a file, where the
 		// process exit status does not. It rides the same stream as the
 		// output, after everything the child wrote.
-		send(anovelv1.LogStream_LOG_STREAM_STDERR, "[exec exited: "+waitErr.Error()+"]")
+		send(&anovelv1.ExecOutput{Stream: anovelv1.LogStream_LOG_STREAM_STDERR, Line: "[exec exited: " + waitErr.Error() + "]"})
 	}
 	// The terminal message carries the exit code and no line, so the client can
 	// propagate the child's status as its own.
-	sendMu.Lock()
-	defer sendMu.Unlock()
-	_ = stream.Send(&anovelv1.ExecOutput{ExitCode: &code})
+	send(&anovelv1.ExecOutput{ExitCode: &code})
 
 	return nil
 }
@@ -1205,9 +1020,9 @@ func execExitCode(waitErr error) (int32, error) {
 // A container-mode target is rejected: attaching to a containerized process
 // needs an in-image dlv and a port-forward the daemon does not manage.
 //
-// DelvePort is a suggestion for `dlv attach --listen=:<port>`, which the daemon
-// never binds. It is `PID + 20000`, high but unprivileged, so debugging several
-// targets gives a unique port per PID with no allocation bookkeeping.
+// The hint's listen port is a suggestion the daemon never binds. It is
+// `PID + 20000`, high but unprivileged, so debugging several targets gives a
+// unique port per PID with no allocation bookkeeping.
 func (s *Server) Debug(_ context.Context, req *anovelv1.DebugRequest) (*anovelv1.DebugResponse, error) {
 	id := req.GetTargetId()
 	if id == "" {
@@ -1221,20 +1036,20 @@ func (s *Server) Debug(_ context.Context, req *anovelv1.DebugRequest) (*anovelv1
 		return nil, connect.Errorf(connect.CodeFailedPrecondition,
 			"debug: target %q is not running (phase=%s)", id, inst.Phase)
 	}
-	if inst.Mode != runner.ModeGoExec {
+	if inst.Mode != anovelv1.Mode_MODE_GO_EXEC {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			"debug: only go-exec targets can be attached to (container-mode dlv requires in-image dlv + port-forward)")
 	}
 	port := inst.PID + 20000
-	hint := fmt.Sprintf(
+	return &anovelv1.DebugResponse{Hint: fmt.Sprintf(
 		"Attach with:\n  dlv attach %d --listen=:%d --headless --api-version=2\nThen connect from your editor (vscode: 'Connect to server' on port %d).",
 		inst.PID, port, port,
-	)
-	return &anovelv1.DebugResponse{
-		DelvePort: port,
-		Hint:      hint,
-	}, nil
+	)}, nil
 }
+
+// =============================================================================
+// Watch
+// =============================================================================
 
 // Watch streams every phase transition the runner emits, filtered by the
 // caller's (stack, service, target_id) tuple. An empty filter field matches any
@@ -1249,7 +1064,7 @@ func (s *Server) Watch(ctx context.Context, req *anovelv1.WatchRequest, stream a
 	wantService := req.GetService()
 	wantTargetID := req.GetTargetId()
 	filter := func(ev runner.PhaseEvent) bool {
-		if wantStack != "" && wantStack != "*" && ev.Stack != wantStack {
+		if wantStack != "" && wantStack != allStacks && ev.Stack != wantStack {
 			return false
 		}
 		if wantService != "" && ev.Service != wantService {
@@ -1287,100 +1102,27 @@ func (s *Server) Watch(ctx context.Context, req *anovelv1.WatchRequest, stream a
 }
 
 // describePhaseEvent produces the one-line human summary that lands in
-// StateEvent.description. The field is opaque to the daemon, and a client may
-// re-render from (old_phase, new_phase, exit_reason) instead, but the pre-baked
-// summary is the cheap default for `ps --watch`.
+// StateEvent.description, such as "<id> running" or "<id> terminated
+// (killed)". The field is opaque to the daemon, and a client may re-render
+// from (old_phase, new_phase, exit_reason) instead, but the pre-baked summary
+// is the cheap default for `ps --watch`. A phase without a summary, such as
+// PENDING, falls back to its enum name.
 func describePhaseEvent(ev runner.PhaseEvent) string {
 	switch ev.NewPhase {
-	case anovelv1.Phase_PHASE_STARTING:
-		return ev.TargetID + " starting"
-	case anovelv1.Phase_PHASE_RUNNING:
-		return ev.TargetID + " running"
-	case anovelv1.Phase_PHASE_STOPPING:
-		return ev.TargetID + " stopping"
+	case anovelv1.Phase_PHASE_STARTING, anovelv1.Phase_PHASE_RUNNING, anovelv1.Phase_PHASE_STOPPING:
+		return ev.TargetID + " " + enumWord(ev.NewPhase.String(), "PHASE_")
 	case anovelv1.Phase_PHASE_TERMINATED:
-		switch ev.ExitReason {
-		case anovelv1.ExitReason_EXIT_REASON_SUCCESS:
-			return ev.TargetID + " terminated (success)"
-		case anovelv1.ExitReason_EXIT_REASON_ERROR:
-			return ev.TargetID + " terminated (error)"
-		case anovelv1.ExitReason_EXIT_REASON_KILLED:
-			return ev.TargetID + " terminated (killed)"
-		case anovelv1.ExitReason_EXIT_REASON_CRASHED:
-			return ev.TargetID + " terminated (crashed)"
+		if ev.ExitReason == anovelv1.ExitReason_EXIT_REASON_UNSPECIFIED {
+			return ev.TargetID + " terminated"
 		}
-		return ev.TargetID + " terminated"
+		return ev.TargetID + " terminated (" + enumWord(ev.ExitReason.String(), "EXIT_REASON_") + ")"
+	default:
+		return ev.TargetID + " " + ev.NewPhase.String()
 	}
-	return ev.TargetID + " " + ev.NewPhase.String()
 }
 
-// unimplemented returns the uniform error for an RPC with no handler yet, where
-// phase names when the feature is expected.
-func unimplemented(rpc, phase string) error {
-	return connect.NewError(connect.CodeUnimplemented, rpc+" not yet implemented (scheduled for "+phase+")")
-}
-
-// parseInfraLogID recognizes the "<stack>/<service>/infra/<name>" form
-// StreamLogs uses to address an infra container's log stream. It returns
-// (stack, service, name, true) on a match and ("", "", "", false) otherwise.
-//
-// The "infra" sentinel segment cannot collide with a target, since target IDs
-// come from compose service names.
-func parseInfraLogID(id string) (string, string, string, bool) {
-	parts := strings.Split(id, "/")
-	if len(parts) != 4 || parts[2] != "infra" {
-		return "", "", "", false
-	}
-	return parts[0], parts[1], parts[3], true
-}
-
-// streamPodmanLogs forwards `podman logs [-f] <cid>` output to a client log
-// stream. The container's stdout and stderr merge into one pipe, reported as
-// stdout, since service images write to stdout anyway.
-//
-// Each line is stamped at read time, which is accurate enough for the log
-// viewer and skips parsing podman's optional --timestamps prefix.
-func streamPodmanLogs(ctx context.Context, cid string, follow bool, stream anovelv1connect.CoreServiceStreamLogsServerStream) error {
-	args := []string{"logs"}
-	if follow {
-		args = append(args, "-f")
-	}
-	args = append(args, cid)
-	cmd := exec.CommandContext(ctx, "podman", args...)
-	pipeR, pipeW := io.Pipe()
-	cmd.Stdout = pipeW
-	cmd.Stderr = pipeW
-	if err := cmd.Start(); err != nil {
-		return connect.Errorf(connect.CodeInternal,
-			"start podman logs %s: %v", cid, err).WithCause(err)
-	}
-	// Close the writer when the command exits so the scanner sees EOF.
-	go func() {
-		_ = cmd.Wait()
-		_ = pipeW.Close()
-	}()
-	defer func() {
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
-	}()
-	scanner := bufio.NewScanner(pipeR)
-	// Container logs carry long lines, such as panics and JSON dumps, so the
-	// per-token cap goes up to keep the scanner from bisecting one.
-	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		select {
-		case <-ctx.Done():
-			return nil
-		default:
-		}
-		if err := stream.Send(&anovelv1.LogLine{
-			Ts:     timestamppb.Now(),
-			Stream: anovelv1.LogStream_LOG_STREAM_STDOUT,
-			Line:   scanner.Text(),
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
+// enumWord turns a proto enum name into the lowercase word after its prefix,
+// as PHASE_RUNNING becomes "running".
+func enumWord(name, prefix string) string {
+	return strings.ToLower(strings.TrimPrefix(name, prefix))
 }

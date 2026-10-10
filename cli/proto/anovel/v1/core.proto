@@ -103,7 +103,7 @@ message Target {
   Health     health            = 9; // container long-runners only
   int32      pid               = 10; // go-exec mode only
   string     container_id      = 11; // container mode only
-  repeated string deps         = 12; // target IDs this depends on
+  repeated string deps         = 12; // compose service names in its depends_on
   google.protobuf.Timestamp started_at  = 13;
   google.protobuf.Timestamp terminated_at = 14;
 }
@@ -135,17 +135,15 @@ message LogLine {
   string                    line   = 3;
 }
 
-// StateEvent is one transition emitted by Watch.
+// StateEvent is one target phase transition emitted by Watch.
 message StateEvent {
   google.protobuf.Timestamp ts          = 1;
-  string                    target_id   = 2; // empty for service/infra events
+  string                    target_id   = 2;
   string                    service     = 3;
   string                    stack       = 4;
   string                    description = 5; // human-readable summary
-  // Old/new states (populated for transitions; either may be empty for
-  // pure-event entries like "log file rotated").
-  Phase  old_phase = 6;
-  Phase  new_phase = 7;
+  Phase                     old_phase   = 6;
+  Phase                     new_phase   = 7;
 }
 
 // =============================================================================
@@ -154,8 +152,9 @@ message StateEvent {
 
 message PingRequest {}
 message PingResponse {
+  reserved 2;
+  reserved "now";
   string daemon_version = 1;
-  google.protobuf.Timestamp now = 2;
 }
 
 message StatusRequest {}
@@ -208,7 +207,7 @@ message ListStacksResponse {
 }
 
 message ListServicesRequest {
-  string stack       = 1; // empty == default; "*" == all stacks
+  string stack = 1; // empty == default; "*" == all stacks
 }
 message ListServicesResponse {
   repeated Service services = 1;
@@ -308,12 +307,12 @@ message RestartInfraContainerResponse {
 // =============================================================================
 
 message StreamLogsRequest {
-  string target_id = 1;
-  bool   follow    = 2;
-  int32  tail      = 3; // 0 == all
-  google.protobuf.Duration since = 4;
-  LogStream stream = 5; // unspecified == both
-  string run_id    = 6; // empty == current run; otherwise a past run
+  reserved 3, 4;
+  reserved "tail", "since";
+  string    target_id = 1;
+  bool      follow    = 2;
+  LogStream stream    = 5; // unspecified == both
+  string    run_id    = 6; // empty == current run; otherwise a past run
 }
 
 message ListRunsRequest {
@@ -328,10 +327,10 @@ message ListRunsResponse {
 // =============================================================================
 
 message GetEnvRequest {
-  string service = 1; // empty == every service in stack
-  string stack   = 2;
-  string only    = 3; // glob filter (e.g., "REST*")
-  bool   all_stacks = 4;
+  reserved 3, 4;
+  reserved "only", "all_stacks";
+  string service = 1; // empty == every service in stack; ignored for "*"
+  string stack   = 2; // empty == default; "*" == every service of every stack
 }
 message GetEnvResponse {
   // One entry per (stack, service, key) — clients format as shell/json/dotenv.
@@ -407,8 +406,9 @@ message DebugRequest {
   string target_id = 1;
 }
 message DebugResponse {
-  int32 delve_port = 1;
-  string hint      = 2;
+  reserved 1;
+  reserved "delve_port";
+  string hint = 2;
 }
 
 // =============================================================================

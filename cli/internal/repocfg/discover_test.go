@@ -7,25 +7,30 @@ import (
 	"testing"
 )
 
-// writeTree writes rel→content under root, creating parent dirs.
-func writeTree(root, rel, content string) {
-	p := filepath.Join(root, filepath.FromSlash(rel))
-	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
-		panic(err)
-	}
-	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
-		panic(err)
-	}
-}
-
 // TestDiscover covers the main.yaml-based discovery: required checks are the
 // always set plus every main.yaml job, minus the report-* and master-only
-// exclusions.
+// exclusions. A repo without a main.yaml (e.g. docs/meta) yields just the
+// always set.
 func TestDiscover(t *testing.T) {
 	t.Parallel()
 
-	root := t.TempDir()
-	writeTree(root, ".github/workflows/main.yaml", `
+	cc, err := LoadChecks()
+	if err != nil {
+		t.Fatalf("LoadChecks: %v", err)
+	}
+	// The [Agent] app id is per-org, injected before discovery. A sentinel id
+	// proves merge-gate resolves to the injected value, not a global constant.
+	cc.ResolveBotIntegrations(&OrgProfile{Bots: map[string]int64{"agent": 4242}})
+
+	testCases := []struct {
+		name     string
+		mainYAML string
+		want     []string
+	}{
+		{name: "Success/NoMainYaml", want: []string{"epic-freeze", "merge-gate"}},
+		{
+			name: "Success/MainYaml",
+			mainYAML: `
 name: main
 jobs:
   test-go:
@@ -37,58 +42,38 @@ jobs:
   publish-docs:
     if: "github.ref == 'refs/heads/master' && success()"
     runs-on: ubuntu-latest
-`)
-	writeTree(root, "go.mod", "module x\n")
-	writeTree(root, "package.json", "{}")
-
-	cc, err := LoadChecks()
-	if err != nil {
-		t.Fatalf("LoadChecks: %v", err)
+`,
+			want: []string{"epic-freeze", "lint-go", "merge-gate", "test-go"},
+		},
 	}
-	// The [Agent] app id is per-org, injected before discovery. Use a sentinel id
-	// so the assertion below proves merge-gate resolves to the injected value, not
-	// a global constant.
-	cc.ResolveBotIntegrations(&OrgProfile{Bots: map[string]int64{"agent": 4242}})
-	d, err := Discover(root, cc)
-	if err != nil {
-		t.Fatalf("Discover: %v", err)
-	}
-
-	// always (epic-freeze + merge-gate) + the non-excluded main.yaml jobs.
-	got := contextsOf(d.Checks)
-	want := []string{"epic-freeze", "lint-go", "merge-gate", "test-go"}
-	if !slices.Equal(got, want) {
-		t.Errorf("required checks = %v, want %v", got, want)
-	}
-	// merge-gate + epic-freeze must be required against the injected per-org [Agent] app id.
-	for _, c := range d.Checks {
-		if (c.Context == "merge-gate" || c.Context == "epic-freeze") && c.IntegrationID != 4242 {
-			t.Errorf("%s integration id = %d, want the injected 4242", c.Context, c.IntegrationID)
-		}
-	}
-	// report-* and master-only jobs must NOT be required.
-	for _, ex := range []string{"report-codecov", "publish-docs"} {
-		if slices.Contains(got, ex) {
-			t.Errorf("excluded job %q leaked into required checks: %v", ex, got)
-		}
-	}
-}
-
-// TestDiscover_NoMainYaml: a repo without a main.yaml (e.g. docs/meta) yields
-// just the always-required checks.
-func TestDiscover_NoMainYaml(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	cc, err := LoadChecks()
-	if err != nil {
-		t.Fatalf("LoadChecks: %v", err)
-	}
-	d, err := Discover(root, cc)
-	if err != nil {
-		t.Fatalf("Discover: %v", err)
-	}
-	if got, want := contextsOf(d.Checks), []string{"epic-freeze", "merge-gate"}; !slices.Equal(got, want) {
-		t.Errorf("checks = %v, want %v", got, want)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			if testCase.mainYAML != "" {
+				workflows := filepath.Join(root, ".github", "workflows")
+				if err := os.MkdirAll(workflows, 0o750); err != nil {
+					panic(err)
+				}
+				if err := os.WriteFile(filepath.Join(workflows, "main.yaml"), []byte(testCase.mainYAML), 0o600); err != nil {
+					panic(err)
+				}
+			}
+			d, err := Discover(root, cc)
+			if err != nil {
+				t.Fatalf("Discover: %v", err)
+			}
+			got := make([]string, len(d.Checks))
+			for i, c := range d.Checks {
+				got[i] = c.Context
+				// merge-gate + epic-freeze are required against the injected per-org [Agent] app id.
+				if (c.Context == "merge-gate" || c.Context == "epic-freeze") && c.IntegrationID != 4242 {
+					t.Errorf("%s integration id = %d, want the injected 4242", c.Context, c.IntegrationID)
+				}
+			}
+			if !slices.Equal(got, testCase.want) {
+				t.Errorf("required checks = %v, want %v", got, testCase.want)
+			}
+		})
 	}
 }

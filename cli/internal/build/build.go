@@ -1,6 +1,6 @@
-// Package build executes a detected target as a subprocess and reports a
-// structured pass/fail [Result] with captured output — the raw material the UI
-// turns into a build report.
+// Package build turns a detected target into a [jobs.Job]: it assembles the
+// target's environment, brings its compose env up and down around the command,
+// and enforces the per-target deadline.
 package build
 
 import (
@@ -13,124 +13,48 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/a-novel-kit/stack/cli/internal/detect"
+	"github.com/a-novel-kit/stack/cli/internal/jobs"
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
 )
 
-// Result is the outcome of running one [detect.Target].
-type Result struct {
-	Target detect.Target
-
-	// Success is true iff the process exited zero.
-	Success bool
-
-	// ExitErr is the non-nil error from a failed/aborted process (non-zero
-	// exit, context cancellation, or a binary that could not be spawned).
-	ExitErr error
-
-	// Output is the combined stdout+stderr, trimmed. It is always captured,
-	// since a failure's output is what the user needs to see.
-	Output string
-
-	// Duration is wall-clock time spent in the subprocess.
-	Duration time.Duration
-}
-
-// LiveLog holds the most recent output line per target. The parallel runners
-// write it concurrently and the TUI reads it each spinner tick, so progress
-// shows and a stalled command stands out early. A nil *LiveLog is a valid
-// no-op.
-type LiveLog struct {
-	mu sync.Mutex
-	m  map[string]string
-}
-
-// NewLiveLog returns an empty LiveLog ready for concurrent writes and reads.
-func NewLiveLog() *LiveLog { return &LiveLog{m: map[string]string{}} }
-
-func (l *LiveLog) set(id, line string) {
-	if l == nil || line == "" {
-		return
+// Job wraps t for the job runner. A timeout above zero bounds the whole target,
+// env bring-up included; teardown then runs on a detached context, so a
+// timed-out target is still cleaned up.
+//
+// maxProcs above zero caps GOMAXPROCS for the spawned process, so concurrent
+// `go test` targets share the machine's cores. keep leaves the target's compose
+// env up after the run; the next run's preflight adopts it, schema included.
+func Job(t detect.Target, timeout time.Duration, maxProcs int, keep bool) jobs.Job {
+	return jobs.Job{
+		Name:   t.Name,
+		Group:  string(t.Kind),
+		Detail: t.RelDir,
+		Run: func(ctx context.Context, out io.Writer) (string, error) {
+			return "", run(ctx, t, timeout, maxProcs, keep, out)
+		},
 	}
-	l.mu.Lock()
-	l.m[id] = line
-	l.mu.Unlock()
-}
-
-// Line returns the latest captured output line for target id ("" if none).
-func (l *LiveLog) Line(id string) string {
-	if l == nil {
-		return ""
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.m[id]
-}
-
-var ansiSeq = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
-
-// cleanLine reduces a raw output chunk to one readable line: text after the
-// last carriage return (collapses \r progress redraws), ANSI stripped, trimmed.
-func cleanLine(s string) string {
-	if i := strings.LastIndexByte(s, '\r'); i >= 0 {
-		s = s[i+1:]
-	}
-	return strings.TrimSpace(ansiSeq.ReplaceAllString(s, ""))
-}
-
-// tailWriter records the most recent output line, complete or in progress, into
-// a LiveLog under the target's id. It sits in an io.MultiWriter beside the
-// capture buffer, so it never swallows output.
-type tailWriter struct {
-	id   string
-	live *LiveLog
-	rest []byte
-}
-
-func (w *tailWriter) Write(p []byte) (int, error) {
-	w.rest = append(w.rest, p...)
-	for {
-		i := bytes.IndexByte(w.rest, '\n')
-		if i < 0 {
-			break
-		}
-		w.live.set(w.id, cleanLine(string(w.rest[:i])))
-		w.rest = w.rest[i+1:]
-	}
-	w.live.set(w.id, cleanLine(string(w.rest)))
-	return len(p), nil
 }
 
 // PrepareEnv builds the process environment for a target: os.Environ() plus,
 // when the target has a compose env, allocated host ports, the URLs derived
 // from them, standard local test credentials, and whatever
-// scripts/setup-env.sh defines. It is the single source of env truth for both
-// `build`/`test` and `run`, and streams its progress to out. It returns the
-// full environment and the delta the CLI contributed to it.
-func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, []string, error) {
-	// Snapshot the inherited env to compute the CLI's delta at the end. Global
-	// mode cross-shares that delta between services.
-	baseline := make(map[string]string, len(os.Environ()))
-	for _, e := range os.Environ() {
-		k, v, _ := strings.Cut(e, "=")
-		baseline[k] = v
-	}
-
+// scripts/setup-env.sh defines, then the repo's declared secrets. It streams
+// its progress to out.
+func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, error) {
 	runEnv := os.Environ()
 	if t.Env != nil {
 		var added []string
 		if len(t.Env.Ports) > 0 {
 			portEnv, err := allocPorts(t.Env.Ports)
 			if err != nil {
-				return nil, nil, fmt.Errorf("port allocation failed: %w", err)
+				return nil, fmt.Errorf("port allocation failed: %w", err)
 			}
 			runEnv = append(runEnv, portEnv...)
 			derived := derivedURLs(t.Env.Ports, runEnv)
@@ -153,35 +77,23 @@ func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, 
 	// APP_MASTER_KEY. It already sees the ports and URLs set above, so its
 	// `${VAR:=…}` defaults stay inert and cannot override them.
 	if root := repoRoot(t); root != "" {
-		if se := filepath.Join(root, "scripts", "setup-env.sh"); isFile(se) {
+		if se := filepath.Join(root, "scripts", "setup-env.sh"); detect.IsFile(se) {
 			_, _ = fmt.Fprintf(out, "── setup-env: %s ──\n", rel(root, se))
 			env, err := sourceEnv(ctx, se, root, runEnv, out)
 			if err != nil {
-				return nil, nil, fmt.Errorf("setup-env.sh failed: %w", err)
+				return nil, fmt.Errorf("setup-env.sh failed: %w", err)
 			}
 			runEnv = env
 		}
 	}
 
-	// Un-prefix the operator's `<SERVICE_X>_*` vars into this service's own env:
-	// a shell exporting `SERVICE_JSON_KEYS_APP_MASTER_KEY=hex` reaches the
-	// json-keys process as `APP_MASTER_KEY=hex`. This runs after setup-env, so
-	// the operator's value wins over the script's default.
-	if prefix := servicePrefix(t.Service); prefix != "" {
-		runEnv = unprefixForOwner(runEnv, prefix)
-	}
-
-	// Inject the repo's decrypted secrets, declared by the value-free
-	// .a-novel/secrets.yaml manifest at the repo root; an absent manifest is a
-	// no-op, and an absent key or store reports every declared secret missing.
-	// Appending them last lets a developer-provisioned secret win over any
-	// default, and folds them into the delta global mode cross-shares. Values
+	// Secrets come last so a provisioned value wins over any default. Values
 	// never reach the `── env ──` block above, and a declared-but-unset secret
 	// only raises a value-free warning, so tests that don't need it still run.
 	if root := repoRoot(t); root != "" {
 		res, err := secrets.InjectForRepo(root)
 		if err != nil {
-			return nil, nil, fmt.Errorf("secrets injection failed: %w", err)
+			return nil, fmt.Errorf("secrets injection failed: %w", err)
 		}
 		for name, value := range res.Env {
 			runEnv = append(runEnv, name+"="+value)
@@ -191,82 +103,11 @@ func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, 
 		}
 	}
 
-	// The delta holds every var the CLI or setup-env added or changed. Global
-	// mode re-exports it to other services under an `<SERVICE>_` prefix.
-	delta := envDelta(runEnv, baseline)
-	return runEnv, delta, nil
+	return runEnv, nil
 }
 
-// servicePrefix is the producer-namespace prefix for a service name:
-// "service-json-keys" → "SERVICE_JSON_KEYS_". An empty service yields an empty
-// prefix.
-func servicePrefix(svc string) string {
-	if svc == "" {
-		return ""
-	}
-	return strings.ToUpper(strings.ReplaceAll(svc, "-", "_")) + "_"
-}
-
-// unprefixForOwner mirrors each `<PREFIX><KEY>=value` entry as `<KEY>=value`, so
-// an operator-set value reaches the owning service under its native variable
-// name. On duplicate inputs the latest value wins, and the un-prefixed entry
-// replaces any earlier one for the same key.
-func unprefixForOwner(env []string, prefix string) []string {
-	val := make(map[string]string, len(env))
-	order := make([]string, 0, len(env))
-	for _, e := range env {
-		k, v, _ := strings.Cut(e, "=")
-		if _, ok := val[k]; !ok {
-			order = append(order, k)
-		}
-		val[k] = v
-	}
-	var added []string
-	for _, k := range order {
-		if !strings.HasPrefix(k, prefix) {
-			continue
-		}
-		unp := k[len(prefix):]
-		if unp == "" {
-			continue
-		}
-		if _, ok := val[unp]; !ok {
-			added = append(added, unp)
-		}
-		val[unp] = val[k]
-	}
-	out := make([]string, 0, len(order)+len(added))
-	for _, k := range order {
-		out = append(out, k+"="+val[k])
-	}
-	for _, k := range added {
-		out = append(out, k+"="+val[k])
-	}
-	return out
-}
-
-// envDelta returns the env entries in final that differ from baseline. Order
-// follows final (so the most recent value of any duplicate key wins, matching
-// shell-export semantics).
-func envDelta(final []string, baseline map[string]string) []string {
-	seen := make(map[string]string, len(final))
-	for _, e := range final {
-		k, v, _ := strings.Cut(e, "=")
-		seen[k] = v
-	}
-	out := make([]string, 0, len(seen))
-	for k, v := range seen {
-		if bv, ok := baseline[k]; !ok || bv != v {
-			out = append(out, k+"="+v)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-// ANSI SGR codes used by formatEnvBlock. The ui/lipgloss palette is out of
-// reach here — ui imports build — so the colors are inlined as raw 256-color
-// escapes. They survive runner.SanitizeLine and render in the viewport.
+// ANSI SGR codes used by formatEnvBlock. The block lands in captured output, so
+// its colors travel as raw 256-color escapes rather than lipgloss styles.
 const (
 	envHdr = "\x1b[1;38;5;172m" // gold, bold — the header
 	envKey = "\x1b[38;5;37m"    // accent — variable names
@@ -289,7 +130,7 @@ func formatEnvBlock(kv []string) string {
 			maxK = len(k)
 		}
 	}
-	sort.Slice(pairs, func(i, j int) bool { return pairs[i].k < pairs[j].k })
+	slices.SortFunc(pairs, func(a, b pair) int { return strings.Compare(a.k, b.k) })
 	var b strings.Builder
 	b.WriteString(envHdr + "── env ──" + envRst + "\n")
 	for _, p := range pairs {
@@ -300,128 +141,74 @@ func formatEnvBlock(kv []string) string {
 	return b.String()
 }
 
-// Run executes t.Cmd with t.Args in t.Dir, capturing combined output, and
-// blocks until the process exits or ctx is cancelled. A timeout above zero
-// bounds the whole target, env bring-up included; teardown then runs on a
-// detached context, so a timed-out target is still cleaned up. live, which may
-// be nil, receives the most recent output line for the TUI tail. Every field of
-// the returned Result is meaningful.
-//
-// maxProcs above zero caps GOMAXPROCS for the spawned process. The parallel
-// interactive runner passes NumCPU/jobs so that concurrent `go test` targets
-// share the machine's cores; zero leaves GOMAXPROCS untouched, for the
-// sequential path where a target has the box to itself.
-//
-// keep leaves the target's compose env up after the run, so a repeat run reuses
-// the same containers and volume and skips the Postgres initdb; the next run's
-// preflight adopts it. A reused env keeps its prior schema, so the caller must
-// not pass keep across a migration change.
-func Run(ctx context.Context, t detect.Target, timeout time.Duration, live *LiveLog, maxProcs int, keep bool) Result {
-	start := time.Now()
-
-	// Per-target deadline. Cancellation propagates into exec.CommandContext and
-	// kills the test or compose-up process; the deferred env-down below detaches
-	// from ctx so it survives the deadline.
+// run executes t.Cmd with t.Args in t.Dir, writing the command line, the env
+// assembly, compose output and the command's own output to out.
+func run(ctx context.Context, t detect.Target, timeout time.Duration, maxProcs int, keep bool, out io.Writer) error {
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
 
-	// One buffer for both streams, so the report keeps stdout and stderr
-	// interleaved. Compose up/down output lands in it too, fenced with ──
-	// headers, so a failure to stand up the environment reads as part of the
-	// same story.
-	var buf bytes.Buffer
-	// Everything bound for the report buffer also tees to the live tail, so
-	// env-up progress and the command's own output both feed the line the TUI
-	// shows under the running target.
-	out := io.MultiWriter(&buf, &tailWriter{id: t.ID(), live: live})
-
-	runEnv, _, perr := PrepareEnv(ctx, t, out)
-	if perr != nil {
-		return Result{
-			Target:   t,
-			ExitErr:  perr,
-			Output:   strings.TrimRight(buf.String(), "\n"),
-			Duration: time.Since(start),
-		}
+	_, _ = fmt.Fprintf(out, "$ %s %s\n", t.Cmd, strings.Join(t.Args, " "))
+	runEnv, err := PrepareEnv(ctx, t, out)
+	if err != nil {
+		return err
 	}
 
-	// Cap the process' core count so parallel targets don't oversubscribe the
-	// CPU. GOMAXPROCS also bounds `go test`'s compile parallelism, since -p
-	// defaults to it, so this throttles the build and the run alike. A target
-	// that pins GOMAXPROCS itself keeps its own value.
+	// GOMAXPROCS also bounds `go test`'s compile parallelism, since -p defaults
+	// to it, so the cap throttles the build and the run alike. A target that
+	// pins GOMAXPROCS itself keeps its own value.
 	if maxProcs > 0 && !has(runEnv, "GOMAXPROCS") {
-		runEnv = append(runEnv, fmt.Sprintf("GOMAXPROCS=%d", maxProcs))
+		runEnv = append(runEnv, "GOMAXPROCS="+strconv.Itoa(maxProcs))
 	}
 
-	// An inner closure so the deferred env-down runs, and appends its output,
-	// before buf is snapshotted into res.Output below.
-	res := func() Result {
-		if t.Env != nil {
-			_, _ = fmt.Fprintf(out, "── env up: %s ──\n", t.Env.ID)
-			// Register the down before the up so it runs even when bring-up
-			// fails midway or ctx is cancelled mid-test, on a detached context
-			// so cleanup is never cancelled itself. The podman-compose provider
-			// accepts --volume in the singular. Under --keep the env stays up
-			// with its volume, and the next run's preflight adopts it.
-			if !keep {
-				defer func() {
-					_, _ = fmt.Fprint(out, "── env down ──\n")
-					_ = compose(context.WithoutCancel(ctx), out, runEnv, t.Env, nil, "down", "--volume")
-				}()
-			} else {
-				_, _ = fmt.Fprint(out, "── env kept up (--keep) ──\n")
-			}
-			// Bring the env up in dependency waves, waiting for each to become
-			// healthy before the tests run.
-			if err := composeUpPhased(ctx, out, runEnv, t.Env, 120*time.Second); err != nil {
-				return Result{Target: t, ExitErr: fmt.Errorf(
-					"environment %s failed to start: %w", t.Env.ID, err)}
-			}
-			_, _ = fmt.Fprintf(out, "── %s ──\n", t.Name)
-		}
-
-		cmd := exec.Command(t.Cmd, t.Args...)
-		cmd.Dir = t.Dir
-		cmd.Env = runEnv
-		cmd.Stdout = out
-		cmd.Stderr = out
-		// Own process group so a timeout or abort kills the whole tree
-		// (pnpm → sh → node, go test → compiled bins). Killing only the direct
-		// child leaves Wait blocked on a grandchild's inherited pipe, and the
-		// deadline is then reported but never enforced.
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		if err := cmd.Start(); err != nil {
-			return Result{Target: t, ExitErr: err}
-		}
-		done := make(chan struct{})
-		go func() {
-			select {
-			case <-ctx.Done():
-				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-			case <-done:
-			}
-		}()
-		err := cmd.Wait()
-		close(done)
-		return Result{Target: t, Success: err == nil, ExitErr: err}
-	}()
-
-	// A timed-out target reads like any other failure: the command goes into the
-	// captured output and the error names the timeout, so the report's failure
-	// panel shows the command, the error, and whatever ran before the deadline.
+	err = runInEnv(ctx, t, keep, runEnv, out)
 	if timeout > 0 && errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		_, _ = fmt.Fprintf(out, "\n── TIMED OUT after %s ──\n$ %s %s\n",
-			timeout, t.Cmd, strings.Join(t.Args, " "))
-		res.Success = false
-		res.ExitErr = fmt.Errorf("timed out after %s (override with --timeout)", timeout)
+		_, _ = fmt.Fprintf(out, "\n── TIMED OUT after %s ──\n", timeout)
+		return fmt.Errorf("timed out after %s (override with --timeout)", timeout)
+	}
+	return err
+}
+
+// runInEnv brings t's compose env up, when it has one, runs the command, and
+// tears the env down unless keep is set.
+func runInEnv(ctx context.Context, t detect.Target, keep bool, runEnv []string, out io.Writer) error {
+	if t.Env != nil {
+		_, _ = fmt.Fprintf(out, "── env up: %s ──\n", t.Env.ID)
+		// The down is registered before the up so it runs even when bring-up
+		// fails midway, on a detached context so cleanup is never cancelled.
+		// The podman-compose provider accepts --volume in the singular.
+		if keep {
+			_, _ = fmt.Fprint(out, "── env kept up (--keep) ──\n")
+		} else {
+			defer func() {
+				_, _ = fmt.Fprint(out, "── env down ──\n")
+				_ = compose(context.WithoutCancel(ctx), out, runEnv, t.Env, nil, "down", "--volume")
+			}()
+		}
+		if err := composeUpPhased(ctx, out, runEnv, t.Env, 120*time.Second); err != nil {
+			return fmt.Errorf("environment %s failed to start: %w", t.Env.ID, err)
+		}
+		_, _ = fmt.Fprintf(out, "── %s ──\n", t.Name)
 	}
 
-	res.Output = strings.TrimRight(buf.String(), "\n")
-	res.Duration = time.Since(start)
-	return res
+	cmd := exec.Command(t.Cmd, t.Args...)
+	cmd.Dir = t.Dir
+	cmd.Env = runEnv
+	cmd.Stdout = out
+	cmd.Stderr = out
+	// Own process group so a timeout or abort kills the whole tree (pnpm → sh →
+	// node, go test → compiled bins). Killing only the direct child leaves Wait
+	// blocked on a grandchild's inherited pipe, and the deadline is never
+	// enforced.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	stop := context.AfterFunc(ctx, func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) })
+	defer stop()
+	return cmd.Wait()
 }
 
 // repoRoot is the directory holding scripts/ and builds/ for a target: the
@@ -432,11 +219,6 @@ func repoRoot(t detect.Target) string {
 		return filepath.Dir(filepath.Dir(t.Env.File))
 	}
 	return t.Dir
-}
-
-func isFile(p string) bool {
-	fi, err := os.Stat(p)
-	return err == nil && !fi.IsDir()
 }
 
 func rel(base, p string) string {
@@ -490,12 +272,7 @@ var stdTestEnv = map[string]string{
 
 // has reports whether env already defines key.
 func has(env []string, key string) bool {
-	for _, kv := range env {
-		if strings.HasPrefix(kv, key+"=") {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(env, func(kv string) bool { return strings.HasPrefix(kv, key+"=") })
 }
 
 // envVal returns env's value for key, or "".
@@ -683,19 +460,13 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 // health at "starting". Two waves cover the flat test composes: infra plus one
 // standalone subject.
 //
-// services, when non-empty, restricts the bring-up to that subset and
-// partitions it into the same two waves. An unknown service list falls back to
-// a single whole-env `up`.
+// An env whose service list is unknown comes up in a single whole-env `up`.
 //
 // --remove-orphans stays out: podman-compose's orphan handling around a
 // positional `up <svc>` varies by version and can sweep services it just
 // created. TearDown owns orphan removal.
-func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect.ComposeEnv, healthTimeout time.Duration, services ...string) error {
-	want := services
-	if len(want) == 0 {
-		want = e.Services
-	}
-	if len(want) == 0 {
+func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect.ComposeEnv, healthTimeout time.Duration) error {
+	if len(e.Services) == 0 {
 		// Unknown service list: bring the whole env up at once.
 		if err := compose(ctx, out, env, e,
 			[]string{"--podman-build-args=--format docker -q"}, "up", "-d", "--build"); err != nil {
@@ -704,21 +475,15 @@ func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect
 		return waitHealthy(ctx, out, env, e, healthTimeout)
 	}
 
-	dependent := make(map[string]bool, len(e.Dependents))
-	for _, s := range e.Dependents {
-		dependent[s] = true
-	}
 	var infra, dependents []string
-	for _, s := range want {
-		if dependent[s] {
+	for _, s := range e.Services {
+		if slices.Contains(e.Dependents, s) {
 			dependents = append(dependents, s)
 		} else {
 			infra = append(infra, s)
 		}
 	}
 
-	// Number the waves by execution order, so a subset holding only dependents
-	// still shows its first bring-up as "wave 1".
 	waveNum := 0
 	for _, wave := range [][]string{infra, dependents} {
 		if len(wave) == 0 {
@@ -735,22 +500,6 @@ func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect
 		if err := waitHealthy(ctx, out, env, e, healthTimeout); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-// EnvUp brings a compose env up in dependency waves, building and detaching,
-// then waits for it to become healthy. It is the `run` counterpart of the env
-// handling Run does inline, and streams its progress to out.
-//
-// services, when non-empty, names the compose services to bring up, narrowing
-// the default of every profile-less service. The runner uses it in global mode
-// to skip services that duplicate a sibling already running from its own repo.
-func EnvUp(ctx context.Context, env []string, e *detect.ComposeEnv, out io.Writer, services ...string) error {
-	// 180s: a fresh `--build` plus first-run postgres `initdb` can exceed the
-	// 120s budget on slower machines / cold caches.
-	if err := composeUpPhased(ctx, out, env, e, 180*time.Second, services...); err != nil {
-		return fmt.Errorf("environment %s failed to start: %w", e.ID, err)
 	}
 	return nil
 }
@@ -833,32 +582,4 @@ func containerLogTail(ctx context.Context, env []string, id string, lines int) s
 		return ""
 	}
 	return strings.TrimRight(out, "\n")
-}
-
-// Summary aggregates a set of results for the report screen.
-type Summary struct {
-	Total  int
-	Passed int
-	Failed int
-
-	// CumulativeDuration is the total work performed: the sum of every target's
-	// own build time. Overlapping builds each count in full, so under the
-	// parallel runner it exceeds wall-clock time, which the runner tracks
-	// separately and the report shows as "took".
-	CumulativeDuration time.Duration
-}
-
-// Summarize folds results into counts and cumulative per-target build time.
-// Wall-clock elapsed time belongs to the runner.
-func Summarize(results []Result) Summary {
-	s := Summary{Total: len(results)}
-	for _, r := range results {
-		s.CumulativeDuration += r.Duration
-		if r.Success {
-			s.Passed++
-		} else {
-			s.Failed++
-		}
-	}
-	return s
 }

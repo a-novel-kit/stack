@@ -39,7 +39,7 @@ and requires `git` and a running Podman. The rest of the toolchain (Node + pnpm,
 go install github.com/a-novel-kit/stack/cli/cmd/a-novel@latest
 
 a-novel core setup    # one-time bootstrap: env checks, state dirs, shell rc, daemon
-a-novel core sync     # clone / fast-forward the workspace repos into app/ and kit/
+a-novel core sync     # clone / fast-forward the workspace repos into app/ and kit/, in parallel
 ```
 
 `go install` pulls and builds the binary straight from the module path — no
@@ -97,9 +97,10 @@ learn this one.
 Everything the UI does is also a discrete command — what you reach for in
 scripts, in CI, or when you already know exactly what you want.
 
-**Build and test** discover their targets in the working tree and show an
-interactive picker by default; `-y` skips it and runs everything sequentially
-(also the default when there is no TTY):
+**Build and test** discover their targets in the working tree, show an
+interactive picker by default, and run the selection in parallel. `-y` skips
+the picker and runs everything, sequentially unless `-j` sets a limit (also the
+default when there is no TTY):
 
 ```bash
 a-novel test -y                       # run every Go + pnpm test in the tree

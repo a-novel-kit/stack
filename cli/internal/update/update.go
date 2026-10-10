@@ -1,7 +1,7 @@
 // Package update implements a best-effort "a newer version is available" notice
-// for the a-novel CLI. Every failure — offline, proxy down, unparseable data,
-// unwritable cache — is swallowed, because a version check must never disrupt
-// or slow a command. The latest version is cached, so the network is hit at
+// for the a-novel CLI. Every failure, from an offline network to an unwritable
+// cache, is swallowed, because a version check must never disrupt or slow a
+// command. The latest version is cached, so the network is hit at
 // most once per checkInterval and the cached value drives the notice between
 // fetches.
 package update
@@ -23,9 +23,9 @@ import (
 
 const (
 	// latestURL is the Go module proxy's "latest version" endpoint for the CLI
-	// module — the very source `go install …@latest` resolves against, so the
-	// suggested version is exactly what an update would install. The trailing
-	// path is the cli/ submodule; the proxy maps it to the latest cli/vX.Y.Z tag.
+	// module. `go install …@latest` resolves against the same source, so the
+	// suggested version is what an update installs. The trailing path is the
+	// cli/ submodule, which the proxy maps to the latest cli/vX.Y.Z tag.
 	latestURL = "https://proxy.golang.org/github.com/a-novel-kit/stack/cli/@latest"
 
 	// installPath is the package users `go install` to update.
@@ -43,8 +43,9 @@ const (
 	// command by more than this on the once-a-day refresh.
 	httpTimeout = 2 * time.Second
 
-	// maxResponseBytes bounds how much of the proxy response is read before
-	// decoding — the @latest JSON is a few hundred bytes; 64 KiB is ample.
+	// maxResponseBytes bounds how much of the proxy response is decoded, so an
+	// unexpectedly large body cannot balloon memory. The @latest JSON is a few
+	// hundred bytes.
 	maxResponseBytes = 64 << 10
 
 	cacheFile = "update-check.json"
@@ -56,12 +57,11 @@ type cacheEntry struct {
 	Latest    string    `json:"latest"`
 }
 
-// Notify writes a short "update available" suggestion to w — two lines: the
-// available version, then the install command — when a tagged release newer than
-// current exists. current is version.String(): a non-release value (a commit
-// hash, "dev", "(devel)") is skipped, since there is nothing to compare a local
-// build against. Honors the A_NOVEL_NO_UPDATE_CHECK opt-out. All errors are
-// intentionally ignored.
+// Notify writes a two-line "update available" suggestion to w, the available
+// version and then the install command, when a tagged release newer than current
+// exists. current is version.String(); a non-release value such as a commit hash
+// or "dev" is skipped, since a local build has nothing to compare against.
+// Setting A_NOVEL_NO_UPDATE_CHECK disables the check, and all errors are ignored.
 func Notify(w io.Writer, current string) {
 	if os.Getenv(disableEnv) != "" || !semver.IsValid(current) {
 		return
@@ -74,9 +74,9 @@ func Notify(w io.Writer, current string) {
 	_, _ = fmt.Fprintf(w, "  Update: go install %s@latest\n", installPath)
 }
 
-// shouldNotify reports whether latest is a valid release strictly newer than
-// current (both already known to be candidate versions). Pure, so the decision
-// is unit-testable without touching the network or the cache.
+// shouldNotify reports whether both versions are valid releases and latest is
+// strictly newer than current. It is pure, so the decision is unit-testable
+// without touching the network or the cache.
 func shouldNotify(current, latest string) bool {
 	return semver.IsValid(current) && semver.IsValid(latest) && semver.Compare(latest, current) > 0
 }
@@ -121,8 +121,6 @@ func fetchLatest() string {
 	var info struct {
 		Version string `json:"Version"`
 	}
-	// The @latest payload is a few hundred bytes; bound the read so an
-	// unexpectedly large response can't balloon memory.
 	if json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(&info) != nil {
 		return ""
 	}
@@ -139,10 +137,10 @@ func readCache(path string) (cacheEntry, error) {
 	return entry, err
 }
 
-// writeCache writes entry atomically — to a temp file in the same directory,
-// then rename into place — so a concurrent invocation or an interrupted write
-// can never leave a half-written cache that disables the check until the
-// interval expires.
+// writeCache writes entry to a temp file in the same directory and renames it
+// into place. A concurrent invocation or an interrupted write therefore never
+// leaves a half-written cache that disables the check until the interval
+// expires.
 func writeCache(path string, entry cacheEntry) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

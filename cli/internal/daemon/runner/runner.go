@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"sync"
@@ -13,26 +14,6 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Mode is how a target instance was spawned. Mirrors anovelv1.Mode but
-// keeps the runner package independent of the proto types.
-type Mode int
-
-const (
-	ModeGoExec    Mode = 1
-	ModeContainer Mode = 2
-)
-
-func (m Mode) String() string {
-	switch m {
-	case ModeGoExec:
-		return "go-exec"
-	case ModeContainer:
-		return "container"
-	default:
-		return "unknown"
-	}
-}
-
 // Instance is one running (or recently-terminated) target. The runner owns
 // every Instance; the server reads them through Runner methods.
 type Instance struct {
@@ -41,19 +22,20 @@ type Instance struct {
 	Target  string // bare target name (e.g., "rest")
 	Service string
 	Stack   string
+	// Mode is how the instance was spawned, go-exec or container. It is set
+	// at construction and never changes.
+	Mode anovelv1.Mode
 
 	// Lifecycle. Mutated by the runner; readers must hold Runner.mu (RLock).
 	Phase        anovelv1.Phase
 	ExitReason   anovelv1.ExitReason
 	Health       anovelv1.Health
-	Mode         Mode
 	PID          int32
 	ContainerID  string
 	StartedAt    time.Time
 	TerminatedAt time.Time
-	// LastErr captures the most recent non-fatal error observed by the
-	// supervisor (e.g., spawn failure, wait error). Surfaced via the
-	// LastError method.
+	// LastErr captures the most recent error the supervisor observed, such as
+	// a spawn or wait failure. A failed one-shot quotes it.
 	LastErr string
 
 	// Process handle. nil after termination.
@@ -61,23 +43,33 @@ type Instance struct {
 	cancel context.CancelFunc
 }
 
+// Live reports whether the instance is starting or running, the phases a
+// shutdown or an infra teardown has to stop.
+func (i *Instance) Live() bool {
+	return i.Phase == anovelv1.Phase_PHASE_RUNNING || i.Phase == anovelv1.Phase_PHASE_STARTING
+}
+
+// ErrEnv marks a start that failed while building the target's env, a daemon
+// fault rather than a refused precondition.
+var ErrEnv = errors.New("env build")
+
 // Runner supervises every spawned target across every stack. A single RWMutex
 // guards the instance map, making per-target state last-write-wins.
 type Runner struct {
 	mu        sync.RWMutex
 	instances map[string]*Instance // keyed by Instance.ID
 
-	// discovery translates a target ID into a discovery.Target at start time.
-	discovery []*discovery.Stack
+	// stacks translates a target ID into a discovery.Target at start time.
+	stacks discovery.Stacks
 	// alloc is the port allocator. The runner releases an instance's
 	// refcounted slots when it terminates. A nil allocator skips those
 	// releases, which tests rely on.
 	alloc *env.Allocator
-	// builder synthesizes env blocks per target, for the infra path where
-	// StartInfra auto-runs one-shots that each need an env.
+	// builder synthesizes the env block of every target and infra the runner
+	// spawns.
 	builder *env.Builder
 	// logs is the per-target log store. The runner pipes go-exec stdout and
-	// stderr through it; container logs stay in podman's journal.
+	// stderr through it, and streams `podman logs` of its containers into it.
 	logs *logs.Store
 
 	// sessMu guards infraSessions. Separate from mu so the (sometimes
@@ -121,10 +113,10 @@ const infraStateCacheTTL = 2500 * time.Millisecond
 // New returns an empty Runner wired to the discovery snapshot it resolves
 // target IDs against, the env allocator and builder, and the log store that
 // captures target output.
-func New(disc []*discovery.Stack, alloc *env.Allocator, builder *env.Builder, logStore *logs.Store) *Runner {
+func New(disc discovery.Stacks, alloc *env.Allocator, builder *env.Builder, logStore *logs.Store) *Runner {
 	return &Runner{
 		instances:       make(map[string]*Instance),
-		discovery:       disc,
+		stacks:          disc,
 		alloc:           alloc,
 		builder:         builder,
 		logs:            logStore,
@@ -167,22 +159,63 @@ func (r *Runner) AllInstances() []Instance {
 }
 
 // =============================================================================
-// Lifecycle invariants — used by every Start path
+// Start
 // =============================================================================
 
-// resolveTarget looks up a target by ID across every registered stack.
-// Returns the discovery.Target along with its owning Service for context.
-func (r *Runner) resolveTarget(id string) (*discovery.Target, *discovery.Service, error) {
-	for _, st := range r.discovery {
-		for _, svc := range st.Services {
-			for _, t := range svc.Targets {
-				if targetID(st.Name, svc.Name, t.Name) == id {
-					return t, svc, nil
-				}
-			}
-		}
+// StartTarget brings t up in mode once its dependencies are ready: infra up,
+// one-shots satisfied, and long-runner deps already running. A mode other than
+// container means go-exec. The dependency walk runs first, so the ports it
+// allocates land in the env built next.
+//
+// Starting a target already running in mode returns its instance. A target
+// running in the other mode, or stopping, is refused. A failure to build the
+// env wraps ErrEnv.
+func (r *Runner) StartTarget(ctx context.Context, t *discovery.Target, svc *discovery.Service, mode anovelv1.Mode) (*Instance, error) {
+	if err := r.EnsureDepsReady(ctx, t, svc, mode); err != nil {
+		return nil, err
 	}
-	return nil, nil, fmt.Errorf("unknown target %q", id)
+	return r.launch(ctx, t, mode)
+}
+
+// Relaunch spawns target id as go-exec with a prepared environ, the way the
+// reinstall replay restarts what a checkpoint recorded.
+func (r *Runner) Relaunch(ctx context.Context, id string, environ []string) error {
+	t, _ := r.stacks.Target(id)
+	if t == nil {
+		return fmt.Errorf("unknown target %q", id)
+	}
+	if _, running, err := r.canStart(id, anovelv1.Mode_MODE_GO_EXEC); err != nil || running {
+		return err
+	}
+	_, err := r.startGoExec(ctx, t, environ, nil)
+	return err
+}
+
+// launch builds t's env and spawns it in mode. The start invariants are
+// checked before the env claims any port, so a refused start leaves a live
+// instance's ports alone, and a failed spawn releases what the env claimed.
+func (r *Runner) launch(ctx context.Context, t *discovery.Target, mode anovelv1.Mode) (*Instance, error) {
+	start := r.startGoExec
+	if mode == anovelv1.Mode_MODE_CONTAINER {
+		start = r.startContainer
+	} else {
+		mode = anovelv1.Mode_MODE_GO_EXEC
+	}
+	if inst, running, err := r.canStart(t.ID(), mode); err != nil || running {
+		return inst, err
+	}
+	// The builder's snapshot fill picks up ports infra-up allocated, such as
+	// POSTGRES_PORT, so POSTGRES_DSN synthesizes to localhost:<port>.
+	entries, warnings, err := r.builder.ForTarget(t)
+	if err != nil {
+		r.alloc.Release(t.ID())
+		return nil, fmt.Errorf("%w: %w", ErrEnv, err)
+	}
+	inst, err := start(ctx, t, env.Environ(entries), warnings)
+	if err != nil {
+		r.alloc.Release(t.ID())
+	}
+	return inst, err
 }
 
 // canStart enforces the start-time invariants:
@@ -191,35 +224,56 @@ func (r *Runner) resolveTarget(id string) (*discovery.Target, *discovery.Service
 //   - a stopping instance is refused; the caller waits or restarts
 //
 // It returns (existing-instance, true, nil) when the call is a no-op.
-func (r *Runner) canStart(id string, mode Mode) (*Instance, bool, error) {
+func (r *Runner) canStart(id string, mode anovelv1.Mode) (*Instance, bool, error) {
 	r.mu.RLock()
+	defer r.mu.RUnlock()
 	inst, ok := r.instances[id]
-	r.mu.RUnlock()
 	if !ok {
 		return nil, false, nil
 	}
 	switch inst.Phase {
 	case anovelv1.Phase_PHASE_RUNNING, anovelv1.Phase_PHASE_STARTING, anovelv1.Phase_PHASE_PENDING:
 		if inst.Mode == mode {
-			// Idempotent: same target, same mode, already up.
-			return inst, true, nil
+			out := *inst
+			return &out, true, nil
 		}
 		return nil, false, fmt.Errorf(
 			"%s already running in %s mode (pid %d); kill it first or use `a-novel run restart %s --mode=%s`",
-			id, inst.Mode, inst.PID, id, mode)
+			id, modeLabel(inst.Mode), inst.PID, id, modeLabel(mode))
 	case anovelv1.Phase_PHASE_STOPPING:
 		return nil, false, fmt.Errorf("%s is currently stopping; wait for it to settle", id)
-	case anovelv1.Phase_PHASE_TERMINATED:
-		// Re-use the slot: replace the dead instance below.
+	default:
+		// A terminated instance's slot is reused.
 		return nil, false, nil
 	}
-	return nil, false, nil
 }
 
-// targetID is the canonical "<stack>/<service>/<target>" form. Must match
-// the convertTarget rule in internal/daemon/server/convert.go.
-func targetID(stack, service, target string) string {
-	return stack + "/" + service + "/" + target
+// modeLabel names a mode the way the CLI's --mode flag spells it.
+func modeLabel(m anovelv1.Mode) string {
+	if m == anovelv1.Mode_MODE_CONTAINER {
+		return "container"
+	}
+	return "go-exec"
+}
+
+// register records a PENDING instance of t, replacing a terminated one, so
+// concurrent starts see the slot taken. cmd is nil for a container.
+func (r *Runner) register(t *discovery.Target, mode anovelv1.Mode, cmd *exec.Cmd, cancel context.CancelFunc) *Instance {
+	inst := &Instance{
+		ID:        t.ID(),
+		Target:    t.Name,
+		Service:   t.Service,
+		Stack:     t.Stack,
+		Mode:      mode,
+		Phase:     anovelv1.Phase_PHASE_PENDING,
+		StartedAt: time.Now(),
+		cmd:       cmd,
+		cancel:    cancel,
+	}
+	r.mu.Lock()
+	r.instances[inst.ID] = inst
+	r.mu.Unlock()
+	return inst
 }
 
 // =============================================================================
@@ -231,28 +285,22 @@ func targetID(stack, service, target string) string {
 //
 // `grace` of 0 means "SIGKILL immediately" (no grace period).
 func (r *Runner) Kill(ctx context.Context, id string, grace time.Duration) error {
-	r.mu.Lock()
+	r.mu.RLock()
 	inst, ok := r.instances[id]
-	if !ok {
-		r.mu.Unlock()
-		return nil // idempotent
-	}
-	if inst.Phase == anovelv1.Phase_PHASE_TERMINATED {
-		r.mu.Unlock()
+	if !ok || inst.Phase == anovelv1.Phase_PHASE_TERMINATED {
+		r.mu.RUnlock()
 		return nil
 	}
-	r.mu.Unlock()
+	mode := inst.Mode
+	r.mu.RUnlock()
 	// transition emits the *→STOPPING PhaseEvent, so Watch subscribers can show
 	// "stopping" briefly before the eventual TERMINATED.
 	r.transition(id, anovelv1.Phase_PHASE_STOPPING)
-	r.mu.RLock()
-	inst = r.instances[id]
-	r.mu.RUnlock()
 
-	switch inst.Mode {
-	case ModeGoExec:
+	switch mode {
+	case anovelv1.Mode_MODE_GO_EXEC:
 		return r.killGoExec(ctx, id, grace)
-	case ModeContainer:
+	case anovelv1.Mode_MODE_CONTAINER:
 		return r.killContainer(ctx, id, grace)
 	default:
 		return fmt.Errorf("kill: unknown mode for %s", id)

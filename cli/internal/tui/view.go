@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
@@ -61,11 +62,8 @@ func (m *model) renderMain() string {
 		mainWidth = m.width
 		navWidth = 0
 	}
-	// Reserve rows for the status bar, the footer hint and the frame borders.
-	contentHeight := m.height - 4
-
-	nav := m.renderNav(navWidth, contentHeight)
-	right := m.renderRight(mainWidth, contentHeight)
+	nav := m.renderNav(navWidth, m.contentHeight())
+	right := m.renderRight(mainWidth, m.contentHeight())
 
 	var body string
 	if navWidth > 0 {
@@ -98,8 +96,7 @@ func (m *model) renderStatus(width int) string {
 		prefix = "✗  "
 		style = styleErr
 	}
-	msg := truncate(m.status.text, width-len(prefix)-1)
-	return style.Render(prefix + msg)
+	return style.Render(truncate(prefix+m.status.text, width-1))
 }
 
 func (m *model) renderNav(width, height int) string {
@@ -156,22 +153,14 @@ func (m *model) renderNav(width, height int) string {
 }
 
 func (m *model) renderRight(width, height int) string {
-	svc := m.activeService()
-	if svc == nil || m.tabCount() == 0 {
+	if m.tabCount() == 0 {
 		return styleFrame.Width(width).Height(height).Render(styleDim.Render("(this service has no targets or infra)"))
 	}
-	// Two selectable tab rows, infra on top and targets below, each tab
-	// carrying a leading colored status dot. selectedTab walks the
-	// concatenated [infras..., targets...] sequence so ←/→ flows across both
-	// rows linearly. A row whose slice is empty is omitted entirely.
-	infraTabsRow := renderInfraTabs(svc, m.selectedTab)
-	targetTabsRow := renderTargetTabs(svc, m.selectedTab, len(svc.GetInfra()))
 	// Detail header. Targets read "name · mode · phase [pid] [container]",
 	// infras "name · infra · phase healthy container=xxx".
 	var header string
-	switch m.activeTabKind() {
-	case tabKindTarget:
-		t := m.activeTarget()
+	switch t, in := m.activeTarget(), m.activeInfra(); {
+	case t != nil:
 		header = fmt.Sprintf("%s · %s · %s",
 			t.GetName(), modeShort(t.GetMode()), phaseShort(t.GetPhase()))
 		if t.GetPid() != 0 {
@@ -180,8 +169,7 @@ func (m *model) renderRight(width, height int) string {
 		if t.GetContainerId() != "" {
 			header += " container=" + safeShort(t.GetContainerId(), 12)
 		}
-	case tabKindInfra:
-		in := m.activeInfra()
+	case in != nil:
 		header = fmt.Sprintf("%s · %s · %s %s",
 			in.GetName(),
 			styleDim.Render("infra"),
@@ -191,77 +179,44 @@ func (m *model) renderRight(width, height int) string {
 			header += " container=" + safeShort(in.GetContainerId(), 12)
 		}
 	}
-	headerStyled := styleHeader.Render(header)
-	// Layout: [infra-row] [target-row] [divider] [header] [logs], with absent
-	// rows left out of the JoinVertical input.
-	sections := []string{}
-	rowCount := 0
-	if infraTabsRow != "" {
-		sections = append(sections, infraTabsRow)
-		rowCount++
+	// Layout: [infra tabs] [target tabs] [divider] [header] [logs]. Two
+	// selectable tab rows, infra on top and targets below, each omitted when
+	// its slice is empty. selectedTab walks the concatenated
+	// [infras..., targets...] sequence so ←/→ flows across both rows linearly.
+	svc := m.activeService()
+	var sections []string
+	if infras := svc.GetInfra(); len(infras) > 0 {
+		tabs := make([]string, 0, len(infras))
+		for i, in := range infras {
+			tabs = append(tabs, renderTab(infraDot(in), "{"+in.GetName()+"}", i == m.selectedTab))
+		}
+		sections = append(sections, styleDim.Render("infra ")+strings.Join(tabs, "  "))
 	}
-	if targetTabsRow != "" {
-		sections = append(sections, targetTabsRow)
-		rowCount++
+	if targets := svc.GetTargets(); len(targets) > 0 {
+		tabs := make([]string, 0, len(targets))
+		offset := len(svc.GetInfra())
+		for i, t := range targets {
+			tabs = append(tabs, renderTab(targetStatusDot(t), "["+t.GetName()+"]", offset+i == m.selectedTab))
+		}
+		sections = append(sections, styleDim.Render("target ")+strings.Join(tabs, "  "))
 	}
-	// Log pane shrinks by (rowCount-1) so a second tab row doesn't push
-	// log lines off the bottom; the base height budgets for one tab row.
-	logsHeight := height - 5 - (rowCount - 1)
-	if logsHeight < 4 {
-		logsHeight = 4
-	}
-	logsRendered := m.renderLogs(width-4, logsHeight)
 	sections = append(sections,
 		strings.Repeat("─", width-4),
-		headerStyled,
-		logsRendered,
+		styleHeader.Render(header),
+		m.renderLogs(width-4, m.logViewportHeight()),
 	)
 	body := lipgloss.JoinVertical(lipgloss.Left, sections...)
 	return styleFrame.Width(width).Height(height).Render(body)
 }
 
-// renderInfraTabs renders the top tab row: one tab per infra container, with a
-// leading colored status dot and {curly} brackets, or "" when the service has
-// no infra. selectedTab is the model's combined index; a value in
-// [0, len(infras)) selects the matching tab.
-func renderInfraTabs(svc *anovelv1.Service, selectedTab int) string {
-	infras := svc.GetInfra()
-	if len(infras) == 0 {
-		return ""
+// renderTab renders one tab of the right pane's tab rows: its status dot,
+// then its bracketed label, highlighted when selected.
+func renderTab(dot, label string, selected bool) string {
+	style := styleDim
+	if selected {
+		style = styleSelected
 	}
-	tabs := make([]string, 0, len(infras))
-	for i, in := range infras {
-		dot := infraDot(in)
-		brackets := "{" + in.GetName() + "}"
-		if i == selectedTab {
-			tabs = append(tabs, dot+" "+styleSelected.Render(brackets))
-		} else {
-			tabs = append(tabs, dot+" "+styleDim.Render(brackets))
-		}
-	}
-	return styleDim.Render("infra ") + strings.Join(tabs, "  ")
-}
-
-// renderTargetTabs renders the bottom tab row: one tab per target, with a
-// leading colored status dot and [square] brackets. infraOffset shifts the
-// selection index, so a combined selectedTab in
-// [infraOffset, infraOffset+len(targets)) selects the matching target tab.
-func renderTargetTabs(svc *anovelv1.Service, selectedTab, infraOffset int) string {
-	targets := svc.GetTargets()
-	if len(targets) == 0 {
-		return ""
-	}
-	tabs := make([]string, 0, len(targets))
-	for i, t := range targets {
-		dot := targetStatusDot(t)
-		brackets := "[" + t.GetName() + "]"
-		if infraOffset+i == selectedTab {
-			tabs = append(tabs, dot+" "+styleSelected.Render(brackets))
-		} else {
-			tabs = append(tabs, dot+" "+styleDim.Render(brackets))
-		}
-	}
-	return styleDim.Render("target ") + strings.Join(tabs, "  ")
+	return dot + " " + style.Render(label)
 }
 
 // targetStatusDot returns the colored status glyph for one target. It branches
@@ -309,28 +264,17 @@ func targetStatusDot(t *anovelv1.Target) string {
 
 func (m *model) renderLogs(width, height int) string {
 	if len(m.logLines) == 0 {
-		return styleDim.Render("(no log lines yet — start the target or press 'r' to refresh)")
+		return styleDim.Render("(no log lines yet — start the target or run :refresh)")
 	}
 	// Away from the tail, the bottom line of the pane holds the scroll
 	// indicator; at the tail the full height goes to log content.
 	contentH := height
 	if m.logScroll > 0 {
-		contentH = height - 1
-		if contentH < 1 {
-			contentH = 1
-		}
+		contentH = max(height-1, 1)
 	}
-	// Compute the window into logLines:
-	//   logScroll == 0    → tail (the last `contentH` lines)
-	//   logScroll == N>0  → window `[len-contentH-N, len-N)`
-	end := len(m.logLines) - m.logScroll
-	if end < 0 {
-		end = 0
-	}
-	from := end - contentH
-	if from < 0 {
-		from = 0
-	}
+	// The window into logLines ends logScroll lines before the tail.
+	end := max(len(m.logLines)-m.logScroll, 0)
+	from := max(end-contentH, 0)
 	var b strings.Builder
 	for _, ln := range m.logLines[from:end] {
 		tag := "out"
@@ -399,8 +343,8 @@ func (m *model) renderHelp() string {
 		"  :infra-start           bring up active service's WHOLE infra + one-shots",
 		"  :infra-kill            tear down active service's WHOLE infra (refuses if targets up)",
 		"  :infra-kill force      cascade-kill targets + infra",
-		"  :env                   show env block for active service in stderr",
 		"  :volume-backup         snapshot active service's volumes",
+		"  :topology              show the dependency graph (any key returns)",
 		"  :refresh               refresh services + logs now",
 		"",
 		styleHeader.Render("UI"),
@@ -436,23 +380,12 @@ func (m *model) renderTopology() string {
 // over the bottom-most lines of the main view: as the user types, it
 // shows matching commands with one-line descriptions.
 func overlayCommand(main, input string) string {
-	cmd := styleCmd.Render(input) + styleDim.Render("█")
-	suggestions := suggestCommands(strings.TrimPrefix(input, ":"))
-	lines := strings.Split(main, "\n")
-	if len(lines) == 0 {
-		return cmd
-	}
 	// The input sits on the bottom line with any suggestions stacked above
 	// it, so it stays anchored where the user is typing.
-	overlayLines := suggestions
-	overlayLines = append(overlayLines, cmd)
+	overlay := append(suggestCommands(strings.TrimPrefix(input, ":")), styleCmd.Render(input)+styleDim.Render("█"))
 	// Drop as many bottom lines as the overlay needs, then append it.
-	drop := len(overlayLines)
-	if drop > len(lines) {
-		drop = len(lines)
-	}
-	lines = lines[:len(lines)-drop]
-	lines = append(lines, overlayLines...)
+	lines := strings.Split(main, "\n")
+	lines = append(lines[:len(lines)-min(len(overlay), len(lines))], overlay...)
 	return strings.Join(lines, "\n")
 }
 
@@ -598,15 +531,9 @@ func computeNavWidth(svcs []*anovelv1.Service) int {
 	w := minW
 	for _, svc := range svcs {
 		// "▸ " prefix + name + 2 cols of right padding.
-		needed := 4 + len(svc.GetName())
-		if needed > w {
-			w = needed
-		}
+		w = max(w, 4+len(svc.GetName()))
 	}
-	if w > maxW {
-		w = maxW
-	}
-	return w
+	return min(w, maxW)
 }
 
 // serviceHasError reports whether any target in the service terminated with a
@@ -651,19 +578,18 @@ func phaseShort(p anovelv1.Phase) string {
 	}
 }
 
+// truncate fits s into maxLen terminal cells, ending it with an ellipsis
+// when cut. It never splits a multi-byte character or an ANSI escape
+// sequence. A non-positive maxLen leaves s whole.
 func truncate(s string, maxLen int) string {
 	if maxLen <= 0 {
 		return s
 	}
-	if len(s) > maxLen {
-		return s[:maxLen-1] + "…"
-	}
-	return s
+	return ansi.Truncate(s, maxLen, "…")
 }
 
+// safeShort returns the first n bytes of an ASCII identifier such as a
+// container ID, or all of it when shorter.
 func safeShort(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n]
+	return s[:min(n, len(s))]
 }

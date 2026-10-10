@@ -516,7 +516,7 @@ type Target struct {
 	Health        Health                 `protobuf:"varint,9,opt,name=health,proto3,enum=anovel.v1.Health" json:"health,omitempty"`        // container long-runners only
 	Pid           int32                  `protobuf:"varint,10,opt,name=pid,proto3" json:"pid,omitempty"`                                   // go-exec mode only
 	ContainerId   string                 `protobuf:"bytes,11,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"` // container mode only
-	Deps          []string               `protobuf:"bytes,12,rep,name=deps,proto3" json:"deps,omitempty"`                                  // target IDs this depends on
+	Deps          []string               `protobuf:"bytes,12,rep,name=deps,proto3" json:"deps,omitempty"`                                  // compose service names in its depends_on
 	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
 	TerminatedAt  *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=terminated_at,json=terminatedAt,proto3" json:"terminated_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -882,18 +882,16 @@ func (x *LogLine) GetLine() string {
 	return ""
 }
 
-// StateEvent is one transition emitted by Watch.
+// StateEvent is one target phase transition emitted by Watch.
 type StateEvent struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	Ts          *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=ts,proto3" json:"ts,omitempty"`
-	TargetId    string                 `protobuf:"bytes,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"` // empty for service/infra events
-	Service     string                 `protobuf:"bytes,3,opt,name=service,proto3" json:"service,omitempty"`
-	Stack       string                 `protobuf:"bytes,4,opt,name=stack,proto3" json:"stack,omitempty"`
-	Description string                 `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"` // human-readable summary
-	// Old/new states (populated for transitions; either may be empty for
-	// pure-event entries like "log file rotated").
-	OldPhase      Phase `protobuf:"varint,6,opt,name=old_phase,json=oldPhase,proto3,enum=anovel.v1.Phase" json:"old_phase,omitempty"`
-	NewPhase      Phase `protobuf:"varint,7,opt,name=new_phase,json=newPhase,proto3,enum=anovel.v1.Phase" json:"new_phase,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ts            *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=ts,proto3" json:"ts,omitempty"`
+	TargetId      string                 `protobuf:"bytes,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	Service       string                 `protobuf:"bytes,3,opt,name=service,proto3" json:"service,omitempty"`
+	Stack         string                 `protobuf:"bytes,4,opt,name=stack,proto3" json:"stack,omitempty"`
+	Description   string                 `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"` // human-readable summary
+	OldPhase      Phase                  `protobuf:"varint,6,opt,name=old_phase,json=oldPhase,proto3,enum=anovel.v1.Phase" json:"old_phase,omitempty"`
+	NewPhase      Phase                  `protobuf:"varint,7,opt,name=new_phase,json=newPhase,proto3,enum=anovel.v1.Phase" json:"new_phase,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1016,7 +1014,6 @@ func (*PingRequest) Descriptor() ([]byte, []int) {
 type PingResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DaemonVersion string                 `protobuf:"bytes,1,opt,name=daemon_version,json=daemonVersion,proto3" json:"daemon_version,omitempty"`
-	Now           *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=now,proto3" json:"now,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1056,13 +1053,6 @@ func (x *PingResponse) GetDaemonVersion() string {
 		return x.DaemonVersion
 	}
 	return ""
-}
-
-func (x *PingResponse) GetNow() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Now
-	}
-	return nil
 }
 
 type StatusRequest struct {
@@ -2461,8 +2451,6 @@ type StreamLogsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TargetId      string                 `protobuf:"bytes,1,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
 	Follow        bool                   `protobuf:"varint,2,opt,name=follow,proto3" json:"follow,omitempty"`
-	Tail          int32                  `protobuf:"varint,3,opt,name=tail,proto3" json:"tail,omitempty"` // 0 == all
-	Since         *durationpb.Duration   `protobuf:"bytes,4,opt,name=since,proto3" json:"since,omitempty"`
 	Stream        LogStream              `protobuf:"varint,5,opt,name=stream,proto3,enum=anovel.v1.LogStream" json:"stream,omitempty"` // unspecified == both
 	RunId         string                 `protobuf:"bytes,6,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`                // empty == current run; otherwise a past run
 	unknownFields protoimpl.UnknownFields
@@ -2511,20 +2499,6 @@ func (x *StreamLogsRequest) GetFollow() bool {
 		return x.Follow
 	}
 	return false
-}
-
-func (x *StreamLogsRequest) GetTail() int32 {
-	if x != nil {
-		return x.Tail
-	}
-	return 0
-}
-
-func (x *StreamLogsRequest) GetSince() *durationpb.Duration {
-	if x != nil {
-		return x.Since
-	}
-	return nil
 }
 
 func (x *StreamLogsRequest) GetStream() LogStream {
@@ -2631,10 +2605,8 @@ func (x *ListRunsResponse) GetRunIds() []string {
 
 type GetEnvRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Service       string                 `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"` // empty == every service in stack
-	Stack         string                 `protobuf:"bytes,2,opt,name=stack,proto3" json:"stack,omitempty"`
-	Only          string                 `protobuf:"bytes,3,opt,name=only,proto3" json:"only,omitempty"` // glob filter (e.g., "REST*")
-	AllStacks     bool                   `protobuf:"varint,4,opt,name=all_stacks,json=allStacks,proto3" json:"all_stacks,omitempty"`
+	Service       string                 `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"` // empty == every service in stack; ignored for "*"
+	Stack         string                 `protobuf:"bytes,2,opt,name=stack,proto3" json:"stack,omitempty"`     // empty == default; "*" == every service of every stack
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2681,20 +2653,6 @@ func (x *GetEnvRequest) GetStack() string {
 		return x.Stack
 	}
 	return ""
-}
-
-func (x *GetEnvRequest) GetOnly() string {
-	if x != nil {
-		return x.Only
-	}
-	return ""
-}
-
-func (x *GetEnvRequest) GetAllStacks() bool {
-	if x != nil {
-		return x.AllStacks
-	}
-	return false
 }
 
 type GetEnvResponse struct {
@@ -3403,7 +3361,6 @@ func (x *DebugRequest) GetTargetId() string {
 
 type DebugResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	DelvePort     int32                  `protobuf:"varint,1,opt,name=delve_port,json=delvePort,proto3" json:"delve_port,omitempty"`
 	Hint          string                 `protobuf:"bytes,2,opt,name=hint,proto3" json:"hint,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3437,13 +3394,6 @@ func (x *DebugResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use DebugResponse.ProtoReflect.Descriptor instead.
 func (*DebugResponse) Descriptor() ([]byte, []int) {
 	return file_anovel_v1_core_proto_rawDescGZIP(), []int{54}
-}
-
-func (x *DebugResponse) GetDelvePort() int32 {
-	if x != nil {
-		return x.DelvePort
-	}
-	return 0
 }
 
 func (x *DebugResponse) GetHint() string {
@@ -3576,10 +3526,9 @@ const file_anovel_v1_core_proto_rawDesc = "" +
 	"\vdescription\x18\x05 \x01(\tR\vdescription\x12-\n" +
 	"\told_phase\x18\x06 \x01(\x0e2\x10.anovel.v1.PhaseR\boldPhase\x12-\n" +
 	"\tnew_phase\x18\a \x01(\x0e2\x10.anovel.v1.PhaseR\bnewPhase\"\r\n" +
-	"\vPingRequest\"c\n" +
+	"\vPingRequest\"@\n" +
 	"\fPingResponse\x12%\n" +
-	"\x0edaemon_version\x18\x01 \x01(\tR\rdaemonVersion\x12,\n" +
-	"\x03now\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03now\"\x0f\n" +
+	"\x0edaemon_version\x18\x01 \x01(\tR\rdaemonVersionJ\x04\b\x02\x10\x03R\x03now\"\x0f\n" +
 	"\rStatusRequest\"\xb2\x02\n" +
 	"\x0eStatusResponse\x12%\n" +
 	"\x0edaemon_version\x18\x01 \x01(\tR\rdaemonVersion\x12\x1f\n" +
@@ -3655,24 +3604,20 @@ const file_anovel_v1_core_proto_rawDesc = "" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\"G\n" +
 	"\x1dRestartInfraContainerResponse\x12&\n" +
-	"\x05infra\x18\x01 \x01(\v2\x10.anovel.v1.InfraR\x05infra\"\xd2\x01\n" +
+	"\x05infra\x18\x01 \x01(\v2\x10.anovel.v1.InfraR\x05infra\"\xa6\x01\n" +
 	"\x11StreamLogsRequest\x12\x1b\n" +
 	"\ttarget_id\x18\x01 \x01(\tR\btargetId\x12\x16\n" +
-	"\x06follow\x18\x02 \x01(\bR\x06follow\x12\x12\n" +
-	"\x04tail\x18\x03 \x01(\x05R\x04tail\x12/\n" +
-	"\x05since\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\x05since\x12,\n" +
+	"\x06follow\x18\x02 \x01(\bR\x06follow\x12,\n" +
 	"\x06stream\x18\x05 \x01(\x0e2\x14.anovel.v1.LogStreamR\x06stream\x12\x15\n" +
-	"\x06run_id\x18\x06 \x01(\tR\x05runId\".\n" +
+	"\x06run_id\x18\x06 \x01(\tR\x05runIdJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\x04tailR\x05since\".\n" +
 	"\x0fListRunsRequest\x12\x1b\n" +
 	"\ttarget_id\x18\x01 \x01(\tR\btargetId\"+\n" +
 	"\x10ListRunsResponse\x12\x17\n" +
-	"\arun_ids\x18\x01 \x03(\tR\x06runIds\"r\n" +
+	"\arun_ids\x18\x01 \x03(\tR\x06runIds\"]\n" +
 	"\rGetEnvRequest\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12\x14\n" +
-	"\x05stack\x18\x02 \x01(\tR\x05stack\x12\x12\n" +
-	"\x04only\x18\x03 \x01(\tR\x04only\x12\x1d\n" +
-	"\n" +
-	"all_stacks\x18\x04 \x01(\bR\tallStacks\"?\n" +
+	"\x05stack\x18\x02 \x01(\tR\x05stackJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\x04onlyR\n" +
+	"all_stacks\"?\n" +
 	"\x0eGetEnvResponse\x12-\n" +
 	"\aentries\x18\x01 \x03(\v2\x13.anovel.v1.EnvEntryR\aentries\"b\n" +
 	"\bEnvEntry\x12\x14\n" +
@@ -3717,11 +3662,10 @@ const file_anovel_v1_core_proto_rawDesc = "" +
 	"\n" +
 	"_exit_code\"+\n" +
 	"\fDebugRequest\x12\x1b\n" +
-	"\ttarget_id\x18\x01 \x01(\tR\btargetId\"B\n" +
-	"\rDebugResponse\x12\x1d\n" +
-	"\n" +
-	"delve_port\x18\x01 \x01(\x05R\tdelvePort\x12\x12\n" +
-	"\x04hint\x18\x02 \x01(\tR\x04hint\"[\n" +
+	"\ttarget_id\x18\x01 \x01(\tR\btargetId\"5\n" +
+	"\rDebugResponse\x12\x12\n" +
+	"\x04hint\x18\x02 \x01(\tR\x04hintJ\x04\b\x01\x10\x02R\n" +
+	"delve_port\"[\n" +
 	"\fWatchRequest\x12\x14\n" +
 	"\x05stack\x18\x01 \x01(\tR\x05stack\x12\x18\n" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x1b\n" +
@@ -3890,84 +3834,82 @@ var file_anovel_v1_core_proto_depIdxs = []int32{
 	62, // 14: anovel.v1.StateEvent.ts:type_name -> google.protobuf.Timestamp
 	0,  // 15: anovel.v1.StateEvent.old_phase:type_name -> anovel.v1.Phase
 	0,  // 16: anovel.v1.StateEvent.new_phase:type_name -> anovel.v1.Phase
-	62, // 17: anovel.v1.PingResponse.now:type_name -> google.protobuf.Timestamp
-	62, // 18: anovel.v1.StatusResponse.started_at:type_name -> google.protobuf.Timestamp
-	63, // 19: anovel.v1.StatusResponse.uptime:type_name -> google.protobuf.Duration
-	6,  // 20: anovel.v1.StatusResponse.stacks:type_name -> anovel.v1.Stack
-	6,  // 21: anovel.v1.ListStacksResponse.stacks:type_name -> anovel.v1.Stack
-	7,  // 22: anovel.v1.ListServicesResponse.services:type_name -> anovel.v1.Service
-	7,  // 23: anovel.v1.DescribeServiceResponse.service:type_name -> anovel.v1.Service
-	2,  // 24: anovel.v1.StartTargetRequest.mode:type_name -> anovel.v1.Mode
-	8,  // 25: anovel.v1.StartTargetResponse.target:type_name -> anovel.v1.Target
-	63, // 26: anovel.v1.KillTargetRequest.timeout:type_name -> google.protobuf.Duration
-	8,  // 27: anovel.v1.KillTargetResponse.target:type_name -> anovel.v1.Target
-	2,  // 28: anovel.v1.RestartTargetRequest.mode:type_name -> anovel.v1.Mode
-	8,  // 29: anovel.v1.RestartTargetResponse.target:type_name -> anovel.v1.Target
-	2,  // 30: anovel.v1.StartInfraRequest.one_shots_mode:type_name -> anovel.v1.Mode
-	7,  // 31: anovel.v1.StartInfraResponse.service:type_name -> anovel.v1.Service
-	7,  // 32: anovel.v1.KillInfraResponse.service:type_name -> anovel.v1.Service
-	9,  // 33: anovel.v1.KillInfraContainerResponse.infra:type_name -> anovel.v1.Infra
-	9,  // 34: anovel.v1.RestartInfraContainerResponse.infra:type_name -> anovel.v1.Infra
-	63, // 35: anovel.v1.StreamLogsRequest.since:type_name -> google.protobuf.Duration
-	5,  // 36: anovel.v1.StreamLogsRequest.stream:type_name -> anovel.v1.LogStream
-	48, // 37: anovel.v1.GetEnvResponse.entries:type_name -> anovel.v1.EnvEntry
-	10, // 38: anovel.v1.ListVolumesResponse.volumes:type_name -> anovel.v1.Volume
-	5,  // 39: anovel.v1.ExecOutput.stream:type_name -> anovel.v1.LogStream
-	13, // 40: anovel.v1.CoreService.Ping:input_type -> anovel.v1.PingRequest
-	15, // 41: anovel.v1.CoreService.Status:input_type -> anovel.v1.StatusRequest
-	17, // 42: anovel.v1.CoreService.PrepareReinstall:input_type -> anovel.v1.PrepareReinstallRequest
-	19, // 43: anovel.v1.CoreService.Shutdown:input_type -> anovel.v1.ShutdownRequest
-	21, // 44: anovel.v1.CoreService.ListStacks:input_type -> anovel.v1.ListStacksRequest
-	23, // 45: anovel.v1.CoreService.ListServices:input_type -> anovel.v1.ListServicesRequest
-	25, // 46: anovel.v1.CoreService.DescribeService:input_type -> anovel.v1.DescribeServiceRequest
-	27, // 47: anovel.v1.CoreService.GetTopology:input_type -> anovel.v1.GetTopologyRequest
-	29, // 48: anovel.v1.CoreService.StartTarget:input_type -> anovel.v1.StartTargetRequest
-	31, // 49: anovel.v1.CoreService.KillTarget:input_type -> anovel.v1.KillTargetRequest
-	33, // 50: anovel.v1.CoreService.RestartTarget:input_type -> anovel.v1.RestartTargetRequest
-	35, // 51: anovel.v1.CoreService.StartInfra:input_type -> anovel.v1.StartInfraRequest
-	37, // 52: anovel.v1.CoreService.KillInfra:input_type -> anovel.v1.KillInfraRequest
-	39, // 53: anovel.v1.CoreService.KillInfraContainer:input_type -> anovel.v1.KillInfraContainerRequest
-	41, // 54: anovel.v1.CoreService.RestartInfraContainer:input_type -> anovel.v1.RestartInfraContainerRequest
-	43, // 55: anovel.v1.CoreService.StreamLogs:input_type -> anovel.v1.StreamLogsRequest
-	44, // 56: anovel.v1.CoreService.ListRuns:input_type -> anovel.v1.ListRunsRequest
-	46, // 57: anovel.v1.CoreService.GetEnv:input_type -> anovel.v1.GetEnvRequest
-	49, // 58: anovel.v1.CoreService.ListVolumes:input_type -> anovel.v1.ListVolumesRequest
-	51, // 59: anovel.v1.CoreService.BackupVolume:input_type -> anovel.v1.BackupVolumeRequest
-	53, // 60: anovel.v1.CoreService.RestoreVolume:input_type -> anovel.v1.RestoreVolumeRequest
-	55, // 61: anovel.v1.CoreService.ClearVolume:input_type -> anovel.v1.ClearVolumeRequest
-	57, // 62: anovel.v1.CoreService.Exec:input_type -> anovel.v1.ExecRequest
-	59, // 63: anovel.v1.CoreService.Debug:input_type -> anovel.v1.DebugRequest
-	61, // 64: anovel.v1.CoreService.Watch:input_type -> anovel.v1.WatchRequest
-	14, // 65: anovel.v1.CoreService.Ping:output_type -> anovel.v1.PingResponse
-	16, // 66: anovel.v1.CoreService.Status:output_type -> anovel.v1.StatusResponse
-	18, // 67: anovel.v1.CoreService.PrepareReinstall:output_type -> anovel.v1.PrepareReinstallResponse
-	20, // 68: anovel.v1.CoreService.Shutdown:output_type -> anovel.v1.ShutdownResponse
-	22, // 69: anovel.v1.CoreService.ListStacks:output_type -> anovel.v1.ListStacksResponse
-	24, // 70: anovel.v1.CoreService.ListServices:output_type -> anovel.v1.ListServicesResponse
-	26, // 71: anovel.v1.CoreService.DescribeService:output_type -> anovel.v1.DescribeServiceResponse
-	28, // 72: anovel.v1.CoreService.GetTopology:output_type -> anovel.v1.GetTopologyResponse
-	30, // 73: anovel.v1.CoreService.StartTarget:output_type -> anovel.v1.StartTargetResponse
-	32, // 74: anovel.v1.CoreService.KillTarget:output_type -> anovel.v1.KillTargetResponse
-	34, // 75: anovel.v1.CoreService.RestartTarget:output_type -> anovel.v1.RestartTargetResponse
-	36, // 76: anovel.v1.CoreService.StartInfra:output_type -> anovel.v1.StartInfraResponse
-	38, // 77: anovel.v1.CoreService.KillInfra:output_type -> anovel.v1.KillInfraResponse
-	40, // 78: anovel.v1.CoreService.KillInfraContainer:output_type -> anovel.v1.KillInfraContainerResponse
-	42, // 79: anovel.v1.CoreService.RestartInfraContainer:output_type -> anovel.v1.RestartInfraContainerResponse
-	11, // 80: anovel.v1.CoreService.StreamLogs:output_type -> anovel.v1.LogLine
-	45, // 81: anovel.v1.CoreService.ListRuns:output_type -> anovel.v1.ListRunsResponse
-	47, // 82: anovel.v1.CoreService.GetEnv:output_type -> anovel.v1.GetEnvResponse
-	50, // 83: anovel.v1.CoreService.ListVolumes:output_type -> anovel.v1.ListVolumesResponse
-	52, // 84: anovel.v1.CoreService.BackupVolume:output_type -> anovel.v1.BackupVolumeResponse
-	54, // 85: anovel.v1.CoreService.RestoreVolume:output_type -> anovel.v1.RestoreVolumeResponse
-	56, // 86: anovel.v1.CoreService.ClearVolume:output_type -> anovel.v1.ClearVolumeResponse
-	58, // 87: anovel.v1.CoreService.Exec:output_type -> anovel.v1.ExecOutput
-	60, // 88: anovel.v1.CoreService.Debug:output_type -> anovel.v1.DebugResponse
-	12, // 89: anovel.v1.CoreService.Watch:output_type -> anovel.v1.StateEvent
-	65, // [65:90] is the sub-list for method output_type
-	40, // [40:65] is the sub-list for method input_type
-	40, // [40:40] is the sub-list for extension type_name
-	40, // [40:40] is the sub-list for extension extendee
-	0,  // [0:40] is the sub-list for field type_name
+	62, // 17: anovel.v1.StatusResponse.started_at:type_name -> google.protobuf.Timestamp
+	63, // 18: anovel.v1.StatusResponse.uptime:type_name -> google.protobuf.Duration
+	6,  // 19: anovel.v1.StatusResponse.stacks:type_name -> anovel.v1.Stack
+	6,  // 20: anovel.v1.ListStacksResponse.stacks:type_name -> anovel.v1.Stack
+	7,  // 21: anovel.v1.ListServicesResponse.services:type_name -> anovel.v1.Service
+	7,  // 22: anovel.v1.DescribeServiceResponse.service:type_name -> anovel.v1.Service
+	2,  // 23: anovel.v1.StartTargetRequest.mode:type_name -> anovel.v1.Mode
+	8,  // 24: anovel.v1.StartTargetResponse.target:type_name -> anovel.v1.Target
+	63, // 25: anovel.v1.KillTargetRequest.timeout:type_name -> google.protobuf.Duration
+	8,  // 26: anovel.v1.KillTargetResponse.target:type_name -> anovel.v1.Target
+	2,  // 27: anovel.v1.RestartTargetRequest.mode:type_name -> anovel.v1.Mode
+	8,  // 28: anovel.v1.RestartTargetResponse.target:type_name -> anovel.v1.Target
+	2,  // 29: anovel.v1.StartInfraRequest.one_shots_mode:type_name -> anovel.v1.Mode
+	7,  // 30: anovel.v1.StartInfraResponse.service:type_name -> anovel.v1.Service
+	7,  // 31: anovel.v1.KillInfraResponse.service:type_name -> anovel.v1.Service
+	9,  // 32: anovel.v1.KillInfraContainerResponse.infra:type_name -> anovel.v1.Infra
+	9,  // 33: anovel.v1.RestartInfraContainerResponse.infra:type_name -> anovel.v1.Infra
+	5,  // 34: anovel.v1.StreamLogsRequest.stream:type_name -> anovel.v1.LogStream
+	48, // 35: anovel.v1.GetEnvResponse.entries:type_name -> anovel.v1.EnvEntry
+	10, // 36: anovel.v1.ListVolumesResponse.volumes:type_name -> anovel.v1.Volume
+	5,  // 37: anovel.v1.ExecOutput.stream:type_name -> anovel.v1.LogStream
+	13, // 38: anovel.v1.CoreService.Ping:input_type -> anovel.v1.PingRequest
+	15, // 39: anovel.v1.CoreService.Status:input_type -> anovel.v1.StatusRequest
+	17, // 40: anovel.v1.CoreService.PrepareReinstall:input_type -> anovel.v1.PrepareReinstallRequest
+	19, // 41: anovel.v1.CoreService.Shutdown:input_type -> anovel.v1.ShutdownRequest
+	21, // 42: anovel.v1.CoreService.ListStacks:input_type -> anovel.v1.ListStacksRequest
+	23, // 43: anovel.v1.CoreService.ListServices:input_type -> anovel.v1.ListServicesRequest
+	25, // 44: anovel.v1.CoreService.DescribeService:input_type -> anovel.v1.DescribeServiceRequest
+	27, // 45: anovel.v1.CoreService.GetTopology:input_type -> anovel.v1.GetTopologyRequest
+	29, // 46: anovel.v1.CoreService.StartTarget:input_type -> anovel.v1.StartTargetRequest
+	31, // 47: anovel.v1.CoreService.KillTarget:input_type -> anovel.v1.KillTargetRequest
+	33, // 48: anovel.v1.CoreService.RestartTarget:input_type -> anovel.v1.RestartTargetRequest
+	35, // 49: anovel.v1.CoreService.StartInfra:input_type -> anovel.v1.StartInfraRequest
+	37, // 50: anovel.v1.CoreService.KillInfra:input_type -> anovel.v1.KillInfraRequest
+	39, // 51: anovel.v1.CoreService.KillInfraContainer:input_type -> anovel.v1.KillInfraContainerRequest
+	41, // 52: anovel.v1.CoreService.RestartInfraContainer:input_type -> anovel.v1.RestartInfraContainerRequest
+	43, // 53: anovel.v1.CoreService.StreamLogs:input_type -> anovel.v1.StreamLogsRequest
+	44, // 54: anovel.v1.CoreService.ListRuns:input_type -> anovel.v1.ListRunsRequest
+	46, // 55: anovel.v1.CoreService.GetEnv:input_type -> anovel.v1.GetEnvRequest
+	49, // 56: anovel.v1.CoreService.ListVolumes:input_type -> anovel.v1.ListVolumesRequest
+	51, // 57: anovel.v1.CoreService.BackupVolume:input_type -> anovel.v1.BackupVolumeRequest
+	53, // 58: anovel.v1.CoreService.RestoreVolume:input_type -> anovel.v1.RestoreVolumeRequest
+	55, // 59: anovel.v1.CoreService.ClearVolume:input_type -> anovel.v1.ClearVolumeRequest
+	57, // 60: anovel.v1.CoreService.Exec:input_type -> anovel.v1.ExecRequest
+	59, // 61: anovel.v1.CoreService.Debug:input_type -> anovel.v1.DebugRequest
+	61, // 62: anovel.v1.CoreService.Watch:input_type -> anovel.v1.WatchRequest
+	14, // 63: anovel.v1.CoreService.Ping:output_type -> anovel.v1.PingResponse
+	16, // 64: anovel.v1.CoreService.Status:output_type -> anovel.v1.StatusResponse
+	18, // 65: anovel.v1.CoreService.PrepareReinstall:output_type -> anovel.v1.PrepareReinstallResponse
+	20, // 66: anovel.v1.CoreService.Shutdown:output_type -> anovel.v1.ShutdownResponse
+	22, // 67: anovel.v1.CoreService.ListStacks:output_type -> anovel.v1.ListStacksResponse
+	24, // 68: anovel.v1.CoreService.ListServices:output_type -> anovel.v1.ListServicesResponse
+	26, // 69: anovel.v1.CoreService.DescribeService:output_type -> anovel.v1.DescribeServiceResponse
+	28, // 70: anovel.v1.CoreService.GetTopology:output_type -> anovel.v1.GetTopologyResponse
+	30, // 71: anovel.v1.CoreService.StartTarget:output_type -> anovel.v1.StartTargetResponse
+	32, // 72: anovel.v1.CoreService.KillTarget:output_type -> anovel.v1.KillTargetResponse
+	34, // 73: anovel.v1.CoreService.RestartTarget:output_type -> anovel.v1.RestartTargetResponse
+	36, // 74: anovel.v1.CoreService.StartInfra:output_type -> anovel.v1.StartInfraResponse
+	38, // 75: anovel.v1.CoreService.KillInfra:output_type -> anovel.v1.KillInfraResponse
+	40, // 76: anovel.v1.CoreService.KillInfraContainer:output_type -> anovel.v1.KillInfraContainerResponse
+	42, // 77: anovel.v1.CoreService.RestartInfraContainer:output_type -> anovel.v1.RestartInfraContainerResponse
+	11, // 78: anovel.v1.CoreService.StreamLogs:output_type -> anovel.v1.LogLine
+	45, // 79: anovel.v1.CoreService.ListRuns:output_type -> anovel.v1.ListRunsResponse
+	47, // 80: anovel.v1.CoreService.GetEnv:output_type -> anovel.v1.GetEnvResponse
+	50, // 81: anovel.v1.CoreService.ListVolumes:output_type -> anovel.v1.ListVolumesResponse
+	52, // 82: anovel.v1.CoreService.BackupVolume:output_type -> anovel.v1.BackupVolumeResponse
+	54, // 83: anovel.v1.CoreService.RestoreVolume:output_type -> anovel.v1.RestoreVolumeResponse
+	56, // 84: anovel.v1.CoreService.ClearVolume:output_type -> anovel.v1.ClearVolumeResponse
+	58, // 85: anovel.v1.CoreService.Exec:output_type -> anovel.v1.ExecOutput
+	60, // 86: anovel.v1.CoreService.Debug:output_type -> anovel.v1.DebugResponse
+	12, // 87: anovel.v1.CoreService.Watch:output_type -> anovel.v1.StateEvent
+	63, // [63:88] is the sub-list for method output_type
+	38, // [38:63] is the sub-list for method input_type
+	38, // [38:38] is the sub-list for extension type_name
+	38, // [38:38] is the sub-list for extension extendee
+	0,  // [0:38] is the sub-list for field type_name
 }
 
 func init() { file_anovel_v1_core_proto_init() }

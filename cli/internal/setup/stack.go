@@ -14,60 +14,38 @@ import (
 // to point at.
 const stackRemoteURL = "git@github.com:a-novel-kit/stack.git"
 
-// bootstrapStack runs the three-way check for one stack:
-//   - exists + valid (right repo + remote) → no-op
-//   - exists + invalid (wrong remote or not a repo) → refuse
-//   - missing → default: prompt; non-default: clone unconditionally
-//
+// bootstrapStack runs the three-way check for one stack and returns its status
+// with a one-line detail. A valid checkout is left alone and anything else at
+// the path is refused. A missing stack is cloned, after the prompter confirms
+// it for the default stack; with a nil prompter the default stack is skipped.
 // Idempotent on re-run.
-func bootstrapStack(s stacks.Stack, nonInteractive bool, prompter Prompter) StackResult {
-	out := StackResult{Name: s.Name, Path: s.Path}
+func bootstrapStack(s stacks.Stack, prompter Prompter) (string, string) {
 	info, statErr := os.Stat(s.Path)
 	switch {
 	case statErr == nil && info.IsDir():
-		// Exists. Is it a valid stack repo?
 		if isValidStackRepo(s.Path) {
-			out.Status = statusValid
-			out.Detail = "already cloned at " + s.Path
-			return out
+			return statusValid, "already cloned at " + s.Path
 		}
-		// Exists but not a valid repo with our remote.
-		out.Status = statusRefused
-		out.Detail = "path exists at " + s.Path + " but is not a git repo for " + stackRemoteURL
-		return out
+		return statusRefused, "path exists at " + s.Path + " but is not a git repo for " + stackRemoteURL
 	case statErr == nil:
-		// Exists as a file — won't touch it.
-		out.Status = statusRefused
-		out.Detail = "path " + s.Path + " exists and is not a directory"
-		return out
+		return statusRefused, "path " + s.Path + " exists and is not a directory"
 	case os.IsNotExist(statErr):
-		// Missing — clone or prompt.
 		if s.IsDefault {
-			if nonInteractive || prompter == nil {
-				out.Status = statusSkipped
-				out.Detail = "default stack missing at " + s.Path + " (re-run interactively to clone, or set it up manually)"
-				return out
+			if prompter == nil {
+				return statusSkipped, "default stack missing at " + s.Path + " (re-run interactively to clone, or set it up manually)"
 			}
 			yes, err := prompter.YesNo(fmt.Sprintf(
 				"Default stack not found at %s. Clone %s into it?", s.Path, stackRemoteURL))
 			if err != nil || !yes {
-				out.Status = statusSkipped
-				out.Detail = "user declined; set up " + s.Path + " manually before running `a-novel core start`"
-				return out
+				return statusSkipped, "user declined; set up " + s.Path + " manually before running `a-novel core start`"
 			}
 		}
 		if err := CloneStack(s.Path); err != nil {
-			out.Status = statusRefused
-			out.Detail = "clone failed: " + err.Error()
-			return out
+			return statusRefused, "clone failed: " + err.Error()
 		}
-		out.Status = statusCloned
-		out.Detail = "cloned " + stackRemoteURL + " → " + s.Path
-		return out
+		return statusCloned, "cloned " + stackRemoteURL + " → " + s.Path
 	default:
-		out.Status = statusRefused
-		out.Detail = "stat failed: " + statErr.Error()
-		return out
+		return statusRefused, "stat failed: " + statErr.Error()
 	}
 }
 

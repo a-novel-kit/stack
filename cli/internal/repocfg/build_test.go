@@ -1,14 +1,41 @@
 package repocfg
 
 import (
-	"fmt"
 	"net/http"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
 )
+
+// planFor builds a-novel-kit/example's plan for class, with every bot a
+// ruleset may name and checks as the discovered required checks.
+func planFor(t *testing.T, class *ClassPreset, checks ...CheckRef) *Plan {
+	t.Helper()
+	plan, err := BuildPlan(&RepoTarget{
+		Org: "a-novel-kit", Repo: "example", DefaultBranch: "master", Class: class,
+		OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{
+			"agent": 3549379, "publish": 1734949, "dependencies": 1734926,
+		}},
+		Discovered: &Discovered{Checks: checks},
+	})
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	return plan
+}
+
+// rulesetBody returns the body of the plan's named ruleset, or nil.
+func rulesetBody(plan *Plan, name string) *APIRuleset {
+	for _, op := range plan.Ops {
+		if op.RulesetName == name {
+			return op.Body.(*APIRuleset)
+		}
+	}
+	return nil
+}
 
 func TestCODEOWNERS(t *testing.T) {
 	t.Parallel()
@@ -21,121 +48,76 @@ func TestCODEOWNERS(t *testing.T) {
 	}
 }
 
-// TestBuildPlanProvisionsCODEOWNERS checks that the CODEOWNERS file is committed
-// to .github/ for every repo regardless of class — a minimal preset (everything
-// off) still emits the op.
-func TestBuildPlanProvisionsCODEOWNERS(t *testing.T) {
+// TestBuildPlanProvisions pins the single op a plan carries for each managed
+// path. CODEOWNERS, labels and the conversation lock reach every repo, even a
+// minimal preset, whatever its pull request policy, and the retired lock-pr
+// copy is deleted. Merge enforcement rides the master ruleset and dependency
+// auto-approval rides require-approval, so a bare class gets neither.
+func TestBuildPlanProvisions(t *testing.T) {
 	t.Parallel()
-	plan, err := BuildPlan(&RepoTarget{
-		Org:        "a-novel-kit",
-		Repo:       "example",
-		Class:      &ClassPreset{},
-		Discovered: &Discovered{},
-	})
+
+	labels, err := LoadLabels()
 	if err != nil {
-		t.Fatalf("BuildPlan: %v", err)
+		t.Fatalf("LoadLabels: %v", err)
 	}
-	var found bool
-	for _, op := range plan.Ops {
-		if op.Method == http.MethodPut && strings.HasSuffix(op.Path, "/contents/.github/CODEOWNERS") {
-			found = true
-			if !strings.Contains(op.Content, "* @kushuh") {
-				t.Errorf("CODEOWNERS op content = %q, want it to contain %q", op.Content, "* @kushuh")
-			}
+	loadPlan := func(class Class) *Plan {
+		preset, err := LoadClass(class)
+		if err != nil {
+			t.Fatalf("LoadClass(%s): %v", class, err)
 		}
+		return planFor(t, preset)
 	}
-	if !found {
-		t.Errorf("BuildPlan emitted no .github/CODEOWNERS op; ops = %+v", plan.Ops)
-	}
-}
+	bare := planFor(t, &ClassPreset{})
+	collaborators := planFor(t, &ClassPreset{Features: Features{PullRequests: "collaborators_only"}})
+	everyone := planFor(t, &ClassPreset{Features: Features{PullRequests: "all"}})
+	master := planFor(t, &ClassPreset{Rulesets: ClassRulesets{Master: true, Tags: true}})
+	approval := planFor(t, &ClassPreset{Rulesets: ClassRulesets{RequireApproval: true}})
+	workflow := map[string]any{"build_type": "workflow"}
 
-// TestBuildPlanProvisionsLabels checks that the canonical label set is
-// provisioned to every repo regardless of class.
-func TestBuildPlanProvisionsLabels(t *testing.T) {
-	t.Parallel()
-	plan, err := BuildPlan(&RepoTarget{
-		Org:        "a-novel-kit",
-		Repo:       "example",
-		Class:      &ClassPreset{},
-		Discovered: &Discovered{},
-	})
-	if err != nil {
-		t.Fatalf("BuildPlan: %v", err)
+	testCases := []struct {
+		name         string
+		plan         *Plan
+		method, path string
+		content      string // a substring of the committed file
+		body         any
+		gated        bool // absent from the bare plan
+	}{
+		{name: "CODEOWNERS", plan: bare, method: http.MethodPut, path: "/contents/.github/CODEOWNERS", content: "* @kushuh"},
+		{name: "Labels", plan: bare, method: http.MethodPut, path: "/labels", body: labels},
+		{name: "LockClosed/CollaboratorsOnly", plan: collaborators, method: http.MethodPut, path: "/lock-closed.yaml", content: "/lock"},
+		{name: "LockClosed/All", plan: everyone, method: http.MethodPut, path: "/lock-closed.yaml", content: "/lock"},
+		{name: "LockPR", plan: bare, method: http.MethodDelete, path: "/lock-pr.yaml"},
+		// Factorized callers reference the reusable *-run.yaml engine, not the action.
+		{name: "MergeGate", plan: master, method: http.MethodPut, path: "/merge-gate.yaml", content: "merge-gate-run.yaml@", gated: true},
+		{name: "ReleaseTrain", plan: master, method: http.MethodPut, path: "/release-train.yaml", content: "release-train-run.yaml@"},
+		{name: "Hotfix", plan: master, method: http.MethodPut, path: "/hotfix.yaml", content: "backport-run.yaml@"},
+		{name: "EpicRollback", plan: master, method: http.MethodPut, path: "/epic-rollback.yaml", content: "epic-rollback-run.yaml@", gated: true},
+		// Already-thin callers still call the action directly.
+		{name: "ApprovePR", plan: master, method: http.MethodPut, path: "/approve-pr.yaml", content: "generic-actions/approve-pr@", gated: true},
+		{name: "DeriveStatus", plan: master, method: http.MethodPut, path: "/derive-status.yaml", content: "generic-actions/derive-status@", gated: true},
+		{name: "RecoverPRs", plan: master, method: http.MethodPut, path: "/recover-prs.yaml", content: "generic-actions/enable-auto-merge@", gated: true},
+		{name: "AutoApprove", plan: approval, method: http.MethodPut, path: "/auto-approve-dependabot.yaml", content: "auto-approve-dependabot-run.yaml@", gated: true},
+		// GitHub Code Quality bills per active committer and per AI credit, so it follows the class flag.
+		{name: "CodeQuality/Off", plan: bare, method: http.MethodPatch, path: "/code-quality/setup", body: map[string]any{"state": "not-configured"}},
+		{name: "CodeQuality/On", plan: planFor(t, &ClassPreset{CodeQuality: true}), method: http.MethodPatch, path: "/code-quality/setup", body: map[string]any{"state": "configured"}},
+		// Published classes enable Pages through a workflow-backed site.
+		{name: "Pages/Library", plan: loadPlan(ClassLibrary), method: http.MethodPost, path: "/pages", body: workflow},
+		{name: "Pages/Platform", plan: loadPlan(ClassPlatform), method: http.MethodPost, path: "/pages", body: workflow},
 	}
-	var cfg *LabelsConfig
-	for _, op := range plan.Ops {
-		if op.Method == http.MethodPut && strings.HasSuffix(op.Path, "/labels") {
-			c, ok := op.Body.(*LabelsConfig)
-			if !ok {
-				t.Fatalf("labels op body = %T, want *LabelsConfig", op.Body)
-			}
-			cfg = c
-		}
-	}
-	if cfg == nil {
-		t.Fatalf("BuildPlan emitted no /labels op; ops = %+v", plan.Ops)
-	}
-	var hasMeta, hasAppendOnlyOverride bool
-	for _, l := range cfg.Ensure {
-		if l.Name == "meta" {
-			hasMeta = true
-		}
-		if l.Name == "append-only-override" {
-			hasAppendOnlyOverride = true
-		}
-	}
-	if !hasMeta {
-		t.Error("labels op ensure set missing `meta`")
-	}
-	if !hasAppendOnlyOverride {
-		t.Error("labels op ensure set missing `append-only-override`")
-	}
-	if !slices.Contains(cfg.Retire, "triage") {
-		t.Errorf("labels op retire set missing `triage`; got %v", cfg.Retire)
-	}
-}
 
-// TestBuildPlanProvisionsPagesByDefault checks that published repository
-// classes enable Pages through a workflow-backed site.
-func TestBuildPlanProvisionsPagesByDefault(t *testing.T) {
-	t.Parallel()
-
-	for _, class := range []Class{ClassLibrary, ClassPlatform} {
-		t.Run(string(class), func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-
-			preset, err := LoadClass(class)
-			if err != nil {
-				t.Fatalf("LoadClass(%s): %v", class, err)
+			onPath := func(op Op) bool { return strings.HasSuffix(op.Path, testCase.path) }
+			ops := slices.DeleteFunc(slices.Clone(testCase.plan.Ops), func(op Op) bool { return !onPath(op) })
+			if len(ops) != 1 || ops[0].Method != testCase.method ||
+				!strings.Contains(ops[0].Content, testCase.content) ||
+				(testCase.body != nil && !reflect.DeepEqual(ops[0].Body, testCase.body)) {
+				t.Fatalf("ops on %s = %+v, want one %s carrying %q / %+v",
+					testCase.path, ops, testCase.method, testCase.content, testCase.body)
 			}
-			plan, err := BuildPlan(&RepoTarget{
-				Org:   "a-novel-kit",
-				Repo:  "example",
-				Class: preset,
-				OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{
-					"agent": 1, "dependencies": 2, "publish": 3,
-				}},
-				Discovered: &Discovered{},
-			})
-			if err != nil {
-				t.Fatalf("BuildPlan(%s): %v", class, err)
-			}
-
-			var pagesOps []Op
-			for _, op := range plan.Ops {
-				if op.Method == http.MethodPost && strings.HasSuffix(op.Path, "/pages") {
-					pagesOps = append(pagesOps, op)
-				}
-			}
-			if len(pagesOps) != 1 {
-				t.Fatalf("BuildPlan(%s) emitted %d Pages ops, want 1; ops = %+v", class, len(pagesOps), plan.Ops)
-			}
-			body, ok := pagesOps[0].Body.(map[string]any)
-			if !ok {
-				t.Fatalf("Pages body = %T, want map[string]any", pagesOps[0].Body)
-			}
-			if got := body["build_type"]; got != "workflow" {
-				t.Errorf("Pages build_type = %v, want workflow", got)
+			if testCase.gated && slices.ContainsFunc(bare.Ops, onPath) {
+				t.Errorf("a bare class's plan touches %s", testCase.path)
 			}
 		})
 	}
@@ -164,155 +146,6 @@ func TestLabelsSatisfyGitHubConstraints(t *testing.T) {
 	}
 }
 
-// TestBuildPlanProvisionsMergeGateWorkflows checks that the merge-enforcement
-// workflows ride along wherever the master ruleset gates merges — the merge-gate
-// runner and the admin approve-pr override — pinned to the workflows action, and
-// that a class WITHOUT the master ruleset gets neither.
-func TestBuildPlanProvisionsMergeGateWorkflows(t *testing.T) {
-	t.Parallel()
-
-	plan, err := BuildPlan(&RepoTarget{
-		Org:           "a-novel-kit",
-		Repo:          "example",
-		DefaultBranch: "master",
-		Class:         &ClassPreset{Rulesets: ClassRulesets{Master: true, Tags: true}},
-		OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{
-			"dependencies": 1734926, "publish": 1734949, "agent": 3549379,
-		}},
-		Discovered: &Discovered{},
-	})
-	if err != nil {
-		t.Fatalf("BuildPlan: %v", err)
-	}
-	want := map[string]string{
-		// Factorized: the thin caller references the reusable *-run.yaml engine, not the action.
-		"/contents/.github/workflows/merge-gate.yaml":    "merge-gate-run.yaml@",
-		"/contents/.github/workflows/release-train.yaml": "release-train-run.yaml@",
-		"/contents/.github/workflows/hotfix.yaml":        "backport-run.yaml@",
-		"/contents/.github/workflows/epic-rollback.yaml": "epic-rollback-run.yaml@",
-		// Not factorized (already thin): still call the action directly.
-		"/contents/.github/workflows/approve-pr.yaml":    "generic-actions/approve-pr@",
-		"/contents/.github/workflows/derive-status.yaml": "generic-actions/derive-status@",
-		"/contents/.github/workflows/recover-prs.yaml":   "generic-actions/enable-auto-merge@",
-	}
-	for suffix, ref := range want {
-		var op *Op
-		for i := range plan.Ops {
-			if plan.Ops[i].Method == http.MethodPut && strings.HasSuffix(plan.Ops[i].Path, suffix) {
-				op = &plan.Ops[i]
-			}
-		}
-		if op == nil {
-			t.Errorf("BuildPlan emitted no op for %s", suffix)
-			continue
-		}
-		if !strings.Contains(op.Content, ref) {
-			t.Errorf("%s content missing action ref %q", suffix, ref)
-		}
-	}
-
-	// A class without the master ruleset gets neither workflow.
-	bare, err := BuildPlan(&RepoTarget{
-		Org: "a-novel-kit", Repo: "example",
-		Class: &ClassPreset{}, Discovered: &Discovered{},
-	})
-	if err != nil {
-		t.Fatalf("BuildPlan(bare): %v", err)
-	}
-	for _, op := range bare.Ops {
-		if strings.Contains(op.Path, "merge-gate.yaml") || strings.Contains(op.Path, "approve-pr.yaml") ||
-			strings.Contains(op.Path, "derive-status.yaml") || strings.Contains(op.Path, "recover-prs.yaml") {
-			t.Errorf("master-less class must not get governance workflows; got %s", op.Path)
-		}
-	}
-}
-
-// TestBuildPlanProvisionsAutoApprove checks that the dependency-bot auto-approval
-// workflow is pushed wherever require-approval is active, and nowhere else.
-func TestBuildPlanProvisionsAutoApprove(t *testing.T) {
-	t.Parallel()
-
-	plan, err := BuildPlan(&RepoTarget{
-		Org:           "a-novel-kit",
-		Repo:          "example",
-		DefaultBranch: "master",
-		Class:         &ClassPreset{Rulesets: ClassRulesets{RequireApproval: true}},
-		OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{
-			"dependencies": 1734926, "publish": 1734949, "agent": 3549379,
-		}},
-		Discovered: &Discovered{},
-	})
-	if err != nil {
-		t.Fatalf("BuildPlan: %v", err)
-	}
-	var op *Op
-	for i := range plan.Ops {
-		if plan.Ops[i].Method == http.MethodPut &&
-			strings.HasSuffix(plan.Ops[i].Path, "/contents/.github/workflows/auto-approve-dependabot.yaml") {
-			op = &plan.Ops[i]
-		}
-	}
-	if op == nil {
-		t.Fatal("BuildPlan emitted no auto-approve workflow op under require-approval")
-	}
-	if !strings.Contains(op.Content, "auto-approve-dependabot-run.yaml@") {
-		t.Error("auto-approve content missing the reusable-workflow ref")
-	}
-
-	// Without require-approval, the auto-approve workflow is not pushed.
-	bare, err := BuildPlan(&RepoTarget{
-		Org: "a-novel-kit", Repo: "example",
-		Class: &ClassPreset{}, Discovered: &Discovered{},
-	})
-	if err != nil {
-		t.Fatalf("BuildPlan(bare): %v", err)
-	}
-	for _, op := range bare.Ops {
-		if strings.Contains(op.Path, "auto-approve") {
-			t.Errorf("auto-approve pushed without require-approval: %s", op.Path)
-		}
-	}
-}
-
-// TestBuildPlanProvisionsLockClosed pins the pull request settings and the
-// conversation lock: the settings body carries the creation policy, every repo
-// gets lock-closed whatever the policy, and the retired lock-pr copy is deleted.
-func TestBuildPlanProvisionsLockClosed(t *testing.T) {
-	t.Parallel()
-
-	for _, policy := range []string{"collaborators_only", "all"} {
-		t.Run(policy, func(t *testing.T) {
-			t.Parallel()
-			plan, err := BuildPlan(&RepoTarget{
-				Org: "a-novel", Repo: "example",
-				Class:      &ClassPreset{Features: Features{PullRequests: policy}},
-				Discovered: &Discovered{},
-			})
-			if err != nil {
-				t.Fatalf("BuildPlan: %v", err)
-			}
-			ops := map[string]Op{}
-			for _, op := range plan.Ops {
-				ops[op.Method+" "+op.Path] = op
-			}
-			settings, ok := ops["PATCH repos/a-novel/example"]
-			if !ok {
-				t.Fatal("plan lacks the settings op")
-			}
-			if got := settings.Body.(map[string]any)["pull_request_creation_policy"]; got != policy {
-				t.Errorf("pull_request_creation_policy = %v, want %s", got, policy)
-			}
-			lock, ok := ops["PUT repos/a-novel/example/contents/.github/workflows/lock-closed.yaml"]
-			if !ok || !strings.Contains(lock.Content, "/lock") {
-				t.Error("plan does not ship lock-closed calling the lock endpoint")
-			}
-			if _, ok := ops["DELETE repos/a-novel/example/contents/.github/workflows/lock-pr.yaml"]; !ok {
-				t.Error("plan does not delete the retired lock-pr workflow")
-			}
-		})
-	}
-}
-
 // TestBuildPlanGovernsReleaseLines pins the release/vX.Y protection: wherever
 // releases are tagged, a backport lands like a default-branch change, behind
 // master's checks, an approval and a squash, while the agent bot alone writes
@@ -321,70 +154,42 @@ func TestBuildPlanGovernsReleaseLines(t *testing.T) {
 	t.Parallel()
 
 	checks := []CheckRef{{Context: "merge-gate", IntegrationID: 3549379}, {Context: "test", IntegrationID: 15368}}
-	for _, tags := range []bool{true, false} {
-		t.Run(fmt.Sprintf("tags=%v", tags), func(t *testing.T) {
-			t.Parallel()
-			plan, err := BuildPlan(&RepoTarget{
-				Org: "a-novel-kit", Repo: "example",
-				Class:      &ClassPreset{Rulesets: ClassRulesets{Master: true, Tags: tags}},
-				OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{"agent": 3549379, "publish": 1734949}},
-				Discovered: &Discovered{Checks: checks},
-			})
-			if err != nil {
-				t.Fatalf("BuildPlan: %v", err)
-			}
-			var ruleset *APIRuleset
-			for _, op := range plan.Ops {
-				if op.RulesetName == rulesetReleaseLines {
-					ruleset = op.Body.(*APIRuleset)
-				}
-			}
-			if (ruleset != nil) != tags {
-				t.Fatalf("release-lines ruleset present = %v, want %v", ruleset != nil, tags)
-			}
-			if !tags {
-				return
-			}
-			refs := ruleset.Conditions["ref_name"].(map[string]any)
-			if ruleset.Target != "branch" || !slices.Equal(refs["include"].([]string), []string{"refs/heads/release/**"}) {
-				t.Fatalf("target/ref_name = %s/%v, want branch release/**", ruleset.Target, refs)
-			}
-			agent := slices.IndexFunc(ruleset.BypassActors, func(a APIBypassActor) bool {
-				return a.ActorID != nil && *a.ActorID == 3549379
-			})
-			if agent < 0 || ruleset.BypassActors[agent].BypassMode != modeAlways {
-				t.Fatalf("bypass actors = %+v, want the agent bot in always mode", ruleset.BypassActors)
-			}
-			rules := map[string]map[string]any{}
-			for _, r := range ruleset.Rules {
-				rules[r.Type] = r.Parameters
-			}
-			for _, rule := range []string{"creation", "deletion", "non_fast_forward", "required_signatures"} {
-				if _, ok := rules[rule]; !ok {
-					t.Errorf("release-lines lacks the %s rule", rule)
-				}
-			}
-			if got := rules["pull_request"]["allowed_merge_methods"]; !slices.Equal(got.([]any), []any{"squash"}) {
-				t.Errorf("allowed_merge_methods = %v, want squash only", got)
-			}
-			if got := rules["pull_request"]["required_approving_review_count"]; got != 1 {
-				t.Errorf("required_approving_review_count = %v, want 1", got)
-			}
-			required := rules["required_status_checks"]["required_status_checks"].([]map[string]any)
-			if len(required) != len(checks) || required[0]["context"] != "merge-gate" || required[1]["context"] != "test" {
-				t.Errorf("required checks = %v, want master's discovered checks", required)
-			}
-		})
+	if rulesetBody(planFor(t, &ClassPreset{Rulesets: ClassRulesets{Master: true}}, checks...), rulesetReleaseLines) != nil {
+		t.Error("an untagged class carries the release-lines ruleset")
 	}
-}
-
-// contextsOf extracts the context names from a CheckRef slice, preserving order.
-func contextsOf(checks []CheckRef) []string {
-	out := make([]string, len(checks))
-	for i, c := range checks {
-		out[i] = c.Context
+	ruleset := rulesetBody(planFor(t, &ClassPreset{Rulesets: ClassRulesets{Master: true, Tags: true}}, checks...), rulesetReleaseLines)
+	if ruleset == nil {
+		t.Fatal("a tagged class lacks the release-lines ruleset")
 	}
-	return out
+	refs := ruleset.Conditions["ref_name"].(map[string]any)
+	if ruleset.Target != "branch" || !slices.Equal(refs["include"].([]string), []string{"refs/heads/release/**"}) {
+		t.Fatalf("target/ref_name = %s/%v, want branch release/**", ruleset.Target, refs)
+	}
+	agent := slices.IndexFunc(ruleset.BypassActors, func(a APIBypassActor) bool {
+		return a.ActorID != nil && *a.ActorID == 3549379
+	})
+	if agent < 0 || ruleset.BypassActors[agent].BypassMode != modeAlways {
+		t.Fatalf("bypass actors = %+v, want the agent bot in always mode", ruleset.BypassActors)
+	}
+	rules := map[string]map[string]any{}
+	for _, r := range ruleset.Rules {
+		rules[r.Type] = r.Parameters
+	}
+	for _, rule := range []string{"creation", "deletion", "non_fast_forward", "required_signatures"} {
+		if _, ok := rules[rule]; !ok {
+			t.Errorf("release-lines lacks the %s rule", rule)
+		}
+	}
+	if got := rules["pull_request"]["allowed_merge_methods"]; !slices.Equal(got.([]any), []any{"squash"}) {
+		t.Errorf("allowed_merge_methods = %v, want squash only", got)
+	}
+	if got := rules["pull_request"]["required_approving_review_count"]; got != 1 {
+		t.Errorf("required_approving_review_count = %v, want 1", got)
+	}
+	required := rules["required_status_checks"]["required_status_checks"].([]map[string]any)
+	if len(required) != len(checks) || required[0]["context"] != "merge-gate" || required[1]["context"] != "test" {
+		t.Errorf("required checks = %v, want master's discovered checks", required)
+	}
 }
 
 // TestBuildPlanPrunesUnknownRulesets pins the invariant that makes repo config
@@ -394,109 +199,65 @@ func contextsOf(checks []CheckRef) []string {
 func TestBuildPlanPrunesUnknownRulesets(t *testing.T) {
 	t.Parallel()
 
-	build := func(t *testing.T, rs ClassRulesets) *Plan {
-		t.Helper()
-		plan, err := BuildPlan(&RepoTarget{
-			Org:        "a-novel-kit",
-			Repo:       "example",
-			Class:      &ClassPreset{Rulesets: rs},
-			OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{"agent": 1, "publish": 2, "dependencies": 3}},
-			Checks:     &ChecksConfig{},
-			Discovered: &Discovered{},
-		})
-		if err != nil {
-			t.Fatalf("BuildPlan: %v", err)
-		}
-		return plan
-	}
-
-	prunes := func(t *testing.T, plan *Plan) Op {
-		t.Helper()
-		var found []Op
-		for _, op := range plan.Ops {
-			if op.PruneRulesets {
-				found = append(found, op)
-			}
-		}
-		if len(found) != 1 {
-			t.Fatalf("want exactly 1 prune op, got %d", len(found))
-		}
-		return found[0]
-	}
-
-	t.Run("keeps exactly what the plan applies", func(t *testing.T) {
-		t.Parallel()
-		plan := build(t, ClassRulesets{Master: true, RequireApproval: true, Tags: true})
-		var applied []string
-		for _, op := range plan.Ops {
-			if op.RulesetName != "" {
-				applied = append(applied, op.RulesetName)
-			}
-		}
-		keep := prunes(t, plan).KeepRulesets
-		slices.Sort(applied)
-		slices.Sort(keep)
-		if !slices.Equal(applied, keep) {
-			t.Errorf("keep set %v != applied rulesets %v — a ruleset would be written then immediately deleted", keep, applied)
-		}
-	})
-
-	t.Run("prunes last, so the repo is never briefly ungoverned", func(t *testing.T) {
-		t.Parallel()
-		plan := build(t, ClassRulesets{Master: true, RequireApproval: true, Tags: true})
-		lastApply := -1
-		pruneAt := -1
+	pruneOf := func(plan *Plan) (Op, int) {
+		var at []int
 		for i, op := range plan.Ops {
-			if op.RulesetName != "" {
-				lastApply = i
-			}
 			if op.PruneRulesets {
-				pruneAt = i
+				at = append(at, i)
 			}
 		}
-		if pruneAt < lastApply {
-			t.Errorf("prune op at %d precedes the last ruleset apply at %d", pruneAt, lastApply)
+		if len(at) != 1 {
+			t.Fatalf("want exactly 1 prune op, got %d", len(at))
 		}
-	})
+		return plan.Ops[at[0]], at[0]
+	}
 
-	t.Run("a class with no rulesets keeps none", func(t *testing.T) {
-		t.Parallel()
-		plan := build(t, ClassRulesets{})
-		if keep := prunes(t, plan).KeepRulesets; len(keep) != 0 {
-			t.Errorf("keep = %v, want empty — an ungoverned class must not retain rulesets", keep)
+	plan := planFor(t, &ClassPreset{Rulesets: ClassRulesets{Master: true, RequireApproval: true, Tags: true}})
+	prune, pruneAt := pruneOf(plan)
+	var applied []string
+	for i, op := range plan.Ops {
+		if op.RulesetName == "" {
+			continue
 		}
-	})
-
-	t.Run("coverage is never kept", func(t *testing.T) {
-		t.Parallel()
-		keep := prunes(t, build(t, ClassRulesets{Master: true, RequireApproval: true, Tags: true})).KeepRulesets
-		if slices.Contains(keep, "codecov") {
-			t.Errorf("codecov is still in the keep set %v — it would survive the prune", keep)
+		applied = append(applied, op.RulesetName)
+		// Pruning runs last, so the repo is never briefly ungoverned.
+		if i > pruneAt {
+			t.Errorf("ruleset apply at %d follows the prune op at %d", i, pruneAt)
 		}
-	})
-
-	t.Run("the prune op reads as a deletion", func(t *testing.T) {
-		t.Parallel()
-		title := prunes(t, build(t, ClassRulesets{Master: true})).Title()
-		if !strings.Contains(title, "PRUNE") || !strings.Contains(title, "master") {
-			t.Errorf("prune title = %q, want it to name the operation and what survives", title)
-		}
-	})
+	}
+	keep := slices.Sorted(slices.Values(prune.KeepRulesets))
+	slices.Sort(applied)
+	if !slices.Equal(applied, keep) {
+		t.Errorf("keep set %v != applied rulesets %v — a ruleset would be written then immediately deleted", keep, applied)
+	}
+	if slices.Contains(keep, "codecov") {
+		t.Errorf("codecov is still in the keep set %v — it would survive the prune", keep)
+	}
+	if title := prune.Title(); !strings.Contains(title, "PRUNE") || !strings.Contains(title, "master") {
+		t.Errorf("prune title = %q, want it to name the operation and what survives", title)
+	}
+	if bare, _ := pruneOf(planFor(t, &ClassPreset{})); len(bare.KeepRulesets) != 0 {
+		t.Errorf("keep = %v, want empty — an ungoverned class must not retain rulesets", bare.KeepRulesets)
+	}
 }
 
-// TestSettingsBodyTakesLandedSubjectsFromPRTitle pins the contract the
-// commit-messages ruleset relies on: a squash merge carries the PR title as its
-// subject, never a branch commit's. The merge-commit title settings stay out,
-// since GitHub rejects the whole PATCH with them while merge commits are off.
-func TestSettingsBodyTakesLandedSubjectsFromPRTitle(t *testing.T) {
+// TestSettingsBody pins the settings contract. The pull request creation policy
+// follows the class, and a squash merge carries the PR title as its subject,
+// which the commit-messages ruleset relies on. The merge-commit title settings
+// stay out, since GitHub rejects the whole PATCH with them while merge commits
+// are off.
+func TestSettingsBody(t *testing.T) {
 	t.Parallel()
-	body := SettingsBody(&ClassPreset{})
-	if body["squash_merge_commit_title"] != "PR_TITLE" {
-		t.Errorf("squash_merge_commit_title = %v, want PR_TITLE", body["squash_merge_commit_title"])
-	}
-	for _, key := range []string{"merge_commit_title", "merge_commit_message"} {
-		if _, ok := body[key]; ok {
-			t.Errorf("%s is set; GitHub rejects it while merge commits are disabled", key)
+	for _, policy := range []string{"collaborators_only", "all"} {
+		body := SettingsBody(&ClassPreset{Features: Features{PullRequests: policy}})
+		if body["pull_request_creation_policy"] != policy || body["squash_merge_commit_title"] != "PR_TITLE" {
+			t.Errorf("pull_request_creation_policy/squash_merge_commit_title = %v/%v, want %s/PR_TITLE",
+				body["pull_request_creation_policy"], body["squash_merge_commit_title"], policy)
+		}
+		for _, key := range []string{"merge_commit_title", "merge_commit_message"} {
+			if _, ok := body[key]; ok {
+				t.Errorf("%s is set; GitHub rejects it while merge commits are disabled", key)
+			}
 		}
 	}
 }
@@ -507,70 +268,22 @@ func TestSettingsBodyTakesLandedSubjectsFromPRTitle(t *testing.T) {
 // entry ships only with classes that enable Dependabot security updates.
 func TestBuildPlanDependabotBypassFollowsSecurityUpdates(t *testing.T) {
 	t.Parallel()
-
 	for _, securityUpdates := range []bool{true, false} {
-		t.Run(fmt.Sprintf("security_updates=%v", securityUpdates), func(t *testing.T) {
-			t.Parallel()
-			plan, err := BuildPlan(&RepoTarget{
-				Org: "a-novel", Repo: "example",
-				Class: &ClassPreset{
-					Rulesets: ClassRulesets{Master: true},
-					Security: SecurityToggles{Dependabot: securityUpdates},
-				},
-				OrgProfile: &OrgProfile{Org: "a-novel", Bots: map[string]int64{"agent": 3549319, "publish": 1718144}},
-				Discovered: &Discovered{},
-			})
-			if err != nil {
-				t.Fatalf("BuildPlan: %v", err)
-			}
-			var ruleset *APIRuleset
-			for _, op := range plan.Ops {
-				if op.RulesetName == "commit-messages" {
-					ruleset = op.Body.(*APIRuleset)
-				}
-			}
-			if ruleset == nil {
-				t.Fatal("plan carries no commit-messages ruleset")
-			}
-			hasDependabot := slices.ContainsFunc(ruleset.BypassActors, func(a APIBypassActor) bool {
-				return a.ActorID != nil && *a.ActorID == dependabotAppID
-			})
-			if hasDependabot != securityUpdates {
-				t.Fatalf("Dependabot bypass = %v, want %v", hasDependabot, securityUpdates)
-			}
-			if !securityUpdates && (ruleset.BypassActors == nil || len(ruleset.BypassActors) != 0) {
-				t.Fatalf("bypass actors = %#v, want an empty list", ruleset.BypassActors)
-			}
+		ruleset := rulesetBody(planFor(t, &ClassPreset{
+			Rulesets: ClassRulesets{Master: true},
+			Security: SecurityToggles{Dependabot: securityUpdates},
+		}), "commit-messages")
+		if ruleset == nil {
+			t.Fatal("plan carries no commit-messages ruleset")
+		}
+		hasDependabot := slices.ContainsFunc(ruleset.BypassActors, func(a APIBypassActor) bool {
+			return a.ActorID != nil && *a.ActorID == dependabotAppID
 		})
-	}
-}
-
-// TestBuildPlanAssertsCodeQuality pins that GitHub Code Quality, which bills per
-// active committer and per AI credit, follows the class code_quality flag on
-// every repo.
-func TestBuildPlanAssertsCodeQuality(t *testing.T) {
-	t.Parallel()
-
-	for flag, want := range map[bool]string{false: "not-configured", true: "configured"} {
-		t.Run(want, func(t *testing.T) {
-			t.Parallel()
-			plan, err := BuildPlan(&RepoTarget{
-				Org: "a-novel", Repo: "example",
-				Class:      &ClassPreset{CodeQuality: flag},
-				Discovered: &Discovered{},
-			})
-			if err != nil {
-				t.Fatalf("BuildPlan: %v", err)
-			}
-			for _, op := range plan.Ops {
-				if op.Method == http.MethodPatch && op.Path == "repos/a-novel/example/code-quality/setup" {
-					if got := op.Body.(map[string]any)["state"]; got != want {
-						t.Fatalf("code quality state = %v, want %s", got, want)
-					}
-					return
-				}
-			}
-			t.Fatal("plan carries no code-quality setup op")
-		})
+		if hasDependabot != securityUpdates {
+			t.Errorf("security updates %v: Dependabot bypass = %v", securityUpdates, hasDependabot)
+		}
+		if !securityUpdates && (ruleset.BypassActors == nil || len(ruleset.BypassActors) != 0) {
+			t.Errorf("bypass actors = %#v, want an empty list", ruleset.BypassActors)
+		}
 	}
 }

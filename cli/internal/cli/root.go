@@ -1,13 +1,12 @@
-// Package cli wires every subcommand the a-novel binary exposes. The
-// standalone `test` and `build` commands are wrapped from cmd/a-novel/main.go,
-// which owns their flag parsing; the daemon-backed verbs under `run` are
-// implemented here directly against the daemon's rpc client.
+// Package cli wires every subcommand the a-novel binary exposes.
 package cli
 
 import (
-	"errors"
+	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/a-novel-kit/stack/cli/internal/version"
 )
@@ -20,187 +19,121 @@ const (
 	stackLabel     = "stack"
 )
 
-// LegacyHandlers carries the entrypoints for the standalone capabilities
-// (test, build), which run their own flag parsers. cmd/a-novel injects them so
-// the flag-parsing code stays in that package, while the daemon-backed verbs
-// under `run` live entirely in this one.
-//
-// `run` is the parent namespace for the daemon-backed verbs, so it has no
-// standalone handler here.
-type LegacyHandlers struct {
-	Test  func(args []string) int
-	Build func(args []string) int
+// Exit codes beyond the generic failure, distinct so scripts can react.
+const (
+	exitUsage   = 2   // bad invocation
+	exitAborted = 130 // interrupted before completing (128+SIGINT)
+)
+
+// stdinIsTTY and stdoutIsTTY report whether the streams are terminals. They are
+// package vars so tests can drive the non-interactive branches without a PTY.
+var (
+	stdinIsTTY  = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
+	stdoutIsTTY = func() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
+)
+
+// ExitError carries an exit status through Cobra's error path. main prints Err,
+// when set, before exiting with Code; a nil Err exits silently, as when the
+// status is a child's own.
+type ExitError struct {
+	Code int
+	Err  error
 }
 
-// NewRoot builds the root a-novel command with every subcommand attached. The
-// caller supplies the standalone test/build handlers, since their flag parsing
-// lives in the cmd/a-novel package.
-func NewRoot(legacy LegacyHandlers) *cobra.Command {
+func (e *ExitError) Error() string {
+	if e.Err == nil {
+		return fmt.Sprintf("exit status %d", e.Code)
+	}
+	return e.Err.Error()
+}
+
+func (e *ExitError) Unwrap() error { return e.Err }
+
+// NewRoot builds the root a-novel command with every subcommand attached.
+func NewRoot() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "a-novel",
 		Short: "the A-Novel storyverse build tool",
-		Long: `a-novel is the storyverse build tool: a single, branded CLI that
-replaces the per-repo bash scripts and Makefiles.
+		Long: `a-novel is the storyverse build tool: a single CLI that replaces the per-repo
+bash scripts and Makefiles.
 
 Commands fall into three groups:
 
   Standalone capabilities — operate on the local working tree, no daemon
   required:
-    test, build, publish, secrets, claude
+    test, build, publish, repo, secrets, claude, version
 
-  Daemon control — manage the long-lived a-novel daemon (one per user)
-  and the workspace it serves:
-    core start, core setup, core kill, core status, core sync,
-    core prepare-reinstall; install (rebuild + reinstall, state-preserving)
+  Daemon control — manage the long-lived a-novel daemon (one per user) and the
+  workspace it serves:
+    core start|setup|kill|restart|status|sync|stacks|bot-comment|prepare-reinstall,
+    install (rebuild + reinstall, state-preserving)
 
-  Daemon-backed verbs — interact with the daemon over its unix socket,
-  always nested under 'run':
-    run ui, run ps, run start <target>, run kill <target>, run restart,
-    run logs <target>, run env [<service>], run watch, run topology,
-    run stacks, run service infra start|kill, run service status,
-    run volume list|backup|restore|clear, run exec <target>, run debug
+  Daemon-backed verbs — talk to the daemon over its unix socket, under 'run':
+    run ui|ps|stacks|topology|service|start|kill|restart|logs|env|watch|volume|exec|debug
 
-Run 'a-novel help <command>' or 'a-novel <command> --help' for any
-command's flags and examples.
+Run 'a-novel help <command>' or 'a-novel <command> --help' for any command's
+flags and examples.
 
-See docs at https://github.com/a-novel-kit/stack/blob/master/cli/README.md
-for the full design.`,
-		SilenceUsage:  true, // don't dump usage on every error — too noisy for the daemon-backed verbs
-		SilenceErrors: false,
+See https://github.com/a-novel-kit/stack/blob/master/cli/README.md for the full
+design.`,
+		// main prints errors itself, so a status-only ExitError stays silent.
+		SilenceErrors: true,
+		SilenceUsage:  true,
 		Version:       version.String(),
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			sandbox, err := cmd.Flags().GetBool("sandbox")
-			if err != nil {
-				return err
-			}
-			if sandbox {
-				return errors.New("--sandbox must be the first argument")
+			if sandbox, _ := cmd.Flags().GetBool("sandbox"); sandbox {
+				return usageError(fmt.Errorf("%s must be the first argument", sandboxFlag))
 			}
 			return nil
 		},
 	}
 	root.PersistentFlags().Bool("sandbox", false,
 		"run one standalone command in a fresh temporary stack (must be first)")
+	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usageError(err) })
 
-	// Standalone capabilities: they scan the working tree, run the build or
-	// test command, report results and exit, with no daemon involved.
-	root.AddCommand(newLegacyCmd("test",
-		"Run tests (Go and pnpm) interactively or by selector",
-		`Discovers Go test packages and pnpm test scripts under the working tree, lets
-you pick which to run through an interactive menu (or a CLI selector), executes
-them, and prints a pass/fail report.`,
-		legacy.Test))
-	root.AddCommand(newLegacyCmd("build",
-		"Build Go binaries, pnpm bundles, and Podman images interactively or by selector",
-		`Discovers Go modules, pnpm build scripts, and Podman images under the working
-tree, lets you pick what to build through an interactive menu (or a CLI
-selector), runs the selection, and prints a pass/fail report.`,
-		legacy.Build))
-
-	// `a-novel publish` — cut a release locally (bump, commit, tag, push).
-	// Standalone like test/build: operates on the working tree, no daemon.
-	root.AddCommand(newPublishCmd())
-	root.AddCommand(newRepoCmd())
-
-	// `a-novel secrets` — local, encrypted secrets manager. Standalone like
-	// publish/repo: operates on the local key + store, no daemon. Its secrets
-	// are auto-injected into test/run/ui via a value-free per-repo mapping.
-	root.AddCommand(newSecretsCmd())
-
-	// `a-novel claude` — launch Claude Code from the stack root. Standalone
-	// and terminal: it execve's into claude, so it never returns here.
-	root.AddCommand(newClaudeCmd())
-
-	// `a-novel version`, alongside the --version flag Cobra puts on root.
-	root.AddCommand(&cobra.Command{
-		Use:   "version",
-		Short: "Print the a-novel CLI version",
-		Run: func(cmd *cobra.Command, _ []string) {
-			cmd.Println(version.String())
+	root.AddCommand(
+		newCapabilityCmd(testCapability),
+		newCapabilityCmd(buildCapability),
+		newPublishCmd(),
+		newRepoCmd(),
+		newSecretsCmd(),
+		newClaudeCmd(),
+		&cobra.Command{
+			Use:   "version",
+			Short: "Print the a-novel CLI version",
+			Run:   func(cmd *cobra.Command, _ []string) { cmd.Println(version.String()) },
 		},
-	})
-
-	// Daemon control stays at the top level, separate from operating on what
-	// the daemon supervises, which lives under `run`.
-	root.AddCommand(newCoreCmd())
-
-	// `a-novel install` — the canonical reinstall path. Wraps the
-	// prepare-reinstall + go install + core start sequence so the
-	// running daemon is always replaced with one running the new
-	// binary, preserving live state across the upgrade.
-	root.AddCommand(newInstallCmd())
-
-	// Daemon-backed verbs, all under `run`, which keeps the daemon-touching
-	// surface distinct from the standalone capabilities.
-	root.AddCommand(newRunCmd())
-
+		newCoreCmd(),
+		newInstallCmd(),
+		newRunCmd(),
+	)
 	return root
 }
 
-// newRunCmd is the parent for every daemon-backed verb. By itself it just
-// prints help and lists its subcommands; users always invoke a child like
-// `a-novel run ps` or `a-novel run start <target>`.
+// newRunCmd is the parent of every daemon-backed verb.
 func newRunCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   commandRun,
 		Short: "Operate on services and targets via the a-novel daemon",
-		Long: `Every verb under 'run' talks to the long-lived a-novel daemon over its
-unix socket. The daemon must be running (see 'a-novel core start') —
-'run' verbs refuse with a clear error if it isn't.
-
-Group is exhaustive: starting, killing, observing, log-streaming, env
-inspection, volume management, exec/debug, and the TUI all live under
-'run'. The exception is daemon-control itself, which lives under
-'a-novel core' (start/setup/kill/status/prepare-reinstall).`,
+		Long: `Every verb under 'run' talks to the long-lived a-novel daemon over its unix
+socket, and refuses with a clear error when it is not running (see 'a-novel
+core start'). Daemon control itself lives under 'a-novel core'.`,
 	}
-	// TUI first so it surfaces prominently in help.
-	cmd.AddCommand(newUICmd())
-	// Discovery / state.
-	cmd.AddCommand(newPsCmd())
-	cmd.AddCommand(newStacksCmd())
-	cmd.AddCommand(newTopologyCmd())
-	cmd.AddCommand(newServiceCmd())
-	// Target lifecycle.
-	cmd.AddCommand(newStartCmd())
-	cmd.AddCommand(newKillCmd())
-	cmd.AddCommand(newRestartCmd())
-	// Observability.
-	cmd.AddCommand(newLogsCmd())
-	cmd.AddCommand(newEnvCmd())
-	cmd.AddCommand(newWatchCmd())
-	// Volumes.
-	cmd.AddCommand(newVolumeCmd())
-	// Exec / debug.
-	cmd.AddCommand(newExecCmd())
-	cmd.AddCommand(newDebugCmd())
+	cmd.AddCommand(
+		newUICmd(),
+		newPsCmd(),
+		newStacksCmd(),
+		newTopologyCmd(),
+		newServiceCmd(),
+		newStartCmd(),
+		newKillCmd(),
+		newRestartCmd(),
+		newLogsCmd(),
+		newEnvCmd(),
+		newWatchCmd(),
+		newVolumeCmd(),
+		newExecCmd(),
+		newDebugCmd(),
+	)
 	return cmd
 }
-
-// newLegacyCmd wraps a non-Cobra handler so test/build can be invoked via
-// 'a-novel <verb> [args...]'. DisableFlagParsing hands args straight to the
-// handler, which runs its own flag parser. As a result Cobra does not
-// intercept `-h` / `--help`; the handler must recognize them itself.
-func newLegacyCmd(verb, short, long string, fn func([]string) int) *cobra.Command {
-	return &cobra.Command{
-		Use:                verb,
-		Short:              short,
-		Long:               long,
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			code := fn(args)
-			if code != 0 {
-				// Cobra collapses a non-zero RunE error to exit code 1,
-				// so the exact code travels in a typed error that the
-				// executor in main.go unwraps for os.Exit.
-				return &ExitError{Code: code}
-			}
-			return nil
-		},
-	}
-}
-
-// ExitError signals an explicit os.Exit code. Cobra's exec returns the
-// error; main.go inspects it for the precise code.
-type ExitError struct{ Code int }
-
-func (e *ExitError) Error() string { return "" }

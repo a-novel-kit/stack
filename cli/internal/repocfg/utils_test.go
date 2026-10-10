@@ -5,7 +5,21 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
+
+// loadWorkflow decodes the governance workflow template name into out.
+func loadWorkflow(t *testing.T, name string, out any) {
+	t.Helper()
+	content, err := os.ReadFile(filepath.Join("templates", "governance", name))
+	if err != nil {
+		panic(err)
+	}
+	if err := yaml.Unmarshal(content, out); err != nil {
+		panic(err)
+	}
+}
 
 func runGovernanceScript(t *testing.T, script string, environment []string) (string, string, error) {
 	t.Helper()

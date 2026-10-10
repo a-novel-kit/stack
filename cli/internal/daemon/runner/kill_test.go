@@ -15,41 +15,26 @@ import (
 // `podman inspect` every 2s and returns once it sees the container exited, so a container that
 // outlives its instance keeps both goroutines going for the life of the daemon.
 
+// TestMarkTerminatedClosesTheInstanceContext also covers a go-exec instance
+// that never started, which carries no cancel.
 func TestMarkTerminatedClosesTheInstanceContext(t *testing.T) {
-	r := &Runner{instances: map[string]*Instance{}}
+	ctx, cancel := context.WithCancel(t.Context())
+	for _, cancel := range []context.CancelFunc{cancel, nil} {
+		const id = "default/svc/rest"
+		r := &Runner{instances: map[string]*Instance{
+			id: {ID: id, Service: "svc", Stack: "default", Phase: anovelv1.Phase_PHASE_RUNNING, cancel: cancel},
+		}}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	const id = "default/svc/rest"
+		r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_KILLED, "")
 
-	r.instances[id] = &Instance{
-		ID:      id,
-		Service: "svc",
-		Stack:   "default",
-		Phase:   anovelv1.Phase_PHASE_RUNNING,
-		cancel:  cancel,
+		if got := r.instances[id].Phase; got != anovelv1.Phase_PHASE_TERMINATED {
+			t.Errorf("phase: got %v, want TERMINATED", got)
+		}
 	}
-
-	r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_KILLED, "")
-
 	select {
 	case <-ctx.Done():
 	case <-time.After(2 * time.Second):
 		t.Fatal("markTerminated left the instance context open; the watch and log goroutines run on it")
-	}
-}
-
-func TestMarkTerminatedHandlesAnInstanceWithNoContext(t *testing.T) {
-	r := &Runner{instances: map[string]*Instance{}}
-
-	const id = "default/svc/migrations"
-
-	// A go-exec instance that never started carries no cancel.
-	r.instances[id] = &Instance{ID: id, Phase: anovelv1.Phase_PHASE_PENDING}
-
-	r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_KILLED, "")
-
-	if got := r.instances[id].Phase; got != anovelv1.Phase_PHASE_TERMINATED {
-		t.Errorf("phase: got %v, want TERMINATED", got)
 	}
 }
 
@@ -63,7 +48,7 @@ func TestKillContainerReportsAFailedStop(t *testing.T) {
 		Service:     "svc",
 		Stack:       "default",
 		Phase:       anovelv1.Phase_PHASE_STOPPING,
-		Mode:        ModeContainer,
+		Mode:        anovelv1.Mode_MODE_CONTAINER,
 		ContainerID: "a-novel-test-container-that-does-not-exist",
 	}
 

@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"sync"
 	"testing"
 	"time"
 
@@ -11,39 +10,11 @@ import (
 // Tests for the runner's phase-event broadcaster, SubscribePhases and
 // emitPhase. The fanout iterates its subscribers under the read lock and sends
 // without blocking, so these cover delivery, filtering, the drop on a full
-// buffer, and unsubscribe.
-
-func newRunnerForEvents() *Runner {
-	// New requires non-nil deps for normal use, but the events surface needs
-	// nothing beyond a zero-value runner and its subs slice.
-	return &Runner{}
-}
-
-func TestEvents_BasicDelivery(t *testing.T) {
-	r := newRunnerForEvents()
-	ch, unsub := r.SubscribePhases(nil)
-	defer unsub()
-	r.emitPhase(PhaseEvent{
-		TargetID: "default/svc/rest",
-		Service:  "svc",
-		Stack:    "default",
-		NewPhase: anovelv1.Phase_PHASE_RUNNING,
-	})
-	select {
-	case ev := <-ch:
-		if ev.TargetID != "default/svc/rest" {
-			t.Errorf("event delivered with wrong id: %q", ev.TargetID)
-		}
-		if ev.Ts.IsZero() {
-			t.Error("emitPhase should stamp Ts before fanout")
-		}
-	case <-time.After(time.Second):
-		t.Fatal("subscriber didn't receive event")
-	}
-}
+// buffer, and unsubscribe. The events surface needs nothing beyond a
+// zero-value runner and its subs slice.
 
 func TestEvents_FilterDropsNonMatching(t *testing.T) {
-	r := newRunnerForEvents()
+	r := &Runner{}
 	// Filter: only events for svc=alpha get through.
 	ch, unsub := r.SubscribePhases(func(ev PhaseEvent) bool {
 		return ev.Service == "alpha"
@@ -69,7 +40,7 @@ func TestEvents_FilterDropsNonMatching(t *testing.T) {
 }
 
 func TestEvents_Unsubscribe(t *testing.T) {
-	r := newRunnerForEvents()
+	r := &Runner{}
 	ch, unsub := r.SubscribePhases(nil)
 	unsub()
 	// After unsub, the channel is closed; emit should fanout-to-empty.
@@ -90,7 +61,7 @@ func TestEvents_FullBufferDrops(t *testing.T) {
 	// A slow subscriber loses events but never stalls the runner, so emitting
 	// 100 events into a 32-slot buffer nobody reads must still return
 	// promptly.
-	r := newRunnerForEvents()
+	r := &Runner{}
 	_, unsub := r.SubscribePhases(nil)
 	defer unsub()
 	start := time.Now()
@@ -108,7 +79,7 @@ func TestEvents_FullBufferDrops(t *testing.T) {
 // under -race, so this loops tightly, subscribing, emitting concurrently, and
 // unsubscribing mid-emit.
 func TestEvents_UnsubDuringEmitNoPanic(t *testing.T) {
-	r := newRunnerForEvents()
+	r := &Runner{}
 	const rounds = 500
 	for range rounds {
 		_, unsub := r.SubscribePhases(nil)
@@ -125,33 +96,22 @@ func TestEvents_UnsubDuringEmitNoPanic(t *testing.T) {
 }
 
 func TestEvents_MultipleSubscribers(t *testing.T) {
-	r := newRunnerForEvents()
-	const N = 8
-	chans := make([]<-chan PhaseEvent, N)
-	unsubs := make([]func(), N)
-	for i := range N {
-		chans[i], unsubs[i] = r.SubscribePhases(nil)
+	r := &Runner{}
+	chans := make([]<-chan PhaseEvent, 8)
+	for i := range chans {
+		var unsub func()
+		chans[i], unsub = r.SubscribePhases(nil)
+		defer unsub()
 	}
-	defer func() {
-		for _, u := range unsubs {
-			u()
-		}
-	}()
-	r.emitPhase(PhaseEvent{TargetID: "broadcast"})
-	var wg sync.WaitGroup
-	wg.Add(N)
-	for i := range N {
-		go func(i int) {
-			defer wg.Done()
-			select {
-			case ev := <-chans[i]:
-				if ev.TargetID != "broadcast" {
-					t.Errorf("sub %d: wrong id %q", i, ev.TargetID)
-				}
-			case <-time.After(time.Second):
-				t.Errorf("sub %d: didn't receive event", i)
+	r.emitPhase(PhaseEvent{TargetID: "broadcast", NewPhase: anovelv1.Phase_PHASE_RUNNING})
+	for i, ch := range chans {
+		select {
+		case ev := <-ch:
+			if ev.TargetID != "broadcast" || ev.Ts.IsZero() {
+				t.Errorf("sub %d: got %+v, want the broadcast stamped with Ts before fanout", i, ev)
 			}
-		}(i)
+		case <-time.After(time.Second):
+			t.Errorf("sub %d: didn't receive event", i)
+		}
 	}
-	wg.Wait()
 }

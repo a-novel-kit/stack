@@ -23,11 +23,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
+	"github.com/a-novel-kit/stack/cli/internal/shared/retention"
 )
 
 // Stream is one of stdout or stderr. It mirrors the proto enum as a local type,
@@ -63,8 +65,6 @@ type Store struct {
 // buffered writer for one target. Created lazily on first OpenForWrite.
 type targetStream struct {
 	mu          sync.Mutex
-	id          string // targetID
-	dir         string // logs dir for this target
 	current     *os.File
 	encoder     *json.Encoder
 	subscribers []chan Line // each subscriber's delivery channel
@@ -82,7 +82,7 @@ func New() *Store {
 // oldest archives are pruned, and a new current.log is created. Returns
 // a Writer the runner can pipe stdout / stderr through.
 func (s *Store) OpenForWrite(targetID, stack, service, target string) (*Writer, error) {
-	dir := filepath.Join(paths.LogsRoot(), stack, service, target)
+	dir := targetDir(stack, service, target)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("mkdir log dir %s: %w", dir, err)
 	}
@@ -92,7 +92,7 @@ func (s *Store) OpenForWrite(targetID, stack, service, target string) (*Writer, 
 		stamp := info.ModTime().UTC().Format("2006-01-02T15-04-05Z")
 		archivePath := filepath.Join(dir, "run-"+stamp+".log")
 		_ = os.Rename(currentPath, archivePath)
-		pruneOldRuns(dir)
+		retention.Prune(dir, func(name string) bool { return strings.HasPrefix(name, "run-") }, maxArchivedRuns)
 	}
 	f, err := os.OpenFile(currentPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -100,12 +100,7 @@ func (s *Store) OpenForWrite(targetID, stack, service, target string) (*Writer, 
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	ts := &targetStream{
-		id:      targetID,
-		dir:     dir,
-		current: f,
-		encoder: json.NewEncoder(f),
-	}
+	ts := &targetStream{current: f, encoder: json.NewEncoder(f)}
 	// Replace any prior stream record for this target (the prior run is
 	// over; its subscribers were closed when the previous proc died).
 	if prior, ok := s.streams[targetID]; ok {
@@ -179,36 +174,38 @@ func (s *Store) CloseTarget(targetID string) {
 	}
 }
 
-// ListRuns returns the timestamps of every archived run for `targetID`,
-// newest first.
+// ListRuns returns the timestamps of every archived run of a target, newest
+// first.
 func (s *Store) ListRuns(stack, service, target string) []string {
-	dir := filepath.Join(paths.LogsRoot(), stack, service, target)
-	entries, err := os.ReadDir(dir)
+	entries, err := os.ReadDir(targetDir(stack, service, target))
 	if err != nil {
 		return nil
 	}
 	var out []string
 	for _, e := range entries {
-		name := e.Name()
-		if len(name) < len("run-") || name[:4] != "run-" {
-			continue
+		stamp, ok := strings.CutPrefix(e.Name(), "run-")
+		if stamp, isLog := strings.CutSuffix(stamp, ".log"); ok && isLog {
+			out = append(out, stamp)
 		}
-		// strip "run-" prefix and ".log" suffix
-		stamp := name[4 : len(name)-len(".log")]
-		out = append(out, stamp)
 	}
-	sort.Sort(sort.Reverse(sort.StringSlice(out)))
+	slices.Sort(out)
+	slices.Reverse(out)
 	return out
 }
 
 // CurrentPath returns the path of the active current.log for a target.
 func (s *Store) CurrentPath(stack, service, target string) string {
-	return filepath.Join(paths.LogsRoot(), stack, service, target, "current.log")
+	return filepath.Join(targetDir(stack, service, target), "current.log")
 }
 
 // RunPath returns the path of an archived run.
 func (s *Store) RunPath(stack, service, target, runID string) string {
-	return filepath.Join(paths.LogsRoot(), stack, service, target, "run-"+runID+".log")
+	return filepath.Join(targetDir(stack, service, target), "run-"+runID+".log")
+}
+
+// targetDir is the directory holding one target's current and archived runs.
+func targetDir(stack, service, target string) string {
+	return filepath.Join(paths.LogsRoot(), stack, service, target)
 }
 
 // close terminates the stream: closes the file handle and every
@@ -228,36 +225,4 @@ func (ts *targetStream) close() {
 		close(ch)
 	}
 	ts.subscribers = nil
-}
-
-// pruneOldRuns removes archived runs beyond maxArchivedRuns, oldest first.
-func pruneOldRuns(dir string) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	type run struct {
-		name string
-		mt   time.Time
-	}
-	var runs []run
-	for _, e := range entries {
-		name := e.Name()
-		if len(name) < len("run-") || name[:4] != "run-" {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		runs = append(runs, run{name: name, mt: info.ModTime()})
-	}
-	if len(runs) <= maxArchivedRuns {
-		return
-	}
-	// Oldest first; remove all but the newest maxArchivedRuns.
-	sort.Slice(runs, func(i, j int) bool { return runs[i].mt.Before(runs[j].mt) })
-	for _, r := range runs[:len(runs)-maxArchivedRuns] {
-		_ = os.Remove(filepath.Join(dir, r.name))
-	}
 }

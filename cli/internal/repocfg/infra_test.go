@@ -2,7 +2,6 @@ package repocfg
 
 import (
 	"bytes"
-	"net/http"
 	"reflect"
 	"slices"
 	"strings"
@@ -16,36 +15,24 @@ func TestInfraClassContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadClass(infra): %v", err)
 	}
-	if got := DetectClass("infra"); got != ClassInfra {
-		t.Fatalf("DetectClass(infra) = %q, want %q", got, ClassInfra)
-	}
 	if _, err := LoadClass(Class("infrastructure")); err == nil {
 		t.Fatal("an unknown class must fail instead of falling back to library")
 	}
-
-	if preset.Class != ClassInfra {
-		t.Errorf("class = %q, want %q", preset.Class, ClassInfra)
+	// Scanning and push protection on, Dependabot alerts explicitly enabled, its
+	// update pull requests off; no Pages, code quality or tags.
+	alerts := true
+	want := &ClassPreset{
+		Class:    ClassInfra,
+		Features: Features{Issues: true, Projects: true, PullRequests: "collaborators_only"},
+		Merge: Merge{
+			Squash: true, AutoMerge: true, DeleteBranchOnMerge: true,
+			AllowUpdateBranch: true, SignoffRequired: true,
+		},
+		Security: SecurityToggles{SecretScanning: true, PushProtection: true, DependabotAlerts: &alerts},
+		Rulesets: ClassRulesets{Master: true, RequireApproval: true},
 	}
-	if want := (Features{Issues: true, Projects: true, PullRequests: "collaborators_only"}); preset.Features != want {
-		t.Errorf("features = %+v, want %+v", preset.Features, want)
-	}
-	if want := (Merge{
-		Squash: true, AutoMerge: true, DeleteBranchOnMerge: true,
-		AllowUpdateBranch: true, SignoffRequired: true,
-	}); preset.Merge != want {
-		t.Errorf("merge = %+v, want %+v", preset.Merge, want)
-	}
-	if !preset.Security.SecretScanning || !preset.Security.PushProtection || preset.Security.Dependabot {
-		t.Errorf("security = %+v, want scanning and push protection on with Dependabot updates off", preset.Security)
-	}
-	if preset.Security.DependabotAlerts == nil || !*preset.Security.DependabotAlerts {
-		t.Errorf("Dependabot alerts = %v, want explicitly enabled", preset.Security.DependabotAlerts)
-	}
-	if preset.Pages || preset.CodeQuality {
-		t.Errorf("pages/code_quality = %v/%v, want both off", preset.Pages, preset.CodeQuality)
-	}
-	if want := (ClassRulesets{Master: true, RequireApproval: true}); preset.Rulesets != want {
-		t.Errorf("rulesets = %+v, want %+v", preset.Rulesets, want)
+	if !reflect.DeepEqual(preset, want) {
+		t.Errorf("infra preset = %+v, want %+v", preset, want)
 	}
 }
 
@@ -57,7 +44,6 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 	signatures := make([]string, 0, len(plan.Ops))
 	var settings map[string]any
 	var master *APIRuleset
-	var hasCODEOWNERS, hasLabels bool
 
 	for _, op := range plan.Ops {
 		switch {
@@ -74,16 +60,6 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 
 		if op.Path == base {
 			settings, _ = op.Body.(map[string]any)
-		}
-		if op.Path == base+"/contents/.github/CODEOWNERS" && strings.TrimSpace(op.Content) == "* @kushuh" {
-			hasCODEOWNERS = true
-		}
-		if op.Path == base+"/labels" {
-			_, hasLabels = op.Body.(*LabelsConfig)
-		}
-		if op.Method == http.MethodPut &&
-			(strings.HasSuffix(op.Path, "/release-train.yaml") || strings.HasSuffix(op.Path, "/hotfix.yaml")) {
-			t.Errorf("infra must not provision a release caller: %s", op.Path)
 		}
 	}
 
@@ -111,12 +87,10 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 		"RULESET require-approval",
 		"PRUNE master,commit-messages,require-approval",
 	}
+	// Release callers are deleted, never provisioned: infra deploys, it does not release.
 	if !slices.Equal(signatures, wantSignatures) {
 		t.Fatalf("operation sequence =\n  %s\nwant =\n  %s",
 			strings.Join(signatures, "\n  "), strings.Join(wantSignatures, "\n  "))
-	}
-	if !hasCODEOWNERS || !hasLabels {
-		t.Errorf("CODEOWNERS/labels present = %v/%v, want both", hasCODEOWNERS, hasLabels)
 	}
 
 	wantFeatures := map[string]any{

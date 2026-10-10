@@ -167,43 +167,26 @@ func unsupportedSandboxCommand(command string) bool {
 	}
 }
 
+// sandboxWorkingDir maps cwd, when it sits in a workspace repository, onto the
+// same directory of that repository's copy in the temporary stack at root.
 func sandboxWorkingDir(root, cwd string) (string, error) {
-	repoRoot, org, repo, ok := sandboxRepoIdentity(cwd)
-	if !ok {
-		return root, nil
+	repoRoot, err := gitToplevel(cwd)
+	if err != nil {
+		return root, nil //nolint:nilerr // outside a repository, the command runs from the stack root
 	}
-	sandboxRepo := root
-	switch {
-	case org == orgAnovelKit && repo == stackLabel:
-	case org == orgAnovelKit:
-		sandboxRepo = filepath.Join(root, "kit", repo)
-	case org == orgAnovel:
-		sandboxRepo = filepath.Join(root, "app", repo)
-	default:
-		return root, nil
+	repo, err := repoFromGitRemote(repoRoot)
+	if err != nil || (repo.Org != orgAnovel && repo.Org != orgAnovelKit) {
+		return root, nil //nolint:nilerr // a foreign repository has no copy in the stack
 	}
 	rel, err := filepath.Rel(repoRoot, cwd)
 	if err != nil {
 		return "", fmt.Errorf("map working directory: %w", err)
 	}
-	mapped := filepath.Join(sandboxRepo, rel)
-	info, statErr := os.Stat(mapped)
-	if statErr != nil || !info.IsDir() {
-		return "", fmt.Errorf("working directory %s/%s:%s is absent from the temporary stack", org, repo, rel)
+	mapped := filepath.Join(repo.Dir(root), rel)
+	if info, err := os.Stat(mapped); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("working directory %s:%s is absent from the temporary stack", repo.FullName(), rel)
 	}
 	return mapped, nil
-}
-
-func sandboxRepoIdentity(cwd string) (string, string, string, bool) {
-	repoRoot, err := gitToplevel(cwd)
-	if err != nil {
-		return "", "", "", false
-	}
-	org, repo, err := repoFromGitRemote(repoRoot)
-	if err != nil {
-		return "", "", "", false
-	}
-	return repoRoot, org, repo, true
 }
 
 func replaceEnv(env []string, name, value string) []string {

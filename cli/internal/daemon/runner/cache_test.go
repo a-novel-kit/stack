@@ -9,20 +9,14 @@ import (
 // InfraStatesOf needs podman, but the cache primitives it relies on are pure
 // in-memory state and stand on their own here.
 
-func newRunnerForCache() *Runner {
-	r := &Runner{
-		infraStateCache: make(map[string]infraStateCacheEntry),
-	}
-	return r
-}
-
-func TestCache_InvalidateBumpsGeneration(t *testing.T) {
-	r := newRunnerForCache()
+func TestCache_InvalidateBumpsGenerationAndClearsEntries(t *testing.T) {
+	r := &Runner{infraStateCache: map[string]infraStateCacheEntry{
+		"default": {at: time.Now(), states: map[string]InfraState{"x/y": {ContainerID: "abc"}}},
+	}}
 	gen0 := r.infraStateGen
 	r.InvalidateInfraStateCache()
-	if r.infraStateGen != gen0+1 {
-		t.Errorf("InvalidateInfraStateCache should bump generation: got %d want %d",
-			r.infraStateGen, gen0+1)
+	if _, ok := r.infraStateCache["default"]; ok || r.infraStateGen != gen0+1 {
+		t.Errorf("after Invalidate: generation %d (want %d), entry kept = %v", r.infraStateGen, gen0+1, ok)
 	}
 	r.InvalidateInfraStateCache()
 	if r.infraStateGen != gen0+2 {
@@ -30,56 +24,30 @@ func TestCache_InvalidateBumpsGeneration(t *testing.T) {
 	}
 }
 
-func TestCache_InvalidateClearsEntries(t *testing.T) {
-	r := newRunnerForCache()
-	r.infraStateCache["default"] = infraStateCacheEntry{
-		at:     time.Now(),
-		states: map[string]InfraState{"x/y": {ContainerID: "abc"}},
-	}
-	r.InvalidateInfraStateCache()
-	if _, ok := r.infraStateCache["default"]; ok {
-		t.Error("InvalidateInfraStateCache should drop existing entries")
-	}
-}
-
-// TestCache_GenCheckSkipsStaleWrite covers the race the generation counter
-// closes: the cache write ending a long InfraStatesOf scan is skipped when
-// InvalidateInfraStateCache fired mid-scan. Standing in for the podman scan, it
-// replays the snapshot-work-compare-and-write sequence.
-func TestCache_GenCheckSkipsStaleWrite(t *testing.T) {
-	r := newRunnerForCache()
-	// Snapshot the generation, the way a scan does as it starts.
-	r.infraStateMu.Lock()
-	startGen := r.infraStateGen
-	r.infraStateMu.Unlock()
-	// An invalidation lands during the scan.
-	r.InvalidateInfraStateCache()
-	// The cache write then mirrors the runtime check.
-	scanResult := map[string]InfraState{"x/y": {ContainerID: "stale"}}
-	r.infraStateMu.Lock()
-	if r.infraStateGen == startGen {
-		r.infraStateCache["default"] = infraStateCacheEntry{at: time.Now(), states: scanResult}
-	}
-	r.infraStateMu.Unlock()
-	if _, ok := r.infraStateCache["default"]; ok {
-		t.Errorf("post-Invalidate write should be skipped, but cache has %v", r.infraStateCache["default"])
-	}
-}
-
-func TestCache_GenCheckAllowsCleanWrite(t *testing.T) {
-	// Without a concurrent invalidation the generation still matches, so the
-	// write proceeds.
-	r := newRunnerForCache()
-	r.infraStateMu.Lock()
-	startGen := r.infraStateGen
-	r.infraStateMu.Unlock()
-	scanResult := map[string]InfraState{"x/y": {ContainerID: "fresh"}}
-	r.infraStateMu.Lock()
-	if r.infraStateGen == startGen {
-		r.infraStateCache["default"] = infraStateCacheEntry{at: time.Now(), states: scanResult}
-	}
-	r.infraStateMu.Unlock()
-	if got, ok := r.infraStateCache["default"]; !ok || got.states["x/y"].ContainerID != "fresh" {
-		t.Errorf("clean write should have populated cache; got %v ok=%v", got, ok)
+// TestCache_GenCheck covers the race the generation counter closes: the cache
+// write ending a long InfraStatesOf scan is skipped when
+// InvalidateInfraStateCache fired mid-scan, and proceeds otherwise. Standing in
+// for the podman scan, it replays the snapshot-work-compare-and-write sequence.
+func TestCache_GenCheck(t *testing.T) {
+	for _, invalidated := range []bool{true, false} {
+		r := &Runner{infraStateCache: make(map[string]infraStateCacheEntry)}
+		// Snapshot the generation, the way a scan does as it starts.
+		r.infraStateMu.Lock()
+		startGen := r.infraStateGen
+		r.infraStateMu.Unlock()
+		if invalidated {
+			r.InvalidateInfraStateCache()
+		}
+		// The cache write then mirrors the runtime check.
+		r.infraStateMu.Lock()
+		if r.infraStateGen == startGen {
+			r.infraStateCache["default"] = infraStateCacheEntry{
+				at: time.Now(), states: map[string]InfraState{"x/y": {ContainerID: "scanned"}},
+			}
+		}
+		r.infraStateMu.Unlock()
+		if got, ok := r.infraStateCache["default"]; ok == invalidated || (ok && got.states["x/y"].ContainerID != "scanned") {
+			t.Errorf("invalidated mid-scan = %v: cache = %v (written %v)", invalidated, got, ok)
+		}
 	}
 }

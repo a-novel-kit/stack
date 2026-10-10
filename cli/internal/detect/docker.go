@@ -27,7 +27,7 @@ func detectPodman(dir, rel string) []Target {
 	registry := registryBase(dir)
 	var targets []Target
 
-	if fileExists(filepath.Join(dir, "Dockerfile")) {
+	if IsFile(filepath.Join(dir, "Dockerfile")) {
 		targets = append(targets, podmanTarget(dir, rel, "Dockerfile", "Dockerfile", registry+":local"))
 	}
 
@@ -133,24 +133,13 @@ func dockerfileSecretEnv(id string) string {
 // falls back to a host-local, push-safe prefix derived from the directory
 // name: localhost/<dir-base>.
 func registryBase(dir string) string {
-	modPath := filepath.Join(dir, "go.mod")
-	module := ""
-	if fileExists(modPath) {
-		module = goModulePath(modPath)
-	}
-	if module == "" {
-		return "localhost/" + filepath.Base(dir)
-	}
-
-	module = stripMajorSuffix(module)
-	parts := strings.Split(module, "/")
 	// Expect host/owner/repo (github.com/a-novel/service-json-keys). Anything
 	// shorter can't name a registry path, so degrade gracefully.
+	parts := strings.Split(goModulePath(dir), "/")
 	if len(parts) < 3 {
 		return "localhost/" + filepath.Base(dir)
 	}
-	owner, repo := parts[1], parts[2]
-	return "ghcr.io/" + owner + "/" + repo
+	return "ghcr.io/" + parts[1] + "/" + parts[2]
 }
 
 // imageName maps a Dockerfile filename to its image-name segment, following the

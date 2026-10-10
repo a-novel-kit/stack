@@ -1,9 +1,12 @@
 package env
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
 	"net"
-	"sort"
+	"slices"
+	"strings"
 	"sync"
 )
 
@@ -41,32 +44,43 @@ func NewAllocator() *Allocator {
 // cross-service prefixes. It sorts them longest-first, so a name that shadows a
 // shorter one — `service-template-extra` over `service-template` — wins.
 func (a *Allocator) SetServices(names []string) {
-	cp := append([]string(nil), names...)
-	sort.Slice(cp, func(i, j int) bool {
-		if len(cp[i]) != len(cp[j]) {
-			return len(cp[i]) > len(cp[j])
-		}
-		return cp[i] < cp[j]
+	sorted := slices.Clone(names)
+	slices.SortFunc(sorted, func(x, y string) int {
+		return cmp.Or(cmp.Compare(len(y), len(x)), strings.Compare(x, y))
 	})
 	a.mu.Lock()
-	a.services = cp
+	a.services = sorted
 	a.mu.Unlock()
 }
 
-// Services returns a snapshot of the registered service names, for callers that
-// resolve owners outside the allocator's lock.
+// Services returns a snapshot of the registered service names, longest-first,
+// for callers that resolve owners outside the allocator's lock.
 func (a *Allocator) Services() []string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	cp := make([]string, len(a.services))
-	copy(cp, a.services)
-	return cp
+	return slices.Clone(a.services)
 }
 
 // Acquire returns the host port for (owner, localVar), allocating a fresh
 // one if no slot exists. `consumer` is the target ID claiming this slot;
 // repeated calls with the same consumer are idempotent.
 func (a *Allocator) Acquire(owner, localVar, consumer string) (int, error) {
+	return a.claim(owner, localVar, consumer, pickFreePort)
+}
+
+// Reserve records (owner, localVar) → port without consulting the kernel.
+// Adoption uses it: a daemon restarting onto an already-running infra container
+// re-seeds the slot from that container's host mapping, so later Acquire calls
+// hand back the port the container is bound to. An existing slot keeps its own
+// port, which Reserve then returns. A var the daemon does not allocate yields 0.
+func (a *Allocator) Reserve(owner, localVar string, port int, consumer string) int {
+	got, _ := a.claim(owner, localVar, consumer, func() (int, error) { return port, nil })
+	return got
+}
+
+// claim adds consumer to the (owner, localVar) slot, creating the slot on
+// newPort when none exists, and returns the slot's port.
+func (a *Allocator) claim(owner, localVar, consumer string, newPort func() (int, error)) (int, error) {
 	if !isAllocatedKind(localVar) {
 		return 0, fmt.Errorf("env: %s is not an allocated kind (only *_PORT)", localVar)
 	}
@@ -77,7 +91,7 @@ func (a *Allocator) Acquire(owner, localVar, consumer string) (int, error) {
 		slot.refs[consumer] = struct{}{}
 		return slot.port, nil
 	}
-	port, err := pickFreePort()
+	port, err := newPort()
 	if err != nil {
 		return 0, fmt.Errorf("env: pick free port for %s/%s: %w", owner, localVar, err)
 	}
@@ -88,32 +102,6 @@ func (a *Allocator) Acquire(owner, localVar, consumer string) (int, error) {
 		refs:     map[string]struct{}{consumer: {}},
 	}
 	return port, nil
-}
-
-// Reserve records (owner, localVar) → port without consulting the kernel.
-// Adoption uses it: a daemon restarting onto an already-running infra container
-// re-seeds the slot from that container's host mapping, so later Acquire calls
-// hand back the port the container is bound to. An existing slot keeps its own
-// port, which Reserve then returns.
-func (a *Allocator) Reserve(owner, localVar string, port int, consumer string) int {
-	if !isAllocatedKind(localVar) {
-		return 0
-	}
-	key := owner + "/" + localVar
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if slot, ok := a.slots[key]; ok {
-		// The existing slot wins; the caller's port is informational.
-		slot.refs[consumer] = struct{}{}
-		return slot.port
-	}
-	a.slots[key] = &portSlot{
-		owner:    owner,
-		localVar: localVar,
-		port:     port,
-		refs:     map[string]struct{}{consumer: {}},
-	}
-	return port
 }
 
 // Lookup returns the current port for (owner, localVar) without allocating, and
@@ -151,23 +139,15 @@ func (a *Allocator) Snapshot() []Allocation {
 	defer a.mu.RUnlock()
 	out := make([]Allocation, 0, len(a.slots))
 	for _, s := range a.slots {
-		refs := make([]string, 0, len(s.refs))
-		for r := range s.refs {
-			refs = append(refs, r)
-		}
-		sort.Strings(refs)
 		out = append(out, Allocation{
 			Owner:    s.owner,
 			LocalVar: s.localVar,
 			Port:     s.port,
-			Refs:     refs,
+			Refs:     slices.Sorted(maps.Keys(s.refs)),
 		})
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Owner != out[j].Owner {
-			return out[i].Owner < out[j].Owner
-		}
-		return out[i].LocalVar < out[j].LocalVar
+	slices.SortFunc(out, func(x, y Allocation) int {
+		return cmp.Or(strings.Compare(x.Owner, y.Owner), strings.Compare(x.LocalVar, y.LocalVar))
 	})
 	return out
 }

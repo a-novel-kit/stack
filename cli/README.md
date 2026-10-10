@@ -25,7 +25,7 @@ a-novel
 │   └── stamp <prefix> <file>           refresh vX.Y.Z references in doc files
 ├── repo          standalone — GitHub repo configuration (interactive, human-only)
 │   ├── create <org> <name>             create a repo (class: service|platform|library|…) + apply config
-│   └── update                          reconcile the current repo to its class template
+│   └── update                          reconcile the current repo (or --all, in parallel) to its class template
 ├── secrets       standalone — local, encrypted secrets manager (child-env only)
 │   ├── init                            create the local key + store dir
 │   ├── set <id>                        store a value (no echo); never printed
@@ -35,7 +35,7 @@ a-novel
 ├── install       graceful binary upgrade (daemon handoff via checkpoint)
 ├── core          daemon control + workspace plumbing
 │   ├── start / setup / kill / restart / status / prepare-reinstall
-│   ├── sync                            clone/ff-pull the curated workspace repos
+│   ├── sync                            clone/ff-pull the curated workspace repos, in parallel
 │   └── bot-comment <org> <repo> <n>    comment as the org bot (via dispatcher workflow)
 └── run           daemon-backed surface for operating on services/targets:
     ├── ui                              full-screen TUI (Bubble Tea)
@@ -185,23 +185,40 @@ streams logs, and manages volumes. Multiple clients see consistent state.
 
 ```
 cli/
-├── cmd/a-novel/main.go            single binary; Cobra dispatch + legacy test/build
+├── cmd/a-novel/main.go            single binary: sandbox dispatch, Cobra root, exit codes
 ├── proto/anovel/v1/core.proto     connect-rpc contract
 └── internal/
     ├── daemon/                    daemon-side (server, runner, env, logs, volumes, ...)
     ├── client/rpc/                Unix-socket connect-rpc client
-    ├── cli/                       Cobra command tree (test/build are wrapped legacy)
-    ├── detect/                    working-tree discovery (test/build/run targets)
-    ├── build/                     standalone test/build execution engine
+    ├── cli/                       Cobra command tree, workspace model, gh/git helpers
+    ├── detect/                    working-tree discovery of test and build targets
+    ├── build/                     a detected target as a job: env, compose up/down, deadline
+    ├── jobs/                      bounded parallel job runner with live progress
     ├── repocfg/                   GitHub repo config templates + apply engine
     ├── tui/                       Bubble Tea TUI
-    ├── ui/                        interactive pickers + reports for test/build
+    ├── ui/                        picker, live job view and report for every batch command
     ├── setup/                     `core setup` bootstrap
     ├── secrets/                   local AES-256-GCM secrets store + env injection
     ├── update/                    best-effort "newer version available" notice
     ├── version/                   build-version resolution (ldflags / buildinfo)
-    └── shared/                    XDG paths, stacks parser
+    └── shared/                    XDG paths, stacks parser, compose files, archive retention
 ```
+
+### Parallel jobs
+
+`test`, `build`, `core sync` and `repo update --all` hand their work to one
+runner (`internal/jobs`): at most `--jobs` units run at once, each with its
+output captured. On a terminal, each finished job prints one status line that
+stays in scrollback, above a live view of the running jobs (spinner, latest
+output line, timer). Without a terminal, each job prints a line as it starts and
+as it finishes, so output never interleaves. A report closes the run: outcome
+counts, coverage for tests, and the full output of every failure (of every repo,
+for `repo update --all`, as the audit trail of its writes).
+
+The default limit follows what bounds the work. `test` and `build` split the CPUs
+(NumCPU/4 behind the picker, one at a time with `-y`); `core sync` runs one repo
+per CPU; `repo update --all` applies six repos at a time, under GitHub's
+secondary rate limit, and a rate-limited `gh` call is retried after a minute.
 
 ### Key invariants
 
