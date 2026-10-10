@@ -28,13 +28,8 @@ type errWriter struct{}
 func (errWriter) Write(p []byte) (int, error) { return 0, errDiskFull }
 
 func TestCompressToReportsFlushFailure(t *testing.T) {
-	err := compressTo(errWriter{}, bytes.NewReader([]byte("volume contents")))
-	if err == nil {
-		t.Fatal("compressTo: got nil, want the destination's write error")
-	}
-
-	if !errors.Is(err, errDiskFull) {
-		t.Errorf("compressTo: got %v, want it to wrap %v", err, errDiskFull)
+	if err := compressTo(errWriter{}, bytes.NewReader([]byte("volume contents"))); !errors.Is(err, errDiskFull) {
+		t.Errorf("compressTo: got %v, want it to wrap the destination's %v", err, errDiskFull)
 	}
 }
 
@@ -105,98 +100,55 @@ func TestBackupOneLeavesNoPartialFile(t *testing.T) {
 	}
 }
 
-// resolveBackup used to return the first prefix match in name order, so a bare timestamp
-// restored .auto-pre-clear ahead of the manual archive at the same timestamp — something
-// other than what the operator named.
-
-func writeArchive(t *testing.T, dir, name string) {
-	t.Helper()
-
-	if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
+// TestResolveBackup: resolveBackup used to return the first prefix match in name
+// order, so a bare timestamp restored .auto-pre-clear ahead of the manual archive
+// at the same timestamp — something other than what the operator named.
+func TestResolveBackup(t *testing.T) {
+	const tagged, plain = "20260722-1200.auto-pre-clear.tar.zst", "20260722-1200.tar.zst"
+	cases := []struct {
+		name    string
+		files   []string // oldest first
+		from    string
+		want    string
+		wantErr bool
+		errHas  []string
+	}{
+		// Same timestamp, two variants — the collision the fix exists for. The
+		// message names both candidates so the operator can disambiguate.
+		{name: "Error/AmbiguousPrefix", files: []string{tagged, plain}, from: "20260722-1200", wantErr: true, errHas: []string{"auto-pre-clear", "matches 2"}},
+		// The plain archive's full name is not a prefix of the tagged one, so it
+		// resolves uniquely — the operator's escape hatch from the ambiguity above.
+		{name: "Success/FullNameDisambiguates", files: []string{tagged, plain}, from: plain, want: plain},
+		{name: "Success/UniquePrefix", files: []string{plain, "20260723-0900.tar.zst"}, from: "20260722", want: plain},
+		{name: "Error/NoMatch", files: []string{plain}, from: "19990101", wantErr: true},
+		// An empty from picks the newest by mtime, regardless of name order.
+		{name: "Success/EmptyFromPicksNewest", files: []string{"old.tar.zst", "new.tar.zst"}, want: "new.tar.zst"},
 	}
-}
-
-func TestResolveBackupAmbiguousPrefixIsAnError(t *testing.T) {
-	dir := t.TempDir()
-	// Same timestamp, two variants — the collision the fix exists for.
-	writeArchive(t, dir, "20260722-1200.auto-pre-clear.tar.zst")
-	writeArchive(t, dir, "20260722-1200.tar.zst")
-
-	_, err := resolveBackup(dir, "20260722-1200")
-	if err == nil {
-		t.Fatal("resolveBackup: got nil, want an ambiguity error for a prefix matching two archives")
-	}
-
-	// The message names both candidates so the operator can disambiguate.
-	if !strings.Contains(err.Error(), "auto-pre-clear") || !strings.Contains(err.Error(), "matches 2") {
-		t.Errorf("error = %q, want both candidates and the count named", err)
-	}
-}
-
-func TestResolveBackupFullNameDisambiguates(t *testing.T) {
-	dir := t.TempDir()
-	writeArchive(t, dir, "20260722-1200.auto-pre-clear.tar.zst")
-	writeArchive(t, dir, "20260722-1200.tar.zst")
-
-	// The plain archive's full name is not a prefix of the tagged one, so it resolves
-	// uniquely — the operator's escape hatch from the ambiguity above.
-	got, err := resolveBackup(dir, "20260722-1200.tar.zst")
-	if err != nil {
-		t.Fatalf("resolveBackup: %v", err)
-	}
-
-	if filepath.Base(got) != "20260722-1200.tar.zst" {
-		t.Errorf("got %s, want the plain archive", filepath.Base(got))
-	}
-}
-
-func TestResolveBackupUniquePrefix(t *testing.T) {
-	dir := t.TempDir()
-	writeArchive(t, dir, "20260722-1200.tar.zst")
-	writeArchive(t, dir, "20260723-0900.tar.zst")
-
-	got, err := resolveBackup(dir, "20260722")
-	if err != nil {
-		t.Fatalf("resolveBackup: %v", err)
-	}
-
-	if filepath.Base(got) != "20260722-1200.tar.zst" {
-		t.Errorf("got %s, want the single match", filepath.Base(got))
-	}
-}
-
-func TestResolveBackupNoMatch(t *testing.T) {
-	dir := t.TempDir()
-	writeArchive(t, dir, "20260722-1200.tar.zst")
-
-	if _, err := resolveBackup(dir, "19990101"); err == nil {
-		t.Fatal("resolveBackup: got nil, want a no-match error")
-	}
-}
-
-func TestResolveBackupEmptyFromPicksNewest(t *testing.T) {
-	dir := t.TempDir()
-	writeArchive(t, dir, "old.tar.zst")
-	writeArchive(t, dir, "new.tar.zst")
-
-	// Make "new" the more recently modified regardless of name order.
-	newer := time.Now()
-	if err := os.Chtimes(filepath.Join(dir, "new.tar.zst"), newer, newer); err != nil {
-		t.Fatal(err)
-	}
-
-	older := newer.Add(-time.Hour)
-	if err := os.Chtimes(filepath.Join(dir, "old.tar.zst"), older, older); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := resolveBackup(dir, "")
-	if err != nil {
-		t.Fatalf("resolveBackup: %v", err)
-	}
-
-	if filepath.Base(got) != "new.tar.zst" {
-		t.Errorf("got %s, want the newest by mtime", filepath.Base(got))
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for i, name := range c.files {
+				path := filepath.Join(dir, name)
+				mtime := time.Now().Add(time.Duration(i-len(c.files)) * time.Hour)
+				if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chtimes(path, mtime, mtime); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got, err := resolveBackup(dir, c.from)
+			if (err != nil) != c.wantErr {
+				t.Fatalf("resolveBackup(%q): got (%q, %v), want error %v", c.from, got, err, c.wantErr)
+			}
+			for _, want := range c.errHas {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want it to name %q", err, want)
+				}
+			}
+			if !c.wantErr && filepath.Base(got) != c.want {
+				t.Errorf("got %s, want %s", filepath.Base(got), c.want)
+			}
+		})
 	}
 }

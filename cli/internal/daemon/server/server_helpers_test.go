@@ -42,64 +42,26 @@ func TestParseInfraLogID(t *testing.T) {
 func TestDescribePhaseEvent(t *testing.T) {
 	const id = "default/svc/rest"
 	cases := []struct {
-		ev   runner.PhaseEvent
-		want string
+		phase  anovelv1.Phase
+		reason anovelv1.ExitReason
+		want   string
 	}{
-		{
-			runner.PhaseEvent{TargetID: id, NewPhase: anovelv1.Phase_PHASE_STARTING},
-			id + " starting",
-		},
-		{
-			runner.PhaseEvent{TargetID: id, NewPhase: anovelv1.Phase_PHASE_RUNNING},
-			id + " running",
-		},
-		{
-			runner.PhaseEvent{TargetID: id, NewPhase: anovelv1.Phase_PHASE_STOPPING},
-			id + " stopping",
-		},
-		{
-			runner.PhaseEvent{
-				TargetID:   id,
-				NewPhase:   anovelv1.Phase_PHASE_TERMINATED,
-				ExitReason: anovelv1.ExitReason_EXIT_REASON_SUCCESS,
-			},
-			id + " terminated (success)",
-		},
-		{
-			runner.PhaseEvent{
-				TargetID:   id,
-				NewPhase:   anovelv1.Phase_PHASE_TERMINATED,
-				ExitReason: anovelv1.ExitReason_EXIT_REASON_ERROR,
-			},
-			id + " terminated (error)",
-		},
-		{
-			runner.PhaseEvent{
-				TargetID:   id,
-				NewPhase:   anovelv1.Phase_PHASE_TERMINATED,
-				ExitReason: anovelv1.ExitReason_EXIT_REASON_KILLED,
-			},
-			id + " terminated (killed)",
-		},
-		{
-			runner.PhaseEvent{
-				TargetID:   id,
-				NewPhase:   anovelv1.Phase_PHASE_TERMINATED,
-				ExitReason: anovelv1.ExitReason_EXIT_REASON_CRASHED,
-			},
-			id + " terminated (crashed)",
-		},
-		{
-			// PENDING, like any unhandled phase, falls through to the
-			// stringified enum form.
-			runner.PhaseEvent{TargetID: id, NewPhase: anovelv1.Phase_PHASE_PENDING},
-			id + " " + anovelv1.Phase_PHASE_PENDING.String(),
-		},
+		{anovelv1.Phase_PHASE_STARTING, 0, "starting"},
+		{anovelv1.Phase_PHASE_RUNNING, 0, "running"},
+		{anovelv1.Phase_PHASE_STOPPING, 0, "stopping"},
+		{anovelv1.Phase_PHASE_TERMINATED, 0, "terminated"},
+		{anovelv1.Phase_PHASE_TERMINATED, anovelv1.ExitReason_EXIT_REASON_SUCCESS, "terminated (success)"},
+		{anovelv1.Phase_PHASE_TERMINATED, anovelv1.ExitReason_EXIT_REASON_ERROR, "terminated (error)"},
+		{anovelv1.Phase_PHASE_TERMINATED, anovelv1.ExitReason_EXIT_REASON_KILLED, "terminated (killed)"},
+		{anovelv1.Phase_PHASE_TERMINATED, anovelv1.ExitReason_EXIT_REASON_CRASHED, "terminated (crashed)"},
+		// PENDING, like any unhandled phase, falls through to the stringified
+		// enum form.
+		{anovelv1.Phase_PHASE_PENDING, 0, anovelv1.Phase_PHASE_PENDING.String()},
 	}
 	for _, c := range cases {
-		got := describePhaseEvent(c.ev)
-		if got != c.want {
-			t.Errorf("describePhaseEvent(%v): got %q want %q", c.ev, got, c.want)
+		ev := runner.PhaseEvent{TargetID: id, NewPhase: c.phase, ExitReason: c.reason}
+		if got := describePhaseEvent(ev); got != id+" "+c.want {
+			t.Errorf("describePhaseEvent(%v): got %q want %q", ev, got, id+" "+c.want)
 		}
 	}
 }

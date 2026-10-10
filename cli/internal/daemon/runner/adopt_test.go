@@ -42,84 +42,38 @@ func TestTranslatePodmanStatus(t *testing.T) {
 	}
 }
 
-func TestTranslatePodmanStatusGatesTheInfraSession(t *testing.T) {
-	// The predicate adoption applies before marking a session Up. Only a running container clears it,
-	// so a stopped or half-created one leaves EnsureDepsReady to bring the infra up.
-	up := []string{"Up 11 minutes", "Up 2 hours (healthy)", "Up 3 minutes (unhealthy)"}
-	notUp := []string{"Exited (0) 5 minutes ago", "Exited (137) 2 days ago", "Stopped", "Created"}
-
-	for _, status := range up {
-		if phase, _ := translatePodmanStatus(status); phase != anovelv1.Phase_PHASE_RUNNING {
-			t.Errorf("%q should mark the infra session up, got %v", status, phase)
-		}
-	}
-
-	for _, status := range notUp {
-		if phase, _ := translatePodmanStatus(status); phase == anovelv1.Phase_PHASE_RUNNING {
-			t.Errorf("%q should leave the infra session down, got %v", status, phase)
-		}
-	}
-}
-
-// newRunnerForAdopt builds the minimum an adoption scan touches: the instance map and the infra
-// session store. discovery is absent, so target entries are left orphaned and only the infra
-// decisions run.
-func newRunnerForAdopt() *Runner {
-	return &Runner{
-		instances:     map[string]*Instance{},
-		infraSessions: map[string]*infraSession{},
-	}
-}
-
+// TestAdoptEntriesMarksTheSessionUpFromRunningContainersOnly applies the
+// predicate adoption uses before marking a session Up. Only a running container
+// clears it, so a stopped or half-created one leaves EnsureDepsReady to bring
+// the infra up. discovery is absent, so only the infra decisions run.
 func TestAdoptEntriesMarksTheSessionUpFromRunningContainersOnly(t *testing.T) {
-	infra := func(status string) psEntry {
-		return psEntry{
-			ID:     "cid-" + status,
-			Status: status,
-			Labels: map[string]string{
-				"anovel.stack":   "default",
-				"anovel.service": "service-json-keys",
-			},
-		}
-	}
-
 	cases := []struct {
-		status string
-		up     bool
+		statuses []string
+		up       bool
 	}{
-		{"Up 11 minutes", true},
-		{"Up 2 hours (healthy)", true},
+		{[]string{"Up 11 minutes"}, true},
+		{[]string{"Up 2 hours (healthy)"}, true},
 		// A container the operator killed with `run kill` survives in Exited state so it can be
 		// restarted, so adoption meets one on every daemon restart after a kill.
-		{"Exited (0) 5 minutes ago", false},
-		{"Stopped", false},
-		{"Created", false},
+		{[]string{"Exited (0) 5 minutes ago"}, false},
+		{[]string{"Stopped"}, false},
+		{[]string{"Created"}, false},
+		// The whole service is down. EnsureDepsReady has to bring it up rather than short-circuit
+		// on a session flagged from the corpses.
+		{[]string{"Exited (0) 2 minutes ago", "Exited (137) 2 minutes ago"}, false},
 	}
-
-	for _, c := range cases {
-		r := newRunnerForAdopt()
-		r.adoptEntries(t.Context(), []psEntry{infra(c.status)})
-
-		sess, _ := r.InfraSession("default", "service-json-keys")
-		got := sess.Up
-		if got != c.up {
-			t.Errorf("infra %q: session up = %v, want %v", c.status, got, c.up)
-		}
-	}
-}
-
-func TestAdoptEntriesLeavesTheSessionDownWhenEveryContainerIsStopped(t *testing.T) {
-	// The whole service is down. EnsureDepsReady has to bring it up rather than short-circuit on a
-	// session flagged from the corpses.
-	r := newRunnerForAdopt()
 
 	labels := map[string]string{"anovel.stack": "default", "anovel.service": "service-json-keys"}
-	r.adoptEntries(t.Context(), []psEntry{
-		{ID: "cid-pg", Status: "Exited (0) 2 minutes ago", Labels: labels},
-		{ID: "cid-mail", Status: "Exited (137) 2 minutes ago", Labels: labels},
-	})
+	for _, c := range cases {
+		r := &Runner{instances: map[string]*Instance{}, infraSessions: map[string]*infraSession{}}
+		entries := make([]psEntry, len(c.statuses))
+		for i, status := range c.statuses {
+			entries[i] = psEntry{ID: "cid-" + status, Status: status, Labels: labels}
+		}
+		r.adoptEntries(t.Context(), entries)
 
-	if sess, _ := r.InfraSession("default", "service-json-keys"); sess.Up {
-		t.Error("every container is stopped, but the infra session reads Up")
+		if sess, _ := r.InfraSession("default", "service-json-keys"); sess.Up != c.up {
+			t.Errorf("infra %q: session up = %v, want %v", c.statuses, sess.Up, c.up)
+		}
 	}
 }

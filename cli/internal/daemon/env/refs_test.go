@@ -31,7 +31,9 @@ func TestResolveOwner(t *testing.T) {
 	// out.
 	services := []string{
 		"service-authentication",
+		"service-template-extra",
 		"service-json-keys",
+		"service-template",
 	}
 	cases := []struct {
 		varName   string
@@ -45,6 +47,10 @@ func TestResolveOwner(t *testing.T) {
 		// A var that merely starts with a service prefix still resolves to
 		// that service: naming one SERVICE_JSON_KEYS_X owns the consequence.
 		{"SERVICE_JSON_KEYS_PORT", "service-json-keys", "PORT"},
+		// When two service names share a prefix the longer must match first, or
+		// `service-template-extra/X` resolves against `service-template` and
+		// silently misroutes.
+		{"SERVICE_TEMPLATE_EXTRA_PORT", "service-template-extra", "PORT"},
 	}
 	for _, c := range cases {
 		gotOwner, gotLocal := resolveOwner(c.varName, services)
@@ -55,56 +61,28 @@ func TestResolveOwner(t *testing.T) {
 	}
 }
 
-func TestResolveOwnerLongestMatchWins(t *testing.T) {
-	// When two service names share a prefix the longer must match first, or
-	// `service-template-extra/X` resolves against `service-template` and
-	// silently misroutes.
-	services := []string{
-		// The caller sorts longest-first, as allocator.SetServices does.
-		"service-template-extra",
-		"service-template",
-	}
-	owner, local := resolveOwner("SERVICE_TEMPLATE_EXTRA_PORT", services)
-	if owner != "service-template-extra" || local != "PORT" {
-		t.Errorf("longest-match: got (%q, %q) want (service-template-extra, PORT)", owner, local)
-	}
-}
-
-func TestIsAllocatedKind(t *testing.T) {
+// TestVarKinds pins the suffix rules: a var is allocated, host or URL kind only
+// with its `_PORT`, `_HOST` or `_URL` suffix, so a bare PORT allocates nothing.
+func TestVarKinds(t *testing.T) {
 	cases := []struct {
-		in   string
-		want bool
+		in              string
+		port, host, url bool
 	}{
-		{"REST_PORT", true},
-		{"GRPC_PORT", true},
-		{"SMTP_PORT", true},
-		// The rule is a _PORT suffix, so a bare PORT allocates nothing.
-		{"PORT", false},
-		{"HOST", false},
-		{"URL", false},
-		{"REST_PORT_EXTRA", false},
-		{"", false},
+		{"REST_PORT", true, false, false},
+		{"GRPC_PORT", true, false, false},
+		{"SMTP_PORT", true, false, false},
+		{"PORT", false, false, false},
+		{"REST_PORT_EXTRA", false, false, false},
+		{"REST_HOST", false, true, false},
+		{"HOST", false, false, false},
+		{"REST_URL", false, false, true},
+		{"URL", false, false, false},
+		{"", false, false, false},
 	}
 	for _, c := range cases {
-		got := isAllocatedKind(c.in)
-		if got != c.want {
-			t.Errorf("isAllocatedKind(%q): got %v want %v", c.in, got, c.want)
+		if port, host, url := isAllocatedKind(c.in), isHostKind(c.in), isURLKind(c.in); port != c.port || host != c.host || url != c.url {
+			t.Errorf("kinds(%q): got port=%v host=%v url=%v, want %v/%v/%v", c.in, port, host, url, c.port, c.host, c.url)
 		}
-	}
-}
-
-func TestIsHostKind_IsURLKind(t *testing.T) {
-	if !isHostKind("REST_HOST") {
-		t.Error("REST_HOST should be host kind")
-	}
-	if isHostKind("HOST") {
-		t.Error("bare HOST should NOT be host kind (no _HOST suffix)")
-	}
-	if !isURLKind("REST_URL") {
-		t.Error("REST_URL should be url kind")
-	}
-	if isURLKind("URL") {
-		t.Error("bare URL should NOT be url kind")
 	}
 }
 

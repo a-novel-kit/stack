@@ -9,63 +9,46 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 )
 
-// TestDiscoverStacksSkipsVanishedScratch pins the asymmetry that keeps the
-// daemon startable: a scratch stack lives in a directory the OS reclaims, so
-// its files can disappear while its $A_NOVEL_STACKS entry lives on in a shell
-// config. Discovery skips the vanished entry and keeps the stacks that are
-// still there, so a temp sweep never costs the operator their workspace.
-func TestDiscoverStacksSkipsVanishedScratch(t *testing.T) {
+// TestDiscoverStacks pins the asymmetry that keeps the daemon startable. A
+// scratch stack lives in a directory the OS reclaims, so its files can
+// disappear while its $A_NOVEL_STACKS entry lives on in a shell config;
+// discovery skips it, and a path that exists as a file, so a temp sweep never
+// costs the operator their workspace. The default stack is the workspace, so
+// its absence is a real misconfiguration and must be loud.
+func TestDiscoverStacks(t *testing.T) {
 	t.Parallel()
 
 	present := t.TempDir()
 	gone := filepath.Join(t.TempDir(), "swept")
-
-	got, err := DiscoverStacks([]stacks.Stack{
-		{Name: "default", Path: present, IsDefault: true},
-		{Name: "swept", Path: gone},
-	})
-	if err != nil {
-		t.Fatalf("a vanished scratch stack should not fail discovery: %v", err)
-	}
-	if len(got) != 1 || got[0].Name != "default" {
-		t.Fatalf("discovered %v, want only the default stack", got)
-	}
-}
-
-// TestDiscoverStacksFailsOnVanishedDefault is the other half: the default stack
-// is the workspace, so its absence is a real misconfiguration and must be loud.
-func TestDiscoverStacksFailsOnVanishedDefault(t *testing.T) {
-	t.Parallel()
-
-	gone := filepath.Join(t.TempDir(), "swept")
-
-	if _, err := DiscoverStacks([]stacks.Stack{
-		{Name: "default", Path: gone, IsDefault: true},
-	}); err == nil {
-		t.Fatal("a missing default stack should fail discovery")
-	}
-}
-
-// TestDiscoverStacksSkipsNonDirectory covers the same skip for a path that
-// exists as a file: just as unusable, and just as far from worth a dead daemon.
-func TestDiscoverStacksSkipsNonDirectory(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	file := filepath.Join(dir, "not-a-dir")
+	file := filepath.Join(t.TempDir(), "not-a-dir")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatalf("fixture: %v", err)
 	}
 
-	got, err := DiscoverStacks([]stacks.Stack{
-		{Name: "default", Path: dir, IsDefault: true},
-		{Name: "bogus", Path: file},
-	})
-	if err != nil {
-		t.Fatalf("a non-directory scratch stack should not fail discovery: %v", err)
+	cases := []struct {
+		name    string
+		stacks  []stacks.Stack
+		wantErr bool
+	}{
+		{name: "Success/SkipsVanishedScratch", stacks: []stacks.Stack{{Name: "swept", Path: gone}}},
+		{name: "Success/SkipsNonDirectory", stacks: []stacks.Stack{{Name: "bogus", Path: file}}},
+		{name: "Error/VanishedDefault", stacks: []stacks.Stack{{Name: "default", Path: gone, IsDefault: true}}, wantErr: true},
 	}
-	if len(got) != 1 {
-		t.Fatalf("discovered %d stacks, want 1", len(got))
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			in := c.stacks
+			if !c.wantErr {
+				in = append([]stacks.Stack{{Name: "default", Path: present, IsDefault: true}}, in...)
+			}
+			got, err := DiscoverStacks(in)
+			if (err != nil) != c.wantErr {
+				t.Fatalf("DiscoverStacks: got err %v, want error %v", err, c.wantErr)
+			}
+			if !c.wantErr && (len(got) != 1 || got[0].Name != "default") {
+				t.Fatalf("discovered %v, want only the default stack", got)
+			}
+		})
 	}
 }
 
