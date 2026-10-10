@@ -3,8 +3,9 @@
 # and whose body lists the branch's commit messages, so both parts are checked
 # before they can land. The merge queue's gh-readonly-queue branches are left
 # out: GitHub writes their commits from titles the rule already checked on the
-# PR. Dependabot is the only bypass actor; its commits follow the repo's style
-# but are not configured. Commit metadata rules need GitHub Enterprise.
+# PR. Dependabot is the only bypass actor, and only on classes that enable its
+# security updates; its commits follow the repo's style but are not configured.
+# Commit metadata rules need GitHub Enterprise.
 #
 # Evaluate records would-be violations in Rule Insights and blocks nothing. The
 # release, hotfix, rollback and reconcile automation still writes other

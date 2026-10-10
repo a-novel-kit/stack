@@ -113,7 +113,8 @@ ruleset, unmanaged bypass actors already present are preserved.
   mode is `always` — the bot writes directly (the version-bump commit, the
   release tag), no branch proxy; on the PR rulesets the mode is `exempt`.
 - `dependabot` — GitHub's Dependabot App, the same in every org, resolved with
-  the bot modes above.
+  the bot modes above. GitHub accepts it only on repos Dependabot runs in, so the
+  entry is dropped for classes with `security.dependabot: false`.
 
 The core team is intentionally **not** a bypass actor.
 
