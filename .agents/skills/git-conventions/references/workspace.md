@@ -73,6 +73,16 @@ Resuming a branch **you** created earlier in the same session is your own work; 
 
 ### When you are done
 
+**Cleanup only ever touches what this session created**, unless the developer explicitly names a
+wider scope. A request to clear worktrees, branches, stacks or issues means yours: the worktrees and
+branches you added, your subagents' worktrees, your scratch stacks and containers, and the issues and
+pull requests you opened. List them as you create them, so cleanup removes exactly that list.
+
+Everything else stays, however finished it looks. A clean worktree on a merged branch can still be
+the working directory of a live parallel session, and removing it, deleting its branch, or
+fast-forwarding a shared checkout pulls that session's ground from under it. Clean, merged and idle
+are not ownership. When you cannot tell whether something is yours, leave it and ask.
+
 A stack synced for one task is scratch space. Left behind it becomes a stale checkout the next
 session mistakes for real work, plus containers and volumes that outlive the machine's reboot.
 
