@@ -111,7 +111,7 @@ func injectForRepoAt(repoRoot, root string) (Resolution, error) {
 	// missing: the common case for a developer who has not provisioned this
 	// service's secrets yet. No key is created.
 	if _, statErr := os.Stat(filepath.Join(root, keyFile)); errors.Is(statErr, os.ErrNotExist) {
-		return Resolution{Missing: append([]Declaration(nil), m.Secrets...)}, nil
+		return Resolution{Missing: m.Secrets}, nil
 	}
 
 	st, err := openAt(root)
