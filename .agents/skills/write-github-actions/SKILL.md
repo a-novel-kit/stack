@@ -215,8 +215,8 @@ the command.
 
 The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.yaml`,
 `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`,
-`auto-approve-dependabot.yaml`) are rendered from `cli/internal/repocfg/templates/governance/` and
-carry a "Managed by `a-novel repo update`" banner. Edit the template in the stack repo; a change to
+`auto-approve-dependabot.yaml`, `lock-pr.yaml`) are rendered from
+`cli/internal/repocfg/templates/governance/` and carry a "Managed by `a-novel repo update`" banner. Edit the template in the stack repo; a change to
 the copy in a repo is overwritten. What those workflows mean is `coordinate-landing`'s subject.
 
 ---
