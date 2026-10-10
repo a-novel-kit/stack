@@ -37,7 +37,7 @@ func TestParse(t *testing.T) {
 }
 
 // Not parallel: every case calls t.Setenv, which forbids it.
-func TestDefaultPath(t *testing.T) {
+func TestDefault(t *testing.T) {
 	cases := []struct {
 		name    string
 		stacks  string
@@ -52,12 +52,12 @@ func TestDefaultPath(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Setenv(EnvVar, c.stacks)
 			t.Setenv("HOME", "/home/tester")
-			got, err := DefaultPath()
+			got, err := Default()
 			if (err != nil) != c.wantErr {
-				t.Fatalf("DefaultPath() error = %v, wantErr %v", err, c.wantErr)
+				t.Fatalf("Default() error = %v, wantErr %v", err, c.wantErr)
 			}
-			if got != c.want {
-				t.Errorf("DefaultPath() = %q, want %q", got, c.want)
+			if got.Path != c.want {
+				t.Errorf("Default().Path = %q, want %q", got.Path, c.want)
 			}
 		})
 	}

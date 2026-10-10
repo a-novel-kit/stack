@@ -320,9 +320,9 @@ func onDiskTemplatesDir() string {
 	if d := os.Getenv("REPO_CONFIG_DIR"); d != "" {
 		return d
 	}
-	root, err := stacks.DefaultPath()
+	stack, err := stacks.Default()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(root, "cli", "internal", "repocfg", "templates")
+	return filepath.Join(stack.Path, "cli", "internal", "repocfg", "templates")
 }

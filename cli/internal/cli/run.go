@@ -565,10 +565,14 @@ type entityRef struct {
 //	<stack>/<service>/infra/<name>          → infra canonical
 //
 // Only an "infra" in the second-to-last segment marks an infra reference;
-// anywhere else the word is an ordinary target name.
+// anywhere else the word is an ordinary target name. A shorthand resolves
+// against defaultStack, or the default stack, the first $A_NOVEL_STACKS entry.
 func parseEntityID(arg, defaultStack string) entityRef {
 	if defaultStack == "" {
 		defaultStack = stacks.DefaultName
+		if stack, err := stacks.Default(); err == nil {
+			defaultStack = stack.Name
+		}
 	}
 	parts := strings.Split(arg, "/")
 	// Infra: 3 segments (svc/infra/name) or 4 (stack/svc/infra/name).

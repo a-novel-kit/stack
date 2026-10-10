@@ -48,7 +48,7 @@ its own with nothing in between.`,
 		// handling travels with them, as Long explains.
 		DisableFlagParsing: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			root, err := stacks.DefaultPath()
+			stack, err := stacks.Default()
 			if err != nil {
 				return fmt.Errorf("resolve stack root: %w", err)
 			}
@@ -59,8 +59,8 @@ its own with nothing in between.`,
 				return fmt.Errorf(
 					"claude not found in $PATH — install Claude Code (https://claude.com/claude-code): %w", err)
 			}
-			if err := os.Chdir(root); err != nil {
-				return fmt.Errorf("enter stack root %s: %w", root, err)
+			if err := os.Chdir(stack.Path); err != nil {
+				return fmt.Errorf("enter stack root %s: %w", stack.Path, err)
 			}
 
 			// Point of no return: on success Exec never returns, so nothing

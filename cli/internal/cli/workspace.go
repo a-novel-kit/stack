@@ -131,8 +131,8 @@ func workspaceRoot(override string) (string, error) {
 	if override != "" {
 		return filepath.Abs(override)
 	}
-	if root, err := stacks.DefaultPath(); err == nil {
-		return root, nil
+	if stack, err := stacks.Default(); err == nil {
+		return stack.Path, nil
 	}
 	return os.Getwd()
 }

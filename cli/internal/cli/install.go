@@ -43,11 +43,11 @@ running before.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx, out := cmd.Context(), cmd.OutOrStdout()
 			if sourceDir == "" {
-				root, err := stacks.DefaultPath()
+				stack, err := stacks.Default()
 				if err != nil {
 					return fmt.Errorf("resolve cli source dir: %w (pass --source explicitly)", err)
 				}
-				sourceDir = filepath.Join(root, "cli")
+				sourceDir = filepath.Join(stack.Path, "cli")
 			}
 			if !exists(filepath.Join(sourceDir, "go.mod")) {
 				return fmt.Errorf("no go.mod at %s — pass --source pointing at the CLI source dir", sourceDir)

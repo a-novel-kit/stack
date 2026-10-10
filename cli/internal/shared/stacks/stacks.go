@@ -90,12 +90,11 @@ func expandHome(p string) string {
 	return p
 }
 
-// DefaultPath is the root of the default stack, the first entry of
-// $A_NOVEL_STACKS.
-func DefaultPath() (string, error) {
+// Default is the default stack, the first entry of $A_NOVEL_STACKS.
+func Default() (Stack, error) {
 	stk, err := ParseEnv()
 	if err != nil {
-		return "", err
+		return Stack{}, err
 	}
-	return stk[0].Path, nil
+	return stk[0], nil
 }
