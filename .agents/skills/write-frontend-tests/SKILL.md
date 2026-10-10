@@ -76,6 +76,9 @@ Do not manufacture cases that the public contract cannot reach.
 - Use framework-supported request interception for network tests. Never call a live third-party
   service from unit or component tests.
 - Make mock failures loud: reject unhandled requests and unexpected calls.
+- Build a fresh `Response` per call (`mockImplementation(async () => Response.json(…))`). A body
+  reads once, so `mockResolvedValue(response)` hands every later call a consumed body, and the
+  failure looks like a parsing bug in the code under test.
 
 ## Vitest and Testing Library
 
@@ -133,6 +136,11 @@ Do not manufacture cases that the public contract cannot reach.
 - Keep stories and docs in a private workbench. Keep reusable Storybook theme, preview, and test
   configuration in a separately consumable development package; never publish stories or runtime
   workbench code as part of the component package.
+- List each dependency subpath a story imports in Storybook's `optimizeDeps.include`
+  (`@a-novel-kit/uikit-storybook/ScrollPreview.svelte`, not only the package). Vite matches entries
+  exactly; an unlisted subpath is optimized mid-run, which reloads the iframes and fails every story
+  file on a cold cache. CI is always cold, so prove such fixes after deleting `node_modules/.cache`
+  and `node_modules/.vite`.
 - Keep a representative framework or extraction fixture with the shared nodelib preset it validates.
   A platform tests its product catalogs, screen states, and wiring instead of copying that generic
   fixture locally.
@@ -155,6 +163,10 @@ affected instead of inventing a screenshot test.
 - Test critical journeys and browser contracts, not every visual variant.
 - Use accessible locators and observable readiness conditions. Never use fixed sleeps.
 - Keep test data isolated and clean it through supported product interfaces.
+- Point every URL the server under test reads at a local fixture started in a global setup, never at
+  a live or production file. When the server caches what it reads, give each state its own
+  `webServer` entry: entries start in order, so later ones run `node build` on the first entry's
+  build. platform-studio's downtime journeys follow this pattern.
 - Capture traces/screenshots on failure where the existing runner supports them; do not commit
   transient artifacts.
 - Run at least the repository browser baseline for compatibility-sensitive behavior.

@@ -229,6 +229,9 @@ or instruction to find an earlier link does not replace it.
 
 - Use the formal address form for static text when a language distinguishes registers (`vous` in French, `usted` in Spanish).
 - Use the language’s conventional action-label form for buttons, links, and other controls; French uses infinitives such as `Créer le compte`.
+- Put no space before a colon in French (`Fin prévue:`), against standard French typography: a
+  product ruling, enforced by uikit's catalog test. It applies to every catalog, page title and test
+  expectation.
 - Apply the same distinction to accessible names and Storybook states.
 
 ## Security and privacy

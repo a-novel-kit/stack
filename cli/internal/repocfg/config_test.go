@@ -124,9 +124,14 @@ func TestLoadLabels(t *testing.T) {
 	if named("append-only-override") < 0 {
 		t.Error("ensure set lacks the `append-only-override` label")
 	}
-	// triage is retired in favour of the Triage board status.
-	if !slices.Contains(l.Retire, "triage") {
-		t.Errorf("retire set missing `triage`; got %v", l.Retire)
+	// triage gave way to the Triage board status, and hotfix-reconcile to backports.
+	for _, name := range []string{"triage", "hotfix-reconcile"} {
+		if !slices.Contains(l.Retire, name) {
+			t.Errorf("retire set missing `%s`; got %v", name, l.Retire)
+		}
+		if slices.ContainsFunc(l.Ensure, func(d LabelDef) bool { return d.Name == name }) {
+			t.Errorf("`%s` is both ensured and retired", name)
+		}
 	}
 }
 

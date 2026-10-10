@@ -175,6 +175,18 @@ re-pins to the released tag first.**
    (or `@latest`), `go mod tidy`, commit (`chore(deps): bump golib to vX.Y.Z`). B's CI goes green.
 3. **Merge B's PR.** Now production is fully on released versions.
 
+For a pnpm consumer, a fresh release sits inside pnpm's `minimumReleaseAge` (one day by default).
+Exempt it by exact version in `pnpm-workspace.yaml` `minimumReleaseAgeExclude`, one entry per pinned
+package. Bump in two steps, because pnpm also rejects the outgoing pin when it is still too fresh:
+
+1. Add the new versions next to the old ones, then run `pnpm install`.
+2. Remove the old entries, then pass `pnpm install --frozen-lockfile`.
+
+Never hand-merge `pnpm-lock.yaml` during a rebase. At each conflicting commit, take the upstream
+lockfile (`git checkout --ours`), then run `pnpm install`. Exempt only the versions pnpm names, and
+only while installing. Restore the commit's workspace file, and pass `--frozen-lockfile` before
+continuing. The policy relaxation never reaches a commit.
+
 If B's change is itself a dependency of a repo C, repeat: A → release → B re-pins → B releases →
 C re-pins → C merges. Stacked dependency chains merge bottom-up.
 
