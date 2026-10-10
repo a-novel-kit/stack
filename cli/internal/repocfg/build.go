@@ -224,12 +224,14 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	// Rulesets, reconciled by name (POST when absent, PUT .../{id} when present).
 	// The master ruleset gates exactly the discovered checks (always + the
 	// repo's main.yaml jobs, minus exclusions) — set wholesale, no reconcile.
+	// commit-messages governs the same branch, so it ships alongside master.
 	wanted := []struct {
 		name   string
 		on     bool
 		checks []CheckRef
 	}{
 		{rulesetMaster, c.Rulesets.Master, t.Discovered.Checks},
+		{"commit-messages", c.Rulesets.Master, nil},
 		{"require-approval", c.Rulesets.RequireApproval, nil},
 		{rulesetTags, c.Rulesets.Tags, nil},
 	}

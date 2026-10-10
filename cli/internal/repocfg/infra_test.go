@@ -104,8 +104,9 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 		"PUT /contents/.github/workflows/auto-approve-dependabot.yaml",
 		"DELETE /pages",
 		"RULESET master",
+		"RULESET commit-messages",
 		"RULESET require-approval",
-		"PRUNE master,require-approval",
+		"PRUNE master,commit-messages,require-approval",
 	}
 	if !slices.Equal(signatures, wantSignatures) {
 		t.Fatalf("operation sequence =\n  %s\nwant =\n  %s",

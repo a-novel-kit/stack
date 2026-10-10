@@ -164,7 +164,7 @@ func TestLoadLabels(t *testing.T) {
 
 func TestLoadRulesets(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"master", "require-approval", "tags"} {
+	for _, name := range []string{"master", "commit-messages", "require-approval", "tags"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			r, err := LoadRuleset(name)
@@ -292,21 +292,25 @@ func TestBuildRulesetCreationRule(t *testing.T) {
 	}
 }
 
-// TestBuildRulesetCommitMessagePattern pins the master ruleset's Conventional
-// Commits rule: it reaches the API body, and its pattern accepts the subjects the
-// fleet writes while rejecting the rest. GitHub evaluates metadata patterns as
+// TestBuildRulesetCommitMessagePattern pins the commit-messages ruleset: it stays
+// in Evaluate until the automation's PR titles comply, its rule reaches the API
+// body, and its pattern accepts the subjects the fleet writes while rejecting the
+// rest. GitHub evaluates metadata patterns as
 // RE2, the dialect Go's regexp implements, so a pattern verified here behaves
 // the same there.
 func TestBuildRulesetCommitMessagePattern(t *testing.T) {
 	t.Parallel()
-	spec, err := LoadRuleset("master")
+	spec, err := LoadRuleset("commit-messages")
 	if err != nil {
-		t.Fatalf("LoadRuleset(master): %v", err)
+		t.Fatalf("LoadRuleset(commit-messages): %v", err)
 	}
 	org := &OrgProfile{Org: "a-novel", Bots: map[string]int64{"agent": 3549319, "publish": 1718144}}
 	rs, err := BuildRuleset(spec, org, nil)
 	if err != nil {
 		t.Fatalf("BuildRuleset: %v", err)
+	}
+	if rs.Enforcement != "evaluate" {
+		t.Fatalf("enforcement = %q, want evaluate", rs.Enforcement)
 	}
 	var params map[string]any
 	for _, r := range rs.Rules {
@@ -315,7 +319,7 @@ func TestBuildRulesetCommitMessagePattern(t *testing.T) {
 		}
 	}
 	if params == nil {
-		t.Fatal("master ruleset emitted no commit_message_pattern rule")
+		t.Fatal("commit-messages ruleset emitted no commit_message_pattern rule")
 	}
 	if params["operator"] != "regex" || params["negate"] != false {
 		t.Fatalf("operator/negate = %v/%v, want regex/false", params["operator"], params["negate"])

@@ -74,7 +74,7 @@ are required unless noted.
 | `security.dependabot_alerts`                                    | bool   | Optional explicit state for Dependabot vulnerability alerts; omission leaves the live state alone.                                                                                                |
 | `pages`                                                         | bool   | Reconcile Pages on (`workflow`) or off.                                                                                                                                                           |
 | `code_quality`                                                  | bool   | Add the `code_quality` rule to the `master` ruleset (GitHub Code Quality is a separate repo toggle).                                                                                              |
-| `rulesets.master` / `.require_approval` / `.tags`               | bool   | Apply those rulesets. `tags` locks tag (and release) creation to the agent bot + admins.                                                                                                          |
+| `rulesets.master` / `.require_approval` / `.tags`               | bool   | Apply those rulesets. `tags` locks tag (and release) creation to the agent bot + admins. `master` also applies `commit-messages`, which checks Conventional Commits subjects in Evaluate mode.    |
 
 The `infra` class is public-by-default and deployment-only. It keeps Pages,
 wiki, discussions, release workflow callers, and the tag ruleset off; when a

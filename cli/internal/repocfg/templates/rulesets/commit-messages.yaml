@@ -1,0 +1,25 @@
+# Conventional Commits subjects on the default branch. The merge queue squashes,
+# so the rule checks the subject GitHub writes from the PR title, or from the
+# lone commit of a one-commit PR. Commit metadata rules need GitHub Enterprise.
+#
+# Evaluate records would-be violations in Rule Insights and blocks nothing.
+# Merge-queue commits match no bypass actor, and the epic-rollback and
+# hotfix-reconcile automation still opens PRs with other titles, so an active
+# rule would block those sagas. Tracked in https://github.com/a-novel-kit/stack/issues/530
+name: commit-messages
+target: branch
+enforcement: evaluate
+conditions:
+  ref_name:
+    include: ["~DEFAULT_BRANCH"]
+    exclude: []
+bypass:
+  - admins
+  - publish
+  - agent
+rules:
+  commit_message_pattern:
+    name: Conventional Commits subject
+    operator: regex
+    pattern: '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]+\))?!?: \S'
+    negate: false
