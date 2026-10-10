@@ -127,13 +127,7 @@ func Run(ctx context.Context, opts Options) error {
 	// The allocator needs every service name up front so cross-service prefixes
 	// (SERVICE_X_VAR) resolve to the owning service.
 	alloc := env.NewAllocator()
-	allNames := make([]string, 0)
-	for _, st := range disc {
-		for _, svc := range st.Services {
-			allNames = append(allNames, svc.Name)
-		}
-	}
-	alloc.SetServices(allNames)
+	alloc.SetServices(disc.ServiceNames())
 	builder := env.NewBuilder(alloc)
 
 	// Per-target JSON-line files under $XDG_STATE_HOME/a-novel/logs, with

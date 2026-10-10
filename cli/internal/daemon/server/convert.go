@@ -11,15 +11,8 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// targetIDFor builds the stack/service/target ID that addresses a target across
-// every stack. It is the one place this rule lives on the server side, and it
-// must match the runner's own form exactly.
-func targetIDFor(stack, service, target string) string {
-	return stack + "/" + service + "/" + target
-}
-
 // infraIDFor builds the stack/service/name ID that addresses an infra
-// container, mirroring targetIDFor for targets.
+// container, mirroring discovery.Target.ID for targets.
 func infraIDFor(stack, service, name string) string {
 	return stack + "/" + service + "/" + name
 }
@@ -97,7 +90,7 @@ func (s *Server) liveInfraStates(stack string) map[string]runner.InfraState {
 // where one exists, so the proto carries the real phase, pid, mode, and exit
 // reason.
 func (s *Server) convertTargetWithLive(t *discovery.Target) *anovelv1.Target {
-	id := targetIDFor(t.Stack, t.Service, t.Name)
+	id := t.ID()
 	inst, ok := s.runner.Instance(id)
 	if !ok {
 		return convertTargetStatic(t)
@@ -122,7 +115,7 @@ func (s *Server) convertTargetWithLive(t *discovery.Target) *anovelv1.Target {
 // runner.Instance recorded.
 func convertTargetStatic(t *discovery.Target) *anovelv1.Target {
 	out := &anovelv1.Target{
-		Id:      targetIDFor(t.Stack, t.Service, t.Name),
+		Id:      t.ID(),
 		Name:    t.Name,
 		Service: t.Service,
 		Stack:   t.Stack,

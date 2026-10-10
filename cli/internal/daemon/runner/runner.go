@@ -67,8 +67,8 @@ type Runner struct {
 	mu        sync.RWMutex
 	instances map[string]*Instance // keyed by Instance.ID
 
-	// discovery translates a target ID into a discovery.Target at start time.
-	discovery []*discovery.Stack
+	// stacks translates a target ID into a discovery.Target at start time.
+	stacks discovery.Stacks
 	// alloc is the port allocator. The runner releases an instance's
 	// refcounted slots when it terminates. A nil allocator skips those
 	// releases, which tests rely on.
@@ -121,10 +121,10 @@ const infraStateCacheTTL = 2500 * time.Millisecond
 // New returns an empty Runner wired to the discovery snapshot it resolves
 // target IDs against, the env allocator and builder, and the log store that
 // captures target output.
-func New(disc []*discovery.Stack, alloc *env.Allocator, builder *env.Builder, logStore *logs.Store) *Runner {
+func New(disc discovery.Stacks, alloc *env.Allocator, builder *env.Builder, logStore *logs.Store) *Runner {
 	return &Runner{
 		instances:       make(map[string]*Instance),
-		discovery:       disc,
+		stacks:          disc,
 		alloc:           alloc,
 		builder:         builder,
 		logs:            logStore,
@@ -173,14 +173,8 @@ func (r *Runner) AllInstances() []Instance {
 // resolveTarget looks up a target by ID across every registered stack.
 // Returns the discovery.Target along with its owning Service for context.
 func (r *Runner) resolveTarget(id string) (*discovery.Target, *discovery.Service, error) {
-	for _, st := range r.discovery {
-		for _, svc := range st.Services {
-			for _, t := range svc.Targets {
-				if targetID(st.Name, svc.Name, t.Name) == id {
-					return t, svc, nil
-				}
-			}
-		}
+	if t, svc := r.stacks.Target(id); t != nil {
+		return t, svc, nil
 	}
 	return nil, nil, fmt.Errorf("unknown target %q", id)
 }
@@ -214,12 +208,6 @@ func (r *Runner) canStart(id string, mode Mode) (*Instance, bool, error) {
 		return nil, false, nil
 	}
 	return nil, false, nil
-}
-
-// targetID is the canonical "<stack>/<service>/<target>" form. Must match
-// the convertTarget rule in internal/daemon/server/convert.go.
-func targetID(stack, service, target string) string {
-	return stack + "/" + service + "/" + target
 }
 
 // =============================================================================

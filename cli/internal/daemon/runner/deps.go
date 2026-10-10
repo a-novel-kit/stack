@@ -31,13 +31,13 @@ func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *
 	for _, depName := range t.DependsOn {
 		// Classify the dep against the service's discovered targets and
 		// infra.
-		if isInfra(svc, depName) {
+		if svc.FindInfra(depName) != nil {
 			if err := r.ensureInfraReady(ctx, svc, oneShotsMode, env); err != nil {
 				return fmt.Errorf("infra dep %s: %w", depName, err)
 			}
 			continue
 		}
-		if depTarget := findTarget(svc, depName); depTarget != nil {
+		if depTarget := svc.FindTargetByComposeName(depName); depTarget != nil {
 			if depTarget.Kind == discovery.TargetKindOneShot {
 				if err := r.ensureOneShotSatisfied(ctx, svc, depTarget, oneShotsMode); err != nil {
 					return err
@@ -104,26 +104,6 @@ func (r *Runner) ensureOneShotSatisfied(ctx context.Context, svc *discovery.Serv
 	defer r.sessMu.Unlock()
 	if s, ok := r.infraSessions[sessionKey(svc.Stack, svc.Name)]; ok {
 		s.OneShotResults[t.Name] = anovelv1.ExitReason_EXIT_REASON_SUCCESS
-	}
-	return nil
-}
-
-// isInfra reports whether `name` is one of the service's infra entries.
-func isInfra(svc *discovery.Service, name string) bool {
-	for _, in := range svc.Infra {
-		if in.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-// findTarget returns the target with compose-name `name`, or nil.
-func findTarget(svc *discovery.Service, name string) *discovery.Target {
-	for _, t := range svc.Targets {
-		if t.ComposeName == name {
-			return t
-		}
 	}
 	return nil
 }

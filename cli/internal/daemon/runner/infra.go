@@ -449,15 +449,8 @@ func topoSortOneShots(svc *discovery.Service) []*discovery.Target {
 // findService resolves (stack, service) against the runner's discovery
 // snapshot, for the infra and dependency code that has no access to the server.
 func (r *Runner) findService(stack, service string) (*discovery.Service, error) {
-	for _, st := range r.discovery {
-		if st.Name != stack && stack != "" {
-			continue
-		}
-		for _, svc := range st.Services {
-			if svc.Name == service {
-				return svc, nil
-			}
-		}
+	if svc := r.stacks.Service(stack, service); svc != nil {
+		return svc, nil
 	}
 	return nil, fmt.Errorf("service %q not found in stack %q", service, stack)
 }

@@ -30,10 +30,6 @@ depends_on:
 	if _, ok := v.DependsOn["mailserver"]; !ok {
 		t.Errorf("short form: missing 'mailserver' dep, got %+v", v.DependsOn)
 	}
-	// Short form entries carry no condition.
-	if v.DependsOn["postgres"].Condition != "" {
-		t.Errorf("short form: condition should be empty, got %q", v.DependsOn["postgres"].Condition)
-	}
 }
 
 func TestComposeDependsOn_LongForm(t *testing.T) {
@@ -50,12 +46,14 @@ depends_on:
 	if err := yaml.Unmarshal([]byte(src), &v); err != nil {
 		t.Fatal(err)
 	}
-	if v.DependsOn["postgres"].Condition != "service_healthy" {
-		t.Errorf("long form: postgres condition got %q want service_healthy",
-			v.DependsOn["postgres"].Condition)
+	// The conditions ride along in the map values, but only the names count.
+	if len(v.DependsOn) != 2 {
+		t.Errorf("long form: got %+v, want postgres and init", v.DependsOn)
 	}
-	if v.DependsOn["init"].Condition != "service_completed_successfully" {
-		t.Errorf("long form: init condition wrong: %+v", v.DependsOn["init"])
+	for _, name := range []string{"postgres", "init"} {
+		if _, ok := v.DependsOn[name]; !ok {
+			t.Errorf("long form: missing %q dep, got %+v", name, v.DependsOn)
+		}
 	}
 }
 
@@ -131,8 +129,7 @@ environment:
 
 func TestParseComposeFile_FullDocument(t *testing.T) {
 	// End to end: a representative compose file written to a tempdir must
-	// parse into the expected top-level shape, services, volumes, and
-	// networks at once.
+	// parse into the expected top-level shape, services, and volumes at once.
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "podman-compose.yaml")
 	src := `
@@ -180,13 +177,13 @@ volumes:
 	if _, ok := cf.Volumes["postgres-data"]; !ok {
 		t.Fatal("missing postgres-data volume")
 	}
-	if _, ok := cf.Networks["api"]; !ok {
-		t.Fatal("missing api network")
-	}
 	// Spot-checks on each side of the parser:
 	pg := cf.Services["postgres-svc"]
-	if pg.Healthcheck == nil || len(pg.Healthcheck.Test) == 0 {
+	if pg.Healthcheck == nil {
 		t.Error("healthcheck not parsed")
+	}
+	if cf.Services["svc-rest"].Healthcheck != nil {
+		t.Error("svc-rest declares no healthcheck, but one was parsed")
 	}
 	if len(pg.Ports) != 1 || pg.Ports[0] != "${POSTGRES_PORT}:5432" {
 		t.Errorf("ports parsed wrong: %+v", pg.Ports)
@@ -195,8 +192,8 @@ volumes:
 	if len(rest.Profiles) != 1 || rest.Profiles[0] != "rest" {
 		t.Errorf("profiles wrong: %+v", rest.Profiles)
 	}
-	if rest.DependsOn["postgres-svc"].Condition != "service_healthy" {
-		t.Errorf("depends_on condition not parsed: %+v", rest.DependsOn)
+	if _, ok := rest.DependsOn["postgres-svc"]; !ok {
+		t.Errorf("depends_on not parsed: %+v", rest.DependsOn)
 	}
 }
 

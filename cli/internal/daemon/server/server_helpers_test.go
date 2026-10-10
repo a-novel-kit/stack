@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/runner"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
@@ -103,23 +102,6 @@ func TestDescribePhaseEvent(t *testing.T) {
 			t.Errorf("describePhaseEvent(%v): got %q want %q", c.ev, got, c.want)
 		}
 	}
-}
-
-func TestFindInfra(t *testing.T) {
-	svc := &discovery.Service{
-		Infra: []*discovery.Infra{
-			{Name: "postgres"},
-			{Name: "mailserver"},
-		},
-	}
-	if got := findInfra(svc, "postgres"); got == nil || got.Name != "postgres" {
-		t.Errorf("findInfra(postgres): got %v", got)
-	}
-	if got := findInfra(svc, "missing"); got != nil {
-		t.Errorf("findInfra(missing): got %v want nil", got)
-	}
-	// findInfra never nil-checks svc, since every caller in the package passes
-	// a discovered one, so a `findInfra(nil, ...)` probe belongs nowhere here.
 }
 
 func TestConvertModeFromProto(t *testing.T) {

@@ -1,10 +1,12 @@
 package discovery
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
@@ -28,36 +30,28 @@ type Stack struct {
 type Service struct {
 	Name        string // e.g., "service-json-keys"
 	Stack       string // owning stack name
-	Path        string // absolute path to the service directory
 	ComposePath string // absolute path to its compose file
 	Targets     []*Target
 	Infra       []*Infra
 	Volumes     []*Volume
-	Networks    []string // network names declared at compose top-level
-	// Dependency edges, one per compose `depends_on` entry, connecting two
-	// compose-service names. Resolving them to a concrete target or infra
-	// happens later, at the daemon level.
-	DependsOn map[string][]string // compose-service-name → [list of names it depends on]
 }
 
-// Target is a discovered Go cmd/<name>/ entry with its compose mirror.
+// Target is a discovered Go cmd/<name>/ entry with its compose mirror. Name is
+// also the compose profile that gates the mirror.
 type Target struct {
 	Name        string     // e.g., "rest" (cmd directory name)
 	ComposeName string     // e.g., "service-json-keys-rest" (compose service name)
 	Service     string     // owning service name
 	Stack       string     // owning stack name
-	Profile     string     // compose profile name (same as Name by convention)
 	Kind        TargetKind // OneShot | LongRunner
 	CmdDir      string     // absolute path to cmd/<name>/
-	Dockerfile  string     // absolute path to the build's Dockerfile (may be "")
 	DependsOn   []string   // compose-service-names this target depends_on
 	Ports       []string   // raw "${VAR}:N" port mappings, resolved later
 	Environment map[string]string
 }
 
 // ID returns the canonical "<stack>/<service>/<target>" identifier the daemon
-// uses to address this target across every API. Every layer derives it the same
-// way, so the identifier stays stable end to end.
+// uses to address this target across every API.
 func (t *Target) ID() string {
 	return t.Stack + "/" + t.Service + "/" + t.Name
 }
@@ -65,15 +59,12 @@ func (t *Target) ID() string {
 // Infra is a compose service with no profile assignment and no matching
 // cmd/<name>/ directory.
 type Infra struct {
-	Name           string // compose service name, e.g., "postgres-json-keys"
-	Service        string // owning service name
-	Stack          string // owning stack name
-	Dockerfile     string // referenced Dockerfile (for build)
-	HasHealthcheck bool
-	DependsOn      []string
-	Ports          []string
-	Environment    map[string]string
-	Volumes        []string // volume mounts the infra declares
+	Name        string // compose service name, e.g., "postgres-json-keys"
+	Service     string // owning service name
+	Stack       string // owning stack name
+	DependsOn   []string
+	Ports       []string
+	Environment map[string]string
 }
 
 // Volume is a top-level compose `volumes:` entry, scoped to its service.
@@ -122,6 +113,80 @@ func (e DiscoveryError) Error() string {
 }
 
 // =============================================================================
+// Lookups
+// =============================================================================
+
+// Stacks is the discovery snapshot of every registered stack, in registration
+// order, so the default stack comes first. Its methods are the one way the
+// daemon resolves names to discovered entities.
+type Stacks []*Stack
+
+// Stack returns the stack named name, or the default stack when name is empty.
+// It returns nil when no stack matches.
+func (x Stacks) Stack(name string) *Stack {
+	for _, st := range x {
+		if st.Name == name || name == "" && st.Default {
+			return st
+		}
+	}
+	return nil
+}
+
+// Service returns the named service of the named stack, an empty stack name
+// meaning the default one. It returns nil when either name is unknown.
+func (x Stacks) Service(stack, name string) *Service {
+	st := x.Stack(stack)
+	if st == nil {
+		return nil
+	}
+	return find(st.Services, func(svc *Service) bool { return svc.Name == name })
+}
+
+// Target returns the target whose ID is id, with its owning service. Both are
+// nil when no discovered target carries that ID.
+func (x Stacks) Target(id string) (*Target, *Service) {
+	for _, st := range x {
+		for _, svc := range st.Services {
+			if t := find(svc.Targets, func(t *Target) bool { return t.ID() == id }); t != nil {
+				return t, svc
+			}
+		}
+	}
+	return nil, nil
+}
+
+// ServiceNames returns the name of every service across the stacks.
+func (x Stacks) ServiceNames() []string {
+	var names []string
+	for _, st := range x {
+		for _, svc := range st.Services {
+			names = append(names, svc.Name)
+		}
+	}
+	return names
+}
+
+// FindInfra returns the infra the service declares under the compose service
+// name, or nil.
+func (s *Service) FindInfra(name string) *Infra {
+	return find(s.Infra, func(in *Infra) bool { return in.Name == name })
+}
+
+// FindTargetByComposeName returns the target whose compose mirror is named
+// composeName, the form depends_on entries use, or nil.
+func (s *Service) FindTargetByComposeName(composeName string) *Target {
+	return find(s.Targets, func(t *Target) bool { return t.ComposeName == composeName })
+}
+
+// find returns the first element of list that satisfies match, or nil.
+func find[T any](list []*T, match func(*T) bool) *T {
+	if i := slices.IndexFunc(list, match); i >= 0 {
+		return list[i]
+	}
+	return nil
+}
+
+// =============================================================================
 // Discovery
 // =============================================================================
 
@@ -129,8 +194,8 @@ func (e DiscoveryError) Error() string {
 // Stack per input with its services populated and its problems collected in
 // Errors. An inaccessible stack path returns an error and no Stack entry, while
 // a stack with malformed services still comes back with them listed in Errors.
-func DiscoverStacks(stk []stacks.Stack) ([]*Stack, error) {
-	out := make([]*Stack, 0, len(stk))
+func DiscoverStacks(stk []stacks.Stack) (Stacks, error) {
+	out := make(Stacks, 0, len(stk))
 	for _, s := range stk {
 		info, err := os.Stat(s.Path)
 		if err != nil {
@@ -177,20 +242,13 @@ func discoverStack(st *Stack) {
 	}
 	// Skip the *-template scaffolds: they are design-time references with
 	// nothing runnable behind them, and listing them in `ps` or the TUI sidebar
-	// invites an accidental start. The sort keeps the output stable.
-	names := make([]string, 0, len(entries))
+	// invites an accidental start. os.ReadDir sorts by name, which keeps the
+	// output stable.
 	for _, e := range entries {
-		if !e.IsDir() || !strings.HasPrefix(e.Name(), "service-") {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "service-") || strings.HasSuffix(e.Name(), "-template") {
 			continue
 		}
-		if strings.HasSuffix(e.Name(), "-template") {
-			continue
-		}
-		names = append(names, e.Name())
-	}
-	sort.Strings(names)
-	for _, n := range names {
-		svc, errs := discoverService(st.Name, filepath.Join(appDir, n))
+		svc, errs := discoverService(st.Name, filepath.Join(appDir, e.Name()))
 		st.Errors = append(st.Errors, errs...)
 		if svc != nil {
 			st.Services = append(st.Services, svc)
@@ -211,13 +269,7 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 		// the service drops out of the list with an error explaining why.
 		return nil, []DiscoveryError{{Service: name, Path: composePath, Reason: err.Error()}}
 	}
-	svc := &Service{
-		Name:        name,
-		Stack:       stack,
-		Path:        dir,
-		ComposePath: composePath,
-		DependsOn:   make(map[string][]string),
-	}
+	svc := &Service{Name: name, Stack: stack, ComposePath: composePath}
 
 	// Walk cmd/ to find the Go targets the service exposes.
 	cmdEntries, _ := os.ReadDir(filepath.Join(dir, "cmd"))
@@ -228,9 +280,9 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 		}
 		// Require cmd/<name>/main.go, so a stray empty directory never counts
 		// as a target.
-		mainPath := filepath.Join(dir, "cmd", e.Name(), "main.go")
-		if _, err := os.Stat(mainPath); err == nil {
-			cmdNames[e.Name()] = filepath.Join(dir, "cmd", e.Name())
+		cmdDir := filepath.Join(dir, "cmd", e.Name())
+		if _, err := os.Stat(filepath.Join(cmdDir, "main.go")); err == nil {
+			cmdNames[e.Name()] = cmdDir
 		}
 	}
 
@@ -238,95 +290,67 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 
 	// Classify each compose service.
 	for csName, cs := range cf.Services {
-		// Resolve the dockerfile path for healthcheck inspection.
-		dockerfileAbs := ""
-		if cs.Build != nil && cs.Build.Dockerfile != "" {
-			// Compose resolves `context:` against the compose file's directory,
-			// and the Dockerfile field against that context.
-			ctxDir := filepath.Dir(composePath)
-			if cs.Build.Context != "" {
-				ctxDir = filepath.Join(ctxDir, cs.Build.Context)
-			}
-			dockerfileAbs = filepath.Join(ctxDir, cs.Build.Dockerfile)
-			dockerfileAbs = filepath.Clean(dockerfileAbs)
-		}
-
-		// Collect dependency list.
-		var depList []string
-		for depName := range cs.DependsOn {
-			depList = append(depList, depName)
-		}
-		sort.Strings(depList)
-		svc.DependsOn[csName] = depList
-
-		// Profile-tagged → target candidate.
-		if len(cs.Profiles) > 0 {
-			// The first profile is canonical: by convention a target
-			// declares a single profile whose name matches its cmd dir.
-			profile := cs.Profiles[0]
-			cmdDir, hasCmd := cmdNames[profile]
-			if !hasCmd {
-				errs = append(errs, DiscoveryError{
-					Service: name,
-					Path:    composePath,
-					Reason:  fmt.Sprintf("compose service %q has profiles:[%q] but no matching cmd/%s/", csName, profile, profile),
-				})
-				continue
-			}
-			// Classify by healthcheck presence (compose first, Dockerfile fallback).
-			kind := TargetKindOneShot
-			if cs.Healthcheck != nil {
-				kind = TargetKindLongRunner
-			} else if dockerfileAbs != "" && dockerfileHasHealthcheck(dockerfileAbs) {
-				kind = TargetKindLongRunner
-			}
-			svc.Targets = append(svc.Targets, &Target{
-				Name:        profile,
-				ComposeName: csName,
-				Service:     name,
-				Stack:       stack,
-				Profile:     profile,
-				Kind:        kind,
-				CmdDir:      cmdDir,
-				Dockerfile:  dockerfileAbs,
-				DependsOn:   depList,
-				Ports:       cs.Ports,
-				Environment: map[string]string(cs.Environment),
-			})
-			// Mark this cmd as matched, leaving only orphans behind for the
-			// check below.
-			delete(cmdNames, profile)
-			continue
-		}
+		deps := slices.Sorted(maps.Keys(cs.DependsOn))
 
 		// No profile means infrastructure. A profile-less compose service with
 		// a matching cmd/<csName>/ is an unprofiled target, which is an error;
 		// infra names like "postgres-json-keys" have no cmd dir and pass
 		// naturally.
-		if _, hasCmd := cmdNames[csName]; hasCmd {
+		if len(cs.Profiles) == 0 {
+			if _, hasCmd := cmdNames[csName]; hasCmd {
+				errs = append(errs, DiscoveryError{
+					Service: name,
+					Path:    composePath,
+					Reason:  fmt.Sprintf("compose service %q has no profile but a matching cmd/%s/ exists — declare profiles:[%q] to make it a target, or rename the cmd dir", csName, csName, csName),
+				})
+				delete(cmdNames, csName)
+				continue
+			}
+			svc.Infra = append(svc.Infra, &Infra{
+				Name:        csName,
+				Service:     name,
+				Stack:       stack,
+				DependsOn:   deps,
+				Ports:       cs.Ports,
+				Environment: cs.Environment,
+			})
+			continue
+		}
+
+		// The first profile is canonical: by convention a target declares a
+		// single profile whose name matches its cmd dir.
+		profile := cs.Profiles[0]
+		cmdDir, hasCmd := cmdNames[profile]
+		if !hasCmd {
 			errs = append(errs, DiscoveryError{
 				Service: name,
 				Path:    composePath,
-				Reason:  fmt.Sprintf("compose service %q has no profile but a matching cmd/%s/ exists — declare profiles:[%q] to make it a target, or rename the cmd dir", csName, csName, csName),
+				Reason:  fmt.Sprintf("compose service %q has profiles:[%q] but no matching cmd/%s/", csName, profile, profile),
 			})
-			delete(cmdNames, csName)
 			continue
 		}
-		hasHC := cs.Healthcheck != nil
-		if !hasHC && dockerfileAbs != "" {
-			hasHC = dockerfileHasHealthcheck(dockerfileAbs)
+		// Classify by healthcheck presence, compose first. Compose resolves
+		// the build context against the compose file's directory, and the
+		// Dockerfile against that context.
+		kind := TargetKindOneShot
+		if cs.Healthcheck != nil || cs.Build != nil && cs.Build.Dockerfile != "" &&
+			dockerfileHasHealthcheck(filepath.Join(filepath.Dir(composePath), cs.Build.Context, cs.Build.Dockerfile)) {
+			kind = TargetKindLongRunner
 		}
-		svc.Infra = append(svc.Infra, &Infra{
-			Name:           csName,
-			Service:        name,
-			Stack:          stack,
-			Dockerfile:     dockerfileAbs,
-			HasHealthcheck: hasHC,
-			DependsOn:      depList,
-			Ports:          cs.Ports,
-			Environment:    map[string]string(cs.Environment),
-			Volumes:        cs.Volumes,
+		svc.Targets = append(svc.Targets, &Target{
+			Name:        profile,
+			ComposeName: csName,
+			Service:     name,
+			Stack:       stack,
+			Kind:        kind,
+			CmdDir:      cmdDir,
+			DependsOn:   deps,
+			Ports:       cs.Ports,
+			Environment: cs.Environment,
 		})
+		// Mark this cmd as matched, leaving only orphans behind for the check
+		// below.
+		delete(cmdNames, profile)
 	}
 
 	// A cmd/ entry left unmatched is an orphan: without a compose mirror it
@@ -339,23 +363,13 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 		})
 	}
 
-	// Volumes and networks declared at top-level.
-	for vName := range cf.Volumes {
-		svc.Volumes = append(svc.Volumes, &Volume{
-			Name:    vName,
-			Service: name,
-			Stack:   stack,
-		})
-	}
-	for nName := range cf.Networks {
-		svc.Networks = append(svc.Networks, nName)
+	for _, vName := range slices.Sorted(maps.Keys(cf.Volumes)) {
+		svc.Volumes = append(svc.Volumes, &Volume{Name: vName, Service: name, Stack: stack})
 	}
 
 	// Stable sort for deterministic output.
-	sort.Slice(svc.Targets, func(i, j int) bool { return svc.Targets[i].Name < svc.Targets[j].Name })
-	sort.Slice(svc.Infra, func(i, j int) bool { return svc.Infra[i].Name < svc.Infra[j].Name })
-	sort.Slice(svc.Volumes, func(i, j int) bool { return svc.Volumes[i].Name < svc.Volumes[j].Name })
-	sort.Strings(svc.Networks)
+	slices.SortFunc(svc.Targets, func(a, b *Target) int { return cmp.Compare(a.Name, b.Name) })
+	slices.SortFunc(svc.Infra, func(a, b *Infra) int { return cmp.Compare(a.Name, b.Name) })
 
 	return svc, errs
 }

@@ -25,12 +25,9 @@ var envRefRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}`)
 //
 // Anything else warns. Compose still substitutes an empty string at runtime,
 // and the warning surfaces the gap.
-func ValidateEnvRefs(stacks []*Stack) {
+func ValidateEnvRefs(stacks Stacks) {
 	for _, st := range stacks {
-		serviceNames := make([]string, 0, len(st.Services))
-		for _, svc := range st.Services {
-			serviceNames = append(serviceNames, svc.Name)
-		}
+		serviceNames := Stacks{st}.ServiceNames()
 		for _, svc := range st.Services {
 			st.Errors = append(st.Errors, validateService(svc, serviceNames)...)
 		}

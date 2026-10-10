@@ -86,8 +86,6 @@ func (r *Runner) StartContainer(ctx context.Context, id string, env []string, wa
 	}
 
 	project := composeProjectName(svc.Stack, svc.Name)
-	composeFile := svc.ComposePath
-	profile := tgt.Profile
 
 	// Register the instance early so concurrent Start callers see the
 	// slot occupied.
@@ -112,8 +110,8 @@ func (r *Runner) StartContainer(ctx context.Context, id string, env []string, wa
 	args := []string{
 		"compose",
 		"-p", project,
-		"-f", composeFile,
-		"--profile", profile,
+		"-f", svc.ComposePath,
+		"--profile", tgt.Name,
 		containerLabelArgs(svc.Stack, svc.Name, tgt.Name),
 		"up", "-d", "--build", "--no-deps",
 	}

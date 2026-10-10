@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -87,7 +86,7 @@ func (r *Runner) adoptEntries(ctx context.Context, entries []podmanEntry) (int, 
 		}
 
 		// Target container — find it in discovery and reconstitute.
-		tgt := r.findTargetInDiscovery(stack, service, target)
+		tgt, _ := r.stacks.Target(stack + "/" + service + "/" + target)
 		if tgt == nil {
 			// Discovery does not know this target, so the compose file
 			// changed since the container was created. Leave it orphaned
@@ -154,7 +153,7 @@ func (r *Runner) reseedAllocator(ctx context.Context, stack, service, cid string
 	// names. Container names follow compose's `<project>_<infraName>_N`
 	// pattern, and infraName picks the right Infra record among the several a
 	// service may declare.
-	svc := r.findServiceInDiscovery(stack, service)
+	svc := r.stacks.Service(stack, service)
 	if svc == nil {
 		return
 	}
@@ -175,13 +174,7 @@ func (r *Runner) reseedAllocator(ctx context.Context, stack, service, cid string
 	if infraName == "" {
 		return
 	}
-	var infra *discovery.Infra
-	for _, in := range svc.Infra {
-		if in.Name == infraName {
-			infra = in
-			break
-		}
-	}
+	infra := svc.FindInfra(infraName)
 	if infra == nil {
 		return
 	}
@@ -223,22 +216,6 @@ func (r *Runner) reseedAllocator(ctx context.Context, stack, service, cid string
 		}
 		r.alloc.Reserve(service, varName, hostPort, consumer)
 	}
-}
-
-// findServiceInDiscovery returns the discovery record for (stack, service),
-// or nil if not found.
-func (r *Runner) findServiceInDiscovery(stack, service string) *discovery.Service {
-	for _, st := range r.discovery {
-		if st.Name != stack {
-			continue
-		}
-		for _, svc := range st.Services {
-			if svc.Name == service {
-				return svc
-			}
-		}
-	}
-	return nil
 }
 
 // containerInfraNameRe matches the trailing infra name in compose's
@@ -295,28 +272,6 @@ func (r *Runner) markInfraSessionUp(stack, service string) {
 		OneShotResults:     make(map[string]anovelv1.ExitReason),
 		AllocationConsumer: key + "-infra",
 	}
-}
-
-// findTargetInDiscovery is the adoption-time target lookup. Returns nil
-// if the (stack, service, target) triple doesn't match anything the
-// daemon discovered.
-func (r *Runner) findTargetInDiscovery(stack, service, target string) *discovery.Target {
-	for _, st := range r.discovery {
-		if st.Name != stack {
-			continue
-		}
-		for _, svc := range st.Services {
-			if svc.Name != service {
-				continue
-			}
-			for _, t := range svc.Targets {
-				if t.Name == target {
-					return t
-				}
-			}
-		}
-	}
-	return nil
 }
 
 // translatePodmanStatus maps podman's status string into our Phase +

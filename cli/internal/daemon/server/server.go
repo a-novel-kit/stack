@@ -43,15 +43,15 @@ var _ anovelv1connect.CoreServiceHandler = (*Server)(nil)
 // across RPC calls.
 type Server struct {
 	mu         sync.RWMutex
-	version    string             // daemon binary version (from build info)
-	startedAt  time.Time          // for uptime calculation
-	socketPath string             // for Status responses
-	stacks     []stacks.Stack     // raw config from $A_NOVEL_STACKS
-	discovered []*discovery.Stack // per-stack service tree
-	runner     *runner.Runner     // process / container supervisor
-	envAlloc   *env.Allocator     // port allocator + refcount
-	envBuilder *env.Builder       // env block synthesis
-	logs       *logs.Store        // per-target log files + streaming hub
+	version    string           // daemon binary version (from build info)
+	startedAt  time.Time        // for uptime calculation
+	socketPath string           // for Status responses
+	stacks     []stacks.Stack   // raw config from $A_NOVEL_STACKS
+	discovered discovery.Stacks // per-stack service tree
+	runner     *runner.Runner   // process / container supervisor
+	envAlloc   *env.Allocator   // port allocator + refcount
+	envBuilder *env.Builder     // env block synthesis
+	logs       *logs.Store      // per-target log files + streaming hub
 	// shutdownCh closes to tell the daemon's main loop to exit cleanly.
 	// SignalShutdown fires it, idempotently.
 	shutdownCh   chan struct{}
@@ -59,7 +59,7 @@ type Server struct {
 }
 
 // New constructs a Server with every daemon-side subsystem wired up.
-func New(version, socketPath string, stk []stacks.Stack, disc []*discovery.Stack, run *runner.Runner, alloc *env.Allocator, builder *env.Builder, logStore *logs.Store) *Server {
+func New(version, socketPath string, stk []stacks.Stack, disc discovery.Stacks, run *runner.Runner, alloc *env.Allocator, builder *env.Builder, logStore *logs.Store) *Server {
 	return &Server{
 		version:    version,
 		startedAt:  time.Now(),
@@ -87,31 +87,18 @@ func (s *Server) SignalShutdown() {
 // allServiceNames returns every service name across every stack, which the env
 // builder needs to detect cross-service prefixes.
 func (s *Server) allServiceNames() []string {
-	var out []string
-	for _, st := range s.discovered {
-		for _, svc := range st.Services {
-			out = append(out, svc.Name)
-		}
-	}
-	return out
+	return s.discovered.ServiceNames()
 }
 
-// findStack returns the discovered Stack named `name`, or the default first
-// stack when the name is empty. An unknown name yields a connect.Error.
+// findStack returns the discovered Stack named `name`, or the default stack
+// when the name is empty. An unknown name yields a connect.Error.
 func (s *Server) findStack(name string) (*discovery.Stack, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	if len(s.discovered) == 0 {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			"no stacks registered (set A_NOVEL_STACKS)")
 	}
-	if name == "" {
-		return s.discovered[0], nil
-	}
-	for _, st := range s.discovered {
-		if st.Name == name {
-			return st, nil
-		}
+	if st := s.discovered.Stack(name); st != nil {
+		return st, nil
 	}
 	return nil, connect.Errorf(connect.CodeNotFound,
 		"stack %q not registered", name)
@@ -124,10 +111,8 @@ func (s *Server) findService(stackName, serviceName string) (*discovery.Service,
 	if err != nil {
 		return nil, err
 	}
-	for _, svc := range st.Services {
-		if svc.Name == serviceName {
-			return svc, nil
-		}
+	if svc := s.discovered.Service(st.Name, serviceName); svc != nil {
+		return svc, nil
 	}
 	return nil, connect.Errorf(connect.CodeNotFound,
 		"service %q not found in stack %q", serviceName, st.Name)
@@ -499,14 +484,8 @@ func (s *Server) StartTarget(ctx context.Context, req *anovelv1.StartTargetReque
 // findTargetByID resolves a "<stack>/<service>/<target>" ID into its discovery
 // objects.
 func (s *Server) findTargetByID(id string) (*discovery.Target, *discovery.Service, error) {
-	for _, st := range s.discovered {
-		for _, svc := range st.Services {
-			for _, t := range svc.Targets {
-				if t.ID() == id {
-					return t, svc, nil
-				}
-			}
-		}
+	if t, svc := s.discovered.Target(id); t != nil {
+		return t, svc, nil
 	}
 	return nil, nil, fmt.Errorf("unknown target %q", id)
 }
@@ -560,25 +539,8 @@ func (s *Server) RestartTarget(ctx context.Context, req *anovelv1.RestartTargetR
 // lookupTargetForInstance returns the discovery.Target behind an Instance, so a
 // proto response can carry the static metadata the runner does not track.
 func (s *Server) lookupTargetForInstance(inst *runner.Instance) *discovery.Target {
-	if inst.ID == "" {
-		return nil
-	}
-	for _, st := range s.discovered {
-		if st.Name != inst.Stack {
-			continue
-		}
-		for _, svc := range st.Services {
-			if svc.Name != inst.Service {
-				continue
-			}
-			for _, t := range svc.Targets {
-				if t.Name == inst.Target {
-					return t
-				}
-			}
-		}
-	}
-	return nil
+	t, _ := s.discovered.Target(inst.ID)
+	return t
 }
 
 // StartInfra brings up a service's infrastructure containers and auto-runs
@@ -644,7 +606,7 @@ func (s *Server) KillInfraContainer(ctx context.Context, req *anovelv1.KillInfra
 	if err != nil {
 		return nil, err
 	}
-	in := findInfra(svc, req.GetName())
+	in := svc.FindInfra(req.GetName())
 	if in == nil {
 		return nil, connect.Errorf(connect.CodeNotFound,
 			"infra %q not declared in %s/%s", req.GetName(), stack, svc.Name)
@@ -668,7 +630,7 @@ func (s *Server) RestartInfraContainer(ctx context.Context, req *anovelv1.Restar
 	if err != nil {
 		return nil, err
 	}
-	in := findInfra(svc, req.GetName())
+	in := svc.FindInfra(req.GetName())
 	if in == nil {
 		return nil, connect.Errorf(connect.CodeNotFound,
 			"infra %q not declared in %s/%s", req.GetName(), stack, svc.Name)
@@ -679,17 +641,6 @@ func (s *Server) RestartInfraContainer(ctx context.Context, req *anovelv1.Restar
 	return &anovelv1.RestartInfraContainerResponse{
 		Infra: s.convertInfraWithLive(in, s.liveInfraStates(svc.Stack)),
 	}, nil
-}
-
-// findInfra returns the named infra in a discovery.Service, or nil when the
-// service does not declare it.
-func findInfra(svc *discovery.Service, name string) *discovery.Infra {
-	for _, in := range svc.Infra {
-		if in.Name == name {
-			return in
-		}
-	}
-	return nil
 }
 
 // convertModeFromProto maps proto Mode → runner.Mode.
