@@ -23,7 +23,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -189,15 +191,13 @@ func (s *Store) ListRuns(stack, service, target string) []string {
 	}
 	var out []string
 	for _, e := range entries {
-		name := e.Name()
-		if len(name) < len("run-") || name[:4] != "run-" {
-			continue
+		stamp, ok := strings.CutPrefix(e.Name(), "run-")
+		if stamp, isLog := strings.CutSuffix(stamp, ".log"); ok && isLog {
+			out = append(out, stamp)
 		}
-		// strip "run-" prefix and ".log" suffix
-		stamp := name[4 : len(name)-len(".log")]
-		out = append(out, stamp)
 	}
-	sort.Sort(sort.Reverse(sort.StringSlice(out)))
+	slices.Sort(out)
+	slices.Reverse(out)
 	return out
 }
 

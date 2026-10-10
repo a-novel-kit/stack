@@ -3,6 +3,7 @@ package logs
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -162,6 +163,24 @@ func TestStore_NoSubscriberStillWritesFile(t *testing.T) {
 	}
 	if len(data) == 0 {
 		t.Error("log file is empty after a write")
+	}
+}
+
+// TestStore_ListRunsSkipsMalformedNames covers archive names outside the
+// run-<stamp>.log shape, such as a stray run-x, which once panicked the listing.
+func TestStore_ListRunsSkipsMalformedNames(t *testing.T) {
+	s, _, _ := withStore(t)
+	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "a-novel", "logs", "default", "test", "x")
+	for _, name := range []string{"run-x", "run-", "run-2026-07-01.log", "run-2026-07-02.log", "notes.log"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got := s.ListRuns("default", "test", "x")
+
+	if want := []string{"2026-07-02", "2026-07-01"}; !slices.Equal(got, want) {
+		t.Errorf("ListRuns: got %q, want %q", got, want)
 	}
 }
 
