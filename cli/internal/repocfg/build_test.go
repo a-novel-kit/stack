@@ -484,3 +484,33 @@ func TestBuildPlanDependabotBypassFollowsSecurityUpdates(t *testing.T) {
 		})
 	}
 }
+
+// TestBuildPlanAssertsCodeQuality pins that GitHub Code Quality, which bills per
+// active committer and per AI credit, follows the class code_quality flag on
+// every repo.
+func TestBuildPlanAssertsCodeQuality(t *testing.T) {
+	t.Parallel()
+
+	for flag, want := range map[bool]string{false: "not-configured", true: "configured"} {
+		t.Run(want, func(t *testing.T) {
+			t.Parallel()
+			plan, err := BuildPlan(&RepoTarget{
+				Org: "a-novel", Repo: "example",
+				Class:      &ClassPreset{CodeQuality: flag},
+				Discovered: &Discovered{},
+			})
+			if err != nil {
+				t.Fatalf("BuildPlan: %v", err)
+			}
+			for _, op := range plan.Ops {
+				if op.Method == http.MethodPatch && op.Path == "repos/a-novel/example/code-quality/setup" {
+					if got := op.Body.(map[string]any)["state"]; got != want {
+						t.Fatalf("code quality state = %v, want %s", got, want)
+					}
+					return
+				}
+			}
+			t.Fatal("plan carries no code-quality setup op")
+		})
+	}
+}

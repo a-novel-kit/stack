@@ -843,3 +843,33 @@ func TestGhError(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyCodeQuality(t *testing.T) {
+	op := repocfg.Op{
+		Method: "PATCH",
+		Path:   "repos/o/r/code-quality/setup",
+		Body:   map[string]any{"state": "not-configured"},
+	}
+	for _, tc := range []struct {
+		name, current, wantDetail string
+		wantPatch                 bool
+	}{
+		{name: "Success/AlreadyOff", current: "not-configured\n", wantDetail: opUnchanged},
+		{name: "Success/TurnsOff", current: "configured\n", wantDetail: "not-configured", wantPatch: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := fakeGH(t, map[string]string{"api repos/o/r/code-quality/setup --jq": tc.current})
+			detail, err := applyCodeQuality(op)
+			if err != nil {
+				t.Fatalf("applyCodeQuality: %v", err)
+			}
+			if detail != tc.wantDetail {
+				t.Fatalf("detail = %q, want %q", detail, tc.wantDetail)
+			}
+			patched := slices.ContainsFunc(*calls, func(c string) bool { return strings.Contains(c, "-X PATCH repos/o/r/code-quality/setup") })
+			if patched != tc.wantPatch {
+				t.Fatalf("PATCH sent = %v, want %v (calls %q)", patched, tc.wantPatch, *calls)
+			}
+		})
+	}
+}

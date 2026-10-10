@@ -107,6 +107,9 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 		case strings.HasSuffix(op.Path, "/code-scanning/default-setup"):
 			detail, err := applyCodeScanning(op)
 			note(err == nil, "code scanning", ternErr(err, detail))
+		case strings.HasSuffix(op.Path, "/code-quality/setup"):
+			detail, err := applyCodeQuality(op)
+			note(err == nil, "code quality", ternErr(err, detail))
 		case strings.HasSuffix(op.Path, "/labels"):
 			detail, err := applyLabels(org, repo, op)
 			note(err == nil, "labels", ternErr(err, detail))
@@ -399,6 +402,27 @@ func applyCodeScanning(op repocfg.Op) (string, error) {
 		return "", err
 	}
 	return "default setup off", nil
+}
+
+// applyCodeQuality reconciles the GitHub Code Quality setup state. It writes
+// only on a change: an update starts a setup run, so reasserting a matching
+// state would spend one for nothing.
+func applyCodeQuality(op repocfg.Op) (string, error) {
+	body, ok := op.Body.(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("code quality body is %T, want map", op.Body)
+	}
+	current, err := gh("api", op.Path, "--jq", ".state")
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(current) == body["state"] {
+		return opUnchanged, nil
+	}
+	if err := ghJSON(http.MethodPatch, op.Path, body); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%v", body["state"]), nil
 }
 
 // applyPages reconciles the Pages site. A missing site is already disabled; an
