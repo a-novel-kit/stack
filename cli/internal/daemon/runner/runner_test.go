@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -78,5 +79,32 @@ func TestLaunchReleasesTheClaimsOfAFailedSpawn(t *testing.T) {
 	}
 	if snap := alloc.Snapshot(); len(snap) != 0 {
 		t.Errorf("a failed spawn kept its claims: %+v", snap)
+	}
+}
+
+// TestRelaunchClaimsTheCheckpointedPorts covers the reinstall replay. The
+// relaunched process binds the ports the previous daemon gave it, so the new
+// daemon must hold them for it: a replay that skipped the allocator let the
+// next consumer of REST_PORT draw a fresh port the process never bound.
+func TestRelaunchClaimsTheCheckpointedPorts(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	// The runner spawns `go run`; a stand-in go that only sleeps keeps the
+	// toolchain out of the test.
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "go"), []byte("#!/bin/sh\nexec sleep 30\n"), 0o700); err != nil { //nolint:gosec // an executable fixture
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	r, alloc, tgt := newRunnerForLaunch()
+	tgt.CmdDir = filepath.Join(t.TempDir(), "cmd", "rest")
+
+	if err := r.Relaunch(t.Context(), tgt.ID(), []string{"REST_PORT=41234"}); err != nil {
+		t.Fatalf("Relaunch: %v", err)
+	}
+	t.Cleanup(func() { _ = r.Kill(context.Background(), tgt.ID(), 0) })
+
+	snap := alloc.Snapshot()
+	if len(snap) != 1 || snap[0].Port != 41234 || len(snap[0].Refs) != 1 || snap[0].Refs[0] != tgt.ID() {
+		t.Errorf("allocations after relaunch = %+v, want svc/REST_PORT=41234 held by %s", snap, tgt.ID())
 	}
 }

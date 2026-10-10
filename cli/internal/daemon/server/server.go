@@ -146,7 +146,7 @@ func (s *Server) Status(_ context.Context, _ *anovelv1.StatusRequest) (*anovelv1
 }
 
 // PrepareReinstall writes a checkpoint listing every running go-exec target
-// with the env to relaunch it, fsyncs it, stops those targets, then signals the
+// with the ports to relaunch it on, fsyncs it, stops those targets, then signals the
 // daemon to shut down. Containers stay out, surviving the daemon's death on
 // their own.
 //
@@ -156,25 +156,15 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *anovelv1.PrepareReinstal
 	if err := reinstall.EnsureSinglePending(); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
-	// An instance never stores the env it started with, so the checkpoint
-	// re-derives it from the env builder. The target still holds its port
-	// claims, so the env names the ports it runs on, and the new daemon
-	// relaunches it on those same ports.
+	// A running target still holds its port claims, so the checkpoint records
+	// those ports and the new daemon relaunches it on them. It records nothing
+	// else: the relaunch rebuilds the env, so no secret reaches the file.
 	ids := s.liveGoExecIDs()
 	cp := reinstall.Checkpoint{}
 	for _, id := range ids {
-		t, _ := s.stacks.Target(id)
-		if t == nil {
-			continue
+		if t, _ := s.stacks.Target(id); t != nil {
+			cp.GoExec = append(cp.GoExec, reinstall.GoExecCheckpoint{TargetID: id, Env: s.envBuilder.HeldPorts(t)})
 		}
-		envEntries, _, err := s.envBuilder.ForTarget(t)
-		if err != nil {
-			continue
-		}
-		cp.GoExec = append(cp.GoExec, reinstall.GoExecCheckpoint{
-			TargetID: id,
-			Env:      env.Environ(envEntries),
-		})
 	}
 	if err := reinstall.Write(cp); err != nil {
 		return nil, connect.Errorf(connect.CodeInternal, "write checkpoint: %v", err).WithCause(err)

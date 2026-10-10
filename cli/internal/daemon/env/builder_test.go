@@ -304,3 +304,113 @@ func TestForService_ConsumerAllocatesInfraPorts(t *testing.T) {
 		t.Errorf("port %d still allocated after releasing the infra consumer", port)
 	}
 }
+
+// TestBuilderKeepPorts covers the reinstall relaunch: the ports the previous
+// daemon recorded are reserved for the target, so its env and every other
+// consumer resolve to what the relaunched process binds.
+func TestBuilderKeepPorts(t *testing.T) {
+	t.Parallel()
+
+	target := func() *discovery.Target {
+		return &discovery.Target{
+			Name: "rest", Service: "svc", Stack: "default",
+			Ports: []string{"${REST_PORT}:8080"},
+			Environment: map[string]string{
+				"DEP_PORT": "${SERVICE_OTHER_GRPC_PORT}",
+				// A constant named like a port is no reference, so it claims nothing.
+				"ALIAS_PORT": "1234",
+			},
+		}
+	}
+	held := []string{"REST_PORT=41001", "SERVICE_OTHER_GRPC_PORT=41002", "ALIAS_PORT=41003", "STRAY_PORT=41004", "PATH=/bin"}
+
+	cases := []struct {
+		name string
+		// seed reserves a slot before KeepPorts runs, as adopting a container does.
+		seed     func(a *Allocator)
+		wantRest int
+	}{
+		{name: "Success/KeepsReferencedPorts", seed: func(*Allocator) {}, wantRest: 41001},
+		{name: "Success/AllocatedSlotKeepsItsPort", seed: func(a *Allocator) { a.Reserve("svc", "REST_PORT", 40000, "default/svc-infra") }, wantRest: 40000},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			b, alloc := newBuilderWith([]string{"svc", "service-other"})
+			c.seed(alloc)
+			tgt := target()
+			b.KeepPorts(tgt, held)
+
+			entries, _, err := b.ForTarget(tgt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			env := toMap(entries)
+			if env["REST_PORT"] != strconv.Itoa(c.wantRest) || env["DEP_PORT"] != "41002" || env["ALIAS_PORT"] != "1234" {
+				t.Errorf("env: REST_PORT=%s DEP_PORT=%s ALIAS_PORT=%s, want %d, 41002, 1234",
+					env["REST_PORT"], env["DEP_PORT"], env["ALIAS_PORT"], c.wantRest)
+			}
+			snap := alloc.Snapshot()
+			claimed := make([]string, len(snap))
+			for i, slot := range snap {
+				claimed[i] = slot.Owner + "/" + slot.LocalVar
+			}
+			if want := []string{"service-other/GRPC_PORT", "svc/REST_PORT"}; strings.Join(claimed, ",") != strings.Join(want, ",") {
+				t.Errorf("claimed slots %v, want %v", claimed, want)
+			}
+			// A sibling consumer resolves the kept port, not a fresh one.
+			sibling := &discovery.Target{
+				Name: "web", Service: "service-other", Stack: "default",
+				Environment: map[string]string{"API_PORT": "${SVC_REST_PORT}"},
+			}
+			siblingEnv, _, err := b.ForTarget(sibling)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := toMap(siblingEnv)["API_PORT"]; got != strconv.Itoa(c.wantRest) {
+				t.Errorf("sibling API_PORT = %s, want %d", got, c.wantRest)
+			}
+			// Releasing the relaunched target drops its claims like any other.
+			alloc.Release(tgt.ID())
+			alloc.Release(sibling.ID())
+			if _, ok := alloc.Lookup("service-other", "GRPC_PORT"); ok {
+				t.Error("service-other/GRPC_PORT outlived its consumers")
+			}
+		})
+	}
+}
+
+// TestBuilderHeldPorts pins the checkpoint side: the ports a running target
+// holds, named as its env references them, and nothing else, so the next
+// daemon's KeepPorts hands them straight back.
+func TestBuilderHeldPorts(t *testing.T) {
+	t.Parallel()
+
+	b, alloc := newBuilderWith([]string{"svc", "service-other"})
+	tgt := &discovery.Target{
+		Name: "rest", Service: "svc", Stack: "default",
+		Ports:       []string{"${REST_PORT}:8080"},
+		Environment: map[string]string{"DEP_PORT": "${SERVICE_OTHER_GRPC_PORT}", "TOKEN": "secret-value"},
+	}
+	if _, _, err := b.ForTarget(tgt); err != nil {
+		t.Fatal(err)
+	}
+	rest, _ := alloc.Lookup("svc", "REST_PORT")
+	grpc, _ := alloc.Lookup("service-other", "GRPC_PORT")
+
+	held := b.HeldPorts(tgt)
+	want := []string{"REST_PORT=" + strconv.Itoa(rest), "SERVICE_OTHER_GRPC_PORT=" + strconv.Itoa(grpc)}
+	if strings.Join(held, ",") != strings.Join(want, ",") {
+		t.Fatalf("HeldPorts = %v, want %v", held, want)
+	}
+
+	next, nextAlloc := newBuilderWith([]string{"svc", "service-other"})
+	next.KeepPorts(tgt, held)
+	if got, _ := nextAlloc.Lookup("svc", "REST_PORT"); got != rest {
+		t.Errorf("next daemon REST_PORT = %d, want %d", got, rest)
+	}
+	if got, _ := nextAlloc.Lookup("service-other", "GRPC_PORT"); got != grpc {
+		t.Errorf("next daemon SERVICE_OTHER_GRPC_PORT = %d, want %d", got, grpc)
+	}
+}
