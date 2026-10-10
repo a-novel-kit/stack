@@ -165,6 +165,37 @@ func TestRecoverPRsGovernance(t *testing.T) {
 	}
 }
 
+// TestAutoApproveHoldsReleaseAge pins what the approval engine needs to enforce
+// Renovate's release age: the status event that reports it, and the statuses
+// read the App lacks. A nested job asking for more than its caller grants fails.
+func TestAutoApproveHoldsReleaseAge(t *testing.T) {
+	t.Parallel()
+	content, err := os.ReadFile("templates/governance/auto-approve-dependabot.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		On   map[string]any `yaml:"on"`
+		Jobs map[string]struct {
+			If          string            `yaml:"if"`
+			Permissions map[string]string `yaml:"permissions"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(content, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := workflow.On["status"]; !ok {
+		t.Error("auto-approve must trigger on status to approve once renovate/stability-days turns green")
+	}
+	job := workflow.Jobs["auto-approve"]
+	if job.Permissions["statuses"] != "read" {
+		t.Errorf("auto-approve permissions = %v, want statuses: read", job.Permissions)
+	}
+	if !strings.Contains(job.If, "'renovate/stability-days'") || !strings.Contains(job.If, "'success'") {
+		t.Error("auto-approve must only run for the stability status turning green")
+	}
+}
+
 // TestLockClosedGovernance pins when conversations lock: only once an issue or
 // pull request closes. A locked conversation refuses a GitHub App's review, so
 // locking an open pull request would block the dependency bots' approval.
