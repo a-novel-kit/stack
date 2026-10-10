@@ -46,7 +46,7 @@ func Run() error {
 	if _, err := c.Ping(ctx); err != nil {
 		return err
 	}
-	m := newModel(c)
+	m := &model{c: c}
 	// Mouse-cell-motion capture stays off, so the terminal keeps its own
 	// click-drag text selection. This keyboard-driven UI needs it for
 	// copying log lines out.
@@ -59,10 +59,6 @@ func Run() error {
 }
 
 const (
-	// tabKindInfra is the activeTabKind value for an infra entry.
-	tabKindInfra = "infra"
-	// tabKindTarget is the activeTabKind value for a runnable target.
-	tabKindTarget = "target"
 	// modeContainer names container mode in palette args like ":start
 	// container" and in renderRight's header label. The CLI and RPC
 	// layers use the typed anovelv1.Mode_MODE_* enums; these strings
@@ -99,7 +95,8 @@ type model struct {
 	// selectedTab is the combined index into [infras..., targets...].
 	// Indices below len(svc.Infra) address infras; the rest address
 	// targets at i-len(svc.Infra). The single sequence lets `←/→` cycle
-	// through both kinds, and consumers branch on activeTabKind().
+	// through both kinds, and consumers branch on activeInfra and
+	// activeTarget.
 	selectedTab int
 	// Log streaming.
 	logLines     []*anovelv1.LogLine
@@ -112,8 +109,7 @@ type model struct {
 	// the bottom, so new lines push the view forward. A positive value
 	// means the user paged up: the view holds at
 	// `logLines[len-h-scroll : len-scroll]` while new lines accumulate in
-	// the buffer. Reset to 0 on a tab or service switch, and after a
-	// successful action, whose log file may have been truncated.
+	// the buffer. followSelectedLogs resets it along with the buffer.
 	logScroll  int
 	cmdInput   string // command-palette input buffer, leading ":" included
 	topologyTx string // last GetTopology response, rendered by viewTopology
@@ -140,9 +136,12 @@ type statusEntry struct {
 	at    time.Time
 }
 
-func newModel(c *rpc.Client) *model {
-	return &model{c: c, view: viewMain}
-}
+// maxLogLines bounds the log buffer so a chatty target cannot grow the
+// model without limit.
+const maxLogLines = 500
+
+// statusInfoTTL is how long an info status stays before it fades.
+const statusInfoTTL = 5 * time.Second
 
 func (m *model) Init() tea.Cmd {
 	return tea.Batch(refreshServicesCmd(m.c), tickEvery(2*time.Second))
@@ -164,10 +163,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.selectedSvc >= len(m.services) {
 			m.selectedSvc = 0
 		}
-		if m.selectedSvc < len(m.services) {
-			if m.selectedTab >= m.tabCount() {
-				m.selectedTab = 0
-			}
+		if m.selectedTab >= m.tabCount() {
+			m.selectedTab = 0
 		}
 		return m, nil
 
@@ -180,9 +177,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case statusMsg:
 		m.status = msg.entry
-		if msg.entry.level == statusInfo {
-			return m, fadeStatusAfter(5 * time.Second)
-		}
 		return m, nil
 
 	case actionResultMsg:
@@ -195,43 +189,37 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = statusEntry{level: statusInfo, text: msg.successText, at: time.Now()}
 		// A successful action may have replaced the log file: kill+restart
 		// truncates via O_TRUNC, and even a plain start opens a fresh one.
-		// Drop the stale buffer, reset the scroll and reattach the
-		// follower so it streams history then tail. The generation counter
-		// inside followSelectedLogs discards in-flight messages from the
-		// previous follower.
-		m.logLines = nil
-		m.logScroll = 0
-		return m, tea.Batch(refreshServicesCmd(m.c), fadeStatusAfter(5*time.Second), m.followSelectedLogs())
+		// Reattaching the follower restarts the buffer from that file.
+		m.followSelectedLogs()
+		return m, tea.Batch(
+			refreshServicesCmd(m.c),
+			tea.Tick(statusInfoTTL, func(time.Time) tea.Msg { return statusFadeMsg{} }),
+		)
 
 	case statusFadeMsg:
 		// Only info fades: busy is still in-flight, and an error is sticky
 		// until the user acts again.
-		if m.status.level == statusInfo && time.Since(m.status.at) >= 5*time.Second {
+		if m.status.level == statusInfo && time.Since(m.status.at) >= statusInfoTTL {
 			m.status = statusEntry{}
 		}
 		return m, nil
 
-	case logsMsg:
+	case logLineMsg:
 		// Drop messages from a stale follower generation. They arrive
 		// during the cancel-then-start race window on a tab or service
 		// switch, so only the current generation reaches the view.
 		if msg.gen != m.followGen {
 			return m, nil
 		}
-		m.logLines = append(m.logLines, msg.lines...)
-		// While paused, shift the offset by however many lines arrived so
-		// the visible window keeps showing the same absolute lines.
-		if m.logScroll > 0 {
-			m.logScroll += len(msg.lines)
+		m.logLines = append(m.logLines, msg.line)
+		if len(m.logLines) > maxLogLines {
+			m.logLines = m.logLines[len(m.logLines)-maxLogLines:]
 		}
-		// Bound to last 500 lines so the model doesn't grow unbounded.
-		if len(m.logLines) > 500 {
-			m.logLines = m.logLines[len(m.logLines)-500:]
-		}
-		// If trimming pushed the paused window past the buffer, snap back
-		// to the furthest offset that still shows a full window.
+		// While paused, the offset moves past the new line so the window
+		// keeps showing the same lines. Clamping snaps it back when trimming
+		// pushed that window past the buffer.
 		if m.logScroll > 0 {
-			m.logScroll = m.clampLogScroll(m.logScroll)
+			m.logScroll = m.clampLogScroll(m.logScroll + 1)
 		}
 		return m, nil
 
@@ -264,125 +252,90 @@ func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "?":
 		m.view = viewHelp
-		return m, nil
 	case "esc":
 		m.view = viewCommand
 		m.cmdInput = ":"
-		return m, nil
 	case "j", "down":
-		if len(m.services) > 0 {
-			m.selectedSvc = (m.selectedSvc + 1) % len(m.services)
-			m.selectedTab = 0
-			m.logLines = nil
-			m.logScroll = 0
-		}
-		return m, m.followSelectedLogs()
+		m.moveService(1)
 	case "k", "up":
-		if len(m.services) > 0 {
-			m.selectedSvc--
-			if m.selectedSvc < 0 {
-				m.selectedSvc = len(m.services) - 1
-			}
-			m.selectedTab = 0
-			m.logLines = nil
-			m.logScroll = 0
-		}
-		return m, m.followSelectedLogs()
+		m.moveService(-1)
 	case "l", "right", "tab":
-		if m.tabCount() > 0 {
-			m.selectedTab = (m.selectedTab + 1) % m.tabCount()
-			m.logLines = nil
-			m.logScroll = 0
-		}
-		return m, m.followSelectedLogs()
+		m.moveTab(1)
 	case "h", "left", "shift+tab":
-		if m.tabCount() > 0 {
-			m.selectedTab--
-			if m.selectedTab < 0 {
-				m.selectedTab = m.tabCount() - 1
-			}
-			m.logLines = nil
-			m.logScroll = 0
-		}
-		return m, m.followSelectedLogs()
+		m.moveTab(-1)
 	// Log-pane scrolling: ctrl+up/down step one line, pgup/pgdn jump a
 	// half-page, end/G returns to the tail (auto-follow) and home/g to the
 	// top of the buffered window. clampLogScroll bounds the offset.
 	case "pgup":
 		m.logScroll = m.clampLogScroll(m.logScroll + m.logViewportHeight()/2)
-		return m, nil
 	case "pgdown", "pgdn":
 		m.logScroll = m.clampLogScroll(m.logScroll - m.logViewportHeight()/2)
-		return m, nil
 	case "ctrl+up":
 		m.logScroll = m.clampLogScroll(m.logScroll + 1)
-		return m, nil
 	case "ctrl+down":
 		m.logScroll = m.clampLogScroll(m.logScroll - 1)
-		return m, nil
 	case "home", "g":
 		m.logScroll = m.clampLogScroll(len(m.logLines))
-		return m, nil
 	case "end", "G":
 		m.logScroll = 0
-		return m, nil
 	}
 	return m, nil
 }
 
-// clampLogScroll keeps logScroll inside [0, maxScroll], where maxScroll
-// is the largest offset that still leaves the visible window full
-// (`len(logLines) - contentHeight`). That ceiling stops the user paging
-// back until a single log line shows above the "logs paused" indicator.
-//
-// Zero auto-follows the tail; a positive value pages that many lines
-// back from it. The "−1" accounts for the indicator row renderLogs
-// reserves at the bottom of the pane whenever logScroll > 0.
-func (m *model) clampLogScroll(n int) int {
-	if n < 0 {
-		return 0
+// moveService steps the service selection by delta, wrapping at both ends,
+// and follows the first tab of the newly selected service.
+func (m *model) moveService(delta int) {
+	if n := len(m.services); n > 0 {
+		m.selectedSvc = (m.selectedSvc + delta + n) % n
+		m.selectedTab = 0
+		m.followSelectedLogs()
 	}
-	h := m.logViewportHeight()
-	if n > 0 {
-		// Indicator row will take one line; the actual log content fits
-		// in (h-1) rows.
-		h--
-	}
-	if h < 1 {
-		h = 1
-	}
-	maxScroll := len(m.logLines) - h
-	if maxScroll < 0 {
-		maxScroll = 0
-	}
-	if n > maxScroll {
-		return maxScroll
-	}
-	return n
 }
 
-// logViewportHeight mirrors the height arithmetic in renderRight so
-// pgup/pgdn jump by a true half-page. The constants must stay in step
-// with renderRight: -4 chrome lines (status bar, footer, two borders),
-// -5 for the header and divider inside the right frame, minus the
-// number of tab rows actually rendered.
+// moveTab steps the tab selection by delta, wrapping at both ends, and
+// follows the newly selected tab.
+func (m *model) moveTab(delta int) {
+	if n := m.tabCount(); n > 0 {
+		m.selectedTab = (m.selectedTab + delta + n) % n
+		m.followSelectedLogs()
+	}
+}
+
+// clampLogScroll keeps logScroll inside [0, maxScroll], where maxScroll
+// is the largest offset that still leaves the visible window full. That
+// ceiling stops the user paging back until a single log line shows above
+// the "logs paused" indicator, which takes one row of the pane whenever
+// logScroll > 0.
+func (m *model) clampLogScroll(n int) int {
+	if n <= 0 {
+		return 0
+	}
+	rows := max(m.logViewportHeight()-1, 1)
+	return min(n, max(len(m.logLines)-rows, 0))
+}
+
+// contentHeight is the height of the nav and right frames: the terminal
+// height less the rows reserved for the status bar, the footer hint and the
+// frame borders.
+func (m *model) contentHeight() int {
+	return m.height - 4
+}
+
+// logViewportHeight is the row count of the log pane. renderRight sizes the
+// pane with it, and pgup/pgdn page by half of it. Inside the right frame,
+// the two borders, the divider, the detail header and each tab strip take
+// one row. The pane keeps at least four.
 func (m *model) logViewportHeight() int {
-	contentHeight := m.height - 4
-	rowCount := 0
-	svc := m.activeService()
-	if svc != nil {
+	h := m.contentHeight() - 4
+	if svc := m.activeService(); svc != nil {
 		if len(svc.GetInfra()) > 0 {
-			rowCount++
+			h--
 		}
 		if len(svc.GetTargets()) > 0 {
-			rowCount++
+			h--
 		}
 	}
-	h := contentHeight - 5 - (rowCount - 1)
-	if h < 4 {
-		h = 4
-	}
-	return h
+	return max(h, 4)
 }
 
 func (m *model) handleCommandKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -429,50 +382,33 @@ func (m *model) tabCount() int {
 	return len(svc.GetTargets()) + len(svc.GetInfra())
 }
 
-// activeTabKind returns "infra", "target", or "" depending on which
-// section the selectedTab index falls into. Infras come first in the
-// index, so the right pane's two-row tab strip renders them on the top
-// row and ←/→ walks the concatenated sequence linearly.
-func (m *model) activeTabKind() string {
-	svc := m.activeService()
-	if svc == nil || m.selectedTab < 0 || m.selectedTab >= m.tabCount() {
-		return ""
-	}
-	if m.selectedTab < len(svc.GetInfra()) {
-		return tabKindInfra
-	}
-	return tabKindTarget
-}
-
-// activeInfra returns the selected infra entry, or nil when the
-// active tab is a target.
+// activeInfra returns the selected infra entry, or nil when no tab or a
+// target tab is selected. Infras come first in the combined tab index.
 func (m *model) activeInfra() *anovelv1.Infra {
-	if m.activeTabKind() != tabKindInfra {
+	infras := m.activeService().GetInfra()
+	if m.selectedTab >= len(infras) {
 		return nil
 	}
-	return m.services[m.selectedSvc].GetInfra()[m.selectedTab]
+	return infras[m.selectedTab]
 }
 
-// activeTarget returns the selected target, or nil when the active
-// tab is an infra entry.
+// activeTarget returns the selected target, or nil when no tab or an infra
+// tab is selected.
 func (m *model) activeTarget() *anovelv1.Target {
-	if m.activeTabKind() != tabKindTarget {
+	svc := m.activeService()
+	i := m.selectedTab - len(svc.GetInfra())
+	if i < 0 || i >= len(svc.GetTargets()) {
 		return nil
 	}
-	svc := m.services[m.selectedSvc]
-	return svc.GetTargets()[m.selectedTab-len(svc.GetInfra())]
+	return svc.GetTargets()[i]
 }
 
-// activeLogID returns the ID format expected by StreamLogs for the
-// currently selected tab — target IDs use the runner's <stack>/<svc>/<tgt>
-// form, infra IDs use the <stack>/<svc>/infra/<name> sentinel.
+// activeLogID returns the ID StreamLogs expects for the selected tab, or ""
+// when none is selected. Targets use the runner's <stack>/<svc>/<tgt> form
+// and infras the <stack>/<svc>/infra/<name> sentinel.
 func (m *model) activeLogID() string {
-	switch m.activeTabKind() {
-	case tabKindTarget:
-		return m.activeTarget().GetId()
-	case tabKindInfra:
-		in := m.activeInfra()
+	if in := m.activeInfra(); in != nil {
 		return in.GetStack() + "/" + in.GetService() + "/infra/" + in.GetName()
 	}
-	return ""
+	return m.activeTarget().GetId()
 }

@@ -11,6 +11,12 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
+// Validation errors shared by the palette verbs that need a selection.
+const (
+	noServiceText = "no active service — select one with ↑/↓ first"
+	noTabText     = "no active tab — select one with ←/→ first"
+)
+
 // servicesMsg carries a fresh ListServices snapshot from the daemon.
 type servicesMsg struct{ services []*anovelv1.Service }
 
@@ -19,9 +25,8 @@ type servicesMsg struct{ services []*anovelv1.Service }
 // the service list is empty.
 type errMsg struct{ err error }
 
-// statusMsg sets the status bar to a given entry. Used for transient
-// state changes (busy → info → idle) and validation errors that don't
-// involve an RPC round trip ("no active target").
+// statusMsg sets the status bar to a given entry: a busy status, or a
+// validation error that involves no RPC round trip ("no active target").
 type statusMsg struct{ entry statusEntry }
 
 // actionResultMsg carries the outcome of a daemon-backed action, so
@@ -37,53 +42,34 @@ type actionResultMsg struct {
 // statusFadeMsg is the tick that times out an info-level status entry.
 type statusFadeMsg struct{}
 
-// fadeStatusAfter returns a Cmd that emits statusFadeMsg after d.
-func fadeStatusAfter(d time.Duration) tea.Cmd {
-	return tea.Tick(d, func(time.Time) tea.Msg { return statusFadeMsg{} })
-}
-
-// setStatusCmd is a Cmd that emits one statusMsg. Used inline by
-// palette commands to set busy / show validation errors without
-// involving the action pipeline.
+// setStatusCmd is a Cmd that emits one statusMsg.
 func setStatusCmd(level statusLevel, text string) tea.Cmd {
 	return func() tea.Msg {
 		return statusMsg{entry: statusEntry{level: level, text: text, at: time.Now()}}
 	}
 }
 
-// runAction is the canonical pattern for any daemon-backed palette
-// action: emit a "busy" status, run the RPC, then emit
-// actionResultMsg with the outcome. Update converts that into either
-// info or error status and triggers a state refresh.
-//
-//	busyText      — what shows while the RPC is in flight
-//	   ("Starting service-template/grpc...")
-//	successText   — what shows on completion ("Started ...")
-//	actionLabel   — verb-phrase prefix for the error message
-//	   ("start service-template/grpc")
-func runAction(busyText, successText, actionLabel string, do func() error) tea.Cmd {
+// runAction runs a daemon-backed palette action. It shows busyText while
+// do runs under timeout, then emits an actionResultMsg that Update renders
+// as successText, or as the error prefixed by actionLabel.
+func runAction(busyText, successText, actionLabel string, timeout time.Duration, do func(context.Context) error) tea.Cmd {
 	return tea.Batch(
 		setStatusCmd(statusBusy, busyText),
 		func() tea.Msg {
-			if err := do(); err != nil {
-				return actionResultMsg{actionLabel: actionLabel, err: err}
-			}
-			return actionResultMsg{actionLabel: actionLabel, successText: successText}
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			return actionResultMsg{actionLabel: actionLabel, successText: successText, err: do(ctx)}
 		},
 	)
 }
 
-// logsMsg carries log lines from a follower goroutine into the model.
-// `gen` is the follower-generation tag: Update drops any message whose
-// gen does not match m.followGen, so only the current follower's lines
-// reach the view across the cancel-then-start race.
-//
-// Lines are always appended. The server's follow=true mode delivers
-// history then tail in one stream, so the follower alone carries the
-// whole view.
-type logsMsg struct {
-	lines []*anovelv1.LogLine
-	gen   int
+// logLineMsg carries one log line from a follower goroutine into the
+// model. gen is the follower-generation tag: Update drops any message
+// whose gen does not match m.followGen, so only the current follower's
+// lines reach the view across the cancel-then-start race.
+type logLineMsg struct {
+	line *anovelv1.LogLine
+	gen  int
 }
 
 // tickMsg is the periodic refresh trigger.
@@ -108,21 +94,13 @@ func tickEvery(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
-// followSelectedLogs starts a log-streaming subscription on the
-// currently-selected target. It spawns a background goroutine that
-// follows new lines and pushes them via p.Send, bound to m.followCancel
-// so a target switch cleanly cancels the previous follower.
-//
-// The returned tea.Cmd is always nil; the shape lets callers plug the
-// call straight into tea.Batch even though the work happens out-of-band
-// on the goroutine.
-//
-//nolint:unparam // tea.Cmd shape is intentional; see comment.
-func (m *model) followSelectedLogs() tea.Cmd {
-	id := m.activeLogID()
-	if id == "" {
-		return nil
-	}
+// followSelectedLogs restarts the log pane on the selected tab. The
+// server's follow mode streams the whole log before tailing it, so the
+// buffer and scroll restart empty. A background goroutine feeds the lines
+// in through program.Send until the next call cancels it.
+func (m *model) followSelectedLogs() {
+	m.logLines = nil
+	m.logScroll = 0
 	// Cancel the prior follower and bump the generation tag, so any of
 	// its late messages carry a stale gen and Update drops them.
 	if m.followCancel != nil {
@@ -130,12 +108,11 @@ func (m *model) followSelectedLogs() tea.Cmd {
 		m.followCancel = nil
 	}
 	m.followGen++
-	gen := m.followGen
-	if m.program == nil {
-		return nil
+	id := m.activeLogID()
+	if id == "" || m.program == nil {
+		return
 	}
-	// One follower stream carries everything: the server's follow=true mode
-	// delivers history first, then tails new lines.
+	gen := m.followGen
 	ctx, cancel := context.WithCancel(context.Background())
 	m.followCancel = cancel
 	go func() {
@@ -148,191 +125,118 @@ func (m *model) followSelectedLogs() tea.Cmd {
 			if err != nil || ctx.Err() != nil {
 				return
 			}
-			m.program.Send(logsMsg{lines: []*anovelv1.LogLine{ln}, gen: gen})
+			m.program.Send(logLineMsg{line: ln, gen: gen})
 		}
 	}()
-	return nil
 }
 
-// runPaletteCommand dispatches a `:command` from the palette. Returns a
-// tea.Cmd that runs the action asynchronously and refreshes state on
-// completion.
+// runPaletteCommand dispatches a `:command` from the palette. The returned
+// tea.Cmd runs the action asynchronously and refreshes state on completion.
 func (m *model) runPaletteCommand(input string) tea.Cmd {
-	input = strings.TrimPrefix(input, ":")
-	parts := strings.Fields(input)
+	parts := strings.Fields(strings.TrimPrefix(input, ":"))
 	if len(parts) == 0 {
 		return nil
 	}
-	verb := parts[0]
-	args := parts[1:]
-	t := m.activeTarget()
-	var svc *anovelv1.Service
-	if m.selectedSvc < len(m.services) {
-		svc = m.services[m.selectedSvc]
-	}
+	verb, args := parts[0], parts[1:]
+	svc, t, in := m.activeService(), m.activeTarget(), m.activeInfra()
 	switch verb {
 	case "quit", "q":
 		return tea.Quit
 	case "refresh":
-		// The new follower replays the whole log, so the buffer restarts.
-		m.logLines = nil
-		m.logScroll = 0
-		return tea.Batch(refreshServicesCmd(m.c), m.followSelectedLogs())
+		m.followSelectedLogs()
+		return refreshServicesCmd(m.c)
 	case "start":
 		// :start addresses targets only: a single infra container cannot
 		// be cold-started in isolation, since it may depend on other
 		// infra.
-		if m.activeTabKind() == tabKindInfra {
+		if in != nil {
 			return setStatusCmd(statusError,
 				":start only works on targets. For infra: use :infra-start (whole service) or :restart (this container)")
 		}
 		if t == nil {
 			return setStatusCmd(statusError, "no active target — select one with ←/→ first")
 		}
-		mode := anovelv1.Mode_MODE_GO_EXEC
-		modeLabel := modeGoExec
+		mode, modeLabel := anovelv1.Mode_MODE_GO_EXEC, modeGoExec
 		if len(args) > 0 && args[0] == modeContainer {
-			mode = anovelv1.Mode_MODE_CONTAINER
-			modeLabel = modeContainer
+			mode, modeLabel = anovelv1.Mode_MODE_CONTAINER, modeContainer
 		}
-		label := "start " + t.GetName()
-		return runAction(
-			"Starting "+t.GetName()+" ("+modeLabel+")... infra + one-shots will run first",
-			"Started "+t.GetName(),
-			label,
-			func() error {
-				ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-				defer cancel()
+		return runAction("Starting "+t.GetName()+" ("+modeLabel+")... infra + one-shots will run first",
+			"Started "+t.GetName(), "start "+t.GetName(), time.Minute,
+			func(ctx context.Context) error {
 				_, err := m.c.StartTarget(ctx, t.GetId(), mode)
 				return err
-			},
-		)
+			})
 	case "kill":
-		// Targets call KillTarget; infra entries call
-		// KillInfraContainer, which stops that one container and leaves
-		// the rest of the service's infra and targets alone.
-		switch m.activeTabKind() {
-		case tabKindTarget:
-			label := "kill " + t.GetName()
-			return runAction(
-				"Killing "+t.GetName()+"...",
-				"Killed "+t.GetName(),
-				label,
-				func() error {
-					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-					defer cancel()
+		// An infra entry stops that one container and leaves the rest of
+		// the service's infra and targets alone.
+		switch {
+		case t != nil:
+			return runAction("Killing "+t.GetName()+"...", "Killed "+t.GetName(), "kill "+t.GetName(),
+				30*time.Second, func(ctx context.Context) error {
 					_, err := m.c.KillTarget(ctx, t.GetId(), 10*time.Second)
 					return err
-				},
-			)
-		case tabKindInfra:
-			in := m.activeInfra()
-			label := "kill infra " + in.GetName()
-			return runAction(
-				"Stopping infra container "+in.GetName()+"...",
-				"Stopped infra "+in.GetName(),
-				label,
-				func() error {
-					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-					defer cancel()
+				})
+		case in != nil:
+			return runAction("Stopping infra container "+in.GetName()+"...", "Stopped infra "+in.GetName(),
+				"kill infra "+in.GetName(), 30*time.Second, func(ctx context.Context) error {
 					_, err := m.c.KillInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName())
 					return err
-				},
-			)
-		default:
-			return setStatusCmd(statusError, "no active tab — select one with ←/→ first")
+				})
 		}
+		return setStatusCmd(statusError, noTabText)
 	case "restart":
-		switch m.activeTabKind() {
-		case tabKindTarget:
-			label := "restart " + t.GetName()
-			return runAction(
-				"Restarting "+t.GetName()+"...",
-				"Restarted "+t.GetName(),
-				label,
-				func() error {
-					ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-					defer cancel()
+		switch {
+		case t != nil:
+			return runAction("Restarting "+t.GetName()+"...", "Restarted "+t.GetName(), "restart "+t.GetName(),
+				time.Minute, func(ctx context.Context) error {
 					_, err := m.c.RestartTarget(ctx, t.GetId(), anovelv1.Mode_MODE_UNSPECIFIED)
 					return err
-				},
-			)
-		case tabKindInfra:
-			in := m.activeInfra()
-			label := "restart infra " + in.GetName()
-			return runAction(
-				"Restarting infra container "+in.GetName()+"...",
-				"Restarted infra "+in.GetName(),
-				label,
-				func() error {
-					ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-					defer cancel()
+				})
+		case in != nil:
+			return runAction("Restarting infra container "+in.GetName()+"...", "Restarted infra "+in.GetName(),
+				"restart infra "+in.GetName(), time.Minute, func(ctx context.Context) error {
 					_, err := m.c.RestartInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName())
 					return err
-				},
-			)
-		default:
-			return setStatusCmd(statusError, "no active tab — select one with ←/→ first")
+				})
 		}
+		return setStatusCmd(statusError, noTabText)
 	case "infra-start":
 		if svc == nil {
-			return setStatusCmd(statusError, "no active service — select one with ↑/↓ first")
+			return setStatusCmd(statusError, noServiceText)
 		}
-		label := "infra-start " + svc.GetName()
-		return runAction(
-			"Bringing up infra + one-shots for "+svc.GetName()+"...",
-			"Infra ready for "+svc.GetName(),
-			label,
-			func() error {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-				defer cancel()
+		return runAction("Bringing up infra + one-shots for "+svc.GetName()+"...", "Infra ready for "+svc.GetName(),
+			"infra-start "+svc.GetName(), 5*time.Minute, func(ctx context.Context) error {
 				_, err := m.c.StartInfra(ctx, "", svc.GetName(), anovelv1.Mode_MODE_GO_EXEC)
 				return err
-			},
-		)
+			})
 	case "infra-kill":
 		if svc == nil {
-			return setStatusCmd(statusError, "no active service — select one with ↑/↓ first")
+			return setStatusCmd(statusError, noServiceText)
 		}
 		force := len(args) > 0 && args[0] == "force"
-		label := "infra-kill " + svc.GetName()
 		busyText := "Tearing down infra for " + svc.GetName() + "..."
 		if force {
 			busyText = "Force-tearing down infra + targets for " + svc.GetName() + "..."
 		}
-		return runAction(
-			busyText,
-			"Infra down for "+svc.GetName(),
-			label,
-			func() error {
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer cancel()
+		return runAction(busyText, "Infra down for "+svc.GetName(), "infra-kill "+svc.GetName(),
+			30*time.Second, func(ctx context.Context) error {
 				_, err := m.c.KillInfra(ctx, "", svc.GetName(), force)
 				return err
-			},
-		)
+			})
 	case "volume-backup":
 		if svc == nil {
-			return setStatusCmd(statusError, "no active service — select one with ↑/↓ first")
+			return setStatusCmd(statusError, noServiceText)
 		}
-		label := "volume-backup " + svc.GetName()
-		return runAction(
-			"Backing up volumes for "+svc.GetName()+"... (may take a while)",
-			"Backed up volumes for "+svc.GetName(),
-			label,
-			func() error {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-				defer cancel()
+		return runAction("Backing up volumes for "+svc.GetName()+"... (may take a while)",
+			"Backed up volumes for "+svc.GetName(), "volume-backup "+svc.GetName(),
+			5*time.Minute, func(ctx context.Context) error {
 				_, err := m.c.BackupVolume(ctx, "", svc.GetName(), "", false)
 				return err
-			},
-		)
+			})
 	case "topology":
-		// An empty service name asks for the whole stack.
-		svcName := ""
-		if svc != nil {
-			svcName = svc.GetName()
-		}
+		// GetName is nil-safe, so with no service selected the empty name
+		// asks for the whole stack.
+		svcName := svc.GetName()
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
