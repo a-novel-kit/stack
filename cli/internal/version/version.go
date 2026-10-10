@@ -23,7 +23,7 @@ import (
 var Version = ""
 
 // fallback is returned when neither ldflags nor build metadata yield anything
-// usable. It is a named constant so callers can compare against it.
+// usable.
 const fallback = "dev"
 
 // String returns the resolved version string, e.g. "v2.1.0", "a1b2c3d-dirty",
@@ -39,8 +39,8 @@ func String() string {
 	}
 
 	// `go install module@vX.Y.Z` records the tag here. Local builds record the
-	// sentinel "(devel)", which we deliberately ignore in favour of the VCS
-	// revision below — a commit hash is far more actionable than "(devel)".
+	// sentinel "(devel)", which yields to the more actionable VCS revision
+	// below.
 	if v := info.Main.Version; v != "" && v != "(devel)" {
 		return v
 	}
@@ -56,10 +56,7 @@ func String() string {
 	}
 
 	if revision != "" {
-		short := revision
-		if len(short) > 7 {
-			short = short[:7]
-		}
+		short := revision[:min(7, len(revision))]
 		if modified == "true" {
 			return short + "-dirty"
 		}
