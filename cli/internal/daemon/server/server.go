@@ -16,7 +16,6 @@ import (
 	"os"
 	"os/exec"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -290,7 +289,7 @@ func tearDown(
 	}
 	// Goroutine completion order is not stable, so the same failures would
 	// otherwise come back in a different order run to run.
-	sort.Strings(out.failures)
+	slices.Sort(out.failures)
 	return out
 }
 

@@ -43,11 +43,11 @@ func Parse(raw string) ([]Stack, error) {
 		if p == "" {
 			continue
 		}
-		colon := strings.IndexByte(p, ':')
-		if colon <= 0 || colon == len(p)-1 {
+		name, path, ok := strings.Cut(p, ":")
+		if !ok || name == "" || path == "" {
 			return nil, fmt.Errorf("%s entry %d: expected name:path, got %q", EnvVar, i+1, p)
 		}
-		name, path := strings.TrimSpace(p[:colon]), strings.TrimSpace(p[colon+1:])
+		name, path = strings.TrimSpace(name), strings.TrimSpace(path)
 		if seen[name] {
 			return nil, fmt.Errorf("%s entry %d: duplicate stack name %q", EnvVar, i+1, name)
 		}

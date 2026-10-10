@@ -2,7 +2,6 @@ package discovery
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -13,46 +12,36 @@ import (
 // Infra comes first as the root, then one-shots, then long-runners, with each
 // line annotated by its kind and its depends_on list.
 func RenderTopology(s *Service) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n", s.Name)
 	type row struct {
-		label  string
-		detail string
+		label string
+		kind  string
+		deps  []string
 	}
 	rows := make([]row, 0, len(s.Infra)+len(s.Targets))
 	for _, in := range s.Infra {
-		detail := "(infra)"
-		if len(in.DependsOn) > 0 {
-			detail = "(infra)  depends-on: " + strings.Join(in.DependsOn, ", ")
-		}
-		rows = append(rows, row{label: in.Name, detail: detail})
+		rows = append(rows, row{label: in.Name, kind: "infra", deps: in.DependsOn})
 	}
-	// One-shots first, then long-runners, each group alphabetical so the
-	// topology is deterministic regardless of map iteration order.
-	oneShots := make([]*Target, 0)
-	longRunners := make([]*Target, 0)
-	for _, t := range s.Targets {
-		if t.Kind == TargetKindOneShot {
-			oneShots = append(oneShots, t)
-		} else {
-			longRunners = append(longRunners, t)
+	// One-shots first, then long-runners, each group in discovery's name order.
+	for _, oneShots := range []bool{true, false} {
+		for _, t := range s.Targets {
+			if (t.Kind == TargetKindOneShot) == oneShots {
+				rows = append(rows, row{label: t.Name, kind: t.Kind.String(), deps: t.DependsOn})
+			}
 		}
 	}
-	sort.Slice(oneShots, func(i, j int) bool { return oneShots[i].Name < oneShots[j].Name })
-	sort.Slice(longRunners, func(i, j int) bool { return longRunners[i].Name < longRunners[j].Name })
-	for _, t := range append(oneShots, longRunners...) {
-		detail := fmt.Sprintf("(%s)", t.Kind)
-		if len(t.DependsOn) > 0 {
-			detail = fmt.Sprintf("(%s)  depends-on: %s", t.Kind, strings.Join(t.DependsOn, ", "))
-		}
-		rows = append(rows, row{label: t.Name, detail: detail})
-	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n", s.Name)
 	for i, r := range rows {
 		prefix := "├─"
 		if i == len(rows)-1 {
 			prefix = "└─"
 		}
-		fmt.Fprintf(&b, "%s %-22s %s\n", prefix, r.label, r.detail)
+		detail := "(" + r.kind + ")"
+		if len(r.deps) > 0 {
+			detail += "  depends-on: " + strings.Join(r.deps, ", ")
+		}
+		fmt.Fprintf(&b, "%s %-22s %s\n", prefix, r.label, detail)
 	}
 	return b.String()
 }

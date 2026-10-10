@@ -95,7 +95,7 @@ func TestBackupOneLeavesNoPartialFile(t *testing.T) {
 
 	// Fails whether or not podman is installed: the export either cannot start or
 	// rejects the unknown volume. Either way backupOne leaves no file behind, so
-	// `restore --previous` only ever offers a complete archive.
+	// `restore` only ever offers a complete archive.
 	if err := backupOne("a-novel-test-volume-that-does-not-exist", dest); err == nil {
 		t.Fatal("backupOne: got nil, want an error for a missing volume")
 	}
