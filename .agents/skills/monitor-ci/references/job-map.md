@@ -30,10 +30,10 @@ repo-specific or downstream of a base table entry.
 | `report-grc` / `publish-docs` | Post-success reporting, **master only**    | (none)                        | Rarely actionable; usually transient                                         |
 | `report-codecov`              | Coverage upload, runs on **every branch**  | (none)                        | Upload failure can still mark the run failed in PR checks; usually transient |
 
-`test-go` blocks most application `build-*` jobs (`build-grpc`, `build-rest`,
-`build-standalone-*`, `build-job-rotate-keys`); when it fails they are cancelled, so fix `test-go`
-first. `build-database` does **not** depend on `test-go`, and `build-migrations` depends only on
-`build-database`, so failures in those two surface independently and need their own diagnosis.
+`build-database` feeds `generated-go`, the `test-*` jobs, `build-migrations`, and the application
+`build-*` images; when it fails they are all skipped, so fix it first. A skipped job has no result
+of its own. Platforms skip their tests and `build-platform` the same way when `build-node` or
+`lint-types` fails.
 
 Check contexts are lane-suffixed (`test-go`, `lint-node`, …); `write-github-actions` owns that rule
 and the reasons for it. A repo not yet migrated may still emit a bare `test`.
