@@ -1,37 +1,37 @@
-// `a-novel repo` — create and configure GitHub repositories from the
-// editable templates in internal/repocfg. Writes are interactive
-// (human-only, TTY-gated like publish); `--dry-run` prints the API
-// operations that would run and is safe to use anywhere.
+// `a-novel repo` — create and configure GitHub repositories from the editable
+// templates in internal/repocfg. Writes are interactive and human-only;
+// `--dry-run` prints the API operations that would run and is safe anywhere.
+
 package cli
 
 import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/repocfg"
+	"github.com/a-novel-kit/stack/cli/internal/ui"
 )
 
-// branchMaster is the default branch name across the org's repos.
-const branchMaster = "master"
+// repoJobs is how many repositories `repo update --all` reconciles at once by
+// default. GitHub's secondary rate limit allows 900 REST points a minute, a
+// write costing five, and one repository's apply spends about 60 points in
+// some 20 seconds, so six concurrent applies stay under it.
+const repoJobs = 6
 
 // confirm prints prompt and reads a yes/no answer; only an explicit y/yes
-// returns true (so a bare Enter is a safe "no").
+// returns true, so a bare Enter is a safe "no".
 func confirm(cmd *cobra.Command, prompt string) bool {
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s [y/N] ", prompt)
 	line, _ := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "y", "yes":
-		return true
-	default:
-		return false
-	}
+	answer := strings.ToLower(strings.TrimSpace(line))
+	return answer == "y" || answer == "yes"
 }
 
 func newRepoCmd() *cobra.Command {
@@ -44,18 +44,13 @@ rulesets, Pages) from the templates in cli/internal/repocfg/templates.
 Writes are interactive and human-only. '--dry-run' computes the desired
 state and prints the raw API operations without applying anything.`,
 	}
-	cmd.AddCommand(newRepoCreateCmd())
-	cmd.AddCommand(newRepoUpdateCmd())
+	cmd.AddCommand(newRepoCreateCmd(), newRepoUpdateCmd())
 	return cmd
 }
 
 func newRepoCreateCmd() *cobra.Command {
-	var (
-		description string
-		class       string
-		template    string
-		private     bool
-	)
+	var description, class, template string
+	var private bool
 	cmd := &cobra.Command{
 		Use:   "create <org> <name>",
 		Short: "Create a repository and apply its class config",
@@ -65,74 +60,52 @@ rulesets and Pages. Interactive (human-only); repositories are public unless --p
 		Example: `  a-novel repo create a-novel infra --class infra`,
 		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			org, name := args[0], args[1]
+			repo := repoEntry{Org: args[0], Name: args[1]}
 			if !stdinIsTTY() {
 				return errors.New("repo create is interactive (human-only); run it in a terminal")
 			}
-			preset, err := resolvePreset(org, name, class)
+			preset, err := resolvePreset(repo, class)
 			if err != nil {
 				return err
 			}
 
 			out := cmd.OutOrStdout()
-			tmpl := ""
-			if template != "" {
-				tmpl = " from template " + org + "/" + template
+			visibility, from := "public", ""
+			if private {
+				visibility = "private"
 			}
-			if !confirm(cmd, fmt.Sprintf("Create %s %s/%s%s (class %s)?", visibility(private), org, name, tmpl, preset.Class)) {
+			if template != "" {
+				from = " from template " + repo.Org + "/" + template
+			}
+			if !confirm(cmd, fmt.Sprintf("Create %s %s%s (class %s)?", visibility, repo.FullName(), from, preset.Class)) {
 				_, _ = fmt.Fprintln(out, "aborted.")
 				return nil
 			}
 
-			createArgs := []string{"repo", "create", org + "/" + name, "--" + visibility(private)}
+			createArgs := []string{"repo", "create", repo.FullName(), "--" + visibility}
 			if description != "" {
 				createArgs = append(createArgs, "--description", description)
 			}
 			if template != "" {
-				createArgs = append(createArgs, "--template", org+"/"+template)
+				createArgs = append(createArgs, "--template", repo.Org+"/"+template)
 			}
-			if cmdOut, err := gh(createArgs...); err != nil {
-				return fmt.Errorf("repo create: %w\n%s", err, cmdOut)
+			if ghOut, err := gh(createArgs...); err != nil {
+				return fmt.Errorf("repo create: %w\n%s", err, ghOut)
 			}
-			_, _ = fmt.Fprintf(out, "✓ created %s/%s\n", org, name)
+			_, _ = fmt.Fprintf(out, "✓ created %s\n", repo.FullName())
 
-			// Discover the new repo's checks from a throwaway clone (a fresh
-			// repo has no live ruleset or coverage history yet).
+			// A fresh repo has no live ruleset or history yet, so its checks are
+			// discovered from a throwaway clone.
 			tmp, err := os.MkdirTemp("", "repo-create-")
 			if err != nil {
 				return err
 			}
 			defer func() { _ = os.RemoveAll(tmp) }()
-			cloneDir := filepath.Join(tmp, name)
-			checks, err := repocfg.LoadChecks()
-			if err != nil {
-				return err
-			}
-			orgProfile, err := repocfg.LoadOrg(org)
-			if err != nil {
-				return err
-			}
-			// The [Agent] App id is per-org; inject it before discovery so the
-			// merge-gate required check resolves to this org's App.
-			checks.ResolveBotIntegrations(orgProfile)
-			if _, err := gh("repo", "clone", org+"/"+name, cloneDir); err != nil {
+			cloneDir := filepath.Join(tmp, repo.Name)
+			if _, err := gh("repo", "clone", repo.FullName(), cloneDir); err != nil {
 				return fmt.Errorf("clone created repo for check discovery: %w", err)
 			}
-			discovered, err := repocfg.Discover(cloneDir, checks)
-			if err != nil {
-				return fmt.Errorf("discover required checks: %w", err)
-			}
-			branch := repoDefaultBranch(org, name)
-			target := &repocfg.RepoTarget{
-				Org:           org,
-				Repo:          name,
-				DefaultBranch: branch,
-				Class:         preset,
-				OrgProfile:    orgProfile,
-				Checks:        checks,
-				Discovered:    discovered,
-			}
-			plan, err := repocfg.BuildPlan(target)
+			target, plan, err := planRepo(repo, cloneDir, class)
 			if err != nil {
 				return err
 			}
@@ -140,10 +113,10 @@ rulesets and Pages. Interactive (human-only); repositories are public unless --p
 			_, _ = fmt.Fprintln(out)
 			renderSummary(out, target)
 			_, _ = fmt.Fprintf(out, "\n▸ Applying %s config...\n", preset.Class)
-			if err := applyPlan(out, org, name, branch, plan); err != nil {
+			if err := applyPlan(out, target, plan); err != nil {
 				return err
 			}
-			_, _ = fmt.Fprintf(out, "\n✓ %s/%s created and configured.\n", org, name)
+			_, _ = fmt.Fprintf(out, "\n✓ %s created and configured.\n", repo.FullName())
 			return nil
 		},
 	}
@@ -152,13 +125,6 @@ rulesets and Pages. Interactive (human-only); repositories are public unless --p
 	cmd.Flags().StringVar(&template, "template", "", "create from this org template repo (e.g. service-template)")
 	cmd.Flags().BoolVar(&private, "private", false, "create a private repository (default public)")
 	return cmd
-}
-
-func visibility(private bool) string {
-	if private {
-		return "private"
-	}
-	return "public"
 }
 
 // classFlagUsage derives the accepted values from repocfg.AllClasses.
@@ -172,12 +138,10 @@ func classFlagUsage() string {
 
 func newRepoUpdateCmd() *cobra.Command {
 	var (
-		dryRun  bool
-		jsonOut bool
-		class   string
-		all     bool
-		exclude []string
-		rootDir string
+		dryRun, jsonOut, all bool
+		class, rootDir       string
+		exclude              []string
+		limit                int
 	)
 	cmd := &cobra.Command{
 		Use:   "update",
@@ -188,13 +152,12 @@ reconciles config. The master ruleset's required checks are the jobs declared in
 .github/workflows/main.yaml (minus reporting / master-only jobs) plus the
 always-required set — set wholesale.
 
---all reconciles every pulled workspace repo in one interactive pass instead:
-the stack repo plus each whitelisted checkout present under app/ or kit/ (the
-same set 'core sync' manages, auto-discovered from workspace-repos.yaml). Config
-is discovered from each working tree, so a repo carrying ongoing work — off its
-default branch or with uncommitted changes — is skipped untouched rather than
-reconciled from an in-progress checkout. --exclude drops named repos; a single
-confirm gates the whole batch.`,
+--all reconciles every pulled workspace repo instead: the stack repo plus each
+whitelisted checkout present under app/ or kit/ (the same set 'core sync'
+manages, from workspace-repos.yaml). Config is discovered from each working
+tree, so a repo carrying ongoing work — off its default branch or with
+uncommitted changes — is skipped untouched. --exclude drops named repos; a
+single confirm gates the whole batch, which applies --jobs repos at once.`,
 		Example: `  a-novel repo update                       # current repo
   a-novel repo update --all                 # every pulled workspace repo
   a-novel repo update --all --exclude=service-template
@@ -202,45 +165,44 @@ confirm gates the whole batch.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if all {
-				return runRepoUpdateAll(cmd, rootDir, class, exclude, dryRun, jsonOut)
+				return runRepoUpdateAll(cmd, rootDir, class, exclude, dryRun, jsonOut, limit)
 			}
-			wd, err := os.Getwd()
+			root, err := gitToplevel(".")
 			if err != nil {
 				return err
 			}
-			target, plan, err := buildRepoTarget(wd, class)
+			repo, err := repoFromGitRemote(root)
 			if err != nil {
 				return err
 			}
-			org, repo, branch := target.Org, target.Repo, target.DefaultBranch
-
+			target, plan, err := planRepo(repo, root, class)
+			if err != nil {
+				return err
+			}
 			if jsonOut {
 				return plan.RenderJSON(cmd.OutOrStdout())
 			}
 			if dryRun {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-					"# dry-run %s/%s — class %s\n# required checks: %s\n",
-					org, repo, target.Class.Class, strings.Join(checkContexts(target.Discovered.Checks), ", "))
-				renderPruneImpact(cmd.ErrOrStderr(), org, repo, plan)
-				_, _ = fmt.Fprintln(cmd.ErrOrStderr())
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "# dry-run %s/%s — class %s\n# required checks: %s\n%s\n\n",
+					target.Org, target.Repo, target.Class.Class, strings.Join(checkContexts(target), ", "),
+					pruneImpact(target, plan))
 				return plan.Render(cmd.OutOrStdout())
 			}
-
 			if !stdinIsTTY() {
 				return errors.New("repo update is interactive (human-only); run it in a terminal, or use --dry-run")
 			}
 
 			out := cmd.OutOrStdout()
 			renderSummary(out, target)
-			if !confirm(cmd, fmt.Sprintf("\nApply this configuration to %s/%s?", org, repo)) {
+			if !confirm(cmd, fmt.Sprintf("\nApply this configuration to %s/%s?", target.Org, target.Repo)) {
 				_, _ = fmt.Fprintln(out, "aborted.")
 				return nil
 			}
 			_, _ = fmt.Fprintln(out, "\n▸ Applying...")
-			if err := applyPlan(out, org, repo, branch, plan); err != nil {
+			if err := applyPlan(out, target, plan); err != nil {
 				return err
 			}
-			_, _ = fmt.Fprintf(out, "\n✓ %s/%s reconciled.\n", org, repo)
+			_, _ = fmt.Fprintf(out, "\n✓ %s/%s reconciled.\n", target.Org, target.Repo)
 			return nil
 		},
 	}
@@ -252,31 +214,22 @@ confirm gates the whole batch.`,
 		"with --all, skip these repos (<org>/<name> or bare <name>); may be repeated")
 	cmd.Flags().StringVar(&rootDir, "root", "",
 		"with --all, the workspace root containing kit/ and app/ (defaults like `core sync`)")
+	cmd.Flags().IntVarP(&limit, "jobs", "j", repoJobs,
+		"with --all, max repos applied at once (GitHub rate-limits concurrent writes)")
 	return cmd
 }
 
-// buildRepoTarget resolves the repository that owns the checkout at dir (dir may
-// be any path inside it), discovers its config from the working tree, and
-// returns the reconcile target plus the computed plan. It performs no writes —
-// callers gate the apply on --dry-run / a confirm. The org's [Agent] App id is
-// injected before discovery so the merge-gate required check resolves to this
-// org's App. Because discovery reads the working tree, callers reconciling in
-// bulk must first confirm the checkout is on its default branch and clean (see
-// runRepoUpdateAll) so the plan never reflects in-progress local state.
-func buildRepoTarget(dir, class string) (*repocfg.RepoTarget, *repocfg.Plan, error) {
-	org, repo, err := repoFromGitRemote(dir)
+// planRepo discovers repo's config from its working tree at root and computes
+// the plan, writing nothing. The org's [Agent] App id is injected before
+// discovery, so the merge-gate check resolves to that org's App. Discovery
+// reads the working tree, so a bulk caller must first confirm the checkout is
+// clean and on its default branch.
+func planRepo(repo repoEntry, root, class string) (*repocfg.RepoTarget, *repocfg.Plan, error) {
+	preset, err := resolvePreset(repo, class)
 	if err != nil {
 		return nil, nil, err
 	}
-	root, err := gitToplevel(dir)
-	if err != nil {
-		return nil, nil, err
-	}
-	preset, err := resolvePreset(org, repo, class)
-	if err != nil {
-		return nil, nil, err
-	}
-	orgProfile, err := repocfg.LoadOrg(org)
+	orgProfile, err := repocfg.LoadOrg(repo.Org)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -289,12 +242,10 @@ func buildRepoTarget(dir, class string) (*repocfg.RepoTarget, *repocfg.Plan, err
 	if err != nil {
 		return nil, nil, err
 	}
-
-	branch := repoDefaultBranch(org, repo)
 	target := &repocfg.RepoTarget{
-		Org:           org,
-		Repo:          repo,
-		DefaultBranch: branch,
+		Org:           repo.Org,
+		Repo:          repo.Name,
+		DefaultBranch: repoDefaultBranch(repo),
 		Class:         preset,
 		OrgProfile:    orgProfile,
 		Checks:        checks,
@@ -308,56 +259,105 @@ func buildRepoTarget(dir, class string) (*repocfg.RepoTarget, *repocfg.Plan, err
 }
 
 // resolvePreset prefers a repos/<org>_<repo>.yaml override, then the --class
-// flag, then auto-discovery from the repo name (repocfg.DetectClass). It always
-// resolves to a class — no interactive prompt — and the chosen class is shown in
-// the summary before the apply confirm.
-func resolvePreset(org, repo, class string) (*repocfg.ClassPreset, error) {
-	if p, ok, err := repocfg.LoadRepoOverride(org, repo); err != nil {
-		return nil, err
-	} else if ok {
-		return p, nil
+// flag, then the class the repo name implies. The summary shows the result
+// before the apply confirm.
+func resolvePreset(repo repoEntry, class string) (*repocfg.ClassPreset, error) {
+	if p, ok, err := repocfg.LoadRepoOverride(repo.Org, repo.Name); err != nil || ok {
+		return p, err
 	}
 	if class == "" {
-		class = string(repocfg.DetectClass(repo))
+		class = string(repocfg.DetectClass(repo.Name))
 	}
 	return repocfg.LoadClass(repocfg.Class(class))
 }
 
-// repoFromGitRemote parses owner/repo from the origin remote of dir.
-func repoFromGitRemote(dir string) (string, string, error) {
-	out, err := exec.Command("git", "-C", dir, "remote", "get-url", "origin").Output()
-	if err != nil {
-		return "", "", fmt.Errorf("not in a git repo with an 'origin' remote: %w", err)
-	}
-	url := strings.TrimSuffix(strings.TrimSpace(string(out)), ".git")
-	if i := strings.Index(url, "github.com"); i >= 0 {
-		url = strings.TrimLeft(url[i+len("github.com"):], ":/")
-	}
-	parts := strings.Split(url, "/")
-	if len(parts) < 2 {
-		return "", "", fmt.Errorf("cannot parse owner/repo from origin url %q", strings.TrimSpace(string(out)))
-	}
-	return parts[len(parts)-2], parts[len(parts)-1], nil
-}
-
-// repoDefaultBranch asks GitHub for the repo's default branch; falls back to master.
-func repoDefaultBranch(org, repo string) string {
-	out, err := gh("api", "repos/"+org+"/"+repo, "--jq", ".default_branch")
-	if err != nil {
-		return branchMaster
-	}
-	if b := strings.TrimSpace(out); b != "" {
+// repoDefaultBranch asks GitHub for the repo's default branch, falling back to
+// master.
+func repoDefaultBranch(repo repoEntry) string {
+	out, err := gh("api", "repos/"+repo.FullName(), "--jq", ".default_branch")
+	if b := strings.TrimSpace(out); err == nil && b != "" {
 		return b
 	}
 	return branchMaster
 }
 
-// codecovReports reports whether Codecov posts a status check on the repo's
-// default branch (gates codecov: auto).
-func checkContexts(checks []repocfg.CheckRef) []string {
-	cs := make([]string, len(checks))
-	for i, c := range checks {
-		cs[i] = c.Context
+// checkContexts lists the required checks the master ruleset will carry.
+func checkContexts(t *repocfg.RepoTarget) []string {
+	out := make([]string, len(t.Discovered.Checks))
+	for i, c := range t.Discovered.Checks {
+		out[i] = c.Context
 	}
-	return cs
+	return out
+}
+
+// rulesetNames lists the rulesets the class applies.
+func rulesetNames(c *repocfg.ClassPreset) []string {
+	var out []string
+	for _, rs := range []struct {
+		name string
+		on   bool
+	}{
+		{"master", c.Rulesets.Master},
+		{"require-approval", c.Rulesets.RequireApproval},
+		{"tags", c.Rulesets.Tags},
+	} {
+		if rs.on {
+			out = append(out, rs.name)
+		}
+	}
+	return out
+}
+
+// renderSummary prints a grouped overview of the desired config, the readable
+// alternative to the raw API ops, shown before the apply confirm.
+func renderSummary(w io.Writer, t *repocfg.RepoTarget) {
+	c := t.Class
+	line := func(label string, values ...string) {
+		_, _ = fmt.Fprintf(w, "  %s  %s\n", ui.Gold.Render(fmt.Sprintf("%-10s", label)), strings.Join(values, " "))
+	}
+	onOff := func(label string, on bool) string {
+		if on {
+			return ui.OK.Render(label)
+		}
+		return ui.Muted.Render(label + "✗")
+	}
+
+	_, _ = fmt.Fprintf(w, "%s — class %s\n", ui.Brand.Render(t.Org+"/"+t.Repo), c.Class)
+	line("Features", onOff("issues", c.Features.Issues), onOff("projects", c.Features.Projects),
+		onOff("discussions", c.Features.Discussions), onOff("wiki", c.Features.Wiki))
+	var merge []string
+	for _, m := range []struct {
+		name string
+		on   bool
+	}{{"squash", c.Merge.Squash}, {"merge", c.Merge.MergeCommit}, {"rebase", c.Merge.Rebase}} {
+		if m.on {
+			merge = append(merge, m.name)
+		}
+	}
+	mergeLine := strings.Join(merge, "+")
+	if c.Merge.AutoMerge {
+		mergeLine += ", auto-merge"
+	}
+	if c.Merge.SignoffRequired {
+		mergeLine += ", signoff"
+	}
+	line("Merge", mergeLine)
+	security := []string{
+		onOff("secret-scanning", c.Security.SecretScanning),
+		onOff("push-protection", c.Security.PushProtection),
+		onOff("dependabot-updates", c.Security.Dependabot),
+	}
+	if c.Security.DependabotAlerts != nil {
+		security = append(security, onOff("dependabot-alerts", *c.Security.DependabotAlerts))
+	}
+	line("Security", security...)
+	pages := ui.Muted.Render("disabled")
+	if c.Pages {
+		pages = ui.OK.Render("enabled")
+	}
+	line("Pages", pages)
+	line("Rulesets", strings.Join(rulesetNames(c), ", "))
+	if checks := checkContexts(t); len(checks) > 0 {
+		line("Checks", fmt.Sprintf("%s (%d)", strings.Join(checks, ", "), len(checks)))
+	}
 }

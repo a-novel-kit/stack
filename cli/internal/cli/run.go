@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -58,30 +59,17 @@ func (s *stackScope) bindAll(cmd *cobra.Command) {
 // =============================================================================
 
 func newStacksCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "stacks",
 		Short: "List the registered stacks",
-		Long: `Print the stacks the daemon manages, one per row, with their path and a
-marker showing which is the default. Stacks come from $A_NOVEL_STACKS,
-parsed at daemon start (see 'a-novel core setup' for the bootstrap flow).`,
+		Long: `Print the stacks the daemon manages, one per row: path, a '*' on the
+default, and what each holds. Stacks come from $A_NOVEL_STACKS, parsed at
+daemon start. Same as 'a-novel core stacks list'.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			resp, err := c.ListStacks(ctx)
-			if err != nil {
-				return err
-			}
-			for _, st := range resp.GetStacks() {
-				marker := " "
-				if st.GetIsDefault() {
-					marker = "*"
-				}
-				fmt.Printf("%s %-20s %s\n", marker, st.GetName(), st.GetPath())
-			}
-			return nil
+			return listStacks(cmd.Context(), cmd.OutOrStdout())
 		},
 	}
-	return cmd
 }
 
 // =============================================================================
@@ -127,34 +115,14 @@ With --json, emits one JSON object per service for machine consumption
 			if ss.allStacks {
 				stack = "*"
 			}
+			if kind != "" && kind != "all" && kind != kindTarget && kind != kindInfra {
+				return usageError(fmt.Errorf("--kind=%q: must be 'target', 'infra', or 'all'", kind))
+			}
 			resp, err := c.ListServices(ctx, stack)
 			if err != nil {
 				return err
 			}
-			services := resp.GetServices()
-			if service != "" {
-				filtered := services[:0]
-				for _, s := range services {
-					if s.GetName() == service {
-						filtered = append(filtered, s)
-					}
-				}
-				services = filtered
-			}
-			switch kind {
-			case "", "all":
-				// default — show both
-			case kindTarget:
-				for _, s := range services {
-					s.Infra = nil
-				}
-			case kindInfra:
-				for _, s := range services {
-					s.Targets = nil
-				}
-			default:
-				return fmt.Errorf("--kind=%q: must be 'target', 'infra', or 'all'", kind)
-			}
+			services := filterServices(resp.GetServices(), service, kind)
 			if watch {
 				return runPsWatch(ctx, c, cmd.OutOrStdout(), services, stack, service, kind, jsonOut)
 			}
@@ -168,6 +136,23 @@ With --json, emits one JSON object per service for machine consumption
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON (machine-readable)")
 	cmd.Flags().BoolVar(&watch, "watch", false, "stream state changes instead of a snapshot")
 	return cmd
+}
+
+// filterServices keeps the named service (all when empty) and drops the entity
+// kind --kind leaves out.
+func filterServices(services []*anovelv1.Service, service, kind string) []*anovelv1.Service {
+	if service != "" {
+		services = slices.DeleteFunc(services, func(s *anovelv1.Service) bool { return s.GetName() != service })
+	}
+	for _, s := range services {
+		switch kind {
+		case kindTarget:
+			s.Infra = nil
+		case kindInfra:
+			s.Targets = nil
+		}
+	}
+	return services
 }
 
 // renderPs prints services as a human-readable table or as JSON lines.
@@ -360,10 +345,7 @@ func newServiceInfraStartCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			c := rpc.New("")
-			m := anovelv1.Mode_MODE_GO_EXEC
-			if oneShotsMode == modeContainer {
-				m = anovelv1.Mode_MODE_CONTAINER
-			}
+			m := parseMode(oneShotsMode, anovelv1.Mode_MODE_GO_EXEC)
 			resp, err := c.StartInfra(ctx, ss.stack, args[0], m)
 			if err != nil {
 				return err
@@ -425,25 +407,17 @@ Mode defaults to go-exec — faster feedback, no container build. Pass
 Mutual exclusion is enforced: if the target is already running in the
 other mode, the command refuses with a hint to 'kill' or 'restart'.
 Idempotent: starting an already-running target in the same mode is a
-no-op (returns 0).
-
-Phase 3 status: go-exec mode is live. Container mode + dependency-walk
-gating + one-shot auto-run are scheduled for the next phase-3 chunks;
-attempting --mode=container today returns a clear Unimplemented error.`,
+no-op (returns 0). Dependencies come up first: infra is health-gated and
+one-shots such as migrations run to success before the target starts.`,
 		Example: `  a-novel run start default/service-json-keys/rest
   a-novel run start service-json-keys/rest                     # default stack inferred
-  a-novel run start service-json-keys/rest --mode=container    # next chunk
+  a-novel run start service-json-keys/rest --mode=container
   a-novel run start service-template/rest --stack=branch-foo`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			c := rpc.New("")
-			id := resolveTargetID(args[0], ss.stack)
-			m := anovelv1.Mode_MODE_GO_EXEC
-			if mode == modeContainer {
-				m = anovelv1.Mode_MODE_CONTAINER
-			}
-			resp, err := c.StartTarget(ctx, id, m)
+			resp, err := c.StartTarget(ctx, parseEntityID(args[0], ss.stack).ID, parseMode(mode, anovelv1.Mode_MODE_GO_EXEC))
 			if err != nil {
 				return err
 			}
@@ -520,7 +494,7 @@ disambiguated by the stack-prefixed form.`,
 		},
 	}
 	ss.bind(cmd)
-	cmd.Flags().DurationVar(&timeout, "timeout", 10*time.Second, "SIGTERM-to-SIGKILL grace")
+	cmd.Flags().DurationVar(&timeout, "timeout", killGrace, "SIGTERM-to-SIGKILL grace")
 	return cmd
 }
 
@@ -551,14 +525,7 @@ is reused. --mode is ignored for infra (infra is always containerized).`,
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "restarted infra %s\n", ref.ID)
 				return nil
 			}
-			m := anovelv1.Mode_MODE_UNSPECIFIED
-			switch mode {
-			case modeGoExec:
-				m = anovelv1.Mode_MODE_GO_EXEC
-			case modeContainer:
-				m = anovelv1.Mode_MODE_CONTAINER
-			}
-			resp, err := c.RestartTarget(ctx, ref.ID, m)
+			resp, err := c.RestartTarget(ctx, ref.ID, parseMode(mode, anovelv1.Mode_MODE_UNSPECIFIED))
 			if err != nil {
 				return err
 			}
@@ -571,19 +538,6 @@ is reused. --mode is ignored for infra (infra is always containerized).`,
 	ss.bind(cmd)
 	cmd.Flags().StringVar(&mode, "mode", "", "switch to this mode (go-exec | container); empty keeps current")
 	return cmd
-}
-
-// resolveTargetID accepts the canonical full ID or the bare service/target
-// shorthand and returns the daemon-friendly form. Daemon-side lookup
-// requires the full <stack>/<service>/<target> shape.
-func resolveTargetID(arg, stack string) string {
-	if strings.Count(arg, "/") >= 2 {
-		return arg
-	}
-	if stack == "" {
-		stack = stacks.DefaultName
-	}
-	return stack + "/" + arg
 }
 
 // entityRef is a parsed CLI argument identifying either a target or an infra
@@ -649,6 +603,18 @@ func parseEntityID(arg, defaultStack string) entityRef {
 	}
 	ref.ID = ref.Stack + "/" + ref.Service + "/" + ref.Target
 	return ref
+}
+
+// parseMode reads a --mode token, an empty or unknown one yielding fallback.
+func parseMode(token string, fallback anovelv1.Mode) anovelv1.Mode {
+	switch token {
+	case modeGoExec:
+		return anovelv1.Mode_MODE_GO_EXEC
+	case modeContainer:
+		return anovelv1.Mode_MODE_CONTAINER
+	default:
+		return fallback
+	}
 }
 
 // modeLabel renders a Mode enum as its canonical CLI token.
@@ -1107,9 +1073,9 @@ func newExecCmd() *cobra.Command {
 
 Output is forwarded line-by-line from the daemon. Exit code reflects
 the underlying command's success.`,
-		Example: `  a-novel exec service-json-keys/rest -- sh
-  a-novel exec service-json-keys/migrations -- psql
-  a-novel exec default/service-json-keys/rest -- curl -s localhost:8080`,
+		Example: `  a-novel run exec service-json-keys/rest -- sh
+  a-novel run exec service-json-keys/migrations -- psql
+  a-novel run exec default/service-json-keys/rest -- curl -s localhost:8080`,
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -1184,8 +1150,8 @@ your IDE then connects to dlv's headless listener.
 Container-mode targets are rejected — attaching dlv inside a container
 requires an in-image dlv install + a port-forward the daemon doesn't
 manage.`,
-		Example: `  a-novel debug service-json-keys/grpc
-  a-novel debug default/service-json-keys/grpc`,
+		Example: `  a-novel run debug service-json-keys/grpc
+  a-novel run debug default/service-json-keys/grpc`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -1231,37 +1197,14 @@ narrow the stream.`,
 			if ss.allStacks {
 				stack = "*"
 			}
-			stream, err := c.Watch(ctx, stack, service, target)
-			if err != nil {
-				return err
-			}
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			for ev, err := range stream {
-				if err != nil {
-					if ctx.Err() == nil {
-						return err
-					}
-
-					break
-				}
-
+			out := cmd.OutOrStdout()
+			return watchEvents(ctx, c, stack, service, target, func(ev *anovelv1.StateEvent) {
 				if jsonOut {
-					_ = enc.Encode(map[string]any{
-						"ts":          ev.GetTs().AsTime().Format(time.RFC3339Nano),
-						stackLabel:    ev.GetStack(),
-						"service":     ev.GetService(),
-						"target_id":   ev.GetTargetId(),
-						"old_phase":   ev.GetOldPhase().String(),
-						"new_phase":   ev.GetNewPhase().String(),
-						"description": ev.GetDescription(),
-					})
+					encodeEvent(out, ev)
 				} else {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s\n",
-						ev.GetTs().AsTime().Format("15:04:05.000"),
-						ev.GetDescription())
+					_, _ = fmt.Fprintf(out, "%s  %s\n", ev.GetTs().AsTime().Format("15:04:05.000"), ev.GetDescription())
 				}
-			}
-			return nil
+			})
 		},
 	}
 	ss.bindAll(cmd)
@@ -1282,74 +1225,56 @@ func runPsWatch(
 	ctx context.Context, c *rpc.Client, out io.Writer,
 	services []*anovelv1.Service, stack, service, kind string, jsonOut bool,
 ) error {
-	if !jsonOut {
-		// Initial snapshot.
-		renderPs(out, services, false)
-	} else {
-		renderPs(out, services, true)
-	}
-	stream, err := c.Watch(ctx, stack, service, "")
-	if err != nil {
-		return err
-	}
-	enc := json.NewEncoder(out)
-	for ev, err := range stream {
-		if err != nil {
-			if ctx.Err() == nil {
-				return err
-			}
-
-			break
-		}
-
+	renderPs(out, services, jsonOut)
+	return watchEvents(ctx, c, stack, service, "", func(ev *anovelv1.StateEvent) {
 		if jsonOut {
-			_ = enc.Encode(map[string]any{
-				"ts":          ev.GetTs().AsTime().Format(time.RFC3339Nano),
-				stackLabel:    ev.GetStack(),
-				"service":     ev.GetService(),
-				"target_id":   ev.GetTargetId(),
-				"old_phase":   ev.GetOldPhase().String(),
-				"new_phase":   ev.GetNewPhase().String(),
-				"description": ev.GetDescription(),
-			})
-			continue
+			encodeEvent(out, ev)
+			return
 		}
-		// Human mode: refresh the snapshot. One ListServices call per
-		// event is cheap and keeps the rendered table current.
-		// Repainting in place keeps frames out of the scrollback.
+		// One ListServices call per event is cheap and keeps the table
+		// current. Repainting in place keeps frames out of the scrollback.
 		resp, err := c.ListServices(ctx, stack)
 		if err != nil {
 			_, _ = fmt.Fprintf(out, "watch: refresh failed: %v\n", err)
-			continue
+			return
 		}
-		fresh := resp.GetServices()
-		if service != "" {
-			filtered := fresh[:0]
-			for _, s := range fresh {
-				if s.GetName() == service {
-					filtered = append(filtered, s)
-				}
-			}
-			fresh = filtered
-		}
-		switch kind {
-		case kindTarget:
-			for _, s := range fresh {
-				s.Infra = nil
-			}
-		case kindInfra:
-			for _, s := range fresh {
-				s.Targets = nil
-			}
-		}
-		// Move the cursor home and clear the screen. On a non-TTY pipe the
-		// escape sequences are harmless filler.
+		// Move the cursor home and clear the screen; on a pipe the escape
+		// sequences are harmless filler.
 		_, _ = fmt.Fprint(out, "\x1b[H\x1b[2J")
-		renderPs(out, fresh, false)
-		_, _ = fmt.Fprintf(out, "\n%s  %s\n",
-			ev.GetTs().AsTime().Format("15:04:05"), ev.GetDescription())
+		renderPs(out, filterServices(resp.GetServices(), service, kind), false)
+		_, _ = fmt.Fprintf(out, "\n%s  %s\n", ev.GetTs().AsTime().Format("15:04:05"), ev.GetDescription())
+	})
+}
+
+// watchEvents streams the daemon's state events to handle until ctx ends.
+func watchEvents(ctx context.Context, c *rpc.Client, stack, service, target string, handle func(*anovelv1.StateEvent)) error {
+	stream, err := c.Watch(ctx, stack, service, target)
+	if err != nil {
+		return err
+	}
+	for ev, err := range stream {
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+		handle(ev)
 	}
 	return nil
+}
+
+// encodeEvent writes a state event as one JSON line.
+func encodeEvent(w io.Writer, ev *anovelv1.StateEvent) {
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ts":          ev.GetTs().AsTime().Format(time.RFC3339Nano),
+		stackLabel:    ev.GetStack(),
+		"service":     ev.GetService(),
+		"target_id":   ev.GetTargetId(),
+		"old_phase":   ev.GetOldPhase().String(),
+		"new_phase":   ev.GetNewPhase().String(),
+		"description": ev.GetDescription(),
+	})
 }
 
 // =============================================================================

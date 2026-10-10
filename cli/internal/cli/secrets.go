@@ -22,13 +22,6 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
 )
 
-// secretsStdinIsTTY reports whether stdin is an interactive terminal. It is a
-// package var so the `secrets set` non-interactive refusal is testable without
-// a real PTY, the same seam the publish command uses. Setting a secret reads a
-// no-echo value from the terminal, so it is human-only: an agent or CI run with
-// no TTY is refused outright.
-var secretsStdinIsTTY = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
-
 // readPassword reads a line from the terminal with echo disabled. A package var
 // so tests can stub it; production reads via golang.org/x/term so the typed
 // secret never appears on screen.
@@ -106,7 +99,7 @@ history). Provision secrets yourself from a terminal.`,
 			// A secret must never reach a terminal, a log or a shell history.
 			// Reading it with echo disabled takes a real terminal, so a
 			// non-interactive stdin is refused.
-			if !secretsStdinIsTTY() {
+			if !stdinIsTTY() {
 				return errors.New("secrets set: refusing to run non-interactively — a secret " +
 					"is read with no echo from a terminal, so it must be set by a human. Run it yourself")
 			}

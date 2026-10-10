@@ -20,42 +20,18 @@ func mustWrite(t *testing.T, path, content string) {
 	}
 }
 
-// TestGlobalAppRoots pins the stack-root run fan-out: both app/service-* and
-// app/platform-* checkouts (each its own git repo) are returned, sorted; a
-// prefixed dir that is not its own git repo, and a non-app-prefixed dir, are
-// skipped.
-func TestGlobalAppRoots(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	// Two real app repos: a service and a platform.
-	mustWrite(t, filepath.Join(root, "app", "service-auth", ".git"), "")
-	mustWrite(t, filepath.Join(root, "app", "platform-studio", ".git"), "")
-	// A prefixed dir that is not its own git repo (no .git) — skipped.
-	mustWrite(t, filepath.Join(root, "app", "service-nogit", "go.mod"), "module x\n")
-	// An unrelated dir sharing neither prefix — skipped.
-	mustWrite(t, filepath.Join(root, "app", "docs", ".git"), "")
-
-	got := globalAppRoots(root)
-	want := []string{
-		filepath.Join(root, "app", "platform-studio"),
-		filepath.Join(root, "app", "service-auth"),
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("globalAppRoots = %v, want %v", got, want)
-	}
-}
-
-// TestComposeDependents guards the classifier that drives build.composeUpPhased:
+// TestComposeServices guards the classifier that drives build.composeUpPhased:
 // a service is a "dependent" (second wave) iff it declares a depends_on: block.
 // Both the map and short-list forms count; a service with none is first-wave
-// infra. The result preserves source order.
-func TestComposeDependents(t *testing.T) {
+// infra. Both lists preserve source order.
+func TestComposeServices(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name string
-		yaml string
-		want []string
+		name     string
+		yaml     string
+		services []string
+		want     []string
 	}{
 		{
 			name: "MapFormLongCondition",
@@ -69,7 +45,8 @@ func TestComposeDependents(t *testing.T) {
       postgres-x:
         condition: service_healthy
 `,
-			want: []string{"service-x"},
+			services: []string{"postgres-x", "service-x"},
+			want:     []string{"service-x"},
 		},
 		{
 			name: "ShortListForm",
@@ -83,7 +60,8 @@ func TestComposeDependents(t *testing.T) {
       - postgres-x
       - mailserver
 `,
-			want: []string{"service-x"},
+			services: []string{"postgres-x", "mailserver", "service-x"},
+			want:     []string{"service-x"},
 		},
 		{
 			name: "DBOnlyNoDependents",
@@ -93,7 +71,8 @@ func TestComposeDependents(t *testing.T) {
     ports:
       - "${POSTGRES_PORT}:5432"
 `,
-			want: nil,
+			services: []string{"postgres-x"},
+			want:     nil,
 		},
 		{
 			name: "MultipleDependentsInSourceOrder",
@@ -109,16 +88,25 @@ func TestComposeDependents(t *testing.T) {
       seed-x:
         condition: service_completed_successfully
 `,
-			want: []string{"seed-x", "service-x"},
+			services: []string{"postgres-x", "seed-x", "service-x"},
+			want:     []string{"seed-x", "service-x"},
+		},
+		{
+			name:     "Malformed",
+			yaml:     "services: [unclosed\n",
+			services: nil,
+			want:     nil,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			f := filepath.Join(t.TempDir(), "podman-compose.test.yaml")
-			mustWrite(t, f, tc.yaml)
-			if got := composeDependents(f); !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("composeDependents = %v, want %v", got, tc.want)
+			services, dependents := composeServices([]byte(tc.yaml))
+			if !reflect.DeepEqual(services, tc.services) {
+				t.Errorf("services = %v, want %v", services, tc.services)
+			}
+			if !reflect.DeepEqual(dependents, tc.want) {
+				t.Errorf("dependents = %v, want %v", dependents, tc.want)
 			}
 		})
 	}

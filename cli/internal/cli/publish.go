@@ -16,16 +16,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
-
-// stdinIsTTY reports whether the CLI is attached to an interactive terminal. It
-// is a package var so tests can drive the non-interactive branch without a real
-// PTY. The human-only commands (repo create, repo update) gate on it: they
-// prompt for confirmation, so an agent or CI run with no TTY is refused rather
-// than driving them blind.
-var stdinIsTTY = func() bool { return term.IsTerminal(os.Stdin.Fd()) }
 
 func newPublishCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -63,7 +55,7 @@ inside docs/config always match the released version:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, err := gitToplevel(".")
 			if err != nil {
-				return err
+				return fmt.Errorf("publish: %w", err)
 			}
 			version, err := readPackageVersion(root)
 			if err != nil {
@@ -132,9 +124,6 @@ func readPackageVersion(root string) (string, error) {
 	return pkg.Version, nil
 }
 
-// goModFile is the Go module manifest's fixed file name.
-const goModFile = "go.mod"
-
 // resolveStampTargets expands each file-or-glob argument into concrete file
 // paths (relative to the working directory), preserving order and de-duping
 // overlapping matches. An existing literal path is taken verbatim (so a real
@@ -200,15 +189,4 @@ func stampFile(path, prefix, version string) (int, error) {
 		return 0, fmt.Errorf("publish: write %s: %w", path, err)
 	}
 	return len(matches), nil
-}
-
-// gitToplevel resolves the repo root containing dir, so publish commands
-// can run from anywhere inside the repo (pnpm scripts run them from the
-// root; humans may not).
-func gitToplevel(dir string) (string, error) {
-	out, err := runGit(dir, "rev-parse", "--show-toplevel")
-	if err != nil {
-		return "", fmt.Errorf("publish: not inside a git repository (%s): %w", dir, err)
-	}
-	return strings.TrimSpace(out), nil
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/setup"
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 	"github.com/a-novel-kit/stack/cli/internal/version"
+	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
 // daemonInternalCmd is the hidden subcommand name `a-novel core start` re-execs
@@ -55,7 +56,7 @@ func newCoreCmd() *cobra.Command {
 running targets and serves the CLI / TUI / future web UI over a unix socket.
 
 A single daemon instance per user manages every registered stack (see
-'a-novel stacks'). Designed to live in your .zshrc as 'a-novel core start',
+'a-novel core stacks'). Designed to live in your .zshrc as 'a-novel core start',
 which is silent on already-running and idempotent.`,
 	}
 	cmd.AddCommand(newCoreStartCmd())
@@ -91,20 +92,12 @@ stack isn't set up; run 'a-novel core setup' to bootstrap.`,
   # Foreground (systemd / debugging)
   a-novel core start --foreground`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			// Already running? Exit silently.
-			c := rpc.New("")
-			pingCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
-			defer cancel()
-			if _, err := c.Ping(pingCtx); err == nil {
+			if up, _ := daemonUp(cmd.Context(), rpc.New("")); up {
 				return nil
 			}
-			// Foreground mode: just call into the daemon package directly.
 			if foreground {
-				return daemon.Run(ctx, daemon.Options{Version: version.String()})
+				return daemon.Run(cmd.Context(), daemon.Options{Version: version.String()})
 			}
-			// Background mode: re-exec this binary with the hidden internal
-			// subcommand, detached, which avoids forking a Go process.
 			return startDetached()
 		},
 	}
@@ -135,38 +128,20 @@ For graceful 'restart-the-daemon-and-relaunch-my-targets', prefer
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			c := rpc.New("")
-			pingCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
-			if _, err := c.Ping(pingCtx); err != nil {
-				cancel()
-				if rpc.IsNotRunning(err) {
+			if up, err := daemonUp(ctx, c); !up {
+				if err == nil {
 					_, _ = fmt.Fprintln(os.Stderr, "a-novel: daemon not running")
-					return nil
 				}
 				return err
 			}
-			cancel()
-			// The daemon signals its own exit once the Shutdown response is
-			// on the wire, so polling Ping until the socket is gone is what
-			// tells a shell or script the daemon is done.
-			shutCtx, shutCancel := context.WithTimeout(ctx, 60*time.Second)
-			defer shutCancel()
-			resp, err := c.Shutdown(shutCtx, force)
+			resp, err := shutdown(ctx, c, force, cmd.OutOrStdout())
 			if err != nil {
 				return err
-			}
-			if force {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-					"shutdown: %d go-exec target(s) killed, %d service infra torn down\n",
-					resp.GetGoExecKilled(), resp.GetInfraServicesTornDown())
-			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-					"shutdown: %d go-exec target(s) killed (containers left running)\n",
-					resp.GetGoExecKilled())
 			}
 			// The daemon still exits, so it is waited on either way. The
 			// failures decide the exit code: whoever ran this to get a clean
 			// environment has to learn from the shell that they did not.
-			waitErr := waitForDaemonGone(ctx, c, 10*time.Second, cmd.OutOrStdout())
+			waitErr := waitDaemonGone(ctx, c, cmd.OutOrStdout())
 			if fails := resp.GetFailures(); len(fails) > 0 {
 				for _, f := range fails {
 					_, _ = fmt.Fprintf(os.Stderr, "a-novel: shutdown could not stop %s\n", f)
@@ -180,22 +155,66 @@ For graceful 'restart-the-daemon-and-relaunch-my-targets', prefer
 	return cmd
 }
 
-// waitForDaemonGone polls Ping until the daemon's socket is unresponsive, up to
-// timeout. core kill and core restart use it for a deterministic "the daemon is
-// gone" signal, so a script can run `core start` on the next line.
-func waitForDaemonGone(ctx context.Context, c *rpc.Client, timeout time.Duration, out io.Writer) error {
-	deadline := time.Now().Add(timeout)
+// daemonUp pings the daemon briefly. A daemon that is not listening is down,
+// not an error; any other failure is returned.
+func daemonUp(ctx context.Context, c *rpc.Client) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	_, err := c.Ping(ctx)
+	if rpc.IsNotRunning(err) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// daemonExitTimeout bounds how long a stopped daemon may take to release its
+// socket.
+const daemonExitTimeout = 10 * time.Second
+
+// waitDaemonGone polls until the daemon stops answering, a deterministic "the
+// daemon is gone" signal so a script can run `core start` on the next line.
+func waitDaemonGone(ctx context.Context, c *rpc.Client, out io.Writer) error {
+	deadline := time.Now().Add(daemonExitTimeout)
 	for time.Now().Before(deadline) {
-		pingCtx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
-		_, err := c.Ping(pingCtx)
-		cancel()
-		if err != nil && rpc.IsNotRunning(err) {
+		if up, err := daemonUp(ctx, c); !up && err == nil {
 			_, _ = fmt.Fprintln(out, "daemon stopped.")
 			return nil
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	return fmt.Errorf("daemon didn't shut down within %s", timeout)
+	return fmt.Errorf("daemon didn't shut down within %s", daemonExitTimeout)
+}
+
+// shutdown asks the daemon to exit and reports what it stopped. force also
+// tears down every service's infra.
+func shutdown(ctx context.Context, c *rpc.Client, force bool, out io.Writer) (*anovelv1.ShutdownResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	resp, err := c.Shutdown(ctx, force)
+	if err != nil {
+		return nil, err
+	}
+	if force {
+		_, _ = fmt.Fprintf(out, "shutdown: %d go-exec target(s) killed, %d service infra torn down\n",
+			resp.GetGoExecKilled(), resp.GetInfraServicesTornDown())
+	} else {
+		_, _ = fmt.Fprintf(out, "shutdown: %d go-exec target(s) killed (containers left running)\n",
+			resp.GetGoExecKilled())
+	}
+	return resp, nil
+}
+
+// prepareReinstall asks the daemon to checkpoint its go-exec targets and exit.
+func prepareReinstall(ctx context.Context, c *rpc.Client, out io.Writer) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	resp, err := c.PrepareReinstall(ctx)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(out, "checkpoint written: %s (%d go-exec target(s))\n",
+		resp.GetCheckpointPath(), resp.GetGoExecTargetCount())
+	return nil
 }
 
 func newCoreRestartCmd() *cobra.Command {
@@ -210,7 +229,7 @@ loop. Honors the same flags as 'core kill':
   --force            tear down all infra alongside the daemon
   --preserve-targets write a reinstall checkpoint first, so go-exec
                      targets relaunch on next start (the same path
-                     scripts/install.sh uses)
+                     'a-novel install' uses)
 
 Without flags, the daemon stops cleanly (containers survive, go-exec
 targets are SIGTERMed and NOT relaunched) and then starts fresh. With
@@ -222,49 +241,28 @@ If the daemon is already down, this is just 'core start'.`,
   a-novel core restart --preserve-targets
   a-novel core restart --force`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			pingCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
-			_, pingErr := c.Ping(pingCtx)
-			cancel()
-			if pingErr != nil && !rpc.IsNotRunning(pingErr) {
-				return pingErr
+			if preserve && force {
+				return usageError(errors.New("--preserve-targets and --force are mutually exclusive " +
+					"(force tears down everything; preserve assumes the targets continue)"))
 			}
-			daemonUp := pingErr == nil
-			if daemonUp {
-				if preserve && force {
-					return errors.New("--preserve-targets and --force are mutually exclusive (force tears down everything; preserve assumes the targets continue)")
-				}
+			ctx, out := cmd.Context(), cmd.OutOrStdout()
+			c := rpc.New("")
+			up, err := daemonUp(ctx, c)
+			if err != nil {
+				return err
+			}
+			if up {
 				if preserve {
-					// The 'core prepare-reinstall' path: write the checkpoint,
-					// the daemon exits, the next start replays it.
-					rCtx, rCancel := context.WithTimeout(ctx, 30*time.Second)
-					resp, err := c.PrepareReinstall(rCtx)
-					rCancel()
-					if err != nil {
-						return err
-					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-						"checkpoint written: %s (%d go-exec target(s))\n",
-						resp.GetCheckpointPath(), resp.GetGoExecTargetCount())
+					// The prepare-reinstall path: the daemon checkpoints and
+					// exits, and the next start replays the checkpoint.
+					err = prepareReinstall(ctx, c, out)
 				} else {
-					sCtx, sCancel := context.WithTimeout(ctx, 60*time.Second)
-					resp, err := c.Shutdown(sCtx, force)
-					sCancel()
-					if err != nil {
-						return err
-					}
-					if force {
-						_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-							"shutdown: %d go-exec target(s) killed, %d service infra torn down\n",
-							resp.GetGoExecKilled(), resp.GetInfraServicesTornDown())
-					} else {
-						_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-							"shutdown: %d go-exec target(s) killed (containers left running)\n",
-							resp.GetGoExecKilled())
-					}
+					_, err = shutdown(ctx, c, force, out)
 				}
-				if err := waitForDaemonGone(ctx, c, 10*time.Second, cmd.OutOrStdout()); err != nil {
+				if err != nil {
+					return err
+				}
+				if err := waitDaemonGone(ctx, c, out); err != nil {
 					return err
 				}
 			}
@@ -330,26 +328,21 @@ The next 'a-novel core start' reads the checkpoint and relaunches the
 recorded go-exec targets, then deletes the checkpoint — yielding a steady
 state identical to pre-restart.
 
-Used by scripts/install.sh to make 'go install ./cmd/a-novel' non-disruptive
-during development. Not for direct manual use — for an immediate stop use
-'core kill' instead.`,
+Used by 'a-novel install' to make a rebuild non-disruptive. Not for direct
+manual use — for an immediate stop use 'core kill' instead.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			c := rpc.New("")
-			if _, err := c.Ping(ctx); err != nil {
-				if rpc.IsNotRunning(err) {
+			if up, err := daemonUp(ctx, c); !up {
+				if err == nil {
 					_, _ = fmt.Fprintln(cmd.OutOrStderr(), "a-novel: daemon not running (nothing to checkpoint)")
-					return nil
 				}
 				return err
 			}
-			resp, err := c.PrepareReinstall(ctx)
-			if err != nil {
+			if err := prepareReinstall(ctx, c, cmd.OutOrStdout()); err != nil {
 				return err
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "checkpoint written: %s (%d go-exec target(s))\n",
-				resp.GetCheckpointPath(), resp.GetGoExecTargetCount())
-			return waitForDaemonGone(ctx, c, 10*time.Second, cmd.OutOrStdout())
+			return waitDaemonGone(ctx, c, cmd.OutOrStdout())
 		},
 	}
 }
@@ -431,7 +424,8 @@ func newCoreDaemonInternalCmd() *cobra.Command {
 }
 
 // startDetached re-execs the current binary with the hidden daemon
-// subcommand and detaches the child so it survives this process's exit.
+// subcommand, in its own session so it survives this process's exit, and waits
+// for it to answer. Callers check that no daemon runs already.
 func startDetached() error {
 	bin, err := os.Executable()
 	if err != nil {

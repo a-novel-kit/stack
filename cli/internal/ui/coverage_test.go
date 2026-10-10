@@ -3,8 +3,7 @@ package ui
 import (
 	"testing"
 
-	"github.com/a-novel-kit/stack/cli/internal/build"
-	"github.com/a-novel-kit/stack/cli/internal/detect"
+	"github.com/a-novel-kit/stack/cli/internal/jobs"
 )
 
 // goCoverage keeps generated and test-support packages out of the mean. Under coverage
@@ -21,8 +20,8 @@ ok  	x/internal/test  0.01s  coverage: 0.0% of statements
 ok  	x/proto/gen/protogen  0.01s  coverage: 0.0% of statements
 ok  	x/pkg/go  0.05s  coverage: 60.0% of statements`
 
-	results := []build.Result{{
-		Target: detect.Target{Kind: detect.KindGo, Name: "x"},
+	results := []jobs.Result{{
+		Job:    jobs.Job{Name: "x", Group: "go"},
 		Output: out,
 	}}
 
@@ -61,8 +60,8 @@ func TestGoCoverageKeepsSubstringMatches(t *testing.T) {
 	out := "ok  	x/internal/testutil  0.01s  coverage: 50.0% of statements\n" +
 		"ok  	x/internal/attestation  0.01s  coverage: 70.0% of statements"
 
-	results := []build.Result{{
-		Target: detect.Target{Kind: detect.KindGo, Name: "x"},
+	results := []jobs.Result{{
+		Job:    jobs.Job{Name: "x", Group: "go"},
 		Output: out,
 	}}
 

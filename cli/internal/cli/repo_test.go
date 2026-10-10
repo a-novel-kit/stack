@@ -3,8 +3,6 @@ package cli
 import (
 	"bytes"
 	"errors"
-	"io"
-	"net/http"
 	"strings"
 	"testing"
 
@@ -77,7 +75,7 @@ func TestRepoCreateInfraDefaultsPublicAndBootstrapsBeforeRulesets(t *testing.T) 
 	}
 	if strings.Contains(joined, "-X PUT repos/a-novel/infra/contents/.github/workflows/release-train.yaml") ||
 		strings.Contains(joined, "-X PUT repos/a-novel/infra/contents/.github/workflows/hotfix.yaml") ||
-		strings.Contains(joined, `select(.name=="tags")`) {
+		strings.Contains(joined, `"name":"tags"`) {
 		t.Errorf("infra create attempted release mechanics:\n%s", joined)
 	}
 	for _, want := range []string{"class infra", "created and configured"} {
@@ -100,103 +98,6 @@ func TestRepoCreateInfraDefaultsPublicAndBootstrapsBeforeRulesets(t *testing.T) 
 	}
 }
 
-func TestApplyPlanSkipsRulesetsWhenManagedSyncFails(t *testing.T) {
-	// Not parallel: swaps the package-level ghStdin seam.
-	orig := ghStdin
-	t.Cleanup(func() { ghStdin = orig })
-
-	var rulesetCalls int
-	ghStdin = func(_ string, args ...string) (string, error) {
-		joined := strings.Join(args, " ")
-		switch {
-		case strings.Contains(joined, "/contents/"):
-			return "", errors.New("gh: Not Found (HTTP 404)")
-		case strings.Contains(joined, "git/ref/heads/master"):
-			return "headoid123", nil
-		case strings.Contains(joined, "api graphql"):
-			return "", errors.New("workflow scope missing")
-		case strings.Contains(joined, "/rulesets"):
-			rulesetCalls++
-		}
-		return "", nil
-	}
-
-	plan := &repocfg.Plan{Ops: []repocfg.Op{
-		{Method: http.MethodPut, Path: "repos/o/r/contents/.github/workflows/merge-gate.yaml", Content: "name: merge gate\n"},
-		{RulesetName: branchMaster, Path: "repos/o/r/rulesets", Body: &repocfg.APIRuleset{Name: branchMaster}},
-	}}
-	if err := applyPlan(io.Discard, "o", "r", branchMaster, plan); err == nil {
-		t.Fatal("managed sync failure must fail the apply")
-	}
-	if rulesetCalls != 0 {
-		t.Errorf("issued %d ruleset call(s) after managed sync failed, want 0", rulesetCalls)
-	}
-}
-
-func TestInfraDisabledStateOperationsAreIdempotent(t *testing.T) {
-	// Not parallel: swaps the package-level ghStdin seam.
-	orig := ghStdin
-	t.Cleanup(func() { ghStdin = orig })
-
-	var pagesCalls, alertCalls int
-	ghStdin = func(_ string, args ...string) (string, error) {
-		joined := strings.Join(args, " ")
-		switch {
-		case strings.Contains(joined, "/pages"):
-			pagesCalls++
-			if pagesCalls > 1 {
-				return "", errors.New("gh: Not Found (HTTP 404)")
-			}
-		case strings.Contains(joined, "/vulnerability-alerts"):
-			alertCalls++
-		}
-		return "", nil
-	}
-
-	pages := repocfg.Op{Method: http.MethodDelete, Path: "repos/o/infra/pages"}
-	if got, err := applyPages(pages); err != nil || got != "disabled" {
-		t.Fatalf("first Pages disable = (%q, %v), want (disabled, nil)", got, err)
-	}
-	if got, err := applyPages(pages); err != nil || got != "already disabled" {
-		t.Fatalf("second Pages disable = (%q, %v), want (already disabled, nil)", got, err)
-	}
-
-	alerts := repocfg.Op{Method: http.MethodPut, Path: "repos/o/infra/vulnerability-alerts"}
-	for i := range 2 {
-		if got, err := applyVulnerabilityAlerts(alerts); err != nil || got != "enabled" {
-			t.Fatalf("alerts enable %d = (%q, %v), want (enabled, nil)", i+1, got, err)
-		}
-	}
-	if pagesCalls != 2 || alertCalls != 2 {
-		t.Errorf("Pages/alerts calls = %d/%d, want 2/2", pagesCalls, alertCalls)
-	}
-}
-
-func TestStageContentDeletionIsIdempotent(t *testing.T) {
-	// Not parallel: swaps the package-level ghStdin seam.
-	orig := ghStdin
-	t.Cleanup(func() { ghStdin = orig })
-
-	var reads int
-	ghStdin = func(string, ...string) (string, error) {
-		reads++
-		if reads == 1 {
-			return "existing-sha", nil
-		}
-		return "", errors.New("gh: Not Found (HTTP 404)")
-	}
-	op := repocfg.Op{Method: http.MethodDelete, Path: "repos/o/infra/contents/.github/workflows/release-train.yaml"}
-
-	change, unchanged, err := stageContentDeletion(op)
-	if err != nil || unchanged || change.outcome != opDeleted {
-		t.Fatalf("existing deletion = (%+v, %v, %v), want one staged deletion", change, unchanged, err)
-	}
-	change, unchanged, err = stageContentDeletion(op)
-	if err != nil || !unchanged || change != (contentChange{}) {
-		t.Fatalf("missing deletion = (%+v, %v, %v), want unchanged", change, unchanged, err)
-	}
-}
-
 func indexCall(calls []string, contains string) int {
 	for i, call := range calls {
 		if strings.Contains(call, contains) {
@@ -204,4 +105,56 @@ func indexCall(calls []string, contains string) int {
 		}
 	}
 	return -1
+}
+
+func TestRenderSummary(t *testing.T) {
+	t.Parallel()
+	target := &repocfg.RepoTarget{
+		Org:  orgAnovel,
+		Repo: "service-auth",
+		Class: &repocfg.ClassPreset{
+			Class:    repocfg.ClassService,
+			Features: repocfg.Features{Issues: true, Projects: true},
+			Merge:    repocfg.Merge{Squash: true, AutoMerge: true, SignoffRequired: true},
+			Security: repocfg.SecurityToggles{SecretScanning: true, PushProtection: true, Dependabot: true},
+			Rulesets: repocfg.ClassRulesets{Master: true, RequireApproval: true},
+		},
+		Discovered: &repocfg.Discovered{
+			Checks: []repocfg.CheckRef{{Context: "lint-go"}, {Context: "test"}},
+		},
+	}
+
+	var buf bytes.Buffer
+	renderSummary(&buf, target)
+	got := buf.String()
+
+	for _, want := range []string{
+		"a-novel/service-auth", "class service",
+		"Features", "squash", "auto-merge", "signoff",
+		"lint-go, test (2)", // discovered checks
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("summary missing %q\n--- got ---\n%s", want, got)
+		}
+	}
+}
+
+// TestRenderSummaryOmitsRetiredRulesets guards the summary against announcing a
+// ruleset repocfg no longer applies. An operator reads the summary before
+// confirming a reconcile, so it names only the protection the plan keeps.
+func TestRenderSummaryOmitsRetiredRulesets(t *testing.T) {
+	t.Parallel()
+	target := &repocfg.RepoTarget{
+		Org: orgAnovel, Repo: "lib-x",
+		Class: &repocfg.ClassPreset{
+			Class:    repocfg.ClassLibrary,
+			Rulesets: repocfg.ClassRulesets{Master: true, RequireApproval: true, Tags: true},
+		},
+		Discovered: &repocfg.Discovered{},
+	}
+	var buf bytes.Buffer
+	renderSummary(&buf, target)
+	if strings.Contains(buf.String(), "codecov") {
+		t.Errorf("summary still lists the retired codecov ruleset:\n%s", buf.String())
+	}
 }

@@ -11,12 +11,11 @@ import (
 // TestSecretsSetRefusesNonInteractive verifies the TTY gate: `secrets set`
 // must refuse when stdin is not a terminal so a value is never piped in.
 //
-// Not parallel: swaps the package-level secretsStdinIsTTY seam (same pattern as
-// publish_cmd_test.go's stdinIsTTY).
+// Not parallel: swaps the package-level stdinIsTTY seam.
 func TestSecretsSetRefusesNonInteractive(t *testing.T) {
-	orig := secretsStdinIsTTY
-	secretsStdinIsTTY = func() bool { return false }
-	t.Cleanup(func() { secretsStdinIsTTY = orig })
+	orig := stdinIsTTY
+	stdinIsTTY = func() bool { return false }
+	t.Cleanup(func() { stdinIsTTY = orig })
 
 	cmd := newSecretsSetCmd()
 	cmd.SetArgs([]string{"some-id"})
@@ -37,9 +36,9 @@ func TestSecretsSetRefusesNonInteractive(t *testing.T) {
 func TestSecretsSetStoresWithoutEchoingValue(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
-	origTTY := secretsStdinIsTTY
-	secretsStdinIsTTY = func() bool { return true }
-	t.Cleanup(func() { secretsStdinIsTTY = origTTY })
+	origTTY := stdinIsTTY
+	stdinIsTTY = func() bool { return true }
+	t.Cleanup(func() { stdinIsTTY = origTTY })
 
 	const secretValue = "sk-super-secret"
 	origRead := readPassword

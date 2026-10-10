@@ -16,12 +16,15 @@
 package detect
 
 import (
-	"bufio"
+	"cmp"
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
+
+	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
 )
 
 // Kind classifies a build target. Its string value doubles as the user-facing
@@ -35,11 +38,10 @@ const (
 	KindPnpm Kind = "pnpm"
 	// KindPodman is a root Dockerfile or one under builds/, built into an image.
 	KindPodman Kind = "podman"
-	// KindContainer is a run-mode target: a compose service guarded by a
-	// profile that the runner brings up with `podman compose --profile X
-	// up <svc>`. Only DetectRun emits it, in container mode.
-	KindContainer Kind = "container"
 )
+
+// Kinds lists every kind in presentation order.
+var Kinds = []Kind{KindGo, KindPnpm, KindPodman}
 
 // buildArg is the "build" token shared by the go and podman subcommands and
 // the canonical pnpm script name.
@@ -52,32 +54,6 @@ const pkgAll = "./..."
 // testArg is the "test" token shared by `go test`, the canonical pnpm script
 // name, and the env id.
 const testArg = "test"
-
-// runArg is the "run" token shared by the `pnpm run <script>` subcommand, the
-// canonical "run"/"run:*" script name, and the run env id.
-const runArg = "run"
-
-// InitOrder lists the one-shot init Go entrypoints by Name, in the order they
-// must run to completion before any long-lived service target: init seeds,
-// migrations applies the schema, rotate-keys refreshes the JWKs. Detection,
-// the runner and mode resolution all read it, so the policy lives in one place.
-var InitOrder = []string{"init", "migrations", "rotate-keys"}
-
-// IsInit reports whether t is one of the [InitOrder] entrypoints, a Go
-// `cmd/<name>` main. The picker groups these targets with the container
-// targets, and the runner barriers on them before launching any long-lived
-// service.
-func IsInit(t Target) bool {
-	if t.Kind != KindGo {
-		return false
-	}
-	for _, n := range InitOrder {
-		if t.Name == n {
-			return true
-		}
-	}
-	return false
-}
 
 // ciSuffix marks a pnpm script as CI-only ("test:ci", "build:ci"). Those are
 // tailored to the GitHub pipeline, so discovery skips them.
@@ -103,12 +79,6 @@ type Target struct {
 	// RelDir.
 	Name string
 
-	// Service is the owning repo/module short name (e.g. "service-json-keys").
-	// Set for `run` targets so the UI can disambiguate identically-named
-	// entrypoints across services (every service has a "rest"). Empty for
-	// build/test, where Name and RelDir already suffice.
-	Service string
-
 	// RelDir is the target's directory relative to the scan root ("." for the
 	// root itself). Used for display grouping and de-duplication.
 	RelDir string
@@ -117,7 +87,7 @@ type Target struct {
 	Dir string
 
 	// Detail is a one-line, human-readable summary shown under the target in
-	// the menu and report (the resolved image tag, the script body, …).
+	// the picker (the resolved image tag, the script body, …).
 	Detail string
 
 	// Cmd and Args are the exact process to spawn, executed with Dir as CWD.
@@ -127,14 +97,6 @@ type Target struct {
 	// Env, when non-nil, is a podman-compose environment that must be up
 	// before the command runs and torn down after. Only test targets set it.
 	Env *ComposeEnv
-
-	// ComposeService is the compose service name that runs this target
-	// dockerized, set by `run` detection when the target's name matches a
-	// profile in its env's compose file (e.g. "rest" →
-	// "service-json-keys-rest"). Empty when dockerized mode cannot run the
-	// target — one-shots such as migrations have no compose service — and
-	// the runner falls back to local exec.
-	ComposeService string
 }
 
 // ComposeEnv is a podman-compose test environment discovered from a
@@ -157,15 +119,8 @@ type ComposeEnv struct {
 	// HOST) for any it references, so an internal-only postgres with no host
 	// port, and therefore no entry in Ports, still gets credentials.
 	Refs []string
-	// Profiles maps a compose `profiles: ["x"]` value to the service name
-	// carrying it (e.g. "rest" → "service-json-keys-rest"). `run` reads it to
-	// pick the compose service to bring up for a target requested in
-	// dockerized mode (`podman compose --profile x up <svc>`).
-	Profiles map[string]string
 	// Services lists every compose service declared under `services:`, in
-	// source order. The runner derives the set to bring up at env-up time
-	// from it, skipping in global mode any sibling service already being run
-	// from its own repo.
+	// source order.
 	Services []string
 	// Dependents lists the services that declare a `depends_on:` block. The
 	// test env-up path starts dependency-free services first and dependents
@@ -221,209 +176,145 @@ func skipDir(absRoot, path, name string, ignored map[string]struct{}) bool {
 	return false
 }
 
-// Detect walks root and returns every build target found, sorted for stable
-// presentation (by kind, then directory, then name).
+// Detect walks root and returns every build target found, sorted by kind, then
+// directory, then name.
 func Detect(root string) ([]Target, error) {
+	return walk(root, func(dir, rel string) []Target {
+		return slices.Concat(detectGo(dir, rel), detectPnpm(dir, rel), detectPodman(dir, rel))
+	})
+}
+
+// walk calls visit for every directory under root the scan keeps, and returns
+// the targets it emits in presentation order.
+func walk(root string, visit func(dir, rel string) []Target) ([]Target, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
 	}
-
 	ignored := gitIgnoredDirs(absRoot)
 	var targets []Target
-
-	walkErr := filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
+	err = filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			// Skip an unreadable subtree and keep discovering the rest.
+			// Skip an unreadable entry and keep discovering the rest.
 			if d != nil && d.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-
 		if !d.IsDir() {
 			return nil
 		}
-
 		if skipDir(absRoot, path, d.Name(), ignored) {
 			return filepath.SkipDir
 		}
-
 		rel, _ := filepath.Rel(absRoot, path)
-
-		targets = append(targets, detectGo(path, rel)...)
-		targets = append(targets, detectPnpm(path, rel)...)
-		targets = append(targets, detectPodman(path, rel)...)
-
+		targets = append(targets, visit(path, rel)...)
 		return nil
 	})
-	if walkErr != nil {
-		return nil, walkErr
+	if err != nil {
+		return nil, err
 	}
-
-	sort.SliceStable(targets, func(i, j int) bool {
-		a, b := targets[i], targets[j]
-		if a.Kind != b.Kind {
-			return kindOrder(a.Kind) < kindOrder(b.Kind)
-		}
-		if a.RelDir != b.RelDir {
-			return a.RelDir < b.RelDir
-		}
-		return a.Name < b.Name
+	slices.SortStableFunc(targets, func(a, b Target) int {
+		return cmp.Or(
+			cmp.Compare(slices.Index(Kinds, a.Kind), slices.Index(Kinds, b.Kind)),
+			cmp.Compare(a.RelDir, b.RelDir),
+			cmp.Compare(a.Name, b.Name),
+		)
 	})
-
 	return targets, nil
-}
-
-func kindOrder(k Kind) int {
-	switch k {
-	case KindGo:
-		return 0
-	case KindPnpm:
-		return 1
-	case KindPodman:
-		return 2
-	case KindContainer:
-		return 3
-	default:
-		return 4
-	}
 }
 
 // detectGo emits a single `go build ./...` target when dir holds a go.mod.
 func detectGo(dir, rel string) []Target {
-	modPath := filepath.Join(dir, "go.mod")
-	if !fileExists(modPath) {
+	if !IsFile(filepath.Join(dir, "go.mod")) {
 		return nil
 	}
-
-	name := goModuleName(modPath)
-	if name == "" {
-		name = filepath.Base(dir)
-	}
-
 	return []Target{{
 		Kind:   KindGo,
-		Name:   name,
+		Name:   goModuleName(dir),
 		RelDir: rel,
 		Dir:    dir,
 		Detail: "go build " + pkgAll,
-		Cmd:    "go",
+		Cmd:    string(KindGo),
 		Args:   []string{buildArg, pkgAll},
 	}}
-}
-
-// packageJSON is the minimal shape read out of a package.json.
-type packageJSON struct {
-	Name    string            `json:"name"`
-	Scripts map[string]string `json:"scripts"`
 }
 
 // detectPnpm emits one target per "build"-prefixed script in dir's
 // package.json. Each script is listed individually so the user can build, say,
 // only `build:rest` without triggering the umbrella `build`.
 func detectPnpm(dir, rel string) []Target {
-	pkgPath := filepath.Join(dir, "package.json")
-	if !fileExists(pkgPath) {
-		return nil
-	}
-
-	raw, err := os.ReadFile(pkgPath)
-	if err != nil {
-		return nil
-	}
-
-	var pkg packageJSON
-	if json.Unmarshal(raw, &pkg) != nil {
-		return nil
-	}
-
-	scripts := make([]string, 0, len(pkg.Scripts))
-	for name := range pkg.Scripts {
-		if pnpmScript(name, buildArg) {
-			scripts = append(scripts, name)
-		}
-	}
-	sort.Strings(scripts)
-
+	scripts := pnpmScripts(dir, buildArg)
 	targets := make([]Target, 0, len(scripts))
 	for _, s := range scripts {
-		targets = append(targets, Target{
-			Kind:   KindPnpm,
-			Name:   s,
-			RelDir: rel,
-			Dir:    dir,
-			Detail: truncate(pkg.Scripts[s], 70),
-			Cmd:    string(KindPnpm),
-			Args:   []string{runArg, s},
-		})
+		targets = append(targets, pnpmTarget(dir, rel, s))
 	}
 	return targets
 }
 
-// fileExists reports whether path is an existing regular file.
-func fileExists(path string) bool {
+// pnpmScripts returns the "<kind>" and "<kind>:*" scripts of dir's
+// package.json, sorted, with their bodies.
+func pnpmScripts(dir, kind string) []pnpmScriptDef {
+	raw, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	if err != nil {
+		return nil
+	}
+	var pkg struct {
+		Scripts map[string]string `json:"scripts"`
+	}
+	if json.Unmarshal(raw, &pkg) != nil {
+		return nil
+	}
+	var out []pnpmScriptDef
+	for name, body := range pkg.Scripts {
+		if pnpmScript(name, kind) {
+			out = append(out, pnpmScriptDef{name: name, body: body})
+		}
+	}
+	slices.SortFunc(out, func(a, b pnpmScriptDef) int { return strings.Compare(a.name, b.name) })
+	return out
+}
+
+// pnpmScriptDef is one package.json script.
+type pnpmScriptDef struct{ name, body string }
+
+// pnpmTarget runs one package.json script through pnpm.
+func pnpmTarget(dir, rel string, s pnpmScriptDef) Target {
+	return Target{
+		Kind:   KindPnpm,
+		Name:   s.name,
+		RelDir: rel,
+		Dir:    dir,
+		Detail: strings.TrimSpace(s.body),
+		Cmd:    string(KindPnpm),
+		Args:   []string{"run", s.name},
+	}
+}
+
+// IsFile reports whether path is an existing regular file.
+func IsFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
 }
 
-// goModuleName extracts the module short name from a go.mod's `module` line:
-// "github.com/a-novel/service-json-keys/v2" → "service-json-keys". The major
-// version suffix is dropped so v1 and v2 of the same module read identically.
-func goModuleName(modPath string) string {
-	full := goModulePath(modPath)
-	if full == "" {
-		return ""
-	}
-	full = stripMajorSuffix(full)
-	parts := strings.Split(full, "/")
-	return parts[len(parts)-1]
-}
-
-// goModulePath returns the raw module path from a go.mod's `module` directive,
-// or "" if it cannot be read.
-func goModulePath(modPath string) string {
-	f, err := os.Open(modPath)
+// goModulePath returns the module path of dir/go.mod without its major-version
+// suffix ("github.com/a-novel/service-json-keys/v2" →
+// "github.com/a-novel/service-json-keys"), or "" when there is none.
+func goModulePath(dir string) string {
+	raw, err := os.ReadFile(filepath.Join(dir, "go.mod"))
 	if err != nil {
 		return ""
 	}
-	defer func() { _ = f.Close() }()
-
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if rest, ok := strings.CutPrefix(line, "module "); ok {
-			return strings.TrimSpace(rest)
-		}
-	}
-	return ""
+	prefix, _, _ := module.SplitPathVersion(modfile.ModulePath(raw))
+	return prefix
 }
 
-// stripMajorSuffix removes a trailing "/vN" semantic-import-version segment.
-func stripMajorSuffix(modulePath string) string {
-	i := strings.LastIndex(modulePath, "/v")
-	if i < 0 {
-		return modulePath
+// goModuleName is the last segment of dir's module path, or the directory name
+// when go.mod names no module.
+func goModuleName(dir string) string {
+	path := goModulePath(dir)
+	if path == "" {
+		return filepath.Base(dir)
 	}
-	suffix := modulePath[i+2:]
-	if suffix == "" {
-		return modulePath
-	}
-	for _, r := range suffix {
-		if r < '0' || r > '9' {
-			return modulePath
-		}
-	}
-	return modulePath[:i]
-}
-
-// truncate shortens s to max runes, appending an ellipsis when cut. Used to
-// keep one-line details from wrapping the menu.
-func truncate(s string, maxLen int) string {
-	s = strings.TrimSpace(s)
-	r := []rune(s)
-	if len(r) <= maxLen {
-		return s
-	}
-	return string(r[:maxLen-1]) + "…"
+	return path[strings.LastIndexByte(path, '/')+1:]
 }

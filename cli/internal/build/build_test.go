@@ -14,8 +14,8 @@ import (
 
 // TestPrepareEnv_InjectsRepoSecrets verifies the test/build env-assembly seam:
 // PrepareEnv appends the repo's locally-stored secrets (decrypted) to the child
-// env and folds them into the delta. The value must appear only in the returned
-// env — never in the progress written to `out`.
+// env. The value must appear only in the returned env — never in the progress
+// written to `out`.
 //
 // Not parallel: uses t.Setenv("XDG_DATA_HOME", ...) for store isolation.
 func TestPrepareEnv_InjectsRepoSecrets(t *testing.T) {
@@ -47,16 +47,13 @@ func TestPrepareEnv_InjectsRepoSecrets(t *testing.T) {
 	tgt := detect.Target{Kind: detect.KindGo, Name: "x", Dir: repoRoot}
 
 	var out strings.Builder
-	runEnv, delta, err := PrepareEnv(t.Context(), tgt, &out)
+	runEnv, err := PrepareEnv(t.Context(), tgt, &out)
 	if err != nil {
 		t.Fatalf("PrepareEnv: %v", err)
 	}
 
 	if !slices.Contains(runEnv, "OPENAI_API_KEY="+secretValue) {
 		t.Error("injected secret missing from runEnv")
-	}
-	if !slices.Contains(delta, "OPENAI_API_KEY="+secretValue) {
-		t.Error("injected secret missing from delta")
 	}
 	if strings.Contains(out.String(), secretValue) {
 		t.Errorf("PrepareEnv progress output leaked the secret value:\n%s", out.String())
@@ -71,7 +68,7 @@ func TestPrepareEnv_NoMappingNoSecrets(t *testing.T) {
 	repoRoot := t.TempDir() // no .a-novel/secrets.yaml
 	tgt := detect.Target{Kind: detect.KindGo, Name: "x", Dir: repoRoot}
 
-	runEnv, _, err := PrepareEnv(t.Context(), tgt, io.Discard)
+	runEnv, err := PrepareEnv(t.Context(), tgt, io.Discard)
 	if err != nil {
 		t.Fatalf("PrepareEnv: %v", err)
 	}
@@ -102,7 +99,7 @@ func TestPrepareEnv_MissingSecretWarns(t *testing.T) {
 	tgt := detect.Target{Kind: detect.KindGo, Name: "x", Dir: repoRoot}
 
 	var out strings.Builder
-	runEnv, _, err := PrepareEnv(t.Context(), tgt, &out)
+	runEnv, err := PrepareEnv(t.Context(), tgt, &out)
 	if err != nil {
 		t.Fatalf("PrepareEnv must not fail on a missing secret: %v", err)
 	}
@@ -119,12 +116,12 @@ func TestPrepareEnv_MissingSecretWarns(t *testing.T) {
 	}
 }
 
-// TestRun_GOMAXPROCSCap verifies Run injects GOMAXPROCS from its maxProcs
+// TestJob_GOMAXPROCSCap verifies a job injects GOMAXPROCS from its maxProcs
 // argument (the per-target CPU cap the parallel runner uses), and leaves it
 // untouched when maxProcs is 0 (the sequential path).
-func TestRun_GOMAXPROCSCap(t *testing.T) {
+func TestJob_GOMAXPROCSCap(t *testing.T) {
 	// The child echoes its inherited GOMAXPROCS; ensure it isn't already set in
-	// this process, so we observe only what Run injects.
+	// this process, so we observe only what the job injects.
 	if orig, ok := os.LookupEnv("GOMAXPROCS"); ok {
 		_ = os.Unsetenv("GOMAXPROCS")
 		t.Cleanup(func() { _ = os.Setenv("GOMAXPROCS", orig) })
@@ -147,12 +144,12 @@ func TestRun_GOMAXPROCSCap(t *testing.T) {
 				Cmd:  "sh",
 				Args: []string{"-c", `printf 'GMP=[%s]' "$GOMAXPROCS"`},
 			}
-			res := Run(t.Context(), tgt, 0, nil, tt.maxProcs, false)
-			if !res.Success {
-				t.Fatalf("target failed: %v\n%s", res.ExitErr, res.Output)
+			var out strings.Builder
+			if _, err := Job(tgt, 0, tt.maxProcs, false).Run(t.Context(), &out); err != nil {
+				t.Fatalf("target failed: %v\n%s", err, out.String())
 			}
-			if want := "GMP=[" + tt.want + "]"; !strings.Contains(res.Output, want) {
-				t.Errorf("output %q does not contain %q", res.Output, want)
+			if want := "GMP=[" + tt.want + "]"; !strings.Contains(out.String(), want) {
+				t.Errorf("output %q does not contain %q", out.String(), want)
 			}
 		})
 	}

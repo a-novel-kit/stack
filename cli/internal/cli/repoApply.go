@@ -1,21 +1,22 @@
 package cli
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
-	"os/exec"
 	"path"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/mod/semver"
 
@@ -27,20 +28,27 @@ import (
 // repository never requires checks whose workflow callers are still absent.
 // Independent operations continue after failures, but rulesets are skipped
 // when managed-file staging or sync fails.
-func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) error {
+func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
+	org, repo, branch := t.Org, t.Repo, t.DefaultBranch
 	var failures []string
-	note := func(ok bool, label, detail string) {
+	note := func(label, detail string, err error) {
 		mark := "✓"
-		if !ok {
+		if err != nil {
 			mark = "✗"
+			if detail == "" {
+				detail = firstLine(err.Error())
+			}
 			failures = append(failures, label+": "+detail)
 		}
-		line := fmt.Sprintf("  %s %s", mark, label)
+		line := "  " + mark + " " + label
 		if detail != "" {
 			line += " — " + detail
 		}
 		_, _ = fmt.Fprintln(out, line)
 	}
+	// The live rulesets are read once: a reconcile only adds kept rulesets, so
+	// the prune's candidates are fixed before the first write.
+	rulesets := sync.OnceValues(func() (map[string]string, error) { return liveRulesets(org, repo) })
 
 	var staged []contentChange
 	managedFilesFailed := false
@@ -51,10 +59,10 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 		detail, err := commitSync(org, repo, branch, staged)
 		if err == nil {
 			for _, change := range staged {
-				note(true, change.path, change.outcome)
+				note(change.path, change.outcome, nil)
 			}
 		}
-		note(err == nil, "sync commit", ternErr(err, detail))
+		note("sync commit", detail, err)
 		staged = nil
 		return err == nil
 	}
@@ -64,58 +72,56 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 				managedFilesFailed = true
 			}
 			if managedFilesFailed {
-				note(false, op.Title(), "skipped because managed-file sync failed")
+				note(op.Title(), "skipped because managed-file sync failed", errSkipped)
 				continue
 			}
 		}
 		switch {
 		case op.PruneRulesets:
-			detail, err := pruneRulesets(org, repo, op)
-			note(err == nil, "rulesets (prune)", ternErr(err, detail))
+			detail, err := pruneRulesets(org, repo, rulesets, op)
+			note("rulesets (prune)", detail, err)
 		case op.RulesetName != "":
-			detail, err := applyRuleset(org, repo, op)
-			note(err == nil, "ruleset "+op.RulesetName, ternErr(err, detail))
+			detail, err := applyRuleset(op, rulesets)
+			note("ruleset "+op.RulesetName, detail, err)
 		case op.Method == http.MethodDelete && strings.Contains(op.Path, "/contents/"):
 			change, unchanged, err := stageContentDeletion(op)
-			if err != nil {
+			switch {
+			case err != nil:
 				managedFilesFailed = true
-				note(false, shortPath(op.Path), ternErr(err, ""))
-				continue
-			}
-			if unchanged {
-				note(true, shortPath(op.Path), opUnchanged)
-			} else {
+				note(shortPath(op.Path), "", err)
+			case unchanged:
+				note(shortPath(op.Path), opUnchanged, nil)
+			default:
 				staged = append(staged, change)
 			}
 		case op.Content != "":
 			changes, unchanged, err := stageContents(op)
 			if err != nil {
 				managedFilesFailed = true
-				note(false, shortPath(op.Path), ternErr(err, ""))
+				note(shortPath(op.Path), "", err)
 				continue
 			}
 			if unchanged {
-				note(true, shortPath(op.Path), opUnchanged)
+				note(shortPath(op.Path), opUnchanged, nil)
 			}
 			staged = append(staged, changes...)
 		case strings.HasSuffix(op.Path, "/vulnerability-alerts"):
 			detail, err := applyVulnerabilityAlerts(op)
-			note(err == nil, "Dependabot alerts", ternErr(err, detail))
+			note("Dependabot alerts", detail, err)
 		case strings.HasSuffix(op.Path, "/pages"):
 			detail, err := applyPages(op)
-			note(err == nil, "pages", ternErr(err, detail))
+			note("pages", detail, err)
 		case strings.HasSuffix(op.Path, "/code-scanning/default-setup"):
 			detail, err := applyCodeScanning(op)
-			note(err == nil, "code scanning", ternErr(err, detail))
+			note("code scanning", detail, err)
 		case strings.HasSuffix(op.Path, "/code-quality/setup"):
 			detail, err := applyCodeQuality(op)
-			note(err == nil, "code quality", ternErr(err, detail))
+			note("code quality", detail, err)
 		case strings.HasSuffix(op.Path, "/labels"):
 			detail, err := applyLabels(org, repo, op)
-			note(err == nil, "labels", ternErr(err, detail))
+			note("labels", detail, err)
 		default: // settings PATCH
-			err := applySettings(op)
-			note(err == nil, "settings ("+op.Method+" "+shortPath(op.Path)+")", errText(err))
+			note("settings ("+op.Method+" "+shortPath(op.Path)+")", "", applySettings(op))
 		}
 	}
 
@@ -128,6 +134,9 @@ func applyPlan(out io.Writer, org, repo, branch string, plan *repocfg.Plan) erro
 	return nil
 }
 
+// errSkipped marks an operation applyPlan did not attempt.
+var errSkipped = errors.New("skipped")
+
 // applySettings PATCHes the repo settings. The a-novel org enforces
 // web_commit_signoff_required org-wide, which locks the repo-level field: a
 // PATCH that includes it is rejected with 422 even when the value matches.
@@ -139,7 +148,7 @@ func applySettings(op repocfg.Op) error {
 	}
 	if err := ghJSON("PATCH", op.Path, body); err != nil {
 		if isSignoffLocked(err) {
-			retry := cloneMap(body)
+			retry := maps.Clone(body)
 			delete(retry, "web_commit_signoff_required")
 			return ghJSON("PATCH", op.Path, retry)
 		}
@@ -151,16 +160,16 @@ func applySettings(op repocfg.Op) error {
 // applyRuleset reconciles a ruleset by name: PUT when one with the same name
 // already exists, POST otherwise, so a ruleset is never duplicated. The plan's
 // prune op owns removal (see pruneRulesets).
-func applyRuleset(org, repo string, op repocfg.Op) (string, error) {
+func applyRuleset(op repocfg.Op, live func() (map[string]string, error)) (string, error) {
 	body, ok := op.Body.(*repocfg.APIRuleset)
 	if !ok {
 		return "", fmt.Errorf("ruleset body is %T, want *repocfg.APIRuleset", op.Body)
 	}
-	id, err := rulesetID(org, repo, op.RulesetName)
+	ids, err := live()
 	if err != nil {
 		return "", err
 	}
-	if id != "" {
+	if id := ids[op.RulesetName]; id != "" {
 		if err := ghJSON("PUT", op.Path+"/"+id, body); err != nil {
 			return "", err
 		}
@@ -295,7 +304,7 @@ func commitSync(org, repo, branch string, changes []contentChange) (string, erro
 		if err != nil {
 			return "", err
 		}
-		out, err := ghStdin(string(payload), "api", "graphql",
+		out, err := ghRun(string(payload), "api", "graphql",
 			"--jq", ".data.createCommitOnBranch.commit.oid", "--input", "-")
 		switch {
 		case err == nil:
@@ -354,7 +363,7 @@ func putContent(org, repo, branch string, change contentChange) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	out, err := ghStdin(string(payload), "api", "-X", "PUT",
+	out, err := ghRun(string(payload), "api", "-X", "PUT",
 		fmt.Sprintf("repos/%s/%s/contents/%s", org, repo, change.path),
 		"--jq", ".commit.sha", "--input", "-")
 	if err != nil {
@@ -537,16 +546,6 @@ func listLabels(org, repo string) (map[string]ghLabel, error) {
 	return m, nil
 }
 
-// rulesetID returns the id of the named ruleset, or "" if none exists.
-func rulesetID(org, repo, name string) (string, error) {
-	out, err := gh("api", fmt.Sprintf("repos/%s/%s/rulesets", org, repo),
-		"--jq", fmt.Sprintf(`.[]|select(.name==%q).id`, name))
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
-}
-
 // liveRulesets maps the repo's current ruleset names to their ids.
 func liveRulesets(org, repo string) (map[string]string, error) {
 	out, err := gh("api", fmt.Sprintf("repos/%s/%s/rulesets", org, repo),
@@ -572,8 +571,8 @@ func liveRulesets(org, repo string) (map[string]string, error) {
 // from the class preset, the org profile and code-driven discovery, so
 // anything else on the repo is drift — a ruleset this version no longer ships,
 // or one added by hand in the UI — and a reconcile removes it.
-func pruneRulesets(org, repo string, op repocfg.Op) (string, error) {
-	live, err := liveRulesets(org, repo)
+func pruneRulesets(org, repo string, rulesets func() (map[string]string, error), op repocfg.Op) (string, error) {
+	live, err := rulesets()
 	if err != nil {
 		return "", err
 	}
@@ -594,7 +593,7 @@ func pruneRulesets(org, repo string, op repocfg.Op) (string, error) {
 	return opDeleted + " " + strings.Join(dropped, ", "), nil
 }
 
-// renderPruneImpact names the rulesets a plan's prune op would delete.
+// pruneImpact names the rulesets a plan's prune op would delete.
 //
 // The plan is computed offline, so the op itself can only state what survives,
 // and "keep only: master, require-approval, tags" reads the same whether it
@@ -602,30 +601,26 @@ func pruneRulesets(org, repo string, op repocfg.Op) (string, error) {
 // the one destructive operation has to name its casualties, so this resolves
 // them live. A read failure is reported as UNRESOLVED, because an operator who
 // sees "none" will confirm without looking.
-func renderPruneImpact(w io.Writer, org, repo string, plan *repocfg.Plan) {
-	for _, op := range plan.Ops {
-		if !op.PruneRulesets {
-			continue
-		}
-		live, err := liveRulesets(org, repo)
-		if err != nil {
-			_, _ = fmt.Fprintf(w, "# rulesets to delete: UNRESOLVED — %v\n", err)
-			return
-		}
-		drop := make([]string, 0, len(live))
-		for name := range live {
-			if !slices.Contains(op.KeepRulesets, name) {
-				drop = append(drop, name)
-			}
-		}
-		if len(drop) == 0 {
-			_, _ = fmt.Fprintln(w, "# rulesets to delete: none")
-			return
-		}
-		slices.Sort(drop)
-		_, _ = fmt.Fprintf(w, "# rulesets to DELETE: %s\n", strings.Join(drop, ", "))
-		return
+func pruneImpact(t *repocfg.RepoTarget, plan *repocfg.Plan) string {
+	i := slices.IndexFunc(plan.Ops, func(op repocfg.Op) bool { return op.PruneRulesets })
+	if i < 0 {
+		return ""
 	}
+	live, err := liveRulesets(t.Org, t.Repo)
+	if err != nil {
+		return "# rulesets to delete: UNRESOLVED — " + err.Error()
+	}
+	var drop []string
+	for name := range live {
+		if !slices.Contains(plan.Ops[i].KeepRulesets, name) {
+			drop = append(drop, name)
+		}
+	}
+	if len(drop) == 0 {
+		return "# rulesets to delete: none"
+	}
+	slices.Sort(drop)
+	return "# rulesets to DELETE: " + strings.Join(drop, ", ")
 }
 
 // outcome labels for staged managed-file changes.
@@ -647,50 +642,6 @@ const (
 // keyDescription is the JSON "description" field name, a constant so the
 // package's repeated use of it satisfies goconst.
 const keyDescription = "description"
-
-// ghJSON runs `gh api -X <method> <path> --input -` with body marshalled to
-// JSON on stdin.
-func ghJSON(method, path string, body any) error {
-	raw, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-	_, err = ghStdin(string(raw), "api", "-X", method, path, "--input", "-")
-	return err
-}
-
-func gh(args ...string) (string, error) { return ghStdin("", args...) }
-
-// ghStdin runs `gh` with optional stdin and returns stdout; on failure it
-// folds gh's output into the error (see ghError). A package var so tests can
-// intercept every GitHub API call without a live `gh`.
-var ghStdin = func(stdin string, args ...string) (string, error) {
-	c := exec.Command("gh", args...)
-	if stdin != "" {
-		c.Stdin = strings.NewReader(stdin)
-	}
-	var out, errb bytes.Buffer
-	c.Stdout, c.Stderr = &out, &errb
-	if err := c.Run(); err != nil {
-		return out.String(), ghError(err, out.String(), errb.String())
-	}
-	return out.String(), nil
-}
-
-// ghError folds a failed gh run's output into err. gh prints the HTTP status
-// on stderr and GitHub's JSON error on stdout; only the JSON's errors list
-// names the field GitHub rejected, so a JSON stdout joins the message.
-func ghError(err error, stdout, stderr string) error {
-	msg := strings.TrimSpace(stderr)
-	var body bytes.Buffer
-	if json.Compact(&body, []byte(stdout)) == nil {
-		msg = strings.TrimSpace(msg + " " + body.String())
-	}
-	if msg == "" {
-		return err
-	}
-	return fmt.Errorf("%w: %s", err, msg)
-}
 
 // contentSHA returns the blob sha of an existing file at path, or "" when the
 // file does not exist yet (a 404, the create case). Only a 404 reads as the
@@ -797,74 +748,10 @@ func shortOid(out string) string {
 	return oid
 }
 
-// isStaleHead reports the typed STALE_DATA error createCommitOnBranch returns
-// when the branch tip no longer matches expectedHeadOid.
-func isStaleHead(out string, err error) bool {
-	return err != nil && (strings.Contains(out, "STALE_DATA") ||
-		strings.Contains(err.Error(), "Expected branch to point to"))
-}
-
-func isNotFound(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "404")
-}
-
-// isEmptyRepo reports GitHub's 409 for a repository with no commits yet, where a
-// branch-ref read answers "Git Repository is empty." — the signal that the sync
-// commit must bootstrap the root commit rather than build on a branch tip.
-func isEmptyRepo(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "Git Repository is empty")
-}
-
-func isSignoffLocked(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "signoff") && strings.Contains(err.Error(), "enforced")
-}
-
-func isWorkflowScope(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "workflow") && strings.Contains(strings.ToLower(err.Error()), "scope")
-}
-
-func isAlreadyExists(err error) bool {
-	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "409") || strings.Contains(s, "already exists")
-}
-
-func cloneMap(m map[string]any) map[string]any {
-	out := make(map[string]any, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
-}
-
-func errText(err error) string {
-	if err == nil {
-		return ""
-	}
-	return firstLine(err.Error())
-}
-
-// ternErr returns detail on success, the error's first line on failure.
-func ternErr(err error, detail string) string {
-	if err != nil {
-		if detail != "" {
-			return detail
-		}
-		return firstLine(err.Error())
-	}
-	return detail
-}
-
 // shortPath trims the repos/<org>/<repo>/contents/ prefix for a readable label.
 func shortPath(path string) string {
 	if i := strings.Index(path, "/contents/"); i >= 0 {
 		return path[i+len("/contents/"):]
 	}
 	return path
-}
-
-func firstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i]
-	}
-	return s
 }

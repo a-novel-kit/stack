@@ -169,48 +169,6 @@ func TestHoldingsOfUnknownPhase(t *testing.T) {
 	}
 }
 
-func TestUnpushedCommits(t *testing.T) {
-	t.Parallel()
-
-	local, _ := initSyncRepo(t)
-
-	if n := unpushedCommits(local); n != 0 {
-		t.Fatalf("fresh clone has %d unpushed commits, want 0", n)
-	}
-
-	writeFixture(t, local, "c.txt", "c0\n")
-	mustGit(t, local, "add", "-A")
-	mustGit(t, local, "commit", "--quiet", "-m", "local only")
-
-	if n := unpushedCommits(local); n != 1 {
-		t.Fatalf("after one local commit: %d unpushed, want 1", n)
-	}
-
-	mustGit(t, local, "push", "--quiet")
-
-	if n := unpushedCommits(local); n != 0 {
-		t.Fatalf("after push: %d unpushed, want 0", n)
-	}
-}
-
-// TestUnpushedCommitsNoUpstream covers a checkout with no upstream at all,
-// which counts as zero unpushed commits.
-func TestUnpushedCommitsNoUpstream(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	mustGit(t, dir, "init", "--quiet", "--initial-branch=master")
-	mustGit(t, dir, "config", "user.email", "test@a-novel.dev")
-	mustGit(t, dir, "config", "user.name", "test")
-	writeFixture(t, dir, "a.txt", "a0\n")
-	mustGit(t, dir, "add", "-A")
-	mustGit(t, dir, "commit", "--quiet", "-m", "init")
-
-	if n := unpushedCommits(dir); n != 0 {
-		t.Fatalf("no-upstream checkout reported %d unpushed, want 0", n)
-	}
-}
-
 // TestDefaultStackRoot pins that an unrouted stack lands under the OS temp
 // directory. os.TempDir() honors $TMPDIR, so this holds on macOS too, where it
 // resolves to a per-user /var/folders/…/T.

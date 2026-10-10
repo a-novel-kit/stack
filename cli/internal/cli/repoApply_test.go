@@ -1,11 +1,11 @@
 package cli
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -41,8 +41,8 @@ func TestApplyPlan(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam.
 	calls := fakeGH(t, map[string]string{
 		// no existing master ruleset → POST; codecov ruleset exists → PUT.
-		`rulesets --jq .[]|select(.name=="codecov")`: "777",
-		"git/ref/heads/master":                       "headoid123\n",
+		"rulesets --jq":        "codecov\t777\n",
+		"git/ref/heads/master": "headoid123\n",
 	})
 
 	plan := &repocfg.Plan{Ops: []repocfg.Op{
@@ -53,7 +53,7 @@ func TestApplyPlan(t *testing.T) {
 		{RulesetName: "codecov", Path: "repos/o/r/rulesets", Body: &repocfg.APIRuleset{Name: "codecov"}},
 	}}
 
-	if err := applyPlan(io.Discard, "o", "r", branchMaster, plan); err != nil {
+	if err := applyPlan(io.Discard, testTarget, plan); err != nil {
 		t.Fatalf("applyPlan: %v", err)
 	}
 
@@ -458,7 +458,7 @@ func TestApplyRulesetBadBody(t *testing.T) {
 	// A malformed plan (wrong body type) must fail fast, not POST a null body.
 	calls := fakeGH(t, nil)
 	op := repocfg.Op{RulesetName: branchMaster, Path: "repos/o/r/rulesets", Body: map[string]any{"name": "x"}}
-	if _, err := applyRuleset("o", "r", op); err == nil {
+	if _, err := applyRuleset(op, liveOf("o", "r")); err == nil {
 		t.Fatal("expected an error for a non-*APIRuleset body")
 	}
 	for _, c := range *calls {
@@ -687,7 +687,7 @@ func TestPruneRulesets(t *testing.T) {
 
 	t.Run("deletes only what the plan does not name", func(t *testing.T) {
 		calls := fakeGH(t, map[string]string{"--jq": listed})
-		detail, err := pruneRulesets("a-novel", "service-auth", repocfg.Op{
+		detail, err := pruneRulesets("a-novel", "service-auth", liveOf("a-novel", "service-auth"), repocfg.Op{
 			PruneRulesets: true,
 			KeepRulesets:  []string{"master", "require-approval", "tags"},
 		})
@@ -711,7 +711,7 @@ func TestPruneRulesets(t *testing.T) {
 
 	t.Run("keeping everything deletes nothing", func(t *testing.T) {
 		calls := fakeGH(t, map[string]string{"--jq": listed})
-		detail, err := pruneRulesets("a-novel", "service-auth", repocfg.Op{
+		detail, err := pruneRulesets("a-novel", "service-auth", liveOf("a-novel", "service-auth"), repocfg.Op{
 			PruneRulesets: true,
 			KeepRulesets: []string{
 				"master", "require-approval", "tags", "codecov",
@@ -733,7 +733,7 @@ func TestPruneRulesets(t *testing.T) {
 		// A class that declares no rulesets genuinely wants none, so an empty keep
 		// set prunes every ruleset the repo carries.
 		calls := fakeGH(t, map[string]string{"--jq": listed})
-		if _, err := pruneRulesets("a-novel", "docs", repocfg.Op{PruneRulesets: true}); err != nil {
+		if _, err := pruneRulesets("a-novel", "docs", liveOf("a-novel", "docs"), repocfg.Op{PruneRulesets: true}); err != nil {
 			t.Fatalf("pruneRulesets: %v", err)
 		}
 		if got := deletedIDs(*calls); len(got) != 5 {
@@ -756,7 +756,7 @@ func TestPruneRulesets(t *testing.T) {
 			return "", nil
 		}
 		t.Cleanup(func() { ghStdin = orig })
-		if _, err := pruneRulesets("a-novel", "service-auth", repocfg.Op{
+		if _, err := pruneRulesets("a-novel", "service-auth", liveOf("a-novel", "service-auth"), repocfg.Op{
 			PruneRulesets: true, KeepRulesets: []string{"master"},
 		}); err == nil {
 			t.Error("want an error when the ruleset listing fails")
@@ -767,11 +767,12 @@ func TestPruneRulesets(t *testing.T) {
 	})
 }
 
-// TestRenderPruneImpact covers the preview an operator confirms a destructive
+// TestPruneImpact covers the preview an operator confirms a destructive
 // reconcile from. The plan is computed offline and can only state what SURVIVES,
 // so this is the only place the deletions are visible — and a read failure must
 // never render as "none", which reads as safe and gets waved through.
-func TestRenderPruneImpact(t *testing.T) {
+func TestPruneImpact(t *testing.T) {
+	impactTarget := &repocfg.RepoTarget{Org: "a-novel", Repo: "service-auth"}
 	// Not parallel: swaps the package-level ghStdin seam.
 	plan := &repocfg.Plan{Ops: []repocfg.Op{
 		{RulesetName: "master"},
@@ -780,9 +781,7 @@ func TestRenderPruneImpact(t *testing.T) {
 
 	t.Run("names every ruleset that would go", func(t *testing.T) {
 		fakeGH(t, map[string]string{"--jq": "master\t1\ntags\t2\ncodecov\t3\nCopilot review\t4\n"})
-		var buf bytes.Buffer
-		renderPruneImpact(&buf, "a-novel", "service-auth", plan)
-		got := buf.String()
+		got := pruneImpact(impactTarget, plan)
 		for _, want := range []string{"DELETE", "codecov", "Copilot review"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("preview %q missing %q", got, want)
@@ -795,9 +794,7 @@ func TestRenderPruneImpact(t *testing.T) {
 
 	t.Run("says none when nothing would go", func(t *testing.T) {
 		fakeGH(t, map[string]string{"--jq": "master\t1\ntags\t2\n"})
-		var buf bytes.Buffer
-		renderPruneImpact(&buf, "a-novel", "service-auth", plan)
-		if got := buf.String(); !strings.Contains(got, "none") {
+		if got := pruneImpact(impactTarget, plan); !strings.Contains(got, "none") {
 			t.Errorf("preview = %q, want it to say none", got)
 		}
 	})
@@ -806,9 +803,7 @@ func TestRenderPruneImpact(t *testing.T) {
 		orig := ghStdin
 		ghStdin = func(string, ...string) (string, error) { return "", errors.New("gh: rate limited") }
 		t.Cleanup(func() { ghStdin = orig })
-		var buf bytes.Buffer
-		renderPruneImpact(&buf, "a-novel", "service-auth", plan)
-		got := buf.String()
+		got := pruneImpact(impactTarget, plan)
 		if !strings.Contains(got, "UNRESOLVED") {
 			t.Errorf("preview = %q, want UNRESOLVED", got)
 		}
@@ -816,32 +811,6 @@ func TestRenderPruneImpact(t *testing.T) {
 			t.Errorf("preview = %q reports none after a failed read — reads as safe when it is unknown", got)
 		}
 	})
-}
-
-func TestGhError(t *testing.T) {
-	base := errors.New("exit status 1")
-	for _, tc := range []struct {
-		name, stdout, stderr, want string
-	}{
-		{
-			name:   "Success/JSONBodyJoinsTheMessage",
-			stdout: "{\n  \"message\": \"Validation Failed\",\n  \"errors\": [\"Actor Dependabot integration must be part of the ruleset source or owner organization\"]\n}\n",
-			stderr: "gh: Validation Failed (HTTP 422)\n",
-			want:   `exit status 1: gh: Validation Failed (HTTP 422) {"message":"Validation Failed","errors":["Actor Dependabot integration must be part of the ruleset source or owner organization"]}`,
-		},
-		{name: "Success/NonJSONStdoutIsDropped", stdout: "partial output", stderr: "gh: not found", want: "exit status 1: gh: not found"},
-		{name: "Success/NothingToAdd", want: "exit status 1"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			err := ghError(base, tc.stdout, tc.stderr)
-			if !errors.Is(err, base) {
-				t.Fatalf("ghError dropped the wrapped error: %v", err)
-			}
-			if err.Error() != tc.want {
-				t.Fatalf("ghError = %q, want %q", err.Error(), tc.want)
-			}
-		})
-	}
 }
 
 func TestApplyCodeQuality(t *testing.T) {
@@ -872,4 +841,110 @@ func TestApplyCodeQuality(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestApplyPlanSkipsRulesetsWhenManagedSyncFails(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam.
+	orig := ghStdin
+	t.Cleanup(func() { ghStdin = orig })
+
+	var rulesetCalls int
+	ghStdin = func(_ string, args ...string) (string, error) {
+		joined := strings.Join(args, " ")
+		switch {
+		case strings.Contains(joined, "/contents/"):
+			return "", errors.New("gh: Not Found (HTTP 404)")
+		case strings.Contains(joined, "git/ref/heads/master"):
+			return "headoid123", nil
+		case strings.Contains(joined, "api graphql"):
+			return "", errors.New("workflow scope missing")
+		case strings.Contains(joined, "/rulesets"):
+			rulesetCalls++
+		}
+		return "", nil
+	}
+
+	plan := &repocfg.Plan{Ops: []repocfg.Op{
+		{Method: http.MethodPut, Path: "repos/o/r/contents/.github/workflows/merge-gate.yaml", Content: "name: merge gate\n"},
+		{RulesetName: branchMaster, Path: "repos/o/r/rulesets", Body: &repocfg.APIRuleset{Name: branchMaster}},
+	}}
+	if err := applyPlan(io.Discard, testTarget, plan); err == nil {
+		t.Fatal("managed sync failure must fail the apply")
+	}
+	if rulesetCalls != 0 {
+		t.Errorf("issued %d ruleset call(s) after managed sync failed, want 0", rulesetCalls)
+	}
+}
+
+func TestInfraDisabledStateOperationsAreIdempotent(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam.
+	orig := ghStdin
+	t.Cleanup(func() { ghStdin = orig })
+
+	var pagesCalls, alertCalls int
+	ghStdin = func(_ string, args ...string) (string, error) {
+		joined := strings.Join(args, " ")
+		switch {
+		case strings.Contains(joined, "/pages"):
+			pagesCalls++
+			if pagesCalls > 1 {
+				return "", errors.New("gh: Not Found (HTTP 404)")
+			}
+		case strings.Contains(joined, "/vulnerability-alerts"):
+			alertCalls++
+		}
+		return "", nil
+	}
+
+	pages := repocfg.Op{Method: http.MethodDelete, Path: "repos/o/infra/pages"}
+	if got, err := applyPages(pages); err != nil || got != "disabled" {
+		t.Fatalf("first Pages disable = (%q, %v), want (disabled, nil)", got, err)
+	}
+	if got, err := applyPages(pages); err != nil || got != "already disabled" {
+		t.Fatalf("second Pages disable = (%q, %v), want (already disabled, nil)", got, err)
+	}
+
+	alerts := repocfg.Op{Method: http.MethodPut, Path: "repos/o/infra/vulnerability-alerts"}
+	for i := range 2 {
+		if got, err := applyVulnerabilityAlerts(alerts); err != nil || got != "enabled" {
+			t.Fatalf("alerts enable %d = (%q, %v), want (enabled, nil)", i+1, got, err)
+		}
+	}
+	if pagesCalls != 2 || alertCalls != 2 {
+		t.Errorf("Pages/alerts calls = %d/%d, want 2/2", pagesCalls, alertCalls)
+	}
+}
+
+func TestStageContentDeletionIsIdempotent(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam.
+	orig := ghStdin
+	t.Cleanup(func() { ghStdin = orig })
+
+	var reads int
+	ghStdin = func(string, ...string) (string, error) {
+		reads++
+		if reads == 1 {
+			return "existing-sha", nil
+		}
+		return "", errors.New("gh: Not Found (HTTP 404)")
+	}
+	op := repocfg.Op{Method: http.MethodDelete, Path: "repos/o/infra/contents/.github/workflows/release-train.yaml"}
+
+	change, unchanged, err := stageContentDeletion(op)
+	if err != nil || unchanged || change.outcome != opDeleted {
+		t.Fatalf("existing deletion = (%+v, %v, %v), want one staged deletion", change, unchanged, err)
+	}
+	change, unchanged, err = stageContentDeletion(op)
+	if err != nil || !unchanged || change != (contentChange{}) {
+		t.Fatalf("missing deletion = (%+v, %v, %v), want unchanged", change, unchanged, err)
+	}
+}
+
+// testTarget is the repository the applyPlan tests reconcile.
+var testTarget = &repocfg.RepoTarget{Org: "o", Repo: "r", DefaultBranch: branchMaster}
+
+// liveOf reads a repository's live rulesets through the gh seam, as applyPlan
+// does once per run.
+func liveOf(org, repo string) func() (map[string]string, error) {
+	return func() (map[string]string, error) { return liveRulesets(org, repo) }
 }

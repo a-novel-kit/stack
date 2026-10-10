@@ -233,7 +233,7 @@ func TestRunSandboxRefusesDaemonCommandsBeforeAllocating(t *testing.T) {
 func TestRootRejectsMisplacedSandboxFlag(t *testing.T) {
 	t.Parallel()
 
-	root := NewRoot(LegacyHandlers{})
+	root := NewRoot()
 	root.SetArgs([]string{"secrets", "ls", "--sandbox"})
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)

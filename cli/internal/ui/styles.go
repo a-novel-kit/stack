@@ -1,113 +1,100 @@
 package ui
 
 import (
+	"image/color"
+
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/compat"
 
 	"github.com/a-novel-kit/stack/cli/internal/detect"
+	"github.com/a-novel-kit/stack/cli/internal/version"
 )
 
 // Palette.
 //
-// All semantic colors are the exact A-Novel values and so are fixed
-// lipgloss.Color (not adaptive) — brand and status signalling must not drift
-// per terminal theme. Only colMuted/colWarn stay adaptive (pure dimming, no
-// brand meaning). Everything is foreground-only — no backgrounds, no pure
-// black/white — for consistent readability across terminal themes.
+// Semantic colors are the exact A-Novel values and stay fixed across terminal
+// themes, so brand and status signalling never drift; only the dimming colors
+// adapt. Everything is foreground-only for readability on any background.
 //
-// The two brand colors (purple/blue) are the identity; colGold is a third,
-// non-brand accent used for structural chrome (section headings, counts) so
-// the UI does not read as an endless purple/blue stripe. colCrit is reserved
-// for the few things that demand the eye immediately (a failed build) — used
-// sparingly so it keeps its alarm value.
+// Purple and blue are the identity. Gold is a structural accent for headings and
+// counts, and colCrit is reserved for what demands the eye at once, such as a
+// failed run.
 var (
-	colBrand  = lipgloss.Color("#DC24FF")                                                               // A-Novel purple   — rgb(220,36,255)
-	colAccent = lipgloss.Color("#00A9B2")                                                               // A-Novel blue     — rgb(0,169,178)
-	colGold   = lipgloss.Color("#C38500")                                                               // structural accent — rgb(195,133,0)
-	colOK     = lipgloss.Color("#00AF84")                                                               // success          — rgb(0,175,132)
-	colErr    = lipgloss.Color("#ED6200")                                                               // error            — rgb(237,98,0)
-	colCrit   = lipgloss.Color("#FF00AB")                                                               // immediate attention — rgb(255,0,171)
+	colBrand  = lipgloss.Color("#DC24FF")                                                               // A-Novel purple
+	colAccent = lipgloss.Color("#00A9B2")                                                               // A-Novel blue
+	colGold   = lipgloss.Color("#C38500")                                                               // structural accent
+	colOK     = lipgloss.Color("#00AF84")                                                               // success
+	colErr    = lipgloss.Color("#ED6200")                                                               // error
+	colCrit   = lipgloss.Color("#FF00AB")                                                               // immediate attention
 	colMuted  = compat.AdaptiveColor{Light: lipgloss.Color("#868E96"), Dark: lipgloss.Color("#6C757D")} // dim detail
 	colWarn   = compat.AdaptiveColor{Light: lipgloss.Color("#E8590C"), Dark: lipgloss.Color("#FFA94D")} // aborted / caution
 )
 
+// Styles shared by every screen of the CLI.
 var (
-	styleBrand   = lipgloss.NewStyle().Foreground(colBrand).Bold(true)
-	styleAccent  = lipgloss.NewStyle().Foreground(colAccent)
-	styleGold    = lipgloss.NewStyle().Foreground(colGold).Bold(true)
-	styleMuted   = lipgloss.NewStyle().Foreground(colMuted)
-	styleOK      = lipgloss.NewStyle().Foreground(colOK).Bold(true)
-	styleWarn    = lipgloss.NewStyle().Foreground(colWarn).Bold(true)
-	styleErr     = lipgloss.NewStyle().Foreground(colErr).Bold(true)
-	styleCrit    = lipgloss.NewStyle().Foreground(colCrit).Bold(true)
-	styleNib     = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
-	styleSel     = lipgloss.NewStyle().Foreground(colBrand).Bold(true)
-	styleHelp    = lipgloss.NewStyle().Foreground(colMuted)
-	styleGroup   = lipgloss.NewStyle().Foreground(colGold).Bold(true)
-	styleVersion = lipgloss.NewStyle().
-			Foreground(colBrand).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colBrand).
-			Padding(0, 1)
+	Brand  = lipgloss.NewStyle().Foreground(colBrand).Bold(true)
+	Accent = lipgloss.NewStyle().Foreground(colAccent)
+	Gold   = lipgloss.NewStyle().Foreground(colGold).Bold(true)
+	Muted  = lipgloss.NewStyle().Foreground(colMuted)
+	OK     = lipgloss.NewStyle().Foreground(colOK).Bold(true)
+	Warn   = lipgloss.NewStyle().Foreground(colWarn).Bold(true)
+	Err    = lipgloss.NewStyle().Foreground(colErr).Bold(true)
+	Crit   = lipgloss.NewStyle().Foreground(colCrit).Bold(true)
 )
 
-var wordmarkContour = []string{
-	"▄",
-	"█",
-	"▜",
-	"▝█",
-	" ▝█",
-	"   ▚ ",
-	"   ▝▖",
+var styleVersion = lipgloss.NewStyle().
+	Foreground(colBrand).
+	Border(lipgloss.RoundedBorder()).
+	BorderForeground(colBrand).
+	Padding(0, 1)
+
+// wordmark is the quill logo. Each row's first glyph, its contour, renders in
+// purple and the rest in blue, painting a shadow down the diagonal.
+var wordmark = []struct{ contour, body string }{
+	{"▄", "    "},
+	{"█", "▙   "},
+	{"▜", "█▙  "},
+	{"▝█", "█▌ "},
+	{" ▝█", "▛ "},
+	{"   ▚ ", ""},
+	{"   ▝▖", ""},
 }
 
-var wordmark = []string{
-	"▄    ",
-	"█▙   ",
-	"▜█▙  ",
-	"▝██▌ ",
-	" ▝█▛ ",
-	"   ▚ ",
-	"   ▝▖",
-}
-
-// renderQuillLine two-tones a single wordmark row: the first visible glyph in
-// purple, everything after it in blue. Down the diagonal this paints a purple
-// leading edge with a blue body — a shadow/relief effect using only the two
-// trademark colors. Leading spaces (which carry the diagonal) stay uncolored.
-func renderQuillLine() []string {
-	out := make([]string, len(wordmark))
-
-	for i, line := range wordmark {
-		lead := wordmarkContour[i]
-		rest := line[len(lead):]
-		out[i] = styleBrand.Render(lead) + styleNib.Render(rest)
+// Banner renders the branded header with the resolved CLI version.
+func Banner() string {
+	rows := make([]string, len(wordmark))
+	for i, row := range wordmark {
+		rows[i] = Brand.Render(row.contour) + Accent.Bold(true).Render(row.body)
 	}
-
-	return out
-}
-
-// Banner renders the branded header shown at the top of every screen. version
-// is the resolved CLI version (see internal/version).
-func Banner(version string) string {
-	rows := renderQuillLine()
-	mark := lipgloss.JoinVertical(lipgloss.Left, rows...)
-
 	text := lipgloss.JoinVertical(
 		lipgloss.Left,
 		"",
-		styleBrand.Render("A-NOVEL"),
-		styleAccent.Render("the storyverse build tool"),
+		Brand.Render("A-NOVEL"),
+		Accent.Render("the storyverse build tool"),
 		"",
-		styleVersion.Render("a-novel "+version),
+		styleVersion.Render("a-novel "+version.String()),
 	)
-
 	return lipgloss.NewStyle().
 		Padding(1, 2, 0, 2).
-		Render(lipgloss.JoinHorizontal(lipgloss.Top, mark, "  ", text))
+		Render(lipgloss.JoinHorizontal(lipgloss.Top, lipgloss.JoinVertical(lipgloss.Left, rows...), "  ", text))
 }
 
-// kindLabel is the human heading for a target group.
+// groupColor gives each build kind its own color, so a tag alone tells
+// go/pnpm/podman apart.
+func groupColor(group string) color.Color {
+	switch detect.Kind(group) {
+	case detect.KindGo:
+		return colAccent
+	case detect.KindPnpm:
+		return colGold
+	case detect.KindPodman:
+		return colBrand
+	default:
+		return colMuted
+	}
+}
+
+// kindLabel is the heading of a target group in the picker.
 func kindLabel(k detect.Kind) string {
 	switch k {
 	case detect.KindGo:
@@ -121,8 +108,7 @@ func kindLabel(k detect.Kind) string {
 	}
 }
 
-// glyphs — Unicode status symbols, chosen for richness and consistent
-// rendering across terminals.
+// Status glyphs.
 const (
 	glyphChecked   = "◉"
 	glyphPartial   = "◐" // group: some-but-not-all members selected
@@ -130,5 +116,4 @@ const (
 	glyphCursor    = "▸"
 	glyphOK        = "✓"
 	glyphFail      = "✗"
-	glyphRun       = "•"
 )

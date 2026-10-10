@@ -94,3 +94,13 @@ func homeDir() string {
 	}
 	return "/"
 }
+
+// DefaultPath is the root of the default stack, the first entry of
+// $A_NOVEL_STACKS.
+func DefaultPath() (string, error) {
+	stk, err := ParseEnv()
+	if err != nil {
+		return "", err
+	}
+	return stk[0].Path, nil
+}

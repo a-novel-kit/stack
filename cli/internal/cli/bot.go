@@ -19,7 +19,6 @@
 package cli
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -309,7 +308,7 @@ func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs
 		"--repo", dispatchRepo,
 		"-f", "nonce=" + nonce,
 	}, formArgs...)
-	if _, err := runGHOut(dispatchArgs...); err != nil {
+	if _, err := gh(dispatchArgs...); err != nil {
 		return fmt.Errorf("bot-comment: dispatch to %s failed: %w", dispatchRepo, err)
 	}
 	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dispatched bot-comment %s; waiting for the run...\n", label)
@@ -328,7 +327,7 @@ func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs
 	watch.Stderr = cmd.ErrOrStderr()
 	if err := watch.Run(); err != nil {
 		// The run failed; pull the failed step's logs to explain why.
-		logs, _ := runGHOut(commandRun, "view", strconv.FormatInt(runID, 10),
+		logs, _ := gh(commandRun, "view", strconv.FormatInt(runID, 10),
 			"--repo", dispatchRepo, "--log-failed")
 		return fmt.Errorf("bot-comment: workflow run %d failed: %w\n%s", runID, err, logs)
 	}
@@ -341,7 +340,7 @@ func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs
 func waitForDispatchedRun(dispatchRepo, nonce string) (int64, error) {
 	deadline := time.Now().Add(botRunLookupTimeout)
 	for {
-		out, err := runGHOut(commandRun, "list",
+		out, err := gh(commandRun, "list",
 			"--repo", dispatchRepo,
 			"--workflow", botWorkflowFile,
 			"--event", "workflow_dispatch",
@@ -366,25 +365,6 @@ func waitForDispatchedRun(dispatchRepo, nonce string) (int64, error) {
 		}
 		time.Sleep(2 * time.Second)
 	}
-}
-
-// runGHOut runs gh with the operator's own credentials and returns stdout
-// only. stderr is captured separately, so gh's progress and warning chatter
-// cannot corrupt the JSON parsed from stdout by the run-list poll; on failure
-// it is folded into the returned error.
-func runGHOut(args ...string) (string, error) {
-	c := exec.Command("gh", args...)
-	c.Env = os.Environ()
-	var stdout, stderr bytes.Buffer
-	c.Stdout = &stdout
-	c.Stderr = &stderr
-	if err := c.Run(); err != nil {
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			return "", fmt.Errorf("%w: %s", err, msg)
-		}
-		return "", err
-	}
-	return stdout.String(), nil
 }
 
 // newNonce returns a short random hex token used to correlate a dispatch

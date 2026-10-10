@@ -15,6 +15,8 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
+
+	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 )
 
 // claudeBin is the Claude Code executable, resolved through $PATH.
@@ -46,7 +48,7 @@ its own with nothing in between.`,
 		// handling travels with them, as Long explains.
 		DisableFlagParsing: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			root, err := defaultStackPath()
+			root, err := stacks.DefaultPath()
 			if err != nil {
 				return fmt.Errorf("resolve stack root: %w", err)
 			}

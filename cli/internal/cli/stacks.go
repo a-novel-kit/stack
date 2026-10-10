@@ -127,38 +127,41 @@ leftovers from a finished session.`,
 		Example: `  a-novel core stacks list`,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			resp, err := c.ListStacks(ctx)
-			if err != nil {
-				return err
-			}
-			out := cmd.OutOrStdout()
-			managed := make(map[string]bool, len(resp.GetStacks()))
-			_, _ = fmt.Fprintf(out, "  %-20s %-40s %8s %8s %8s\n",
-				"NAME", "PATH", "TARGETS", "INFRA", "VOLUMES")
-			for _, st := range resp.GetStacks() {
-				marker := " "
-				if st.GetIsDefault() {
-					marker = "*"
-				}
-				held, err := inspectStack(ctx, c, st.GetName())
-				if err != nil {
-					return err
-				}
-				// Infra gets its own column. A stack whose only live container
-				// is its database still holds a host port, and the infra count
-				// is what shows it.
-				_, _ = fmt.Fprintf(out, "%s %-20s %-40s %8s %8s %8d\n",
-					marker, st.GetName(), st.GetPath(),
-					fmt.Sprintf("%d up", len(held.liveTargets)),
-					fmt.Sprintf("%d up", held.liveInfra),
-					len(held.volumes))
-				managed[st.GetName()] = true
-			}
-			return reportUnmanaged(out, managed)
+			return listStacks(cmd.Context(), cmd.OutOrStdout())
 		},
 	}
+}
+
+// listStacks prints every registered stack with what it holds, then the
+// registrations the daemon does not manage. `core stacks list` and `run
+// stacks` both render it.
+func listStacks(ctx context.Context, out io.Writer) error {
+	c := rpc.New("")
+	resp, err := c.ListStacks(ctx)
+	if err != nil {
+		return err
+	}
+	managed := make(map[string]bool, len(resp.GetStacks()))
+	_, _ = fmt.Fprintf(out, "  %-20s %-40s %8s %8s %8s\n", "NAME", "PATH", "TARGETS", "INFRA", "VOLUMES")
+	for _, st := range resp.GetStacks() {
+		marker := " "
+		if st.GetIsDefault() {
+			marker = "*"
+		}
+		held, err := inspectStack(ctx, c, st.GetName())
+		if err != nil {
+			return err
+		}
+		// A stack whose only live container is its database still holds a
+		// host port, and the infra column is what shows it.
+		_, _ = fmt.Fprintf(out, "%s %-20s %-40s %8s %8s %8d\n",
+			marker, st.GetName(), st.GetPath(),
+			fmt.Sprintf("%d up", len(held.liveTargets)),
+			fmt.Sprintf("%d up", held.liveInfra),
+			len(held.volumes))
+		managed[st.GetName()] = true
+	}
+	return reportUnmanaged(out, managed)
 }
 
 // =============================================================================
@@ -441,40 +444,23 @@ func dryRunVerdict(blockers []string, force bool) string {
 }
 
 // pruneBlockers lists the reasons a stack's checkouts should outlive the prune,
-// one per checkout. It reuses `repo update`'s ongoingWork for the dirty-tree and
-// off-default-branch cases, and adds unpushed commits — a clean checkout sitting
-// on its default branch can still be the only copy of a commit.
+// one per checkout: work in progress (see ongoingWork), or unpushed commits,
+// since a clean checkout on its default branch can still hold the only copy of
+// a commit.
 func pruneBlockers(root string) []string {
-	cands, err := discoverUpdateCandidates(root)
+	checkouts, err := workspaceCheckouts(root)
 	if err != nil {
 		// An unreadable root has no recoverable work in it by definition;
 		// removing it is the whole point of the command.
 		return nil
 	}
 	var blockers []string
-	for _, c := range cands {
+	for _, c := range checkouts {
 		if reason := ongoingWork(c.dir); reason != "" {
-			blockers = append(blockers, c.repo+": "+reason)
-			continue
-		}
-		if n := unpushedCommits(c.dir); n > 0 {
-			blockers = append(blockers, fmt.Sprintf("%s: %d unpushed commit(s)", c.repo, n))
+			blockers = append(blockers, c.Name+": "+reason)
+		} else if n := unpushedCommits(c.dir); n > 0 {
+			blockers = append(blockers, fmt.Sprintf("%s: %d unpushed commit(s)", c.Name, n))
 		}
 	}
 	return blockers
-}
-
-// unpushedCommits counts commits on HEAD that its upstream does not have. A
-// checkout with no upstream configured counts as zero: there is no remote to
-// have lost them to, and `git clone` always sets one.
-func unpushedCommits(dir string) int {
-	out, err := runGit(dir, "rev-list", "--count", "@{upstream}..HEAD")
-	if err != nil {
-		return 0
-	}
-	var n int
-	if _, err := fmt.Sscanf(strings.TrimSpace(out), "%d", &n); err != nil {
-		return 0
-	}
-	return n
 }
