@@ -191,7 +191,7 @@ cli/
     ├── daemon/                    daemon-side (server, runner, env, logs, volumes, ...)
     ├── client/rpc/                Unix-socket connect-rpc client
     ├── cli/                       Cobra command tree, workspace model, gh/git helpers
-    ├── detect/                    working-tree discovery (test/build/run targets)
+    ├── detect/                    working-tree discovery of test and build targets
     ├── build/                     a detected target as a job: env, compose up/down, deadline
     ├── jobs/                      bounded parallel job runner with live progress
     ├── repocfg/                   GitHub repo config templates + apply engine
@@ -201,7 +201,7 @@ cli/
     ├── secrets/                   local AES-256-GCM secrets store + env injection
     ├── update/                    best-effort "newer version available" notice
     ├── version/                   build-version resolution (ldflags / buildinfo)
-    └── shared/                    XDG paths, stacks parser
+    └── shared/                    XDG paths, stacks parser, compose files, archive retention
 ```
 
 ### Parallel jobs
