@@ -92,6 +92,10 @@ EOF
 - **Never commit secrets.** .env files, APP_MASTER_KEY values, real credentials.
 - **Never skip hooks** (`--no-verify`) unless explicitly asked.
 - **Never amend a pushed commit.** Create a new commit instead.
+- **Mid-rebase, resolve, `git add`, then `git rebase --continue`; never `git commit --amend`.**
+  `HEAD` is then the previously replayed commit, so an amend folds the resolution into it and
+  replaces its message. To undo it, `git reset --soft` to that commit from the reflog, commit the
+  difference, and compare `HEAD^{tree}` with the amended tree to prove nothing else moved.
 - **Never push to `master`/`main` — not force-push, not a plain push — without explicit consent.**
   This is the one git action that is never safe by default. Most contributors lack the access, so
   the guardrail is already enforced for them; on an admin account it is _yours_ to hold, because you
