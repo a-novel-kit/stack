@@ -379,10 +379,9 @@ Use --no-shell-rc to skip step 4 entirely (for dotfile-manager users).`,
   a-novel core setup --no-shell-rc`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			opts := setup.Options{
-				RCPath:         rcPath,
-				NoShellRC:      noShellRC,
-				NoStartDaemon:  noStartDaemon,
-				NonInteractive: nonInteractive,
+				RCPath:        rcPath,
+				NoShellRC:     noShellRC,
+				NoStartDaemon: noStartDaemon,
 				// A daemon that is already running counts as success without
 				// a re-spawn, matching `a-novel core start` and keeping
 				// re-runs of `core setup` a no-op.
@@ -399,8 +398,7 @@ Use --no-shell-rc to skip step 4 entirely (for dotfile-manager users).`,
 			if !nonInteractive {
 				prompter = &setup.StdinPrompter{Out: cmd.OutOrStderr()}
 			}
-			_, err := setup.Run(opts, cmd.OutOrStdout(), prompter)
-			return err
+			return setup.Run(opts, cmd.OutOrStdout(), prompter)
 		},
 	}
 	cmd.Flags().StringVar(&rcPath, "rc", "", "explicit shell rc path (overrides $SHELL detection)")

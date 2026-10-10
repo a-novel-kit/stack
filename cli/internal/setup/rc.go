@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,9 +27,8 @@ const (
 	shellFish = "fish"
 )
 
-// Stack-bootstrap status outcomes, shown in setup.go's summary and set by
-// stack.go's classification. Constants keep a typo from silently rendering as
-// "(unknown)".
+// Stack-bootstrap status outcomes, returned by bootstrapStack and mapped to a
+// summary glyph by statusGlyph.
 const (
 	statusValid   = "valid"
 	statusCloned  = "cloned"
@@ -145,7 +144,7 @@ func serializeStacks(stk []stacks.Stack) string {
 //   - block absent → append with leading blank line
 //   - malformed markers → refuse with a clear message
 func upsertRCBlock(rcPath, blockContent string) (string, bool, error) {
-	// File doesn't exist yet — create with just the block.
+	// A missing file is created with just the block.
 	existing := ""
 	if data, err := os.ReadFile(rcPath); err == nil {
 		existing = string(data)
@@ -155,39 +154,31 @@ func upsertRCBlock(rcPath, blockContent string) (string, bool, error) {
 
 	desired := beginMarker + "\n" + blockContent + endMarker + "\n"
 
+	var newContent string
 	switch loc := locateBlock(existing); loc.kind {
-	case blockAbsent:
-		// Append with a leading blank line if the file ends in non-empty content.
-		var nu strings.Builder
-		nu.WriteString(existing)
-		if existing != "" && !strings.HasSuffix(existing, "\n") {
-			nu.WriteString("\n")
-		}
-		if existing != "" {
-			nu.WriteString("\n")
-		}
-		nu.WriteString(desired)
-		newContent := nu.String()
-		if newContent == existing {
-			return "", false, nil // pathological: nothing to do
-		}
-		backup, err := writeWithBackup(rcPath, []byte(newContent))
-		return backup, true, err
-	case blockPresent:
-		// Replace the existing block in place.
-		newContent := existing[:loc.beginStart] + desired + existing[loc.endStop:]
-		if newContent == existing {
-			return "", false, nil
-		}
-		backup, err := writeWithBackup(rcPath, []byte(newContent))
-		return backup, true, err
 	case blockMalformed:
 		return "", false, fmt.Errorf(
 			"shell rc at %s has malformed a-novel markers (begin marker without matching end, or vice versa); "+
 				"restore both markers around the existing managed block, or delete both markers entirely and re-run setup",
 			rcPath)
+	case blockPresent:
+		newContent = existing[:loc.beginStart] + desired + existing[loc.endStop:]
+		if newContent == existing {
+			return "", false, nil
+		}
+	default:
+		// Append, separated from any existing content by a blank line.
+		newContent = existing
+		if existing != "" {
+			if !strings.HasSuffix(existing, "\n") {
+				newContent += "\n"
+			}
+			newContent += "\n"
+		}
+		newContent += desired
 	}
-	return "", false, nil
+	backup, err := writeWithBackup(rcPath, []byte(newContent))
+	return backup, true, err
 }
 
 type blockKind int
@@ -277,7 +268,7 @@ func pruneOldRCBackups(rcPath string) {
 	if len(backups) <= maxRCBackups {
 		return
 	}
-	sort.Slice(backups, func(i, j int) bool { return backups[i].mt.Before(backups[j].mt) })
+	slices.SortFunc(backups, func(a, b entry) int { return a.mt.Compare(b.mt) })
 	for _, b := range backups[:len(backups)-maxRCBackups] {
 		_ = os.Remove(b.path)
 	}
