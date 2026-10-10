@@ -422,3 +422,16 @@ func TestBuildPlanPrunesUnknownRulesets(t *testing.T) {
 		}
 	})
 }
+
+// TestSettingsBodyTakesLandedSubjectsFromPRTitle pins the contract the
+// commit-messages ruleset relies on: whatever lands, squash or merge commit,
+// carries the PR title as its subject, never a branch commit's.
+func TestSettingsBodyTakesLandedSubjectsFromPRTitle(t *testing.T) {
+	t.Parallel()
+	body := SettingsBody(&ClassPreset{})
+	for _, key := range []string{"squash_merge_commit_title", "merge_commit_title"} {
+		if body[key] != "PR_TITLE" {
+			t.Errorf("%s = %v, want PR_TITLE", key, body[key])
+		}
+	}
+}

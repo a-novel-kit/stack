@@ -394,9 +394,13 @@ func SettingsBody(c *ClassPreset) map[string]any {
 		"delete_branch_on_merge":       c.Merge.DeleteBranchOnMerge,
 		"allow_update_branch":          c.Merge.AllowUpdateBranch,
 		"web_commit_signoff_required":  c.Merge.SignoffRequired,
-		"squash_merge_commit_title":    "COMMIT_OR_PR_TITLE",
-		"squash_merge_commit_message":  "COMMIT_MESSAGES",
-		"security_and_analysis":        SecurityBlock(c),
+		// The PR title is the subject of whatever lands, squash or merge commit,
+		// so the commit-messages ruleset judges the title reviewers saw.
+		"squash_merge_commit_title":   "PR_TITLE",
+		"squash_merge_commit_message": "COMMIT_MESSAGES",
+		"merge_commit_title":          "PR_TITLE",
+		"merge_commit_message":        "PR_BODY",
+		"security_and_analysis":       SecurityBlock(c),
 	}
 }
 

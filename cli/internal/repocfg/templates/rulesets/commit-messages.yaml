@@ -1,6 +1,7 @@
-# Conventional Commits subjects on the default branch. The merge queue squashes,
-# so the rule checks the subject GitHub writes from the PR title, or from the
-# lone commit of a one-commit PR. Commit metadata rules need GitHub Enterprise.
+# Conventional Commits subjects on the default branch. On a squash merge GitHub
+# ignores the PR's own commits and checks only the commit that lands, whose
+# subject the repo settings take from the PR title. Commit metadata rules need
+# GitHub Enterprise.
 #
 # Evaluate records would-be violations in Rule Insights and blocks nothing.
 # Merge-queue commits match no bypass actor, and the epic-rollback and
