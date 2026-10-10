@@ -425,14 +425,18 @@ func TestBuildPlanPrunesUnknownRulesets(t *testing.T) {
 }
 
 // TestSettingsBodyTakesLandedSubjectsFromPRTitle pins the contract the
-// commit-messages ruleset relies on: whatever lands, squash or merge commit,
-// carries the PR title as its subject, never a branch commit's.
+// commit-messages ruleset relies on: a squash merge carries the PR title as its
+// subject, never a branch commit's. The merge-commit title settings stay out,
+// since GitHub rejects the whole PATCH with them while merge commits are off.
 func TestSettingsBodyTakesLandedSubjectsFromPRTitle(t *testing.T) {
 	t.Parallel()
 	body := SettingsBody(&ClassPreset{})
-	for _, key := range []string{"squash_merge_commit_title", "merge_commit_title"} {
-		if body[key] != "PR_TITLE" {
-			t.Errorf("%s = %v, want PR_TITLE", key, body[key])
+	if body["squash_merge_commit_title"] != "PR_TITLE" {
+		t.Errorf("squash_merge_commit_title = %v, want PR_TITLE", body["squash_merge_commit_title"])
+	}
+	for _, key := range []string{"merge_commit_title", "merge_commit_message"} {
+		if _, ok := body[key]; ok {
+			t.Errorf("%s is set; GitHub rejects it while merge commits are disabled", key)
 		}
 	}
 }
