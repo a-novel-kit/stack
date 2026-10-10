@@ -157,6 +157,19 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		Body:   map[string]any{"state": "not-configured"},
 	})
 
+	// GitHub Code Quality bills per active committer and per AI credit on every
+	// default-branch push, so the product follows the same class flag as the
+	// master ruleset's code_quality rule.
+	codeQuality := "not-configured"
+	if c.CodeQuality {
+		codeQuality = "configured"
+	}
+	p.Ops = append(p.Ops, Op{
+		Method: http.MethodPatch,
+		Path:   repoPath + "/code-quality/setup",
+		Body:   map[string]any{"state": codeQuality},
+	})
+
 	// Merge governance workflows ship wherever the master ruleset gates merges.
 	// Release callers are narrower: a deployment-only class without the tags
 	// ruleset explicitly removes them, so changing a repo's class cannot leave

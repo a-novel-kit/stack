@@ -93,6 +93,7 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 		"PUT /contents/.github/CODEOWNERS",
 		"PUT /labels",
 		"PATCH /code-scanning/default-setup",
+		"PATCH /code-quality/setup",
 		"PUT /contents/.github/workflows/merge-gate.yaml",
 		"PUT /contents/.github/workflows/epic-freeze.yaml",
 		"PUT /contents/.github/workflows/approve-pr.yaml",
