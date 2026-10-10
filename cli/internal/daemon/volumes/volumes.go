@@ -18,7 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +26,7 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
+	"github.com/a-novel-kit/stack/cli/internal/shared/retention"
 )
 
 // maxBackupsPerVolume is how many of the most-recent backups to keep per
@@ -35,12 +36,10 @@ const maxBackupsPerVolume = 5
 // Volume is a list-row for `volume list`.
 type Volume struct {
 	Name        string // bare name (without stack/service prefix)
-	FullName    string // podman volume name (`<stack>_<service>_<name>`)
 	Service     string
 	Stack       string
 	SizeBytes   int64 // 0 if volume doesn't exist yet
 	BackupCount int32 // archives in our backups dir
-	Exists      bool  // does the podman volume actually exist?
 }
 
 // PodmanVolumeName returns the podman-namespaced volume name from a
@@ -60,62 +59,42 @@ func BackupDir(stack, service, volume string) string {
 // =============================================================================
 
 // List returns one Volume entry per compose-declared volume on the service.
-// Existence and size come from podman, the backup count from the backups dir.
-func List(svc *discovery.Service) ([]Volume, error) {
+// The size comes from podman, the backup count from the backups dir.
+func List(svc *discovery.Service) []Volume {
 	out := make([]Volume, 0, len(svc.Volumes))
 	for _, v := range svc.Volumes {
-		full := PodmanVolumeName(svc.Stack, svc.Name, v.Name)
-		size, exists := podmanVolumeSize(full)
-		count := countBackups(svc.Stack, svc.Name, v.Name)
 		out = append(out, Volume{
 			Name:        v.Name,
-			FullName:    full,
 			Service:     svc.Name,
 			Stack:       svc.Stack,
-			SizeBytes:   size,
-			BackupCount: count,
-			Exists:      exists,
+			SizeBytes:   podmanVolumeSize(PodmanVolumeName(svc.Stack, svc.Name, v.Name)),
+			BackupCount: int32(len(retention.Files(BackupDir(svc.Stack, svc.Name, v.Name), isArchive))),
 		})
 	}
-	return out, nil
+	return out
 }
 
-// podmanVolumeSize returns the volume's size on disk and whether it exists at
-// all, reporting (0, false) for one that does not.
-func podmanVolumeSize(fullName string) (int64, bool) {
-	// The size comes from `du -sb` on the mountpoint `podman volume inspect`
-	// reports.
-	mp, err := podmanVolumeMountpoint(fullName)
-	if err != nil || mp == "" {
-		return 0, false
-	}
-	out, err := exec.Command("du", "-sb", mp).Output()
-	if err != nil {
-		return 0, true // exists but size unknown
-	}
-	// du output: "<bytes>\t<path>"
-	fields := strings.Fields(string(out))
-	if len(fields) == 0 {
-		return 0, true
-	}
-	var n int64
-	for _, c := range fields[0] {
-		if c < '0' || c > '9' {
-			break
-		}
-		n = n*10 + int64(c-'0')
-	}
-	return n, true
-}
-
-func podmanVolumeMountpoint(fullName string) (string, error) {
+// podmanVolumeSize returns the volume's size on disk, from `du -sb` on the
+// mountpoint `podman volume inspect` reports. A missing volume, or one du
+// cannot measure, reports 0.
+func podmanVolumeSize(fullName string) int64 {
 	out, err := exec.Command("podman", "volume", "inspect", fullName,
 		"--format", "{{.Mountpoint}}").Output()
-	if err != nil {
-		return "", err
+	mountpoint := strings.TrimSpace(string(out))
+	if err != nil || mountpoint == "" {
+		return 0
 	}
-	return strings.TrimSpace(string(out)), nil
+	if out, err = exec.Command("du", "-sb", mountpoint).Output(); err != nil {
+		return 0
+	}
+	// du prints "<bytes>\t<path>".
+	size, _, _ := strings.Cut(string(out), "\t")
+	n, _ := strconv.ParseInt(size, 10, 64)
+	return n
 }
+
+// isArchive reports whether a backups-dir entry is a backup archive.
+func isArchive(name string) bool { return strings.HasSuffix(name, ".tar.zst") }
 
 // =============================================================================
 // Backup
@@ -155,7 +134,7 @@ func Backup(svc *discovery.Service, tag string) ([]string, error) {
 		archives = append(archives, dest)
 		// Prune to the retention limit only after a successful backup, so a
 		// failed one never prunes away recovery state.
-		pruneOldBackups(dir)
+		retention.Prune(dir, isArchive, maxBackupsPerVolume)
 	}
 	return archives, nil
 }
@@ -165,7 +144,7 @@ func Backup(svc *discovery.Service, tag string) ([]string, error) {
 //
 // A failed backup leaves no file behind, so every archive on disk is a complete
 // one. Clear treats a successful backup as license to destroy the volume, and
-// `restore --previous` picks from the same directory.
+// `restore` picks from the same directory.
 func backupOne(volumeName, dest string) error {
 	if err := writeBackup(volumeName, dest); err != nil {
 		_ = os.Remove(dest)
@@ -182,18 +161,14 @@ func backupOne(volumeName, dest string) error {
 // and the frame checksum, so it is the call a full disk surfaces in, after
 // everything else looked fine. Every close error is returned, since a dropped
 // one reports a truncated archive as a successful backup.
-func writeBackup(volumeName, dest string) error {
+func writeBackup(volumeName, dest string) (err error) {
 	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", dest, err)
 	}
-	// Guards the early returns only. The success path closes explicitly below
-	// and returns the close error.
-	closed := false
-
 	defer func() {
-		if !closed {
-			_ = out.Close()
+		if closeErr := out.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("close %s: %w", dest, closeErr)
 		}
 	}()
 
@@ -228,12 +203,6 @@ func writeBackup(volumeName, dest string) error {
 		return fmt.Errorf("fsync %s: %w", dest, err)
 	}
 
-	closed = true
-
-	if err := out.Close(); err != nil {
-		return fmt.Errorf("close %s: %w", dest, err)
-	}
-
 	return nil
 }
 
@@ -258,52 +227,17 @@ func compressTo(dst io.Writer, src io.Reader) error {
 	return nil
 }
 
-// sanitizeTag drops shell-unfriendly chars so the filename is safe.
+// sanitizeTag replaces shell-unfriendly chars with dashes so the filename is
+// safe.
 func sanitizeTag(tag string) string {
-	keep := func(c rune) rune {
+	return strings.Map(func(c rune) rune {
 		switch {
 		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
 			return c
 		default:
 			return '-'
 		}
-	}
-	out := make([]rune, 0, len(tag))
-	for _, c := range tag {
-		out = append(out, keep(c))
-	}
-	return string(out)
-}
-
-// pruneOldBackups keeps the maxBackupsPerVolume most-recent files, by
-// modification time, removing the rest.
-func pruneOldBackups(dir string) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	type entry struct {
-		path string
-		mt   time.Time
-	}
-	var files []entry
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tar.zst") {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		files = append(files, entry{path: filepath.Join(dir, e.Name()), mt: info.ModTime()})
-	}
-	if len(files) <= maxBackupsPerVolume {
-		return
-	}
-	sort.Slice(files, func(i, j int) bool { return files[i].mt.Before(files[j].mt) })
-	for _, f := range files[:len(files)-maxBackupsPerVolume] {
-		_ = os.Remove(f.path)
-	}
+	}, tag)
 }
 
 // =============================================================================
@@ -362,7 +296,7 @@ func resolveBackup(dir, from string) (string, error) {
 		var matches []string
 
 		for _, e := range entries {
-			if strings.HasPrefix(e.Name(), from) && strings.HasSuffix(e.Name(), ".tar.zst") {
+			if strings.HasPrefix(e.Name(), from) && isArchive(e.Name()) {
 				matches = append(matches, e.Name())
 			}
 		}
@@ -373,33 +307,15 @@ func resolveBackup(dir, from string) (string, error) {
 		case 1:
 			return filepath.Join(dir, matches[0]), nil
 		default:
-			sort.Strings(matches)
-
 			return "", fmt.Errorf("timestamp %q matches %d backups (%s); pass a longer prefix to pick one",
 				from, len(matches), strings.Join(matches, ", "))
 		}
 	}
-	// Newest by mtime.
-	type cand struct {
-		path string
-		mt   time.Time
-	}
-	var cands []cand
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tar.zst") {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		cands = append(cands, cand{path: filepath.Join(dir, e.Name()), mt: info.ModTime()})
-	}
-	if len(cands) == 0 {
+	archives := retention.Files(dir, isArchive)
+	if len(archives) == 0 {
 		return "", errors.New("no backups available")
 	}
-	sort.Slice(cands, func(i, j int) bool { return cands[i].mt.After(cands[j].mt) })
-	return cands[0].path, nil
+	return archives[len(archives)-1], nil
 }
 
 // validateArchive reads the archive through to confirm it decompresses cleanly.
@@ -450,8 +366,7 @@ func restoreOne(volumeName, archive string) error {
 // =============================================================================
 
 // Clear destroys every volume on the service. It takes an auto-backup first, so
-// undo is one `restore --previous` away; noBackup makes the deletion
-// irreversible.
+// undo is one `restore` away; noBackup makes the deletion irreversible.
 //
 // The caller owns the service-down pre-check.
 func Clear(svc *discovery.Service, noBackup bool) ([]string, error) {
@@ -471,21 +386,4 @@ func Clear(svc *discovery.Service, noBackup bool) ([]string, error) {
 		cleared = append(cleared, v.Name)
 	}
 	return cleared, nil
-}
-
-// countBackups returns the number of .tar.zst files in the per-volume
-// backups dir.
-func countBackups(stack, service, volume string) int32 {
-	dir := BackupDir(stack, service, volume)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return 0
-	}
-	var n int32
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".tar.zst") {
-			n++
-		}
-	}
-	return n
 }

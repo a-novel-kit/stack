@@ -945,12 +945,8 @@ func (s *Server) ListVolumes(_ context.Context, req *anovelv1.ListVolumesRequest
 	if err != nil {
 		return nil, err
 	}
-	vols, err := volumes.List(svc)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
 	out := &anovelv1.ListVolumesResponse{}
-	for _, v := range vols {
+	for _, v := range volumes.List(svc) {
 		out.Volumes = append(out.Volumes, &anovelv1.Volume{
 			Name:        v.Name,
 			Service:     v.Service,

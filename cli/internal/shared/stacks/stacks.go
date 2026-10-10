@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
 // DefaultName is the stack name used when A_NOVEL_STACKS is unset.
@@ -70,7 +72,7 @@ func ParseEnv() ([]Stack, error) { return Parse(os.Getenv(EnvVar)) }
 func implicitDefault() Stack {
 	return Stack{
 		Name:      DefaultName,
-		Path:      filepath.Join(homeDir(), "git-projects", "a-novel"),
+		Path:      filepath.Join(paths.Home(), "git-projects", "a-novel"),
 		IsDefault: true,
 	}
 }
@@ -79,20 +81,13 @@ func implicitDefault() Stack {
 // everything else is returned unchanged, so a shell-expansion mistake surfaces
 // as a broken path.
 func expandHome(p string) string {
-	if strings.HasPrefix(p, "~/") {
-		return filepath.Join(homeDir(), p[2:])
+	if rest, ok := strings.CutPrefix(p, "~/"); ok {
+		return filepath.Join(paths.Home(), rest)
 	}
 	if p == "~" {
-		return homeDir()
+		return paths.Home()
 	}
 	return p
-}
-
-func homeDir() string {
-	if v := os.Getenv("HOME"); v != "" {
-		return v
-	}
-	return "/"
 }
 
 // DefaultPath is the root of the default stack, the first entry of

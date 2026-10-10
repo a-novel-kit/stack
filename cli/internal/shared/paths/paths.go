@@ -34,7 +34,7 @@ func State() string {
 	if v := os.Getenv("XDG_STATE_HOME"); v != "" {
 		return filepath.Join(v, "a-novel")
 	}
-	return filepath.Join(home(), ".local", "state", "a-novel")
+	return filepath.Join(Home(), ".local", "state", "a-novel")
 }
 
 // Data is $XDG_DATA_HOME/a-novel/ (default ~/.local/share/a-novel/).
@@ -43,7 +43,7 @@ func Data() string {
 	if v := os.Getenv("XDG_DATA_HOME"); v != "" {
 		return filepath.Join(v, "a-novel")
 	}
-	return filepath.Join(home(), ".local", "share", "a-novel")
+	return filepath.Join(Home(), ".local", "share", "a-novel")
 }
 
 // LogsRoot is the per-stack logs root (State()/logs/).
@@ -68,9 +68,9 @@ func ReinstallCheckpoint() string { return filepath.Join(State(), "reinstall.jso
 // LogsRoot(), which holds the output of the targets the daemon supervises.
 func DaemonLog() string { return filepath.Join(State(), "daemon.log") }
 
-// home returns $HOME, or "/" when it is unset, so path computation always
+// Home returns $HOME, or "/" when it is unset, so path computation always
 // yields a path.
-func home() string {
+func Home() string {
 	if v := os.Getenv("HOME"); v != "" {
 		return v
 	}
