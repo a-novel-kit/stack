@@ -638,8 +638,8 @@ func ghJSON(method, path string, body any) error {
 func gh(args ...string) (string, error) { return ghStdin("", args...) }
 
 // ghStdin runs `gh` with optional stdin and returns stdout; on failure it
-// folds stderr into the error. A package var so tests can intercept every
-// GitHub API call without a live `gh`.
+// folds gh's output into the error (see ghError). A package var so tests can
+// intercept every GitHub API call without a live `gh`.
 var ghStdin = func(stdin string, args ...string) (string, error) {
 	c := exec.Command("gh", args...)
 	if stdin != "" {
@@ -648,12 +648,24 @@ var ghStdin = func(stdin string, args ...string) (string, error) {
 	var out, errb bytes.Buffer
 	c.Stdout, c.Stderr = &out, &errb
 	if err := c.Run(); err != nil {
-		if msg := strings.TrimSpace(errb.String()); msg != "" {
-			return out.String(), fmt.Errorf("%w: %s", err, msg)
-		}
-		return out.String(), err
+		return out.String(), ghError(err, out.String(), errb.String())
 	}
 	return out.String(), nil
+}
+
+// ghError folds a failed gh run's output into err. gh prints the HTTP status
+// on stderr and GitHub's JSON error on stdout; only the JSON's errors list
+// names the field GitHub rejected, so a JSON stdout joins the message.
+func ghError(err error, stdout, stderr string) error {
+	msg := strings.TrimSpace(stderr)
+	var body bytes.Buffer
+	if json.Compact(&body, []byte(stdout)) == nil {
+		msg = strings.TrimSpace(msg + " " + body.String())
+	}
+	if msg == "" {
+		return err
+	}
+	return fmt.Errorf("%w: %s", err, msg)
 }
 
 // contentSHA returns the blob sha of an existing file at path, or "" when the
