@@ -1,0 +1,35 @@
+# Protection for release lines, the release/vX.Y branches the hotfix workflow
+# cuts from a line's latest tag. A line holds released code plus backports only,
+# so a backport lands like a default-branch change: through a pull request with
+# one approval, squashed, behind the required checks the CLI injects for master.
+# A backport runs those checks from the line's own workflow files, so a check
+# added after the line's tag never reports there, and an admin merges past it.
+#
+# Only admins and the agent bot may create a line, so every line starts at a
+# tag. The agent bot bypasses with mode "always" for its direct writes: the
+# line's creation and the patch's version-bump commit, pushed with its tags.
+name: release-lines
+target: branch
+enforcement: active
+conditions:
+  ref_name:
+    include: ["refs/heads/release/**"]
+    exclude: []
+bypass:
+  - admins
+  - agent
+rules:
+  creation: true
+  deletion: true
+  non_fast_forward: true
+  required_signatures: true
+  required_status_checks:
+    strict: true
+    do_not_enforce_on_create: false
+  pull_request:
+    allowed_merge_methods: ["squash"]
+    required_approving_review_count: 1
+    dismiss_stale_reviews_on_push: true
+    require_last_push_approval: true
+    required_review_thread_resolution: true
+    require_code_owner_review: false

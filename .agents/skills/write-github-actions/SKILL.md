@@ -217,8 +217,11 @@ minus two exclusions: IDs starting with `report-` (reporting and post-merge jobs
 
 Adding a job to `main.yaml` therefore adds a required check on the next `a-novel repo update`.
 Renaming one silently drops the old context and adds a new one, so rename and reconcile in the same
-landing. Codecov's `codecov/patch` and `codecov/project` are posted by Codecov rather than by a job,
-so they live in their own ruleset.
+landing. Coverage gates nothing: no ruleset requires a Codecov status.
+
+The `release-lines` ruleset requires the same set on `release/vX.Y` branches. A backport runs those
+checks from its line's own workflow files, so a check added after the line's tag never reports there
+and an admin merges past it (`manage-versions`).
 
 The rulesets themselves are static YAML under `templates/rulesets/`, with the required-check list and
 the bypass actors injected by the CLI. `a-novel repo update` applies them; `use-a-novel-cli` covers

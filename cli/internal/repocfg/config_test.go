@@ -164,7 +164,7 @@ func TestLoadLabels(t *testing.T) {
 
 func TestLoadRulesets(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"master", "commit-messages", "require-approval", "tags"} {
+	for _, name := range []string{"master", "commit-messages", "require-approval", "tags", "release-lines"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			r, err := LoadRuleset(name)

@@ -29,6 +29,11 @@ const rulesetMaster = "master"
 // the tag, so like master it bypasses with mode "always".
 const rulesetTags = "tags"
 
+// rulesetReleaseLines is the name of the release/vX.Y branch ruleset. The
+// release bot creates a line and pushes its version-bump commits, so it also
+// bypasses with mode "always".
+const rulesetReleaseLines = "release-lines"
+
 // APIBypassActor is one bypass-actor entry in the GitHub rulesets API request body.
 type APIBypassActor struct {
 	ActorID    *int64 `json:"actor_id"`
@@ -242,6 +247,7 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	// The master ruleset gates exactly the discovered checks (always + the
 	// repo's main.yaml jobs, minus exclusions) — set wholesale, no reconcile.
 	// commit-messages governs the same branch, so it ships alongside master.
+	// Release lines take master's checks, and exist wherever releases are tagged.
 	wanted := []struct {
 		name   string
 		on     bool
@@ -251,6 +257,7 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		{"commit-messages", c.Rulesets.Master, nil},
 		{"require-approval", c.Rulesets.RequireApproval, nil},
 		{rulesetTags, c.Rulesets.Tags, nil},
+		{rulesetReleaseLines, c.Rulesets.Tags, t.Discovered.Checks},
 	}
 	keep := make([]string, 0, len(wanted))
 	for _, w := range wanted {
@@ -377,14 +384,14 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRu
 }
 
 // resolveBypass maps one generic bypass entry to concrete actors. Admins
-// always bypass with mode "always"; bots bypass with "always" on master and
-// tags, where they write directly (the bump commit and the release tag), and
-// "exempt" elsewhere. Dependabot is GitHub's own App, so its ID is the same in
+// always bypass with mode "always"; bots bypass with "always" on master, tags
+// and release lines, where they write directly (the bump commit and the release
+// tag), and "exempt" elsewhere. Dependabot is GitHub's own App, so its ID is the same in
 // every org. An entry that resolves to nothing is an error, so a typo in a
 // ruleset template is caught before the bypass list ships.
 func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor, error) {
 	botMode := modeExempt
-	if rulesetName == rulesetMaster || rulesetName == rulesetTags {
+	if rulesetName == rulesetMaster || rulesetName == rulesetTags || rulesetName == rulesetReleaseLines {
 		botMode = modeAlways
 	}
 	switch entry {

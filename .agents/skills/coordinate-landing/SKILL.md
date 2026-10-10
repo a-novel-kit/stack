@@ -216,7 +216,7 @@ A bug on a released line that spans several repos is **not** a special "hotfix t
 **standard Epic, run fast**: label the fix PRs `epic:<N>`, let the merge-gate land them atomically, and
 release with the release train. There is deliberately **no cross-repo hotfix orchestrator** — the Epic
 machinery already gives atomicity plus a coordinated release. The _single-repo_ hotfix path
-(`hotfix.yaml`: baseline → ephemeral → cut → reconcile → cleanup Task) and its vocabulary live in
+(`hotfix.yaml`: fix on the default branch → backport into `release/vX.Y` → cut on merge) and its vocabulary live in
 `manage-versions`.
 
 ---

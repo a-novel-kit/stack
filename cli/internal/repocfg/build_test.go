@@ -188,7 +188,7 @@ func TestBuildPlanProvisionsMergeGateWorkflows(t *testing.T) {
 		// Factorized: the thin caller references the reusable *-run.yaml engine, not the action.
 		"/contents/.github/workflows/merge-gate.yaml":    "merge-gate-run.yaml@",
 		"/contents/.github/workflows/release-train.yaml": "release-train-run.yaml@",
-		"/contents/.github/workflows/hotfix.yaml":        "hotfix-run.yaml@",
+		"/contents/.github/workflows/hotfix.yaml":        "backport-run.yaml@",
 		"/contents/.github/workflows/epic-rollback.yaml": "epic-rollback-run.yaml@",
 		// Not factorized (already thin): still call the action directly.
 		"/contents/.github/workflows/approve-pr.yaml":    "generic-actions/approve-pr@",
@@ -308,6 +308,71 @@ func TestBuildPlanProvisionsLockClosed(t *testing.T) {
 			}
 			if _, ok := ops["DELETE repos/a-novel/example/contents/.github/workflows/lock-pr.yaml"]; !ok {
 				t.Error("plan does not delete the retired lock-pr workflow")
+			}
+		})
+	}
+}
+
+// TestBuildPlanGovernsReleaseLines pins the release/vX.Y protection: wherever
+// releases are tagged, a backport lands like a default-branch change, behind
+// master's checks, an approval and a squash, while the agent bot alone writes
+// to the line directly, to create it and to push a patch's bump commit.
+func TestBuildPlanGovernsReleaseLines(t *testing.T) {
+	t.Parallel()
+
+	checks := []CheckRef{{Context: "merge-gate", IntegrationID: 3549379}, {Context: "test", IntegrationID: 15368}}
+	for _, tags := range []bool{true, false} {
+		t.Run(fmt.Sprintf("tags=%v", tags), func(t *testing.T) {
+			t.Parallel()
+			plan, err := BuildPlan(&RepoTarget{
+				Org: "a-novel-kit", Repo: "example",
+				Class:      &ClassPreset{Rulesets: ClassRulesets{Master: true, Tags: tags}},
+				OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{"agent": 3549379, "publish": 1734949}},
+				Discovered: &Discovered{Checks: checks},
+			})
+			if err != nil {
+				t.Fatalf("BuildPlan: %v", err)
+			}
+			var ruleset *APIRuleset
+			for _, op := range plan.Ops {
+				if op.RulesetName == rulesetReleaseLines {
+					ruleset = op.Body.(*APIRuleset)
+				}
+			}
+			if (ruleset != nil) != tags {
+				t.Fatalf("release-lines ruleset present = %v, want %v", ruleset != nil, tags)
+			}
+			if !tags {
+				return
+			}
+			refs := ruleset.Conditions["ref_name"].(map[string]any)
+			if ruleset.Target != "branch" || !slices.Equal(refs["include"].([]string), []string{"refs/heads/release/**"}) {
+				t.Fatalf("target/ref_name = %s/%v, want branch release/**", ruleset.Target, refs)
+			}
+			agent := slices.IndexFunc(ruleset.BypassActors, func(a APIBypassActor) bool {
+				return a.ActorID != nil && *a.ActorID == 3549379
+			})
+			if agent < 0 || ruleset.BypassActors[agent].BypassMode != modeAlways {
+				t.Fatalf("bypass actors = %+v, want the agent bot in always mode", ruleset.BypassActors)
+			}
+			rules := map[string]map[string]any{}
+			for _, r := range ruleset.Rules {
+				rules[r.Type] = r.Parameters
+			}
+			for _, rule := range []string{"creation", "deletion", "non_fast_forward", "required_signatures"} {
+				if _, ok := rules[rule]; !ok {
+					t.Errorf("release-lines lacks the %s rule", rule)
+				}
+			}
+			if got := rules["pull_request"]["allowed_merge_methods"]; !slices.Equal(got.([]any), []any{"squash"}) {
+				t.Errorf("allowed_merge_methods = %v, want squash only", got)
+			}
+			if got := rules["pull_request"]["required_approving_review_count"]; got != 1 {
+				t.Errorf("required_approving_review_count = %v, want 1", got)
+			}
+			required := rules["required_status_checks"]["required_status_checks"].([]map[string]any)
+			if len(required) != len(checks) || required[0]["context"] != "merge-gate" || required[1]["context"] != "test" {
+				t.Errorf("required checks = %v, want master's discovered checks", required)
 			}
 		})
 	}
