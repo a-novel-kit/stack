@@ -230,9 +230,9 @@ reverted on the next reconcile.
 
 `commit-messages` checks the subject of every commit on every branch, except the merge queue's
 `gh-readonly-queue/**`, against Conventional Commits. A squash merge lands with the PR title as its
-subject and the branch's commit messages as its body, so both halves are checked. It runs in Evaluate
-until the release, hotfix and rollback automation writes Conventional messages (a-novel-kit/stack#530).
-Commit metadata rules like this one need GitHub Enterprise.
+subject and the branch's commit messages as its body, so both halves are checked. The rule is active,
+so automation that commits must write Conventional subjects too (`git-conventions`). Commit metadata
+rules like this one need GitHub Enterprise.
 
 Two GitHub constraints shape the bypass lists:
 
