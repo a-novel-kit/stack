@@ -81,6 +81,10 @@ inside docs/config always match the released version:
 // the reference shape, a renamed field — and stamping nothing is the silent way
 // that surfaces, one release too late.
 func stampTargets(patterns []string, prefix, version string) (int, int, error) {
+	re, err := stampPattern(prefix)
+	if err != nil {
+		return 0, 0, err
+	}
 	files, err := resolveStampTargets(patterns)
 	if err != nil {
 		return 0, 0, err
@@ -89,7 +93,7 @@ func stampTargets(patterns []string, prefix, version string) (int, int, error) {
 	total := 0
 
 	for _, f := range files {
-		count, err := stampFile(f, prefix, version)
+		count, err := stampFile(f, re, version)
 		if err != nil {
 			return 0, 0, err
 		}
@@ -163,15 +167,18 @@ func resolveStampTargets(patterns []string) ([]string, error) {
 	return files, nil
 }
 
-// stampFile rewrites every `<prefix>vX.Y.Z` occurrence in the file at path
-// to carry version, and reports how many references were rewritten. prefix
-// is a regular expression; the version-number tail it stamps over is always
-// `v[0-9.]+`.
-func stampFile(path, prefix, version string) (int, error) {
+// stampPattern matches `<prefix>vX.Y.Z`, prefix being a regular expression.
+func stampPattern(prefix string) (*regexp.Regexp, error) {
 	re, err := regexp.Compile("(" + prefix + ")v[0-9.]+")
 	if err != nil {
-		return 0, fmt.Errorf("publish: invalid prefix pattern %q: %w", prefix, err)
+		return nil, fmt.Errorf("publish: invalid prefix pattern %q: %w", prefix, err)
 	}
+	return re, nil
+}
+
+// stampFile rewrites every match of re, a `(<prefix>)v[0-9.]+` pattern, in the
+// file at path to carry version, and reports how many references it rewrote.
+func stampFile(path string, re *regexp.Regexp, version string) (int, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return 0, fmt.Errorf("publish: stat %s: %w", path, err)

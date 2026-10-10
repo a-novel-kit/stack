@@ -386,10 +386,8 @@ Use --no-shell-rc to skip step 4 entirely (for dotfile-manager users).`,
 				// a re-spawn, matching `a-novel core start` and keeping
 				// re-runs of `core setup` a no-op.
 				StartDaemon: func() error {
-					ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-					defer cancel()
-					if _, err := rpc.New("").Ping(ctx); err == nil {
-						return nil // already up
+					if up, _ := daemonUp(cmd.Context(), rpc.New("")); up {
+						return nil
 					}
 					return startDetached()
 				},

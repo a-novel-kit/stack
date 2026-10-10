@@ -81,7 +81,11 @@ func TestStampFile(t *testing.T) {
 				t.Fatalf("write fixture: %v", err)
 			}
 
-			count, err := stampFile(path, testCase.prefix, testCase.version)
+			re, err := stampPattern(testCase.prefix)
+			count := 0
+			if err == nil {
+				count, err = stampFile(path, re, testCase.version)
+			}
 			if testCase.expectErr {
 				if err == nil {
 					t.Fatal("expected an error, got none")
