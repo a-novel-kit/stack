@@ -6,9 +6,10 @@
 //  1. PrepareReinstall RPC writes a JSON checkpoint listing every running
 //     go-exec target. Containers survive the daemon's death on their own, so
 //     they stay out of it.
-//  2. Daemon exits cleanly; go-exec children receive SIGTERM via the
-//     normal Kill path.
-//  3. Install script overwrites the binary.
+//  2. The daemon stops those targets through the normal Kill path, freeing
+//     their ports, and exits cleanly.
+//  3. `a-novel install` rebuilds the binary; `a-novel core restart
+//     --preserve-targets` goes straight to the next step.
 //  4. New daemon starts, observes the checkpoint at well-known path,
 //     re-launches the listed go-exec targets, deletes the checkpoint.
 //

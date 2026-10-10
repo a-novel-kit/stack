@@ -3,16 +3,75 @@ package server
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
+	"github.com/a-novel-kit/stack/cli/internal/daemon/env"
+	"github.com/a-novel-kit/stack/cli/internal/daemon/logs"
+	"github.com/a-novel-kit/stack/cli/internal/daemon/reinstall"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/runner"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Tests for the two places the daemon reports an outcome to an operator who has
-// no other way to check it: what a shutdown managed to stop, and whether a log
-// snapshot reached the end of the file.
+// Tests for the places the daemon reports an outcome to an operator who has no
+// other way to check it: what a shutdown or a reinstall handoff managed to
+// stop, and whether a log snapshot reached the end of the file.
+
+// TestPrepareReinstallStopsGoExecTargets covers the reinstall handoff. A
+// go-exec process outlives its daemon, so a target left running keeps the
+// ports the next daemon relaunches it on.
+func TestPrepareReinstallStopsGoExecTargets(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	// The runner spawns `go run`. A stand-in go that only sleeps keeps the
+	// toolchain out of the test.
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "go"), []byte("#!/bin/sh\nexec sleep 30\n"), 0o700); err != nil { //nolint:gosec // an executable fixture
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	tgt := &discovery.Target{Name: "rest", Service: "svc", Stack: "default", CmdDir: filepath.Join(t.TempDir(), "cmd", "rest")}
+	stacks := discovery.Stacks{{
+		Name:     "default",
+		Default:  true,
+		Services: []*discovery.Service{{Name: "svc", Stack: "default", Targets: []*discovery.Target{tgt}}},
+	}}
+	alloc := env.NewAllocator()
+	builder := env.NewBuilder(alloc)
+	logStore := logs.New()
+	run := runner.New(stacks, alloc, builder, logStore)
+	stopped := make(chan struct{})
+	srv := New("test", "", stacks, run, builder, logStore, func() { close(stopped) })
+
+	if err := run.Relaunch(t.Context(), tgt.ID(), os.Environ()); err != nil {
+		t.Fatalf("Relaunch: %v", err)
+	}
+	t.Cleanup(func() { _ = run.Kill(context.Background(), tgt.ID(), 0) })
+
+	resp, err := srv.PrepareReinstall(t.Context(), &anovelv1.PrepareReinstallRequest{})
+	if err != nil {
+		t.Fatalf("PrepareReinstall: %v", err)
+	}
+
+	if resp.GetGoExecTargetCount() != 1 {
+		t.Errorf("checkpointed %d target(s), want 1", resp.GetGoExecTargetCount())
+	}
+	if cp, err := reinstall.Read(); err != nil || cp == nil || len(cp.GoExec) != 1 || cp.GoExec[0].TargetID != tgt.ID() {
+		t.Errorf("checkpoint = %+v (err %v), want %s listed", cp, err, tgt.ID())
+	}
+	if inst, _ := run.Instance(tgt.ID()); inst.Phase != anovelv1.Phase_PHASE_TERMINATED {
+		t.Errorf("target phase after the handoff: got %v, want TERMINATED", inst.Phase)
+	}
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Error("PrepareReinstall never stopped the daemon")
+	}
+}
 
 func collect(t *testing.T) (func(*anovelv1.LogLine) error, *[]*anovelv1.LogLine) {
 	t.Helper()

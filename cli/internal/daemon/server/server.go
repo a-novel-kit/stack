@@ -147,8 +147,9 @@ func (s *Server) Status(_ context.Context, _ *anovelv1.StatusRequest) (*anovelv1
 }
 
 // PrepareReinstall writes a checkpoint listing every running go-exec target
-// with the env to relaunch it, fsyncs it, then signals the daemon to shut down.
-// Containers stay out, surviving the daemon's death on their own.
+// with the env to relaunch it, fsyncs it, stops those targets, then signals the
+// daemon to shut down. Containers stay out, surviving the daemon's death on
+// their own.
 //
 // A second PrepareReinstall is rejected while one is pending, guarded by the
 // checkpoint file's existence.
@@ -156,11 +157,13 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *anovelv1.PrepareReinstal
 	if err := reinstall.EnsureSinglePending(); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
-	// Gather the running go-exec instances. An instance never stores the env
-	// it started with, so relaunch re-derives it from the env builder and the
-	// target comes back on freshly allocated ports, as a manual restart does.
+	// An instance never stores the env it started with, so the checkpoint
+	// re-derives it from the env builder. The target still holds its port
+	// claims, so the env names the ports it runs on, and the new daemon
+	// relaunches it on those same ports.
+	ids := s.liveGoExecIDs()
 	cp := reinstall.Checkpoint{}
-	for _, id := range s.liveGoExecIDs() {
+	for _, id := range ids {
 		t, _ := s.stacks.Target(id)
 		if t == nil {
 			continue
@@ -177,8 +180,12 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *anovelv1.PrepareReinstal
 	if err := reinstall.Write(cp); err != nil {
 		return nil, connect.Errorf(connect.CodeInternal, "write checkpoint: %v", err).WithCause(err)
 	}
-	// The daemon's main loop then wakes and shuts down gracefully, SIGTERMing
-	// the go-exec children and leaving containers.
+	// Stop the targets before the daemon exits, since a go-exec process
+	// outlives its daemon and keeps the ports its relaunch needs. The 5s grace
+	// keeps the RPC inside the 10s `a-novel install` gives it.
+	for _, failure := range s.stopAll(ids, nil, 5*time.Second).failures {
+		fmt.Fprintf(os.Stderr, "reinstall: %s\n", failure)
+	}
 	time.AfterFunc(shutdownDelay, s.stop)
 	return &anovelv1.PrepareReinstallResponse{
 		CheckpointPath:    reinstall.Path(),
