@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/a-novel-kit/stack/cli/internal/shared/compose"
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 )
 
@@ -269,7 +270,7 @@ func discoverStack(st *Stack) {
 func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 	name := filepath.Base(dir)
 	composePath := filepath.Join(dir, "builds", "podman-compose.yaml")
-	cf, err := parseComposeFile(composePath)
+	cf, err := compose.ReadFile(composePath)
 	if err != nil {
 		// A missing or malformed compose file leaves nothing to classify, so
 		// the service drops out of the list with an error explaining why.

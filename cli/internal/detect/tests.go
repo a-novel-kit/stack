@@ -1,13 +1,14 @@
 package detect
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"github.com/a-novel-kit/stack/cli/internal/shared/compose"
 )
 
 // DetectTests is the test-suite counterpart of [Detect]. It discovers:
@@ -82,64 +83,36 @@ func composeProject(rel, id string) string {
 	return "anovel-test-" + strings.Trim(slug, "-")
 }
 
-// hostPortVar matches a `${NAME}:1234` host→container port mapping. The
-// `:digits` after the brace distinguishes a ports entry from environment
-// (`KEY: "${NAME}"`) or volumes (`${NAME}:/path`).
-var hostPortVar = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}:\d`)
-
-// anyVar matches every `${NAME}` interpolation, ports/env/anything.
-var anyVar = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)`)
-
-// distinct returns the first capture group of every match, de-duplicated in
-// first-seen order.
-func distinct(re *regexp.Regexp, src string) []string {
-	var out []string
-	for _, m := range re.FindAllStringSubmatch(src, -1) {
-		if !slices.Contains(out, m[1]) {
-			out = append(out, m[1])
-		}
-	}
-	return out
-}
-
-// composeServices lists the services a compose file declares, in source order,
-// and the ones among them with a `depends_on:` block. build.composeUpPhased
-// starts dependency-free services first and dependents second, so ordering
-// never relies on the provider's `depends_on` wait. A file that does not parse
-// lists nothing, and its env comes up in one piece.
-func composeServices(raw []byte) ([]string, []string) {
-	var doc struct {
-		Services yaml.Node `yaml:"services"`
-	}
-	if yaml.Unmarshal(raw, &doc) != nil {
-		return nil, nil
-	}
-	var services, dependents []string
-	for i := 0; i+1 < len(doc.Services.Content); i += 2 {
-		name := doc.Services.Content[i].Value
-		services = append(services, name)
-		var svc struct {
-			DependsOn yaml.Node `yaml:"depends_on"`
-		}
-		if doc.Services.Content[i+1].Decode(&svc) == nil && !svc.DependsOn.IsZero() {
-			dependents = append(dependents, name)
-		}
-	}
-	return services, dependents
-}
-
+// toEnv describes the env file f as the runner needs it: its services, split
+// into dependency-free ones and dependents, the host ports to allocate, and every
+// variable it references. build.composeUpPhased starts dependency-free services
+// first and dependents second, so ordering never relies on the provider's
+// `depends_on` wait. A file that does not parse lists nothing, and its env comes
+// up in one piece.
 func (f envFile) toEnv(rel string) *ComposeEnv {
-	raw, _ := os.ReadFile(f.file)
-	services, dependents := composeServices(raw)
-	return &ComposeEnv{
-		File:       f.file,
-		Project:    composeProject(rel, f.id),
-		ID:         f.id,
-		Ports:      distinct(hostPortVar, string(raw)),
-		Refs:       distinct(anyVar, string(raw)),
-		Services:   services,
-		Dependents: dependents,
+	env := &ComposeEnv{File: f.file, Project: composeProject(rel, f.id), ID: f.id}
+	raw, err := os.ReadFile(f.file)
+	if err != nil {
+		return env
 	}
+	env.Refs = compose.Refs(string(raw))
+	parsed, err := compose.Parse(raw)
+	if err != nil {
+		return env
+	}
+	env.Services = slices.Sorted(maps.Keys(parsed.Services))
+	for _, name := range env.Services {
+		svc := parsed.Services[name]
+		if len(svc.DependsOn) > 0 {
+			env.Dependents = append(env.Dependents, name)
+		}
+		for _, mapping := range svc.Ports {
+			if port, _, ok := compose.HostPort(mapping); ok && !slices.Contains(env.Ports, port) {
+				env.Ports = append(env.Ports, port)
+			}
+		}
+	}
+	return env
 }
 
 // goTests emits the Go test target(s) for a module at dir.

@@ -26,59 +26,6 @@ func TestServicePrefix(t *testing.T) {
 	}
 }
 
-func TestExtractRefs(t *testing.T) {
-	cases := []struct {
-		in   string
-		want []string
-	}{
-		// Single bare reference.
-		{"${POSTGRES_PORT}", []string{"POSTGRES_PORT"}},
-		// Two references in one value — order preserved.
-		{"${SMTP_HOST}:${SMTP_PORT}", []string{"SMTP_HOST", "SMTP_PORT"}},
-		// Default-value syntax recognized but the default is discarded.
-		{"${X:-fallback}", []string{"X"}},
-		// Mixed literal + refs.
-		{"postgres://${USER}:${PASS}@${HOST}:${PORT}/db", []string{"USER", "PASS", "HOST", "PORT"}},
-		// Same ref twice — deduplicated.
-		{"${X}/${X}", []string{"X"}},
-		// No refs.
-		{"plain-literal", nil},
-		{"", nil},
-	}
-	for _, c := range cases {
-		got := extractRefs(c.in)
-		// nil and empty slice are both "no refs" — normalize.
-		if len(got) == 0 && len(c.want) == 0 {
-			continue
-		}
-		if !reflect.DeepEqual(got, c.want) {
-			t.Errorf("extractRefs(%q): got %v want %v", c.in, got, c.want)
-		}
-	}
-}
-
-func TestSubstitute(t *testing.T) {
-	ctx := map[string]string{
-		"HOST": "localhost",
-		"PORT": "5432",
-	}
-	cases := []struct{ in, want string }{
-		{"${HOST}:${PORT}", "localhost:5432"},
-		{"http://${HOST}", "http://localhost"},
-		// Unknown reference → empty (matches compose semantics).
-		{"${UNKNOWN}", ""},
-		{"prefix ${UNKNOWN} suffix", "prefix  suffix"},
-		// No references → identity.
-		{"plain", "plain"},
-	}
-	for _, c := range cases {
-		got := substitute(c.in, ctx)
-		if got != c.want {
-			t.Errorf("substitute(%q): got %q want %q", c.in, got, c.want)
-		}
-	}
-}
-
 func TestResolveOwner(t *testing.T) {
 	// The services list is sorted longest-first, the shape SetServices hands
 	// out.

@@ -119,8 +119,7 @@ type ComposeEnv struct {
 	// HOST) for any it references, so an internal-only postgres with no host
 	// port, and therefore no entry in Ports, still gets credentials.
 	Refs []string
-	// Services lists every compose service declared under `services:`, in
-	// source order.
+	// Services lists every compose service the file declares, sorted.
 	Services []string
 	// Dependents lists the services that declare a `depends_on:` block. The
 	// test env-up path starts dependency-free services first and dependents

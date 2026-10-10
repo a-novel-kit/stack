@@ -17,48 +17,12 @@
 package env
 
 import (
-	"regexp"
 	"strconv"
 	"strings"
 )
 
 // hostLocalhost is the hostname synthesized for every *_HOST derivation.
 const hostLocalhost = "localhost"
-
-// refRe matches a ${VAR} reference in a compose environment value, in both the
-// bare ${VAR} and the ${VAR:-default} form. The default is matched but dropped,
-// never applied.
-var refRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}`)
-
-// extractRefs returns the deduplicated list of ${VAR} names referenced in
-// raw — the right-hand side of one compose environment entry.
-func extractRefs(raw string) []string {
-	matches := refRe.FindAllStringSubmatch(raw, -1)
-	seen := make(map[string]bool, len(matches))
-	out := make([]string, 0, len(matches))
-	for _, m := range matches {
-		if !seen[m[1]] {
-			seen[m[1]] = true
-			out = append(out, m[1])
-		}
-	}
-	return out
-}
-
-// substitute resolves every ${VAR} in raw against ctx. An unknown reference
-// resolves to the empty string, matching compose's behavior, so a missing var
-// never survives as a literal ${VAR} that breaks at run time.
-func substitute(raw string, ctx map[string]string) string {
-	return refRe.ReplaceAllStringFunc(raw, func(match string) string {
-		// The captured VAR is the first group of "${VAR}" or
-		// "${VAR:-default}".
-		m := refRe.FindStringSubmatch(match)
-		if len(m) < 2 {
-			return ""
-		}
-		return ctx[m[1]]
-	})
-}
 
 // ServicePrefix is the uppercase, underscore-separated form of a service name
 // used in cross-service env references: `service-json-keys` becomes

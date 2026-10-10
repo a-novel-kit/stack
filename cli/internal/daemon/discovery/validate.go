@@ -2,14 +2,10 @@ package discovery
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
-)
 
-// envRefRe extracts ${VAR} and ${VAR:-default} references from compose env
-// values. It duplicates the env package's pattern to keep discovery free of an
-// env import.
-var envRefRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}`)
+	"github.com/a-novel-kit/stack/cli/internal/shared/compose"
+)
 
 // ValidateEnvRefs scans every compose env block for ${VAR} references the
 // daemon cannot fill and appends a non-fatal warning to the owning stack's
@@ -52,7 +48,7 @@ func validateService(svc *Service, allServices []string) []DiscoveryError {
 	}
 
 	check := func(where, key, value string) {
-		for _, ref := range extractRefsLocal(value) {
+		for _, ref := range compose.Refs(value) {
 			if isResolvable(ref, allServices, declared) {
 				continue
 			}
@@ -75,21 +71,6 @@ func validateService(svc *Service, allServices []string) []DiscoveryError {
 		}
 	}
 	return errs
-}
-
-// extractRefsLocal returns the deduplicated ${VAR} names referenced in raw,
-// mirroring the env package's own extraction without importing it.
-func extractRefsLocal(raw string) []string {
-	matches := envRefRe.FindAllStringSubmatch(raw, -1)
-	seen := make(map[string]bool, len(matches))
-	out := make([]string, 0, len(matches))
-	for _, m := range matches {
-		if !seen[m[1]] {
-			seen[m[1]] = true
-			out = append(out, m[1])
-		}
-	}
-	return out
 }
 
 // isResolvable applies the env-resolution rules to decide whether the daemon

@@ -11,6 +11,7 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
+	"github.com/a-novel-kit/stack/cli/internal/shared/compose"
 )
 
 // Builder assembles env blocks for services / targets. It reads compose
@@ -132,7 +133,7 @@ func (b *Builder) buildEnv(t *discovery.Target, services []string, allocate bool
 	// into ctx.
 	out := maps.Clone(ctx)
 	for k, raw := range t.Environment {
-		out[k] = substitute(raw, ctx)
+		out[k] = compose.Substitute(raw, ctx)
 	}
 	// The synthetic __port_N keys exist only for reference collection, so drop
 	// them from the user view.
@@ -216,7 +217,7 @@ func (b *Builder) buildInfraEnv(in *discovery.Infra, services []string, allocate
 		}
 	}
 	for k, raw := range in.Environment {
-		out[k] = substitute(raw, ctx)
+		out[k] = compose.Substitute(raw, ctx)
 	}
 	return out, nil
 }
@@ -229,13 +230,13 @@ func (b *Builder) resolveContext(env map[string]string, owner string, services [
 	ctx := make(map[string]string)
 	// Seed with the constants, the entries holding no ${VAR} reference.
 	for k, v := range env {
-		if len(extractRefs(v)) == 0 {
+		if len(compose.Refs(v)) == 0 {
 			ctx[k] = v
 		}
 	}
 	// Then resolve every referenced VAR.
 	for _, v := range env {
-		for _, ref := range extractRefs(v) {
+		for _, ref := range compose.Refs(v) {
 			if _, already := ctx[ref]; already {
 				continue
 			}
@@ -306,7 +307,7 @@ func (b *Builder) resolveOne(varName, owner string, services []string, allocate 
 		return "", nil
 	default:
 		// A constant from this env block, already in ctx, or a value carrying
-		// references that substitute() resolves in the second pass.
+		// references that compose.Substitute resolves in the second pass.
 		return ctx[varName], nil
 	}
 }
@@ -319,7 +320,7 @@ func isURLKind(k string) bool { return k != "_URL" && strings.HasSuffix(k, "_URL
 
 // mergePortRefs returns a copy of env with one synthetic `__port_N` entry per
 // raw compose ports: mapping. The synthetic keys carry those mapping strings
-// through resolveContext so extractRefs picks up their embedded `${VAR}`
+// through resolveContext so compose.Refs picks up their embedded `${VAR}`
 // references; they never reach the final output.
 func mergePortRefs(env map[string]string, ports []string) map[string]string {
 	out := make(map[string]string, len(env)+len(ports))

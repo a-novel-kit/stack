@@ -20,93 +20,56 @@ func mustWrite(t *testing.T, path, content string) {
 	}
 }
 
-// TestComposeServices guards the classifier that drives build.composeUpPhased:
-// a service is a "dependent" (second wave) iff it declares a depends_on: block.
-// Both the map and short-list forms count; a service with none is first-wave
-// infra. Both lists preserve source order.
-func TestComposeServices(t *testing.T) {
+// TestEnvFileToEnv guards the classifier that drives build.composeUpPhased:
+// a service is a "dependent" (second wave) iff it declares a depends_on block,
+// in either form. The host ports to allocate are the ${VAR} host sides of port
+// mappings, and a file that does not parse comes up in one piece.
+func TestEnvFileToEnv(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name     string
-		yaml     string
-		services []string
-		want     []string
+		name       string
+		yaml       string
+		services   []string
+		dependents []string
+		ports      []string
 	}{
 		{
-			name: "MapFormLongCondition",
+			name: "MapAndListDependsOn",
 			yaml: `services:
   postgres-x:
     image: postgres
-  service-x:
-    build:
-      context: ..
-    depends_on:
-      postgres-x:
-        condition: service_healthy
-`,
-			services: []string{"postgres-x", "service-x"},
-			want:     []string{"service-x"},
-		},
-		{
-			name: "ShortListForm",
-			yaml: `services:
-  postgres-x:
-    image: postgres
-  mailserver:
-    image: mailpit
-  service-x:
-    depends_on:
-      - postgres-x
-      - mailserver
-`,
-			services: []string{"postgres-x", "mailserver", "service-x"},
-			want:     []string{"service-x"},
-		},
-		{
-			name: "DBOnlyNoDependents",
-			yaml: `services:
-  postgres-x:
-    image: postgres
-    ports:
-      - "${POSTGRES_PORT}:5432"
-`,
-			services: []string{"postgres-x"},
-			want:     nil,
-		},
-		{
-			name: "MultipleDependentsInSourceOrder",
-			yaml: `services:
-  postgres-x:
-    image: postgres
+    ports: ["${POSTGRES_PORT}:5432", "5433:5433"]
   seed-x:
-    depends_on:
-      postgres-x:
-        condition: service_healthy
+    depends_on: [postgres-x]
   service-x:
     depends_on:
       seed-x:
         condition: service_completed_successfully
+    ports: ["${REST_PORT}:8080"]
 `,
-			services: []string{"postgres-x", "seed-x", "service-x"},
-			want:     []string{"seed-x", "service-x"},
+			services:   []string{"postgres-x", "seed-x", "service-x"},
+			dependents: []string{"seed-x", "service-x"},
+			ports:      []string{"POSTGRES_PORT", "REST_PORT"},
 		},
 		{
-			name:     "Malformed",
-			yaml:     "services: [unclosed\n",
-			services: nil,
-			want:     nil,
+			name:     "DBOnlyNoDependents",
+			yaml:     "services:\n  postgres-x:\n    ports: [\"${POSTGRES_PORT}:5432\"]\n",
+			services: []string{"postgres-x"},
+			ports:    []string{"POSTGRES_PORT"},
 		},
+		{name: "Malformed", yaml: "services: [unclosed\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			services, dependents := composeServices([]byte(tc.yaml))
-			if !reflect.DeepEqual(services, tc.services) {
-				t.Errorf("services = %v, want %v", services, tc.services)
-			}
-			if !reflect.DeepEqual(dependents, tc.want) {
-				t.Errorf("dependents = %v, want %v", dependents, tc.want)
+			f := filepath.Join(t.TempDir(), "podman-compose.go.test.yaml")
+			mustWrite(t, f, tc.yaml)
+			env := envFile{env: "go", file: f, id: "go"}.toEnv(".")
+			if !reflect.DeepEqual(env.Services, tc.services) || !reflect.DeepEqual(env.Dependents, tc.dependents) ||
+				!reflect.DeepEqual(env.Ports, tc.ports) {
+				t.Errorf("toEnv = services %v, dependents %v, ports %v; want %v, %v, %v",
+					env.Services, env.Dependents, env.Ports, tc.services, tc.dependents, tc.ports)
 			}
 		})
 	}

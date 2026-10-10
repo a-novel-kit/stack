@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/a-novel-kit/stack/cli/internal/shared/compose"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -175,8 +176,8 @@ func (r *Runner) reseedAllocator(ctx context.Context, stack, service, cid string
 	// Walk Infra.Ports and re-seed.
 	consumer := infraConsumer(stack, service)
 	for _, raw := range infra.Ports {
-		varName, containerPort := parseInfraPortMapping(raw)
-		if varName == "" || containerPort == "" {
+		varName, containerPort, ok := compose.HostPort(raw)
+		if !ok {
 			continue
 		}
 		hostPort, ok := containerToHost[containerPort]
@@ -204,22 +205,6 @@ func extractInfraNameFromContainerName(containerName, projectName string) string
 		rest = rest[:m[0]]
 	}
 	return rest
-}
-
-// infraPortRe matches a compose port mapping like "${POSTGRES_PORT}:5432"
-// and captures the var name + container-side port.
-var infraPortRe = regexp.MustCompile(`^\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}:(\d+)$`)
-
-// parseInfraPortMapping returns (varName, containerPort) from a
-// "${VAR}:N" mapping, or ("", "") if the mapping isn't in the
-// expected form (e.g., a literal "5432:5432" mapping has no allocated
-// var to re-seed).
-func parseInfraPortMapping(raw string) (string, string) {
-	m := infraPortRe.FindStringSubmatch(strings.TrimSpace(raw))
-	if m == nil {
-		return "", ""
-	}
-	return m[1], m[2]
 }
 
 // markInfraSessionUp flips the infra session for (stack, service) to
