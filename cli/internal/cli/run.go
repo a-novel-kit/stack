@@ -805,7 +805,7 @@ to 'json' for agent consumption or 'dotenv' for .env-style key=value.
 			if len(args) == 1 {
 				service = args[0]
 			}
-			resp, err := c.GetEnv(ctx, ss.stack, service, only, ss.allStacks)
+			resp, err := c.GetEnv(ctx, ss.stack, service, ss.allStacks)
 			if err != nil {
 				return err
 			}

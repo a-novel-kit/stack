@@ -119,10 +119,7 @@ func (s *Server) findService(stackName, serviceName string) (*discovery.Service,
 // Ping is the cheap handshake clients use to verify the daemon is alive.
 // `core start` uses it to detect an already-running instance.
 func (s *Server) Ping(_ context.Context, _ *anovelv1.PingRequest) (*anovelv1.PingResponse, error) {
-	return &anovelv1.PingResponse{
-		DaemonVersion: s.version,
-		Now:           timestamppb.Now(),
-	}, nil
+	return &anovelv1.PingResponse{DaemonVersion: s.version}, nil
 }
 
 // Status reports everything `a-novel core status` needs in one round-trip.
@@ -820,7 +817,7 @@ func (s *Server) GetEnv(_ context.Context, req *anovelv1.GetEnvRequest) (*anovel
 		return nil
 	}
 	switch {
-	case req.GetAllStacks():
+	case req.GetStack() == "*":
 		for _, st := range s.discovered {
 			for _, svc := range st.Services {
 				if err := gather(svc); err != nil {
@@ -1109,9 +1106,9 @@ func execExitCode(waitErr error) (int32, error) {
 // A container-mode target is rejected: attaching to a containerized process
 // needs an in-image dlv and a port-forward the daemon does not manage.
 //
-// DelvePort is a suggestion for `dlv attach --listen=:<port>`, which the daemon
-// never binds. It is `PID + 20000`, high but unprivileged, so debugging several
-// targets gives a unique port per PID with no allocation bookkeeping.
+// The hint's listen port is a suggestion the daemon never binds. It is
+// `PID + 20000`, high but unprivileged, so debugging several targets gives a
+// unique port per PID with no allocation bookkeeping.
 func (s *Server) Debug(_ context.Context, req *anovelv1.DebugRequest) (*anovelv1.DebugResponse, error) {
 	id := req.GetTargetId()
 	if id == "" {
@@ -1130,14 +1127,10 @@ func (s *Server) Debug(_ context.Context, req *anovelv1.DebugRequest) (*anovelv1
 			"debug: only go-exec targets can be attached to (container-mode dlv requires in-image dlv + port-forward)")
 	}
 	port := inst.PID + 20000
-	hint := fmt.Sprintf(
+	return &anovelv1.DebugResponse{Hint: fmt.Sprintf(
 		"Attach with:\n  dlv attach %d --listen=:%d --headless --api-version=2\nThen connect from your editor (vscode: 'Connect to server' on port %d).",
 		inst.PID, port, port,
-	)
-	return &anovelv1.DebugResponse{
-		DelvePort: port,
-		Hint:      hint,
-	}, nil
+	)}, nil
 }
 
 // Watch streams every phase transition the runner emits, filtered by the
