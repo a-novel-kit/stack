@@ -7,13 +7,12 @@
 # security updates; its commits follow the repo's style but are not configured.
 # Commit metadata rules need GitHub Enterprise.
 #
-# Evaluate records would-be violations in Rule Insights and blocks nothing. The
-# release, hotfix, rollback and reconcile automation still writes other
-# messages, so an active rule would block those sagas.
-# Tracked in https://github.com/a-novel-kit/stack/issues/530
+# The rule is active: GitHub rejects a push, a web commit or a merge that carries
+# a non-conforming subject, so `fixup!` commits, merge-based branch updates and
+# GitHub's `Revert "…"` button are refused (see the git-conventions skill).
 name: commit-messages
 target: branch
-enforcement: evaluate
+enforcement: active
 conditions:
   ref_name:
     include: ["~ALL"]

@@ -229,9 +229,8 @@ func TestBuildRuleset(t *testing.T) {
 	}
 }
 
-// TestBuildRulesetCommitMessagePattern pins the commit-messages ruleset: it stays
-// in Evaluate until the automation's messages comply, it covers every branch but
-// the merge queue's, only Dependabot bypasses it, and its pattern accepts the
+// TestBuildRulesetCommitMessagePattern pins the commit-messages ruleset: it is
+// active, it covers every branch but the merge queue's, only Dependabot bypasses it, and its pattern accepts the
 // subjects the fleet writes while rejecting the rest. GitHub evaluates metadata patterns as
 // RE2, the dialect Go's regexp implements, so a pattern verified here behaves
 // the same there.
@@ -246,8 +245,8 @@ func TestBuildRulesetCommitMessagePattern(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildRuleset: %v", err)
 	}
-	if rs.Enforcement != "evaluate" {
-		t.Fatalf("enforcement = %q, want evaluate", rs.Enforcement)
+	if rs.Enforcement != "active" {
+		t.Fatalf("enforcement = %q, want active", rs.Enforcement)
 	}
 	refs := rs.Conditions["ref_name"].(map[string]any)
 	if !slices.Equal(refs["include"].([]string), []string{"~ALL"}) ||
@@ -277,6 +276,8 @@ func TestBuildRulesetCommitMessagePattern(t *testing.T) {
 		"fix!: drop the legacy flag",
 		"refactor(pkg-js)!: rename the client\n\nBody text.",
 		"revert: feat(repocfg): restrict pull requests to collaborators",
+		"chore(release): 1.43.0",
+		"fix(auth): refuse banned owners [v1.4]",
 	} {
 		if !pattern.MatchString(subject) {
 			t.Errorf("pattern rejects conventional subject %q", subject)
@@ -289,6 +290,9 @@ func TestBuildRulesetCommitMessagePattern(t *testing.T) {
 		"feat(repocfg) missing colon",
 		"Feat: capitalised type",
 		"fixup! feat(repocfg): restrict pull requests to collaborators",
+		"squash! feat(repocfg): restrict pull requests to collaborators",
+		"amend! feat(repocfg): restrict pull requests to collaborators",
+		"WIP",
 		"Merge branch 'master' into feat/repocfg/x",
 		`Revert "feat(repocfg): restrict pull requests to collaborators"`,
 	} {
