@@ -174,6 +174,9 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 	case "quit", "q":
 		return tea.Quit
 	case "refresh":
+		// The new follower replays the whole log, so the buffer restarts.
+		m.logLines = nil
+		m.logScroll = 0
 		return tea.Batch(refreshServicesCmd(m.c), m.followSelectedLogs())
 	case "start":
 		// :start addresses targets only: a single infra container cannot

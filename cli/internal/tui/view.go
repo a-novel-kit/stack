@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
@@ -98,8 +99,7 @@ func (m *model) renderStatus(width int) string {
 		prefix = "✗  "
 		style = styleErr
 	}
-	msg := truncate(m.status.text, width-len(prefix)-1)
-	return style.Render(prefix + msg)
+	return style.Render(truncate(prefix+m.status.text, width-1))
 }
 
 func (m *model) renderNav(width, height int) string {
@@ -309,7 +309,7 @@ func targetStatusDot(t *anovelv1.Target) string {
 
 func (m *model) renderLogs(width, height int) string {
 	if len(m.logLines) == 0 {
-		return styleDim.Render("(no log lines yet — start the target or press 'r' to refresh)")
+		return styleDim.Render("(no log lines yet — start the target or run :refresh)")
 	}
 	// Away from the tail, the bottom line of the pane holds the scroll
 	// indicator; at the tail the full height goes to log content.
@@ -399,8 +399,8 @@ func (m *model) renderHelp() string {
 		"  :infra-start           bring up active service's WHOLE infra + one-shots",
 		"  :infra-kill            tear down active service's WHOLE infra (refuses if targets up)",
 		"  :infra-kill force      cascade-kill targets + infra",
-		"  :env                   show env block for active service in stderr",
 		"  :volume-backup         snapshot active service's volumes",
+		"  :topology              show the dependency graph (any key returns)",
 		"  :refresh               refresh services + logs now",
 		"",
 		styleHeader.Render("UI"),
@@ -651,14 +651,14 @@ func phaseShort(p anovelv1.Phase) string {
 	}
 }
 
+// truncate fits s into maxLen terminal cells, ending it with an ellipsis
+// when cut. It never splits a multi-byte character or an ANSI escape
+// sequence. A non-positive maxLen leaves s whole.
 func truncate(s string, maxLen int) string {
 	if maxLen <= 0 {
 		return s
 	}
-	if len(s) > maxLen {
-		return s[:maxLen-1] + "…"
-	}
-	return s
+	return ansi.Truncate(s, maxLen, "…")
 }
 
 func safeShort(s string, n int) string {

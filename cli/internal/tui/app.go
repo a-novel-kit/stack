@@ -27,6 +27,7 @@ import (
 	"context"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -396,9 +397,8 @@ func (m *model) handleCommandKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.cmdInput = ""
 		return m, m.runPaletteCommand(cmd)
 	case tea.KeyBackspace:
-		if len(m.cmdInput) > 0 {
-			m.cmdInput = m.cmdInput[:len(m.cmdInput)-1]
-		}
+		_, size := utf8.DecodeLastRuneInString(m.cmdInput)
+		m.cmdInput = m.cmdInput[:len(m.cmdInput)-size]
 		return m, nil
 	}
 	// Printable input carries its characters in Key.Text, which is populated
