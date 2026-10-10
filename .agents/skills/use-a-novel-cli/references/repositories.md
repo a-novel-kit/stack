@@ -38,4 +38,7 @@ Four behaviours to know before running it:
 - **A newer deployed pin survives.** For files pinning `a-novel-kit/workflows` actions, a version
   already ahead of the template's is kept, so `update` never rolls back a bump Renovate landed.
 
+A failed operation prints GitHub's JSON error after the HTTP status; its `errors` list names the
+rejected field.
+
 Agents stop at `--dry-run`: the write path refuses a non-TTY.

@@ -211,7 +211,26 @@ so they live in their own ruleset.
 
 The rulesets themselves are static YAML under `templates/rulesets/`, with the required-check list and
 the bypass actors injected by the CLI. `a-novel repo update` applies them; `use-a-novel-cli` covers
-the command.
+the command. The templates are the whole configuration: a ruleset or setting changed in the UI is
+reverted on the next reconcile.
+
+`commit-messages` checks the subject of every commit on every branch, except the merge queue's
+`gh-readonly-queue/**`, against Conventional Commits. A squash merge lands with the PR title as its
+subject and the branch's commit messages as its body, so both halves are checked. It runs in Evaluate
+until the release, hotfix and rollback automation writes Conventional messages (a-novel-kit/stack#530).
+Commit metadata rules like this one need GitHub Enterprise.
+
+Two GitHub constraints shape the bypass lists:
+
+- **Merge-queue commits match no bypass actor.** The queue writes them, not a person or an App, so
+  every PR into a protected branch must satisfy the rules itself, a bot's PR included.
+- **A bypass actor must be part of the repo.** Dependabot (App 29110) is `commit-messages`' only
+  bypass actor, and only on classes with `security.dependabot: true`. On a repo Dependabot never ran
+  in, GitHub rejects it with HTTP 422, "Actor Dependabot integration must be part of the ruleset
+  source or owner organization".
+
+Pull requests are for collaborators: every class sets `features.pull_requests: collaborators_only`,
+and `lock-pr.yaml` locks each new PR's conversation. Outsiders use issues and discussions.
 
 The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.yaml`,
 `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`,
