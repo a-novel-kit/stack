@@ -2,6 +2,7 @@ package repocfg
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -175,65 +176,47 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		Body:   map[string]any{"state": codeQuality},
 	})
 
-	// Merge governance workflows ship wherever the master ruleset gates merges.
-	// recover-prs re-arms PRs the queue drops on a timeout, so it follows the queue.
-	// Release callers are narrower: a deployment-only class without the tags
-	// ruleset explicitly removes them, so changing a repo's class cannot leave
-	// release mechanics behind as drift.
+	// Governance workflows are written from their templates, or deleted where
+	// an earlier reconcile left one the class no longer ships.
+	workflows := repoPath + "/contents/.github/workflows/"
+	var readErr error
+	put := func(names ...string) {
+		for _, name := range names {
+			content, err := ReadTemplate("governance/" + name)
+			readErr = errors.Join(readErr, err)
+			p.Ops = append(p.Ops, Op{Method: http.MethodPut, Path: workflows + name, Content: string(content)})
+		}
+	}
+	drop := func(names ...string) {
+		for _, name := range names {
+			p.Ops = append(p.Ops, Op{Method: http.MethodDelete, Path: workflows + name})
+		}
+	}
+
+	// Merge governance ships wherever the master ruleset gates merges;
+	// recover-prs re-arms PRs the queue drops on a timeout, so it follows the
+	// queue. Release callers are narrower: a class without the tags ruleset
+	// removes them, so changing a repo's class leaves no release mechanics behind.
 	if c.Rulesets.Master {
-		for _, wf := range []string{"merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml", "recover-prs.yaml"} {
-			content, err := ReadTemplate("governance/" + wf)
-			if err != nil {
-				return nil, err
-			}
-			p.Ops = append(p.Ops, Op{
-				Method:  http.MethodPut,
-				Path:    repoPath + "/contents/.github/workflows/" + wf,
-				Content: string(content),
-			})
-		}
+		put("merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml", "recover-prs.yaml")
 	}
-	for _, wf := range []string{"release-train.yaml", "hotfix.yaml"} {
-		op := Op{
-			Method: http.MethodDelete,
-			Path:   repoPath + "/contents/.github/workflows/" + wf,
-		}
-		if c.Rulesets.Master && c.Rulesets.Tags {
-			content, err := ReadTemplate("governance/" + wf)
-			if err != nil {
-				return nil, err
-			}
-			op.Method = http.MethodPut
-			op.Content = string(content)
-		}
-		p.Ops = append(p.Ops, op)
+	if c.Rulesets.Master && c.Rulesets.Tags {
+		put("release-train.yaml", "hotfix.yaml")
+	} else {
+		drop("release-train.yaml", "hotfix.yaml")
 	}
-
-	// Every repo locks a conversation once its issue or pull request closes, so
-	// lock-closed ships regardless of class. It replaces lock-pr.yaml, which
-	// locked pull requests as they opened and so blocked the approval bot; the
-	// plan deletes that copy wherever an earlier reconcile left it.
-	lockClosed, err := ReadTemplate("governance/lock-closed.yaml")
-	if err != nil {
-		return nil, err
-	}
-	p.Ops = append(p.Ops,
-		Op{Method: http.MethodPut, Path: repoPath + "/contents/.github/workflows/lock-closed.yaml", Content: string(lockClosed)},
-		Op{Method: http.MethodDelete, Path: repoPath + "/contents/.github/workflows/lock-pr.yaml"},
-	)
-
-	// Auto-approve the trusted dependency bots' PRs so their version bumps don't
-	// wait on a human. The workflow ships wherever require-approval holds them.
+	// Every repo locks a conversation once its issue or pull request closes.
+	// lock-closed replaces lock-pr, which locked pull requests as they opened
+	// and so blocked the approval bot.
+	put("lock-closed.yaml")
+	drop("lock-pr.yaml")
+	// The trusted dependency bots' PRs are auto-approved wherever
+	// require-approval would otherwise hold their version bumps for a human.
 	if c.Rulesets.RequireApproval {
-		content, err := ReadTemplate("governance/auto-approve-dependabot.yaml")
-		if err != nil {
-			return nil, err
-		}
-		p.Ops = append(p.Ops, Op{
-			Method:  http.MethodPut,
-			Path:    repoPath + "/contents/.github/workflows/auto-approve-dependabot.yaml",
-			Content: string(content),
-		})
+		put("auto-approve-dependabot.yaml")
+	}
+	if readErr != nil {
+		return nil, readErr
 	}
 
 	pages := Op{Method: http.MethodDelete, Path: repoPath + "/pages"}
