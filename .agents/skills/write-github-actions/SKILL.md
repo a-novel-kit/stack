@@ -243,6 +243,14 @@ Two GitHub constraints shape the bypass lists:
   in, GitHub rejects it with HTTP 422, "Actor Dependabot integration must be part of the ruleset
   source or owner organization".
 
+**A bypass label approves one PR head.** A label that waives a check (`allow-screenshot-change`,
+`allow-incomplete-translations`, `allow-translation-drift`, infra's `allow-resource-deletion`)
+approves the commit it was reviewed on, so a push removes it and a reviewer adds it again. The
+removal runs in a job holding `pull-requests: write`, and the label change re-runs the gate. A gate
+reads labels live through the API, or ignores them on a `synchronize` payload, since a rerun replays
+its original event. `append-only-override` predates this: it reads the payload, and its callers do
+not re-run on a label change.
+
 Pull requests are for collaborators: every class sets `features.pull_requests: collaborators_only`,
 and outsiders use issues and discussions. GitHub Apps count as collaborators there, so Renovate and
 the bots still open PRs. `lock-closed.yaml` locks an issue's or PR's conversation once it closes and
