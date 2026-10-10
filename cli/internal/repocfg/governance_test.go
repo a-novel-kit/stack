@@ -122,3 +122,31 @@ func TestDependabotGovernance(t *testing.T) {
 		})
 	}
 }
+
+// TestLockClosedGovernance pins when conversations lock: only once an issue or
+// pull request closes. A locked conversation refuses a GitHub App's review, so
+// locking an open pull request would block the dependency bots' approval.
+func TestLockClosedGovernance(t *testing.T) {
+	t.Parallel()
+	content, err := os.ReadFile("templates/governance/lock-closed.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	type trigger struct {
+		Types []string `yaml:"types"`
+	}
+	var workflow struct {
+		On struct {
+			Issues      trigger `yaml:"issues"`
+			PullRequest trigger `yaml:"pull_request"`
+		} `yaml:"on"`
+	}
+	if err := yaml.Unmarshal(content, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	for event, types := range map[string][]string{"issues": workflow.On.Issues.Types, "pull_request": workflow.On.PullRequest.Types} {
+		if got := strings.Join(types, ","); got != "closed,reopened" {
+			t.Errorf("lock-closed %s types = %q, want closed,reopened", event, got)
+		}
+	}
+}
