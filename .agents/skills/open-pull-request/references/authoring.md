@@ -47,7 +47,8 @@ gh pr create --base feat/dao/jwk-revoke ...
 ### 5.2 Title
 
 The title is a Conventional-Commits line matching the primary commit on the branch. Under
-70 characters. No period.
+70 characters. No period. It becomes the subject of the commit that lands on the default branch,
+which the `commit-messages` ruleset checks; the branch's own commit subjects never land.
 
 ```
 feat(dao): add soft-delete repository for key revocation
