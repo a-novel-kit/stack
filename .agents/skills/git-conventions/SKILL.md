@@ -2,8 +2,8 @@
 name: git-conventions
 description: >
   Manage checkout hygiene, branches, commits, and history. Load when starting or finishing checkout
-  work, creating or naming branches, grouping changes, or writing commits; pair with
-  attribute-ai-commits.
+  work, cleaning up worktrees or branches, creating or naming branches, grouping changes, or writing
+  commits; pair with attribute-ai-commits.
 ---
 
 # Git Conventions
@@ -16,8 +16,10 @@ drive automation (Renovate, CI tagging, changelogs) and signal intent to reviewe
 
 ## Load the Git procedure for this operation
 
-- Before starting or finishing checkout work, read [workspace hygiene](references/workspace.md).
-  Preserve other contributors' work and use an isolated checkout for sustained work.
+- Before starting or finishing checkout work, or cleaning anything up, read
+  [workspace hygiene](references/workspace.md). Touch only what this session created, cleanup
+  included, unless told otherwise; preserve other contributors' work and use an isolated checkout
+  for sustained work.
 - Before naming a branch, grouping changes, or writing, amending, or reviewing a commit message,
   read [commit conventions](references/commits.md).
   Use `attribute-ai-commits` for material AI contributions.

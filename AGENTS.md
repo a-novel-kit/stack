@@ -4,6 +4,13 @@ Workspace skills live in `.agents/skills/` and are shared through `a-novel-kit/s
 Publish skill changes on a feature branch with a pull request. Use these repository copies
 in this environment; keep personal skill installations outside this workflow.
 
+Never touch what you do not own unless the developer explicitly says to. You own only what your
+current session created: its worktrees, branches, stacks, containers, issues and pull requests. A
+bare "clean up" or "clear", of worktrees, issues or anything else, stays inside that set; a global
+cleanup that owns the whole workspace is always requested explicitly. Another session's checkout can
+be clean, merged and idle while that session still runs in it, so when ownership is unclear, ask.
+See [workspace hygiene](.agents/skills/git-conventions/references/workspace.md#when-you-are-done).
+
 Prefer the smallest complete solution: fewer lines of maintained code, fewer moving parts,
 and clear, idiomatic control flow. Preserve required behavior and the project's architecture,
 dependency policy, security, and testing standards. Simplify the whole affected path before
