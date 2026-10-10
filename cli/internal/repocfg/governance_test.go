@@ -196,6 +196,77 @@ func TestAutoApproveHoldsReleaseAge(t *testing.T) {
 	}
 }
 
+// TestHotfixGovernance pins the two hotfix paths of the caller. A dispatch
+// backports, and a backport merged into a release line cuts the patch. The cut
+// rides pull_request_target, the event GitHub runs from the default branch's
+// copy of the caller, and names its line from the merged pull request's base.
+func TestHotfixGovernance(t *testing.T) {
+	t.Parallel()
+	content, err := os.ReadFile("templates/governance/hotfix.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		On struct {
+			Dispatch struct {
+				Inputs map[string]any `yaml:"inputs"`
+			} `yaml:"workflow_dispatch"`
+			PullRequestTarget struct {
+				Types    []string `yaml:"types"`
+				Branches []string `yaml:"branches"`
+			} `yaml:"pull_request_target"`
+			Push any `yaml:"push"`
+		} `yaml:"on"`
+		Concurrency any `yaml:"concurrency"`
+		Jobs        map[string]struct {
+			If          string            `yaml:"if"`
+			Uses        string            `yaml:"uses"`
+			With        map[string]string `yaml:"with"`
+			Concurrency struct {
+				Group string `yaml:"group"`
+			} `yaml:"concurrency"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(content, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := workflow.On.Dispatch.Inputs["fix_refs"]; !ok {
+		t.Error("the dispatch takes no fix_refs input")
+	}
+	if _, ok := workflow.On.Dispatch.Inputs["fix_ref"]; ok {
+		t.Error("the dispatch still takes the fix_ref range input")
+	}
+	if got := strings.Join(workflow.On.PullRequestTarget.Types, ","); got != "closed" ||
+		strings.Join(workflow.On.PullRequestTarget.Branches, ",") != "release/**" {
+		t.Errorf("pull_request_target = %v on %v, want closed on release/**", got, workflow.On.PullRequestTarget.Branches)
+	}
+	// A push trigger would run the release line's own, older copy of the caller.
+	if workflow.On.Push != nil {
+		t.Error("the caller triggers on push")
+	}
+	// Workflow-level concurrency would let a skipped run replace a queued cut.
+	if workflow.Concurrency != nil {
+		t.Error("the caller sets workflow-level concurrency")
+	}
+	for job, want := range map[string]struct{ uses, condition, group string }{
+		"backport": {"backport-run.yaml@", "github.event_name == 'workflow_dispatch'", "hotfix-${{ github.repository }}"},
+		"cut": {
+			"release-line-run.yaml@", "github.event.pull_request.merged",
+			"release-line-${{ github.repository }}-${{ github.event.pull_request.base.ref }}",
+		},
+	} {
+		got := workflow.Jobs[job]
+		if !strings.Contains(got.Uses, want.uses) || !strings.Contains(got.If, want.condition) ||
+			got.Concurrency.Group != want.group {
+			t.Errorf("job %s = uses %q if %q group %q, want %q, %q, %q",
+				job, got.Uses, got.If, got.Concurrency.Group, want.uses, want.condition, want.group)
+		}
+	}
+	if got := workflow.Jobs["cut"].With["branch"]; got != "${{ github.event.pull_request.base.ref }}" {
+		t.Errorf("cut branch = %q, want the merged pull request's base", got)
+	}
+}
+
 // TestLockClosedGovernance pins when conversations lock: only once an issue or
 // pull request closes. A locked conversation refuses a GitHub App's review, so
 // locking an open pull request would block the dependency bots' approval.

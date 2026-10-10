@@ -188,7 +188,7 @@ func TestBuildPlanProvisionsMergeGateWorkflows(t *testing.T) {
 		// Factorized: the thin caller references the reusable *-run.yaml engine, not the action.
 		"/contents/.github/workflows/merge-gate.yaml":    "merge-gate-run.yaml@",
 		"/contents/.github/workflows/release-train.yaml": "release-train-run.yaml@",
-		"/contents/.github/workflows/hotfix.yaml":        "hotfix-run.yaml@",
+		"/contents/.github/workflows/hotfix.yaml":        "backport-run.yaml@",
 		"/contents/.github/workflows/epic-rollback.yaml": "epic-rollback-run.yaml@",
 		// Not factorized (already thin): still call the action directly.
 		"/contents/.github/workflows/approve-pr.yaml":    "generic-actions/approve-pr@",
