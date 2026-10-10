@@ -123,6 +123,48 @@ func TestDependabotGovernance(t *testing.T) {
 	}
 }
 
+// TestRecoverPRsGovernance pins what recover-prs may restart. It re-arms only a
+// queue drop for checks_timed_out, and through the [Agent] App: a merge armed by
+// GITHUB_TOKEN pushes a commit that triggers no workflow on master.
+func TestRecoverPRsGovernance(t *testing.T) {
+	t.Parallel()
+	content, err := os.ReadFile("templates/governance/recover-prs.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		On struct {
+			PullRequest struct {
+				Types []string `yaml:"types"`
+			} `yaml:"pull_request"`
+		} `yaml:"on"`
+		Jobs map[string]struct {
+			Steps []struct {
+				Uses string            `yaml:"uses"`
+				Run  string            `yaml:"run"`
+				With map[string]string `yaml:"with"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(content, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(workflow.On.PullRequest.Types, ","); got != "dequeued,closed" {
+		t.Errorf("recover-prs pull_request types = %q, want dequeued,closed", got)
+	}
+	requeue := workflow.Jobs["requeue"].Steps
+	if len(requeue) != 2 || !strings.Contains(requeue[0].Run, `[ "$last" = checks_timed_out ]`) {
+		t.Error("requeue must re-arm only after a checks_timed_out drop")
+	}
+	if !strings.Contains(requeue[len(requeue)-1].Uses, "generic-actions/enable-auto-merge@") ||
+		requeue[len(requeue)-1].With["dry_run"] != "false" {
+		t.Error("requeue must re-arm through the [Agent] App's enable-auto-merge action")
+	}
+	if !strings.Contains(workflow.Jobs["rebase"].Steps[0].Run, `index("CONFLICTING")`) {
+		t.Error("rebase must dispatch Renovate only when a dependency PR conflicts")
+	}
+}
+
 // TestLockClosedGovernance pins when conversations lock: only once an issue or
 // pull request closes. A locked conversation refuses a GitHub App's review, so
 // locking an open pull request would block the dependency bots' approval.
