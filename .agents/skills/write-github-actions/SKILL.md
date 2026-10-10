@@ -230,7 +230,11 @@ Two GitHub constraints shape the bypass lists:
   source or owner organization".
 
 Pull requests are for collaborators: every class sets `features.pull_requests: collaborators_only`,
-and `lock-pr.yaml` locks each new PR's conversation. Outsiders use issues and discussions.
+and outsiders use issues and discussions. GitHub Apps count as collaborators there, so Renovate and
+the bots still open PRs. `lock-closed.yaml` locks an issue's or PR's conversation once it closes and
+unlocks it on reopen. Open conversations stay unlocked: a locked conversation refuses a GitHub App's
+review ("Issue is locked"), which would block the approval bot. An outsider's comment on an open
+conversation is moderated by hand, and a bot that must comment on a closed one reopens it first.
 
 The enterprise subscription is the only spend. Standard runners on public repos and the free security
 features cost nothing; GitHub Code Quality bills per active committer and per AI credit on every
@@ -238,7 +242,7 @@ default-branch push, so every class sets `code_quality: false` and `repo update`
 
 The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.yaml`,
 `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`,
-`auto-approve-dependabot.yaml`, `lock-pr.yaml`) are rendered from
+`auto-approve-dependabot.yaml`, `lock-closed.yaml`) are rendered from
 `cli/internal/repocfg/templates/governance/` and carry a "Managed by `a-novel repo update`" banner. Edit the template in the stack repo; a change to
 the copy in a repo is overwritten. What those workflows mean is `coordinate-landing`'s subject.
 
