@@ -1,6 +1,7 @@
 package repocfg
 
 import (
+	"fmt"
 	"net/http"
 	"regexp"
 	"slices"
@@ -433,5 +434,49 @@ func TestSettingsBodyTakesLandedSubjectsFromPRTitle(t *testing.T) {
 		if body[key] != "PR_TITLE" {
 			t.Errorf("%s = %v, want PR_TITLE", key, body[key])
 		}
+	}
+}
+
+// TestBuildPlanDependabotBypassFollowsSecurityUpdates pins where Dependabot may
+// bypass commit-messages. GitHub rejects a Dependabot bypass actor on a repo it
+// does not run in (HTTP 422, "must be part of the ruleset source"), so the
+// entry ships only with classes that enable Dependabot security updates.
+func TestBuildPlanDependabotBypassFollowsSecurityUpdates(t *testing.T) {
+	t.Parallel()
+
+	for _, securityUpdates := range []bool{true, false} {
+		t.Run(fmt.Sprintf("security_updates=%v", securityUpdates), func(t *testing.T) {
+			t.Parallel()
+			plan, err := BuildPlan(&RepoTarget{
+				Org: "a-novel", Repo: "example",
+				Class: &ClassPreset{
+					Rulesets: ClassRulesets{Master: true},
+					Security: SecurityToggles{Dependabot: securityUpdates},
+				},
+				OrgProfile: &OrgProfile{Org: "a-novel", Bots: map[string]int64{"agent": 3549319, "publish": 1718144}},
+				Discovered: &Discovered{},
+			})
+			if err != nil {
+				t.Fatalf("BuildPlan: %v", err)
+			}
+			var ruleset *APIRuleset
+			for _, op := range plan.Ops {
+				if op.RulesetName == "commit-messages" {
+					ruleset = op.Body.(*APIRuleset)
+				}
+			}
+			if ruleset == nil {
+				t.Fatal("plan carries no commit-messages ruleset")
+			}
+			hasDependabot := slices.ContainsFunc(ruleset.BypassActors, func(a APIBypassActor) bool {
+				return a.ActorID != nil && *a.ActorID == dependabotAppID
+			})
+			if hasDependabot != securityUpdates {
+				t.Fatalf("Dependabot bypass = %v, want %v", hasDependabot, securityUpdates)
+			}
+			if !securityUpdates && (ruleset.BypassActors == nil || len(ruleset.BypassActors) != 0) {
+				t.Fatalf("bypass actors = %#v, want an empty list", ruleset.BypassActors)
+			}
+		})
 	}
 }

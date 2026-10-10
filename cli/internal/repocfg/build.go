@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -277,6 +278,11 @@ func rulesetOp(name string, t *RepoTarget, checks []CheckRef) (Op, error) {
 	if !t.Class.CodeQuality {
 		spec.Rules.CodeQuality = nil
 	}
+	// GitHub accepts Dependabot as a bypass actor only on repos it runs in,
+	// which are the classes that enable its security updates.
+	if !t.Class.Security.Dependabot {
+		spec.Bypass = slices.DeleteFunc(spec.Bypass, func(entry string) bool { return entry == "dependabot" })
+	}
 	body, err := BuildRuleset(spec, t.OrgProfile, checks)
 	if err != nil {
 		return Op{}, err
@@ -295,6 +301,8 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRu
 		Name:        spec.Name,
 		Target:      spec.Target,
 		Enforcement: spec.Enforcement,
+		// An empty list, never null: a ruleset may have no bypass actors.
+		BypassActors: []APIBypassActor{},
 		Conditions: map[string]any{"ref_name": map[string]any{
 			"include": spec.Conditions.RefName.Include,
 			"exclude": spec.Conditions.RefName.Exclude,
