@@ -994,7 +994,7 @@ func newVolumeClearCmd() *cobra.Command {
 		Use:   "clear <service>",
 		Short: "Destroy a service's volumes (auto-backups first)",
 		Long: `Delete every volume of the service. By default, takes an auto-backup
-first (so undo is one 'restore --previous' away). Pass --no-backup to
+first, so 'volume restore' undoes it (it takes the latest backup). Pass --no-backup to
 skip the auto-backup — the destruction is then irreversible.
 
 Refuses while the service is up. --force cascade-stops first.`,
