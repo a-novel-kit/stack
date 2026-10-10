@@ -2,7 +2,7 @@
 name: monitor-ci
 description: >
   Observe GitHub Actions, diagnose failing checks, fix scoped defects, and retry confirmed flakes
-  within budget. Load after pushes or whenever investigating or waiting on CI.
+  within budget. Load after pushes, when investigating or waiting on CI, or to sweep dependency PRs.
 ---
 
 # Monitor CI
@@ -27,7 +27,9 @@ the budget runs out, stop and escalate.
    [failure diagnosis](references/failures.md) before choosing a fix or retry.
 4. Use [the service job map](references/job-map.md) when interpreting an unfamiliar service job;
    the current repository workflow is the source of truth.
-5. Re-run the affected verification, preserve history, and observe the new commit. Stop at green
+5. For a sweep of Renovate or Dependabot PRs, read [dependency PRs](references/dependency-prs.md)
+   before classifying or landing them.
+6. Re-run the affected verification, preserve history, and observe the new commit. Stop at green
    or the escalation conditions below; green CI does not authorize a merge.
 
 ## Phase 1: Observe

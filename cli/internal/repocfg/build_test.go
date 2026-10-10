@@ -193,6 +193,7 @@ func TestBuildPlanProvisionsMergeGateWorkflows(t *testing.T) {
 		// Not factorized (already thin): still call the action directly.
 		"/contents/.github/workflows/approve-pr.yaml":    "generic-actions/approve-pr@",
 		"/contents/.github/workflows/derive-status.yaml": "generic-actions/derive-status@",
+		"/contents/.github/workflows/recover-prs.yaml":   "generic-actions/enable-auto-merge@",
 	}
 	for suffix, ref := range want {
 		var op *Op
@@ -220,7 +221,7 @@ func TestBuildPlanProvisionsMergeGateWorkflows(t *testing.T) {
 	}
 	for _, op := range bare.Ops {
 		if strings.Contains(op.Path, "merge-gate.yaml") || strings.Contains(op.Path, "approve-pr.yaml") ||
-			strings.Contains(op.Path, "derive-status.yaml") {
+			strings.Contains(op.Path, "derive-status.yaml") || strings.Contains(op.Path, "recover-prs.yaml") {
 			t.Errorf("master-less class must not get governance workflows; got %s", op.Path)
 		}
 	}
