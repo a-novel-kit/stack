@@ -210,6 +210,12 @@ recipe preserves: UID/GID 999, `PGDATA=/var/lib/postgresql/18/docker`, the upstr
   command: infra also runs the image with other commands.
 - **A Wolfi data directory is not portable from the Debian image.** Moving between them needs a fresh
   volume, or a logical dump and restore.
+- **Installing pgBackRest does not activate backups.** Keep the entrypoint, extensions,
+  authentication and archive settings unless the task changes them.
+- **Test the normal entrypoint**, init scripts, authentication and persistent volumes, not only an
+  overridden command. A green build or restore test does not prove the image free of advisories.
+- **Paths carry the PostgreSQL major** (`PGDATA`, `/usr/share/postgresql18/`): check them, and every
+  extension's compatibility, when changing the major.
 
 **Executable files**: use `COPY --chmod=755` when copying shell scripts or other executables into
 the image. It sets the executable bit in a single instruction and avoids a separate `RUN chmod +x`

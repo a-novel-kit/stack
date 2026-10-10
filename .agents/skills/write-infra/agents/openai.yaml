@@ -1,0 +1,4 @@
+interface:
+  display_name: "Infrastructure"
+  short_description: "GitOps OpenTofu changes, proven by their plans"
+  default_prompt: "Use $write-infra to make this infrastructure change and prove its plan before review."
