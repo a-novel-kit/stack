@@ -153,24 +153,32 @@ worthless, such as a lint-only workflow. Anything that releases or deploys must 
 
 ---
 
-## `needs:` is data flow, not sequencing
+## `needs:` carries data, plus one build gate
 
-A `needs:` edge belongs there only when the downstream job **consumes something the upstream one
-produces**. In this fleet that is one of three things: an image digest read as
-`needs.build-database.outputs.digest`, a coverage artifact ID read as
-`needs.test-go.outputs.artifact-id`, or a file the upstream job left on disk. If you cannot name the
-value crossing the edge, the edge is wrong.
+A `needs:` edge has two uses. The first is **data flow**: the downstream job consumes something
+the upstream one produces, such as an image digest read as `needs.build-database.outputs.digest`, a
+coverage artifact ID read as `needs.test-go.outputs.artifact-id`, or a file left on disk.
 
-Do not add one to express "don't spend a runner if the previous check failed". Jobs run on separate
-runners against separate checkouts, so an upstream verdict cannot change a downstream one — a
-`lint-go → test-go` edge buys nothing but latency, and it costs it on every run, including the green
-ones. It also degrades a red run: failures surface one layer at a time instead of all at once, so a
-branch with a lint error and a test error takes two round trips to fix. `merge-gate` is what stops a
-red PR from merging; the graph shape is not, and never was.
+The second is a **build gate** in front of the expensive jobs. Every repo in both orgs draws on one
+pool of runners, so a test or image job started on code that does not compile holds a runner that
+another run is queued for. Gate the long jobs (tests, browser suites, container builds) on the cheap
+jobs whose failure makes their result worthless: the build and the type check. `platform-studio`
+gates its `test-*` jobs and `build-platform` on `[build-node, lint-types]`.
 
-The same reasoning kills the "don't publish an image from untested code" edge (`test-go → build-*`).
-Those images carry branch tags and are dev artifacts; `merge-gate` requires the test lane green
-before anything reaches `master`.
+Keep the graph to three stages: cheap checks with no `needs:`, the gated heavy jobs, and the
+`report-*` jobs that read their outputs. Each stage adds its slowest job to every run, green runs
+included, so chain no further. A `test-go → build-*` edge to keep untested code out of an image is
+one stage too many: those images are branch-tagged dev artifacts, and `merge-gate` keeps `master`
+green.
+
+Pick gates that finish within the slowest cheap job, so gating adds no wall time. Leave style, lint,
+audit and scan jobs out of the gate: their failures leave a test run valid, and gating on them would
+hide test failures until the next push.
+
+**A gate must be a required check that always runs.** A job whose `needs:` failed or was skipped is
+itself skipped, and GitHub counts `skipped` as passing. The tests block a merge only because their
+gate is required and red. Never gate on a `report-*` job, a master-only job, or one with an `if:`
+that can skip it, such as `lint-translations`: its skip would pass every job behind it.
 
 Rewiring `needs:` is safe against the ruleset: required checks derive from the **job list** in
 `main.yaml` (see below), not from the graph, so cutting an edge never changes a check context and
@@ -277,6 +285,8 @@ There is no local runner, so verification is reading plus CI.
   of that name duplicates the context.
 - **A missing `permissions` block.** The job then inherits the repository default, which is wider than
   it needs. Declare the block on every job, `{}` included.
+- **A gate that can be skipped.** Gating on a `report-*`, master-only, or `if:`-guarded job skips
+  every job behind it whenever the gate skips, and each skipped job passes its required check.
 - **`@master` or a floating ref in `uses:`.** CI stops being reproducible and a workflows release
   reaches consumers unannounced.
 - **Mixed workflows-repo tags in one repo.** The actions ship as a unit; move every reference in the
