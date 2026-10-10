@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -12,83 +13,23 @@ const testBotRepo = "service-authentication"
 func TestValidateBotCommentArgs(t *testing.T) {
 	t.Parallel()
 
-	testCases := []struct {
-		name string
-
-		org    string
-		repo   string
-		number string
-
-		expectErr bool
+	for _, tc := range []struct {
+		name, org, repo, number string
+		wantErr                 bool
 	}{
-		{
-			name:   "valid a-novel target",
-			org:    orgAnovel,
-			repo:   testBotRepo,
-			number: "549",
-		},
-		{
-			name:   "valid a-novel-kit target",
-			org:    orgAnovelKit,
-			repo:   "golib",
-			number: "1",
-		},
-		{
-			name:      "unknown org",
-			org:       "a-other",
-			repo:      testBotRepo,
-			number:    "549",
-			expectErr: true,
-		},
-		{
-			name:      "empty repo",
-			org:       orgAnovel,
-			repo:      "",
-			number:    "549",
-			expectErr: true,
-		},
-		{
-			name:      "repo carries org prefix",
-			org:       orgAnovel,
-			repo:      orgAnovel + "/" + testBotRepo,
-			number:    "549",
-			expectErr: true,
-		},
-		{
-			name:      "non-numeric number",
-			org:       orgAnovel,
-			repo:      testBotRepo,
-			number:    "abc",
-			expectErr: true,
-		},
-		{
-			name:      "zero number",
-			org:       orgAnovel,
-			repo:      testBotRepo,
-			number:    "0",
-			expectErr: true,
-		},
-		{
-			name:      "negative number",
-			org:       orgAnovel,
-			repo:      testBotRepo,
-			number:    "-3",
-			expectErr: true,
-		},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
+		{"Success", orgAnovel, testBotRepo, "549", false},
+		{"Success/AnovelKit", orgAnovelKit, "golib", "1", false},
+		{"Error/UnknownOrg", "a-other", testBotRepo, "549", true},
+		{"Error/EmptyRepo", orgAnovel, "", "549", true},
+		{"Error/RepoCarriesOrgPrefix", orgAnovel, orgAnovel + "/" + testBotRepo, "549", true},
+		{"Error/NonNumericNumber", orgAnovel, testBotRepo, "abc", true},
+		{"Error/ZeroNumber", orgAnovel, testBotRepo, "0", true},
+		{"Error/NegativeNumber", orgAnovel, testBotRepo, "-3", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			err := validateBotCommentArgs(testCase.org, testCase.repo, testCase.number)
-			if testCase.expectErr && err == nil {
-				t.Fatalf("expected an error for org=%q repo=%q number=%q, got nil",
-					testCase.org, testCase.repo, testCase.number)
-			}
-			if !testCase.expectErr && err != nil {
-				t.Fatalf("expected no error for org=%q repo=%q number=%q, got: %v",
-					testCase.org, testCase.repo, testCase.number, err)
+			if err := validateBotCommentArgs(tc.org, tc.repo, tc.number); (err != nil) != tc.wantErr {
+				t.Fatalf("validateBotCommentArgs(%q, %q, %q) = %v, wantErr %v", tc.org, tc.repo, tc.number, err, tc.wantErr)
 			}
 		})
 	}
@@ -97,31 +38,20 @@ func TestValidateBotCommentArgs(t *testing.T) {
 func TestValidateBotOrgRepo(t *testing.T) {
 	t.Parallel()
 
-	testCases := []struct {
-		name string
-
-		org  string
-		repo string
-
-		expectErr bool
+	for _, tc := range []struct {
+		name, org, repo string
+		wantErr         bool
 	}{
-		{name: "valid a-novel", org: orgAnovel, repo: testBotRepo},
-		{name: "valid a-novel-kit", org: orgAnovelKit, repo: "nodelib"},
-		{name: "unknown org", org: "a-other", repo: testBotRepo, expectErr: true},
-		{name: "empty repo", org: orgAnovel, repo: "", expectErr: true},
-		{name: "repo carries org prefix", org: orgAnovel, repo: orgAnovel + "/" + testBotRepo, expectErr: true},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
+		{"Success", orgAnovel, testBotRepo, false},
+		{"Success/AnovelKit", orgAnovelKit, "nodelib", false},
+		{"Error/UnknownOrg", "a-other", testBotRepo, true},
+		{"Error/EmptyRepo", orgAnovel, "", true},
+		{"Error/RepoCarriesOrgPrefix", orgAnovel, orgAnovel + "/" + testBotRepo, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			err := validateBotOrgRepo(testCase.org, testCase.repo)
-			if testCase.expectErr && err == nil {
-				t.Fatalf("expected an error for org=%q repo=%q, got nil", testCase.org, testCase.repo)
-			}
-			if !testCase.expectErr && err != nil {
-				t.Fatalf("expected no error for org=%q repo=%q, got: %v", testCase.org, testCase.repo, err)
+			if err := validateBotOrgRepo(tc.org, tc.repo); (err != nil) != tc.wantErr {
+				t.Fatalf("validateBotOrgRepo(%q, %q) = %v, wantErr %v", tc.org, tc.repo, err, tc.wantErr)
 			}
 		})
 	}
@@ -130,42 +60,27 @@ func TestValidateBotOrgRepo(t *testing.T) {
 func TestReadBotBatch(t *testing.T) {
 	t.Parallel()
 
-	testCases := []struct {
-		name string
-
-		input   string
-		wantLen int
-
-		expectErr bool
+	for _, tc := range []struct {
+		name, input string
+		wantLen     int
+		wantErr     bool
 	}{
-		{name: "single comment", input: `[{"number":1,"body":"hi"}]`, wantLen: 1},
-		{name: "comment with reply_to", input: `[{"number":1,"body":"hi","reply_to":99}]`, wantLen: 1},
-		{name: "multiple comments", input: `[{"number":1,"body":"a"},{"number":2,"body":"b"}]`, wantLen: 2},
-		{name: "not an array", input: `{"number":1,"body":"hi"}`, expectErr: true},
-		{name: "empty array", input: `[]`, expectErr: true},
-		{name: "malformed json", input: `[`, expectErr: true},
-		{name: "zero number", input: `[{"number":0,"body":"hi"}]`, expectErr: true},
-		{name: "negative number", input: `[{"number":-1,"body":"hi"}]`, expectErr: true},
-		{name: "blank body", input: `[{"number":1,"body":"   "}]`, expectErr: true},
-		{name: "negative reply_to", input: `[{"number":1,"body":"hi","reply_to":-2}]`, expectErr: true},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
+		{name: "Success", input: `[{"number":1,"body":"hi"}]`, wantLen: 1},
+		{name: "Success/ReplyTo", input: `[{"number":1,"body":"hi","reply_to":99}]`, wantLen: 1},
+		{name: "Success/Multiple", input: `[{"number":1,"body":"a"},{"number":2,"body":"b"}]`, wantLen: 2},
+		{name: "Error/NotAnArray", input: `{"number":1,"body":"hi"}`, wantErr: true},
+		{name: "Error/EmptyArray", input: `[]`, wantErr: true},
+		{name: "Error/MalformedJSON", input: `[`, wantErr: true},
+		{name: "Error/ZeroNumber", input: `[{"number":0,"body":"hi"}]`, wantErr: true},
+		{name: "Error/NegativeNumber", input: `[{"number":-1,"body":"hi"}]`, wantErr: true},
+		{name: "Error/BlankBody", input: `[{"number":1,"body":"   "}]`, wantErr: true},
+		{name: "Error/NegativeReplyTo", input: `[{"number":1,"body":"hi","reply_to":-2}]`, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			items, err := readBotBatch("-", strings.NewReader(testCase.input))
-			if testCase.expectErr {
-				if err == nil {
-					t.Fatalf("expected an error for input %q, got nil", testCase.input)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("expected no error for input %q, got: %v", testCase.input, err)
-			}
-			if len(items) != testCase.wantLen {
-				t.Fatalf("expected %d items for input %q, got %d", testCase.wantLen, testCase.input, len(items))
+			items, err := readBotBatch("-", strings.NewReader(tc.input))
+			if (err != nil) != tc.wantErr || len(items) != tc.wantLen {
+				t.Fatalf("readBotBatch(%q) = (%d items, %v), want (%d, error %v)", tc.input, len(items), err, tc.wantLen, tc.wantErr)
 			}
 		})
 	}
@@ -178,61 +93,37 @@ func TestChunkBotComments(t *testing.T) {
 		return botBatchItem{Number: number, Body: strings.Repeat("x", bodyLen)}
 	}
 
-	t.Run("packs into a single chunk under the cap", func(t *testing.T) {
+	t.Run("Success/SingleChunkUnderTheCap", func(t *testing.T) {
 		t.Parallel()
-
-		items := []botBatchItem{item(1, 10), item(2, 10), item(3, 10)}
-		chunks, err := chunkBotComments(items, botMaxCommentsBytes)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(chunks) != 1 {
-			t.Fatalf("expected 1 chunk, got %d", len(chunks))
-		}
-		if len(chunks[0]) != 3 {
-			t.Fatalf("expected 3 items in the chunk, got %d", len(chunks[0]))
+		chunks, err := chunkBotComments([]botBatchItem{item(1, 10), item(2, 10), item(3, 10)}, botMaxCommentsBytes)
+		if err != nil || len(chunks) != 1 || len(chunks[0]) != 3 {
+			t.Fatalf("chunkBotComments = (%d chunks, %v), want one chunk of 3", len(chunks), err)
 		}
 	})
 
-	t.Run("splits across chunks over the cap, preserving order and size", func(t *testing.T) {
+	t.Run("Success/SplitsOverTheCapPreservingOrder", func(t *testing.T) {
 		t.Parallel()
-
 		const limit = 70
-		items := []botBatchItem{item(1, 20), item(2, 20), item(3, 20), item(4, 20)}
-		chunks, err := chunkBotComments(items, limit)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		chunks, err := chunkBotComments([]botBatchItem{item(1, 20), item(2, 20), item(3, 20), item(4, 20)}, limit)
+		if err != nil || len(chunks) < 2 {
+			t.Fatalf("chunkBotComments = (%d chunks, %v), want several", len(chunks), err)
 		}
-		if len(chunks) < 2 {
-			t.Fatalf("expected the batch to split into multiple chunks, got %d", len(chunks))
-		}
-
 		var flat []int64
 		for _, chunk := range chunks {
-			marshaled, err := json.Marshal(chunk)
-			if err != nil {
-				t.Fatalf("marshal chunk: %v", err)
-			}
-			if len(marshaled) > limit {
+			if marshaled, _ := json.Marshal(chunk); len(marshaled) > limit {
 				t.Fatalf("chunk of %d bytes exceeds the %d-byte limit", len(marshaled), limit)
 			}
 			for _, it := range chunk {
 				flat = append(flat, it.Number)
 			}
 		}
-		if len(flat) != len(items) {
-			t.Fatalf("expected %d items across all chunks, got %d", len(items), len(flat))
-		}
-		for i, number := range flat {
-			if number != int64(i+1) {
-				t.Fatalf("order not preserved across chunks: %v", flat)
-			}
+		if !slices.Equal(flat, []int64{1, 2, 3, 4}) {
+			t.Fatalf("items across chunks = %v, want every item in order", flat)
 		}
 	})
 
-	t.Run("a single oversized comment is a hard error", func(t *testing.T) {
+	t.Run("Error/OversizedComment", func(t *testing.T) {
 		t.Parallel()
-
 		if _, err := chunkBotComments([]botBatchItem{item(1, 200)}, 50); err == nil {
 			t.Fatal("expected an error for a comment larger than the cap, got nil")
 		}

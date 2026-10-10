@@ -2,7 +2,6 @@ package cli
 
 import (
 	"errors"
-	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -16,29 +15,18 @@ import (
 func TestWithCoverage(t *testing.T) {
 	t.Parallel()
 
+	goTarget := func(args ...string) detect.Target { return detect.Target{Kind: detect.KindGo, Args: args} }
 	cases := []struct {
 		name string
 		in   detect.Target
 		want []string
 	}{
+		{name: "Success/EnvLessWholeModule", in: goTarget("test", "./..."), want: []string{"test", "-cover", "./..."}},
+		{name: "Success/EnvBackedKeepsCountAndScope", in: goTarget("test", "-count=1", "./internal/..."), want: []string{"test", "-cover", "-count=1", "./internal/..."}},
+		// The catch-all carries several selectors; every one must survive.
+		{name: "Success/KeepsEverySelector", in: goTarget("test", "./pkg/go", "./cmd/rest"), want: []string{"test", "-cover", "./pkg/go", "./cmd/rest"}},
 		{
-			name: "env-less whole module",
-			in:   detect.Target{Kind: detect.KindGo, Args: []string{"test", "./..."}},
-			want: []string{"test", "-cover", "./..."},
-		},
-		{
-			name: "env-backed keeps its -count=1 and scope",
-			in:   detect.Target{Kind: detect.KindGo, Args: []string{"test", "-count=1", "./internal/..."}},
-			want: []string{"test", "-cover", "-count=1", "./internal/..."},
-		},
-		{
-			// The catch-all carries several selectors; every one must survive.
-			name: "multi-selector catch-all keeps every selector",
-			in:   detect.Target{Kind: detect.KindGo, Args: []string{"test", "./pkg/go", "./cmd/rest"}},
-			want: []string{"test", "-cover", "./pkg/go", "./cmd/rest"},
-		},
-		{
-			name: "pnpm forwards --coverage to vitest",
+			name: "Success/PnpmForwardsToVitest",
 			in:   detect.Target{Kind: detect.KindPnpm, Args: []string{"run", "test"}},
 			want: []string{"run", "test", "--", "--coverage"},
 		},
@@ -96,26 +84,21 @@ func TestCapabilityFlags(t *testing.T) {
 		args    []string
 		wantMsg string
 	}{
-		{name: "attached short values", args: []string{"test", "-j1", "-tgo", "-T30s", "-C/nonexistent"}, wantMsg: "cannot scan"},
-		{name: "keep and no-cover", args: []string{"test", "--keep", "--no-cover", "--dir", "/nonexistent"}, wantMsg: "cannot scan"},
-		{name: "jobs must be positive", args: []string{"build", "-j", "0"}, wantMsg: "--jobs"},
-		{name: "negative timeout", args: []string{"build", "-T", "-1s"}, wantMsg: "--timeout"},
-		{name: "unknown kind", args: []string{"build", "-t", "rust"}, wantMsg: "--type"},
-		{name: "unknown flag", args: []string{"test", "--bogus"}, wantMsg: "unknown flag"},
-		{name: "build has no --keep", args: []string{"build", "--keep"}, wantMsg: "unknown flag"},
+		{name: "Error/MissingDir/AttachedShortValues", args: []string{"test", "-j1", "-tgo", "-T30s", "-C/nonexistent"}, wantMsg: "cannot scan"},
+		{name: "Error/MissingDir/KeepAndNoCover", args: []string{"test", "--keep", "--no-cover", "--dir", "/nonexistent"}, wantMsg: "cannot scan"},
+		{name: "Error/NonPositiveJobs", args: []string{"build", "-j", "0"}, wantMsg: "--jobs"},
+		{name: "Error/NegativeTimeout", args: []string{"build", "-T", "-1s"}, wantMsg: "--timeout"},
+		{name: "Error/UnknownKind", args: []string{"build", "-t", "rust"}, wantMsg: "--type"},
+		{name: "Error/UnknownFlag", args: []string{"test", "--bogus"}, wantMsg: "unknown flag"},
+		{name: "Error/BuildHasNoKeep", args: []string{"build", "--keep"}, wantMsg: "unknown flag"},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 
-			root := NewRoot()
-			root.SetArgs(c.args)
-			root.SetOut(io.Discard)
-			root.SetErr(io.Discard)
-
 			var exitErr *ExitError
-			err := root.Execute()
+			_, err := runCmd(t, NewRoot(), c.args...)
 			if !errors.As(err, &exitErr) || exitErr.Code != exitUsage {
 				t.Fatalf("Execute(%v) = %v, want exit status %d", c.args, err, exitUsage)
 			}

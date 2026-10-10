@@ -56,32 +56,22 @@ func TestRunSandbox(t *testing.T) {
 	root := filepath.Join(tempParent, "sandbox")
 	currentRepo := filepath.Join(tempParent, "worktree")
 	cwd := filepath.Join(currentRepo, "internal")
-	if err := os.Mkdir(currentRepo, 0o700); err != nil {
+	if err := os.MkdirAll(cwd, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	mustGit(t, currentRepo, "init", "--quiet")
 	mustGit(t, currentRepo, "remote", "add", "origin", "git@github.com:a-novel/service-authentication.git")
-	if err := os.Mkdir(cwd, 0o700); err != nil {
-		t.Fatal(err)
-	}
 
 	type call struct {
-		dir    string
-		env    []string
-		args   []string
-		stdout io.Writer
+		dir       string
+		env, args []string
+		stdout    io.Writer
 	}
 	var calls []call
 	removed := false
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	system := sandboxSystem{
-		tempDir: func() (string, error) {
-			if err := os.Mkdir(root, 0o700); err != nil {
-				return "", err
-			}
-			return root, nil
-		},
+		tempDir: func() (string, error) { return root, os.Mkdir(root, 0o700) },
 		clone: func(path string) error {
 			return os.MkdirAll(filepath.Join(path, "app", "service-authentication", "internal"), 0o700)
 		},
@@ -89,41 +79,19 @@ func TestRunSandbox(t *testing.T) {
 			removed = true
 			return os.RemoveAll(path)
 		},
-		run: func(
-			_ context.Context,
-			dir string,
-			env []string,
-			args []string,
-			commandOut io.Writer,
-			_ io.Writer,
-		) error {
-			calls = append(calls, call{
-				dir:    dir,
-				env:    slices.Clone(env),
-				args:   slices.Clone(args),
-				stdout: commandOut,
-			})
+		run: func(_ context.Context, dir string, env, args []string, commandOut, _ io.Writer) error {
+			calls = append(calls, call{dir: dir, env: slices.Clone(env), args: slices.Clone(args), stdout: commandOut})
 			return nil
 		},
 		cwd:     cwd,
 		environ: []string{"PATH=/bin", "A_NOVEL_STACKS=old:/old"},
 	}
 
-	err := runSandbox(
-		context.Background(),
-		[]string{"reconcile", "--all"},
-		system,
-		stdout,
-		stderr,
-	)
-	if err != nil {
+	if err := runSandbox(t.Context(), []string{"reconcile", "--all"}, system, stdout, stderr); err != nil {
 		t.Fatalf("runSandbox: %v", err)
 	}
-	if !removed {
-		t.Fatal("temporary stack was not removed")
-	}
-	if _, err := os.Stat(root); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("temporary stack still exists: %v", err)
+	if _, err := os.Stat(root); !removed || !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("temporary stack not removed (removeAll called: %v, stat: %v)", removed, err)
 	}
 	if len(calls) != 2 {
 		t.Fatalf("calls = %d, want sync and requested command", len(calls))
@@ -137,8 +105,7 @@ func TestRunSandbox(t *testing.T) {
 	if !slices.Equal(calls[1].args, []string{"reconcile", "--all"}) {
 		t.Errorf("command args = %v", calls[1].args)
 	}
-	wantDir := filepath.Join(root, "app", "service-authentication", "internal")
-	if calls[1].dir != wantDir {
+	if wantDir := filepath.Join(root, "app", "service-authentication", "internal"); calls[1].dir != wantDir {
 		t.Errorf("command dir = %q, want %q", calls[1].dir, wantDir)
 	}
 	if calls[1].stdout != stdout {
@@ -149,82 +116,53 @@ func TestRunSandbox(t *testing.T) {
 	}
 }
 
-func TestRunSandboxRemovesStackAfterCommandFailure(t *testing.T) {
+// TestRunSandboxFailures pins that an allocated stack is always removed, even
+// when the command fails, that a failed removal is reported, and that daemon
+// commands are refused before any stack is allocated.
+func TestRunSandboxFailures(t *testing.T) {
 	t.Parallel()
 
-	root := filepath.Join(t.TempDir(), "sandbox")
-	runs := 0
-	removed := false
-	system := sandboxSystem{
-		tempDir: func() (string, error) {
-			return root, os.Mkdir(root, 0o700)
-		},
-		clone: func(string) error { return nil },
-		removeAll: func(path string) error {
-			removed = true
-			return os.RemoveAll(path)
-		},
-		run: func(context.Context, string, []string, []string, io.Writer, io.Writer) error {
-			runs++
-			if runs == 2 {
-				return &ExitError{Code: 7}
-			}
-			return nil
-		},
-		cwd:     t.TempDir(),
-		environ: []string{"PATH=/bin"},
-	}
-
-	err := runSandbox(context.Background(), []string{"failing-command"}, system, io.Discard, io.Discard)
-	var exitErr *ExitError
-	if !errors.As(err, &exitErr) || exitErr.Code != 7 {
-		t.Fatalf("error = %v, want exit code 7", err)
-	}
-	if !removed {
-		t.Fatal("temporary stack was not removed after command failure")
-	}
-}
-
-func TestRunSandboxReportsCleanupFailure(t *testing.T) {
-	t.Parallel()
-
-	root := filepath.Join(t.TempDir(), "sandbox")
-	system := sandboxSystem{
-		tempDir:   func() (string, error) { return root, os.Mkdir(root, 0o700) },
-		clone:     func(string) error { return nil },
-		removeAll: func(string) error { return errors.New("busy") },
-		run: func(context.Context, string, []string, []string, io.Writer, io.Writer) error {
-			return nil
-		},
-		cwd:     t.TempDir(),
-		environ: []string{"PATH=/bin"},
-	}
-
-	err := runSandbox(context.Background(), []string{"successful-command"}, system, io.Discard, io.Discard)
-	if err == nil || !strings.Contains(err.Error(), "remove temporary stack") {
-		t.Fatalf("error = %v, want cleanup failure", err)
-	}
-}
-
-func TestRunSandboxRefusesDaemonCommandsBeforeAllocating(t *testing.T) {
-	t.Parallel()
-
-	for _, command := range []string{commandCore, commandInstall, commandRun} {
-		t.Run(command, func(t *testing.T) {
+	for _, tc := range []struct {
+		name, command, wantMsg string
+		runErr, removeErr      error
+		wantAllocated          bool
+	}{
+		{name: "Error/CommandFails", command: "failing-command", runErr: &ExitError{Code: 7}, wantMsg: "exit status 7", wantAllocated: true},
+		{name: "Error/CleanupFails", command: "successful-command", removeErr: errors.New("busy"), wantMsg: "remove temporary stack", wantAllocated: true},
+		{name: "Error/DaemonCommand/core", command: commandCore, wantMsg: "user-wide daemon"},
+		{name: "Error/DaemonCommand/install", command: commandInstall, wantMsg: "user-wide daemon"},
+		{name: "Error/DaemonCommand/run", command: commandRun, wantMsg: "user-wide daemon"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			allocated := false
+			root := filepath.Join(t.TempDir(), "sandbox")
+			allocated, removed := false, false
 			system := sandboxSystem{
 				tempDir: func() (string, error) {
 					allocated = true
-					return t.TempDir(), nil
+					return root, os.Mkdir(root, 0o700)
 				},
+				clone: func(string) error { return nil },
+				removeAll: func(path string) error {
+					removed = true
+					return errors.Join(tc.removeErr, os.RemoveAll(path))
+				},
+				run: func(_ context.Context, _ string, _, args []string, _, _ io.Writer) error {
+					if args[0] == tc.command {
+						return tc.runErr
+					}
+					return nil
+				},
+				cwd:     t.TempDir(),
+				environ: []string{"PATH=/bin"},
 			}
-			err := runSandbox(context.Background(), []string{command}, system, io.Discard, io.Discard)
-			if err == nil || !strings.Contains(err.Error(), "user-wide daemon") {
-				t.Fatalf("error = %v", err)
+
+			err := runSandbox(t.Context(), []string{tc.command}, system, io.Discard, io.Discard)
+			if err == nil || !strings.Contains(err.Error(), tc.wantMsg) || (tc.runErr != nil && !errors.Is(err, tc.runErr)) {
+				t.Fatalf("error = %v, want %q", err, tc.wantMsg)
 			}
-			if allocated {
-				t.Error("sandbox was allocated for an unsupported command")
+			if allocated != tc.wantAllocated || removed != allocated {
+				t.Errorf("allocated = %v, removed = %v; want allocated %v and removed whenever allocated", allocated, removed, tc.wantAllocated)
 			}
 		})
 	}
@@ -233,11 +171,7 @@ func TestRunSandboxRefusesDaemonCommandsBeforeAllocating(t *testing.T) {
 func TestRootRejectsMisplacedSandboxFlag(t *testing.T) {
 	t.Parallel()
 
-	root := NewRoot()
-	root.SetArgs([]string{"secrets", "ls", "--sandbox"})
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	err := root.Execute()
+	_, err := runCmd(t, NewRoot(), "secrets", "ls", "--sandbox")
 	if err == nil || !strings.Contains(err.Error(), "must be the first argument") {
 		t.Fatalf("error = %v", err)
 	}

@@ -19,26 +19,24 @@ func TestGhRun(t *testing.T) {
 		{name: "Success", wantCalls: 1},
 		{name: "Success/AfterRateLimit", failures: []error{rateLimited, rateLimited}, wantCalls: 3},
 		{name: "Error/RateLimitPersists", failures: []error{rateLimited, rateLimited, rateLimited}, wantCalls: 3, wantErr: true},
-		{name: "Error/NotRetried", failures: []error{errors.New("gh: Not Found (HTTP 404)")}, wantCalls: 1, wantErr: true},
+		{name: "Error/NotRetried", failures: []error{errGHNotFound}, wantCalls: 1, wantErr: true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			orig := ghStdin
-			t.Cleanup(func() { ghStdin = orig })
-			calls := 0
-			ghStdin = func(string, ...string) (string, error) {
-				calls++
-				if calls <= len(c.failures) {
-					return "", c.failures[calls-1]
+			attempts := 0
+			stubGH(t, func(string) (string, error) {
+				attempts++
+				if attempts <= len(c.failures) {
+					return "", c.failures[attempts-1]
 				}
 				return "ok", nil
-			}
+			})
 			_, err := ghRun("", "api", "repos/o/r")
 			if (err != nil) != c.wantErr {
 				t.Errorf("err = %v, wantErr %v", err, c.wantErr)
 			}
-			if calls != c.wantCalls {
-				t.Errorf("calls = %d, want %d", calls, c.wantCalls)
+			if attempts != c.wantCalls {
+				t.Errorf("calls = %d, want %d", attempts, c.wantCalls)
 			}
 		})
 	}

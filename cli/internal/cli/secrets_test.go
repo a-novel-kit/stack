@@ -13,59 +13,32 @@ import (
 //
 // Not parallel: swaps the package-level stdinIsTTY seam.
 func TestSecretsSetRefusesNonInteractive(t *testing.T) {
-	orig := stdinIsTTY
-	stdinIsTTY = func() bool { return false }
-	t.Cleanup(func() { stdinIsTTY = orig })
+	swap(t, &stdinIsTTY, func() bool { return false })
 
-	cmd := newSecretsSetCmd()
-	cmd.SetArgs([]string{"some-id"})
-	cmd.SilenceUsage = true
-	cmd.SilenceErrors = true
-
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("expected non-interactive `secrets set` to be refused, got nil")
-	}
-	if !strings.Contains(err.Error(), "non-interactively") {
-		t.Fatalf("expected an interactive-only refusal, got: %v", err)
+	if _, err := runCmd(t, newSecretsSetCmd(), "some-id"); err == nil || !strings.Contains(err.Error(), "non-interactively") {
+		t.Fatalf("set = %v, want an interactive-only refusal", err)
 	}
 }
 
 // TestSecretsSetStoresWithoutEchoingValue drives the interactive path with a
 // stubbed no-echo reader and asserts the value is stored but never printed.
 func TestSecretsSetStoresWithoutEchoingValue(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
-
-	origTTY := stdinIsTTY
-	stdinIsTTY = func() bool { return true }
-	t.Cleanup(func() { stdinIsTTY = origTTY })
-
+	dataHome := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dataHome)
 	const secretValue = "sk-super-secret"
-	origRead := readPassword
-	readPassword = func() ([]byte, error) { return []byte(secretValue), nil }
-	t.Cleanup(func() { readPassword = origRead })
+	swap(t, &stdinIsTTY, func() bool { return true })
+	swap(t, &readPassword, func() ([]byte, error) { return []byte(secretValue), nil })
 
-	cmd := newSecretsSetCmd()
-	cmd.SetArgs([]string{"openai-key"})
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SilenceUsage = true
-	cmd.SilenceErrors = true
-
-	if err := cmd.Execute(); err != nil {
+	out, err := runCmd(t, newSecretsSetCmd(), "openai-key")
+	if err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if strings.Contains(out.String(), secretValue) {
-		t.Fatalf("command output leaked the secret value:\n%s", out.String())
-	}
-	if !strings.Contains(out.String(), "set openai-key") {
-		t.Fatalf("expected confirmation `set openai-key`, got:\n%s", out.String())
+	if strings.Contains(out, secretValue) || !strings.Contains(out, "set openai-key") {
+		t.Fatalf("output = %q, want the `set openai-key` confirmation and never the value", out)
 	}
 
 	// The encrypted store must exist and must not contain the plaintext value.
-	storePath := filepath.Join(os.Getenv("XDG_DATA_HOME"), "a-novel", "secrets", "store.enc")
-	blob, err := os.ReadFile(storePath)
+	blob, err := os.ReadFile(filepath.Join(dataHome, "a-novel", "secrets", "store.enc"))
 	if err != nil {
 		t.Fatalf("read store: %v", err)
 	}
@@ -78,12 +51,7 @@ func TestSecretsSetStoresWithoutEchoingValue(t *testing.T) {
 func TestSecretsExecRequiresEnvFlag(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
-	cmd := newSecretsExecCmd()
-	cmd.SetArgs([]string{"true"})
-	cmd.SilenceUsage = true
-	cmd.SilenceErrors = true
-
-	if err := cmd.Execute(); err == nil {
+	if _, err := runCmd(t, newSecretsExecCmd(), "true"); err == nil {
 		t.Fatal("expected `secrets exec` with no --env to be refused")
 	}
 }

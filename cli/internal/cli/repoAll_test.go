@@ -44,7 +44,7 @@ func TestRenderCompactSummary(t *testing.T) {
 func TestRenderAllJSON(t *testing.T) {
 	t.Parallel()
 
-	t.Run("with plans", func(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
 		items := []plannedUpdate{{
 			checkout: checkout{repoEntry: repoEntry{Org: orgAnovel, Name: "service-json-keys"}},
@@ -61,14 +61,11 @@ func TestRenderAllJSON(t *testing.T) {
 		}
 	})
 
-	t.Run("empty renders as an array", func(t *testing.T) {
+	t.Run("Success/EmptyIsAnArray", func(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
-		if err := renderAllJSON(&buf, nil); err != nil {
-			t.Fatalf("renderAllJSON(nil): %v", err)
-		}
-		if got := strings.TrimSpace(buf.String()); got != "[]" {
-			t.Errorf("empty json = %q, want %q", got, "[]")
+		if err := renderAllJSON(&buf, nil); err != nil || strings.TrimSpace(buf.String()) != "[]" {
+			t.Errorf("renderAllJSON(nil) = (%q, %v), want []", buf.String(), err)
 		}
 	})
 }

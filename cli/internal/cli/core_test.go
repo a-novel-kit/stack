@@ -10,60 +10,35 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
-// TestReadDaemonLogFrom pins that a failed start quotes its own output. A
-// daemon that fails, is fixed, and fails again for a new reason is diagnosed
-// from the new message.
+// TestReadDaemonLogFrom pins that a failed start quotes only its own output: a
+// daemon that fails, is fixed, and fails again is diagnosed from the new
+// message, and a crash-looping one cannot bury its error under its retries.
 func TestReadDaemonLogFrom(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), "daemon.log")
-	first := "Error: previous failure\n"
-	if err := os.WriteFile(path, []byte(first), 0o600); err != nil {
-		t.Fatalf("fixture: %v", err)
-	}
-
-	got := readDaemonLogFrom(path, int64(len(first)))
-	if got != "" {
-		t.Errorf("read from end of file = %q, want empty", got)
-	}
-
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		t.Fatalf("fixture: %v", err)
-	}
-	if _, err := f.WriteString("Error: this attempt\n"); err != nil {
-		t.Fatalf("fixture: %v", err)
-	}
-	_ = f.Close()
-
-	got = readDaemonLogFrom(path, int64(len(first)))
-	if got != "Error: this attempt" {
-		t.Errorf("read from offset = %q, want only this attempt's line", got)
-	}
-}
-
-// TestReadDaemonLogFromCaps stops a crash-looping daemon from burying its own
-// error under its retries.
-func TestReadDaemonLogFromCaps(t *testing.T) {
-	t.Parallel()
-
-	path := filepath.Join(t.TempDir(), "daemon.log")
-	if err := os.WriteFile(path, []byte(strings.Repeat("x", daemonLogTailLimit*3)), 0o600); err != nil {
-		t.Fatalf("fixture: %v", err)
-	}
-
-	if got := len(readDaemonLogFrom(path, 0)); got > daemonLogTailLimit {
-		t.Errorf("read %d bytes, want at most %d", got, daemonLogTailLimit)
-	}
-}
-
-// TestReadDaemonLogFromMissing covers a log that was never created: no output,
-// no panic — the readiness error still has to be reportable.
-func TestReadDaemonLogFromMissing(t *testing.T) {
-	t.Parallel()
-
-	if got := readDaemonLogFrom(filepath.Join(t.TempDir(), "absent.log"), 0); got != "" {
-		t.Errorf("missing log read = %q, want empty", got)
+	const first = "Error: previous failure\n"
+	for _, tc := range []struct {
+		name    string
+		content string // "" leaves the log absent
+		offset  int64
+		want    string
+	}{
+		{name: "Success/FromOffset", content: first + "Error: this attempt\n", offset: int64(len(first)), want: "Error: this attempt"},
+		{name: "Success/AtEnd", content: first, offset: int64(len(first))},
+		// A log that was never created: the readiness error is still reportable.
+		{name: "Success/Missing"},
+		{name: "Success/Capped", content: strings.Repeat("x", daemonLogTailLimit*3), want: strings.Repeat("x", daemonLogTailLimit)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			if tc.content != "" {
+				writeFixture(t, dir, "daemon.log", tc.content)
+			}
+			if got := readDaemonLogFrom(filepath.Join(dir, "daemon.log"), tc.offset); got != tc.want {
+				t.Errorf("readDaemonLogFrom = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -73,14 +48,14 @@ func TestDaemonFailureDetail(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", state)
 
-	t.Run("unopenable log falls back to the manual hint", func(t *testing.T) {
+	t.Run("Success/UnopenableLogFallsBackToHint", func(t *testing.T) {
 		got := daemonFailureDetail(errors.New("permission denied"), 0)
 		if !strings.Contains(got, "--foreground") {
 			t.Errorf("detail = %q, want the --foreground fallback", got)
 		}
 	})
 
-	t.Run("silent daemon says so", func(t *testing.T) {
+	t.Run("Success/SilentDaemon", func(t *testing.T) {
 		got := daemonFailureDetail(nil, 0)
 		if !strings.Contains(got, "wrote nothing") {
 			t.Errorf("detail = %q, want it to report an empty log", got)
@@ -90,14 +65,9 @@ func TestDaemonFailureDetail(t *testing.T) {
 		}
 	})
 
-	t.Run("a daemon that explained itself is quoted", func(t *testing.T) {
-		if err := os.MkdirAll(filepath.Dir(paths.DaemonLog()), 0o700); err != nil {
-			t.Fatalf("fixture: %v", err)
-		}
+	t.Run("Success/QuotesTheDaemon", func(t *testing.T) {
 		msg := "Error: discover stacks: stack swept at /tmp/gone: no such file or directory"
-		if err := os.WriteFile(paths.DaemonLog(), []byte(msg+"\n"), 0o600); err != nil {
-			t.Fatalf("fixture: %v", err)
-		}
+		writeFixture(t, filepath.Dir(paths.DaemonLog()), filepath.Base(paths.DaemonLog()), msg+"\n")
 
 		got := daemonFailureDetail(nil, 0)
 		if !strings.Contains(got, msg) {
@@ -111,23 +81,16 @@ func TestDaemonFailureDetail(t *testing.T) {
 func TestOpenDaemonLogAppends(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-	first, err := openDaemonLog()
-	if err != nil {
-		t.Fatalf("open: %v", err)
+	for _, attempt := range []string{"one\n", "two\n"} {
+		f, err := openDaemonLog()
+		if err != nil {
+			t.Fatalf("open: %v", err)
+		}
+		if _, err := f.WriteString(attempt); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		_ = f.Close()
 	}
-	if _, err := first.WriteString("one\n"); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	_ = first.Close()
-
-	second, err := openDaemonLog()
-	if err != nil {
-		t.Fatalf("reopen: %v", err)
-	}
-	if _, err := second.WriteString("two\n"); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	_ = second.Close()
 
 	body, err := os.ReadFile(paths.DaemonLog())
 	if err != nil {

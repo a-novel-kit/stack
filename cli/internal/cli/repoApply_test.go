@@ -13,28 +13,28 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/repocfg"
 )
 
-// fakeGH installs a stub gh runner for the test, returning canned output per
-// matcher and recording every invocation (args, then any stdin payload).
-// Restores the real runner on cleanup.
-func fakeGH(t *testing.T, responses map[string]string) *[]string {
+// testTarget is the repository the applyPlan tests reconcile.
+var testTarget = &repocfg.RepoTarget{Org: "o", Repo: "r", DefaultBranch: branchMaster}
+
+// liveOf reads a repository's live rulesets through the gh seam, as applyPlan
+// does once per run.
+func liveOf(org, repo string) func() (map[string]string, error) {
+	return func() (map[string]string, error) { return liveRulesets(org, repo) }
+}
+
+// contentsJSON builds the contents-API body GitHub returns for a deployed file
+// holding text.
+func contentsJSON(t *testing.T, text string) string {
 	t.Helper()
-	orig := ghStdin
-	var calls []string
-	ghStdin = func(stdin string, args ...string) (string, error) {
-		joined := strings.Join(args, " ")
-		if stdin != "" {
-			joined += " " + stdin
-		}
-		calls = append(calls, joined)
-		for substr, out := range responses {
-			if strings.Contains(joined, substr) {
-				return out, nil
-			}
-		}
-		return "", nil
+	raw, err := json.Marshal(ghContent{
+		SHA:      blobSHA(text),
+		Content:  base64.StdEncoding.EncodeToString([]byte(text)),
+		Encoding: "base64",
+	})
+	if err != nil {
+		panic(err)
 	}
-	t.Cleanup(func() { ghStdin = orig })
-	return &calls
+	return string(raw)
 }
 
 func TestApplyPlan(t *testing.T) {
@@ -58,7 +58,7 @@ func TestApplyPlan(t *testing.T) {
 	}
 
 	joined := strings.Join(*calls, "\n")
-	wants := []string{
+	for _, w := range []string{
 		"api -X PATCH repos/o/r --input -",                             // settings
 		"api -X PATCH repos/o/r/code-scanning/default-setup --input -", // code scanning stays off
 		"api repos/o/r/git/ref/heads/master --jq .object.sha",          // sync commit: read the branch tip
@@ -66,14 +66,12 @@ func TestApplyPlan(t *testing.T) {
 		`"path":".github/workflows/managed.yaml"`,                      // sync commit: carries the staged file
 		"api -X POST repos/o/r/rulesets --input -",                     // master ruleset created (no existing id)
 		"api -X PUT repos/o/r/rulesets/777 --input -",                  // codecov ruleset updated (existing id 777)
-	}
-	for _, w := range wants {
+	} {
 		if !strings.Contains(joined, w) {
 			t.Errorf("expected a gh call containing %q; calls:\n%s", w, joined)
 		}
 	}
-	// Managed files land in the one sync commit, so no per-file REST PUT
-	// appears.
+	// Managed files land in the one sync commit, never as per-file REST PUTs.
 	if strings.Contains(joined, "-X PUT repos/o/r/contents/") {
 		t.Errorf("managed files must land via the sync commit, not per-file PUTs; calls:\n%s", joined)
 	}
@@ -81,134 +79,83 @@ func TestApplyPlan(t *testing.T) {
 
 func TestStageContents(t *testing.T) {
 	// Not parallel: sub-tests swap the package-level ghStdin seam.
-	t.Run("unchanged content stages nothing", func(t *testing.T) {
-		content := "name: Managed\n"
-		fakeGH(t, map[string]string{"--jq .sha": blobSHA(content) + "\n"})
-
-		changes, unchanged, err := stageContents(repocfg.Op{
-			Path: "repos/o/r/contents/.github/workflows/managed.yaml", Content: content,
-		})
-		if err != nil {
-			t.Fatalf("stageContents: %v", err)
-		}
-		if !unchanged || len(changes) != 0 {
-			t.Fatalf("got (changes=%v, unchanged=%v), want nothing staged", changes, unchanged)
-		}
-	})
-
-	t.Run("new file stages a creation", func(t *testing.T) {
-		fakeGH(t, nil) // sha GET yields "" → the file does not exist yet
-
-		changes, unchanged, err := stageContents(repocfg.Op{
-			Path: "repos/o/r/contents/.github/workflows/managed.yaml", Content: "name: Managed\n",
-		})
-		if err != nil || unchanged {
-			t.Fatalf("stageContents: (unchanged=%v, err=%v)", unchanged, err)
-		}
-		want := contentChange{path: ".github/workflows/managed.yaml", content: "name: Managed\n", outcome: opCreated}
-		if len(changes) != 1 || changes[0] != want {
-			t.Fatalf("changes = %+v, want [%+v]", changes, want)
-		}
-	})
-
-	t.Run("drifted file stages an update", func(t *testing.T) {
-		fakeGH(t, map[string]string{"--jq .sha": "someothersha\n"})
-
-		changes, unchanged, err := stageContents(repocfg.Op{
-			Path: "repos/o/r/contents/.github/workflows/managed.yaml", Content: "name: Managed\n",
-		})
-		if err != nil || unchanged {
-			t.Fatalf("stageContents: (unchanged=%v, err=%v)", unchanged, err)
-		}
-		if len(changes) != 1 || changes[0].outcome != opUpdated {
-			t.Fatalf("changes = %+v, want one update", changes)
-		}
-	})
-
-	t.Run("stray root CODEOWNERS staged as deletion even when unchanged", func(t *testing.T) {
-		content := "* @a-novel-kit/maintainers\n"
-		fakeGH(t, map[string]string{
-			// Both the root copy and the .github/ copy report this sha: the
-			// .github/ copy matches (unchanged), the root copy just exists.
-			"--jq .sha": blobSHA(content) + "\n",
-		})
-
-		changes, unchanged, err := stageContents(repocfg.Op{
-			Path: "repos/o/r/contents/.github/CODEOWNERS", Content: content,
-		})
-		if err != nil {
-			t.Fatalf("stageContents: %v", err)
-		}
-		want := contentChange{path: "CODEOWNERS", outcome: opDeleted}
-		if !unchanged || len(changes) != 1 || changes[0] != want {
-			t.Fatalf("got (changes=%+v, unchanged=%v), want the root deletion only", changes, unchanged)
-		}
-	})
-
-	const gatePath = "repos/o/r/contents/.github/workflows/merge-gate.yaml"
-
-	t.Run("governance caller keeps a newer deployed pin (no downgrade, no-op)", func(t *testing.T) {
-		template := "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.14.0\n"
-		deployed := "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.15.0\n"
-		fakeGH(t, map[string]string{gatePath: contentsJSON(t, deployed)})
-
-		changes, unchanged, err := stageContents(repocfg.Op{Path: gatePath, Content: template})
-		if err != nil {
-			t.Fatalf("stageContents: %v", err)
-		}
-		// The template pins v1.14.0 but the deployed caller is on v1.15.0 (Renovate
-		// bumped it); the sync must not write the older pin back.
-		if !unchanged || len(changes) != 0 {
-			t.Fatalf("got (changes=%+v, unchanged=%v); a newer deployed pin must not be downgraded", changes, unchanged)
-		}
-	})
-
-	t.Run("governance caller upgrades when the template pin is newer", func(t *testing.T) {
-		template := "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.16.0\n"
-		deployed := "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.15.0\n"
-		fakeGH(t, map[string]string{gatePath: contentsJSON(t, deployed)})
-
-		changes, unchanged, err := stageContents(repocfg.Op{Path: gatePath, Content: template})
-		if err != nil || unchanged {
-			t.Fatalf("stageContents: (unchanged=%v, err=%v)", unchanged, err)
-		}
-		if len(changes) != 1 || changes[0].outcome != opUpdated || !strings.Contains(changes[0].content, "merge-gate@v1.16.0") {
-			t.Fatalf("changes = %+v, want an update carrying the newer template pin", changes)
-		}
-	})
-
-	t.Run("governance caller lands a template edit but keeps the newer pin", func(t *testing.T) {
-		template := "# refreshed comment\n      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.14.0\n"
-		deployed := "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@v1.15.0\n"
-		fakeGH(t, map[string]string{gatePath: contentsJSON(t, deployed)})
-
-		changes, unchanged, err := stageContents(repocfg.Op{Path: gatePath, Content: template})
-		if err != nil || unchanged {
-			t.Fatalf("stageContents: (unchanged=%v, err=%v)", unchanged, err)
-		}
-		// A genuine template change still lands, but the pin is not downgraded.
-		if len(changes) != 1 ||
-			!strings.Contains(changes[0].content, "# refreshed comment") ||
-			!strings.Contains(changes[0].content, "merge-gate@v1.15.0") {
-			t.Fatalf("update must land the template edit AND keep the newer pin; got %+v", changes)
-		}
-	})
-}
-
-// contentsJSON builds a GitHub contents-API response body for text with the
-// matching blob sha, so a stubbed `gh api <path>` returns what the real API
-// returns for a deployed file.
-func contentsJSON(t *testing.T, text string) string {
-	t.Helper()
-	raw, err := json.Marshal(ghContent{
-		SHA:      blobSHA(text),
-		Content:  base64.StdEncoding.EncodeToString([]byte(text)),
-		Encoding: "base64",
-	})
-	if err != nil {
-		panic(err)
+	const (
+		managed  = "name: Managed\n"
+		owners   = "* @a-novel-kit/maintainers\n"
+		wfPath   = "repos/o/r/contents/.github/workflows/managed.yaml"
+		gatePath = "repos/o/r/contents/.github/workflows/merge-gate.yaml"
+	)
+	pin := func(v string) string {
+		return "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@" + v + "\n"
 	}
-	return string(raw)
+	deployedGate := map[string]string{gatePath: contentsJSON(t, pin("v1.15.0"))}
+
+	for _, tc := range []struct {
+		name          string
+		responses     map[string]string
+		op            repocfg.Op
+		wantChanges   []contentChange
+		wantUnchanged bool
+	}{
+		{
+			name:          "Success/Unchanged",
+			responses:     map[string]string{"--jq .sha": blobSHA(managed) + "\n"},
+			op:            repocfg.Op{Path: wfPath, Content: managed},
+			wantUnchanged: true,
+		},
+		{
+			// The sha read yields "": the file does not exist yet.
+			name:        "Success/NewFile",
+			op:          repocfg.Op{Path: wfPath, Content: managed},
+			wantChanges: []contentChange{{path: ".github/workflows/managed.yaml", content: managed, outcome: opCreated}},
+		},
+		{
+			name:        "Success/Drifted",
+			responses:   map[string]string{"--jq .sha": "someothersha\n"},
+			op:          repocfg.Op{Path: wfPath, Content: managed},
+			wantChanges: []contentChange{{path: ".github/workflows/managed.yaml", content: managed, outcome: opUpdated}},
+		},
+		{
+			// Both copies report this sha: the .github/ copy is unchanged, and
+			// the stray root copy is deleted anyway.
+			name:          "Success/StrayRootCODEOWNERS",
+			responses:     map[string]string{"--jq .sha": blobSHA(owners) + "\n"},
+			op:            repocfg.Op{Path: "repos/o/r/contents/.github/CODEOWNERS", Content: owners},
+			wantChanges:   []contentChange{{path: "CODEOWNERS", outcome: opDeleted}},
+			wantUnchanged: true,
+		},
+		{
+			// Renovate bumped the deployed caller past the template's pin; the
+			// sync must not write the older pin back.
+			name:          "Success/KeepsNewerDeployedPin",
+			responses:     deployedGate,
+			op:            repocfg.Op{Path: gatePath, Content: pin("v1.14.0")},
+			wantUnchanged: true,
+		},
+		{
+			name:        "Success/UpgradesToNewerTemplatePin",
+			responses:   deployedGate,
+			op:          repocfg.Op{Path: gatePath, Content: pin("v1.16.0")},
+			wantChanges: []contentChange{{path: ".github/workflows/merge-gate.yaml", content: pin("v1.16.0"), outcome: opUpdated}},
+		},
+		{
+			// A genuine template edit still lands, but the pin is not downgraded.
+			name:      "Success/TemplateEditKeepsNewerPin",
+			responses: deployedGate,
+			op:        repocfg.Op{Path: gatePath, Content: "# refreshed comment\n" + pin("v1.14.0")},
+			wantChanges: []contentChange{{
+				path: ".github/workflows/merge-gate.yaml", content: "# refreshed comment\n" + pin("v1.15.0"), outcome: opUpdated,
+			}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeGH(t, tc.responses)
+			changes, unchanged, err := stageContents(tc.op)
+			if err != nil || unchanged != tc.wantUnchanged || !slices.Equal(changes, tc.wantChanges) {
+				t.Fatalf("stageContents = (%+v, %v, %v), want (%+v, %v, nil)", changes, unchanged, err, tc.wantChanges, tc.wantUnchanged)
+			}
+		})
+	}
 }
 
 func TestCommitSync(t *testing.T) {
@@ -218,18 +165,12 @@ func TestCommitSync(t *testing.T) {
 		{path: "CODEOWNERS", outcome: opDeleted},
 	}
 
-	t.Run("one mutation carries additions and deletions", func(t *testing.T) {
-		calls := fakeGH(t, map[string]string{
-			"git/ref/heads/master": "headoid123\n",
-			"api graphql":          "fc89f28c5489\n",
-		})
-
+	t.Run("Success", func(t *testing.T) {
+		// One mutation carries both the additions and the deletions.
+		calls := fakeGH(t, map[string]string{"git/ref/heads/master": "headoid123\n", "api graphql": "fc89f28c5489\n"})
 		detail, err := commitSync("o", "r", branchMaster, changes)
-		if err != nil {
-			t.Fatalf("commitSync: %v", err)
-		}
-		if detail != "fc89f28" {
-			t.Fatalf("detail = %q, want the short commit id", detail)
+		if err != nil || detail != "fc89f28" {
+			t.Fatalf("commitSync = (%q, %v), want the short commit id", detail, err)
 		}
 		joined := strings.Join(*calls, "\n")
 		for _, w := range []string{
@@ -244,39 +185,25 @@ func TestCommitSync(t *testing.T) {
 		}
 	})
 
-	t.Run("empty repo seeds the first commit via the Contents API", func(t *testing.T) {
-		// A freshly created repo has no commit: the ref read answers 409 "empty",
-		// and so would the Git Data blob/tree/commit endpoints. Only the Contents
-		// API can create the first commit, so the single added file must land
-		// through a PUT .../contents/... , never createCommitOnBranch.
-		orig := ghStdin
-		t.Cleanup(func() { ghStdin = orig })
-		var calls []string
-		ghStdin = func(stdin string, args ...string) (string, error) {
-			j := strings.Join(args, " ")
-			if stdin != "" {
-				j += " " + stdin
-			}
-			calls = append(calls, j)
+	t.Run("Success/EmptyRepoSeedsViaContentsAPI", func(t *testing.T) {
+		// A fresh repo has no commit: the ref read answers 409 "empty", and so
+		// would the Git Data endpoints. Only the Contents API can create the
+		// first commit, so the lone added file lands through a contents PUT,
+		// never createCommitOnBranch.
+		calls := stubGH(t, func(call string) (string, error) {
 			switch {
-			case strings.Contains(j, "git/ref/heads/master"):
-				return "", errors.New("exit 1: gh: Git Repository is empty. (HTTP 409)")
-			case strings.Contains(j, "PUT repos/o/r/contents/"):
+			case strings.Contains(call, "git/ref/heads/master"):
+				return "", errGHEmptyRepo
+			case strings.Contains(call, "PUT repos/o/r/contents/"):
 				return "c0mm1t5ha0000\n", nil // .commit.sha
-			default:
-				return "", nil
 			}
-		}
-
-		// One added file; the CODEOWNERS deletion in `changes` must be dropped.
+			return "", nil
+		})
 		detail, err := commitSync("o", "r", branchMaster, changes[:1])
-		if err != nil {
-			t.Fatalf("commitSync on empty repo: %v", err)
+		if err != nil || detail != "c0mm1t5" {
+			t.Fatalf("commitSync = (%q, %v), want the short seed-commit id", detail, err)
 		}
-		if detail != "c0mm1t5" {
-			t.Fatalf("detail = %q, want the short seed-commit id", detail)
-		}
-		joined := strings.Join(calls, "\n")
+		joined := strings.Join(*calls, "\n")
 		for _, w := range []string{
 			"api -X PUT repos/o/r/contents/.github/workflows/managed.yaml", // the seed file
 			`"branch":"master"`, // ...onto the default branch
@@ -286,95 +213,72 @@ func TestCommitSync(t *testing.T) {
 				t.Errorf("expected a Contents-API seed call containing %q; calls:\n%s", w, joined)
 			}
 		}
-		// The mutation cannot commit without a branch, so it must not be reached.
 		if strings.Contains(joined, "api graphql") {
 			t.Errorf("empty-repo seed must not use createCommitOnBranch; calls:\n%s", joined)
 		}
 	})
 
-	t.Run("empty repo seeds one file then syncs the rest", func(t *testing.T) {
-		// With more than one added file the first seeds the initial commit via the
-		// Contents API; the branch then exists, so the remainder land in one
-		// normal createCommitOnBranch mutation.
-		orig := ghStdin
-		t.Cleanup(func() { ghStdin = orig })
-		var puts, mutations, headReads int
-		ghStdin = func(_ string, args ...string) (string, error) {
-			j := strings.Join(args, " ")
+	t.Run("Success/EmptyRepoSeedsOneFileThenSyncs", func(t *testing.T) {
+		// The first added file seeds the initial commit; the branch then
+		// exists, so the rest land in one normal createCommitOnBranch.
+		headReads := 0
+		calls := stubGH(t, func(call string) (string, error) {
 			switch {
-			case strings.Contains(j, "git/ref/heads/master"):
+			case strings.Contains(call, "git/ref/heads/master"):
 				headReads++
 				if headReads == 1 {
-					return "", errors.New("exit 1: gh: Git Repository is empty. (HTTP 409)")
+					return "", errGHEmptyRepo
 				}
 				return "seedoid\n", nil // the seed commit is now the tip
-			case strings.Contains(j, "PUT repos/o/r/contents/"):
-				puts++
+			case strings.Contains(call, "PUT repos/o/r/contents/"):
 				return "seedcommit123\n", nil
-			case strings.Contains(j, "api graphql"):
-				mutations++
+			case strings.Contains(call, "api graphql"):
 				return "restcommit456\n", nil
 			}
 			return "", nil
-		}
-
-		twoAdds := []contentChange{
+		})
+		detail, err := commitSync("o", "r", branchMaster, []contentChange{
 			{path: ".github/workflows/managed.yaml", content: "name: Managed\n", outcome: opCreated},
 			{path: ".github/CODEOWNERS", content: "* @team\n", outcome: opCreated},
+		})
+		if err != nil || detail != "restcom" {
+			t.Fatalf("commitSync = (%q, %v), want the follow-up sync commit's short id", detail, err)
 		}
-		detail, err := commitSync("o", "r", branchMaster, twoAdds)
-		if err != nil {
-			t.Fatalf("commitSync on empty repo (2 files): %v", err)
-		}
-		if puts != 1 || mutations != 1 {
+		if puts, mutations := countCalls(*calls, "PUT repos/o/r/contents/"), countCalls(*calls, "api graphql"); puts != 1 || mutations != 1 {
 			t.Fatalf("got %d Contents PUT / %d mutation(s), want 1 / 1", puts, mutations)
-		}
-		if detail != "restcom" {
-			t.Fatalf("detail = %q, want the short id of the follow-up sync commit", detail)
 		}
 	})
 
-	t.Run("stale branch tip retries once with a fresh oid", func(t *testing.T) {
-		orig := ghStdin
-		t.Cleanup(func() { ghStdin = orig })
-		var mutations, headReads int
-		ghStdin = func(_ string, args ...string) (string, error) {
-			j := strings.Join(args, " ")
-			if strings.Contains(j, "git/ref/heads") {
-				headReads++
+	t.Run("Success/StaleTipRetriesOnce", func(t *testing.T) {
+		mutations := 0
+		calls := stubGH(t, func(call string) (string, error) {
+			if strings.Contains(call, "git/ref/heads") {
 				return "headoid123\n", nil
 			}
 			mutations++
 			if mutations == 1 {
-				return `{"errors":[{"type":"STALE_DATA"}]}`, errors.New("exit 1: gh: Expected branch to point to \"x\" but it did not.")
+				return `{"errors":[{"type":"STALE_DATA"}]}`, errors.New(`exit 1: gh: Expected branch to point to "x" but it did not.`)
 			}
 			return "fc89f28c5489\n", nil
-		}
-
+		})
 		if _, err := commitSync("o", "r", branchMaster, changes); err != nil {
 			t.Fatalf("commitSync after retry: %v", err)
 		}
-		if mutations != 2 || headReads != 2 {
+		if headReads := countCalls(*calls, "git/ref/heads"); mutations != 2 || headReads != 2 {
 			t.Fatalf("got %d mutations / %d head reads, want 2 / 2", mutations, headReads)
 		}
 	})
 
-	t.Run("missing workflow scope hints the fix", func(t *testing.T) {
-		orig := ghStdin
-		t.Cleanup(func() { ghStdin = orig })
-		ghStdin = func(_ string, args ...string) (string, error) {
-			if strings.Contains(strings.Join(args, " "), "git/ref/heads") {
+	t.Run("Error/MissingWorkflowScope", func(t *testing.T) {
+		stubGH(t, func(call string) (string, error) {
+			if strings.Contains(call, "git/ref/heads") {
 				return "headoid123\n", nil
 			}
 			return "", errors.New("exit 1: gh: refusing to update workflow files without the workflow scope")
-		}
-
+		})
 		detail, err := commitSync("o", "r", branchMaster, changes)
-		if err == nil {
-			t.Fatal("expected the scope failure to surface as an error")
-		}
-		if !strings.Contains(detail, "workflow") || !strings.Contains(detail, "scope") {
-			t.Fatalf("detail should hint the `workflow` scope; got %q", detail)
+		if err == nil || !strings.Contains(detail, "workflow") || !strings.Contains(detail, "scope") {
+			t.Fatalf("commitSync = (%q, %v), want an error whose detail hints the `workflow` scope", detail, err)
 		}
 	})
 }
@@ -418,20 +322,16 @@ func TestBlobSHA(t *testing.T) {
 }
 
 func TestApplySettingsSignoffRetry(t *testing.T) {
-	var bodies []string
-	orig := ghStdin
-	t.Cleanup(func() { ghStdin = orig })
-	first := true
-	ghStdin = func(stdin string, args ...string) (string, error) {
-		if strings.Contains(strings.Join(args, " "), "PATCH repos/o/r") {
-			bodies = append(bodies, stdin)
-			if first {
-				first = false
-				return "", signoffError{}
-			}
+	// Not parallel: swaps the package-level ghStdin seam. The org locks the
+	// signoff field, so the first PATCH is rejected and retried without it.
+	rejected := false
+	calls := stubGH(t, func(string) (string, error) {
+		if !rejected {
+			rejected = true
+			return "", errors.New("HTTP 422: Commit signoff is enforced by the organization and cannot be disabled")
 		}
 		return "", nil
-	}
+	})
 
 	op := repocfg.Op{Method: "PATCH", Path: "repos/o/r", Body: map[string]any{
 		"has_wiki":                    false,
@@ -440,31 +340,21 @@ func TestApplySettingsSignoffRetry(t *testing.T) {
 	if err := applySettings(op); err != nil {
 		t.Fatalf("applySettings: %v", err)
 	}
-	if len(bodies) != 2 {
-		t.Fatalf("expected a retry (2 PATCH bodies), got %d", len(bodies))
+	if len(*calls) != 2 || strings.Contains((*calls)[1], "web_commit_signoff_required") {
+		t.Fatalf("calls = %q, want a retry PATCH without web_commit_signoff_required", *calls)
 	}
-	if strings.Contains(bodies[1], "web_commit_signoff_required") {
-		t.Error("retry body should omit web_commit_signoff_required")
-	}
-}
-
-type signoffError struct{}
-
-func (signoffError) Error() string {
-	return "HTTP 422: Commit signoff is enforced by the organization and cannot be disabled"
 }
 
 func TestApplyRulesetBadBody(t *testing.T) {
-	// A malformed plan (wrong body type) must fail fast, not POST a null body.
+	// Not parallel: swaps the package-level ghStdin seam. A malformed plan
+	// (wrong body type) must fail fast, not POST a null body.
 	calls := fakeGH(t, nil)
 	op := repocfg.Op{RulesetName: branchMaster, Path: "repos/o/r/rulesets", Body: map[string]any{"name": "x"}}
 	if _, err := applyRuleset(op, liveOf("o", "r")); err == nil {
 		t.Fatal("expected an error for a non-*APIRuleset body")
 	}
-	for _, c := range *calls {
-		if strings.Contains(c, "rulesets") && (strings.Contains(c, "POST") || strings.Contains(c, "PUT")) {
-			t.Errorf("must not write a ruleset with a bad body; got call %q", c)
-		}
+	if slices.ContainsFunc(*calls, func(c string) bool { return strings.Contains(c, "-X POST") || strings.Contains(c, "-X PUT") }) {
+		t.Errorf("must not write a ruleset with a bad body; calls %q", *calls)
 	}
 }
 
@@ -476,59 +366,19 @@ func TestPreserveNewerPins(t *testing.T) {
 		autoMrg = "a-novel-kit/workflows/generic-actions/enable-auto-merge@"
 	)
 
-	testCases := []struct {
-		name string
-
-		desired  string
-		deployed string
-
-		expect string
-	}{
-		{
-			name:     "Deployed newer is preserved",
-			desired:  gate + "v1.14.0",
-			deployed: gate + "v1.15.0",
-			expect:   gate + "v1.15.0",
-		},
-		{
-			name:     "Deployed older keeps the template",
-			desired:  gate + "v1.14.0",
-			deployed: gate + "v1.13.0",
-			expect:   gate + "v1.14.0",
-		},
-		{
-			name:     "Equal is unchanged",
-			desired:  gate + "v1.14.0",
-			deployed: gate + "v1.14.0",
-			expect:   gate + "v1.14.0",
-		},
-		{
-			name:     "Per-path — only the newer pin advances",
-			desired:  gate + "v1.14.0\n" + autoMrg + "v1.14.0",
-			deployed: gate + "v1.15.0\n" + autoMrg + "v1.14.0",
-			expect:   gate + "v1.15.0\n" + autoMrg + "v1.14.0",
-		},
-		{
-			name:     "Deployed has no pins — template kept",
-			desired:  gate + "v1.14.0",
-			deployed: "no workflows pins here",
-			expect:   gate + "v1.14.0",
-		},
-		{
-			// v1.10.0 > v1.2.0 by semver, though lexically the reverse — proves
-			// the comparison is semver, not string ordering.
-			name:     "Semver, not lexical, ordering",
-			desired:  gate + "v1.2.0",
-			deployed: gate + "v1.10.0",
-			expect:   gate + "v1.10.0",
-		},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
+	for _, tc := range []struct{ name, desired, deployed, want string }{
+		{"Success/DeployedNewerIsPreserved", gate + "v1.14.0", gate + "v1.15.0", gate + "v1.15.0"},
+		{"Success/DeployedOlderKeepsTemplate", gate + "v1.14.0", gate + "v1.13.0", gate + "v1.14.0"},
+		{"Success/Equal", gate + "v1.14.0", gate + "v1.14.0", gate + "v1.14.0"},
+		{"Success/PerPath", gate + "v1.14.0\n" + autoMrg + "v1.14.0", gate + "v1.15.0\n" + autoMrg + "v1.14.0", gate + "v1.15.0\n" + autoMrg + "v1.14.0"},
+		{"Success/DeployedHasNoPins", gate + "v1.14.0", "no workflows pins here", gate + "v1.14.0"},
+		// v1.10.0 > v1.2.0 by semver, though lexically the reverse.
+		{"Success/SemverNotLexical", gate + "v1.2.0", gate + "v1.10.0", gate + "v1.10.0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := preserveNewerPins(testCase.desired, testCase.deployed); got != testCase.expect {
-				t.Fatalf("preserveNewerPins() = %q, want %q", got, testCase.expect)
+			if got := preserveNewerPins(tc.desired, tc.deployed); got != tc.want {
+				t.Fatalf("preserveNewerPins() = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -536,84 +386,57 @@ func TestPreserveNewerPins(t *testing.T) {
 
 func TestContentText(t *testing.T) {
 	// Not parallel: sub-tests swap the package-level ghStdin seam.
-	t.Run("existing base64 file → decoded text and sha", func(t *testing.T) {
-		text := "hello: world\n"
-		fakeGH(t, map[string]string{"contents/x.yaml": contentsJSON(t, text)})
-
-		got, sha, err := contentText("repos/o/r/contents/x.yaml")
-		if err != nil || got != text || sha != blobSHA(text) {
-			t.Fatalf("got (%q, %q, %v), want (%q, %q, nil)", got, sha, err, text, blobSHA(text))
-		}
-	})
-
-	t.Run("missing file (404) → empty text and sha, nil", func(t *testing.T) {
-		orig := ghStdin
-		t.Cleanup(func() { ghStdin = orig })
-		ghStdin = func(_ string, _ ...string) (string, error) {
-			return "", errors.New("exit 1: HTTP 404: Not Found")
-		}
-		got, sha, err := contentText("repos/o/r/contents/missing.yaml")
-		if err != nil || got != "" || sha != "" {
-			t.Fatalf("404 should yield (\"\", \"\", nil); got (%q, %q, %v)", got, sha, err)
-		}
-	})
-
-	t.Run("non-404 error → propagated", func(t *testing.T) {
-		orig := ghStdin
-		t.Cleanup(func() { ghStdin = orig })
-		ghStdin = func(_ string, _ ...string) (string, error) {
-			return "", errors.New("exit 1: HTTP 401: Bad credentials")
-		}
-		if _, _, err := contentText("repos/o/r/contents/x.yaml"); err == nil {
-			t.Fatal("a non-404 error must propagate, not be swallowed")
-		}
-	})
-
-	t.Run("non-base64 encoding → sha only, safe no-splice fallback", func(t *testing.T) {
-		fakeGH(t, map[string]string{"contents/big.yaml": `{"sha":"deadbeef","content":"","encoding":"none"}`})
-
-		got, sha, err := contentText("repos/o/r/contents/big.yaml")
-		if err != nil || got != "" || sha != "deadbeef" {
-			t.Fatalf("got (%q, %q, %v), want (\"\", \"deadbeef\", nil)", got, sha, err)
-		}
-	})
+	const path = "repos/o/r/contents/x.yaml"
+	text := "hello: world\n"
+	for _, tc := range []struct {
+		name              string
+		out               string
+		err               error
+		wantText, wantSHA string
+		wantErr           bool
+	}{
+		{name: "Success", out: contentsJSON(t, text), wantText: text, wantSHA: blobSHA(text)},
+		{name: "Success/NotFound", err: errGHNotFound},
+		// Files over 1MB are not base64-encoded: sha only, a safe no-splice fallback.
+		{name: "Success/NonBase64", out: `{"sha":"deadbeef","content":"","encoding":"none"}`, wantSHA: "deadbeef"},
+		{name: "Error/Propagated", err: errGHBadCredentials, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := stubGH(t, func(string) (string, error) { return tc.out, tc.err })
+			got, sha, err := contentText(path)
+			if got != tc.wantText || sha != tc.wantSHA || (err != nil) != tc.wantErr || !strings.Contains((*calls)[0], path) {
+				t.Fatalf("contentText = (%q, %q, %v) via %q, want (%q, %q, error %v)", got, sha, err, *calls, tc.wantText, tc.wantSHA, tc.wantErr)
+			}
+		})
+	}
 }
 
 func TestContentSHA(t *testing.T) {
-	orig := ghStdin
-	t.Cleanup(func() { ghStdin = orig })
-
-	t.Run("missing file (404) → empty sha, no error", func(t *testing.T) {
-		ghStdin = func(_ string, _ ...string) (string, error) {
-			return "", errors.New("exit 1: HTTP 404: Not Found")
-		}
-		sha, err := contentSHA("repos/o/r/contents/x.yml")
-		if err != nil || sha != "" {
-			t.Fatalf("404 should yield (\"\", nil); got (%q, %v)", sha, err)
-		}
-	})
-
-	t.Run("other error → propagated", func(t *testing.T) {
-		ghStdin = func(_ string, _ ...string) (string, error) {
-			return "", errors.New("exit 1: HTTP 401: Bad credentials")
-		}
-		if _, err := contentSHA("repos/o/r/contents/x.yml"); err == nil {
-			t.Fatal("a non-404 error must propagate, not be swallowed as create")
-		}
-	})
-
-	t.Run("existing file → trimmed sha", func(t *testing.T) {
-		ghStdin = func(_ string, _ ...string) (string, error) { return "abc123\n", nil }
-		sha, err := contentSHA("repos/o/r/contents/x.yml")
-		if err != nil || sha != "abc123" {
-			t.Fatalf("got (%q, %v), want (\"abc123\", nil)", sha, err)
-		}
-	})
+	// Not parallel: sub-tests swap the package-level ghStdin seam.
+	const path = "repos/o/r/contents/x.yml"
+	for _, tc := range []struct {
+		name, out, wantSHA string
+		err                error
+		wantErr            bool
+	}{
+		{name: "Success", out: "abc123\n", wantSHA: "abc123"},
+		// A 404 is the create case.
+		{name: "Success/NotFound", err: errGHNotFound},
+		{name: "Error/Propagated", err: errGHBadCredentials, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := stubGH(t, func(string) (string, error) { return tc.out, tc.err })
+			sha, err := contentSHA(path)
+			if sha != tc.wantSHA || (err != nil) != tc.wantErr || !strings.Contains((*calls)[0], path) {
+				t.Fatalf("contentSHA = (%q, %v) via %q, want (%q, error %v)", sha, err, *calls, tc.wantSHA, tc.wantErr)
+			}
+		})
+	}
 }
 
 func TestApplyLabels(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam.
-	t.Run("reconcile create+update+retire", func(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
 		calls := fakeGH(t, map[string]string{
 			// meta matches; documentation's colour has drifted; triage lingers.
 			"labels?per_page=100": `[
@@ -632,11 +455,8 @@ func TestApplyLabels(t *testing.T) {
 		}}
 
 		detail, err := applyLabels("o", "r", op)
-		if err != nil {
-			t.Fatalf("applyLabels: %v", err)
-		}
-		if detail != "1 created, 1 updated, 1 retired" {
-			t.Fatalf("summary = %q, want %q", detail, "1 created, 1 updated, 1 retired")
+		if err != nil || detail != "1 created, 1 updated, 1 retired" {
+			t.Fatalf("applyLabels = (%q, %v), want %q", detail, err, "1 created, 1 updated, 1 retired")
 		}
 
 		joined := strings.Join(*calls, "\n")
@@ -656,7 +476,7 @@ func TestApplyLabels(t *testing.T) {
 		}
 	})
 
-	t.Run("bad body type is an error", func(t *testing.T) {
+	t.Run("Error/BadBody", func(t *testing.T) {
 		fakeGH(t, nil)
 		op := repocfg.Op{Path: "repos/o/r/labels", Body: map[string]any{"ensure": nil}}
 		if _, err := applyLabels("o", "r", op); err == nil {
@@ -666,151 +486,97 @@ func TestApplyLabels(t *testing.T) {
 }
 
 // TestPruneRulesets covers the one operation in repocfg that DESTROYS live
-// configuration. The desired ruleset set is derived from the templates plus
-// code-driven discovery, so anything else on the repo is drift — but that makes
-// the keep-list the only thing standing between a reconcile and a repo's
-// protection, and a bug here is silent until a merge that should have been
-// gated goes through.
+// configuration. Anything the plan does not name is drift, so the keep-list is
+// the only thing standing between a reconcile and a repo's protection, and a
+// bug here is silent until a merge that should have been gated goes through.
 func TestPruneRulesets(t *testing.T) {
-	// Not parallel: swaps the package-level ghStdin seam.
-	const listed = "master\t1\nrequire-approval\t2\ntags\t3\ncodecov\t4\nCode Quality Copilot review for default branch\t5\n"
-
-	deletedIDs := func(calls []string) []string {
-		var out []string
-		for _, c := range calls {
-			if strings.Contains(c, "-X DELETE") {
-				out = append(out, c[strings.LastIndex(c, "/")+1:])
+	// Not parallel: sub-tests swap the package-level ghStdin seam.
+	const copilot = "Code Quality Copilot review for default branch"
+	for _, tc := range []struct {
+		name        string
+		keep        []string
+		listErr     error
+		wantDeleted []string
+		wantDetail  string
+		wantErr     bool
+	}{
+		{
+			// codecov and the hand-made Copilot ruleset are drift.
+			name:        "Success",
+			keep:        []string{"master", "require-approval", "tags"},
+			wantDeleted: []string{"4", "5"},
+			wantDetail:  "deleted " + copilot + ", codecov",
+		},
+		{
+			name:       "Success/KeepEverything",
+			keep:       []string{"master", "require-approval", "tags", "codecov", copilot},
+			wantDetail: opUnchanged,
+		},
+		{
+			// A class that declares no rulesets genuinely wants none.
+			name:        "Success/EmptyKeepPrunesBare",
+			wantDeleted: []string{"1", "2", "3", "4", "5"},
+			wantDetail:  "deleted " + copilot + ", codecov, master, require-approval, tags",
+		},
+		{
+			// Fail closed: a read error leaves every ruleset in place.
+			name:    "Error/ListingFails",
+			keep:    []string{"master"},
+			listErr: errors.New("gh: API rate limit exceeded"),
+			wantErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := stubGH(t, func(call string) (string, error) {
+				if strings.Contains(call, "--jq") {
+					return "master\t1\nrequire-approval\t2\ntags\t3\ncodecov\t4\n" + copilot + "\t5\n", tc.listErr
+				}
+				return "", nil
+			})
+			detail, err := pruneRulesets("a-novel", "service-auth", liveOf("a-novel", "service-auth"),
+				repocfg.Op{PruneRulesets: true, KeepRulesets: tc.keep})
+			var deleted []string
+			for _, c := range *calls {
+				if strings.Contains(c, "-X DELETE") {
+					deleted = append(deleted, c[strings.LastIndex(c, "/")+1:])
+				}
 			}
-		}
-		return out
+			slices.Sort(deleted)
+			if (err != nil) != tc.wantErr || detail != tc.wantDetail || !slices.Equal(deleted, tc.wantDeleted) {
+				t.Errorf("pruneRulesets = (%q, %v) deleting ids %v, want (%q, error %v) deleting %v",
+					detail, err, deleted, tc.wantDetail, tc.wantErr, tc.wantDeleted)
+			}
+		})
 	}
-
-	t.Run("deletes only what the plan does not name", func(t *testing.T) {
-		calls := fakeGH(t, map[string]string{"--jq": listed})
-		detail, err := pruneRulesets("a-novel", "service-auth", liveOf("a-novel", "service-auth"), repocfg.Op{
-			PruneRulesets: true,
-			KeepRulesets:  []string{"master", "require-approval", "tags"},
-		})
-		if err != nil {
-			t.Fatalf("pruneRulesets: %v", err)
-		}
-		got := deletedIDs(*calls)
-		slices.Sort(got)
-		if want := []string{"4", "5"}; !slices.Equal(got, want) {
-			t.Errorf("deleted ids %v, want %v (codecov + the hand-made Copilot ruleset)", got, want)
-		}
-		for _, id := range got {
-			if id == "1" || id == "2" || id == "3" {
-				t.Errorf("deleted a ruleset the plan asked to keep (id %s)", id)
-			}
-		}
-		if !strings.Contains(detail, "codecov") {
-			t.Errorf("detail = %q, want it to name what was removed", detail)
-		}
-	})
-
-	t.Run("keeping everything deletes nothing", func(t *testing.T) {
-		calls := fakeGH(t, map[string]string{"--jq": listed})
-		detail, err := pruneRulesets("a-novel", "service-auth", liveOf("a-novel", "service-auth"), repocfg.Op{
-			PruneRulesets: true,
-			KeepRulesets: []string{
-				"master", "require-approval", "tags", "codecov",
-				"Code Quality Copilot review for default branch",
-			},
-		})
-		if err != nil {
-			t.Fatalf("pruneRulesets: %v", err)
-		}
-		if got := deletedIDs(*calls); len(got) != 0 {
-			t.Errorf("deleted %v, want nothing", got)
-		}
-		if detail != opUnchanged {
-			t.Errorf("detail = %q, want %q", detail, opUnchanged)
-		}
-	})
-
-	t.Run("an empty keep set prunes the repo bare", func(t *testing.T) {
-		// A class that declares no rulesets genuinely wants none, so an empty keep
-		// set prunes every ruleset the repo carries.
-		calls := fakeGH(t, map[string]string{"--jq": listed})
-		if _, err := pruneRulesets("a-novel", "docs", liveOf("a-novel", "docs"), repocfg.Op{PruneRulesets: true}); err != nil {
-			t.Fatalf("pruneRulesets: %v", err)
-		}
-		if got := deletedIDs(*calls); len(got) != 5 {
-			t.Errorf("deleted %d ruleset(s), want all 5", len(got))
-		}
-	})
-
-	t.Run("a listing failure prunes nothing", func(t *testing.T) {
-		// Fail closed: a read error leaves every ruleset in place.
-		orig := ghStdin
-		var deletes int
-		ghStdin = func(_ string, args ...string) (string, error) {
-			joined := strings.Join(args, " ")
-			if strings.Contains(joined, "--jq") {
-				return "", errors.New("gh: API rate limit exceeded")
-			}
-			if strings.Contains(joined, "-X DELETE") {
-				deletes++
-			}
-			return "", nil
-		}
-		t.Cleanup(func() { ghStdin = orig })
-		if _, err := pruneRulesets("a-novel", "service-auth", liveOf("a-novel", "service-auth"), repocfg.Op{
-			PruneRulesets: true, KeepRulesets: []string{"master"},
-		}); err == nil {
-			t.Error("want an error when the ruleset listing fails")
-		}
-		if deletes != 0 {
-			t.Errorf("issued %d delete(s) after a failed listing — must be 0", deletes)
-		}
-	})
 }
 
 // TestPruneImpact covers the preview an operator confirms a destructive
-// reconcile from. The plan is computed offline and can only state what SURVIVES,
-// so this is the only place the deletions are visible — and a read failure must
-// never render as "none", which reads as safe and gets waved through.
+// reconcile from: the offline plan only states what SURVIVES, so this is the
+// only place the deletions are visible. A read failure must never render as
+// "none", which reads as safe and gets waved through.
 func TestPruneImpact(t *testing.T) {
-	impactTarget := &repocfg.RepoTarget{Org: "a-novel", Repo: "service-auth"}
-	// Not parallel: swaps the package-level ghStdin seam.
+	// Not parallel: sub-tests swap the package-level ghStdin seam.
+	target := &repocfg.RepoTarget{Org: "a-novel", Repo: "service-auth"}
 	plan := &repocfg.Plan{Ops: []repocfg.Op{
 		{RulesetName: "master"},
 		{PruneRulesets: true, KeepRulesets: []string{"master", "require-approval", "tags"}},
 	}}
-
-	t.Run("names every ruleset that would go", func(t *testing.T) {
-		fakeGH(t, map[string]string{"--jq": "master\t1\ntags\t2\ncodecov\t3\nCopilot review\t4\n"})
-		got := pruneImpact(impactTarget, plan)
-		for _, want := range []string{"DELETE", "codecov", "Copilot review"} {
-			if !strings.Contains(got, want) {
-				t.Errorf("preview %q missing %q", got, want)
+	for _, tc := range []struct {
+		name, listed string
+		listErr      error
+		want         string
+	}{
+		{name: "Success", listed: "master\t1\ntags\t2\ncodecov\t3\nCopilot review\t4\n", want: "# rulesets to DELETE: Copilot review, codecov"},
+		{name: "Success/NothingToDelete", listed: "master\t1\ntags\t2\n", want: "# rulesets to delete: none"},
+		{name: "Error/ReadFails", listErr: errors.New("gh: rate limited"), want: "# rulesets to delete: UNRESOLVED — gh: rate limited"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubGH(t, func(string) (string, error) { return tc.listed, tc.listErr })
+			if got := pruneImpact(target, plan); got != tc.want {
+				t.Errorf("pruneImpact = %q, want %q", got, tc.want)
 			}
-		}
-		if strings.Contains(got, "master") {
-			t.Errorf("preview %q names a ruleset that survives", got)
-		}
-	})
-
-	t.Run("says none when nothing would go", func(t *testing.T) {
-		fakeGH(t, map[string]string{"--jq": "master\t1\ntags\t2\n"})
-		if got := pruneImpact(impactTarget, plan); !strings.Contains(got, "none") {
-			t.Errorf("preview = %q, want it to say none", got)
-		}
-	})
-
-	t.Run("a failed read is UNRESOLVED, never none", func(t *testing.T) {
-		orig := ghStdin
-		ghStdin = func(string, ...string) (string, error) { return "", errors.New("gh: rate limited") }
-		t.Cleanup(func() { ghStdin = orig })
-		got := pruneImpact(impactTarget, plan)
-		if !strings.Contains(got, "UNRESOLVED") {
-			t.Errorf("preview = %q, want UNRESOLVED", got)
-		}
-		if strings.Contains(got, "none") {
-			t.Errorf("preview = %q reports none after a failed read — reads as safe when it is unknown", got)
-		}
-	})
+		})
+	}
 }
 
 func TestApplyCodeQuality(t *testing.T) {
@@ -835,8 +601,7 @@ func TestApplyCodeQuality(t *testing.T) {
 			if detail != tc.wantDetail {
 				t.Fatalf("detail = %q, want %q", detail, tc.wantDetail)
 			}
-			patched := slices.ContainsFunc(*calls, func(c string) bool { return strings.Contains(c, "-X PATCH repos/o/r/code-quality/setup") })
-			if patched != tc.wantPatch {
+			if patched := countCalls(*calls, "-X PATCH repos/o/r/code-quality/setup") > 0; patched != tc.wantPatch {
 				t.Fatalf("PATCH sent = %v, want %v (calls %q)", patched, tc.wantPatch, *calls)
 			}
 		})
@@ -845,24 +610,17 @@ func TestApplyCodeQuality(t *testing.T) {
 
 func TestApplyPlanSkipsRulesetsWhenManagedSyncFails(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam.
-	orig := ghStdin
-	t.Cleanup(func() { ghStdin = orig })
-
-	var rulesetCalls int
-	ghStdin = func(_ string, args ...string) (string, error) {
-		joined := strings.Join(args, " ")
+	calls := stubGH(t, func(call string) (string, error) {
 		switch {
-		case strings.Contains(joined, "/contents/"):
-			return "", errors.New("gh: Not Found (HTTP 404)")
-		case strings.Contains(joined, "git/ref/heads/master"):
+		case strings.Contains(call, "/contents/"):
+			return "", errGHNotFound
+		case strings.Contains(call, "git/ref/heads/master"):
 			return "headoid123", nil
-		case strings.Contains(joined, "api graphql"):
+		case strings.Contains(call, "api graphql"):
 			return "", errors.New("workflow scope missing")
-		case strings.Contains(joined, "/rulesets"):
-			rulesetCalls++
 		}
 		return "", nil
-	}
+	})
 
 	plan := &repocfg.Plan{Ops: []repocfg.Op{
 		{Method: http.MethodPut, Path: "repos/o/r/contents/.github/workflows/merge-gate.yaml", Content: "name: merge gate\n"},
@@ -871,63 +629,49 @@ func TestApplyPlanSkipsRulesetsWhenManagedSyncFails(t *testing.T) {
 	if err := applyPlan(io.Discard, testTarget, plan); err == nil {
 		t.Fatal("managed sync failure must fail the apply")
 	}
-	if rulesetCalls != 0 {
-		t.Errorf("issued %d ruleset call(s) after managed sync failed, want 0", rulesetCalls)
+	if n := countCalls(*calls, "/rulesets"); n != 0 {
+		t.Errorf("issued %d ruleset call(s) after managed sync failed, want 0", n)
 	}
 }
 
 func TestInfraDisabledStateOperationsAreIdempotent(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam.
-	orig := ghStdin
-	t.Cleanup(func() { ghStdin = orig })
-
-	var pagesCalls, alertCalls int
-	ghStdin = func(_ string, args ...string) (string, error) {
-		joined := strings.Join(args, " ")
-		switch {
-		case strings.Contains(joined, "/pages"):
-			pagesCalls++
-			if pagesCalls > 1 {
-				return "", errors.New("gh: Not Found (HTTP 404)")
+	pagesGone := false
+	calls := stubGH(t, func(call string) (string, error) {
+		if strings.Contains(call, "/pages") {
+			if pagesGone {
+				return "", errGHNotFound
 			}
-		case strings.Contains(joined, "/vulnerability-alerts"):
-			alertCalls++
+			pagesGone = true
 		}
 		return "", nil
-	}
+	})
 
 	pages := repocfg.Op{Method: http.MethodDelete, Path: "repos/o/infra/pages"}
-	if got, err := applyPages(pages); err != nil || got != "disabled" {
-		t.Fatalf("first Pages disable = (%q, %v), want (disabled, nil)", got, err)
-	}
-	if got, err := applyPages(pages); err != nil || got != "already disabled" {
-		t.Fatalf("second Pages disable = (%q, %v), want (already disabled, nil)", got, err)
-	}
-
 	alerts := repocfg.Op{Method: http.MethodPut, Path: "repos/o/infra/vulnerability-alerts"}
-	for i := range 2 {
+	for _, wantPages := range []string{"disabled", "already disabled"} {
+		if got, err := applyPages(pages); err != nil || got != wantPages {
+			t.Fatalf("Pages disable = (%q, %v), want (%s, nil)", got, err, wantPages)
+		}
 		if got, err := applyVulnerabilityAlerts(alerts); err != nil || got != "enabled" {
-			t.Fatalf("alerts enable %d = (%q, %v), want (enabled, nil)", i+1, got, err)
+			t.Fatalf("alerts enable = (%q, %v), want (enabled, nil)", got, err)
 		}
 	}
-	if pagesCalls != 2 || alertCalls != 2 {
-		t.Errorf("Pages/alerts calls = %d/%d, want 2/2", pagesCalls, alertCalls)
+	if p, a := countCalls(*calls, "/pages"), countCalls(*calls, "/vulnerability-alerts"); p != 2 || a != 2 {
+		t.Errorf("Pages/alerts calls = %d/%d, want 2/2", p, a)
 	}
 }
 
 func TestStageContentDeletionIsIdempotent(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam.
-	orig := ghStdin
-	t.Cleanup(func() { ghStdin = orig })
-
-	var reads int
-	ghStdin = func(string, ...string) (string, error) {
-		reads++
-		if reads == 1 {
+	exists := true
+	stubGH(t, func(string) (string, error) {
+		if exists {
+			exists = false
 			return "existing-sha", nil
 		}
-		return "", errors.New("gh: Not Found (HTTP 404)")
-	}
+		return "", errGHNotFound
+	})
 	op := repocfg.Op{Method: http.MethodDelete, Path: "repos/o/infra/contents/.github/workflows/release-train.yaml"}
 
 	change, unchanged, err := stageContentDeletion(op)
@@ -938,13 +682,4 @@ func TestStageContentDeletionIsIdempotent(t *testing.T) {
 	if err != nil || !unchanged || change != (contentChange{}) {
 		t.Fatalf("missing deletion = (%+v, %v, %v), want unchanged", change, unchanged, err)
 	}
-}
-
-// testTarget is the repository the applyPlan tests reconcile.
-var testTarget = &repocfg.RepoTarget{Org: "o", Repo: "r", DefaultBranch: branchMaster}
-
-// liveOf reads a repository's live rulesets through the gh seam, as applyPlan
-// does once per run.
-func liveOf(org, repo string) func() (map[string]string, error) {
-	return func() (map[string]string, error) { return liveRulesets(org, repo) }
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"io"
 	"testing"
 )
@@ -12,91 +13,47 @@ func TestUpdateRepo(t *testing.T) {
 
 	cases := []struct {
 		name string
-		// setup prepares the local clone; seed pushes to its origin.
-		setup      func(t *testing.T, local, seed string)
+		// The local clone checks out branch (when set), origin advances a.txt
+		// (when advance), then dirty is written to the clone's working tree.
+		branch  string
+		advance bool
+		dirty   map[string]string
+
 		wantStatus string
-		// check inspects the clone, given its HEAD before the update.
-		check func(t *testing.T, local, headBefore string)
+		// wantFF: local master reaches origin/master; otherwise it stays put.
+		wantFF    bool
+		wantFiles map[string]string
 	}{
 		{
 			name:       "OnDefaultBranch/CleanFastForwards",
-			setup:      func(t *testing.T, _, seed string) { advanceOrigin(t, seed) },
-			wantStatus: syncUpdated,
-			check: func(t *testing.T, local, _ string) {
-				if got, want := gitOut(t, local, "rev-parse", "refs/heads/master"), gitOut(t, local, "rev-parse", "refs/remotes/origin/master"); got != want {
-					t.Errorf("local master %s not fast-forwarded to origin %s", got, want)
-				}
-				if got := readFixture(t, local, "a.txt"); got != "a1\n" {
-					t.Errorf("a.txt = %q, want the pulled content", got)
-				}
-			},
+			advance:    true,
+			wantStatus: syncUpdated, wantFF: true,
+			wantFiles: map[string]string{"a.txt": "a1\n"},
 		},
 		{
 			// An unrelated unstaged change survives the fast-forward.
-			name: "OnDefaultBranch/UnrelatedDirtyPreserved",
-			setup: func(t *testing.T, local, seed string) {
-				advanceOrigin(t, seed)
-				writeFixture(t, local, "b.txt", "local-wip\n")
-			},
-			wantStatus: syncUpdated,
-			check: func(t *testing.T, local, _ string) {
-				if got := readFixture(t, local, "b.txt"); got != "local-wip\n" {
-					t.Errorf("unstaged b.txt = %q, want it preserved", got)
-				}
-				if got := readFixture(t, local, "a.txt"); got != "a1\n" {
-					t.Errorf("a.txt = %q, want the pulled content", got)
-				}
-			},
+			name:    "OnDefaultBranch/UnrelatedDirtyPreserved",
+			advance: true, dirty: map[string]string{"b.txt": "local-wip\n"},
+			wantStatus: syncUpdated, wantFF: true,
+			wantFiles: map[string]string{"a.txt": "a1\n", "b.txt": "local-wip\n"},
 		},
 		{
 			// A conflicting unstaged change is never clobbered: sync skips and
 			// leaves both HEAD and the working tree as they were.
-			name: "OnDefaultBranch/ConflictingDirtySkipped",
-			setup: func(t *testing.T, local, seed string) {
-				advanceOrigin(t, seed)
-				writeFixture(t, local, "a.txt", "my-wip\n")
-			},
+			name:    "OnDefaultBranch/ConflictingDirtySkipped",
+			advance: true, dirty: map[string]string{"a.txt": "my-wip\n"},
 			wantStatus: syncSkipped,
-			check: func(t *testing.T, local, headBefore string) {
-				if got := gitOut(t, local, "rev-parse", "HEAD"); got != headBefore {
-					t.Errorf("HEAD moved to %s despite the conflict; want %s", got, headBefore)
-				}
-				if got := readFixture(t, local, "a.txt"); got != "my-wip\n" {
-					t.Errorf("unstaged a.txt = %q, want it left untouched", got)
-				}
-			},
+			wantFiles:  map[string]string{"a.txt": "my-wip\n"},
 		},
 		{
 			// Off the default branch, the master ref advances without leaving
 			// the feature branch or touching the working tree.
-			name: "OffDefaultBranch/UpdatesRefOnly",
-			setup: func(t *testing.T, local, seed string) {
-				mustGit(t, local, "checkout", "--quiet", "-b", "feature")
-				advanceOrigin(t, seed)
-				writeFixture(t, local, "b.txt", "feature-wip\n")
-			},
-			wantStatus: syncUpdated,
-			check: func(t *testing.T, local, _ string) {
-				if got := gitOut(t, local, "symbolic-ref", "--short", "HEAD"); got != "feature" {
-					t.Errorf("HEAD = %q, want to stay on 'feature'", got)
-				}
-				if master, origin := gitOut(t, local, "rev-parse", "refs/heads/master"), gitOut(t, local, "rev-parse", "refs/remotes/origin/master"); master != origin {
-					t.Errorf("master %s not fast-forwarded to origin %s", master, origin)
-				}
-				if got := readFixture(t, local, "b.txt"); got != "feature-wip\n" {
-					t.Errorf("unstaged b.txt = %q, want it preserved", got)
-				}
-				if got := readFixture(t, local, "a.txt"); got != "a0\n" {
-					t.Errorf("a.txt = %q, want the feature-branch content untouched", got)
-				}
-			},
+			name:   "OffDefaultBranch/UpdatesRefOnly",
+			branch: "feature", advance: true, dirty: map[string]string{"b.txt": "feature-wip\n"},
+			wantStatus: syncUpdated, wantFF: true,
+			wantFiles: map[string]string{"a.txt": "a0\n", "b.txt": "feature-wip\n"},
 		},
-		{
-			name:       "UpToDate",
-			setup:      func(*testing.T, string, string) {},
-			wantStatus: syncUpToDate,
-			check:      func(*testing.T, string, string) {},
-		},
+		{name: "UpToDate", wantStatus: syncUpToDate, wantFF: true},
 	}
 
 	for _, c := range cases {
@@ -104,17 +61,36 @@ func TestUpdateRepo(t *testing.T) {
 			t.Parallel()
 
 			local, seed := initSyncRepo(t)
-			c.setup(t, local, seed)
-			headBefore := gitOut(t, local, "rev-parse", "HEAD")
+			if c.branch != "" {
+				mustGit(t, local, "checkout", "--quiet", "-b", c.branch)
+			}
+			if c.advance {
+				advanceOrigin(t, seed)
+			}
+			for name, content := range c.dirty {
+				writeFixture(t, local, name, content)
+			}
+			masterBefore := gitOut(t, local, "rev-parse", "refs/heads/master")
 
 			status, err := updateRepo(local, io.Discard)
-			if err != nil {
-				t.Fatalf("updateRepo: %v", err)
+			if err != nil || status != c.wantStatus {
+				t.Fatalf("updateRepo = (%q, %v), want %q", status, err, c.wantStatus)
 			}
-			if status != c.wantStatus {
-				t.Fatalf("status = %q, want %q", status, c.wantStatus)
+			wantMaster := masterBefore
+			if c.wantFF {
+				wantMaster = gitOut(t, local, "rev-parse", "refs/remotes/origin/master")
 			}
-			c.check(t, local, headBefore)
+			if got := gitOut(t, local, "rev-parse", "refs/heads/master"); got != wantMaster {
+				t.Errorf("local master = %s, want %s (fast-forward %v)", got, wantMaster, c.wantFF)
+			}
+			if got, want := gitOut(t, local, "symbolic-ref", "--short", "HEAD"), cmp.Or(c.branch, branchMaster); got != want {
+				t.Errorf("HEAD = %q, want to stay on %q", got, want)
+			}
+			for name, want := range c.wantFiles {
+				if got := readFixture(t, local, name); got != want {
+					t.Errorf("%s = %q, want %q", name, got, want)
+				}
+			}
 		})
 	}
 }

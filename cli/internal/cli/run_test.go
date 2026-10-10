@@ -32,25 +32,13 @@ func TestExecResult(t *testing.T) {
 
 	for _, c := range cases {
 		err := execResult(c.exitCode)
-
 		var exitErr *ExitError
-
-		isExit := errors.As(err, &exitErr)
-
-		switch {
-		case c.wantErr:
-			if err == nil || isExit {
-				t.Errorf("execResult(%s): got (%v, isExitError=%v) want a non-ExitError error",
-					c.name, err, isExit)
-			}
-		case c.wantExit == 0:
-			if err != nil {
-				t.Errorf("execResult(%s): got %v want nil", c.name, err)
-			}
-		case !isExit:
-			t.Errorf("execResult(%s): got %v want an *ExitError", c.name, err)
-		case exitErr.Code != c.wantExit:
-			t.Errorf("execResult(%s): got exit code %d want %d", c.name, exitErr.Code, c.wantExit)
+		gotExit := 0
+		if errors.As(err, &exitErr) {
+			gotExit = exitErr.Code
+		}
+		if gotExit != c.wantExit || (err != nil && gotExit == 0) != c.wantErr {
+			t.Errorf("execResult(%s) = %v, want exit code %d (non-exit error %v)", c.name, err, c.wantExit, c.wantErr)
 		}
 	}
 }

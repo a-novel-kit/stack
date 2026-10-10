@@ -1,8 +1,8 @@
 package cli
 
 import (
-	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -10,101 +10,52 @@ import (
 func TestStampFile(t *testing.T) {
 	t.Parallel()
 
-	testCases := []struct {
-		name string
-
-		content string
-		prefix  string
-		version string
-
-		expectCount   int
-		expectContent string
-		expectErr     bool
+	for _, tc := range []struct {
+		name, content, prefix, version string
+		wantCount                      int
+		wantContent                    string
+		wantErr                        bool
 	}{
 		{
-			name: "openapi version line",
-
-			content: "info:\n  version: v1.2.3\n",
-			prefix:  "version: ",
-			version: "2.0.0",
-
-			expectCount:   1,
-			expectContent: "info:\n  version: v2.0.0\n",
+			name: "Success/OpenAPIVersionLine", content: "info:\n  version: v1.2.3\n", prefix: "version: ", version: "2.0.0",
+			wantCount: 1, wantContent: "info:\n  version: v2.0.0\n",
 		},
 		{
-			name: "module path with regex prefix",
-
-			content: "go get github.com/a-novel/service-json-keys/v2@v2.1.3\n",
-			prefix:  "a-novel/service-json-keys/[^/]+",
-			version: "2.2.0",
-
-			expectCount:   1,
-			expectContent: "go get github.com/a-novel/service-json-keys/v2@v2.2.0\n",
+			name:    "Success/ModulePathWithRegexPrefix",
+			content: "go get github.com/a-novel/service-json-keys/v2@v2.1.3\n", prefix: "a-novel/service-json-keys/[^/]+", version: "2.2.0",
+			wantCount: 1, wantContent: "go get github.com/a-novel/service-json-keys/v2@v2.2.0\n",
 		},
 		{
-			name: "multiple occurrences all stamped",
-
-			content: "version: v1.0.0\nversion: v1.0.0\n",
-			prefix:  "version: ",
-			version: "1.1.0",
-
-			expectCount:   2,
-			expectContent: "version: v1.1.0\nversion: v1.1.0\n",
+			name: "Success/EveryOccurrence", content: "version: v1.0.0\nversion: v1.0.0\n", prefix: "version: ", version: "1.1.0",
+			wantCount: 2, wantContent: "version: v1.1.0\nversion: v1.1.0\n",
 		},
 		{
-			name: "no match leaves file untouched",
-
-			content: "nothing to see here\n",
-			prefix:  "version: ",
-			version: "9.9.9",
-
-			expectCount:   0,
-			expectContent: "nothing to see here\n",
+			name: "Success/NoMatchLeavesFileUntouched", content: "nothing to see here\n", prefix: "version: ", version: "9.9.9",
+			wantContent: "nothing to see here\n",
 		},
-		{
-			name: "invalid prefix regex",
-
-			content: "version: v1.0.0\n",
-			prefix:  "version: (",
-			version: "1.1.0",
-
-			expectErr: true,
-		},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
+		{name: "Error/InvalidPrefixRegex", content: "version: v1.0.0\n", prefix: "version: (", version: "1.1.0", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			path := filepath.Join(t.TempDir(), "doc.md")
-			if err := os.WriteFile(path, []byte(testCase.content), 0o600); err != nil {
-				t.Fatalf("write fixture: %v", err)
-			}
-
-			re, err := stampPattern(testCase.prefix)
+			dir := t.TempDir()
+			writeFixture(t, dir, "doc.md", tc.content)
+			re, err := stampPattern(tc.prefix)
 			count := 0
 			if err == nil {
-				count, err = stampFile(path, re, testCase.version)
+				count, err = stampFile(filepath.Join(dir, "doc.md"), re, tc.version)
 			}
-			if testCase.expectErr {
+			if tc.wantErr {
 				if err == nil {
 					t.Fatal("expected an error, got none")
 				}
 				return
 			}
-			if err != nil {
-				t.Fatalf("stampFile: %v", err)
+			if err != nil || count != tc.wantCount {
+				t.Fatalf("stampFile = (%d, %v), want %d", count, err, tc.wantCount)
 			}
-			if count != testCase.expectCount {
-				t.Errorf("count = %d, want %d", count, testCase.expectCount)
-			}
-
-			got, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("read back: %v", err)
-			}
-			if string(got) != testCase.expectContent {
-				t.Errorf("content = %q, want %q", got, testCase.expectContent)
+			if got := readFixture(t, dir, "doc.md"); got != tc.wantContent {
+				t.Errorf("content = %q, want %q", got, tc.wantContent)
 			}
 		})
 	}
@@ -113,68 +64,26 @@ func TestStampFile(t *testing.T) {
 func TestReadPackageVersion(t *testing.T) {
 	t.Parallel()
 
-	testCases := []struct {
-		name string
-
-		packageJSON string
-		missingFile bool
-
-		expect    string
-		expectErr bool
+	for _, tc := range []struct {
+		name        string
+		packageJSON string // "" leaves the file absent
+		want        string
+		wantErr     bool
 	}{
-		{
-			name: "plain version",
-
-			packageJSON: `{"name": "stack", "version": "1.4.2"}`,
-
-			expect: "1.4.2",
-		},
-		{
-			name: "missing version field",
-
-			packageJSON: `{"name": "stack"}`,
-
-			expectErr: true,
-		},
-		{
-			name: "invalid json",
-
-			packageJSON: `{`,
-
-			expectErr: true,
-		},
-		{
-			name: "missing file",
-
-			missingFile: true,
-
-			expectErr: true,
-		},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
+		{name: "Success", packageJSON: `{"name": "stack", "version": "1.4.2"}`, want: "1.4.2"},
+		{name: "Error/MissingVersion", packageJSON: `{"name": "stack"}`, wantErr: true},
+		{name: "Error/InvalidJSON", packageJSON: `{`, wantErr: true},
+		{name: "Error/MissingFile", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			root := t.TempDir()
-			if !testCase.missingFile {
-				if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(testCase.packageJSON), 0o600); err != nil {
-					t.Fatalf("write fixture: %v", err)
-				}
+			if tc.packageJSON != "" {
+				writeFixture(t, root, "package.json", tc.packageJSON)
 			}
-
-			got, err := readPackageVersion(root)
-			if testCase.expectErr {
-				if err == nil {
-					t.Fatal("expected an error, got none")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("readPackageVersion: %v", err)
-			}
-			if got != testCase.expect {
-				t.Errorf("version = %q, want %q", got, testCase.expect)
+			if got, err := readPackageVersion(root); (err != nil) != tc.wantErr || got != tc.want {
+				t.Fatalf("readPackageVersion = (%q, %v), want (%q, error %v)", got, err, tc.want, tc.wantErr)
 			}
 		})
 	}
@@ -185,135 +94,87 @@ func TestResolveStampTargets(t *testing.T) {
 
 	dir := t.TempDir()
 	for _, rel := range []string{"a/x/action.yaml", "a/y/action.yaml", "b/z/action.yaml", "top.yaml", "weird[1].yaml"} {
-		full := filepath.Join(dir, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatal(err)
+		writeFixture(t, dir, rel, "x")
+	}
+	in := func(rels ...string) []string {
+		out := make([]string, len(rels))
+		for i, rel := range rels {
+			out[i] = filepath.Join(dir, rel)
 		}
-		if err := os.WriteFile(full, []byte("x"), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		return out
 	}
+	actions := in("a/x/action.yaml", "a/y/action.yaml", "b/z/action.yaml")
 
-	// glob across two levels matches the three action files, not top.yaml.
-	got, err := resolveStampTargets([]string{filepath.Join(dir, "*", "*", "action.yaml")})
-	if err != nil {
-		t.Fatalf("glob: %v", err)
-	}
-	if len(got) != 3 {
-		t.Fatalf("glob matched %d files, want 3: %v", len(got), got)
-	}
-
-	// a literal path resolves to itself.
-	got, err = resolveStampTargets([]string{filepath.Join(dir, "top.yaml")})
-	if err != nil || len(got) != 1 {
-		t.Fatalf("literal: got %v err %v", got, err)
-	}
-
-	// a literal filename containing glob metacharacters resolves to itself,
-	// with the brackets taken literally.
-	weird := filepath.Join(dir, "weird[1].yaml")
-	got, err = resolveStampTargets([]string{weird})
-	if err != nil || len(got) != 1 || got[0] != weird {
-		t.Fatalf("literal-with-metachars: got %v err %v, want [%s]", got, err, weird)
-	}
-
-	// overlapping patterns de-dupe.
-	got, err = resolveStampTargets([]string{
-		filepath.Join(dir, "a", "*", "action.yaml"),
-		filepath.Join(dir, "*", "*", "action.yaml"),
-	})
-	if err != nil || len(got) != 3 {
-		t.Fatalf("dedupe: got %d %v err %v", len(got), got, err)
-	}
-
-	// nothing matched is an error (catches typos).
-	if _, err := resolveStampTargets([]string{filepath.Join(dir, "nope", "*.yaml")}); err == nil {
-		t.Fatal("expected an error when nothing matches")
+	for _, tc := range []struct {
+		name     string
+		patterns []string
+		want     []string // nil: the patterns must be refused
+	}{
+		// A glob across two levels matches the three action files, not top.yaml.
+		{name: "Success/Glob", patterns: in("*/*/action.yaml"), want: actions},
+		{name: "Success/Literal", patterns: in("top.yaml"), want: in("top.yaml")},
+		// Glob metacharacters in a literal filename are taken literally.
+		{name: "Success/LiteralWithMetachars", patterns: in("weird[1].yaml"), want: in("weird[1].yaml")},
+		{name: "Success/OverlappingPatternsDedupe", patterns: in("a/*/action.yaml", "*/*/action.yaml"), want: actions},
+		// Nothing matched is an error: it catches typos.
+		{name: "Error/NothingMatches", patterns: in("nope/*.yaml")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := resolveStampTargets(tc.patterns)
+			slices.Sort(got)
+			if (err != nil) != (tc.want == nil) || !slices.Equal(got, tc.want) {
+				t.Fatalf("resolveStampTargets(%v) = (%v, %v), want %v", tc.patterns, got, err, tc.want)
+			}
+		})
 	}
 }
 
 func TestStampTargets(t *testing.T) {
 	t.Parallel()
 
-	write := func(t *testing.T, dir, rel, content string) string {
-		t.Helper()
-
-		full := filepath.Join(dir, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-
-		return full
-	}
-
-	t.Run("a matched reference is stamped", func(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
-
 		dir := t.TempDir()
-		f := write(t, dir, "README.md", "go get x@v1.0.0\n")
-
-		total, fileCount, err := stampTargets([]string{f}, "x@", "1.1.0")
-		if err != nil {
-			t.Fatalf("stampTargets: %v", err)
+		writeFixture(t, dir, "README.md", "go get x@v1.0.0\n")
+		total, files, err := stampTargets([]string{filepath.Join(dir, "README.md")}, "x@", "1.1.0")
+		if err != nil || total != 1 || files != 1 {
+			t.Fatalf("stampTargets = (%d, %d, %v), want (1, 1, nil)", total, files, err)
 		}
-
-		if total != 1 || fileCount != 1 {
-			t.Errorf("got total=%d files=%d, want 1 and 1", total, fileCount)
-		}
-
-		got, _ := os.ReadFile(f)
-		if string(got) != "go get x@v1.1.0\n" {
+		if got := readFixture(t, dir, "README.md"); got != "go get x@v1.1.0\n" {
 			t.Errorf("content = %q", got)
 		}
 	})
 
-	t.Run("zero matches across every file is an error", func(t *testing.T) {
+	t.Run("Success/OneMatchAmongSeveralFiles", func(t *testing.T) {
 		t.Parallel()
-
+		// The aggregate must be non-zero; a file that legitimately holds no
+		// reference is not itself a failure.
 		dir := t.TempDir()
-		a := write(t, dir, "a.md", "nothing here\n")
-		b := write(t, dir, "b.md", "nor here\n")
-
-		_, _, err := stampTargets([]string{a, b}, "version: ", "1.1.0")
-		if err == nil {
-			t.Fatal("stampTargets: got nil, want an error for a pattern that matched nothing")
+		writeFixture(t, dir, "has.md", "x@v1.0.0\n")
+		writeFixture(t, dir, "none.md", "unrelated\n")
+		total, files, err := stampTargets([]string{filepath.Join(dir, "has.md"), filepath.Join(dir, "none.md")}, "x@", "1.1.0")
+		if err != nil || total != 1 || files != 2 {
+			t.Fatalf("stampTargets = (%d, %d, %v), want (1, 2, nil)", total, files, err)
 		}
+	})
 
+	t.Run("Error/ZeroMatches", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeFixture(t, dir, "a.md", "nothing here\n")
+		writeFixture(t, dir, "b.md", "nor here\n")
+		_, _, err := stampTargets([]string{filepath.Join(dir, "a.md"), filepath.Join(dir, "b.md")}, "version: ", "1.1.0")
 		// The message names the pattern and the files it swept, so a broken
 		// prepublish:doc script points at its own line.
-		if !strings.Contains(err.Error(), "version: ") || !strings.Contains(err.Error(), "a.md") {
-			t.Errorf("error = %q, want the pattern and the files named", err)
+		if err == nil || !strings.Contains(err.Error(), "version: ") || !strings.Contains(err.Error(), "a.md") {
+			t.Errorf("error = %v, want the pattern and the files named", err)
 		}
 	})
 
-	t.Run("a match in one file of several still succeeds", func(t *testing.T) {
+	t.Run("Error/NoFilesMatched", func(t *testing.T) {
 		t.Parallel()
-
-		// The aggregate is what must be non-zero; a file that legitimately holds
-		// no reference is not itself a failure.
-		dir := t.TempDir()
-		hit := write(t, dir, "has.md", "x@v1.0.0\n")
-		miss := write(t, dir, "none.md", "unrelated\n")
-
-		total, fileCount, err := stampTargets([]string{hit, miss}, "x@", "1.1.0")
-		if err != nil {
-			t.Fatalf("stampTargets: %v", err)
-		}
-
-		if total != 1 || fileCount != 2 {
-			t.Errorf("got total=%d files=%d, want 1 and 2", total, fileCount)
-		}
-	})
-
-	t.Run("no files matched is still an error", func(t *testing.T) {
-		t.Parallel()
-
-		_, _, err := stampTargets([]string{filepath.Join(t.TempDir(), "absent-*.md")}, "x@", "1.1.0")
-		if err == nil {
+		if _, _, err := stampTargets([]string{filepath.Join(t.TempDir(), "absent-*.md")}, "x@", "1.1.0"); err == nil {
 			t.Fatal("stampTargets: got nil, want the no-files-matched error")
 		}
 	})

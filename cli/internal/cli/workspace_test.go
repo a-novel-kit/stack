@@ -1,30 +1,28 @@
 package cli
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
-	"strings"
+	"slices"
 	"testing"
 )
 
-// TestWorkspaceCheckouts builds a fake workspace — a git repo at the root
-// with an origin remote, a whitelist file, and a few clone markers under app/
-// and kit/ — and checks the sweep surfaces exactly the pulled repos: the stack
-// itself (from root), every whitelisted checkout present on disk, no
-// not-yet-cloned entry, and the stack only once even when the whitelist lists it.
+// TestWorkspaceCheckouts builds a fake workspace (a git repo at the root with
+// an origin remote, a whitelist, and clone markers under app/ and kit/) and
+// checks the sweep surfaces exactly the pulled repos: the stack itself, from
+// the root and only once, plus every whitelisted checkout present on disk.
 func TestWorkspaceCheckouts(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	mustGit(t, root, "init", "--quiet")
 	mustGit(t, root, "remote", "add", "origin", "git@github.com:a-novel-kit/stack.git")
-	writeFixture(t, root, repoWhitelistFile, strings.Join([]string{
-		"repos:",
-		"  - a-novel-kit/golib",
-		"  - a-novel-kit/nodelib", // listed but not cloned → absent
-		"  - a-novel/service-json-keys",
-		"  - a-novel-kit/stack", // duplicate of the root → deduped
-		"",
-	}, "\n"))
+	writeFixture(t, root, repoWhitelistFile, `repos:
+  - a-novel-kit/golib
+  - a-novel-kit/nodelib # listed but not cloned
+  - a-novel/service-json-keys
+  - a-novel-kit/stack # the root itself
+`)
 	// workspaceCheckouts only stats <dir>/.git, so a marker dir is enough.
 	for _, d := range []string{"kit/golib", "app/service-json-keys", "kit/stack"} {
 		if err := os.MkdirAll(filepath.Join(root, d, ".git"), 0o755); err != nil {
@@ -36,83 +34,51 @@ func TestWorkspaceCheckouts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("workspaceCheckouts: %v", err)
 	}
-	byName := map[string]checkout{}
+	dirs := map[string]string{}
 	for _, c := range got {
-		if _, dup := byName[c.FullName()]; dup {
-			t.Fatalf("%s appears twice in checkouts", c.FullName())
-		}
-		byName[c.FullName()] = c
+		dirs[c.FullName()] = c.dir
 	}
-	for _, want := range []string{"a-novel-kit/stack", "a-novel-kit/golib", "a-novel/service-json-keys"} {
-		if _, ok := byName[want]; !ok {
-			t.Errorf("missing candidate %q (got %v)", want, keys(byName))
-		}
+	want := map[string]string{
+		"a-novel-kit/stack":         root,
+		"a-novel-kit/golib":         filepath.Join(root, "kit", "golib"),
+		"a-novel/service-json-keys": filepath.Join(root, "app", "service-json-keys"),
 	}
-	if _, ok := byName["a-novel-kit/nodelib"]; ok {
-		t.Errorf("nodelib is not cloned; it must not be a candidate (got %v)", keys(byName))
-	}
-	if len(got) != 3 {
-		t.Errorf("want 3 candidates, got %d (%v)", len(got), keys(byName))
-	}
-	if dir := byName["a-novel-kit/stack"].dir; dir != root {
-		t.Errorf("stack candidate dir = %q, want the workspace root %q", dir, root)
+	if len(got) != len(want) || !maps.Equal(dirs, want) {
+		t.Errorf("checkouts = %+v, want %v", got, want)
 	}
 }
 
 func TestLoadRepoWhitelist(t *testing.T) {
 	t.Parallel()
 
-	t.Run("valid list parses org and name", func(t *testing.T) {
-		t.Parallel()
-		root := t.TempDir()
-		writeFixture(t, root, repoWhitelistFile,
-			"repos:\n  - a-novel-kit/jwt\n  - a-novel/service-json-keys\n")
-		got, err := loadRepoWhitelist(root)
-		if err != nil {
-			t.Fatalf("loadRepoWhitelist: %v", err)
-		}
-		want := []repoEntry{
-			{Org: orgAnovelKit, Name: "jwt"},
-			{Org: orgAnovel, Name: "service-json-keys"},
-		}
-		if len(got) != len(want) {
-			t.Fatalf("got %d entries, want %d: %+v", len(got), len(want), got)
-		}
-		for i := range want {
-			if got[i] != want[i] {
-				t.Errorf("entry %d = %+v, want %+v", i, got[i], want[i])
+	for _, tc := range []struct {
+		name    string
+		content string // "" leaves the file absent
+		want    []repoEntry
+		wantErr bool
+	}{
+		{
+			name:    "Success",
+			content: "repos:\n  - a-novel-kit/jwt\n  - a-novel/service-json-keys\n",
+			want:    []repoEntry{{Org: orgAnovelKit, Name: "jwt"}, {Org: orgAnovel, Name: "service-json-keys"}},
+		},
+		// An absent file is nothing to sync, not an error.
+		{name: "Success/AbsentFile"},
+		{name: "Error/NoSlash", content: "repos:\n  - golib\n", wantErr: true},
+		{name: "Error/UnknownOrg", content: "repos:\n  - github/whatever\n", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			if tc.content != "" {
+				writeFixture(t, root, repoWhitelistFile, tc.content)
 			}
-		}
-	})
-
-	t.Run("absent file is nothing to sync, not an error", func(t *testing.T) {
-		t.Parallel()
-		got, err := loadRepoWhitelist(t.TempDir())
-		if err != nil {
-			t.Fatalf("loadRepoWhitelist on missing file: %v", err)
-		}
-		if got != nil {
-			t.Errorf("got %+v, want nil", got)
-		}
-	})
-
-	t.Run("entry without a slash is rejected", func(t *testing.T) {
-		t.Parallel()
-		root := t.TempDir()
-		writeFixture(t, root, repoWhitelistFile, "repos:\n  - golib\n")
-		if _, err := loadRepoWhitelist(root); err == nil {
-			t.Error("expected an error for a slash-less entry, got nil")
-		}
-	})
-
-	t.Run("unknown org is rejected", func(t *testing.T) {
-		t.Parallel()
-		root := t.TempDir()
-		writeFixture(t, root, repoWhitelistFile, "repos:\n  - github/whatever\n")
-		if _, err := loadRepoWhitelist(root); err == nil {
-			t.Error("expected an error for an unknown org, got nil")
-		}
-	})
+			got, err := loadRepoWhitelist(root)
+			if (err != nil) != tc.wantErr || !slices.Equal(got, tc.want) {
+				t.Fatalf("loadRepoWhitelist = (%+v, %v), want (%+v, error %v)", got, err, tc.want, tc.wantErr)
+			}
+		})
+	}
 }
 
 // TestRepoEntryListed checks a filter set names a repo by its full
@@ -139,15 +105,6 @@ func TestRepoEntryListed(t *testing.T) {
 			}
 		})
 	}
-}
-
-// keys returns the map keys, for readable failure messages.
-func keys(m map[string]checkout) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }
 
 // TestRepoEntryDir pins where each repository checks out under the workspace

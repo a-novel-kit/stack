@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"errors"
 	"strings"
 	"testing"
 
@@ -11,53 +10,36 @@ import (
 
 func TestRepoCreateInfraDefaultsPublicAndBootstrapsBeforeRulesets(t *testing.T) {
 	// Not parallel: swaps package-level command seams.
-	origTTY := stdinIsTTY
-	origGH := ghStdin
-	t.Cleanup(func() {
-		stdinIsTTY = origTTY
-		ghStdin = origGH
-	})
-	stdinIsTTY = func() bool { return true }
-
-	var calls []string
-	var headReads int
-	ghStdin = func(stdin string, args ...string) (string, error) {
-		joined := strings.Join(args, " ")
-		if stdin != "" {
-			joined += " " + stdin
-		}
-		calls = append(calls, joined)
-
+	swap(t, &stdinIsTTY, func() bool { return true })
+	headReads := 0
+	recorded := stubGH(t, func(call string) (string, error) {
 		switch {
-		case strings.Contains(joined, "labels?per_page=100"):
+		case strings.Contains(call, "labels?per_page=100"):
 			return "[]", nil
-		case strings.Contains(joined, "git/ref/heads/master"):
+		case strings.Contains(call, "git/ref/heads/master"):
 			headReads++
 			if headReads == 1 {
-				return "", errors.New("gh: Git Repository is empty (HTTP 409)")
+				return "", errGHEmptyRepo
 			}
 			return "seedoid123", nil
-		case strings.Contains(joined, "api -X PUT repos/a-novel/infra/contents/"):
+		case strings.Contains(call, "api -X PUT repos/a-novel/infra/contents/"):
 			return "seedcommit123", nil
-		case strings.Contains(joined, "/contents/"):
-			return "", errors.New("gh: Not Found (HTTP 404)")
-		case strings.Contains(joined, "api graphql"):
+		case strings.Contains(call, "/contents/"):
+			return "", errGHNotFound
+		case strings.Contains(call, "api graphql"):
 			return "synccommit456", nil
-		default:
-			return "", nil
 		}
-	}
+		return "", nil
+	})
 
 	cmd := newRepoCreateCmd()
-	var out bytes.Buffer
 	cmd.SetIn(strings.NewReader("yes\n"))
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"a-novel", "infra"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("repo create infra: %v\n%s", err, out.String())
+	out, err := runCmd(t, cmd, "a-novel", "infra")
+	if err != nil {
+		t.Fatalf("repo create infra: %v\n%s", err, out)
 	}
 
+	calls := *recorded
 	joined := strings.Join(calls, "\n")
 	for _, want := range []string{
 		"repo create a-novel/infra --public",
@@ -79,8 +61,8 @@ func TestRepoCreateInfraDefaultsPublicAndBootstrapsBeforeRulesets(t *testing.T) 
 		t.Errorf("infra create attempted release mechanics:\n%s", joined)
 	}
 	for _, want := range []string{"class infra", "created and configured"} {
-		if !strings.Contains(out.String(), want) {
-			t.Errorf("create output missing %q:\n%s", want, out.String())
+		if !strings.Contains(out, want) {
+			t.Errorf("create output missing %q:\n%s", want, out)
 		}
 	}
 	if !strings.Contains(classFlagUsage(), "infra") {
