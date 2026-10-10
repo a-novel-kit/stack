@@ -98,6 +98,17 @@ EOF
   `HEAD` is then the previously replayed commit, so an amend folds the resolution into it and
   replaces its message. To undo it, `git reset --soft` to that commit from the reflog, commit the
   difference, and compare `HEAD^{tree}` with the amended tree to prove nothing else moved.
+- **Push Conventional subjects only.** The `commit-messages` ruleset rejects any other commit, on
+  every branch. Never push `fixup!`, `squash!`, `amend!` or work-in-progress commits: fold them in
+  before the first push with `git rebase --autosquash <base>`, or write the follow-up as its own
+  Conventional commit.
+- **Update a branch by rebasing onto its base, never by merging the base in.** A merge writes a
+  `Merge branch …` commit, which the ruleset rejects, and so does GitHub's default "Update branch".
+  Choose "Update with rebase", or run `git rebase origin/master` and `git push --force-with-lease`.
+  A rebase replays the branch's commits unchanged, so it is not the amend the rule above forbids.
+- **Revert with git, not GitHub's Revert button**, whose `Revert "…"` subject the ruleset rejects:
+  `git revert --no-commit <sha>`, then
+  `git commit -m "revert: <reverted subject>" -m "This reverts commit <sha>."`.
 - **Never push to `master`/`main` — not force-push, not a plain push — without explicit consent.**
   This is the one git action that is never safe by default. Most contributors lack the access, so
   the guardrail is already enforced for them; on an admin account it is _yours_ to hold, because you
