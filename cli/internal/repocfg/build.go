@@ -186,6 +186,20 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		p.Ops = append(p.Ops, op)
 	}
 
+	// The settings PATCH lets only collaborators open pull requests, and lock-pr
+	// limits each new conversation to collaborators. Any other policy deletes the
+	// workflow, so relaxing a class leaves no lock behind.
+	lockPR := Op{Method: http.MethodDelete, Path: repoPath + "/contents/.github/workflows/lock-pr.yaml"}
+	if c.Features.PullRequests == "collaborators_only" {
+		content, err := ReadTemplate("governance/lock-pr.yaml")
+		if err != nil {
+			return nil, err
+		}
+		lockPR.Method = http.MethodPut
+		lockPR.Content = string(content)
+	}
+	p.Ops = append(p.Ops, lockPR)
+
 	// Auto-approve the trusted dependency bots' PRs so their version bumps don't
 	// wait on a human. The workflow ships wherever require-approval holds them.
 	if c.Rulesets.RequireApproval {
@@ -363,20 +377,21 @@ func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor
 // SettingsBody is the PATCH /repos body for general + merge + security.
 func SettingsBody(c *ClassPreset) map[string]any {
 	return map[string]any{
-		"has_issues":                  c.Features.Issues,
-		"has_wiki":                    c.Features.Wiki,
-		"has_projects":                c.Features.Projects,
-		"has_discussions":             c.Features.Discussions,
-		"allow_squash_merge":          c.Merge.Squash,
-		"allow_merge_commit":          c.Merge.MergeCommit,
-		"allow_rebase_merge":          c.Merge.Rebase,
-		"allow_auto_merge":            c.Merge.AutoMerge,
-		"delete_branch_on_merge":      c.Merge.DeleteBranchOnMerge,
-		"allow_update_branch":         c.Merge.AllowUpdateBranch,
-		"web_commit_signoff_required": c.Merge.SignoffRequired,
-		"squash_merge_commit_title":   "COMMIT_OR_PR_TITLE",
-		"squash_merge_commit_message": "COMMIT_MESSAGES",
-		"security_and_analysis":       SecurityBlock(c),
+		"has_issues":                   c.Features.Issues,
+		"has_wiki":                     c.Features.Wiki,
+		"has_projects":                 c.Features.Projects,
+		"has_discussions":              c.Features.Discussions,
+		"pull_request_creation_policy": c.Features.PullRequests,
+		"allow_squash_merge":           c.Merge.Squash,
+		"allow_merge_commit":           c.Merge.MergeCommit,
+		"allow_rebase_merge":           c.Merge.Rebase,
+		"allow_auto_merge":             c.Merge.AutoMerge,
+		"delete_branch_on_merge":       c.Merge.DeleteBranchOnMerge,
+		"allow_update_branch":          c.Merge.AllowUpdateBranch,
+		"web_commit_signoff_required":  c.Merge.SignoffRequired,
+		"squash_merge_commit_title":    "COMMIT_OR_PR_TITLE",
+		"squash_merge_commit_message":  "COMMIT_MESSAGES",
+		"security_and_analysis":        SecurityBlock(c),
 	}
 }
 

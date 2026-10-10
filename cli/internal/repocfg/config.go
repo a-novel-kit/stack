@@ -85,6 +85,9 @@ type Features struct {
 	Wiki        bool `yaml:"wiki"`
 	Projects    bool `yaml:"projects"`
 	Discussions bool `yaml:"discussions"`
+	// PullRequests is who may open and comment on pull requests: "all" or
+	// "collaborators_only". The latter also ships the lock-pr workflow.
+	PullRequests string `yaml:"pull_requests"`
 }
 
 // Merge mirrors the merge-button + PR settings.

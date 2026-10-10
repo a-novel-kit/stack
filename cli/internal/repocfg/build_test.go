@@ -272,6 +272,51 @@ func TestBuildPlanProvisionsAutoApprove(t *testing.T) {
 	}
 }
 
+// TestBuildPlanProvisionsLockPR pins collaborator-only pull requests end to end:
+// the settings body carries the creation policy, and lock-pr ships with it. Any
+// other policy deletes the workflow, so relaxing a class leaves no lock behind.
+func TestBuildPlanProvisionsLockPR(t *testing.T) {
+	t.Parallel()
+
+	for policy, wantMethod := range map[string]string{
+		"collaborators_only": http.MethodPut,
+		"all":                http.MethodDelete,
+	} {
+		t.Run(policy, func(t *testing.T) {
+			t.Parallel()
+			plan, err := BuildPlan(&RepoTarget{
+				Org: "a-novel", Repo: "example",
+				Class:      &ClassPreset{Features: Features{PullRequests: policy}},
+				Discovered: &Discovered{},
+			})
+			if err != nil {
+				t.Fatalf("BuildPlan: %v", err)
+			}
+			var settings, lock *Op
+			for i := range plan.Ops {
+				switch {
+				case plan.Ops[i].Method == http.MethodPatch && plan.Ops[i].Path == "repos/a-novel/example":
+					settings = &plan.Ops[i]
+				case strings.HasSuffix(plan.Ops[i].Path, "/contents/.github/workflows/lock-pr.yaml"):
+					lock = &plan.Ops[i]
+				}
+			}
+			if settings == nil || lock == nil {
+				t.Fatalf("plan lacks the settings or lock-pr op (settings=%v lock=%v)", settings != nil, lock != nil)
+			}
+			if got := settings.Body.(map[string]any)["pull_request_creation_policy"]; got != policy {
+				t.Errorf("pull_request_creation_policy = %v, want %s", got, policy)
+			}
+			if lock.Method != wantMethod {
+				t.Errorf("lock-pr op method = %s, want %s", lock.Method, wantMethod)
+			}
+			if wantMethod == http.MethodPut && !strings.Contains(lock.Content, "/lock") {
+				t.Error("lock-pr content does not call the lock endpoint")
+			}
+		})
+	}
+}
+
 // contextsOf extracts the context names from a CheckRef slice, preserving order.
 func contextsOf(checks []CheckRef) []string {
 	out := make([]string, len(checks))

@@ -20,6 +20,9 @@ func TestLoadAllClasses(t *testing.T) {
 			if p.CodeQuality {
 				t.Error("code_quality = true, want false for every managed class")
 			}
+			if p.Features.PullRequests != "collaborators_only" {
+				t.Errorf("pull_requests = %q, want collaborators_only for every managed class", p.Features.PullRequests)
+			}
 		})
 	}
 }
@@ -192,6 +195,9 @@ func TestLoadRepoOverride(t *testing.T) {
 	}
 	if p.CodeQuality {
 		t.Error("stack code_quality = true, want false")
+	}
+	if p.Features.PullRequests != "collaborators_only" {
+		t.Errorf("stack pull_requests = %q, want collaborators_only", p.Features.PullRequests)
 	}
 
 	if _, ok, err := LoadRepoOverride("a-novel", "service-authentication"); err != nil || ok {
