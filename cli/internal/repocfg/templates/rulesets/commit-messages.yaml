@@ -1,23 +1,24 @@
-# Conventional Commits subjects on the default branch. On a squash merge GitHub
-# ignores the PR's own commits and checks only the commit that lands, whose
-# subject the repo settings take from the PR title. Commit metadata rules need
-# GitHub Enterprise.
+# Conventional Commits subjects on every commit pushed to any branch. A squash
+# merge lands one commit whose subject the repo settings take from the PR title
+# and whose body lists the branch's commit messages, so both parts are checked
+# before they can land. The merge queue's gh-readonly-queue branches are left
+# out: GitHub writes their commits from titles the rule already checked on the
+# PR. Dependabot is the only bypass actor; its commits follow the repo's style
+# but are not configured. Commit metadata rules need GitHub Enterprise.
 #
-# Evaluate records would-be violations in Rule Insights and blocks nothing.
-# Merge-queue commits match no bypass actor, and the epic-rollback and
-# hotfix-reconcile automation still opens PRs with other titles, so an active
-# rule would block those sagas. Tracked in https://github.com/a-novel-kit/stack/issues/530
+# Evaluate records would-be violations in Rule Insights and blocks nothing. The
+# release, hotfix, rollback and reconcile automation still writes other
+# messages, so an active rule would block those sagas.
+# Tracked in https://github.com/a-novel-kit/stack/issues/530
 name: commit-messages
 target: branch
 enforcement: evaluate
 conditions:
   ref_name:
-    include: ["~DEFAULT_BRANCH"]
-    exclude: []
+    include: ["~ALL"]
+    exclude: ["refs/heads/gh-readonly-queue/**"]
 bypass:
-  - admins
-  - publish
-  - agent
+  - dependabot
 rules:
   commit_message_pattern:
     name: Conventional Commits subject

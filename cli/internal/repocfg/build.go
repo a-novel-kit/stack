@@ -11,6 +11,9 @@ import (
 // adminRoleID is the built-in "admin" repository role.
 const adminRoleID int64 = 5
 
+// dependabotAppID is GitHub's Dependabot App.
+const dependabotAppID int64 = 29110
+
 // Ruleset bypass modes.
 const (
 	modeAlways = "always"
@@ -355,8 +358,9 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRu
 // resolveBypass maps one generic bypass entry to concrete actors. Admins
 // always bypass with mode "always"; bots bypass with "always" on master and
 // tags, where they write directly (the bump commit and the release tag), and
-// "exempt" on PR rulesets. An entry that resolves to nothing is an error, so a
-// typo in a ruleset template is caught before the bypass list ships.
+// "exempt" elsewhere. Dependabot is GitHub's own App, so its ID is the same in
+// every org. An entry that resolves to nothing is an error, so a typo in a
+// ruleset template is caught before the bypass list ships.
 func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor, error) {
 	botMode := modeExempt
 	if rulesetName == rulesetMaster || rulesetName == rulesetTags {
@@ -369,6 +373,9 @@ func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor
 			{ActorID: nil, ActorType: "OrganizationAdmin", BypassMode: modeAlways},
 			{ActorID: &role, ActorType: "RepositoryRole", BypassMode: modeAlways},
 		}, nil
+	case "dependabot":
+		id := dependabotAppID
+		return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}, nil
 	default:
 		if id, ok := org.Bots[entry]; ok {
 			id := id
@@ -376,7 +383,7 @@ func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor
 		}
 	}
 	return nil, fmt.Errorf("bypass entry %q in ruleset %q resolves to no actor "+
-		"(expected admins or an org bot key from orgs/<org>.yaml)", entry, rulesetName)
+		"(expected admins, dependabot or an org bot key from orgs/<org>.yaml)", entry, rulesetName)
 }
 
 // SettingsBody is the PATCH /repos body for general + merge + security.

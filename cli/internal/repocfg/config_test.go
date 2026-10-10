@@ -293,9 +293,9 @@ func TestBuildRulesetCreationRule(t *testing.T) {
 }
 
 // TestBuildRulesetCommitMessagePattern pins the commit-messages ruleset: it stays
-// in Evaluate until the automation's PR titles comply, its rule reaches the API
-// body, and its pattern accepts the subjects the fleet writes while rejecting the
-// rest. GitHub evaluates metadata patterns as
+// in Evaluate until the automation's messages comply, it covers every branch but
+// the merge queue's, only Dependabot bypasses it, and its pattern accepts the
+// subjects the fleet writes while rejecting the rest. GitHub evaluates metadata patterns as
 // RE2, the dialect Go's regexp implements, so a pattern verified here behaves
 // the same there.
 func TestBuildRulesetCommitMessagePattern(t *testing.T) {
@@ -311,6 +311,14 @@ func TestBuildRulesetCommitMessagePattern(t *testing.T) {
 	}
 	if rs.Enforcement != "evaluate" {
 		t.Fatalf("enforcement = %q, want evaluate", rs.Enforcement)
+	}
+	refs := rs.Conditions["ref_name"].(map[string]any)
+	if !slices.Equal(refs["include"].([]string), []string{"~ALL"}) ||
+		!slices.Equal(refs["exclude"].([]string), []string{"refs/heads/gh-readonly-queue/**"}) {
+		t.Fatalf("ref_name = %v, want every branch but the merge queue's", refs)
+	}
+	if len(rs.BypassActors) != 1 || *rs.BypassActors[0].ActorID != dependabotAppID {
+		t.Fatalf("bypass actors = %+v, want Dependabot alone", rs.BypassActors)
 	}
 	var params map[string]any
 	for _, r := range rs.Rules {
@@ -331,12 +339,22 @@ func TestBuildRulesetCommitMessagePattern(t *testing.T) {
 		"chore(deps): update module golang.org/x/text to v0.41.0 [security] (#525)",
 		"fix!: drop the legacy flag",
 		"refactor(pkg-js)!: rename the client\n\nBody text.",
+		"revert: feat(repocfg): restrict pull requests to collaborators",
 	} {
 		if !pattern.MatchString(subject) {
 			t.Errorf("pattern rejects conventional subject %q", subject)
 		}
 	}
-	for _, subject := range []string{"2.9.0", "Update README.md", "feat: ", "feat(repocfg) missing colon", "Feat: capitalised type"} {
+	for _, subject := range []string{
+		"2.9.0",
+		"Update README.md",
+		"feat: ",
+		"feat(repocfg) missing colon",
+		"Feat: capitalised type",
+		"fixup! feat(repocfg): restrict pull requests to collaborators",
+		"Merge branch 'master' into feat/repocfg/x",
+		`Revert "feat(repocfg): restrict pull requests to collaborators"`,
+	} {
 		if pattern.MatchString(subject) {
 			t.Errorf("pattern accepts non-conventional subject %q", subject)
 		}
