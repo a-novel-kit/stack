@@ -9,6 +9,7 @@ tmp/
 /.pnpm-store/
 
 .claude/*.local.*
+.claude/worktrees/
 
 # Scratch planning files used by the planning workflow (see the plan-feature
 # skill) — never committed. PLAN.md is the single-plan shorthand; feature work
