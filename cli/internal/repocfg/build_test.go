@@ -273,16 +273,13 @@ func TestBuildPlanProvisionsAutoApprove(t *testing.T) {
 	}
 }
 
-// TestBuildPlanProvisionsLockPR pins collaborator-only pull requests end to end:
-// the settings body carries the creation policy, and lock-pr ships with it. Any
-// other policy deletes the workflow, so relaxing a class leaves no lock behind.
-func TestBuildPlanProvisionsLockPR(t *testing.T) {
+// TestBuildPlanProvisionsLockClosed pins the pull request settings and the
+// conversation lock: the settings body carries the creation policy, every repo
+// gets lock-closed whatever the policy, and the retired lock-pr copy is deleted.
+func TestBuildPlanProvisionsLockClosed(t *testing.T) {
 	t.Parallel()
 
-	for policy, wantMethod := range map[string]string{
-		"collaborators_only": http.MethodPut,
-		"all":                http.MethodDelete,
-	} {
+	for _, policy := range []string{"collaborators_only", "all"} {
 		t.Run(policy, func(t *testing.T) {
 			t.Parallel()
 			plan, err := BuildPlan(&RepoTarget{
@@ -293,26 +290,23 @@ func TestBuildPlanProvisionsLockPR(t *testing.T) {
 			if err != nil {
 				t.Fatalf("BuildPlan: %v", err)
 			}
-			var settings, lock *Op
-			for i := range plan.Ops {
-				switch {
-				case plan.Ops[i].Method == http.MethodPatch && plan.Ops[i].Path == "repos/a-novel/example":
-					settings = &plan.Ops[i]
-				case strings.HasSuffix(plan.Ops[i].Path, "/contents/.github/workflows/lock-pr.yaml"):
-					lock = &plan.Ops[i]
-				}
+			ops := map[string]Op{}
+			for _, op := range plan.Ops {
+				ops[op.Method+" "+op.Path] = op
 			}
-			if settings == nil || lock == nil {
-				t.Fatalf("plan lacks the settings or lock-pr op (settings=%v lock=%v)", settings != nil, lock != nil)
+			settings, ok := ops["PATCH repos/a-novel/example"]
+			if !ok {
+				t.Fatal("plan lacks the settings op")
 			}
 			if got := settings.Body.(map[string]any)["pull_request_creation_policy"]; got != policy {
 				t.Errorf("pull_request_creation_policy = %v, want %s", got, policy)
 			}
-			if lock.Method != wantMethod {
-				t.Errorf("lock-pr op method = %s, want %s", lock.Method, wantMethod)
+			lock, ok := ops["PUT repos/a-novel/example/contents/.github/workflows/lock-closed.yaml"]
+			if !ok || !strings.Contains(lock.Content, "/lock") {
+				t.Error("plan does not ship lock-closed calling the lock endpoint")
 			}
-			if wantMethod == http.MethodPut && !strings.Contains(lock.Content, "/lock") {
-				t.Error("lock-pr content does not call the lock endpoint")
+			if _, ok := ops["DELETE repos/a-novel/example/contents/.github/workflows/lock-pr.yaml"]; !ok {
+				t.Error("plan does not delete the retired lock-pr workflow")
 			}
 		})
 	}

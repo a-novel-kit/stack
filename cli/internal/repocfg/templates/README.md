@@ -41,6 +41,11 @@ the value back to `off`.
 
 ## Always-provisioned files
 
+Every repo gets `.github/workflows/lock-closed.yaml` (`governance/lock-closed.yaml`),
+which locks an issue's or pull request's conversation once it closes and unlocks
+it on reopen. Open conversations stay unlocked, since a locked one refuses a
+GitHub App's review.
+
 Independent of class, `repo update` commits a uniform `.github/CODEOWNERS`
 (`governance/CODEOWNERS` — a single owner today) to every repo so review
 requests route automatically, and removes any stray root `CODEOWNERS` so a repo
@@ -64,7 +69,7 @@ are required unless noted.
 | --------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `class`                                                         | string | Class ID (`service`, `platform`, `infra`, `library`, `workflows`, `meta`).                                                                                                                                                                 |
 | `features.issues` / `.wiki` / `.projects` / `.discussions`      | bool   | Repo feature toggles.                                                                                                                                                                                                                      |
-| `features.pull_requests`                                        | string | Who may open and comment on pull requests: `all` or `collaborators_only`. `collaborators_only` also provisions `lock-pr.yaml`, which locks each new pull request's conversation to collaborators.                                          |
+| `features.pull_requests`                                        | string | Who may open pull requests: `all` or `collaborators_only`.                                                                                                                                                                                 |
 | `merge.squash` / `.merge_commit` / `.rebase`                    | bool   | Allowed merge methods (squash-only org-wide).                                                                                                                                                                                              |
 | `merge.auto_merge`                                              | bool   | Allow auto-merge.                                                                                                                                                                                                                          |
 | `merge.delete_branch_on_merge`                                  | bool   | Auto-delete head branch on merge.                                                                                                                                                                                                          |

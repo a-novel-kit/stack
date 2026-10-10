@@ -203,19 +203,18 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		p.Ops = append(p.Ops, op)
 	}
 
-	// The settings PATCH lets only collaborators open pull requests, and lock-pr
-	// limits each new conversation to collaborators. Any other policy deletes the
-	// workflow, so relaxing a class leaves no lock behind.
-	lockPR := Op{Method: http.MethodDelete, Path: repoPath + "/contents/.github/workflows/lock-pr.yaml"}
-	if c.Features.PullRequests == "collaborators_only" {
-		content, err := ReadTemplate("governance/lock-pr.yaml")
-		if err != nil {
-			return nil, err
-		}
-		lockPR.Method = http.MethodPut
-		lockPR.Content = string(content)
+	// Every repo locks a conversation once its issue or pull request closes, so
+	// lock-closed ships regardless of class. It replaces lock-pr.yaml, which
+	// locked pull requests as they opened and so blocked the approval bot; the
+	// plan deletes that copy wherever an earlier reconcile left it.
+	lockClosed, err := ReadTemplate("governance/lock-closed.yaml")
+	if err != nil {
+		return nil, err
 	}
-	p.Ops = append(p.Ops, lockPR)
+	p.Ops = append(p.Ops,
+		Op{Method: http.MethodPut, Path: repoPath + "/contents/.github/workflows/lock-closed.yaml", Content: string(lockClosed)},
+		Op{Method: http.MethodDelete, Path: repoPath + "/contents/.github/workflows/lock-pr.yaml"},
+	)
 
 	// Auto-approve the trusted dependency bots' PRs so their version bumps don't
 	// wait on a human. The workflow ships wherever require-approval holds them.
