@@ -6,6 +6,7 @@ features:
   wiki: false
   projects: true
   discussions: true
+  pull_requests: collaborators_only
 merge:
   squash: true
   merge_commit: false

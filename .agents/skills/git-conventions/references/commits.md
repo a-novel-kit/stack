@@ -80,8 +80,8 @@ notes show, and as far as most readers get. Spend the effort there.
 
 Default to no body. Most commits are a subject line and nothing else.
 
-Repos squash-merge with `COMMIT_MESSAGES`, so every body on the branch is concatenated into the
-commit that lands on `master`. A five-commit branch with three-paragraph bodies becomes a wall of
+Repos squash-merge with the PR title as the subject and `COMMIT_MESSAGES` as the body, so every
+body on the branch is concatenated into the commit that lands on `master`. A five-commit branch with three-paragraph bodies becomes a wall of
 prose attached to a single line of history that nobody scrolls past.
 
 A body earns its place only when it carries something **neither the subject nor the diff can

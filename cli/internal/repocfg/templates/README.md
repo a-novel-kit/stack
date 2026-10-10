@@ -60,20 +60,21 @@ Same schema. A `repos/` file is for a one-off repo and **replaces** the
 class entirely (it still names a base `class` for provenance). All fields
 are required unless noted.
 
-| Field                                                           | Type   | Meaning                                                                                              |
-| --------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
-| `class`                                                         | string | Class ID (`service`, `platform`, `infra`, `library`, `workflows`, `meta`).                           |
-| `features.issues` / `.wiki` / `.projects` / `.discussions`      | bool   | Repo feature toggles.                                                                                |
-| `merge.squash` / `.merge_commit` / `.rebase`                    | bool   | Allowed merge methods (squash-only org-wide).                                                        |
-| `merge.auto_merge`                                              | bool   | Allow auto-merge.                                                                                    |
-| `merge.delete_branch_on_merge`                                  | bool   | Auto-delete head branch on merge.                                                                    |
-| `merge.allow_update_branch`                                     | bool   | Offer "update branch" on out-of-date PRs.                                                            |
-| `merge.signoff_required`                                        | bool   | Require `Signed-off-by` on web commits.                                                              |
-| `security.secret_scanning` / `.push_protection` / `.dependabot` | bool   | Secret scanning, push protection, and Dependabot security-update PRs.                                |
-| `security.dependabot_alerts`                                    | bool   | Optional explicit state for Dependabot vulnerability alerts; omission leaves the live state alone.   |
-| `pages`                                                         | bool   | Reconcile Pages on (`workflow`) or off.                                                              |
-| `code_quality`                                                  | bool   | Add the `code_quality` rule to the `master` ruleset (GitHub Code Quality is a separate repo toggle). |
-| `rulesets.master` / `.require_approval` / `.tags`               | bool   | Apply those rulesets. `tags` locks tag (and release) creation to the agent bot + admins.             |
+| Field                                                           | Type   | Meaning                                                                                                                                                                                                                                    |
+| --------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `class`                                                         | string | Class ID (`service`, `platform`, `infra`, `library`, `workflows`, `meta`).                                                                                                                                                                 |
+| `features.issues` / `.wiki` / `.projects` / `.discussions`      | bool   | Repo feature toggles.                                                                                                                                                                                                                      |
+| `features.pull_requests`                                        | string | Who may open and comment on pull requests: `all` or `collaborators_only`. `collaborators_only` also provisions `lock-pr.yaml`, which locks each new pull request's conversation to collaborators.                                          |
+| `merge.squash` / `.merge_commit` / `.rebase`                    | bool   | Allowed merge methods (squash-only org-wide).                                                                                                                                                                                              |
+| `merge.auto_merge`                                              | bool   | Allow auto-merge.                                                                                                                                                                                                                          |
+| `merge.delete_branch_on_merge`                                  | bool   | Auto-delete head branch on merge.                                                                                                                                                                                                          |
+| `merge.allow_update_branch`                                     | bool   | Offer "update branch" on out-of-date PRs.                                                                                                                                                                                                  |
+| `merge.signoff_required`                                        | bool   | Require `Signed-off-by` on web commits.                                                                                                                                                                                                    |
+| `security.secret_scanning` / `.push_protection` / `.dependabot` | bool   | Secret scanning, push protection, and Dependabot security-update PRs.                                                                                                                                                                      |
+| `security.dependabot_alerts`                                    | bool   | Optional explicit state for Dependabot vulnerability alerts; omission leaves the live state alone.                                                                                                                                         |
+| `pages`                                                         | bool   | Reconcile Pages on (`workflow`) or off.                                                                                                                                                                                                    |
+| `code_quality`                                                  | bool   | Add the `code_quality` rule to the `master` ruleset (GitHub Code Quality is a separate repo toggle).                                                                                                                                       |
+| `rulesets.master` / `.require_approval` / `.tags`               | bool   | Apply those rulesets. `tags` locks tag (and release) creation to the agent bot + admins. `master` also applies `commit-messages`, which checks the subject of every commit on every branch against Conventional Commits, in Evaluate mode. |
 
 The `infra` class is public-by-default and deployment-only. It keeps Pages,
 wiki, discussions, release workflow callers, and the tag ruleset off; when a
@@ -96,13 +97,13 @@ the `required_status_checks` list (from discovery) and concrete
 `bypass_actors` (from the `bypass` list below). On `update` of an existing
 ruleset, unmanaged bypass actors already present are preserved.
 
-| Field                                      | Type     | Meaning                                                                                                                                                                                              |
-| ------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`                                     | string   | Ruleset name (reconciled by name).                                                                                                                                                                   |
-| `target` / `enforcement`                   | string   | `branch` or `tag` / `active`.                                                                                                                                                                        |
-| `conditions.ref_name.include` / `.exclude` | []string | Refs; `~DEFAULT_BRANCH` = the repo default, `~ALL` = all refs of the target.                                                                                                                         |
-| `bypass`                                   | []string | Generic actors (see below).                                                                                                                                                                          |
-| `rules.*`                                  | mixed    | Rule parameters. `creation`/`update`/`deletion` restrict that ref op to bypassers; `required_status_checks.checks` is injected; `code_quality` is dropped when the class sets `code_quality: false`. |
+| Field                                      | Type     | Meaning                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                                     | string   | Ruleset name (reconciled by name).                                                                                                                                                                                                                                                                                                                                      |
+| `target` / `enforcement`                   | string   | `branch` or `tag` / `active`.                                                                                                                                                                                                                                                                                                                                           |
+| `conditions.ref_name.include` / `.exclude` | []string | Refs; `~DEFAULT_BRANCH` = the repo default, `~ALL` = all refs of the target.                                                                                                                                                                                                                                                                                            |
+| `bypass`                                   | []string | Generic actors (see below).                                                                                                                                                                                                                                                                                                                                             |
+| `rules.*`                                  | mixed    | Rule parameters. `creation`/`update`/`deletion` restrict that ref op to bypassers; `required_status_checks.checks` is injected; `code_quality` is dropped when the class sets `code_quality: false`; `merge_queue`, `pull_request` and `commit_message_pattern` pass through as written. Commit metadata rules such as `commit_message_pattern` need GitHub Enterprise. |
 
 **Generic bypass actors** (`bypass:` entries):
 
@@ -111,6 +112,8 @@ ruleset, unmanaged bypass actors already present are preserved.
   per org from `orgs/<org>.yaml`. On the `master` and `tags` rulesets the bypass
   mode is `always` — the bot writes directly (the version-bump commit, the
   release tag), no branch proxy; on the PR rulesets the mode is `exempt`.
+- `dependabot` — GitHub's Dependabot App, the same in every org, resolved with
+  the bot modes above.
 
 The core team is intentionally **not** a bypass actor.
 

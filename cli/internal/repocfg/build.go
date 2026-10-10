@@ -11,6 +11,9 @@ import (
 // adminRoleID is the built-in "admin" repository role.
 const adminRoleID int64 = 5
 
+// dependabotAppID is GitHub's Dependabot App.
+const dependabotAppID int64 = 29110
+
 // Ruleset bypass modes.
 const (
 	modeAlways = "always"
@@ -186,6 +189,20 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		p.Ops = append(p.Ops, op)
 	}
 
+	// The settings PATCH lets only collaborators open pull requests, and lock-pr
+	// limits each new conversation to collaborators. Any other policy deletes the
+	// workflow, so relaxing a class leaves no lock behind.
+	lockPR := Op{Method: http.MethodDelete, Path: repoPath + "/contents/.github/workflows/lock-pr.yaml"}
+	if c.Features.PullRequests == "collaborators_only" {
+		content, err := ReadTemplate("governance/lock-pr.yaml")
+		if err != nil {
+			return nil, err
+		}
+		lockPR.Method = http.MethodPut
+		lockPR.Content = string(content)
+	}
+	p.Ops = append(p.Ops, lockPR)
+
 	// Auto-approve the trusted dependency bots' PRs so their version bumps don't
 	// wait on a human. The workflow ships wherever require-approval holds them.
 	if c.Rulesets.RequireApproval {
@@ -210,12 +227,14 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	// Rulesets, reconciled by name (POST when absent, PUT .../{id} when present).
 	// The master ruleset gates exactly the discovered checks (always + the
 	// repo's main.yaml jobs, minus exclusions) — set wholesale, no reconcile.
+	// commit-messages governs the same branch, so it ships alongside master.
 	wanted := []struct {
 		name   string
 		on     bool
 		checks []CheckRef
 	}{
 		{rulesetMaster, c.Rulesets.Master, t.Discovered.Checks},
+		{"commit-messages", c.Rulesets.Master, nil},
 		{"require-approval", c.Rulesets.RequireApproval, nil},
 		{rulesetTags, c.Rulesets.Tags, nil},
 	}
@@ -330,14 +349,18 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRu
 	if r.CodeQuality != nil {
 		rs.Rules = append(rs.Rules, APIRule{Type: "code_quality", Parameters: map[string]any{"severity": r.CodeQuality.Severity}})
 	}
+	if r.CommitMessagePattern != nil {
+		rs.Rules = append(rs.Rules, APIRule{Type: "commit_message_pattern", Parameters: r.CommitMessagePattern})
+	}
 	return rs, nil
 }
 
 // resolveBypass maps one generic bypass entry to concrete actors. Admins
 // always bypass with mode "always"; bots bypass with "always" on master and
 // tags, where they write directly (the bump commit and the release tag), and
-// "exempt" on PR rulesets. An entry that resolves to nothing is an error, so a
-// typo in a ruleset template is caught before the bypass list ships.
+// "exempt" elsewhere. Dependabot is GitHub's own App, so its ID is the same in
+// every org. An entry that resolves to nothing is an error, so a typo in a
+// ruleset template is caught before the bypass list ships.
 func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor, error) {
 	botMode := modeExempt
 	if rulesetName == rulesetMaster || rulesetName == rulesetTags {
@@ -350,6 +373,9 @@ func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor
 			{ActorID: nil, ActorType: "OrganizationAdmin", BypassMode: modeAlways},
 			{ActorID: &role, ActorType: "RepositoryRole", BypassMode: modeAlways},
 		}, nil
+	case "dependabot":
+		id := dependabotAppID
+		return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}, nil
 	default:
 		if id, ok := org.Bots[entry]; ok {
 			id := id
@@ -357,25 +383,30 @@ func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor
 		}
 	}
 	return nil, fmt.Errorf("bypass entry %q in ruleset %q resolves to no actor "+
-		"(expected admins or an org bot key from orgs/<org>.yaml)", entry, rulesetName)
+		"(expected admins, dependabot or an org bot key from orgs/<org>.yaml)", entry, rulesetName)
 }
 
 // SettingsBody is the PATCH /repos body for general + merge + security.
 func SettingsBody(c *ClassPreset) map[string]any {
 	return map[string]any{
-		"has_issues":                  c.Features.Issues,
-		"has_wiki":                    c.Features.Wiki,
-		"has_projects":                c.Features.Projects,
-		"has_discussions":             c.Features.Discussions,
-		"allow_squash_merge":          c.Merge.Squash,
-		"allow_merge_commit":          c.Merge.MergeCommit,
-		"allow_rebase_merge":          c.Merge.Rebase,
-		"allow_auto_merge":            c.Merge.AutoMerge,
-		"delete_branch_on_merge":      c.Merge.DeleteBranchOnMerge,
-		"allow_update_branch":         c.Merge.AllowUpdateBranch,
-		"web_commit_signoff_required": c.Merge.SignoffRequired,
-		"squash_merge_commit_title":   "COMMIT_OR_PR_TITLE",
+		"has_issues":                   c.Features.Issues,
+		"has_wiki":                     c.Features.Wiki,
+		"has_projects":                 c.Features.Projects,
+		"has_discussions":              c.Features.Discussions,
+		"pull_request_creation_policy": c.Features.PullRequests,
+		"allow_squash_merge":           c.Merge.Squash,
+		"allow_merge_commit":           c.Merge.MergeCommit,
+		"allow_rebase_merge":           c.Merge.Rebase,
+		"allow_auto_merge":             c.Merge.AutoMerge,
+		"delete_branch_on_merge":       c.Merge.DeleteBranchOnMerge,
+		"allow_update_branch":          c.Merge.AllowUpdateBranch,
+		"web_commit_signoff_required":  c.Merge.SignoffRequired,
+		// The PR title is the subject of whatever lands, squash or merge commit,
+		// so the commit-messages ruleset judges the title reviewers saw.
+		"squash_merge_commit_title":   "PR_TITLE",
 		"squash_merge_commit_message": "COMMIT_MESSAGES",
+		"merge_commit_title":          "PR_TITLE",
+		"merge_commit_message":        "PR_BODY",
 		"security_and_analysis":       SecurityBlock(c),
 	}
 }

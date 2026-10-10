@@ -1,6 +1,7 @@
 package repocfg
 
 import (
+	"regexp"
 	"slices"
 	"testing"
 )
@@ -19,6 +20,9 @@ func TestLoadAllClasses(t *testing.T) {
 			}
 			if p.CodeQuality {
 				t.Error("code_quality = true, want false for every managed class")
+			}
+			if p.Features.PullRequests != "collaborators_only" {
+				t.Errorf("pull_requests = %q, want collaborators_only for every managed class", p.Features.PullRequests)
 			}
 		})
 	}
@@ -160,7 +164,7 @@ func TestLoadLabels(t *testing.T) {
 
 func TestLoadRulesets(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"master", "require-approval", "tags"} {
+	for _, name := range []string{"master", "commit-messages", "require-approval", "tags"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			r, err := LoadRuleset(name)
@@ -192,6 +196,9 @@ func TestLoadRepoOverride(t *testing.T) {
 	}
 	if p.CodeQuality {
 		t.Error("stack code_quality = true, want false")
+	}
+	if p.Features.PullRequests != "collaborators_only" {
+		t.Errorf("stack pull_requests = %q, want collaborators_only", p.Features.PullRequests)
 	}
 
 	if _, ok, err := LoadRepoOverride("a-novel", "service-authentication"); err != nil || ok {
@@ -282,5 +289,74 @@ func TestBuildRulesetCreationRule(t *testing.T) {
 	}
 	if got["deletion"] {
 		t.Fatalf("deletion rule emitted without the flag set")
+	}
+}
+
+// TestBuildRulesetCommitMessagePattern pins the commit-messages ruleset: it stays
+// in Evaluate until the automation's messages comply, it covers every branch but
+// the merge queue's, only Dependabot bypasses it, and its pattern accepts the
+// subjects the fleet writes while rejecting the rest. GitHub evaluates metadata patterns as
+// RE2, the dialect Go's regexp implements, so a pattern verified here behaves
+// the same there.
+func TestBuildRulesetCommitMessagePattern(t *testing.T) {
+	t.Parallel()
+	spec, err := LoadRuleset("commit-messages")
+	if err != nil {
+		t.Fatalf("LoadRuleset(commit-messages): %v", err)
+	}
+	org := &OrgProfile{Org: "a-novel", Bots: map[string]int64{"agent": 3549319, "publish": 1718144}}
+	rs, err := BuildRuleset(spec, org, nil)
+	if err != nil {
+		t.Fatalf("BuildRuleset: %v", err)
+	}
+	if rs.Enforcement != "evaluate" {
+		t.Fatalf("enforcement = %q, want evaluate", rs.Enforcement)
+	}
+	refs := rs.Conditions["ref_name"].(map[string]any)
+	if !slices.Equal(refs["include"].([]string), []string{"~ALL"}) ||
+		!slices.Equal(refs["exclude"].([]string), []string{"refs/heads/gh-readonly-queue/**"}) {
+		t.Fatalf("ref_name = %v, want every branch but the merge queue's", refs)
+	}
+	if len(rs.BypassActors) != 1 || *rs.BypassActors[0].ActorID != dependabotAppID {
+		t.Fatalf("bypass actors = %+v, want Dependabot alone", rs.BypassActors)
+	}
+	var params map[string]any
+	for _, r := range rs.Rules {
+		if r.Type == "commit_message_pattern" {
+			params = r.Parameters
+		}
+	}
+	if params == nil {
+		t.Fatal("commit-messages ruleset emitted no commit_message_pattern rule")
+	}
+	if params["operator"] != "regex" || params["negate"] != false {
+		t.Fatalf("operator/negate = %v/%v, want regex/false", params["operator"], params["negate"])
+	}
+	pattern := regexp.MustCompile(params["pattern"].(string))
+
+	for _, subject := range []string{
+		"feat(repocfg): restrict pull requests to collaborators (#530)",
+		"chore(deps): update module golang.org/x/text to v0.41.0 [security] (#525)",
+		"fix!: drop the legacy flag",
+		"refactor(pkg-js)!: rename the client\n\nBody text.",
+		"revert: feat(repocfg): restrict pull requests to collaborators",
+	} {
+		if !pattern.MatchString(subject) {
+			t.Errorf("pattern rejects conventional subject %q", subject)
+		}
+	}
+	for _, subject := range []string{
+		"2.9.0",
+		"Update README.md",
+		"feat: ",
+		"feat(repocfg) missing colon",
+		"Feat: capitalised type",
+		"fixup! feat(repocfg): restrict pull requests to collaborators",
+		"Merge branch 'master' into feat/repocfg/x",
+		`Revert "feat(repocfg): restrict pull requests to collaborators"`,
+	} {
+		if pattern.MatchString(subject) {
+			t.Errorf("pattern accepts non-conventional subject %q", subject)
+		}
 	}
 }

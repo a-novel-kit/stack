@@ -85,6 +85,9 @@ type Features struct {
 	Wiki        bool `yaml:"wiki"`
 	Projects    bool `yaml:"projects"`
 	Discussions bool `yaml:"discussions"`
+	// PullRequests is who may open and comment on pull requests: "all" or
+	// "collaborators_only". The latter also ships the lock-pr workflow.
+	PullRequests string `yaml:"pull_requests"`
 }
 
 // Merge mirrors the merge-button + PR settings.
@@ -240,7 +243,8 @@ type RulesetConditions struct {
 
 // RulesetRules holds every rule a template may set; absent ones stay nil/
 // false. Param blobs that pass straight through to the API (merge_queue,
-// pull_request) are kept as maps so the template owns their shape.
+// pull_request, commit_message_pattern) are kept as maps so the template owns
+// their shape.
 type RulesetRules struct {
 	Creation             bool               `yaml:"creation"`
 	Update               bool               `yaml:"update"`
@@ -251,6 +255,7 @@ type RulesetRules struct {
 	MergeQueue           map[string]any     `yaml:"merge_queue"`
 	CodeQuality          *CodeQualityParams `yaml:"code_quality"`
 	PullRequest          map[string]any     `yaml:"pull_request"`
+	CommitMessagePattern map[string]any     `yaml:"commit_message_pattern"`
 }
 
 // RSCParams is the static part of a required_status_checks rule; the checks

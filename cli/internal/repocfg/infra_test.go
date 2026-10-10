@@ -26,7 +26,7 @@ func TestInfraClassContract(t *testing.T) {
 	if preset.Class != ClassInfra {
 		t.Errorf("class = %q, want %q", preset.Class, ClassInfra)
 	}
-	if want := (Features{Issues: true, Projects: true}); preset.Features != want {
+	if want := (Features{Issues: true, Projects: true, PullRequests: "collaborators_only"}); preset.Features != want {
 		t.Errorf("features = %+v, want %+v", preset.Features, want)
 	}
 	if want := (Merge{
@@ -100,11 +100,13 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 		"PUT /contents/.github/workflows/epic-rollback.yaml",
 		"DELETE /contents/.github/workflows/release-train.yaml",
 		"DELETE /contents/.github/workflows/hotfix.yaml",
+		"PUT /contents/.github/workflows/lock-pr.yaml",
 		"PUT /contents/.github/workflows/auto-approve-dependabot.yaml",
 		"DELETE /pages",
 		"RULESET master",
+		"RULESET commit-messages",
 		"RULESET require-approval",
-		"PRUNE master,require-approval",
+		"PRUNE master,commit-messages,require-approval",
 	}
 	if !slices.Equal(signatures, wantSignatures) {
 		t.Fatalf("operation sequence =\n  %s\nwant =\n  %s",

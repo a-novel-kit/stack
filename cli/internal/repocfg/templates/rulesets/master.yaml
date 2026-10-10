@@ -1,14 +1,14 @@
 # Branch protection for the default branch. The CLI injects the required status
 # checks from discovery, and omits the code_quality rule for classes that set
-# code_quality: false. Admins bypass, as do the agent bot (which cuts releases)
-# and the publish bot, whose version-bump commit lands on the default branch
-# directly. Every status check is required for everyone else.
+# code_quality: false. Admins bypass, as do two bots that push to the default
+# branch directly: the agent bot, which cuts releases and pushes their
+# version-bump commit, and the publish bot, which pushes the scheduled audit fix.
+# Every status check is required for everyone else.
 #
 # required_signatures enforces verified commits on the default branch. The merge
 # queue squashes, so GitHub validates the signature on the resulting
 # GitHub-signed squash commit, and an unsigned feature commit never blocks a
-# merge. The release bot's direct version-bump commit is covered by its bypass
-# above, and Renovate commits through the API, already signed.
+# merge. The bots' direct commits are covered by their bypass above.
 name: master
 target: branch
 enforcement: active
