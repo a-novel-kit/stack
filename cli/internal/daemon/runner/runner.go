@@ -191,8 +191,9 @@ func (r *Runner) Relaunch(ctx context.Context, id string, environ []string) erro
 	return err
 }
 
-// launch builds t's env and spawns it in mode, releasing the target's port
-// claims when the start fails.
+// launch builds t's env and spawns it in mode. The start invariants are
+// checked before the env claims any port, so a refused start leaves a live
+// instance's ports alone, and a failed spawn releases what the env claimed.
 func (r *Runner) launch(ctx context.Context, t *discovery.Target, mode anovelv1.Mode) (*Instance, error) {
 	start := r.startGoExec
 	if mode == anovelv1.Mode_MODE_CONTAINER {
@@ -200,16 +201,17 @@ func (r *Runner) launch(ctx context.Context, t *discovery.Target, mode anovelv1.
 	} else {
 		mode = anovelv1.Mode_MODE_GO_EXEC
 	}
+	if inst, running, err := r.canStart(t.ID(), mode); err != nil || running {
+		return inst, err
+	}
 	// The builder's snapshot fill picks up ports infra-up allocated, such as
 	// POSTGRES_PORT, so POSTGRES_DSN synthesizes to localhost:<port>.
 	entries, warnings, err := r.builder.ForTarget(t)
 	if err != nil {
+		r.alloc.Release(t.ID())
 		return nil, fmt.Errorf("%w: %w", ErrEnv, err)
 	}
-	inst, running, err := r.canStart(t.ID(), mode)
-	if err == nil && !running {
-		inst, err = start(ctx, t, env.Environ(entries), warnings)
-	}
+	inst, err := start(ctx, t, env.Environ(entries), warnings)
 	if err != nil {
 		r.alloc.Release(t.ID())
 	}
