@@ -18,6 +18,9 @@ turns a job into a required check. `monitor-ci` owns watching a run and diagnosi
 `coordinate-landing` owns the cross-repo landing saga and merge-queue semantics. `manage-versions`
 owns releasing the workflows repo and re-pinning consumers. Point at them; do not restate them.
 
+Before editing a Renovate preset or a repo's `renovate.json`, read
+[Renovate presets](references/renovate-presets.md).
+
 ---
 
 ## Choosing a surface
@@ -241,10 +244,16 @@ features cost nothing; GitHub Code Quality bills per active committer and per AI
 default-branch push, so every class sets `code_quality: false` and `repo update` keeps it off.
 
 The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.yaml`,
-`release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`,
+`release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`, `recover-prs.yaml`,
 `auto-approve-dependabot.yaml`, `lock-closed.yaml`) are rendered from
 `cli/internal/repocfg/templates/governance/` and carry a "Managed by `a-novel repo update`" banner. Edit the template in the stack repo; a change to
 the copy in a repo is overwritten. What those workflows mean is `coordinate-landing`'s subject.
+
+Two of them keep dependency PRs moving without a person. `auto-approve-dependabot.yaml` approves the
+bots' PRs, withholding approval while `renovate/stability-days` is pending; its `status` trigger
+approves once Renovate marks the update stable, and its job needs `statuses: read` because the App
+cannot read commit statuses. `recover-prs.yaml` re-arms auto-merge on a PR the merge queue dropped for
+`checks_timed_out`, and dispatches Renovate when a merge leaves a dependency PR conflicting.
 
 ---
 
