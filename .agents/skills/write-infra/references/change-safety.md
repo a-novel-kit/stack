@@ -83,7 +83,8 @@ pins in the same change.
   backup before rolling.
 - **Database images are pinned** by `tag@digest` in foundation and in the service root. Both
   Artifact Registry copies (`agora-production`, `agora-<service>-private-production`) derive from
-  that one pin.
+  that one pin. The hosts use the digest alone, so the pin rides with the service's release pull
+  request: a release without a database change keeps the reproducible digest and plans nothing.
 - **A database password rotation** bumps foundation's `password_version` and the service's
   `postgres-password` in one pull request, then rolls the host. It costs a few minutes of errors.
 - **pgBackRest owns backup expiry.** Never add age-based deletion to a backup bucket. Never delete
