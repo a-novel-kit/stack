@@ -10,7 +10,7 @@ Contents:
 - [5.2 Title](#52-title)
 - [5.3 Body](#53-body)
 - [5.4 Do NOT pass these flags](#54-do-not-pass-these-flags)
-- [5.5 Tracking metadata — match the linked issue](#55-tracking-metadata--match-the-linked-issue)
+- [5.5 Tracking stays on the issue](#55-tracking-stays-on-the-issue)
 - [5.6 Capture the PR URL](#56-capture-the-pr-url)
 - [Phase 6: Updating an Existing PR](#phase-6-updating-an-existing-pr)
 - [6.1 Flip a draft to ready the moment it qualifies (mandatory)](#61-flip-a-draft-to-ready-the-moment-it-qualifies-mandatory)
@@ -125,29 +125,19 @@ comments (`resolve-pr-feedback`), where prose may lean more technical.
   user asks for a specific person.
 - `--label` — downstream automation derives labels from the title's Conventional-Commits
   type. Add one manually only when the user requests it.
-- `--milestone` / project board / **Priority** / **Size** / tracking labels — **not** left to humans:
-  a **ready** PR mirrors the milestone, project board, its board fields (Priority, Size), and labels
-  of the issue it closes. See [Tracking metadata](#55-tracking-metadata--match-the-linked-issue).
+- `--milestone` / project board / **Priority** / **Size** / tracking labels — a PR carries none of
+  them; the issue it closes does. See [Tracking stays on the issue](#55-tracking-stays-on-the-issue).
 
-### 5.5 Tracking metadata — match the linked issue
+### 5.5 Tracking stays on the issue
 
-A PR that is **ready for review** should be as trackable as the planning issue it closes: add it
-to the org **"Tasks"** board and give it the **same milestone**, the **same board fields
-(Priority, Size)**, and the relevant **tracking labels** as that issue — so a glance at the board
-shows the work whether you look at the issue or its PR. A draft skips this; apply it when opening
-ready, or at the **draft → ready** flip (Phase 6).
+A PR is never a board item. The board tracks the planning issue a PR closes, and `derive-status`
+moves that issue's Status from the PR's events through the closing reference: In review when the
+PR is ready, Awaiting release when it merges. A correct `Closes` line (5.3) is therefore the PR's
+whole contribution to tracking.
 
-```bash
-gh pr edit <n> --repo <org>/<repo> --add-label <label> --milestone "<milestone-title>"
-gh project item-add <project-number> --owner <org> --url <pr-url>
-# then mirror the issue's Priority and Size (single-select board fields — discover ids with
-# `gh project field-list <num> --owner <org>`):
-gh project item-edit --id <pr-item-id> --project-id <proj-id> --field-id <priority-field> --single-select-option-id <opt>
-gh project item-edit --id <pr-item-id> --project-id <proj-id> --field-id <size-field>     --single-select-option-id <opt>
-```
-
-This is **tracking** metadata mirroring the issue — distinct from the type label automation derives
-from the title, and from assignee/reviewer (still automation's job, see 5.4).
+Do not add the PR to a board, and do not copy the issue's milestone, Priority, Size or tracking
+labels onto it. A second card per task drifts from the first, and nothing keeps the two in sync.
+Functional labels such as `epic:<N>` are different: `coordinate-landing` owns them.
 
 ### 5.6 Capture the PR URL
 
@@ -172,7 +162,7 @@ gh pr edit --body "$(cat <<'EOF'
 EOF
 )"
 
-# Flip from draft to ready — then apply tracking metadata (5.5): board + milestone + labels
+# Flip from draft to ready
 gh pr ready
 
 # Flip from ready back to draft
@@ -191,7 +181,7 @@ relevant tests and visual comparisons, final cleanup, and required layers/docs/d
 it in the same turn:
 
 ```bash
-gh pr ready   # then apply Phase 5.5 tracking metadata: board + milestone + labels
+gh pr ready
 ```
 
 **Never end a turn with review-ready work sitting in a draft PR.** If the branch is done and green

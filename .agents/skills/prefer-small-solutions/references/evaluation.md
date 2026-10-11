@@ -63,7 +63,7 @@ insufficient if the task no longer loads it.
   `testdata/`, format choice, reuse, and isolation from production packages.
 - **Branch naming only:** Git routing reaches the commit types and scope table before naming.
 - **Push to an existing draft:** readiness is rechecked after the push; when completion gates pass,
-  load authoring and tracking metadata and mark ready in the same turn.
+  load the authoring reference and mark ready in the same turn, adding nothing to a board.
 - **Frontend companion skills:** Svelte tests/stories reach framework and test rules; uikit reaches
   design-system rules; a service REST client reaches both `write-js-package` and `write-frontend`.
 - **Debugging a Svelte module:** the trigger reaches `write-svelte` for `.svelte.ts`, route loads,
