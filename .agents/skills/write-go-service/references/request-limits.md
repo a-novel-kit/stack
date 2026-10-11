@@ -4,18 +4,18 @@ Read this reference when routed here by [write-go-service](../SKILL.md). Its rul
 REST route a service adds or changes, and to any costly operation.
 
 Every service bounds what one caller can consume, in its own code, so the limits are reviewed with
-the routes they guard. `service-template` carries the standard wiring; copy it.
+the routes they guard. golib's `httpf` carries the standard setup: `NewRouter` applies the body
+limit and the trusted visitor IP, and `Limits` builds the rate limits.
 
 ## Standard limits
 
-- **Body.** `REST_MAX_REQUEST_SIZE` defaults to 16 KiB, applied globally with
-  `middleware.RequestSize`. chi cannot raise a global limit for one route: the outer reader always
-  stops first. A route that needs more sits outside the global limit, in a group with its own
-  `RequestSize`.
-- **Rate.** Every route but the liveness ping allows 5 requests per second per caller, through
-  `go-chi/httprate` used directly. Mount the limiter on a router group, where routing has already
-  matched, and key it by method and route pattern. A raw path would give every path-parameter
-  value a fresh budget.
+- **Body.** `REST_MAX_REQUEST_SIZE` defaults to 16 KiB, applied by `httpf.NewRouter`. chi cannot
+  raise a global limit for one route: the outer reader always stops first. A route that needs more
+  sits outside the global limit, in a group with its own `RequestSize`.
+- **Rate.** Every route but the liveness ping sits in a router group behind
+  `httpf.NewLimits(cfg.Rest).Standard()`: 5 requests per second per visitor. A group, because chi
+  knows the route pattern only once routing matched, and limits count per method and route
+  pattern; a raw path would give every path-parameter value a fresh budget.
 - **Refusal.** Answer `429` with `Retry-After`, and document it on every limited route (see
   `write-openapi`).
 - **Tests.** `REST_RATE_LIMITS_ENABLED=false` turns the limits off for a local test stack whose
@@ -40,10 +40,11 @@ one:
 - per target account, keyed by the email in the body, case-folded, when the route sends mail or
   checks a password. Many callers cannot then gang up on one mailbox or account.
 
-Declare each policy once, by name, in the service's limits file, so every number is auditable in
-one place. Authentication's values are the reference: anonymous tokens 3 per 5 minutes per visitor;
-login 10 per minute and 30 per 10 minutes per visitor, plus 30 per 10 minutes per email; mail 3 per
-5 minutes per caller, plus 3 per hour per address.
+Declare each policy once, by name, in the service's limits file, built on `httpf.Limits.By` with
+the service's own keys, so every number is auditable in one place. Authentication's values are the
+reference: anonymous tokens 3 per 5 minutes per visitor; login 10 per minute and 30 per 10 minutes
+per visitor, plus 30 per 10 minutes per email; mail 3 per 5 minutes per caller, plus 3 per hour per
+address.
 
 ## Costly routes
 
