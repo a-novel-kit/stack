@@ -87,6 +87,7 @@ func TestBuildPlanProvisions(t *testing.T) {
 		{name: "LockClosed/CollaboratorsOnly", plan: collaborators, method: http.MethodPut, path: "/lock-closed.yaml", content: "/lock"},
 		{name: "LockClosed/All", plan: everyone, method: http.MethodPut, path: "/lock-closed.yaml", content: "/lock"},
 		{name: "LockPR", plan: bare, method: http.MethodDelete, path: "/lock-pr.yaml"},
+		{name: "Notify", plan: bare, method: http.MethodPut, path: "/notify.yaml", content: "notify-ci-run.yaml@"},
 		// Factorized callers reference the reusable *-run.yaml engine, not the action.
 		{name: "MergeGate", plan: master, method: http.MethodPut, path: "/merge-gate.yaml", content: "merge-gate-run.yaml@", gated: true},
 		{name: "ReleaseTrain", plan: master, method: http.MethodPut, path: "/release-train.yaml", content: "release-train-run.yaml@"},

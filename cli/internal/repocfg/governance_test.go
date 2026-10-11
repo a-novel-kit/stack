@@ -253,3 +253,42 @@ func TestLockClosedGovernance(t *testing.T) {
 		}
 	}
 }
+
+// TestNotifyGovernance pins what the Discord notifier watches. Watching
+// release as well as main is what reports a release that fails after its tag,
+// and the CI engine needs actions: read to tell a recovery from a routine success.
+func TestNotifyGovernance(t *testing.T) {
+	t.Parallel()
+	var workflow struct {
+		On struct {
+			WorkflowRun struct {
+				Workflows []string `yaml:"workflows"`
+				Branches  []string `yaml:"branches"`
+			} `yaml:"workflow_run"`
+			Release struct {
+				Types []string `yaml:"types"`
+			} `yaml:"release"`
+		} `yaml:"on"`
+		Jobs map[string]struct {
+			Permissions map[string]string `yaml:"permissions"`
+		} `yaml:"jobs"`
+	}
+	loadWorkflow(t, "notify.yaml", &workflow)
+	testCases := []struct {
+		name string
+		got  []string
+		want string
+	}{
+		{name: "workflow_run workflows", got: workflow.On.WorkflowRun.Workflows, want: "main,release"},
+		{name: "workflow_run branches", got: workflow.On.WorkflowRun.Branches, want: "master"},
+		{name: "release types", got: workflow.On.Release.Types, want: "published"},
+	}
+	for _, testCase := range testCases {
+		if got := strings.Join(testCase.got, ","); got != testCase.want {
+			t.Errorf("notify %s = %q, want %q", testCase.name, got, testCase.want)
+		}
+	}
+	if got := workflow.Jobs["ci"].Permissions["actions"]; got != "read" {
+		t.Errorf("notify ci permissions = %v, want actions: read", workflow.Jobs["ci"].Permissions)
+	}
+}
