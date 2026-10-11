@@ -24,6 +24,7 @@ limit and the trusted visitor IP, and `Limits` builds the rate limits.
 ## The caller
 
 - **Signed-in user** when the limiter runs after the auth middleware, from the verified claims.
+  Authentication's client exports this key as `serviceauthentication.CallerKey`.
 - **Visitor IP** otherwise, an IPv6 address counted per /64 (`httprate.CanonicalizeIP`). An
   anonymous token is never a key: anyone can mint another.
 - **Trusted header.** The platform calls services from its server, so the TCP peer is the platform.
@@ -42,8 +43,11 @@ one:
 
 Every limit is configuration, like a timeout or a size: an environment variable with its default
 in `env.go`, never a number in a middleware. A rate is an `httpf.Rate`, written `<requests>/<window>`
-(`3/5m`) in its variable and in its default. Name each policy once in the service's limits file,
-built on `httpf.Limits.By` with the service's own keys. Authentication's defaults are the reference:
+(`3/5m`) in its variable and in its default: `config.Must(httpf.ParseRate("3/5m"))` writes the
+default, and `config.LoadEnv` reads the variable with `httpf.ParseRate`. Name each policy once in the
+service's limits file, built on `httpf.Limits.By` with a caller key or `httpf.JSONFieldKey` for a
+target named in the body. A key or gate that another service could use belongs in golib, not in
+the service. Authentication's defaults are the reference:
 anonymous tokens 3 per 5 minutes per visitor; login 10 per minute and 30 per 10 minutes per visitor,
 plus 30 per 10 minutes per email; mail 3 per 5 minutes per caller, plus 3 per hour per address.
 
@@ -51,7 +55,8 @@ plus 30 per 10 minutes per email; mail 3 per 5 minutes per caller, plus 3 per ho
 
 A route that calls a paid provider or spends heavy CPU or memory gets limits as strong as
 authentication's entrypoints: a strict per-caller limit, and a concurrency gate sized to the
-instance's memory, also read from the environment. Authentication runs at most
+instance's memory, also read from the environment: `httpf.LimitConcurrency` on the route, or a
+semaphore around the costly work itself when it runs below the handler. Authentication runs at most
 `ARGON2_MAX_CONCURRENT` Argon2 hashes at once, 4 by default: 64 MiB each in a 512 MiB instance.
 Excess calls wait for a slot rather than exhaust the instance.
 
