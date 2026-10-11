@@ -345,6 +345,10 @@ Do not document a 4xx response unless the handler code has an explicit path that
 it. A 400 from `/jwk` (invalid UUID) is a real handler path; a 400 from `/jwks` does not
 exist (see Suppressed Warnings).
 
+A rate limit is such a path. Every limited route references one `tooManyRequests` component,
+`429` with an integer `Retry-After` header; only the unlimited liveness ping omits it. A route with
+a strict limit states its numbers in its description, so clients can pace themselves.
+
 ### The `default` response
 
 Every operation must have a `default` response. It catches any status code not explicitly

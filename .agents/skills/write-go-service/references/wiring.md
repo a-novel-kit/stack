@@ -10,6 +10,20 @@ Configuration structs + loading from env vars or YAML. No logic beyond parsing a
 - **Dynamic config with defaults** (ports, timeouts, DSNs) → env vars via the `internal/config/env/`
   helper package.
 - Group related fields into named structs; nest for sub-domains (`App.Rest`, `App.Grpc`, `App.Main`).
+- **Server config comes from golib.** `App.Rest` is an `httpf.ServerConfig` loaded with
+  `httpf.LoadServerConfig(getEnv, defaults)` over the `REST_*` variables; `App.Grpc` is a
+  `grpcf.ServerConfig` loaded the same way over `GRPC_*`. Never redeclare those variables, types or
+  defaults. A service that needs another default overrides it on a copy of
+  `httpf.ServerConfigDefault` (or `grpcf.ServerConfigDefault`), next to the reason.
+- **Servers come from golib, one line each.** `cmd/` builds the router with
+  `httpf.NewRouter(cfg.Rest, cfg.Otel, cfg.HttpLogger, cfg.App.DowntimeStart)` and runs it with
+  `httpf.ListenAndServe(ctx, cfg.Rest, router)`; gRPC uses
+  `grpcf.NewServer(cfg.Otel, cfg.Logger, cfg.App.DowntimeStart, ctxInterceptor)` and
+  `grpcf.ListenAndServe(ctx, cfg.Grpc, server)`. What differs per service, such as the ping path or
+  the CORS methods, is a default on the config copy, never an argument.
+- **`main` reads as wiring.** One line per dependency, server and route. No option literals, middleware
+  chains or explanatory comments inline: a route's middleware is a named value from its own file,
+  mounted with chi's `With`.
 - Provide a `*Default` value/function (in `*.config.default.go`) that assembles the full config
   tree from env vars and YAML — this is what `cmd/` reads at startup.
 - Env var names: `<SERVICE_ENV_PREFIX>_<FIELD_NAME>`, screaming snake case. Test-only presets do
