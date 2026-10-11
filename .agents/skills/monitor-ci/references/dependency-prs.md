@@ -52,9 +52,10 @@ maximum supported`. A tool's indirect `golang.org/x/tools` cannot read the new c
   flake budget.
 - **infra `scan-infrastructure` (Trivy) reports a CVE in an indirect Go module.** Renovate's
   `[security]` PR fixes it once the repo's preset enables OSV alerts; otherwise bump the module by hand.
-- **infra `plan-*` needs `allow-resource-deletion`.** A service release with a new database digest
-  replaces its instance templates. A release without a database change keeps the digest and plans
-  nothing for the hosts. The label is a human decision.
+- **infra `plan-*` asks for `allow-downtime`.** A service release with a new database digest changes
+  its database host's template, so it merges only during that service's planned downtime, with the
+  label. A release without a database change keeps the digest and plans nothing for the hosts. Both
+  the downtime and the label are human decisions.
 
 ## Land them without saturating CI
 
