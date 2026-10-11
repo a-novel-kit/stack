@@ -30,6 +30,11 @@
   deleted while its objects stay.
 - **Grants that served retired tooling** are better adopted and then deleted under the label than
   left behind as unmanaged orphans.
+- **Service roots read foundation's applied outputs.** A new foundation output must deploy before a
+  service root reads it, or the service plans fail on a missing attribute. Ship the output in its
+  own pull request first, then the change that uses it.
+- **A plan shows the state it read.** When pull requests merge and deploy close together, re-run a
+  plan that shows an unexpected change before judging it: a deploy may have applied it meanwhile.
 
 ## Retire protected resources
 
@@ -86,9 +91,10 @@ pins in the same change.
   users.
 - **The deploy's `rollout` job rolls hosts from observed state, not the diff,** so a cancelled or
   force-merged deploy loses nothing:
-  - a database host off its group's target rolls only during its service's downtime, after a
-    snapshot of its data disk. Until then the deploy warns "rollout pending". It restarts in place
-    or is replaced; the stateful disk and IP stay;
+  - a database host off its group's target rolls only during its service's downtime, once the
+    service's serving revision carries the downtime's start, after a snapshot of its data disk.
+    Until then the deploy warns "rollout pending", or fails when the service missed the downtime.
+    It restarts in place or is replaced; the stateful disk and IP stay;
   - a backup repository VM restarts when its `config` label differs from `running-config`, after
     its database host;
   - `roll-database.yaml` forces both, whatever the downtime.
@@ -100,6 +106,12 @@ pins in the same change.
   that one pin. The hosts use the digest alone, so the pin rides with the service's release pull
   request: a release without a database change keeps the reproducible digest and plans nothing. A
   new digest replaces the host template, so that release merges during a planned downtime.
+- **`host-credentials` is pinned once,** in foundation's `host_credentials_image`, as the
+  `tag@digest` `publish-rollout-verifier.yaml` published. Deploy verifies it against that workflow
+  and copies it into each service's tooling repository; the hosts and the service roots derive the
+  digest reference. A new pin is a database host change.
+- **Each backup repository VM keeps a reserved address,** taken from foundation's
+  `native_backups.<service>.repository_ip`, the same value its database host trusts.
 - **A database password rotation** bumps foundation's `password_version` and the service's
   `postgres-password` in one pull request, merged during a planned downtime, which rolls the host.
 - **pgBackRest owns backup expiry.** Never add age-based deletion to a backup bucket. Never delete
