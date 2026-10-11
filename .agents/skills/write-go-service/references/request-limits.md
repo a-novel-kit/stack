@@ -47,7 +47,10 @@ default, and `config.LoadEnv` reads the variable with `httpf.ParseRate`. Name ea
 service's limits file, built on `httpf.Limits.By` with a caller key or `httpf.BodyKeyRate` for a
 target named in the body. The limits file exposes one named middleware per guarded route family,
 built once from the config, so the route table mounts each with chi's `With` and stays one line per
-route: `r.With(limit.Login).Put("/", handlerTokenCreate.ServeHTTP)`. A key or gate that another
+route: `r.With(limit.Login).Put("/", handlerTokenCreate.ServeHTTP)`. Its constructor names every
+limiter as a local first, then composes the families from those names:
+`Login: chi.Chain(loginBurst, login, loginEmail).Handler`, never a call nested in the literal. One
+limiter may serve several families: `By` counts per route, so they never share a budget. A key or gate that another
 service could use belongs in golib, not in the service. Authentication's defaults are the reference:
 anonymous tokens 3 per 5 minutes per visitor; login 10 per minute and 30 per 10 minutes per visitor,
 plus 30 per 10 minutes per email; mail 3 per 5 minutes per caller, plus 3 per hour per address.
