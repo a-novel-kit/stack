@@ -3,8 +3,9 @@
 - [Prove the plan before review](#prove-the-plan-before-review): zero-diff proofs, moves, imports
 - [Retire protected resources](#retire-protected-resources): unlock, retire, forget
 - [Read the live state](#read-the-live-state-before-trusting-the-code)
-- [Release contract](#release-contract), [Database and backup hosts](#database-and-backup-hosts),
-  [Trust boundaries](#trust-boundaries), [Recovery](#recovery)
+- [Release contract](#release-contract), [Capacity caps](#capacity-caps),
+  [Database and backup hosts](#database-and-backup-hosts), [Trust boundaries](#trust-boundaries),
+  [Recovery](#recovery)
 
 ## Prove the plan before review
 
@@ -73,6 +74,18 @@ pins in the same change.
 4. Rollback is a revert pull request. Migrations stay backward compatible; data rollback is a
    recovery, never part of a deploy.
 
+## Capacity caps
+
+- **Every Cloud Run service sets a service-level `scaling.max_instance_count`.** The revision-level
+  one caps each revision, so a rollout can exceed it.
+- **Every project that runs Cloud Run has a CPU and a memory quota** in foundation's `cost_cap`. The
+  quota is the hard ceiling.
+- **A service's postcondition checks its cap against the quota:** maximum instances plus one
+  rollout instance, times its CPU, must fit. A plan that raises the cap fails until foundation
+  raises the quota.
+- **A service with in-memory rate limits** keeps the instance count its limits assume. Raising it
+  is a design change, not a tuning one.
+
 ## Database and backup hosts
 
 - **The host groups use an `OPPORTUNISTIC` update policy.** Merging a template, image or TLS change
@@ -100,6 +113,8 @@ pins in the same change.
 - **The writer's federation condition** pins `deploy.yaml`, `roll-database.yaml` and
   `recovery.yaml` on `master` behind the `production` environment. Changing it is a bootstrap change, applied by the last trusted
   workflow before a new one depends on it.
+- **A service that trusts a forwarded visitor header requires IAM.** Its invokers are only the
+  platform and the deploy health check, which sends an ID token for the service's custom audience.
 - **Inventory IAM by principal and resource:**
   - runtime accounts read only their own secrets;
   - database and repository hosts pull only their service's images;

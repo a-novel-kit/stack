@@ -140,7 +140,16 @@ service:
 - Server loads establish the session and authorization context. UI visibility is convenience;
   privileged routes and actions enforce permissions again on the server.
 - Create an anonymous service session lazily, only when an anonymous protected operation needs it.
-  An ordinary page load must not mint a token merely to render signed-out UI.
+  An ordinary page load must not mint a token merely to render signed-out UI. Keep its cookie until
+  the token expires: a visitor gets only a few anonymous tokens, and a browser restart must not
+  spend one.
+- Send every service call through one wrapped `fetch`. It forwards the visitor's IP in
+  `X-Client-IP`, read with `event.getClientAddress()` (adapter-node's `ADDRESS_HEADER` and
+  `XFF_DEPTH` behind a proxy). On Cloud Run it also adds the platform's Google ID token in
+  `X-Serverless-Authorization`. Services rate-limit by that visitor; without it, every visitor
+  shares the platform's budget.
+- Map a service's `429` to a too-many-attempts message. It is neither an outage nor a signed-out
+  state.
 - Refresh a rejected or expiring session at one server-owned boundary. Clear cookies only after a
   definitive authentication rejection; preserve them and expose a recoverable unavailable state on
   network, timeout, or downstream 5xx failures. Do not silently turn an outage into signed-out state.
