@@ -137,5 +137,5 @@ as exempt from repository safeguards or push directly to `master`/`main` without
 ## Pull Request Description
 
 Use [open-pull-request](../open-pull-request/SKILL.md) for the authoritative title, body,
-tracking metadata, validation, and handoff requirements. Keep the Conventional-Commits title under
+issue linkage, validation, and handoff requirements. Keep the Conventional-Commits title under
 70 characters, state breaking changes, and include only affected layers and meaningful verification.

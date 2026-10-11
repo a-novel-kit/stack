@@ -26,7 +26,7 @@ body, correct base, and no manual reviewer/assignee assignment (workflows handle
 Use the checks and stage rules below before publication. Inspect the existing branch/PR first;
 update an open PR rather than recreating it.
 
-- Before creating or editing a PR, changing draft/ready status, or mirroring tracking metadata,
+- Before creating or editing a PR, or changing draft/ready status,
   read [authoring and metadata](references/authoring.md).
 - After every push to an existing draft PR, recheck its draft reason using the
   [readiness rule](references/authoring.md#61-flip-a-draft-to-ready-the-moment-it-qualifies-mandatory).
@@ -264,8 +264,8 @@ Do not merge — merges are a developer decision unless explicitly delegated.
   the completion report, not durable GitHub metadata.
 - **Handing off completed UI work without Storybook beside the PR and task links.** The final report
   needs a freshly verified direct Storybook link; see `write-frontend`.
-- **Manual reviewer/assignee flags.** Automation handles these (5.4); tracking metadata is
-  the exception a ready PR carries (5.5).
+- **Manual reviewer/assignee flags.** Automation handles these (5.4); tracking metadata
+  stays on the issue the PR closes (5.5).
 - **`--force` without `--lease`.** Always `--force-with-lease` after a rebase.
 - **Missing `BREAKING CHANGE:` footer.** If any commit on the branch is breaking, the PR
   body's Breaking Changes section must list it. Mismatches between commits and PR body are
