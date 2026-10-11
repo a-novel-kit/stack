@@ -13,7 +13,7 @@ limit and the trusted visitor IP, and `Limits` builds the rate limits.
   raise a global limit for one route: the outer reader always stops first. A route that needs more
   sits outside the global limit, in a group with its own `RequestSize`.
 - **Rate.** Every route but the liveness ping sits in a router group behind
-  `httpf.NewLimits(cfg.Rest).Standard()`: 5 requests per second per visitor. A group, because chi
+  `httpf.NewLimits(cfg.Rest).Standard()`: `REST_RATE_LIMIT` per visitor, `5/1s` by default. A group, because chi
   knows the route pattern only once routing matched, and limits count per method and route
   pattern; a raw path would give every path-parameter value a fresh budget.
 - **Refusal.** Answer `429` with `Retry-After`, and document it on every limited route (see
@@ -40,18 +40,20 @@ one:
 - per target account, keyed by the email in the body, case-folded, when the route sends mail or
   checks a password. Many callers cannot then gang up on one mailbox or account.
 
-Declare each policy once, by name, in the service's limits file, built on `httpf.Limits.By` with
-the service's own keys, so every number is auditable in one place. Authentication's values are the
-reference: anonymous tokens 3 per 5 minutes per visitor; login 10 per minute and 30 per 10 minutes
-per visitor, plus 30 per 10 minutes per email; mail 3 per 5 minutes per caller, plus 3 per hour per
-address.
+Every limit is configuration, like a timeout or a size: an environment variable with its default
+in `env.go`, never a number in a middleware. A rate is an `httpf.Rate`, written `<requests>/<window>`
+(`3/5m`) in its variable and in its default. Name each policy once in the service's limits file,
+built on `httpf.Limits.By` with the service's own keys. Authentication's defaults are the reference:
+anonymous tokens 3 per 5 minutes per visitor; login 10 per minute and 30 per 10 minutes per visitor,
+plus 30 per 10 minutes per email; mail 3 per 5 minutes per caller, plus 3 per hour per address.
 
 ## Costly routes
 
 A route that calls a paid provider or spends heavy CPU or memory gets limits as strong as
 authentication's entrypoints: a strict per-caller limit, and a concurrency gate sized to the
-instance's memory. Authentication runs at most 4 Argon2 hashes at once, 64 MiB each, in a 512 MiB
-instance. Excess calls wait for a slot rather than exhaust the instance.
+instance's memory, also read from the environment. Authentication runs at most
+`ARGON2_MAX_CONCURRENT` Argon2 hashes at once, 4 by default: 64 MiB each in a 512 MiB instance.
+Excess calls wait for a slot rather than exhaust the instance.
 
 ## Counters
 
