@@ -245,7 +245,7 @@ Two GitHub constraints shape the bypass lists:
 
 **A bypass label approves one PR head.** A label that waives a check (`allow-screenshot-change`,
 `allow-incomplete-translations`, `allow-translation-drift`, `append-only-override`, infra's
-`allow-resource-deletion`) approves the commit it was reviewed on, so a push removes it and a reviewer
+`allow-resource-deletion` and `allow-downtime`) approves the commit it was reviewed on, so a push removes it and a reviewer
 adds it again. The removal runs in a job holding `pull-requests: write`, and the label change re-runs
 the gate. A gate reads labels live through the API, or ignores them on a `synchronize` payload, since
 a rerun replays its original event. `check-append-only` removes its label only when the step gets

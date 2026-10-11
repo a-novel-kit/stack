@@ -49,11 +49,14 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 - **Use `gcloud` only for reads,** and only when the user allows it in the session. A useful read:
   `tofu plan -refresh=false -lock=false` with `GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)`.
 - **Humans** hold read access, IAP SSH and secret-version rights. Everything else goes through
-  `deploy.yaml`, `roll-database.yaml` for database hosts, or `recovery.yaml` for drills.
+  `deploy.yaml`, `downtime.yaml` for planned downtimes, `roll-database.yaml` for database hosts, or
+  `recovery.yaml` for drills.
 - **Write runbook commands for the identity that actually runs them.** A command a human cannot
   run belongs in a workflow.
 - **Deleting, replacing or forgetting a resource, or weakening its protection,** needs the
   `allow-resource-deletion` label on the pull request.
+- **Changing a database host's template or group configuration** needs the `allow-downtime` label,
+  and that service's planned downtime in progress.
 
 ## Route the work
 
@@ -65,7 +68,7 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 
 Prove a refactor is a no-op before review. Report each root's expected plan in the pull request:
 imports, in-place changes and deletions, with the reason for each. Separate stages that need the
-deletion label from those that do not. Stack them when they depend on one another. In the handoff,
+deletion or downtime label from those that do not. Stack them when they depend on one another. In the handoff,
 list what the user must do by hand: label, admin-bypass merge after a required-check rename, GitHub
 settings, then `a-novel repo update`.
 

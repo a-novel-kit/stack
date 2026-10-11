@@ -77,16 +77,31 @@ pins in the same change.
 
 - **The host groups use an `OPPORTUNISTIC` update policy.** Merging a template, image or TLS change
   restarts nothing.
-- **Rolling is a manual `roll-database.yaml` dispatch** with `service=<service>`, once that
-  service's deploy finished. It restarts the host, or replaces it when the template changed; the
-  stateful disk and IP stay. Then it restarts the repository VM and checks health. Ask for a full
-  backup before rolling.
+- **Database host changes wait for a planned downtime.** `policy.jq` flags a database host's
+  template replacement or group update, which is not a deletion. Its pull request needs
+  `allow-downtime`, and `DOWNTIME` must list `service-<service>.database` with a `start` already
+  passed. Ask for a full backup before the downtime starts.
+- **Planned downtimes come only from the admin-only `downtime.yaml`,** which writes `DOWNTIME` and
+  deploys. Listed services refuse work from `start` until someone clears it; `end` only informs
+  users.
+- **The deploy's `rollout` job rolls hosts from observed state, not the diff,** so a cancelled or
+  force-merged deploy loses nothing:
+  - a database host off its group's target rolls only during its service's downtime, after a
+    snapshot of its data disk. Until then the deploy warns "rollout pending". It restarts in place
+    or is replaced; the stateful disk and IP stay;
+  - a backup repository VM restarts when its `config` label differs from `running-config`, after
+    its database host;
+  - `roll-database.yaml` forces both, whatever the downtime.
+- **Each rollout's snapshot is kept 14 days,** labelled `role=pre-rollout`. Undo is a revert, plus a
+  same-name disk swap from the snapshot when the data is damaged (`docs/runbooks/database.md`). The
+  data disk ignores its source snapshot, so the swapped disk needs no state change.
 - **Database images are pinned** by `tag@digest` in foundation and in the service root. Both
   Artifact Registry copies (`agora-production`, `agora-<service>-private-production`) derive from
   that one pin. The hosts use the digest alone, so the pin rides with the service's release pull
-  request: a release without a database change keeps the reproducible digest and plans nothing.
+  request: a release without a database change keeps the reproducible digest and plans nothing. A
+  new digest replaces the host template, so that release merges during a planned downtime.
 - **A database password rotation** bumps foundation's `password_version` and the service's
-  `postgres-password` in one pull request, then rolls the host. It costs a few minutes of errors.
+  `postgres-password` in one pull request, merged during a planned downtime, which rolls the host.
 - **pgBackRest owns backup expiry.** Never add age-based deletion to a backup bucket. Never delete
   WAL to free space.
 
