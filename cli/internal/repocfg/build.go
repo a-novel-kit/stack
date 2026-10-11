@@ -210,6 +210,8 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	// and so blocked the approval bot.
 	put("lock-closed.yaml")
 	drop("lock-pr.yaml")
+	// Every repo reports its default-branch failures and its releases to Discord.
+	put("notify.yaml")
 	// The trusted dependency bots' PRs are auto-approved wherever
 	// require-approval would otherwise hold their version bumps for a human.
 	if c.Rulesets.RequireApproval {

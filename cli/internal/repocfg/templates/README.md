@@ -46,6 +46,15 @@ which locks an issue's or pull request's conversation once it closes and unlocks
 it on reopen. Open conversations stay unlocked, since a locked one refuses a
 GitHub App's review.
 
+Every repo also gets `.github/workflows/notify.yaml` (`governance/notify.yaml`),
+which posts to the org's Discord server: a failed `main` or `release` run on the
+default branch, pinging the repository's role, then the run that fixes it; and
+each published release with its notes. It reads three org-level values the
+operator provisions by hand: the `CI_WEBHOOK` and `RELEASES_WEBHOOK` secrets, and
+the `DISCORD_REPO_ROLES` variable mapping each `<org>/<repo>` to its role id. A
+missing webhook skips the post; a repository missing from the map posts without
+a ping.
+
 Independent of class, `repo update` commits a uniform `.github/CODEOWNERS`
 (`governance/CODEOWNERS` — a single owner today) to every repo so review
 requests route automatically, and removes any stray root `CODEOWNERS` so a repo
