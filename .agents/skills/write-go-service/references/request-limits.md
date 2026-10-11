@@ -12,10 +12,9 @@ limit and the trusted visitor IP, and `Limits` builds the rate limits.
 - **Body.** `REST_MAX_REQUEST_SIZE` defaults to 16 KiB, applied by `httpf.NewRouter`. chi cannot
   raise a global limit for one route: the outer reader always stops first. A route that needs more
   sits outside the global limit, in a group with its own `RequestSize`.
-- **Rate.** Every route but the liveness ping sits in a router group behind
-  `httpf.NewLimits(cfg.Rest).Standard()`: `REST_RATE_LIMIT` per visitor, `5/1s` by default. A group, because chi
-  knows the route pattern only once routing matched, and limits count per method and route
-  pattern; a raw path would give every path-parameter value a fresh budget.
+- **Rate.** `httpf.NewRouter` limits every route but the ping (`REST_LIVENESS_PATH`) to
+  `REST_RATE_LIMIT` per visitor, `5/1s` by default. Limits count per method and route pattern, which
+  the router looks up itself: a raw path would give every path-parameter value a fresh budget.
 - **Refusal.** Answer `429` with `Retry-After`, and document it on every limited route (see
   `write-openapi`).
 - **Tests.** `REST_RATE_LIMITS_ENABLED=false` turns the limits off for a local test stack whose
@@ -46,8 +45,10 @@ in `env.go`, never a number in a middleware. A rate is an `httpf.Rate`, written 
 (`3/5m`) in its variable and in its default: `config.Must(httpf.ParseRate("3/5m"))` writes the
 default, and `config.LoadEnv` reads the variable with `httpf.ParseRate`. Name each policy once in the
 service's limits file, built on `httpf.Limits.By` with a caller key or `httpf.BodyKeyRate` for a
-target named in the body. A key or gate that another service could use belongs in golib, not in
-the service. Authentication's defaults are the reference:
+target named in the body. The limits file exposes one named middleware per guarded route family,
+built once from the config, so the route table mounts each with chi's `With` and stays one line per
+route: `r.With(limit.Login).Put("/", handlerTokenCreate.ServeHTTP)`. A key or gate that another
+service could use belongs in golib, not in the service. Authentication's defaults are the reference:
 anonymous tokens 3 per 5 minutes per visitor; login 10 per minute and 30 per 10 minutes per visitor,
 plus 30 per 10 minutes per email; mail 3 per 5 minutes per caller, plus 3 per hour per address.
 
