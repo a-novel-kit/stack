@@ -149,9 +149,10 @@ go through a migration — no out-of-band DDL.
 YYYYMMDDHHMMSS_<description>.<up|down>.sql
 ```
 
-The timestamp is the current wall-clock time **down to the second**: run
+The timestamp is the current local wall-clock time **down to the second**: run
 `date '+%Y%m%d%H%M%S'` immediately before creating the files. Never truncate to minutes, guess,
-or reuse an existing timestamp.
+or reuse an existing timestamp. Never use `date -u`: existing migrations carry local time, so a UTC
+stamp can sort before one already merged.
 
 The description uses underscores and is as specific as possible:
 

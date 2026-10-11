@@ -75,6 +75,15 @@ Read secrets and privileged endpoints only from SvelteKit's server-only environm
 an explicitly public value through the framework's `PUBLIC_` contract only when it is safe to ship
 in source. A secret-shaped `VITE_*` variable is a build failure, not runtime configuration.
 
+Trace the server with SvelteKit's own spans and nodelib's setup. Enable
+`sveltekit({ tracing: { server: true } })`, declare `OTEL` and `GCLOUD_PROJECT_ID` in `src/env.ts`,
+and start `@a-novel-kit/nodelib-server/telemetry` from `src/instrumentation.server.ts`, flushing it
+on adapter-node's `sveltekit:shutdown` event. The setup mirrors golib's presets: it traces the
+global `fetch` into backend services, keeps every trace, and redacts query values from recorded
+URLs. Keep secrets in the query, never in a path segment, which is recorded as is. Browser spans are
+deferred: add them only once the browser calls services directly or runs significant work of its
+own.
+
 ## Storybook-first delivery
 
 Build every user-visible screen in this order:
@@ -221,6 +230,10 @@ Expose two distinct probes:
 
 Never turn a request parameter into an arbitrary healthcheck URL. Configuration selects from known
 clients, and concurrency plus deadlines bound the fan-out cost.
+
+Cover `/healthcheck` with an end-to-end request test that expects `200` against the real dependency
+stack. A unit test that mocks `fetch` asserts whatever path it was written with, so it cannot catch a
+probe aimed at a route the service does not serve.
 
 ## CI and publication
 
