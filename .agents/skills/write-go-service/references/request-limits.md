@@ -56,8 +56,9 @@ plus 30 per 10 minutes per email; mail 3 per 5 minutes per caller, plus 3 per ho
 A route that calls a paid provider or spends heavy CPU or memory gets limits as strong as
 authentication's entrypoints: a strict per-caller limit, and a concurrency gate sized to the
 instance's memory, also read from the environment: `httpf.LimitConcurrency` on the route, or a
-semaphore around the costly work itself when it runs below the handler. Authentication runs at most
-`ARGON2_MAX_CONCURRENT` Argon2 hashes at once, 4 by default: 64 MiB each in a 512 MiB instance.
+semaphore around the costly work itself when it runs below the handler. Size a CPU-bound gate to the
+CPUs, `runtime.GOMAXPROCS(0)`: more concurrent work adds memory but no throughput. Authentication runs
+`ARGON2_MAX_CONCURRENT` Argon2 hashes at once, one per CPU by default as Keycloak does, 64 MiB each.
 Excess calls wait for a slot rather than exhaust the instance.
 
 ## Counters
