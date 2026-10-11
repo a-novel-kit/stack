@@ -45,7 +45,7 @@ Every limit is configuration, like a timeout or a size: an environment variable 
 in `env.go`, never a number in a middleware. A rate is an `httpf.Rate`, written `<requests>/<window>`
 (`3/5m`) in its variable and in its default: `config.Must(httpf.ParseRate("3/5m"))` writes the
 default, and `config.LoadEnv` reads the variable with `httpf.ParseRate`. Name each policy once in the
-service's limits file, built on `httpf.Limits.By` with a caller key or `httpf.JSONFieldKey` for a
+service's limits file, built on `httpf.Limits.By` with a caller key or `httpf.BodyKeyRate` for a
 target named in the body. A key or gate that another service could use belongs in golib, not in
 the service. Authentication's defaults are the reference:
 anonymous tokens 3 per 5 minutes per visitor; login 10 per minute and 30 per 10 minutes per visitor,
