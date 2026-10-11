@@ -53,6 +53,13 @@ the minimal surface external consumers need; follow the same naming/interface ru
 provide a `NewClient()` that wraps connection setup and returns a clean interface; leak no internal
 implementation detail through the public API.
 
+`NewClient()` prepends `grpc.WithStatsHandler(otelgrpc.NewClientHandler())` to the caller's dial
+options, so every call opens a client span and sends the caller's trace context. The client owns
+its connection, so consumers trace without wiring of their own and never add a second handler. A
+`pkg/go` test calls an in-process server with a caller span in context and asserts the received
+`traceparent` carries its trace ID: without the handler each server starts a new trace, and no
+other check notices.
+
 ---
 
 ## cmd/ (targets)

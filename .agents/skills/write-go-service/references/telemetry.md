@@ -64,3 +64,19 @@ innermost span that produces it, so a core span does not repeat its DAO's row co
 operation called from several parents keeps an input any of them lacks. Leave out constants,
 configuration values, and timestamps the span's own timing already gives. Do **not** add spans to
 constructors or config loading, nor span events: only operations that do real work get a span.
+
+## Traces across processes
+
+One user action is one trace, from the platform's server to the last service it reaches.
+
+- **Incoming:** golib's presets install the W3C Trace Context propagator, and `otelhttp` and
+  `otelgrpc` server instrumentation continue the caller's trace. Add nothing per handler.
+- **Outgoing:** a gRPC call goes through the callee's `pkg/go` client, which traces its connection
+  (see [wiring](wiring.md#pkggo-exported-go-client)). An HTTP call goes through
+  `httpf.NewPoolClient`, which does the same with `otelhttp`.
+- **Deferred work:** work a request creates but something else runs later, such as a sweep or a
+  queue consumer, stores the creating request's `traceparent` with the work item. Inject it through
+  `propagation.TraceContext{}`, never the global propagator, so baggage stays out of storage. The
+  span that runs the work links to it with `trace.WithLinks` rather than taking it as parent, which
+  would stretch the original trace across the work's lifetime. Skip the link when the work runs in
+  the creating trace. `service-genai`'s `core.GenerationCheck` is the reference.
