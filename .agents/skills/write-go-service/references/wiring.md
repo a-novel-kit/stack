@@ -18,8 +18,10 @@ Configuration structs + loading from env vars or YAML. No logic beyond parsing a
 - **Servers come from golib, one line each.** `cmd/` builds the router with
   `httpf.NewRouter(cfg.Rest, cfg.Otel, cfg.HttpLogger, cfg.App.DowntimeStart)` and runs it with
   `httpf.ListenAndServe(ctx, cfg.Rest, router)`; gRPC uses
-  `grpcf.NewServer(cfg.Otel, cfg.Logger, cfg.App.DowntimeStart, ctxInterceptor)` and
-  `grpcf.ListenAndServe(ctx, cfg.Grpc, server)`. What differs per service, such as the ping path or
+  `grpcf.NewServer(ctx, cfg.Otel, cfg.Logger, cfg.App.DowntimeStart, ctxInterceptor)` and
+  `grpcf.ListenAndServe(ctx, cfg.Grpc, server)`. Both servers take the process context: when it ends,
+  requests and unary calls drain within the shutdown timeout, while gRPC streams end with
+  `UNAVAILABLE` so their clients resume elsewhere. What differs per service, such as the ping path or
   the CORS methods, is a default on the config copy, never an argument.
 - **`main` reads as wiring.** One line per dependency, server and route. No option literals, middleware
   chains or explanatory comments inline: a route's middleware is a named value from its own file,
