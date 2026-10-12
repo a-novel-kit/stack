@@ -59,6 +59,10 @@
   tag-conditioned roles never cover `run.operations.get`; it lives on an unconditional read role.
   When the writer starts managing a new resource type, add its write and operation permissions in
   foundation first.
+- **A newly enabled API's service agent may not exist yet.** Google creates it lazily, and Workflows
+  refused the first workflow with `service agent does not exist`. Create it with
+  `google_project_service_identity`, the one resource on `google-beta`, and grant its `serviceAgent`
+  role before the resource that needs it, as `modules/project-shell` does.
 
 ## Read the live state before trusting the code
 
@@ -149,6 +153,15 @@ pins in the same change.
 - **The writer's federation condition** pins `deploy.yaml`, `roll-database.yaml` and
   `recovery.yaml` on `master` behind the `production` environment. Changing it is a bootstrap change, applied by the last trusted
   workflow before a new one depends on it.
+- **`infra-downtime` trusts only `downtime.yaml` on `master`.** It can start, list and cancel the
+  `downtime-announcements` executions in the management project, and nothing else.
+- **The read-only identity trusts only pull requests into `master`.** A stacked pull request's plans
+  fail with `rejected by the attribute condition`. Once its parent merges, GitHub retargets it to
+  `master`; rebase it onto `master` to drop the parent's squashed commit, and its plans run.
+- **Cloud Workflows can record what a workflow reads.** Detailed execution history keeps variables
+  and call logs keep call results, so a workflow that reads a secret pins
+  `call_log_level = "LOG_NONE"` and `execution_history_level = "EXECUTION_HISTORY_BASIC"`.
+  Bootstrap's test checks both for `downtime-announcements`.
 - **A service that trusts a forwarded visitor header requires IAM.** Its invokers are only the
   platform and the deploy health check, which sends an ID token for the service's custom audience.
 - **Inventory IAM by principal and resource:**
