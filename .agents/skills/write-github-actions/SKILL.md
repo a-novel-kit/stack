@@ -244,7 +244,7 @@ Two GitHub constraints shape the bypass lists:
   source or owner organization".
 
 **A bypass label approves one PR head.** A label that waives a check (`allow-screenshot-change`,
-`allow-incomplete-translations`, `allow-translation-drift`, `append-only-override`, infra's
+`allow-incomplete-translations`, `allow-translation-drift`, `append-only-override`, `allow-dependency-change`, infra's
 `allow-resource-deletion` and `allow-downtime`) approves the commit it was reviewed on, so a push removes it and a reviewer
 adds it again. The removal runs in a job holding `pull-requests: write`, and the label change re-runs
 the gate. A gate reads labels live through the API, or ignores them on a `synchronize` payload, since
@@ -264,7 +264,7 @@ default-branch push, so every class sets `code_quality: false` and `repo update`
 
 The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.yaml`,
 `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`, `recover-prs.yaml`,
-`auto-approve-dependabot.yaml`, `lock-closed.yaml`) are rendered from
+`check-dependencies.yaml`, `auto-approve-dependabot.yaml`, `lock-closed.yaml`) are rendered from
 `cli/internal/repocfg/templates/governance/` and carry a "Managed by `a-novel repo update`" banner. Edit the template in the stack repo; a change to
 the copy in a repo is overwritten. What those workflows mean is `coordinate-landing`'s subject.
 
@@ -273,6 +273,14 @@ bots' PRs, withholding approval while `renovate/stability-days` is pending; its 
 approves once Renovate marks the update stable, and its job needs `statuses: read` because the App
 cannot read commit statuses. `recover-prs.yaml` re-arms auto-merge on a PR the merge queue dropped for
 `checks_timed_out`, and dispatches Renovate when a merge leaves a dependency PR conflicting.
+
+A bot's PR notifies nobody on GitHub: it has no assignee, and CODEOWNERS leaves dependency manifests
+and lockfiles unowned, so a version bump requests no review. A failing one reaches the Discord
+dependencies feed instead. A person's manifest change (`go.mod`, a tool's `.mod`, `go.work`,
+`package.json`, `pnpm-workspace.yaml`) is held by `check-dependencies.yaml` until a reviewer adds
+`allow-dependency-change`; lockfiles pass. The `always` list requires that check everywhere, and a
+ruleset cannot exempt the merge queue's actorless merges, so the check itself passes merge-queue groups
+and a PR whose author and every commit are bots.
 
 ---
 

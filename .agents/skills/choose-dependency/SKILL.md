@@ -111,6 +111,10 @@ human can verify the call.
   `<tool>.mod` / `.sum` files, never in the main `go.mod`, and are never `go install`-ed globally —
   see `write-go`'s tools policy.
 - **Kit repos hold a stricter bar** than services for taking on any dependency (`write-go-kit`).
+- **A manifest change waits for its reviewer.** The required `check-dependencies` check fails a pull
+  request that changes `go.mod`, a tool's `.mod`, `go.work`, `package.json` or `pnpm-workspace.yaml`
+  until the reviewer adds `allow-dependency-change`. Never add that label yourself: it records their
+  acknowledgement, and a push removes it.
 
 ---
 
