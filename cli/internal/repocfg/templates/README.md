@@ -48,12 +48,16 @@ GitHub App's review.
 
 Every repo also gets `.github/workflows/notify.yaml` (`governance/notify.yaml`),
 which posts to the org's Discord server: a failed `main` or `release` run on the
-default branch, pinging the repository's role, then the run that fixes it; and
-each published release with its notes. It reads three org-level values the
-operator provisions by hand: the `CI_WEBHOOK` and `RELEASES_WEBHOOK` secrets, and
-the `DISCORD_REPO_ROLES` variable mapping each `<org>/<repo>` to its role id. A
-missing webhook skips the post; a repository missing from the map posts without
-a ping.
+default branch, pinging the repository's role, then the run that fixes it; each
+published release with its notes; a person's pull request lifecycle and reviews,
+pinging its owner and reviewers; and a bot's pull request whose `main` fails.
+It reads org-level values the operator provisions by hand: the `CI_WEBHOOK`,
+`RELEASES_WEBHOOK`, `PULL_REQUESTS_WEBHOOK`, `REVIEWS_WEBHOOK` and
+`DEPENDENCIES_WEBHOOK` secrets; `BWS_READ_TOKEN` and `BWS_SERVER_URL`, which
+resolve a GitHub account to the Discord user it pings; and the
+`DISCORD_REPO_ROLES` variable mapping each `<org>/<repo>` to its role id. A
+missing webhook skips the post; a person or repository missing from its map
+posts without that ping.
 
 Independent of class, `repo update` commits a uniform `.github/CODEOWNERS`
 (`governance/CODEOWNERS` — a single owner today) to every repo so review
