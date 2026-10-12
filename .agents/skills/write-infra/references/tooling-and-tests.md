@@ -82,5 +82,7 @@ Run the whole gate the way CI does:
   still to create, and template updates in roots the pull request never touched. Wait for the
   `deploy.yaml` runs to finish, then re-run the pull request's checks before comparing the plan.
 - **A quota ceiling below recent usage passes the plan and fails the apply.** Google refuses it
-  (`QUOTA_DECREASE_BELOW_USAGE`), and the deploy stops at foundation. Hold a new ceiling at the
-  current peak, and lower it once the change that cuts usage has run long enough.
+  (`QUOTA_DECREASE_BELOW_USAGE`), and the deploy stops at foundation until a revert merges. Its
+  "recent usage" outlasts the 10-minute average the quota pages describe: Cloud Run CPU was still
+  refused 1.5 hours after an instance cap cut usage. Set a new ceiling at the current peak and keep
+  it; bound actual usage with instance caps instead.
