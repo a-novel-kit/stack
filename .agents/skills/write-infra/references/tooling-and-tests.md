@@ -78,3 +78,6 @@ Run the whole gate the way CI does:
 - **`format()` errors when its string has no verb but receives arguments.**
 - **Cloud Run v2 `uri` is the hashed `*.a.run.app` URL.** Read it from a data source rather than
   copying it.
+- **A plan that runs during a deploy reads half-applied state.** It shows a just-merged change as
+  still to create, and template updates in roots the pull request never touched. Wait for the
+  `deploy.yaml` runs to finish, then re-run the pull request's checks before comparing the plan.
