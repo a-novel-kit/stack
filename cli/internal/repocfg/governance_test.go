@@ -256,18 +256,23 @@ func TestLockClosedGovernance(t *testing.T) {
 
 // TestNotifyGovernance pins what the Discord notifier watches. Watching
 // release as well as main is what reports a release that fails after its tag,
-// and the CI engine needs actions: read to tell a recovery from a routine success.
+// and main on the bots' and the merge queue's branches is what reports a bot's
+// failing pull request. pull_request_target, unlike pull_request, still fires
+// while a pull request conflicts. Both engines need actions: read to list runs.
 func TestNotifyGovernance(t *testing.T) {
 	t.Parallel()
+	type events struct {
+		Types []string `yaml:"types"`
+	}
 	var workflow struct {
 		On struct {
 			WorkflowRun struct {
 				Workflows []string `yaml:"workflows"`
 				Branches  []string `yaml:"branches"`
 			} `yaml:"workflow_run"`
-			Release struct {
-				Types []string `yaml:"types"`
-			} `yaml:"release"`
+			Release           events `yaml:"release"`
+			PullRequestTarget events `yaml:"pull_request_target"`
+			PullRequestReview events `yaml:"pull_request_review"`
 		} `yaml:"on"`
 		Jobs map[string]struct {
 			Permissions map[string]string `yaml:"permissions"`
@@ -280,15 +285,28 @@ func TestNotifyGovernance(t *testing.T) {
 		want string
 	}{
 		{name: "workflow_run workflows", got: workflow.On.WorkflowRun.Workflows, want: "main,release"},
-		{name: "workflow_run branches", got: workflow.On.WorkflowRun.Branches, want: "master"},
+		{
+			name: "workflow_run branches",
+			got:  workflow.On.WorkflowRun.Branches,
+			want: "master,renovate/**,dependabot/**,gh-readonly-queue/**",
+		},
 		{name: "release types", got: workflow.On.Release.Types, want: "published"},
+		{
+			name: "pull_request_target types",
+			got:  workflow.On.PullRequestTarget.Types,
+			want: "opened,ready_for_review,converted_to_draft,assigned,unassigned," +
+				"review_requested,review_request_removed,closed,reopened,dequeued",
+		},
+		{name: "pull_request_review types", got: workflow.On.PullRequestReview.Types, want: "submitted,dismissed"},
 	}
 	for _, testCase := range testCases {
 		if got := strings.Join(testCase.got, ","); got != testCase.want {
 			t.Errorf("notify %s = %q, want %q", testCase.name, got, testCase.want)
 		}
 	}
-	if got := workflow.Jobs["ci"].Permissions["actions"]; got != "read" {
-		t.Errorf("notify ci permissions = %v, want actions: read", workflow.Jobs["ci"].Permissions)
+	for _, job := range []string{"ci", "pull-request"} {
+		if got := workflow.Jobs[job].Permissions["actions"]; got != "read" {
+			t.Errorf("notify %s permissions = %v, want actions: read", job, workflow.Jobs[job].Permissions)
+		}
 	}
 }
