@@ -37,14 +37,24 @@ func rulesetBody(plan *Plan, name string) *APIRuleset {
 	return nil
 }
 
+// TestCODEOWNERS pins the routing: one owner for everything, then owner-less
+// lines for the dependency manifests and lockfiles. The last matching line
+// wins, so the catch-all comes first.
 func TestCODEOWNERS(t *testing.T) {
 	t.Parallel()
 	out, err := CODEOWNERS()
 	if err != nil {
 		t.Fatalf("CODEOWNERS: %v", err)
 	}
-	if strings.TrimSpace(out) != "* @kushuh" {
-		t.Errorf("CODEOWNERS = %q, want %q", out, "* @kushuh")
+	var rules []string
+	for line := range strings.Lines(out) {
+		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
+			rules = append(rules, line)
+		}
+	}
+	want := []string{"* @kushuh", "*.mod", "*.sum", "go.work", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"}
+	if !slices.Equal(rules, want) {
+		t.Errorf("CODEOWNERS rules = %q, want %q", rules, want)
 	}
 }
 
@@ -97,6 +107,10 @@ func TestBuildPlanProvisions(t *testing.T) {
 		{name: "ApprovePR", plan: master, method: http.MethodPut, path: "/approve-pr.yaml", content: "generic-actions/approve-pr@", gated: true},
 		{name: "DeriveStatus", plan: master, method: http.MethodPut, path: "/derive-status.yaml", content: "generic-actions/derive-status@", gated: true},
 		{name: "RecoverPRs", plan: master, method: http.MethodPut, path: "/recover-prs.yaml", content: "generic-actions/enable-auto-merge@", gated: true},
+		{
+			name: "CheckDependencies", plan: master, method: http.MethodPut, path: "/check-dependencies.yaml",
+			content: "generic-actions/check-dependencies@", gated: true,
+		},
 		{name: "AutoApprove", plan: approval, method: http.MethodPut, path: "/auto-approve-dependabot.yaml", content: "auto-approve-dependabot-run.yaml@", gated: true},
 		// GitHub Code Quality bills per active committer and per AI credit, so it follows the class flag.
 		{name: "CodeQuality/Off", plan: bare, method: http.MethodPatch, path: "/code-quality/setup", body: map[string]any{"state": "not-configured"}},

@@ -195,10 +195,12 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 
 	// Merge governance ships wherever the master ruleset gates merges;
 	// recover-prs re-arms PRs the queue drops on a timeout, so it follows the
-	// queue. Release callers are narrower: a class without the tags ruleset
-	// removes them, so changing a repo's class leaves no release mechanics behind.
+	// queue, and check-dependencies posts a check that ruleset requires. Release
+	// callers are narrower: a class without the tags ruleset removes them, so
+	// changing a repo's class leaves no release mechanics behind.
 	if c.Rulesets.Master {
-		put("merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml", "recover-prs.yaml")
+		put("merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml",
+			"recover-prs.yaml", "check-dependencies.yaml")
 	}
 	if c.Rulesets.Master && c.Rulesets.Tags {
 		put("release-train.yaml", "hotfix.yaml")

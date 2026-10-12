@@ -232,6 +232,43 @@ func TestHotfixGovernance(t *testing.T) {
 	}
 }
 
+// TestCheckDependenciesGovernance pins what keeps the dependency gate honest:
+// label changes re-run it, a push re-checks it, and it reports on merge-queue
+// groups, which the required check would otherwise leave waiting. The job id is
+// the check context checks.yaml requires.
+func TestCheckDependenciesGovernance(t *testing.T) {
+	t.Parallel()
+	var workflow struct {
+		On struct {
+			PullRequest struct {
+				Types []string `yaml:"types"`
+			} `yaml:"pull_request"`
+		} `yaml:"on"`
+		Jobs map[string]struct {
+			Permissions map[string]string `yaml:"permissions"`
+		} `yaml:"jobs"`
+	}
+	// merge_group takes no options, so only its key shows it is there.
+	var triggers struct {
+		On map[string]any `yaml:"on"`
+	}
+	loadWorkflow(t, "check-dependencies.yaml", &workflow)
+	loadWorkflow(t, "check-dependencies.yaml", &triggers)
+	if got := strings.Join(workflow.On.PullRequest.Types, ","); got != "opened,reopened,synchronize,labeled,unlabeled" {
+		t.Errorf("check-dependencies pull_request types = %q", got)
+	}
+	if _, ok := triggers.On["merge_group"]; !ok {
+		t.Error("check-dependencies must run on merge_group, or a queued pull request waits out the timeout")
+	}
+	job, ok := workflow.Jobs["check-dependencies"]
+	if !ok {
+		t.Fatal("check-dependencies job missing; its id is the required check context")
+	}
+	if got := job.Permissions["pull-requests"]; got != "write" {
+		t.Errorf("check-dependencies permissions = %v, want pull-requests: write to remove the label", job.Permissions)
+	}
+}
+
 // TestLockClosedGovernance pins when conversations lock: only once an issue or
 // pull request closes. A locked conversation refuses a GitHub App's review, so
 // locking an open pull request would block the dependency bots' approval.

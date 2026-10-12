@@ -40,6 +40,9 @@ ensure:
   - name: append-only-override
     color: "fbca04"
     description: Allows a reviewed change to files protected by an append-only CI check
+  - name: allow-dependency-change
+    color: "fbca04"
+    description: A reviewer acknowledges the dependency manifests this pull request changes
   # automation:paused — on an Epic issue, holds that one epic's [Agent] automation:
   # merge-gate holds its members, and the partial-landing detector and rollback skip
   # it, while other epics keep moving. It is best-effort: a label-read blip fails
