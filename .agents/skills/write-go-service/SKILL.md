@@ -192,7 +192,8 @@ func NewUserSearch(dao UserSearchDao) *UserSearch {
   A service that imports `dao.PgUserSearch` does not use that concrete type directly; it declares a
   local `UserSearchDao` interface describing only the methods it needs. The DAO package has
   no interface of its own. The consumer owns the contract and the producer satisfies it, so neither
-  layer forces the other to import it.
+  layer forces the other to import it. The one accepted exception is genai's connector registry,
+  described under [lib](references/wiring.md#lib-layer-internallib).
 - **One method per interface, named `Exec`.** Idiomatic Go names interface methods after what they
   do; this is a deliberate project standard that trades that for consistency. Follow it.
 - The method signature is `(ctx context.Context, request *XxxRequest) (Result, error)` — `Result`

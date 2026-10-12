@@ -41,6 +41,12 @@ nonexistent**. Before adding anything: check stdlib/deps first, then ask the dev
 belongs here at all (vs. inside the relevant package). During maintenance, look for `lib/` code a
 newer upstream now subsumes, and delete it.
 
+**Accepted exception: genai's provider connectors** (`internal/lib/connectors`). They stay here until
+the a-novel-kit AI library replaces them. Several connectors implement the same modes, so the
+package declares the mode interfaces and the registry that resolves them, and core takes that
+registry rather than declaring an interface per mode. Do not flag either as drift, and do not
+extend the pattern: any other external client goes behind a consumer-owned interface.
+
 ---
 
 ## Models (`internal/models/`)
