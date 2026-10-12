@@ -52,6 +52,9 @@ Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub
   actionlint config ignores its false positive; zizmor prefers it.
 - **Label events re-run the whole workflow.** Never skip non-plan jobs on label events: a later
   skipped check replaces an earlier failure.
+- **Keep a state change and its best-effort follow-up in separate jobs.** `downtime.yaml` writes the
+  downtime in one job and hands its announcements to Google in another: an announcement failure
+  leaves the downtime job green, and "Re-run failed jobs" retries only the announcements.
 
 ## Local verification
 
@@ -86,3 +89,12 @@ Run the whole gate the way CI does:
   "recent usage" outlasts the 10-minute average the quota pages describe: Cloud Run CPU was still
   refused 1.5 hours after an instance cap cut usage. Set a new ceiling at the current peak and keep
   it; bound actual usage with instance caps instead.
+- **A workload identity provider's display name is capped at 32 characters,** and only the apply
+  checks it. Bootstrap's test enforces the limit.
+- **`gcloud` asks before cancelling or deleting, and nobody answers in CI.** Set
+  `CLOUDSDK_CORE_DISABLE_PROMPTS: "1"` on the step and pass `--quiet`. A test stub that accepts every
+  call hides the prompt, so make stubs refuse an unconfirmed call.
+- **GitHub starts this repository's scheduled workflows hours late:** every 4 to 7 hours in
+  October 2026, whatever the cron (a-novel-kit/.github#288). Never rely on `schedule:` for a
+  deadline. The downtime announcements run on Cloud Workflows for that reason, and `drift.yaml`
+  runs far less often than its cron says.
