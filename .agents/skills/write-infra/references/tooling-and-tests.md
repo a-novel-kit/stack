@@ -81,3 +81,6 @@ Run the whole gate the way CI does:
 - **A plan that runs during a deploy reads half-applied state.** It shows a just-merged change as
   still to create, and template updates in roots the pull request never touched. Wait for the
   `deploy.yaml` runs to finish, then re-run the pull request's checks before comparing the plan.
+- **A quota ceiling below recent usage passes the plan and fails the apply.** Google refuses it
+  (`QUOTA_DECREASE_BELOW_USAGE`), and the deploy stops at foundation. Hold a new ceiling at the
+  current peak, and lower it once the change that cuts usage has run long enough.
