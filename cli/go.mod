@@ -8,7 +8,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.6
 	connectrpc.com/connect/v2 v2.0.0
 	github.com/charmbracelet/x/ansi v0.11.9
-	github.com/klauspost/compress v1.20.1
+	github.com/klauspost/compress v1.20.3
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/mod v0.42.0
 	golang.org/x/term v0.47.0
