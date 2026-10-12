@@ -69,13 +69,20 @@ pins in the same change.
 
 ## Release contract
 
-1. Migrations run during apply through the job's `run_execution_token`, which hashes the migration
-   image. The Cloud Run service `depends_on` that job.
+1. Migrations run during apply through the job's `run_execution_token`. The Cloud Run service
+   `depends_on` that job.
+   - **A token must never repeat.** Cloud Run names an execution after its job and token, and
+     refuses a name it has used: the apply waits on "already exists" until it times out.
+   - **Derive it from a `terraform_data` its inputs replace,** never from the inputs alone. A hash
+     repeats when they come back, as on a revert or a cleared downtime. The plan policy exempts
+     that replacement.
 2. Traffic is `TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST`. Cloud Run routes to a revision only after its
    startup probe passes.
 3. Post-deploy checks:
-   - the JSON Keys smoke job runs on every new gRPC image;
-   - deploy calls `/v2/healthcheck`.
+   - the JSON Keys smoke job runs on every new gRPC image, and again once a downtime clears;
+   - deploy calls `/v2/healthcheck`;
+   - each check skips once a planned downtime has started, and re-tests the start when it fails,
+     since a check begun just before `start` fails when the services stop.
 4. Rollback is a revert pull request. Migrations stay backward compatible; data rollback is a
    recovery, never part of a deploy.
 
@@ -102,6 +109,8 @@ pins in the same change.
 - **Planned downtimes come only from the admin-only `downtime.yaml`,** which writes `DOWNTIME` and
   deploys. Listed services refuse work from `start` until someone clears it; `end` only informs
   users.
+- **Users see a downtime whenever a deploy can enforce one.** Any deploy applies `DOWNTIME`, so a
+  schedule publishes `downtime.json` before writing it, and a clear deletes it before publishing.
 - **The deploy's `rollout` job rolls hosts from observed state, not the diff,** so a cancelled or
   force-merged deploy loses nothing:
   - a database host off its group's target rolls only during its service's downtime, once the
