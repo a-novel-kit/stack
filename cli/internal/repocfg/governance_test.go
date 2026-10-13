@@ -6,6 +6,10 @@ import (
 	"testing"
 )
 
+// botCommit is a commit as the REST API lists Dependabot's own: GitHub signs it
+// and records web-flow as its committer.
+const botCommit = `{"author":{"login":"dependabot[bot]"},"committer":{"login":"web-flow"},"commit":{"verification":{"verified":true}}}`
+
 // TestDependabotGovernance runs the auto-approval scripts against a stubbed gh.
 // The engine must also hold Renovate's release age: it triggers on the status
 // event that reports it and reads the statuses the App lacks, since a nested
@@ -69,7 +73,16 @@ func TestDependabotGovernance(t *testing.T) {
 		{name: "Ignore/Draft", mutate: func(p record) { p["draft"] = true }},
 		{name: "Ignore/Closed", mutate: func(p record) { p["state"] = "closed" }},
 		{name: "Ignore/UnknownCommitAuthor", commits: `[[{"author":null}]]`},
-		{name: "Ignore/HumanOnSecondPage", commits: `[[{"author":{"login":"dependabot[bot]"}}],[{"author":{"login":"human"}}]]`},
+		{name: "Ignore/HumanOnSecondPage", commits: "[[" + botCommit + `],[{"author":{"login":"human"}}]]`},
+		// A push can claim Dependabot's email; only GitHub signs as web-flow.
+		{
+			name:    "Ignore/PushedAsBot",
+			commits: `[[{"author":{"login":"dependabot[bot]"},"committer":{"login":"human"},"commit":{"verification":{"verified":true}}}]]`,
+		},
+		{
+			name:    "Ignore/Unverified",
+			commits: `[[{"author":{"login":"dependabot[bot]"},"committer":{"login":"web-flow"},"commit":{"verification":{"verified":false}}}]]`,
+		},
 		{name: "Ignore/EmptyCommits", commits: `[[]]`},
 		{name: "Error/Ambiguous", duplicate: true, wantError: true},
 	} {
@@ -89,7 +102,7 @@ func TestDependabotGovernance(t *testing.T) {
 			}
 			commits := tc.commits
 			if commits == "" {
-				commits = `[[{"author":{"login":"dependabot[bot]"}}]]`
+				commits = "[[" + botCommit + "]]"
 			}
 			output, calls, err := runGovernanceScript(t, scripts["resolve"], []string{"CANDIDATES=" + string(payload), "COMMITS=" + commits, "HEAD_SHA=" + sha, "BOT=" + bot})
 			if (err != nil) != tc.wantError {

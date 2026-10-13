@@ -7,3 +7,13 @@ bots:
   dependencies: 1717331 # AnovelBot[Dependencies] — Renovate
   agent: 3549319 # AnovelBot[Agent] — PR/issue comment proxy
   publish: 1718144 # AnovelBot[Publish] — release automation
+# Org secrets with selected-repository visibility. Each repo can read one
+# exactly when one of its workflows names it; every other org secret stays
+# visible to all repos. Before a secret is listed here, an admin switches it to
+# selected in the org settings, picking the repos that name it, since only that
+# switch needs its value. A listed secret still visible to all repos fails each
+# grant and revoke with 409.
+scoped_secrets:
+  - CODECOV_TOKEN
+  - PUBLISH_BOT_PRIVATE_KEY
+  - TOKEN_EXPIRY_ADMIN

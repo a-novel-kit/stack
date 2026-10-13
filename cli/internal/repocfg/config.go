@@ -77,6 +77,9 @@ type OrgProfile struct {
 	Org             string           `yaml:"org"`
 	SigningRequired bool             `yaml:"signing_required"`
 	Bots            map[string]int64 `yaml:"bots"`
+	// ScopedSecrets are the org secrets with selected-repository visibility. A
+	// repository can read one exactly when one of its workflows names it.
+	ScopedSecrets []string `yaml:"scoped_secrets"`
 }
 
 // Features mirrors the repo "Features" toggles.
@@ -115,6 +118,9 @@ type ClassRulesets struct {
 	Master          bool `yaml:"master"`
 	RequireApproval bool `yaml:"require_approval"`
 	Tags            bool `yaml:"tags"`
+	// AdminsOnly drops the bots from every bypass list, for a class whose
+	// default branch no automation writes to directly.
+	AdminsOnly bool `yaml:"admins_only"`
 }
 
 // ClassPreset is one classes/<class>.yaml file.

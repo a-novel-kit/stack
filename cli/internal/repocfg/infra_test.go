@@ -29,7 +29,7 @@ func TestInfraClassContract(t *testing.T) {
 			AllowUpdateBranch: true, SignoffRequired: true,
 		},
 		Security: SecurityToggles{SecretScanning: true, PushProtection: true, DependabotAlerts: &alerts},
-		Rulesets: ClassRulesets{Master: true, RequireApproval: true},
+		Rulesets: ClassRulesets{Master: true, RequireApproval: true, AdminsOnly: true},
 	}
 	if !reflect.DeepEqual(preset, want) {
 		t.Errorf("infra preset = %+v, want %+v", preset, want)
@@ -51,8 +51,15 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 			signatures = append(signatures, "PRUNE "+strings.Join(op.KeepRulesets, ","))
 		case op.RulesetName != "":
 			signatures = append(signatures, "RULESET "+op.RulesetName)
+			ruleset, _ := op.Body.(*APIRuleset)
 			if op.RulesetName == rulesetMaster {
-				master, _ = op.Body.(*APIRuleset)
+				master = ruleset
+			}
+			// A bot that bypasses could deploy production with its org-wide key.
+			for _, actor := range ruleset.BypassActors {
+				if actor.ActorType != "OrganizationAdmin" && actor.ActorType != "RepositoryRole" {
+					t.Errorf("%s ruleset bypass includes %s %v, want admins only", op.RulesetName, actor.ActorType, *actor.ActorID)
+				}
 			}
 		default:
 			signatures = append(signatures, op.Method+" "+strings.TrimPrefix(op.Path, base))
@@ -70,6 +77,12 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 		"PUT /labels",
 		"PATCH /code-scanning/default-setup",
 		"PATCH /code-quality/setup",
+		"PUT /actions/permissions/workflow",
+		"PUT /actions/permissions/fork-pr-contributor-approval",
+		// Infra's workflows name none of the scoped secrets, so it can read none.
+		"DELETE orgs/a-novel/actions/secrets/CODECOV_TOKEN/repositories",
+		"DELETE orgs/a-novel/actions/secrets/PUBLISH_BOT_PRIVATE_KEY/repositories",
+		"DELETE orgs/a-novel/actions/secrets/TOKEN_EXPIRY_ADMIN/repositories",
 		"PUT /contents/.github/workflows/merge-gate.yaml",
 		"PUT /contents/.github/workflows/epic-freeze.yaml",
 		"PUT /contents/.github/workflows/approve-pr.yaml",

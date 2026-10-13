@@ -43,11 +43,15 @@ func TestApplyPlan(t *testing.T) {
 		// no existing master ruleset → POST; codecov ruleset exists → PUT.
 		"rulesets --jq":        "codecov\t777\n",
 		"git/ref/heads/master": "headoid123\n",
+		"repos/o/r --jq .id":   "4321\n",
 	})
 
 	plan := &repocfg.Plan{Ops: []repocfg.Op{
 		{Method: "PATCH", Path: "repos/o/r", Body: map[string]any{"has_wiki": false}},
 		{Method: "PATCH", Path: "repos/o/r/code-scanning/default-setup", Body: map[string]any{"state": "not-configured"}},
+		{Method: "PUT", Path: "repos/o/r/actions/permissions/workflow", Body: map[string]any{"default_workflow_permissions": "read"}},
+		{Method: "PUT", Path: "orgs/o/actions/secrets/USED/repositories", Secret: "USED"},
+		{Method: "DELETE", Path: "orgs/o/actions/secrets/UNUSED/repositories", Secret: "UNUSED"},
 		{Method: "PUT", Path: "repos/o/r/contents/.github/workflows/managed.yaml", Content: "name: Managed\n"},
 		{RulesetName: branchMaster, Path: "repos/o/r/rulesets", Body: &repocfg.APIRuleset{Name: branchMaster}},
 		{RulesetName: "codecov", Path: "repos/o/r/rulesets", Body: &repocfg.APIRuleset{Name: "codecov"}},
@@ -59,17 +63,23 @@ func TestApplyPlan(t *testing.T) {
 
 	joined := strings.Join(*calls, "\n")
 	for _, w := range []string{
-		"api -X PATCH repos/o/r --input -",                             // settings
-		"api -X PATCH repos/o/r/code-scanning/default-setup --input -", // code scanning stays off
-		"api repos/o/r/git/ref/heads/master --jq .object.sha",          // sync commit: read the branch tip
-		`"expectedHeadOid":"headoid123"`,                               // sync commit: optimistic lock on that tip
-		`"path":".github/workflows/managed.yaml"`,                      // sync commit: carries the staged file
-		"api -X POST repos/o/r/rulesets --input -",                     // master ruleset created (no existing id)
-		"api -X PUT repos/o/r/rulesets/777 --input -",                  // codecov ruleset updated (existing id 777)
+		"api -X PATCH repos/o/r --input -",                              // settings
+		"api -X PATCH repos/o/r/code-scanning/default-setup --input -",  // code scanning stays off
+		"api -X PUT repos/o/r/actions/permissions/workflow --input -",   // a settings op keeps its method
+		"api -X PUT orgs/o/actions/secrets/USED/repositories/4321",      // scoped secret granted by repo id
+		"api -X DELETE orgs/o/actions/secrets/UNUSED/repositories/4321", // and the unused one revoked
+		"api repos/o/r/git/ref/heads/master --jq .object.sha",           // sync commit: read the branch tip
+		`"expectedHeadOid":"headoid123"`,                                // sync commit: optimistic lock on that tip
+		`"path":".github/workflows/managed.yaml"`,                       // sync commit: carries the staged file
+		"api -X POST repos/o/r/rulesets --input -",                      // master ruleset created (no existing id)
+		"api -X PUT repos/o/r/rulesets/777 --input -",                   // codecov ruleset updated (existing id 777)
 	} {
 		if !strings.Contains(joined, w) {
 			t.Errorf("expected a gh call containing %q; calls:\n%s", w, joined)
 		}
+	}
+	if n := countCalls(*calls, "repos/o/r --jq .id"); n != 1 {
+		t.Errorf("repository id read %d times, want once for every secret op", n)
 	}
 	// Managed files land in the one sync commit, never as per-file REST PUTs.
 	if strings.Contains(joined, "-X PUT repos/o/r/contents/") {
@@ -342,6 +352,17 @@ func TestApplySettingsSignoffRetry(t *testing.T) {
 	}
 	if len(*calls) != 2 || strings.Contains((*calls)[1], "web_commit_signoff_required") {
 		t.Fatalf("calls = %q, want a retry PATCH without web_commit_signoff_required", *calls)
+	}
+}
+
+func TestApplySecretAccessNeedsSelectedVisibility(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam. GitHub answers 409
+	// while the secret is visible to every repo; the note says how to fix it.
+	stubGH(t, func(string) (string, error) { return "", errors.New("HTTP 409: Conflict") })
+	op := repocfg.Op{Method: "PUT", Path: "orgs/o/actions/secrets/S/repositories", Secret: "S"}
+	detail, err := applySecretAccess(op, func() (string, error) { return "4321", nil })
+	if err == nil || !strings.Contains(detail, "selected repositories") {
+		t.Fatalf("detail, err = %q, %v; want a 409 pointing at the visibility setting", detail, err)
 	}
 }
 

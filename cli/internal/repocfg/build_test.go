@@ -117,6 +117,13 @@ func TestBuildPlanProvisions(t *testing.T) {
 		// GitHub Code Quality bills per active committer and per AI credit, so it follows the class flag.
 		{name: "CodeQuality/Off", plan: bare, method: http.MethodPatch, path: "/code-quality/setup", body: map[string]any{"state": "not-configured"}},
 		{name: "CodeQuality/On", plan: planFor(t, &ClassPreset{CodeQuality: true}), method: http.MethodPatch, path: "/code-quality/setup", body: map[string]any{"state": "configured"}},
+		// A workflow token is read-only and never approves; fork runs wait for a maintainer.
+		{name: "WorkflowToken", plan: bare, method: http.MethodPut, path: "/actions/permissions/workflow", body: map[string]any{
+			"default_workflow_permissions": "read", "can_approve_pull_request_reviews": false,
+		}},
+		{name: "ForkApproval", plan: bare, method: http.MethodPut, path: "/fork-pr-contributor-approval", body: map[string]any{
+			"approval_policy": "all_external_contributors",
+		}},
 		// Published classes enable Pages through a workflow-backed site.
 		{name: "Pages/Library", plan: loadPlan(ClassLibrary), method: http.MethodPost, path: "/pages", body: workflow},
 		{name: "Pages/Platform", plan: loadPlan(ClassPlatform), method: http.MethodPost, path: "/pages", body: workflow},
@@ -302,5 +309,32 @@ func TestBuildPlanDependabotBypassFollowsSecurityUpdates(t *testing.T) {
 		if !securityUpdates && (ruleset.BypassActors == nil || len(ruleset.BypassActors) != 0) {
 			t.Errorf("bypass actors = %#v, want an empty list", ruleset.BypassActors)
 		}
+	}
+}
+
+// TestBuildPlanScopesSecrets pins scoped secret access: a repo can read a scoped
+// org secret exactly when its workflows name it. Unscoped secrets get no op.
+func TestBuildPlanScopesSecrets(t *testing.T) {
+	t.Parallel()
+	plan, err := BuildPlan(&RepoTarget{
+		Org: "a-novel", Repo: "example", DefaultBranch: "master", Class: &ClassPreset{},
+		OrgProfile: &OrgProfile{Org: "a-novel", ScopedSecrets: []string{"CODECOV_TOKEN", "TOKEN_EXPIRY_ADMIN"}},
+		Discovered: &Discovered{Secrets: []string{"AGENT_BOT_PRIVATE_KEY", "CODECOV_TOKEN"}},
+	})
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	var got []string
+	for _, op := range plan.Ops {
+		if op.Secret != "" {
+			got = append(got, op.Title())
+		}
+	}
+	want := []string{
+		"PUT orgs/a-novel/actions/secrets/CODECOV_TOKEN/repositories/{repository_id}",
+		"DELETE orgs/a-novel/actions/secrets/TOKEN_EXPIRY_ADMIN/repositories/{repository_id}",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("secret ops = %v, want %v", got, want)
 	}
 }

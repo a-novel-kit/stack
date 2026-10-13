@@ -3,7 +3,9 @@
 These YAML files are the editable source of truth for the `a-novel repo create`
 and `a-novel repo update` commands. They are embedded into the CLI binary, but
 an on-disk copy here (or under `$REPO_CONFIG_DIR`) takes precedence, so edits
-take effect without a rebuild.
+take effect without a rebuild. The files decode strictly, so a new field breaks
+every older installed CLI once the stack checkout pulls it: its rollout runs
+`a-novel install` right after the merge.
 
 A repo's desired config is composed from three inputs:
 
@@ -78,6 +80,23 @@ untouched — apply never removes a label it was not told about. Kind
 Size are **project fields**, so neither is a label here; the label set is the
 cross-cutting signals that sort work within a board status.
 
+## Actions settings and scoped secrets
+
+Every repo gets the same Actions settings: a workflow token is read-only unless
+its job asks for more and never approves a pull request, and an outside
+contributor's fork pull request runs no workflow until a maintainer approves it.
+Both orgs set the same values org-wide; the repo-level copy keeps a repo correct
+if an org setting loosens.
+
+The org's `scoped_secrets` have selected-repository visibility. Discovery reads
+every `secrets.NAME` reference in the repo's workflows, and `repo update` grants
+each scoped secret the repo names and revokes the others. A new repo reads
+exactly what its CI uses, and a secret its workflows stop naming is revoked on
+the next reconcile. Switching a secret to selected visibility needs its value,
+so an admin does it once in the org settings, picking the repos that name it,
+before listing it in `orgs/<org>.yaml`; a listed secret still visible to every
+repo fails each grant and revoke with 409.
+
 ## `classes/<class>.yaml` and `repos/<org>_<repo>.yaml`
 
 Same schema. A `repos/` file is for a one-off repo and **replaces** the
@@ -99,20 +118,23 @@ are required unless noted.
 | `pages`                                                         | bool   | Reconcile Pages on (`workflow`) or off.                                                                                                                                                                                                                                                                           |
 | `code_quality`                                                  | bool   | Turn GitHub Code Quality on and add the `code_quality` rule to the `master` ruleset; `false` keeps both off. Code Quality bills per active committer, and per AI credit on every default-branch push.                                                                                                             |
 | `rulesets.master` / `.require_approval` / `.tags`               | bool   | Apply those rulesets. `tags` locks tag (and release) creation to the agent bot + admins, and adds `release-lines`, which governs `release/vX.Y` branches like the default branch. `master` also applies `commit-messages`, which checks the subject of every commit on every branch against Conventional Commits. |
+| `rulesets.admins_only`                                          | bool   | Drop the bots from every bypass list, leaving admins only. For a class whose merges deploy production and whose bots reach the default branch through pull requests, since a bot key is an org secret any repository's workflows can read.                                                                        |
 
 The `infra` class is public-by-default and deployment-only. It keeps Pages,
-wiki, discussions, release workflow callers, and the tag ruleset off; when a
-repo changes to this class, reconciliation also deletes managed `release-train`
-and `hotfix` callers left by a release-bearing class. Create it interactively
+wiki, discussions, release workflow callers, and the tag ruleset off, and only
+admins bypass its rulesets. When a repo changes to this class, reconciliation
+also deletes managed `release-train` and `hotfix` callers left by a
+release-bearing class. Create it interactively
 with `a-novel repo create a-novel infra --class infra` after releasing the CLI.
 
 ## `orgs/<org>.yaml`
 
-| Field                                       | Type   | Meaning                                                                                                                   |
-| ------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `org`                                       | string | Org login (must match the filename).                                                                                      |
-| `signing_required`                          | bool   | Require signed + signed-off commits.                                                                                      |
-| `bots.dependencies` / `.agent` / `.publish` | int    | GitHub App IDs of the three org bots; the CLI resolves a ruleset bypass entry like `publish` to the right ID for the org. |
+| Field                                       | Type     | Meaning                                                                                                                   |
+| ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `org`                                       | string   | Org login (must match the filename).                                                                                      |
+| `signing_required`                          | bool     | Require signed + signed-off commits.                                                                                      |
+| `bots.dependencies` / `.agent` / `.publish` | int      | GitHub App IDs of the three org bots; the CLI resolves a ruleset bypass entry like `publish` to the right ID for the org. |
+| `scoped_secrets`                            | []string | Org secrets with selected-repository visibility. Each repo can read exactly the ones its workflows name.                  |
 
 ## `rulesets/<name>.yaml`
 
@@ -140,6 +162,8 @@ ruleset wholesale.
 - `dependabot` — GitHub's Dependabot App, the same in every org, resolved with
   the bot modes above. GitHub accepts it only on repos Dependabot runs in, so the
   entry is dropped for classes with `security.dependabot: false`.
+
+A class with `rulesets.admins_only: true` drops every entry but `admins`.
 
 The core team is intentionally **not** a bypass actor.
 
@@ -198,4 +222,5 @@ Two consequences worth stating plainly:
 
 Variance between repos is legitimate only where it is _computed_ — the `master`
 ruleset's required checks differ per repo because they are read out of that repo's
-`main.yaml`, not because someone set them differently.
+`main.yaml`, not because someone set them differently. Scoped-secret access is
+read out of the same workflows.

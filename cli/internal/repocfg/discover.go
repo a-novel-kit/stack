@@ -3,6 +3,8 @@ package repocfg
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -20,12 +22,14 @@ type CheckRef struct {
 }
 
 // Discovered is what probing a repo tells us: the required checks for the
-// master ruleset.
+// master ruleset, and the secrets its workflows read.
 type Discovered struct {
 	Checks []CheckRef
+	// Secrets are the secret names the repo's workflows reference, sorted.
+	Secrets []string
 }
 
-// Discover computes a repo's required checks.
+// Discover computes a repo's required checks and the secrets its workflows read.
 //
 // Required checks are the `always` set plus every job declared in the repo's
 // .github/workflows/main.yaml, minus cc.Exclude — the job id is the check
@@ -58,7 +62,41 @@ func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 	}
 
 	sort.Slice(d.Checks, func(i, j int) bool { return d.Checks[i].Context < d.Checks[j].Context })
+
+	if d.Secrets, err = workflowSecrets(filepath.Join(repoPath, ".github", "workflows")); err != nil {
+		return nil, err
+	}
 	return d, nil
+}
+
+// secretRef matches a secrets-context reference such as secrets.CODECOV_TOKEN.
+var secretRef = regexp.MustCompile(`\bsecrets\.([A-Za-z_][A-Za-z0-9_]*)`)
+
+// workflowSecrets lists the secret names that the workflow files in dir
+// reference, sorted and unique. A repo without workflows references none.
+func workflowSecrets(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, entry := range entries {
+		if ext := filepath.Ext(entry.Name()); entry.IsDir() || ext != ".yaml" && ext != ".yml" {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		for _, match := range secretRef.FindAllSubmatch(raw, -1) {
+			names = append(names, string(match[1]))
+		}
+	}
+	slices.Sort(names)
+	return slices.Compact(names), nil
 }
 
 // workflowJob is one job parsed from a workflow file: its check context (the
