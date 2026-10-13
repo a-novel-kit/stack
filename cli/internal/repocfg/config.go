@@ -131,6 +131,7 @@ type ClassPreset struct {
 	Security    SecurityToggles `yaml:"security"`
 	Pages       bool            `yaml:"pages"`
 	CodeQuality bool            `yaml:"code_quality"`
+	CleanImages bool            `yaml:"clean_images"`
 	Rulesets    ClassRulesets   `yaml:"rulesets"`
 }
 

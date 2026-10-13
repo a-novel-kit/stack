@@ -127,6 +127,10 @@ func TestBuildPlanProvisions(t *testing.T) {
 		// Published classes enable Pages through a workflow-backed site.
 		{name: "Pages/Library", plan: loadPlan(ClassLibrary), method: http.MethodPost, path: "/pages", body: workflow},
 		{name: "Pages/Platform", plan: loadPlan(ClassPlatform), method: http.MethodPost, path: "/pages", body: workflow},
+		// Only the classes whose images no deployment pins by digest delete unnamed images.
+		{name: "CleanImages/Service", plan: loadPlan(ClassService), method: http.MethodPut, path: "/clean-images.yaml", content: "build-actions/clean-images@"},
+		{name: "CleanImages/Platform", plan: loadPlan(ClassPlatform), method: http.MethodPut, path: "/clean-images.yaml", content: "build-actions/clean-images@"},
+		{name: "CleanImages/Infra", plan: loadPlan(ClassInfra), method: http.MethodDelete, path: "/clean-images.yaml"},
 	}
 
 	for _, testCase := range testCases {

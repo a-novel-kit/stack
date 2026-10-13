@@ -25,6 +25,7 @@ security:
   dependabot: false
 pages: false
 code_quality: false
+clean_images: false
 rulesets:
   master: true
   require_approval: true

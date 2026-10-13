@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -505,6 +506,86 @@ func TestFeatureEnvGovernance(t *testing.T) {
 				t.Errorf("calls = %q, want the label removed", calls)
 			}
 		})
+	}
+}
+
+// TestCleanImagesGovernance pins who may delete images and when: only the scheduled or dispatched
+// default-branch copy, one non-cancelled job per package, and packages named by the images the
+// repository's own workflows publish, since a workflow token cannot list the organization's.
+func TestCleanImagesGovernance(t *testing.T) {
+	t.Parallel()
+	type job struct {
+		Permissions map[string]string `yaml:"permissions"`
+		Strategy    struct {
+			MaxParallel int `yaml:"max-parallel"`
+		} `yaml:"strategy"`
+		Concurrency struct {
+			Group            string `yaml:"group"`
+			CancelInProgress bool   `yaml:"cancel-in-progress"`
+		} `yaml:"concurrency"`
+		Steps []struct {
+			ID  string `yaml:"id"`
+			Run string `yaml:"run"`
+		} `yaml:"steps"`
+	}
+	var workflow struct {
+		On          map[string]any    `yaml:"on"`
+		Permissions map[string]string `yaml:"permissions"`
+		Jobs        map[string]job    `yaml:"jobs"`
+	}
+	loadWorkflow(t, "clean-images.yaml", &workflow)
+	if len(workflow.On) != 2 || workflow.On["schedule"] == nil || workflow.On["workflow_dispatch"] == nil {
+		t.Errorf("clean-images triggers = %v, want schedule and workflow_dispatch only", workflow.On)
+	}
+	if len(workflow.Permissions) != 0 {
+		t.Errorf("clean-images workflow permissions = %v, want none", workflow.Permissions)
+	}
+	packages, clean := workflow.Jobs["packages"], workflow.Jobs["clean"]
+	if len(packages.Permissions) != 1 || packages.Permissions["contents"] != "read" {
+		t.Errorf("packages permissions = %v, want contents: read only", packages.Permissions)
+	}
+	if clean.Permissions["packages"] != "write" || clean.Permissions["pull-requests"] != "read" || len(clean.Permissions) != 2 {
+		t.Errorf("clean permissions = %v, want packages: write and pull-requests: read", clean.Permissions)
+	}
+	if clean.Concurrency.Group != "clean-images-${{ matrix.package }}" || clean.Concurrency.CancelInProgress {
+		t.Errorf("clean concurrency = %+v, want one uncancelled group per package", clean.Concurrency)
+	}
+	if clean.Strategy.MaxParallel != 1 {
+		t.Errorf("clean max-parallel = %d, want 1: deletions share the repository's API quota with its CI", clean.Strategy.MaxParallel)
+	}
+
+	var list string
+	for _, step := range packages.Steps {
+		if step.ID == "list" {
+			list = step.Run
+		}
+	}
+	directory := t.TempDir()
+	workflows := filepath.Join(directory, ".github", "workflows")
+	if err := os.MkdirAll(workflows, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{
+		"main.yaml":    "image_name: ${{ github.repository }}/database\nimage_name: ${{ github.repository }}/jobs/migrations\n",
+		"release.yaml": "image_name: ${{ github.repository }}/database\nimage_name: \"ghcr.io/other\"\n",
+		"studio.yaml":  "          image_name: ${{ github.repository }}\n",
+	} {
+		if err := os.WriteFile(filepath.Join(workflows, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	command := exec.CommandContext(t.Context(), "bash", "-c", list)
+	command.Dir = directory
+	command.Env = append(os.Environ(), "GITHUB_REPOSITORY=a-novel/service", "GITHUB_OUTPUT="+filepath.Join(directory, "output"))
+	if logs, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("list script: %v: %s", err, logs)
+	}
+	output, err := os.ReadFile(filepath.Join(directory, "output"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(output), `names=["service","service/database","service/jobs/migrations"]`+"\n"; got != want {
+		t.Errorf("listed packages = %q, want %q", got, want)
 	}
 }
 
