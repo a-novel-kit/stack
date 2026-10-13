@@ -22,6 +22,7 @@ func TestDependabotGovernance(t *testing.T) {
 		Jobs map[string]struct {
 			If          string            `yaml:"if"`
 			Permissions map[string]string `yaml:"permissions"`
+			With        map[string]string `yaml:"with"`
 			Steps       []struct {
 				ID   string `yaml:"id"`
 				Name string `yaml:"name"`
@@ -39,6 +40,18 @@ func TestDependabotGovernance(t *testing.T) {
 	}
 	if !strings.Contains(job.If, "'renovate/stability-days'") || !strings.Contains(job.If, "'success'") {
 		t.Error("auto-approve must only run for the stability status turning green")
+	}
+	// Infra deploys on merge, so its bot PRs merge alone only as release pins or Renovate's own updates.
+	if job.With["strict"] != "${{ github.repository == 'a-novel/infra' }}" {
+		t.Errorf("auto-approve strict = %q, want strict mode on a-novel/infra only", job.With["strict"])
+	}
+	// Renovate arms auto-merge after opening, which re-runs the strict check; the agent's arming does not.
+	pullRequest, _ := workflow.On["pull_request"].(map[string]any)
+	if types, _ := pullRequest["types"].([]any); !slices.Contains(types, any("auto_merge_enabled")) {
+		t.Errorf("auto-approve pull_request types = %v, want auto_merge_enabled", types)
+	}
+	if !strings.Contains(job.If, "github.event.action != 'auto_merge_enabled' || github.event.sender.login == vars.DEPENDENCY_BOT_LOGIN") {
+		t.Error("auto-approve must re-run on auto_merge_enabled only when the dependency bot armed it")
 	}
 	scripts := map[string]string{}
 	for _, step := range workflow.Jobs["dependabot"].Steps {
