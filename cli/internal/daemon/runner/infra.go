@@ -116,6 +116,7 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 		"-p", composeProjectName(stack, service),
 		"-f", svc.ComposePath,
 		containerLabelArgs(stack, service),
+		dockerFormatBuildArgs,
 		"up", "-d", "--build",
 	); err != nil {
 		dropSession()

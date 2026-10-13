@@ -20,6 +20,19 @@
 //   - A target with a healthcheck, in compose or in the Dockerfile, is a
 //     long-runner; one without is a one-shot. One-shots run to completion on
 //     infra-up and must be idempotent, since every infra-up cycle re-runs them.
+//   - A long-runner depends on its infra only: its standalone image runs the
+//     service's one-shots at boot, so `podman compose --profile <target> up`
+//     alone brings it up, and the daemon gates it on every one-shot instead.
+//     podman-compose turns a dependency into podman's --requires, which runs
+//     an exited one-shot again and fails when it ends before the check. A
+//     target whose image cannot run its one-shot, or a one-shot needing
+//     another, depends on that single one-shot, and the one-shot lists, after
+//     its own profile, the profiles of what waits for it. The first profile
+//     alone names a target.
+//   - A service another waits on with service_healthy declares its
+//     healthcheck in compose. Podman drops a Dockerfile's HEALTHCHECK from an
+//     OCI image, which is its default build format and the format published
+//     images use.
 //   - Sibling services are never declared in each other's compose files. Each
 //     service describes only its own infra; cross-service connections resolve
 //     through daemon-allocated env (<SIBLING>_<VAR> references).

@@ -54,8 +54,8 @@ func TestDiscoverStacks(t *testing.T) {
 
 // TestDiscoverService builds one service on disk and checks the classification
 // every daemon layer keys off: a profiled compose service with a cmd dir is a
-// target, kinded by the healthcheck its Dockerfile declares, and an unprofiled
-// one is infra.
+// target, kinded by the healthcheck its Dockerfile declares and named by its
+// first profile, and an unprofiled one is infra.
 func TestDiscoverService(t *testing.T) {
 	t.Parallel()
 
@@ -73,7 +73,7 @@ services:
     build: { context: .., dockerfile: builds/rest.Dockerfile }
     depends_on: { service-x-migrations: { condition: service_completed_successfully }, postgres-x: {} }
   service-x-migrations:
-    profiles: ["migrations"]
+    profiles: ["migrations", "rest"]
     depends_on: [postgres-x]
 volumes:
   x-data:

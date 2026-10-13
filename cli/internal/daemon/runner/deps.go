@@ -25,6 +25,10 @@ import (
 //     failed (caller must re-start infra or fix the underlying issue).
 //   - long-runner target: must already be running. A long-runner is never
 //     auto-started; that stays an explicit user action.
+//
+// A long-runner also needs every one-shot of its service, which its compose
+// file leaves out: its standalone image runs them at boot, so a plain
+// `podman compose` up waits on no one-shot, which podman would run again.
 func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *discovery.Service, oneShotsMode anovelv1.Mode) error {
 	for _, depName := range t.DependsOn {
 		// Classify the dep against the service's discovered targets and
@@ -64,6 +68,19 @@ func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *
 		// An unknown dep is most likely a cross-service reference, so skip
 		// it.
 		// TODO: resolve cross-service dependencies here.
+	}
+
+	oneShots := topoSortOneShots(svc)
+	if t.Kind != discovery.TargetKindLongRunner || len(oneShots) == 0 {
+		return nil
+	}
+	if err := r.ensureInfraReady(ctx, svc, oneShotsMode); err != nil {
+		return fmt.Errorf("infra: %w", err)
+	}
+	for _, oneShot := range oneShots {
+		if err := r.ensureOneShotSatisfied(ctx, svc, oneShot, oneShotsMode); err != nil {
+			return err
+		}
 	}
 	return nil
 }

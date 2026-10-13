@@ -92,6 +92,10 @@ func containerLabelArgs(values ...string) string {
 	return "--podman-run-args=--label " + strings.Join(labelPairs(values...), " --label ")
 }
 
+// dockerFormatBuildArgs builds images in the docker format, as `a-novel test` does. Podman's default
+// OCI format drops a Dockerfile's HEALTHCHECK, and the runner follows a container's health from it.
+const dockerFormatBuildArgs = "--podman-build-args=--format docker -q"
+
 // composeProjectName is the prefix-aware compose project, "<stack>_<service>".
 // Every podman-compose invocation uses it, which is what isolates one stack
 // from another.

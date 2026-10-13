@@ -29,7 +29,8 @@ func (r *Runner) streamContainerLogs(ctx context.Context, cid string, writer *lo
 // startContainer brings t up as a podman-compose container in its profile,
 // labeling it for adoption and passing env so compose's ${VAR} port
 // substitution resolves. --no-deps sidesteps podman-compose 1.5.0's broken
-// depends_on wait.
+// depends_on wait. Naming the compose service starts t alone: a one-shot its
+// profile also enables would otherwise come up with t's labels.
 func (r *Runner) startContainer(ctx context.Context, t *discovery.Target, env, warnings []string) (*Instance, error) {
 	id := t.ID()
 	procCtx, cancel := context.WithCancel(context.Background())
@@ -41,7 +42,8 @@ func (r *Runner) startContainer(ctx context.Context, t *discovery.Target, env, w
 		"-f", r.stacks.Service(t.Stack, t.Service).ComposePath,
 		"--profile", t.Name,
 		containerLabelArgs(t.Stack, t.Service, t.Name),
-		"up", "-d", "--build", "--no-deps",
+		dockerFormatBuildArgs,
+		"up", "-d", "--build", "--no-deps", t.ComposeName,
 	); err != nil {
 		r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_ERROR, "compose up: "+err.Error())
 		return nil, fmt.Errorf("compose up for %s: %w", id, err)
