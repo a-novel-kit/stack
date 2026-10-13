@@ -121,8 +121,10 @@ func TestLoadLabels(t *testing.T) {
 	if meta := named("meta"); meta < 0 || l.Ensure[meta].Color != "bfd4f2" {
 		t.Errorf("ensure set lacks the `meta` label coloured bfd4f2; got %v", l.Ensure)
 	}
-	if named("append-only-override") < 0 {
-		t.Error("ensure set lacks the `append-only-override` label")
+	for _, name := range []string{"append-only-override", "with-feature-env"} {
+		if named(name) < 0 {
+			t.Errorf("ensure set lacks the `%s` label", name)
+		}
 	}
 	// triage gave way to the Triage board status, and hotfix-reconcile to backports.
 	for _, name := range []string{"triage", "hotfix-reconcile"} {

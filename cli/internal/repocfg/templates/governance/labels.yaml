@@ -43,6 +43,9 @@ ensure:
   - name: allow-dependency-change
     color: "fbca04"
     description: A reviewer acknowledges the dependency manifests this pull request changes
+  - name: with-feature-env
+    color: "0e8a16"
+    description: Tags this pull request's images for its current head; a push removes it
   # automation:paused — on an Epic issue, holds that one epic's [Agent] automation:
   # merge-gate holds its members, and the partial-landing detector and rollback skip
   # it, while other epics keep moving. It is best-effort: a label-read blip fails
