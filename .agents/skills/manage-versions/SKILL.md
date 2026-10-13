@@ -117,8 +117,8 @@ hotfix is a single-repo path; a bug spanning several repos is a fast **Epic** (s
    approves. Backports merged together cut one patch.
 
 A backport never receives a required check that was added after its line's tag, so an admin merges
-past that check. The watchdog escalates a backport left open longer than a day. A hotfix is
-deliberately **exempt from `AGENT_KILL_SWITCH`**, so the emergency patch path stays open even when
+past that check. Nothing reminds anyone of a backport left open, so merge it once it is approved. A
+hotfix is deliberately **exempt from `AGENT_KILL_SWITCH`**, so the emergency patch path stays open even when
 normal automation is halted. The admin check and the `release` environment gate it instead.
 
 **Security hotfix (embargoed).** When the fix can't be public before release:
