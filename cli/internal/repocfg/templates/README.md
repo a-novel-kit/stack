@@ -127,6 +127,12 @@ branch always, and `release/v*` lines and `v*` tags where `rulesets.tags`
 limits who creates them. A workflow on any other ref never unlocks the key. The
 release App joins the bypass lists of that repo only.
 
+The release App is installed on selected repositories, and GitHub accepts it as
+a bypass actor only where it is installed. A new releasing repo, one created
+from service-template included, joins the App's installation in the org
+settings before its first `repo update`; until then its rulesets fail with
+HTTP 422.
+
 ## `classes/<class>.yaml` and `repos/<org>_<repo>.yaml`
 
 Same schema. A `repos/` file is for a one-off repo and **replaces** the

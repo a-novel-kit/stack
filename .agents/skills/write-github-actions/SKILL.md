@@ -268,7 +268,9 @@ Two GitHub constraints shape the bypass lists:
 - **A bypass actor must be part of the repo.** Dependabot (App 29110) is `commit-messages`' only
   bypass actor, and only on classes with `security.dependabot: true`. On a repo Dependabot never ran
   in, GitHub rejects it with HTTP 422, "Actor Dependabot integration must be part of the ruleset
-  source or owner organization".
+  source or owner organization". The release App, a bypass actor on every repo whose workflows
+  name the `release` environment, is installed on selected repositories, so a new releasing repo
+  joins its installation in the org settings before its first `repo update`.
 
 **A bypass label approves one PR head.** A label that waives a check (`allow-screenshot-change`,
 `allow-incomplete-translations`, `allow-translation-drift`, `append-only-override`, `allow-dependency-change`, infra's
