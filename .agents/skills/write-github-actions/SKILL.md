@@ -326,6 +326,9 @@ There is no local runner, so verification is reading plus CI.
   regenerated. Edit `cli/internal/repocfg/templates/governance/`.
 - **Adding a `main.yaml` job without reconciling the ruleset.** The job runs but gates nothing until
   `a-novel repo update` runs.
+- **Another bot's branch under `renovate/`.** Renovate prunes the branches under its prefix that its
+  configuration does not produce, and closes their PRs. The Dependencies App's own PRs use
+  `chore/deps/`, which `notify.yaml` watches like Renovate's branches.
 - **A bot commit made with `git commit` and pushed.** The `master` and `release-lines` rulesets
   require signed commits, and GitHub signs only what an App creates through its API with no custom
   author. A pushed commit is unsigned, so its PR stays `BLOCKED` with every check green. Build it with

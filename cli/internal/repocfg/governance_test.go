@@ -341,7 +341,7 @@ func TestNotifyGovernance(t *testing.T) {
 		{
 			name: "workflow_run branches",
 			got:  workflow.On.WorkflowRun.Branches,
-			want: "master,renovate/**,dependabot/**,gh-readonly-queue/**",
+			want: "master,renovate/**,dependabot/**,chore/deps/**,gh-readonly-queue/**",
 		},
 		{name: "release types", got: workflow.On.Release.Types, want: "published"},
 		{
