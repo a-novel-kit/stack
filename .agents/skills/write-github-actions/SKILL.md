@@ -274,6 +274,8 @@ The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.
 `notify.yaml`, `auto-assign-author.yaml`) are rendered from `cli/internal/repocfg/templates/governance/`
 and carry a "Managed by `a-novel repo update`" banner. Edit the template in the stack repo; a change to
 the copy in a repo is overwritten. What those workflows mean is `coordinate-landing`'s subject.
+A rendered file must pass every repo's prettier, at width 120 in the fleet and 80 in infra, so write
+a list that outgrows 80 columns as a block sequence; `pnpm lint:templates` checks the narrow width.
 
 Two of them keep dependency PRs moving without a person. `auto-approve-dependabot.yaml` approves the
 bots' PRs, withholding approval while `renovate/stability-days` is pending; its `status` trigger
