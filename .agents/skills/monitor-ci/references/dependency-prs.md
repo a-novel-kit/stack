@@ -15,7 +15,8 @@ Contents:
 Renovate runs as one self-hosted App per org: `app/anovelbot-dependencies` in `a-novel` and
 `app/anovelkitbot-dependencies` in `a-novel-kit`. Dependabot is `app/dependabot`. Searching for
 `app/renovate` finds nothing. The same App opens the `refresh-apko-locks` action's weekly PRs too;
-they carry no label, so search by author, not label.
+they carry no label, so search by author, not label. It also opens infra's release pins on
+`chore/deps/<repository>`: each service or platform release dispatches `pin-release.yaml` there.
 
 Query each org once with GraphQL `search`, reading `mergeStateStatus`, `reviewDecision`,
 `isInMergeQueue`, `autoMergeRequest`, `locked` and the head commit's `statusCheckRollup`. A personal
@@ -34,6 +35,8 @@ Read the PR's timeline (`RemovedFromMergeQueueEvent.reason`) before acting.
 | `DIRTY`                                                                                  | A sibling PR on the same lines merged first, often two `[security]` PRs on one modfile  | `recover-prs.yaml` dispatches Renovate. By hand: `gh workflow run renovate.yaml --repo <r>`.                                           |
 | `auto-approve` failed: `Issue is locked`                                                 | The conversation was locked while open                                                  | Unlock it; `lock-closed.yaml` locks only on close.                                                                                     |
 | Approval withheld: `renovate/stability-days` pending                                     | The update is younger than its release age                                              | Wait for Renovate to mark it green; that status approves it.                                                                           |
+| infra release pin `DIRTY`                                                                | Another release merged first on a neighbouring pin                                      | The next push to `master` rebuilds it. To rebuild it now, send its dispatch again (infra `docs/runbooks/deployments.md`).              |
+| A release has no infra release pin                                                       | Its `deploy` job failed, or the release predates the job                                | Re-run the release's `deploy` job, or send the dispatch by hand.                                                                       |
 | Red                                                                                      | See [failure diagnosis](failures.md) and the classes below                              | Fix on master; Renovate's rebase carries it.                                                                                           |
 | Red and stale, every member pending the age gate, in a repo whose only JS update is pnpm | Zombie: Renovate skips the branch while every update is pending                         | Close it with `--delete-branch`; a fresh PR follows.                                                                                   |
 

@@ -36,7 +36,8 @@ footer) and `implement-feature` (the layered-branch workflow these cross-repo pl
   consumer bumping the pin and running the configured post-upgrade tasks (`go mod tidy`, regenerate
   proto, …). In the _normal_ flow you never hand-edit a dependency pin. The manual dance below is
   only for an **in-flight** cross-repo change that cannot wait for a release plus the next Renovate
-  cycle.
+  cycle. Production is the exception: a service or platform release pins its own images in infra,
+  through infra's `pin-release.yaml`.
 - **Docker-image pins** in CI / compose files follow the same rule: pin a concrete `vX.Y.Z` (or
   `${{ github.ref_name }}` for the repo's own image), never `latest` or a branch.
 
