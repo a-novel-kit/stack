@@ -77,6 +77,12 @@ type OrgProfile struct {
 	Org             string           `yaml:"org"`
 	SigningRequired bool             `yaml:"signing_required"`
 	Bots            map[string]int64 `yaml:"bots"`
+	// ReleaseReviewers are the GitHub user IDs who approve a release job in
+	// the release environment.
+	ReleaseReviewers []int64 `yaml:"release_reviewers"`
+	// ScopedSecrets are the org secrets with selected-repository visibility. A
+	// repository can read one exactly when one of its workflows names it.
+	ScopedSecrets []string `yaml:"scoped_secrets"`
 }
 
 // Features mirrors the repo "Features" toggles.

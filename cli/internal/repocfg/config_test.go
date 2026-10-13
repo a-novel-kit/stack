@@ -72,6 +72,10 @@ func TestLoadOrgs(t *testing.T) {
 					t.Fatalf("%s: bots.%s missing", org, bot)
 				}
 			}
+			// Both orgs have releasing repos, whose plans need a release reviewer.
+			if len(o.ReleaseReviewers) == 0 {
+				t.Fatalf("%s: release_reviewers missing", org)
+			}
 			c, err := LoadChecks()
 			if err != nil {
 				t.Fatalf("LoadChecks: %v", err)

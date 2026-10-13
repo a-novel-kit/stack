@@ -5,3 +5,9 @@ bots:
   dependencies: 1734926 # AnovelKitBot[Dependencies] — Renovate
   agent: 3549379 # AnovelKitBot[Agent] — PR/issue comment proxy
   publish: 1734949 # AnovelKitBot[Publish] — release automation
+release_reviewers:
+  - 83596426 # kushuh
+scoped_secrets:
+  - CODECOV_TOKEN
+  - PUBLISH_BOT_PRIVATE_KEY
+  - TOKEN_EXPIRY_ADMIN

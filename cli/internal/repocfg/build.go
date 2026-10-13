@@ -75,6 +75,9 @@ type RepoTarget struct {
 // PruneRulesets marks the one op that reconciles the whole ruleset set:
 // KeepRulesets is the complete desired list, and apply deletes every live
 // ruleset outside it.
+//
+// A secret op sets Secret: Method grants (PUT) or revokes (DELETE) the repo's
+// access to that org secret, and apply appends the repo's numeric ID to Path.
 type Op struct {
 	Method        string   `json:"method,omitempty"`
 	Path          string   `json:"path,omitempty"`
@@ -83,6 +86,7 @@ type Op struct {
 	RulesetName   string   `json:"ruleset,omitempty"`
 	PruneRulesets bool     `json:"prune_rulesets,omitempty"`
 	KeepRulesets  []string `json:"keep_rulesets,omitempty"`
+	Secret        string   `json:"secret,omitempty"`
 }
 
 // Title is a one-line human label for the op.
@@ -96,6 +100,9 @@ func (o Op) Title() string {
 	}
 	if o.RulesetName != "" {
 		return fmt.Sprintf("PUT|POST ruleset %q (%s)", o.RulesetName, o.Path)
+	}
+	if o.Secret != "" {
+		return o.Method + " " + o.Path + "/{repository_id}"
 	}
 	return o.Method + " " + o.Path
 }
@@ -175,6 +182,49 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		Path:   repoPath + "/code-quality/setup",
 		Body:   map[string]any{"state": codeQuality},
 	})
+
+	// A workflow token is read-only unless its job asks for more, and it never
+	// approves a pull request. An outside contributor's fork runs nothing until
+	// a maintainer approves it.
+	p.Ops = append(p.Ops,
+		Op{Method: http.MethodPut, Path: repoPath + "/actions/permissions/workflow", Body: map[string]any{
+			"default_workflow_permissions": "read", "can_approve_pull_request_reviews": false,
+		}},
+		Op{Method: http.MethodPut, Path: repoPath + "/actions/permissions/fork-pr-contributor-approval", Body: map[string]any{
+			"approval_policy": "all_external_contributors",
+		}},
+	)
+
+	// GitHub creates an environment unprotected the first time a job names it,
+	// so the release environment gets its reviewers before any release runs:
+	// wherever the repo's workflows name it, and wherever the class ships
+	// hotfix, whose release-line cut names it. A reviewer may approve a release
+	// they started.
+	if c.Rulesets.Tags || slices.Contains(t.Discovered.Environments, "release") {
+		if len(t.OrgProfile.ReleaseReviewers) == 0 {
+			return nil, fmt.Errorf("orgs/%s.yaml names no release_reviewers for the release environment", t.Org)
+		}
+		reviewers := make([]map[string]any, 0, len(t.OrgProfile.ReleaseReviewers))
+		for _, id := range t.OrgProfile.ReleaseReviewers {
+			reviewers = append(reviewers, map[string]any{"type": "User", "id": id})
+		}
+		p.Ops = append(p.Ops, Op{Method: http.MethodPut, Path: repoPath + "/environments/release", Body: map[string]any{
+			"reviewers": reviewers, "prevent_self_review": false,
+		}})
+	}
+
+	// A scoped org secret reaches exactly the repos whose workflows name it.
+	for _, name := range t.OrgProfile.ScopedSecrets {
+		method := http.MethodDelete
+		if slices.Contains(t.Discovered.Secrets, name) {
+			method = http.MethodPut
+		}
+		p.Ops = append(p.Ops, Op{
+			Method: method,
+			Path:   fmt.Sprintf("orgs/%s/actions/secrets/%s/repositories", t.Org, name),
+			Secret: name,
+		})
+	}
 
 	// Governance workflows are written from their templates, or deleted where
 	// an earlier reconcile left one the class no longer ships.

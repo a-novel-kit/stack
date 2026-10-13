@@ -49,6 +49,10 @@ func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
 	// The live rulesets are read once: a reconcile only adds kept rulesets, so
 	// the prune's candidates are fixed before the first write.
 	rulesets := sync.OnceValues(func() (map[string]string, error) { return liveRulesets(org, repo) })
+	repoID := sync.OnceValues(func() (string, error) {
+		out, err := gh("api", fmt.Sprintf("repos/%s/%s", org, repo), "--jq", ".id")
+		return strings.TrimSpace(out), err
+	})
 
 	var staged []contentChange
 	managedFilesFailed := false
@@ -120,7 +124,10 @@ func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
 		case strings.HasSuffix(op.Path, "/labels"):
 			detail, err := applyLabels(org, repo, op)
 			note("labels", detail, err)
-		default: // settings PATCH
+		case op.Secret != "":
+			detail, err := applySecretAccess(op, repoID)
+			note("secret "+op.Secret, detail, err)
+		default: // settings
 			note("settings ("+op.Method+" "+shortPath(op.Path)+")", "", applySettings(op))
 		}
 	}
@@ -137,24 +144,43 @@ func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
 // errSkipped marks an operation applyPlan did not attempt.
 var errSkipped = errors.New("skipped")
 
-// applySettings PATCHes the repo settings. The a-novel org enforces
-// web_commit_signoff_required org-wide, which locks the repo-level field: a
-// PATCH that includes it is rejected with 422 even when the value matches.
-// Detect that and retry once without the field.
+// applySettings sends a settings op's body with its method. The a-novel org
+// enforces web_commit_signoff_required org-wide, which locks the repo-level
+// field: a PATCH that includes it is rejected with 422 even when the value
+// matches. Detect that and retry once without the field.
 func applySettings(op repocfg.Op) error {
 	body, ok := op.Body.(map[string]any)
 	if !ok {
 		return fmt.Errorf("settings body is %T, want map", op.Body)
 	}
-	if err := ghJSON("PATCH", op.Path, body); err != nil {
+	if err := ghJSON(op.Method, op.Path, body); err != nil {
 		if isSignoffLocked(err) {
 			retry := maps.Clone(body)
 			delete(retry, "web_commit_signoff_required")
-			return ghJSON("PATCH", op.Path, retry)
+			return ghJSON(op.Method, op.Path, retry)
 		}
 		return err
 	}
 	return nil
+}
+
+// applySecretAccess grants or revokes the repo's access to a scoped org secret.
+// GitHub refuses both with 409 while the secret is still visible to every repo.
+func applySecretAccess(op repocfg.Op, repoID func() (string, error)) (string, error) {
+	id, err := repoID()
+	if err != nil {
+		return "", err
+	}
+	if _, err := gh("api", "-X", op.Method, op.Path+"/"+id, "--silent"); err != nil {
+		if errContains(err, "409") {
+			return "switch its visibility to selected repositories in the org settings", err
+		}
+		return "", err
+	}
+	if op.Method == http.MethodPut {
+		return "granted", nil
+	}
+	return "revoked", nil
 }
 
 // applyRuleset reconciles a ruleset by name: PUT when one with the same name

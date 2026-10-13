@@ -257,6 +257,12 @@ which gets the moving `pr-<N>` tag; every other build is pushed by digest alone 
 run. The managed `feature-env.yaml` removes the label on the next push, so the tag keeps naming the
 last head someone labeled. A repo's `main.yaml` must trigger on `labeled` for the label to build.
 
+`repo update` also owns the Actions security settings: a read-only workflow token that never
+approves a pull request, maintainer approval for every outside contributor's fork run, a `release`
+environment that waits for the org's `release_reviewers`, and access to the org's
+`scoped_secrets`. A repo can read a scoped secret only once one of its workflows names it and a
+reconcile has run, so a new `secrets.X` reference ships with an `a-novel repo update`.
+
 Pull requests are for collaborators: every class sets `features.pull_requests: collaborators_only`,
 and outsiders use issues and discussions. GitHub Apps count as collaborators there, so Renovate and
 the bots still open PRs. `lock-closed.yaml` locks an issue's or PR's conversation once it closes and

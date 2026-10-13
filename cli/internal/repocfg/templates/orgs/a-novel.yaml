@@ -7,3 +7,14 @@ bots:
   dependencies: 1717331 # AnovelBot[Dependencies] — Renovate
   agent: 3549319 # AnovelBot[Agent] — PR/issue comment proxy
   publish: 1718144 # AnovelBot[Publish] — release automation
+# Who approves a release job in each releasing repo's release environment.
+release_reviewers:
+  - 83596426 # kushuh
+# Org secrets with selected-repository visibility. Each repo can read one
+# exactly when one of its workflows names it; every other org secret stays
+# visible to all repos. Switch a secret to selected in the org settings before
+# listing it here, since only that switch needs the secret's value.
+scoped_secrets:
+  - CODECOV_TOKEN
+  - PUBLISH_BOT_PRIVATE_KEY
+  - TOKEN_EXPIRY_ADMIN

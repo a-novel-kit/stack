@@ -77,6 +77,12 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 		"PUT /labels",
 		"PATCH /code-scanning/default-setup",
 		"PATCH /code-quality/setup",
+		"PUT /actions/permissions/workflow",
+		"PUT /actions/permissions/fork-pr-contributor-approval",
+		// Infra's workflows name none of the scoped secrets, so it can read none.
+		"DELETE orgs/a-novel/actions/secrets/CODECOV_TOKEN/repositories",
+		"DELETE orgs/a-novel/actions/secrets/PUBLISH_BOT_PRIVATE_KEY/repositories",
+		"DELETE orgs/a-novel/actions/secrets/TOKEN_EXPIRY_ADMIN/repositories",
 		"PUT /contents/.github/workflows/merge-gate.yaml",
 		"PUT /contents/.github/workflows/epic-freeze.yaml",
 		"PUT /contents/.github/workflows/approve-pr.yaml",
