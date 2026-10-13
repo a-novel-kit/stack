@@ -130,7 +130,8 @@ Consumer-visible changes (a renamed input, a new preferred path) need a migratio
 
 ## Writing a caller workflow
 
-`main.yaml` is a repo's CI. It runs on every branch push, ignoring tags:
+`main.yaml` is a repo's CI. Libraries, the stack and the workflows repo run it on every branch
+push, ignoring tags:
 
 ```yaml
 on:
@@ -138,6 +139,25 @@ on:
     tags-ignore: ["**"]
     branches: ["**"]
 ```
+
+Services, platforms and infra run it on pull requests instead, so adding a label starts a run:
+`with-feature-env` and the head-bound approval labels need one.
+
+```yaml
+on:
+  push:
+    tags-ignore: ["**"]
+    branches: [master]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  merge_group:
+```
+
+On a pull request, `github.sha` is GitHub's temporary merge commit (`refs/pull/N/merge`), not the
+pull request's head. Anything bound to a head uses `github.event.pull_request.head.sha`: a commit
+status, a label approval, a proof. A job that must test exactly the approved commit checks it out
+by that sha. `pull-bot`'s default, `github.head_ref`, is the branch tip, which a push can move
+mid-run.
 
 Each job declares its own `permissions` block. Read-only is the floor (`contents: read`); image
 publishing adds `packages: write`, `attestations: write`, `id-token: write`; a job whose action mints
@@ -153,6 +173,10 @@ for publishing.
 
 Add a `concurrency` group with `cancel-in-progress: true` only where a superseded run's result is
 worthless, such as a lint-only workflow. Anything that releases or deploys must run to completion.
+platform-studio's `main.yaml` groups by
+`${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}`. A pull request's
+newer run cancels the older one, which could otherwise post a stale screenshot verdict last, while
+every other run gets a group of its own and finishes.
 
 ---
 
