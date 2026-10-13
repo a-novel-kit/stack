@@ -282,17 +282,23 @@ deployment scenario:
 
 Uses standalone images (`standalone.grpc.Dockerfile`, `standalone.rest.Dockerfile`) so a target
 comes up with a single `podman compose --profile <target> up`, given the port variables it
-references. Each target sits behind a profile named after its `cmd/` directory. A one-shot such as
-`migrations` lists, after its own profile, the profiles of the targets that wait for it, since
-podman-compose fails on a dependency whose profile is not enabled:
+references; the `a-novel` CLI only keeps those values in sync across services, and is never needed
+to run one. Each target sits behind a profile named after its `cmd/` directory.
+
+A long-runner depends on its database only: its standalone image runs the service's one-shots at
+boot, and the daemon gates it on them itself. Never make it wait on a one-shot: podman-compose turns
+each dependency into podman's `--requires`, which runs the exited one-shot again when the target
+starts and fails whenever it ends first. A target whose image cannot run a one-shot, or a one-shot
+needing another, depends on that one alone, which then lists, after its own profile, the profiles of
+what waits for it, since podman-compose fails on a dependency whose profile is not enabled:
 
 ```yaml
 service-json-keys-migrations:
-  profiles: ["migrations", "grpc", "rest"]
+  profiles: ["migrations", "rotate-keys"]
 ```
 
-The first profile alone names the target for the `a-novel` daemon. Persistent postgres data lives in
-a named volume, so the database survives container restarts:
+The first profile alone names the target for the daemon. Persistent postgres data lives in a named
+volume, so the database survives container restarts:
 
 ```yaml
 volumes:
