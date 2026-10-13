@@ -67,7 +67,7 @@ func TestLoadOrgs(t *testing.T) {
 			if o.Org != org {
 				t.Fatalf("org field = %q, want %q", o.Org, org)
 			}
-			for _, bot := range []string{"dependencies", "agent", "publish"} {
+			for _, bot := range []string{"dependencies", "agent", "publish", "release"} {
 				if o.Bots[bot] == 0 {
 					t.Fatalf("%s: bots.%s missing", org, bot)
 				}

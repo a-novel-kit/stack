@@ -4,6 +4,7 @@ signing_required: true
 bots:
   dependencies: 1734926 # AnovelKitBot[Dependencies] — Renovate
   agent: 3549379 # AnovelKitBot[Agent] — PR/issue comment proxy
+  release: 5307968 # AnovelKitBot[Release] — release tags, commits and packages
   publish: 1734949 # AnovelKitBot[Publish] — release automation
 scoped_secrets:
   - CODECOV_TOKEN

@@ -117,6 +117,16 @@ so an admin does it once in the org settings, picking the repos that name it,
 before listing it in `orgs/<org>.yaml`; a listed secret still visible to every
 repo fails each grant and revoke with 409.
 
+## The release environment
+
+A repo whose workflows name the `release` environment releases through the
+org's release App, whose key is a secret of that environment: a job reads it
+only once the environment admits the job's ref. `repo update` opens the
+environment to refs a ruleset guards and deletes any other pattern: the default
+branch always, and `release/v*` lines and `v*` tags where `rulesets.tags`
+limits who creates them. A workflow on any other ref never unlocks the key. The
+release App joins the bypass lists of that repo only.
+
 ## `classes/<class>.yaml` and `repos/<org>_<repo>.yaml`
 
 Same schema. A `repos/` file is for a one-off repo and **replaces** the
@@ -149,12 +159,12 @@ with `a-novel repo create a-novel infra --class infra` after releasing the CLI.
 
 ## `orgs/<org>.yaml`
 
-| Field                                       | Type     | Meaning                                                                                                                   |
-| ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `org`                                       | string   | Org login (must match the filename).                                                                                      |
-| `signing_required`                          | bool     | Require signed + signed-off commits.                                                                                      |
-| `bots.dependencies` / `.agent` / `.publish` | int      | GitHub App IDs of the three org bots; the CLI resolves a ruleset bypass entry like `publish` to the right ID for the org. |
-| `scoped_secrets`                            | []string | Org secrets with selected-repository visibility. Each repo can read exactly the ones its workflows name.                  |
+| Field                                                    | Type     | Meaning                                                                                                             |
+| -------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `org`                                                    | string   | Org login (must match the filename).                                                                                |
+| `signing_required`                                       | bool     | Require signed + signed-off commits.                                                                                |
+| `bots.dependencies` / `.agent` / `.publish` / `.release` | int      | GitHub App IDs of the org bots; the CLI resolves a ruleset bypass entry like `publish` to the right ID for the org. |
+| `scoped_secrets`                                         | []string | Org secrets with selected-repository visibility. Each repo can read exactly the ones its workflows name.            |
 
 ## `rulesets/<name>.yaml`
 
@@ -174,14 +184,16 @@ ruleset wholesale.
 **Generic bypass actors** (`bypass:` entries):
 
 - `admins` — org admins + the admin repo role, always. Org/repo-independent.
-- `dependencies` / `agent` / `publish` — the org's three bot apps, resolved
-  per org from `orgs/<org>.yaml`. On the `master`, `tags` and `release-lines`
-  rulesets the bypass mode is `always` — the bot writes directly (the
-  version-bump commit, the release tag), no branch proxy; on the PR rulesets the
-  mode is `exempt`.
+- `dependencies` / `agent` / `publish` / `release` — the org's bot apps,
+  resolved per org from `orgs/<org>.yaml`. On the `master`, `tags` and
+  `release-lines` rulesets the bypass mode is `always` — the bot writes directly
+  (the version-bump commit, the release tag), no branch proxy; on the PR
+  rulesets the mode is `exempt`.
 - `dependabot` — GitHub's Dependabot App, the same in every org, resolved with
   the bot modes above. GitHub accepts it only on repos Dependabot runs in, so the
   entry is dropped for classes with `security.dependabot: false`.
+- `release` is dropped likewise from a repo whose workflows name no `release`
+  environment, since the App acts only where releases do.
 
 A class with `rulesets.admins_only: true` drops every entry but `admins`.
 
@@ -242,5 +254,5 @@ Two consequences worth stating plainly:
 
 Variance between repos is legitimate only where it is _computed_ — the `master`
 ruleset's required checks differ per repo because they are read out of that repo's
-`main.yaml`, not because someone set them differently. Scoped-secret access is
-read out of the same workflows.
+`main.yaml`, not because someone set them differently. Scoped-secret access and
+the release environment are read out of the same workflows.

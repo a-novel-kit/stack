@@ -124,6 +124,9 @@ func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
 		case strings.HasSuffix(op.Path, "/labels"):
 			detail, err := applyLabels(org, repo, op)
 			note("labels", detail, err)
+		case strings.HasSuffix(op.Path, "/deployment-branch-policies"):
+			detail, err := applyDeploymentPolicies(op)
+			note("release environment policies", detail, err)
 		case len(op.Teams) > 0:
 			detail, err := applyTeams(org, repo, op)
 			note("tier teams", detail, err)
@@ -552,6 +555,46 @@ func applyLabels(org, repo string, op repocfg.Op) (string, error) {
 		}
 	}
 	return fmt.Sprintf("%d created, %d updated, %d retired", created, updated, retired), nil
+}
+
+// applyDeploymentPolicies reconciles an environment's branch and tag patterns:
+// a missing pattern is created and any other is deleted, so the environment
+// admits exactly the plan's refs.
+func applyDeploymentPolicies(op repocfg.Op) (string, error) {
+	want, ok := op.Body.([]repocfg.DeploymentPolicy)
+	if !ok {
+		return "", fmt.Errorf("deployment policies body is %T, want []repocfg.DeploymentPolicy", op.Body)
+	}
+	out, err := gh("api", "--paginate", op.Path+"?per_page=100",
+		"--jq", `.branch_policies[] | "\(.id)\t\(.type)\t\(.name)"`)
+	if err != nil {
+		return "", err
+	}
+	live := map[repocfg.DeploymentPolicy]string{}
+	for line := range strings.Lines(out) {
+		if id, policy, ok := strings.Cut(strings.TrimSpace(line), "\t"); ok {
+			kind, name, _ := strings.Cut(policy, "\t")
+			live[repocfg.DeploymentPolicy{Name: name, Type: kind}] = id
+		}
+	}
+	var created, deleted int
+	for _, policy := range want {
+		if _, found := live[policy]; found {
+			delete(live, policy)
+			continue
+		}
+		if err := ghJSON(http.MethodPost, op.Path, policy); err != nil {
+			return "", err
+		}
+		created++
+	}
+	for _, id := range live {
+		if _, err := gh("api", "-X", http.MethodDelete, op.Path+"/"+id, "--silent"); err != nil {
+			return "", err
+		}
+		deleted++
+	}
+	return fmt.Sprintf("%d created, %d deleted", created, deleted), nil
 }
 
 // applyTeams reconciles a repo's tier-team grants. A missing tier or area team

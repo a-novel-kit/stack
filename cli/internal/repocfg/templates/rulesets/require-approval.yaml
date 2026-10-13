@@ -12,6 +12,7 @@ bypass:
   - admins
   - dependencies
   - agent
+  - release
   - publish
 rules:
   pull_request:

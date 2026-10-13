@@ -6,7 +6,8 @@
 #
 # ~ALL covers every tag, not just v*, so no tag of any shape can be hand-pushed.
 # The agent bot bypasses with mode "always" for its direct write, resolved by
-# the builder like the master ruleset's bots.
+# the builder like the master ruleset's bots. The release bot joins it in
+# releasing repos, to take the tags over (a-novel/.github#414).
 name: tags
 target: tag
 enforcement: active
@@ -17,6 +18,7 @@ conditions:
 bypass:
   - admins
   - agent
+  - release
 rules:
   creation: true
   update: true
