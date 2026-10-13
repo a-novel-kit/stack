@@ -62,5 +62,4 @@ gh api repos/<owner>/<repo>/pulls/<number>/reviews --method POST --input review.
 Check that every inline comment landed on its line: `gh api repos/<owner>/<repo>/pulls/<number>/comments`
 returns `line` and `start_line` for each. Review new pushes in a new review, and continue existing
 threads under [closing the loop](close-loop.md). When a review went out in another form, post it
-correctly, then minimize the superseded comment with the `minimizeComment` mutation and the
-`OUTDATED` classifier rather than deleting it.
+correctly, verify it landed, then delete the superseded comment so reviewers read one review.
