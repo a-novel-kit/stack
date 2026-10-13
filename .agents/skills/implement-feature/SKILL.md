@@ -250,7 +250,8 @@ you open the pull request.
 whole Epic. Mark ready when the Task is genuinely done, not to start review.
 
 **`merge-gate` red usually is not about you.** It holds every member until _all_ of them are
-non-draft and approved, across every repo, so a red gate most often means a sibling is not ready yet.
+non-draft, approved and passing `review-gate`, across every repo, so a red gate most often means a
+sibling is not ready yet.
 Check the check's summary — it names what it is waiting on — before assuming your branch is at fault.
 
 **`epic-freeze` red means the Epic landed partially.** Some siblings merged and one did not, so the
