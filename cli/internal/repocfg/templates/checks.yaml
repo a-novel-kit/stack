@@ -33,6 +33,10 @@ always:
   # check-dependencies.yaml. Bots and merge-queue groups pass inside the check:
   # the queue's merges have no actor a ruleset could exempt.
   - { context: "check-dependencies", integration: actions }
+  # review-gate: a person's pull request needs a maintainer's or admin's approval,
+  # and a privileged label counts only when one of them applied it, posted by the
+  # [Agent] App from review-gate.yaml and, for Dependabot, auto-approve-dependabot.yaml.
+  - { context: "review-gate", integration: agent }
 
 # main.yaml jobs are required by default, except those matching these rules:
 exclude:

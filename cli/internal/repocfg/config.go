@@ -226,6 +226,28 @@ func LoadLabels() (*LabelsConfig, error) {
 	return &l, nil
 }
 
+// TeamTier is one contributor tier in teams.yaml: a team with no repository
+// access, whose area teams hold Permission (a repository role such as push,
+// maintain or admin) on their class's repositories.
+type TeamTier struct {
+	Name       string `yaml:"name"`
+	Permission string `yaml:"permission"`
+}
+
+// TeamsConfig is teams.yaml: the contributor tiers every org carries.
+type TeamsConfig struct {
+	Tiers []TeamTier `yaml:"tiers"`
+}
+
+// LoadTeams reads and parses teams.yaml.
+func LoadTeams() (*TeamsConfig, error) {
+	var teams TeamsConfig
+	if err := loadTemplateYAML("teams.yaml", &teams); err != nil {
+		return nil, fmt.Errorf("load teams.yaml: %w", err)
+	}
+	return &teams, nil
+}
+
 // RulesetSpec is one rulesets/<name>.yaml base. The required-status-checks
 // list and concrete bypass actors are injected by the builder, not stored
 // here.

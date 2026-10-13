@@ -80,6 +80,26 @@ untouched — apply never removes a label it was not told about. Kind
 Size are **project fields**, so neither is a label here; the label set is the
 cross-cutting signals that sort work within a board status.
 
+## Contributor tiers (`teams.yaml`)
+
+Each tier in `teams.yaml` is an org team with no repository access:
+`developers` (push), `maintainers` (maintain) and `owners` (admin). Under each,
+`repo update` keeps one area team per repository class, `<tier>-<class>`, and
+grants it the tier's role on every repository of that class, so a new repository
+is covered the moment `repo create` classifies it. A person joins the area teams
+they work in; membership is managed in GitHub. Core holds Admin everywhere
+through its `all_repo_admin` org role and is not a tier.
+
+The reconcile owns only the tier teams. It creates a missing tier or area team,
+grants a repository its three area teams, and removes a grant any other tier team
+holds there. Teams outside the tiers are left untouched, as labels outside
+`labels.yaml` are: core's access comes from its org role, which no repository
+grant can remove.
+
+Owners hold Admin, which the `admins` bypass entry covers, so they bypass the
+rulesets exactly as core does. Maintainers hold Maintain, which bypasses nothing:
+their approval is what `review-gate` waits for.
+
 ## Actions settings and scoped secrets
 
 Every repo gets the same Actions settings: a workflow token is read-only unless
@@ -173,8 +193,8 @@ Decides which CI jobs gate the default branch and its release lines. The
 `master` and `release-lines` rulesets' required checks are:
 
 1. the **`always`** set — required on every repo regardless of class (the
-   [Agent] App's `merge-gate` and `epic-freeze`, and the `check-dependencies`
-   job of the governance workflow of that name); plus
+   [Agent] App's `merge-gate`, `epic-freeze` and `review-gate`, and the
+   `check-dependencies` job of the governance workflow of that name); plus
 2. **every job declared in the repo's `.github/workflows/main.yaml`**, minus the
    **`exclude`** rules.
 

@@ -78,15 +78,28 @@ type RepoTarget struct {
 //
 // A secret op sets Secret: Method grants (PUT) or revokes (DELETE) the repo's
 // access to that org secret, and apply appends the repo's numeric ID to Path.
+//
+// A team op sets Teams, the complete set of tier-team grants the repo holds:
+// apply creates a missing team, grants each one, and removes the grant of any
+// other tier team.
 type Op struct {
-	Method        string   `json:"method,omitempty"`
-	Path          string   `json:"path,omitempty"`
-	Body          any      `json:"body,omitempty"`
-	Content       string   `json:"content,omitempty"`
-	RulesetName   string   `json:"ruleset,omitempty"`
-	PruneRulesets bool     `json:"prune_rulesets,omitempty"`
-	KeepRulesets  []string `json:"keep_rulesets,omitempty"`
-	Secret        string   `json:"secret,omitempty"`
+	Method        string      `json:"method,omitempty"`
+	Path          string      `json:"path,omitempty"`
+	Body          any         `json:"body,omitempty"`
+	Content       string      `json:"content,omitempty"`
+	RulesetName   string      `json:"ruleset,omitempty"`
+	PruneRulesets bool        `json:"prune_rulesets,omitempty"`
+	KeepRulesets  []string    `json:"keep_rulesets,omitempty"`
+	Secret        string      `json:"secret,omitempty"`
+	Teams         []TeamGrant `json:"teams,omitempty"`
+}
+
+// TeamGrant is one area team's role on a repository. Team is the area team,
+// `<tier>-<class>`, nested under Parent, its tier team.
+type TeamGrant struct {
+	Team       string `json:"team"`
+	Parent     string `json:"parent"`
+	Permission string `json:"permission"`
 }
 
 // Title is a one-line human label for the op.
@@ -103,6 +116,13 @@ func (o Op) Title() string {
 	}
 	if o.Secret != "" {
 		return o.Method + " " + o.Path + "/{repository_id}"
+	}
+	if len(o.Teams) > 0 {
+		grants := make([]string, 0, len(o.Teams))
+		for _, g := range o.Teams {
+			grants = append(grants, g.Team+"="+g.Permission)
+		}
+		return fmt.Sprintf("RECONCILE tier teams (%s) — grant only: %s", o.Path, strings.Join(grants, ", "))
 	}
 	return o.Method + " " + o.Path
 }
@@ -157,6 +177,18 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		Path:   repoPath + "/labels",
 		Body:   labels,
 	})
+
+	// Each contributor tier holds its role here through the area team of this
+	// repo's class.
+	teams, err := LoadTeams()
+	if err != nil {
+		return nil, err
+	}
+	grants := make([]TeamGrant, 0, len(teams.Tiers))
+	for _, tier := range teams.Tiers {
+		grants = append(grants, TeamGrant{Team: tier.Name + "-" + string(c.Class), Parent: tier.Name, Permission: tier.Permission})
+	}
+	p.Ops = append(p.Ops, Op{Method: http.MethodPut, Path: repoPath + "/teams", Teams: grants})
 
 	// Code scanning stays off, asserted on every update rather than assumed.
 	// Static analysis is the lint-semgrep and scan-secrets jobs in main.yaml,
@@ -227,13 +259,14 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 
 	// Merge governance ships wherever the master ruleset gates merges;
 	// recover-prs re-arms PRs the queue drops on a timeout, so it follows the
-	// queue, and check-dependencies posts a check that ruleset requires.
+	// queue, and check-dependencies and review-gate post checks that ruleset
+	// requires.
 	// feature-env removes the with-feature-env label a push made stale. Release
 	// callers are narrower: a class without the tags ruleset removes them, so
 	// changing a repo's class leaves no release mechanics behind.
 	if c.Rulesets.Master {
 		put("merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml",
-			"recover-prs.yaml", "check-dependencies.yaml", "feature-env.yaml")
+			"recover-prs.yaml", "check-dependencies.yaml", "feature-env.yaml", "review-gate.yaml")
 	}
 	if c.Rulesets.Master && c.Rulesets.Tags {
 		put("release-train.yaml", "hotfix.yaml")

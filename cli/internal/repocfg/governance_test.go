@@ -2,6 +2,7 @@ package repocfg_test
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -279,6 +280,87 @@ func TestCheckDependenciesGovernance(t *testing.T) {
 	}
 	if got := job.Permissions["pull-requests"]; got != "write" {
 		t.Errorf("check-dependencies permissions = %v, want pull-requests: write to remove the label", job.Permissions)
+	}
+}
+
+// TestReviewGateGovernance pins the review-gate caller: it re-evaluates on every
+// event that can change the verdict, runs under an id clear of the check the
+// App posts, lets only the latest run finish since nothing re-posts the check,
+// and leaves Dependabot to the CI-completion job, which gates its pull requests
+// against the same privileged labels.
+func TestReviewGateGovernance(t *testing.T) {
+	t.Parallel()
+	type step struct {
+		Uses string            `yaml:"uses"`
+		With map[string]string `yaml:"with"`
+	}
+	var workflow struct {
+		On struct {
+			PullRequest struct {
+				Types []string `yaml:"types"`
+			} `yaml:"pull_request"`
+			PullRequestReview struct {
+				Types []string `yaml:"types"`
+			} `yaml:"pull_request_review"`
+		} `yaml:"on"`
+		Concurrency struct {
+			Group            string `yaml:"group"`
+			CancelInProgress bool   `yaml:"cancel-in-progress"`
+		} `yaml:"concurrency"`
+		Jobs map[string]struct {
+			If          string            `yaml:"if"`
+			Permissions map[string]string `yaml:"permissions"`
+			Steps       []step            `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	var triggers struct {
+		On map[string]any `yaml:"on"`
+	}
+	loadWorkflow(t, "review-gate.yaml", &workflow)
+	loadWorkflow(t, "review-gate.yaml", &triggers)
+	if got := strings.Join(workflow.On.PullRequest.Types, ","); got != "opened,reopened,synchronize,labeled,unlabeled" {
+		t.Errorf("review-gate pull_request types = %q", got)
+	}
+	if got := strings.Join(workflow.On.PullRequestReview.Types, ","); got != "submitted,dismissed" {
+		t.Errorf("review-gate pull_request_review types = %q", got)
+	}
+	if _, ok := triggers.On["merge_group"]; !ok {
+		t.Error("review-gate must run on merge_group, or a queued pull request waits out the timeout")
+	}
+	if !workflow.Concurrency.CancelInProgress || !strings.Contains(workflow.Concurrency.Group, "github.event.pull_request.number") {
+		t.Errorf("concurrency = %+v, want a per-pull-request group that cancels a superseded run", workflow.Concurrency)
+	}
+	if _, ok := workflow.Jobs["review-gate"]; ok {
+		t.Error("a review-gate job would collide with the check the App posts")
+	}
+	job, ok := workflow.Jobs["evaluate"]
+	if !ok {
+		t.Fatal("evaluate job missing")
+	}
+	if !strings.Contains(job.If, "vars.DEPENDABOT_SECURITY_LOGIN") || len(job.Permissions) != 0 || len(job.Steps) != 1 {
+		t.Errorf("evaluate job = %+v, want the Dependabot skip, no permissions and one review-gate step", job)
+	}
+	gate := job.Steps[0]
+	if !strings.HasPrefix(gate.Uses, "a-novel-kit/workflows/generic-actions/review-gate@") || gate.With["privileged_labels"] == "" {
+		t.Fatalf("evaluate step = %+v, want review-gate with its privileged labels", gate)
+	}
+
+	var dependabot struct {
+		Jobs map[string]struct {
+			Steps []step `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	loadWorkflow(t, "auto-approve-dependabot.yaml", &dependabot)
+	i := slices.IndexFunc(dependabot.Jobs["dependabot"].Steps, func(s step) bool { return s.Uses == gate.Uses })
+	if i < 0 {
+		t.Fatalf("the dependabot job does not run %s", gate.Uses)
+	}
+	ci := dependabot.Jobs["dependabot"].Steps[i]
+	if ci.With["privileged_labels"] != gate.With["privileged_labels"] {
+		t.Errorf("Dependabot privileged labels = %q, want review-gate.yaml's %q", ci.With["privileged_labels"], gate.With["privileged_labels"])
+	}
+	if ci.With["pull_request_number"] == "" || ci.With["head_sha"] == "" {
+		t.Errorf("Dependabot review-gate inputs = %v, want the pull request number and head its event lacks", ci.With)
 	}
 }
 

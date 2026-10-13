@@ -28,7 +28,7 @@ func TestDiscover(t *testing.T) {
 		want        []string
 		wantSecrets []string
 	}{
-		{name: "Success/NoMainYaml", want: []string{"check-dependencies", "epic-freeze", "merge-gate"}},
+		{name: "Success/NoMainYaml", want: []string{"check-dependencies", "epic-freeze", "merge-gate", "review-gate"}},
 		{
 			name: "Success/MainYaml",
 			mainYAML: `
@@ -49,7 +49,7 @@ jobs:
     if: "github.ref == 'refs/heads/master' && success()"
     runs-on: ubuntu-latest
 `,
-			want:        []string{"check-dependencies", "epic-freeze", "lint-go", "merge-gate", "test-go"},
+			want:        []string{"check-dependencies", "epic-freeze", "lint-go", "merge-gate", "review-gate", "test-go"},
 			wantSecrets: []string{"CODECOV_TOKEN", "GITHUB_TOKEN"},
 		},
 	}
@@ -73,8 +73,8 @@ jobs:
 			got := make([]string, len(d.Checks))
 			for i, c := range d.Checks {
 				got[i] = c.Context
-				// merge-gate + epic-freeze are required against the injected per-org [Agent] app id.
-				if (c.Context == "merge-gate" || c.Context == "epic-freeze") && c.IntegrationID != 4242 {
+				// merge-gate, epic-freeze and review-gate are required against the injected per-org [Agent] app id.
+				if (c.Context == "merge-gate" || c.Context == "epic-freeze" || c.Context == "review-gate") && c.IntegrationID != 4242 {
 					t.Errorf("%s integration id = %d, want the injected 4242", c.Context, c.IntegrationID)
 				}
 				// check-dependencies is a workflow job, so GitHub Actions posts it.

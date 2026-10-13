@@ -137,6 +137,20 @@ func TestLoadLabels(t *testing.T) {
 	}
 }
 
+// TestLoadTeams pins the contributor tiers and the role each holds: maintainers
+// stay below Admin, which bypasses the rulesets their approvals gate.
+func TestLoadTeams(t *testing.T) {
+	t.Parallel()
+	teams, err := LoadTeams()
+	if err != nil {
+		t.Fatalf("LoadTeams: %v", err)
+	}
+	want := []TeamTier{{"developers", "push"}, {"maintainers", "maintain"}, {"owners", "admin"}}
+	if !slices.Equal(teams.Tiers, want) {
+		t.Errorf("tiers = %v, want %v", teams.Tiers, want)
+	}
+}
+
 // TestLoadRulesets loads every shipped ruleset. Coverage once shipped too, as a
 // required check exempting the bot Apps so dependency PRs were not blocked on
 // it. A ruleset bypass exempts the author of a PULL REQUEST, but the merge queue
