@@ -165,15 +165,19 @@ func applySettings(op repocfg.Op) error {
 }
 
 // applySecretAccess grants or revokes the repo's access to a scoped org secret.
-// GitHub refuses both with 409 while the secret is still visible to every repo.
+// GitHub refuses both with 409 while the secret is still visible to every repo,
+// and answers a revoke with 404 when the repo had no access to remove.
 func applySecretAccess(op repocfg.Op, repoID func() (string, error)) (string, error) {
 	id, err := repoID()
 	if err != nil {
 		return "", err
 	}
 	if _, err := gh("api", "-X", op.Method, op.Path+"/"+id, "--silent"); err != nil {
-		if errContains(err, "409") {
+		switch {
+		case errContains(err, "409"):
 			return "switch its visibility to selected repositories in the org settings", err
+		case op.Method == http.MethodDelete && errContains(err, "404"):
+			return "already revoked", nil
 		}
 		return "", err
 	}

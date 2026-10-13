@@ -355,14 +355,34 @@ func TestApplySettingsSignoffRetry(t *testing.T) {
 	}
 }
 
-func TestApplySecretAccessNeedsSelectedVisibility(t *testing.T) {
+func TestApplySecretAccess(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam. GitHub answers 409
-	// while the secret is visible to every repo; the note says how to fix it.
-	stubGH(t, func(string) (string, error) { return "", errors.New("HTTP 409: Conflict") })
-	op := repocfg.Op{Method: "PUT", Path: "orgs/o/actions/secrets/S/repositories", Secret: "S"}
-	detail, err := applySecretAccess(op, func() (string, error) { return "4321", nil })
-	if err == nil || !strings.Contains(detail, "selected repositories") {
-		t.Fatalf("detail, err = %q, %v; want a 409 pointing at the visibility setting", detail, err)
+	// while the secret is visible to every repo, and 404 to a revoke of a repo
+	// it never selected, as every revoke of the first fleet reconcile showed.
+	testCases := []struct {
+		name, method, status, wantDetail string
+		wantErr                          bool
+	}{
+		{name: "Success/Granted", method: "PUT", wantDetail: "granted"},
+		{name: "Success/Revoked", method: "DELETE", wantDetail: "revoked"},
+		{name: "Success/AlreadyRevoked", method: "DELETE", status: "HTTP 404: Not Found", wantDetail: "already revoked"},
+		{name: "Error/GrantNotFound", method: "PUT", status: "HTTP 404: Not Found", wantErr: true},
+		{name: "Error/NotSelected", method: "DELETE", status: "HTTP 409: Conflict", wantDetail: "selected repositories", wantErr: true},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			stubGH(t, func(string) (string, error) {
+				if testCase.status == "" {
+					return "", nil
+				}
+				return "", errors.New(testCase.status)
+			})
+			op := repocfg.Op{Method: testCase.method, Path: "orgs/o/actions/secrets/S/repositories", Secret: "S"}
+			detail, err := applySecretAccess(op, func() (string, error) { return "4321", nil })
+			if (err != nil) != testCase.wantErr || !strings.Contains(detail, testCase.wantDetail) {
+				t.Fatalf("detail, err = %q, %v; want %q, error %v", detail, err, testCase.wantDetail, testCase.wantErr)
+			}
+		})
 	}
 }
 
