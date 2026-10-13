@@ -155,13 +155,18 @@ pins in the same change.
   workflow before a new one depends on it.
 - **`infra-downtime` trusts only `downtime.yaml` on `master`.** It can start, list and cancel the
   `downtime-announcements` executions in the management project, and nothing else.
+- **The `github-dispatch` clock holds the only GitHub credentials in Google Cloud:** one
+  fine-grained token per org, limited to Actions on that org's `.github` repo, which only
+  `github-dispatcher` reads. `github-dispatch-clock` holds `workflows.invoker`, which Workflows grants
+  project-wide, so it could start any management-project execution. Rotate a token by adding a
+  version and bumping `github_dispatch_token_versions`.
 - **The read-only identity trusts only pull requests into `master`.** A stacked pull request's plans
   fail with `rejected by the attribute condition`. Once its parent merges, GitHub retargets it to
   `master`; rebase it onto `master` to drop the parent's squashed commit, and its plans run.
 - **Cloud Workflows can record what a workflow reads.** Detailed execution history keeps variables
   and call logs keep call results, so a workflow that reads a secret pins
   `call_log_level = "LOG_NONE"` and `execution_history_level = "EXECUTION_HISTORY_BASIC"`.
-  Bootstrap's test checks both for `downtime-announcements`.
+  Bootstrap's test checks both for every workflow it deploys.
 - **A service that trusts a forwarded visitor header requires IAM.** Its invokers are only the
   platform and the deploy health check, which sends an ID token for the service's custom audience.
 - **Inventory IAM by principal and resource:**

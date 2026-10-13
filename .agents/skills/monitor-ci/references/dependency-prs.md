@@ -18,6 +18,9 @@ Renovate runs as one self-hosted App per org: `app/anovelbot-dependencies` in `a
 they carry no label, so search by author, not label. It also opens infra's release pins on
 `chore/deps/<repository>`: each service or platform release dispatches `pin-release.yaml` there.
 
+The Discord dependencies feed posts each bot PR that fails CI, and each one still green and out of
+the merge queue 2 hours after its last commit, so a sweep can start from its recent posts.
+
 Query each org once with GraphQL `search`, reading `mergeStateStatus`, `reviewDecision`,
 `isInMergeQueue`, `autoMergeRequest`, `locked` and the head commit's `statusCheckRollup`. A personal
 token's 5,000 calls an hour are shared by every session on the account, so poll with one query per
