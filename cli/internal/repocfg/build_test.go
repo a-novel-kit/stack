@@ -338,3 +338,32 @@ func TestBuildPlanScopesSecrets(t *testing.T) {
 		t.Errorf("secret ops = %v, want %v", got, want)
 	}
 }
+
+// TestBuildPlanGrantsTierTeams pins how access follows a repo's class: each
+// tier's area team for that class holds the tier's role, and the op names the
+// complete set, so apply can remove any other tier team's grant.
+func TestBuildPlanGrantsTierTeams(t *testing.T) {
+	t.Parallel()
+	plan := planFor(t, &ClassPreset{Class: ClassService})
+	var op *Op
+	for i := range plan.Ops {
+		if len(plan.Ops[i].Teams) > 0 {
+			op = &plan.Ops[i]
+		}
+	}
+	if op == nil {
+		t.Fatal("plan has no team op")
+	}
+	want := []TeamGrant{
+		{Team: "developers-service", Parent: "developers", Permission: "push"},
+		{Team: "maintainers-service", Parent: "maintainers", Permission: "maintain"},
+		{Team: "owners-service", Parent: "owners", Permission: "admin"},
+	}
+	if !slices.Equal(op.Teams, want) {
+		t.Errorf("team grants = %v, want %v", op.Teams, want)
+	}
+	if want := "RECONCILE tier teams (repos/a-novel-kit/example/teams) — grant only: " +
+		"developers-service=push, maintainers-service=maintain, owners-service=admin"; op.Title() != want {
+		t.Errorf("title = %q, want %q", op.Title(), want)
+	}
+}

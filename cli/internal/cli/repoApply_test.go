@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -522,6 +523,107 @@ func TestApplyLabels(t *testing.T) {
 		op := repocfg.Op{Path: "repos/o/r/labels", Body: map[string]any{"ensure": nil}}
 		if _, err := applyLabels("o", "r", op); err == nil {
 			t.Fatal("expected an error for a non-*LabelsConfig body")
+		}
+	})
+}
+
+// TestApplyTeams pins the tier-team reconcile: a missing team is created under
+// its tier, each area team is granted its role, and only grants inside the tier
+// namespace are removed, since core reaches every repo through its org role and
+// other teams belong to whoever made them.
+func TestApplyTeams(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam.
+	op := repocfg.Op{Path: "repos/o/r/teams", Teams: []repocfg.TeamGrant{
+		{Team: "developers-service", Parent: "developers", Permission: "push"},
+		{Team: "maintainers-service", Parent: "maintainers", Permission: "maintain"},
+		{Team: "owners-service", Parent: "owners", Permission: "admin"},
+	}}
+
+	t.Run("Success", func(t *testing.T) {
+		next := 10
+		calls := stubGH(t, func(call string) (string, error) {
+			switch {
+			case strings.Contains(call, "orgs/o/teams --jq"):
+				return "developers\t1\ncore\t9\n", nil
+			case strings.Contains(call, "-X POST orgs/o/teams"):
+				next++
+				return strconv.Itoa(next) + "\n", nil
+			case strings.Contains(call, "api user"):
+				return "operator\n", nil
+			case strings.Contains(call, "repos/o/r/teams"):
+				return "core\ndevelopers-service\ndevelopers-platform\nmaintainers\nreleasers\n", nil
+			}
+			return "", nil
+		})
+
+		detail, err := applyTeams("o", "r", op)
+		if want := "3 granted, 5 created, 2 removed"; err != nil || detail != want {
+			t.Fatalf("applyTeams = (%q, %v), want %q", detail, err, want)
+		}
+		joined := strings.Join(*calls, "\n")
+		for _, want := range []string{
+			`-X POST orgs/o/teams --input - --jq .id {"name":"developers-service","parent_team_id":1,"privacy":"closed"}`,
+			`-X POST orgs/o/teams --input - --jq .id {"name":"maintainers","privacy":"closed"}`,
+			`-X POST orgs/o/teams --input - --jq .id {"name":"maintainers-service","parent_team_id":12,"privacy":"closed"}`,
+			`-X PUT orgs/o/teams/developers-service/repos/o/r --input - {"permission":"push"}`,
+			`-X PUT orgs/o/teams/owners-service/repos/o/r --input - {"permission":"admin"}`,
+			"-X DELETE orgs/o/teams/developers-platform/repos/o/r",
+			"-X DELETE orgs/o/teams/maintainers/repos/o/r",
+			// GitHub made the operator a maintainer of each team it created.
+			"-X DELETE orgs/o/teams/developers-service/memberships/operator",
+			"-X DELETE orgs/o/teams/owners/memberships/operator",
+		} {
+			if !strings.Contains(joined, want) {
+				t.Errorf("expected a gh call containing %q; calls:\n%s", want, joined)
+			}
+		}
+		for _, kept := range []string{
+			"teams/core/", "teams/releasers/", "DELETE orgs/o/teams/developers-service/repos", `"name":"developers",`,
+			"teams/developers/memberships",
+		} {
+			if strings.Contains(joined, kept) {
+				t.Errorf("must not touch %q; calls:\n%s", kept, joined)
+			}
+		}
+	})
+
+	t.Run("Success/CreatedConcurrently", func(t *testing.T) {
+		// Another repo's apply in the same --all run created developers after the listing.
+		calls := stubGH(t, func(call string) (string, error) {
+			switch {
+			case strings.Contains(call, `-X POST orgs/o/teams --input - --jq .id {"name":"developers",`):
+				return "", errors.New("gh: Validation Failed (HTTP 422)")
+			case strings.Contains(call, "-X POST orgs/o/teams"):
+				return "20\n", nil
+			case strings.Contains(call, "orgs/o/teams/developers --jq .id"):
+				return "7\n", nil
+			}
+			return "", nil
+		})
+		if _, err := applyTeams("o", "r", op); err != nil {
+			t.Fatalf("applyTeams: %v", err)
+		}
+		joined := strings.Join(*calls, "\n")
+		if !strings.Contains(joined, `{"name":"developers-service","parent_team_id":7,"privacy":"closed"}`) {
+			t.Errorf("developers-service must nest under the team found by name; calls:\n%s", joined)
+		}
+		if strings.Contains(joined, "teams/developers/memberships") {
+			t.Errorf("must not leave a team another run created; calls:\n%s", joined)
+		}
+	})
+
+	t.Run("Error/CreateFails", func(t *testing.T) {
+		calls := stubGH(t, func(call string) (string, error) {
+			if strings.Contains(call, "-X POST") {
+				return "", errGHNotFound
+			}
+			return "", nil
+		})
+		if _, err := applyTeams("o", "r", op); err == nil {
+			t.Fatal("expected an error when a team cannot be created")
+		}
+		if slices.ContainsFunc(*calls, func(c string) bool { return strings.Contains(c, "-X PUT") }) {
+			t.Errorf("must not grant after a failed create; calls %q", *calls)
 		}
 	})
 }

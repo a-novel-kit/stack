@@ -75,6 +75,7 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 		"PUT /vulnerability-alerts",
 		"PUT /contents/.github/CODEOWNERS",
 		"PUT /labels",
+		"PUT /teams",
 		"PATCH /code-scanning/default-setup",
 		"PATCH /code-quality/setup",
 		"PUT /actions/permissions/workflow",
@@ -91,6 +92,7 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 		"PUT /contents/.github/workflows/recover-prs.yaml",
 		"PUT /contents/.github/workflows/check-dependencies.yaml",
 		"PUT /contents/.github/workflows/feature-env.yaml",
+		"PUT /contents/.github/workflows/review-gate.yaml",
 		"DELETE /contents/.github/workflows/release-train.yaml",
 		"DELETE /contents/.github/workflows/hotfix.yaml",
 		"PUT /contents/.github/workflows/lock-closed.yaml",
@@ -148,7 +150,7 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 	for _, check := range requiredChecks {
 		contexts = append(contexts, check["context"].(string))
 	}
-	if want := []string{"check-dependencies", "epic-freeze", "merge-gate"}; !slices.Equal(contexts, want) {
+	if want := []string{"check-dependencies", "epic-freeze", "merge-gate", "review-gate"}; !slices.Equal(contexts, want) {
 		t.Errorf("bootstrap required checks = %v, want %v", contexts, want)
 	}
 

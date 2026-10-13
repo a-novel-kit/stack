@@ -124,6 +124,9 @@ func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
 		case strings.HasSuffix(op.Path, "/labels"):
 			detail, err := applyLabels(org, repo, op)
 			note("labels", detail, err)
+		case len(op.Teams) > 0:
+			detail, err := applyTeams(org, repo, op)
+			note("tier teams", detail, err)
 		case op.Secret != "":
 			detail, err := applySecretAccess(op, repoID)
 			note("secret "+op.Secret, detail, err)
@@ -549,6 +552,104 @@ func applyLabels(org, repo string, op repocfg.Op) (string, error) {
 		}
 	}
 	return fmt.Sprintf("%d created, %d updated, %d retired", created, updated, retired), nil
+}
+
+// applyTeams reconciles a repo's tier-team grants. A missing tier or area team
+// is created, the area team nested under its tier; each area team is granted
+// its role; and a grant any other tier team holds here is removed. Teams
+// outside the tiers are left untouched: core reaches every repo through its org
+// role, which no repository grant can remove.
+//
+// GitHub makes a team's creator its maintainer, so the operator leaves each team
+// it creates: tier membership is the record of who holds the tier.
+func applyTeams(org, repo string, op repocfg.Op) (string, error) {
+	out, err := gh("api", "--paginate", "orgs/"+org+"/teams", "--jq", `.[] | "\(.slug)\t\(.id)"`)
+	if err != nil {
+		return "", err
+	}
+	ids := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if slug, id, ok := strings.Cut(line, "\t"); ok {
+			ids[slug] = id
+		}
+	}
+	operator := sync.OnceValues(func() (string, error) {
+		out, err := gh("api", "user", "--jq", ".login")
+		return strings.TrimSpace(out), err
+	})
+	created := 0
+	ensure := func(name, parentID string) (string, error) {
+		if id, ok := ids[name]; ok {
+			return id, nil
+		}
+		body := map[string]any{"name": name, "privacy": "closed"}
+		if parentID != "" {
+			parent, err := strconv.ParseInt(parentID, 10, 64)
+			if err != nil {
+				return "", fmt.Errorf("parent of team %q: %w", name, err)
+			}
+			body["parent_team_id"] = parent
+		}
+		raw, err := json.Marshal(body)
+		if err != nil {
+			return "", err
+		}
+		id, err := ghRun(string(raw), "api", "-X", http.MethodPost, "orgs/"+org+"/teams", "--input", "-", "--jq", ".id")
+		if err != nil {
+			// `repo update --all` applies several repos at once, and another one may have
+			// created the team since the listing.
+			if id, getErr := gh("api", "orgs/"+org+"/teams/"+name, "--jq", ".id"); getErr == nil && strings.TrimSpace(id) != "" {
+				ids[name] = strings.TrimSpace(id)
+				return ids[name], nil
+			}
+			return "", fmt.Errorf("create team %q: %w", name, err)
+		}
+		login, err := operator()
+		if err != nil {
+			return "", err
+		}
+		if _, err := gh("api", "-X", http.MethodDelete, fmt.Sprintf("orgs/%s/teams/%s/memberships/%s", org, name, login)); err != nil {
+			return "", fmt.Errorf("leave team %q: %w", name, err)
+		}
+		ids[name] = strings.TrimSpace(id)
+		created++
+		return ids[name], nil
+	}
+
+	granted := make([]string, 0, len(op.Teams))
+	tiers := make([]string, 0, len(op.Teams))
+	for _, g := range op.Teams {
+		parentID, err := ensure(g.Parent, "")
+		if err != nil {
+			return "", err
+		}
+		if _, err := ensure(g.Team, parentID); err != nil {
+			return "", err
+		}
+		grant := fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s", org, g.Team, org, repo)
+		if err := ghJSON(http.MethodPut, grant, map[string]any{"permission": g.Permission}); err != nil {
+			return "", fmt.Errorf("grant team %q: %w", g.Team, err)
+		}
+		granted = append(granted, g.Team)
+		tiers = append(tiers, g.Parent)
+	}
+
+	live, err := gh("api", "--paginate", fmt.Sprintf("repos/%s/%s/teams", org, repo), "--jq", ".[].slug")
+	if err != nil {
+		return "", err
+	}
+	removed := 0
+	for _, slug := range strings.Fields(live) {
+		tier, _, _ := strings.Cut(slug, "-")
+		if !slices.Contains(tiers, tier) || slices.Contains(granted, slug) {
+			continue
+		}
+		if _, err := gh("api", "-X", http.MethodDelete, fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s", org, slug, org, repo)); err != nil {
+			return "", fmt.Errorf("remove team %q: %w", slug, err)
+		}
+		removed++
+	}
+	return fmt.Sprintf("%d granted, %d created, %d removed", len(granted), created, removed), nil
 }
 
 // ghLabel is the subset of a GitHub label object we reconcile against.
