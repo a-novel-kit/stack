@@ -325,6 +325,12 @@ There is no local runner, so verification is reading plus CI.
   regenerated. Edit `cli/internal/repocfg/templates/governance/`.
 - **Adding a `main.yaml` job without reconciling the ruleset.** The job runs but gates nothing until
   `a-novel repo update` runs.
+- **A bot commit made with `git commit` and pushed.** The `master` and `release-lines` rulesets
+  require signed commits, and GitHub signs only what an App creates through its API with no custom
+  author. A pushed commit is unsigned, so its PR stays `BLOCKED` with every check green. Build it with
+  the Git Data API (`git/trees`, `git/commits`, then the ref), as `refresh-apko-locks` does. When only
+  git can make the change, push it, then recreate the commit from its pushed tree, as
+  `backport-run.yaml` does with a cherry-pick.
 - **Interpolating an input straight into a `run:` script.** Bind it through `env:` so the value cannot
   be read as shell syntax.
 - **A `pnpm <script>` step in an action without reconciling the lockfile first.** pnpm 11's
