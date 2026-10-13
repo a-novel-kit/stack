@@ -308,13 +308,21 @@ must stay with admins or maintainers runs `generic-actions/require-role` first: 
 `github.triggering_actor`, because `github.actor` still names the original dispatcher on a re-run,
 and the role name, because the legacy permission field reports Maintain as `write`.
 
+A workflow that reads the Agent key runs from the default branch's copy, which no pull request can
+rewrite. `pull_request`, `pull_request_review` and `merge_group` run the pull request's own copy, so
+the gates take `pull_request_target`, and `pr-relay.yaml`, which holds no permission and no secret,
+carries reviews and merge groups to them through `workflow_run`. The privileged side treats a relay
+run only as a wake-up signal: `generic-actions/relay-context` admits a real review or merge group and
+reads the pull request's current head through the API. A job on these triggers never checks out or
+runs pull request code.
+
 The enterprise subscription is the only spend. Standard runners on public repos and the free security
 features cost nothing; GitHub Code Quality bills per active committer and per AI credit on every
 default-branch push, so every class sets `code_quality: false` and `repo update` keeps it off.
 
 The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.yaml`,
 `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`, `recover-prs.yaml`,
-`check-dependencies.yaml`, `feature-env.yaml`, `review-gate.yaml`, `auto-approve-dependabot.yaml`,
+`check-dependencies.yaml`, `feature-env.yaml`, `review-gate.yaml`, `pr-relay.yaml`, `auto-approve-dependabot.yaml`,
 `lock-closed.yaml`, `notify.yaml`, `auto-assign-author.yaml`) are rendered from `cli/internal/repocfg/templates/governance/`
 and carry a "Managed by `a-novel repo update`" banner. Edit the template in the stack repo; a change to
 the copy in a repo is overwritten. What those workflows mean is `coordinate-landing`'s subject.
