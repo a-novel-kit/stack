@@ -548,6 +548,8 @@ func TestApplyTeams(t *testing.T) {
 			case strings.Contains(call, "-X POST orgs/o/teams"):
 				next++
 				return strconv.Itoa(next) + "\n", nil
+			case strings.Contains(call, "api user"):
+				return "operator\n", nil
 			case strings.Contains(call, "repos/o/r/teams"):
 				return "core\ndevelopers-service\ndevelopers-platform\nmaintainers\nreleasers\n", nil
 			}
@@ -567,15 +569,46 @@ func TestApplyTeams(t *testing.T) {
 			`-X PUT orgs/o/teams/owners-service/repos/o/r --input - {"permission":"admin"}`,
 			"-X DELETE orgs/o/teams/developers-platform/repos/o/r",
 			"-X DELETE orgs/o/teams/maintainers/repos/o/r",
+			// GitHub made the operator a maintainer of each team it created.
+			"-X DELETE orgs/o/teams/developers-service/memberships/operator",
+			"-X DELETE orgs/o/teams/owners/memberships/operator",
 		} {
 			if !strings.Contains(joined, want) {
 				t.Errorf("expected a gh call containing %q; calls:\n%s", want, joined)
 			}
 		}
-		for _, kept := range []string{"teams/core/", "teams/releasers/", "DELETE orgs/o/teams/developers-service/", `"name":"developers",`} {
+		for _, kept := range []string{
+			"teams/core/", "teams/releasers/", "DELETE orgs/o/teams/developers-service/repos", `"name":"developers",`,
+			"teams/developers/memberships",
+		} {
 			if strings.Contains(joined, kept) {
 				t.Errorf("must not touch %q; calls:\n%s", kept, joined)
 			}
+		}
+	})
+
+	t.Run("Success/CreatedConcurrently", func(t *testing.T) {
+		// Another repo's apply in the same --all run created developers after the listing.
+		calls := stubGH(t, func(call string) (string, error) {
+			switch {
+			case strings.Contains(call, `-X POST orgs/o/teams --input - --jq .id {"name":"developers",`):
+				return "", errors.New("gh: Validation Failed (HTTP 422)")
+			case strings.Contains(call, "-X POST orgs/o/teams"):
+				return "20\n", nil
+			case strings.Contains(call, "orgs/o/teams/developers --jq .id"):
+				return "7\n", nil
+			}
+			return "", nil
+		})
+		if _, err := applyTeams("o", "r", op); err != nil {
+			t.Fatalf("applyTeams: %v", err)
+		}
+		joined := strings.Join(*calls, "\n")
+		if !strings.Contains(joined, `{"name":"developers-service","parent_team_id":7,"privacy":"closed"}`) {
+			t.Errorf("developers-service must nest under the team found by name; calls:\n%s", joined)
+		}
+		if strings.Contains(joined, "teams/developers/memberships") {
+			t.Errorf("must not leave a team another run created; calls:\n%s", joined)
 		}
 	})
 

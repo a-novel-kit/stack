@@ -559,6 +559,9 @@ func applyLabels(org, repo string, op repocfg.Op) (string, error) {
 // its role; and a grant any other tier team holds here is removed. Teams
 // outside the tiers are left untouched: core reaches every repo through its org
 // role, which no repository grant can remove.
+//
+// GitHub makes a team's creator its maintainer, so the operator leaves each team
+// it creates: tier membership is the record of who holds the tier.
 func applyTeams(org, repo string, op repocfg.Op) (string, error) {
 	out, err := gh("api", "--paginate", "orgs/"+org+"/teams", "--jq", `.[] | "\(.slug)\t\(.id)"`)
 	if err != nil {
@@ -570,6 +573,10 @@ func applyTeams(org, repo string, op repocfg.Op) (string, error) {
 			ids[slug] = id
 		}
 	}
+	operator := sync.OnceValues(func() (string, error) {
+		out, err := gh("api", "user", "--jq", ".login")
+		return strings.TrimSpace(out), err
+	})
 	created := 0
 	ensure := func(name, parentID string) (string, error) {
 		if id, ok := ids[name]; ok {
@@ -589,7 +596,20 @@ func applyTeams(org, repo string, op repocfg.Op) (string, error) {
 		}
 		id, err := ghRun(string(raw), "api", "-X", http.MethodPost, "orgs/"+org+"/teams", "--input", "-", "--jq", ".id")
 		if err != nil {
+			// `repo update --all` applies several repos at once, and another one may have
+			// created the team since the listing.
+			if id, getErr := gh("api", "orgs/"+org+"/teams/"+name, "--jq", ".id"); getErr == nil && strings.TrimSpace(id) != "" {
+				ids[name] = strings.TrimSpace(id)
+				return ids[name], nil
+			}
 			return "", fmt.Errorf("create team %q: %w", name, err)
+		}
+		login, err := operator()
+		if err != nil {
+			return "", err
+		}
+		if _, err := gh("api", "-X", http.MethodDelete, fmt.Sprintf("orgs/%s/teams/%s/memberships/%s", org, name, login)); err != nil {
+			return "", fmt.Errorf("leave team %q: %w", name, err)
 		}
 		ids[name] = strings.TrimSpace(id)
 		created++
