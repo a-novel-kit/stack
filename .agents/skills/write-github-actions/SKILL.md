@@ -285,7 +285,9 @@ cannot read commit statuses. `recover-prs.yaml` re-arms auto-merge on a PR the m
 
 A bot's PR notifies nobody on GitHub: it has no assignee, and CODEOWNERS leaves dependency manifests
 and lockfiles unowned, so a version bump requests no review. A failing one reaches the Discord
-dependencies feed instead. A person's manifest change (`go.mod`, a tool's `.mod`, `go.work`,
+dependencies feed instead, and so does one still green and out of the merge queue 2 hours after its
+last commit (`notify-stuck-run`); when that one waits on a person's review, it posts to the reviews
+feed too, pinging its reviewers. A person's manifest change (`go.mod`, a tool's `.mod`, `go.work`,
 `package.json`, `pnpm-workspace.yaml`) is held by `check-dependencies.yaml` until a reviewer adds
 `allow-dependency-change`; lockfiles pass. The `always` list requires that check everywhere, and a
 ruleset cannot exempt the merge queue's actorless merges, so the check itself passes merge-queue groups
@@ -343,6 +345,11 @@ There is no local runner, so verification is reading plus CI.
   the Git Data API (`git/trees`, `git/commits`, then the ref), as `refresh-apko-locks` does. When only
   git can make the change, push it, then recreate the commit from its pushed tree, as
   `backport-run.yaml` does with a cherry-pick.
+- **A `schedule:` trigger on anything that must run on time.** GitHub starts scheduled workflows 4 to
+  7 hours late (a-novel-kit/.github#288). A `.github` repo's timed workflow takes `workflow_dispatch`
+  only and joins `DISPATCHES` in a-novel/infra's `github-dispatch` clock, which dispatches it every
+  hour. Make it read the window since its caller's last successful run, as `notify-stuck-run` does,
+  so a missed hour is caught up instead of lost.
 - **Interpolating an input straight into a `run:` script.** Bind it through `env:` so the value cannot
   be read as shell syntax.
 - **A `pnpm <script>` step in an action without reconciling the lockfile first.** pnpm 11's
