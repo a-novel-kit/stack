@@ -14,7 +14,8 @@ Contents:
 
 Renovate runs as one self-hosted App per org: `app/anovelbot-dependencies` in `a-novel` and
 `app/anovelkitbot-dependencies` in `a-novel-kit`. Dependabot is `app/dependabot`. Searching for
-`app/renovate` finds nothing.
+`app/renovate` finds nothing. The same App opens the `refresh-apko-locks` action's weekly PRs too;
+they carry no label, so search by author, not label.
 
 Query each org once with GraphQL `search`, reading `mergeStateStatus`, `reviewDecision`,
 `isInMergeQueue`, `autoMergeRequest`, `locked` and the head commit's `statusCheckRollup`. A personal
@@ -25,15 +26,16 @@ cycle, at most every two minutes, and never loop REST calls over every repo.
 
 Read the PR's timeline (`RemovedFromMergeQueueEvent.reason`) before acting.
 
-| Symptom                                                                                  | Cause                                                                                  | Action                                                                                                                                 |
-| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `isInMergeQueue` true, auto-merge shown off                                              | Queued; GitHub reports queued PRs as not armed                                         | Wait. It is not stuck.                                                                                                                 |
-| Green, approved, not queued; last removal `checks_timed_out`                             | The queue's checks did not report in time, usually runner saturation                   | `recover-prs.yaml` re-arms it, up to three times. By hand: `gh pr merge <n> --repo <r>`, with no method flag, since the queue owns it. |
-| `DIRTY`                                                                                  | A sibling PR on the same lines merged first, often two `[security]` PRs on one modfile | `recover-prs.yaml` dispatches Renovate. By hand: `gh workflow run renovate.yaml --repo <r>`.                                           |
-| `auto-approve` failed: `Issue is locked`                                                 | The conversation was locked while open                                                 | Unlock it; `lock-closed.yaml` locks only on close.                                                                                     |
-| Approval withheld: `renovate/stability-days` pending                                     | The update is younger than its release age                                             | Wait for Renovate to mark it green; that status approves it.                                                                           |
-| Red                                                                                      | See [failure diagnosis](failures.md) and the classes below                             | Fix on master; Renovate's rebase carries it.                                                                                           |
-| Red and stale, every member pending the age gate, in a repo whose only JS update is pnpm | Zombie: Renovate skips the branch while every update is pending                        | Close it with `--delete-branch`; a fresh PR follows.                                                                                   |
+| Symptom                                                                                  | Cause                                                                                   | Action                                                                                                                                 |
+| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `isInMergeQueue` true, auto-merge shown off                                              | Queued; GitHub reports queued PRs as not armed                                          | Wait. It is not stuck.                                                                                                                 |
+| Green, approved, not queued; last removal `checks_timed_out`                             | The queue's checks did not report in time, usually runner saturation                    | `recover-prs.yaml` re-arms it, up to three times. By hand: `gh pr merge <n> --repo <r>`, with no method flag, since the queue owns it. |
+| Green, approved, armed, never queued; head commit's `verification.reason` is `unsigned`  | The bot built the commit with git, and `master` and `release/**` require signed commits | Fix the producer to commit through the API (`write-github-actions` pitfalls); its next run replaces the head.                          |
+| `DIRTY`                                                                                  | A sibling PR on the same lines merged first, often two `[security]` PRs on one modfile  | `recover-prs.yaml` dispatches Renovate. By hand: `gh workflow run renovate.yaml --repo <r>`.                                           |
+| `auto-approve` failed: `Issue is locked`                                                 | The conversation was locked while open                                                  | Unlock it; `lock-closed.yaml` locks only on close.                                                                                     |
+| Approval withheld: `renovate/stability-days` pending                                     | The update is younger than its release age                                              | Wait for Renovate to mark it green; that status approves it.                                                                           |
+| Red                                                                                      | See [failure diagnosis](failures.md) and the classes below                              | Fix on master; Renovate's rebase carries it.                                                                                           |
+| Red and stale, every member pending the age gate, in a repo whose only JS update is pnpm | Zombie: Renovate skips the branch while every update is pending                         | Close it with `--delete-branch`; a fresh PR follows.                                                                                   |
 
 Never push to a bot branch. The push withholds the auto-approval, Renovate force-pushes over it on
 the next rebase, and the operator who pushed cannot approve it.
