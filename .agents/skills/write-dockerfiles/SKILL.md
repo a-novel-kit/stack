@@ -260,15 +260,39 @@ deployment scenario:
         condition: service_healthy
   ```
 
-  This requires the dependency to define a `HEALTHCHECK` in its Dockerfile (`pg_isready` for the
-  database image). The chain: postgres container starts → `pg_isready` passes → service container
-  starts → migrations run against a ready database.
+  Declare the dependency's healthcheck in the compose file, repeating its Dockerfile `HEALTHCHECK`.
+  Podman builds OCI images by default and published images are OCI too; podman drops a Dockerfile's
+  `HEALTHCHECK` from both, so a dependency without a compose healthcheck never turns healthy and
+  `podman compose up` waits forever:
+
+  ```yaml
+  postgres-json-keys:
+    healthcheck:
+      test: ["CMD", "pg_isready"]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+  ```
+
+  The chain: postgres container starts → `pg_isready` passes → service container starts →
+  migrations run against a ready database. The same holds for a sibling service's published image
+  that a target waits on: repeat that image's own check.
 
 ### Development compose (`podman-compose.yaml`)
 
-Uses standalone images (`standalone.grpc.Dockerfile`, `standalone.rest.Dockerfile`) so the full
-stack comes up with a single `podman compose up`. Persistent postgres data lives in a named volume,
-so the database survives container restarts:
+Uses standalone images (`standalone.grpc.Dockerfile`, `standalone.rest.Dockerfile`) so a target
+comes up with a single `podman compose --profile <target> up`, given the port variables it
+references. Each target sits behind a profile named after its `cmd/` directory. A one-shot such as
+`migrations` lists, after its own profile, the profiles of the targets that wait for it, since
+podman-compose fails on a dependency whose profile is not enabled:
+
+```yaml
+service-json-keys-migrations:
+  profiles: ["migrations", "grpc", "rest"]
+```
+
+The first profile alone names the target for the `a-novel` daemon. Persistent postgres data lives in
+a named volume, so the database survives container restarts:
 
 ```yaml
 volumes:
@@ -338,8 +362,8 @@ Always exclude:
   (generated artifacts, downloaded tools) at the repo root bloat the build context unless excluded.
 - **Bare `depends_on` without a healthcheck condition.** `depends_on: [postgres]` waits only for the
   container to start, so a standalone image running migrations at startup fails with a connection
-  error while postgres is still initializing. Always use `condition: service_healthy` and ensure the
-  dependency has a `HEALTHCHECK`.
+  error while postgres is still initializing. Always use `condition: service_healthy`, and declare
+  the dependency's healthcheck in compose: podman drops a Dockerfile `HEALTHCHECK` from OCI images.
 - **Hardcoded credentials or ports in `POSTGRES_DSN`.** The DSN must use environment variable
   substitution: `postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host:5432/${POSTGRES_DB}`.
   Never hardcode usernames, passwords, or database names. Use port `5432` (the internal container
