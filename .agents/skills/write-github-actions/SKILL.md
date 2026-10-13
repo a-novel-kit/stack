@@ -296,14 +296,24 @@ unlocks it on reopen. Open conversations stay unlocked: a locked conversation re
 review ("Issue is locked"), which would block the approval bot. An outsider's comment on an open
 conversation is moderated by hand, and a bot that must comment on a closed one reopens it first.
 
+Write access is split by tier. Developers hold Write, maintainers Maintain and owners Admin, each
+through a `<tier>-<class>` area team that `repo update` grants from `teams.yaml`. Anyone with Write
+can approve, label and dispatch, so the tiers rest on gates rather than roles. `review-gate`, required
+everywhere, needs an approval of the head from a maintainer, an admin or the [Agent] App, and counts
+a privileged label only when one of them applied it last; the list of privileged labels lives in the
+`review-gate.yaml` template, mirrored by the Dependabot job's step. A dispatch-only workflow that
+must stay with admins or maintainers runs `generic-actions/require-role` first: it checks
+`github.triggering_actor`, because `github.actor` still names the original dispatcher on a re-run,
+and the role name, because the legacy permission field reports Maintain as `write`.
+
 The enterprise subscription is the only spend. Standard runners on public repos and the free security
 features cost nothing; GitHub Code Quality bills per active committer and per AI credit on every
 default-branch push, so every class sets `code_quality: false` and `repo update` keeps it off.
 
 The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.yaml`,
 `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`, `recover-prs.yaml`,
-`check-dependencies.yaml`, `feature-env.yaml`, `auto-approve-dependabot.yaml`, `lock-closed.yaml`,
-`notify.yaml`, `auto-assign-author.yaml`) are rendered from `cli/internal/repocfg/templates/governance/`
+`check-dependencies.yaml`, `feature-env.yaml`, `review-gate.yaml`, `auto-approve-dependabot.yaml`,
+`lock-closed.yaml`, `notify.yaml`, `auto-assign-author.yaml`) are rendered from `cli/internal/repocfg/templates/governance/`
 and carry a "Managed by `a-novel repo update`" banner. Edit the template in the stack repo; a change to
 the copy in a repo is overwritten. What those workflows mean is `coordinate-landing`'s subject.
 A rendered file must pass every repo's prettier, at width 120 in the fleet and 80 in infra, so write
@@ -336,6 +346,9 @@ There is no local runner, so verification is reading plus CI.
 - For a composite action, grep the manifest for `${{ vars.`, `${{ secrets.`, `${{ needs.`,
   `${{ matrix.` and `${{ strategy.` before pushing. The workflows repo's `pnpm lint` checks this; a
   repo-local action under `.github/actions/` does not.
+- In the workflows repo, `lint-shell` shellchecks every `run:` block that
+  `.github/scripts/extract-shell.mjs` pulls out of the manifests and workflows. Reproduce it with
+  `node .github/scripts/extract-shell.mjs <dir>`, then shellcheck the files in `<dir>`.
 - A change to a shared action is not exercised by the workflows repo's own PR CI. It is proven when a
   consumer re-pins to the released tag, which `manage-versions` sequences.
 - Never trigger `release.yaml` to test a change — it cuts a real release. Use its `dry_run` input.
