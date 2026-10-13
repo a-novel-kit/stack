@@ -195,24 +195,6 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		}},
 	)
 
-	// GitHub creates an environment unprotected the first time a job names it,
-	// so the release environment gets its reviewers before any release runs:
-	// wherever the repo's workflows name it, and wherever the class ships
-	// hotfix, whose release-line cut names it. A reviewer may approve a release
-	// they started.
-	if c.Rulesets.Tags || slices.Contains(t.Discovered.Environments, "release") {
-		if len(t.OrgProfile.ReleaseReviewers) == 0 {
-			return nil, fmt.Errorf("orgs/%s.yaml names no release_reviewers for the release environment", t.Org)
-		}
-		reviewers := make([]map[string]any, 0, len(t.OrgProfile.ReleaseReviewers))
-		for _, id := range t.OrgProfile.ReleaseReviewers {
-			reviewers = append(reviewers, map[string]any{"type": "User", "id": id})
-		}
-		p.Ops = append(p.Ops, Op{Method: http.MethodPut, Path: repoPath + "/environments/release", Body: map[string]any{
-			"reviewers": reviewers, "prevent_self_review": false,
-		}})
-	}
-
 	// A scoped org secret reaches exactly the repos whose workflows name it.
 	for _, name := range t.OrgProfile.ScopedSecrets {
 		method := http.MethodDelete

@@ -1,7 +1,6 @@
 package repocfg
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,17 +22,14 @@ type CheckRef struct {
 }
 
 // Discovered is what probing a repo tells us: the required checks for the
-// master ruleset, and the secrets and environments its workflows use.
+// master ruleset, and the secrets its workflows read.
 type Discovered struct {
 	Checks []CheckRef
 	// Secrets are the secret names the repo's workflows reference, sorted.
 	Secrets []string
-	// Environments are the deployment environments its jobs name, sorted.
-	Environments []string
 }
 
-// Discover computes a repo's required checks and the secrets and environments
-// its workflows use.
+// Discover computes a repo's required checks and the secrets its workflows read.
 //
 // Required checks are the `always` set plus every job declared in the repo's
 // .github/workflows/main.yaml, minus cc.Exclude — the job id is the check
@@ -67,7 +63,7 @@ func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 
 	sort.Slice(d.Checks, func(i, j int) bool { return d.Checks[i].Context < d.Checks[j].Context })
 
-	if d.Secrets, d.Environments, err = workflowUses(filepath.Join(repoPath, ".github", "workflows")); err != nil {
+	if d.Secrets, err = workflowSecrets(filepath.Join(repoPath, ".github", "workflows")); err != nil {
 		return nil, err
 	}
 	return d, nil
@@ -76,51 +72,31 @@ func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 // secretRef matches a secrets-context reference such as secrets.CODECOV_TOKEN.
 var secretRef = regexp.MustCompile(`\bsecrets\.([A-Za-z_][A-Za-z0-9_]*)`)
 
-// workflowUses lists the secrets that the workflow files in dir reference and
-// the environments their jobs name, each sorted and unique. A job names its
-// environment either directly or as the name of an environment map.
-func workflowUses(dir string) ([]string, []string, error) {
-	var secrets, environments []string
+// workflowSecrets lists the secret names that the workflow files in dir
+// reference, sorted and unique. A repo without workflows references none.
+func workflowSecrets(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
-		return nil, nil, nil
+		return nil, nil
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
+	var names []string
 	for _, entry := range entries {
 		if ext := filepath.Ext(entry.Name()); entry.IsDir() || ext != ".yaml" && ext != ".yml" {
 			continue
 		}
 		raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		for _, match := range secretRef.FindAllSubmatch(raw, -1) {
-			secrets = append(secrets, string(match[1]))
-		}
-		var wf struct {
-			Jobs map[string]struct {
-				Environment any `yaml:"environment"`
-			} `yaml:"jobs"`
-		}
-		if err := yaml.Unmarshal(raw, &wf); err != nil {
-			return nil, nil, fmt.Errorf("%s: %w", entry.Name(), err)
-		}
-		for _, job := range wf.Jobs {
-			switch environment := job.Environment.(type) {
-			case string:
-				environments = append(environments, environment)
-			case map[string]any:
-				if name, ok := environment["name"].(string); ok {
-					environments = append(environments, name)
-				}
-			}
+			names = append(names, string(match[1]))
 		}
 	}
-	slices.Sort(secrets)
-	slices.Sort(environments)
-	return slices.Compact(secrets), slices.Compact(environments), nil
+	slices.Sort(names)
+	return slices.Compact(names), nil
 }
 
 // workflowJob is one job parsed from a workflow file: its check context (the

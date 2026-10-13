@@ -78,7 +78,7 @@ untouched — apply never removes a label it was not told about. Kind
 Size are **project fields**, so neither is a label here; the label set is the
 cross-cutting signals that sort work within a board status.
 
-## Actions settings, release environment and scoped secrets
+## Actions settings and scoped secrets
 
 Every repo gets the same Actions settings: a workflow token is read-only unless
 its job asks for more and never approves a pull request, and an outside
@@ -86,19 +86,14 @@ contributor's fork pull request runs no workflow until a maintainer approves it.
 Both orgs set the same values org-wide; the repo-level copy keeps a repo correct
 if an org setting loosens.
 
-A repo that releases gets a `release` environment whose jobs wait for one of the
-org's `release_reviewers`. GitHub creates an environment unprotected the first
-time a job names it, so `repo update` writes it first: on every class with the
-`tags` ruleset, whose `hotfix` cut names it, and on any repo whose workflows name
-it. Environments are not pruned, since each holds deployment history.
-
 The org's `scoped_secrets` have selected-repository visibility. Discovery reads
 every `secrets.NAME` reference in the repo's workflows, and `repo update` grants
 each scoped secret the repo names and revokes the others. A new repo reads
 exactly what its CI uses, and a secret its workflows stop naming is revoked on
 the next reconcile. Switching a secret to selected visibility needs its value,
-so an admin does it once in the org settings before listing it here; until then
-GitHub refuses the grants with 409.
+so an admin does it once in the org settings, picking the repos that name it,
+before listing it in `orgs/<org>.yaml`; a listed secret still visible to every
+repo fails each grant and revoke with 409.
 
 ## `classes/<class>.yaml` and `repos/<org>_<repo>.yaml`
 
@@ -137,7 +132,6 @@ with `a-novel repo create a-novel infra --class infra` after releasing the CLI.
 | `org`                                       | string   | Org login (must match the filename).                                                                                      |
 | `signing_required`                          | bool     | Require signed + signed-off commits.                                                                                      |
 | `bots.dependencies` / `.agent` / `.publish` | int      | GitHub App IDs of the three org bots; the CLI resolves a ruleset bypass entry like `publish` to the right ID for the org. |
-| `release_reviewers`                         | []int    | GitHub user IDs who approve a release job in the `release` environment. A releasing repo's plan fails without one.        |
 | `scoped_secrets`                            | []string | Org secrets with selected-repository visibility. Each repo can read exactly the ones its workflows name.                  |
 
 ## `rulesets/<name>.yaml`

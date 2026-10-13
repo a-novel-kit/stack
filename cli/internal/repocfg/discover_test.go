@@ -23,11 +23,10 @@ func TestDiscover(t *testing.T) {
 	cc.ResolveBotIntegrations(&OrgProfile{Bots: map[string]int64{"agent": 4242}})
 
 	testCases := []struct {
-		name             string
-		mainYAML         string
-		want             []string
-		wantSecrets      []string
-		wantEnvironments []string
+		name        string
+		mainYAML    string
+		want        []string
+		wantSecrets []string
 	}{
 		{name: "Success/NoMainYaml", want: []string{"check-dependencies", "epic-freeze", "merge-gate"}},
 		{
@@ -44,19 +43,14 @@ jobs:
       - run: echo "${{ secrets.CODECOV_TOKEN }} ${{secrets.GITHUB_TOKEN}}"
   lint-go:
     runs-on: ubuntu-latest
-    environment: release
   report-codecov:
     runs-on: ubuntu-latest
   publish-docs:
-    environment:
-      name: github-pages
-      url: https://example.org
     if: "github.ref == 'refs/heads/master' && success()"
     runs-on: ubuntu-latest
 `,
-			want:             []string{"check-dependencies", "epic-freeze", "lint-go", "merge-gate", "test-go"},
-			wantSecrets:      []string{"CODECOV_TOKEN", "GITHUB_TOKEN"},
-			wantEnvironments: []string{"github-pages", "release"},
+			want:        []string{"check-dependencies", "epic-freeze", "lint-go", "merge-gate", "test-go"},
+			wantSecrets: []string{"CODECOV_TOKEN", "GITHUB_TOKEN"},
 		},
 	}
 	for _, testCase := range testCases {
@@ -93,9 +87,6 @@ jobs:
 			}
 			if !slices.Equal(d.Secrets, testCase.wantSecrets) {
 				t.Errorf("secrets = %v, want %v", d.Secrets, testCase.wantSecrets)
-			}
-			if !slices.Equal(d.Environments, testCase.wantEnvironments) {
-				t.Errorf("environments = %v, want %v", d.Environments, testCase.wantEnvironments)
 			}
 		})
 	}

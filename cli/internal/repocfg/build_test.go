@@ -10,19 +10,15 @@ import (
 	"unicode/utf8"
 )
 
-// releaseReviewer is the release reviewer planFor's org profile names.
-const releaseReviewer int64 = 4243
-
 // planFor builds a-novel-kit/example's plan for class, with every bot a
-// ruleset may name, one release reviewer, and checks as the discovered
-// required checks.
+// ruleset may name and checks as the discovered required checks.
 func planFor(t *testing.T, class *ClassPreset, checks ...CheckRef) *Plan {
 	t.Helper()
 	plan, err := BuildPlan(&RepoTarget{
 		Org: "a-novel-kit", Repo: "example", DefaultBranch: "master", Class: class,
 		OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{
 			"agent": 3549379, "publish": 1734949, "dependencies": 1734926,
-		}, ReleaseReviewers: []int64{releaseReviewer}},
+		}},
 		Discovered: &Discovered{Checks: checks},
 	})
 	if err != nil {
@@ -128,10 +124,6 @@ func TestBuildPlanProvisions(t *testing.T) {
 		{name: "ForkApproval", plan: bare, method: http.MethodPut, path: "/fork-pr-contributor-approval", body: map[string]any{
 			"approval_policy": "all_external_contributors",
 		}},
-		// A releasing class protects the environment before a first release creates it open.
-		{name: "ReleaseEnvironment", plan: master, method: http.MethodPut, path: "/environments/release", body: map[string]any{
-			"reviewers": []map[string]any{{"type": "User", "id": releaseReviewer}}, "prevent_self_review": false,
-		}, gated: true},
 		// Published classes enable Pages through a workflow-backed site.
 		{name: "Pages/Library", plan: loadPlan(ClassLibrary), method: http.MethodPost, path: "/pages", body: workflow},
 		{name: "Pages/Platform", plan: loadPlan(ClassPlatform), method: http.MethodPost, path: "/pages", body: workflow},
@@ -344,52 +336,5 @@ func TestBuildPlanScopesSecrets(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("secret ops = %v, want %v", got, want)
-	}
-}
-
-// TestBuildPlanProtectsReleaseEnvironment pins where the release environment
-// gets its reviewers: a class shipping hotfix, whose cut names it, and any repo
-// whose workflows name it. With no reviewer to name, planning fails rather than
-// leave the environment open.
-func TestBuildPlanProtectsReleaseEnvironment(t *testing.T) {
-	t.Parallel()
-	testCases := []struct {
-		name         string
-		tags         bool
-		environments []string
-		reviewers    []int64
-		want         bool
-		wantErr      bool
-	}{
-		{name: "Success/HotfixClass", tags: true, reviewers: []int64{releaseReviewer}, want: true},
-		{name: "Success/NamedByWorkflow", environments: []string{"release"}, reviewers: []int64{releaseReviewer}, want: true},
-		{name: "Success/NoRelease", environments: []string{"github-pages"}, reviewers: []int64{releaseReviewer}},
-		{name: "Error/NoReviewers", environments: []string{"release"}, wantErr: true},
-	}
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-			plan, err := BuildPlan(&RepoTarget{
-				Org: "a-novel-kit", Repo: "example", DefaultBranch: "master",
-				Class: &ClassPreset{Rulesets: ClassRulesets{Tags: testCase.tags}},
-				OrgProfile: &OrgProfile{
-					Org: "a-novel-kit", Bots: map[string]int64{"agent": 3549379}, ReleaseReviewers: testCase.reviewers,
-				},
-				Discovered: &Discovered{Environments: testCase.environments},
-			})
-			if testCase.wantErr {
-				if err == nil || !strings.Contains(err.Error(), "release_reviewers") {
-					t.Fatalf("BuildPlan error = %v, want one naming release_reviewers", err)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("BuildPlan: %v", err)
-			}
-			got := slices.ContainsFunc(plan.Ops, func(op Op) bool { return strings.HasSuffix(op.Path, "/environments/release") })
-			if got != testCase.want {
-				t.Errorf("release environment op = %v, want %v", got, testCase.want)
-			}
-		})
 	}
 }

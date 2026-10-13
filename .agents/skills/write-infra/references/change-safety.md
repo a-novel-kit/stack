@@ -152,8 +152,9 @@ pins in the same change.
   - State holds no secret values, because those are added outside OpenTofu.
 - **Only admins bypass the rulesets.** A merge to `master` deploys production, and every bot
   reaches it through a pull request. The bot Apps' keys are org secrets that any repository's
-  workflows can read, so a bot bypass would let any of them deploy. The `infra` class sets
-  `rulesets.admins_only`.
+  workflows can read, so no bot may push `master` directly; the `infra` class sets
+  `rulesets.admins_only`. This closes the direct push only: a bot's pull request that the
+  auto-approver approves still deploys, tracked in a-novel/.github#414.
 - **The writer's federation condition** pins `deploy.yaml`, `roll-database.yaml` and
   `recovery.yaml` on `master` behind the `production` environment. Changing it is a bootstrap change, applied by the last trusted
   workflow before a new one depends on it.
