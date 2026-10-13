@@ -293,6 +293,9 @@ func rulesetOp(name string, t *RepoTarget, checks []CheckRef) (Op, error) {
 	if !t.Class.Security.Dependabot {
 		spec.Bypass = slices.DeleteFunc(spec.Bypass, func(entry string) bool { return entry == "dependabot" })
 	}
+	if t.Class.Rulesets.AdminsOnly {
+		spec.Bypass = slices.DeleteFunc(spec.Bypass, func(entry string) bool { return entry != "admins" })
+	}
 	body, err := BuildRuleset(spec, t.OrgProfile, checks)
 	if err != nil {
 		return Op{}, err

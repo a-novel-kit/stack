@@ -99,11 +99,13 @@ are required unless noted.
 | `pages`                                                         | bool   | Reconcile Pages on (`workflow`) or off.                                                                                                                                                                                                                                                                           |
 | `code_quality`                                                  | bool   | Turn GitHub Code Quality on and add the `code_quality` rule to the `master` ruleset; `false` keeps both off. Code Quality bills per active committer, and per AI credit on every default-branch push.                                                                                                             |
 | `rulesets.master` / `.require_approval` / `.tags`               | bool   | Apply those rulesets. `tags` locks tag (and release) creation to the agent bot + admins, and adds `release-lines`, which governs `release/vX.Y` branches like the default branch. `master` also applies `commit-messages`, which checks the subject of every commit on every branch against Conventional Commits. |
+| `rulesets.admins_only`                                          | bool   | Drop the bots from every bypass list, leaving admins only. For a class whose merges deploy production and whose bots reach the default branch through pull requests, since a bot key is an org secret any repository's workflows can read.                                                                        |
 
 The `infra` class is public-by-default and deployment-only. It keeps Pages,
-wiki, discussions, release workflow callers, and the tag ruleset off; when a
-repo changes to this class, reconciliation also deletes managed `release-train`
-and `hotfix` callers left by a release-bearing class. Create it interactively
+wiki, discussions, release workflow callers, and the tag ruleset off, and only
+admins bypass its rulesets. When a repo changes to this class, reconciliation
+also deletes managed `release-train` and `hotfix` callers left by a
+release-bearing class. Create it interactively
 with `a-novel repo create a-novel infra --class infra` after releasing the CLI.
 
 ## `orgs/<org>.yaml`
@@ -140,6 +142,8 @@ ruleset wholesale.
 - `dependabot` — GitHub's Dependabot App, the same in every org, resolved with
   the bot modes above. GitHub accepts it only on repos Dependabot runs in, so the
   entry is dropped for classes with `security.dependabot: false`.
+
+A class with `rulesets.admins_only: true` drops every entry but `admins`.
 
 The core team is intentionally **not** a bypass actor.
 

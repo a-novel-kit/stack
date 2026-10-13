@@ -150,6 +150,10 @@ pins in the same change.
   - Renovate delays OpenTofu and provider updates by 7 days (6 hours for patches) to bound a
     compromised release.
   - State holds no secret values, because those are added outside OpenTofu.
+- **Only admins bypass the rulesets.** A merge to `master` deploys production, and every bot
+  reaches it through a pull request. The bot Apps' keys are org secrets that any repository's
+  workflows can read, so a bot bypass would let any of them deploy. The `infra` class sets
+  `rulesets.admins_only`.
 - **The writer's federation condition** pins `deploy.yaml`, `roll-database.yaml` and
   `recovery.yaml` on `master` behind the `production` environment. Changing it is a bootstrap change, applied by the last trusted
   workflow before a new one depends on it.

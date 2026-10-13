@@ -115,6 +115,9 @@ type ClassRulesets struct {
 	Master          bool `yaml:"master"`
 	RequireApproval bool `yaml:"require_approval"`
 	Tags            bool `yaml:"tags"`
+	// AdminsOnly drops the bots from every bypass list, for a class whose
+	// default branch no automation writes to directly.
+	AdminsOnly bool `yaml:"admins_only"`
 }
 
 // ClassPreset is one classes/<class>.yaml file.
