@@ -104,8 +104,11 @@ EOF
   Conventional commit.
 - **Update a branch by rebasing onto its base, never by merging the base in.** A merge writes a
   `Merge branch …` commit, which the ruleset rejects, and so does GitHub's default "Update branch".
-  Choose "Update with rebase", or run `git rebase origin/master` and `git push --force-with-lease`.
-  A rebase replays the branch's commits unchanged, so it is not the amend the rule above forbids.
+  Its "Update with rebase" rewrites the commits unsigned, which the required-signatures rule rejects:
+  the pull request can no longer enter the merge queue. Run `git rebase origin/master` and
+  `git push --force-with-lease` instead, which signs them. A rebase replays the branch's commits
+  unchanged, so it is not the amend the rule above forbids. A pull request needs no update to enter
+  the queue, which tests it on the latest base.
 - **Revert with git, not GitHub's Revert button**, whose `Revert "…"` subject the ruleset rejects:
   `git revert --no-commit <sha>`, then
   `git commit -m "revert: <reverted subject>" -m "This reverts commit <sha>."`.
