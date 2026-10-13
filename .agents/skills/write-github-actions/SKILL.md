@@ -171,7 +171,7 @@ gates its `test-*` jobs and `build-platform` on `[build-node, lint-types]`.
 Keep the graph to three stages: cheap checks with no `needs:`, the gated heavy jobs, and the
 `report-*` jobs that read their outputs. Each stage adds its slowest job to every run, green runs
 included, so chain no further. A `test-go → build-*` edge to keep untested code out of an image is
-one stage too many: those images are branch-tagged dev artifacts, and `merge-gate` keeps `master`
+one stage too many: those images are untagged dev artifacts, and `merge-gate` keeps `master`
 green.
 
 Pick gates that finish within the slowest cheap job, so gating adds no wall time. Leave style, lint,
@@ -251,6 +251,12 @@ the gate. A gate reads labels live through the API, or ignores them on a `synchr
 a rerun replays its original event. `check-append-only` removes its label only when the step gets
 `github_token`.
 
+`with-feature-env` follows the same rule to publish rather than waive. `build-actions/docker` tags
+an image only on a push to the default branch, a release, or a pull request carrying the label,
+which gets the moving `pr-<N>` tag; every other build is pushed by digest alone for the jobs of its
+run. The managed `feature-env.yaml` removes the label on the next push, so the tag keeps naming the
+last head someone labeled. A repo's `main.yaml` must trigger on `labeled` for the label to build.
+
 Pull requests are for collaborators: every class sets `features.pull_requests: collaborators_only`,
 and outsiders use issues and discussions. GitHub Apps count as collaborators there, so Renovate and
 the bots still open PRs. `lock-closed.yaml` locks an issue's or PR's conversation once it closes and
@@ -264,10 +270,10 @@ default-branch push, so every class sets `code_quality: false` and `repo update`
 
 The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.yaml`,
 `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`, `recover-prs.yaml`,
-`check-dependencies.yaml`, `auto-approve-dependabot.yaml`, `lock-closed.yaml`, `notify.yaml`,
-`auto-assign-author.yaml`) are rendered from `cli/internal/repocfg/templates/governance/` and carry
-a "Managed by `a-novel repo update`" banner. Edit the template in the stack repo; a change to the
-copy in a repo is overwritten. What those workflows mean is `coordinate-landing`'s subject.
+`check-dependencies.yaml`, `feature-env.yaml`, `auto-approve-dependabot.yaml`, `lock-closed.yaml`,
+`notify.yaml`, `auto-assign-author.yaml`) are rendered from `cli/internal/repocfg/templates/governance/`
+and carry a "Managed by `a-novel repo update`" banner. Edit the template in the stack repo; a change to
+the copy in a repo is overwritten. What those workflows mean is `coordinate-landing`'s subject.
 
 Two of them keep dependency PRs moving without a person. `auto-approve-dependabot.yaml` approves the
 bots' PRs, withholding approval while `renovate/stability-days` is pending; its `status` trigger
