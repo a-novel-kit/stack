@@ -381,8 +381,8 @@ There is no local runner, so verification is reading plus CI.
   7 hours late (a-novel-kit/.github#288). A `.github` repo's timed workflow takes `workflow_dispatch`
   only, and its cron moves to `github_dispatch_schedules` in a-novel/infra's bootstrap, where a Cloud
   Scheduler job dispatches it in each org. A poll reads the window since its caller's last successful
-  run, as `notify-stuck-run` does, so a missed tick is caught up instead of lost. `watchdog` keeps its
-  own cron as well, so it still runs, and reports the others, if the clock stops.
+  run, as `notify-stuck-run` does, so a missed tick is caught up instead of lost. `token-expiry` warns
+  before a dispatch token lapses, the likeliest way the clock stops.
 - **Interpolating an input straight into a `run:` script.** Bind it through `env:` so the value cannot
   be read as shell syntax.
 - **A `pnpm <script>` step in an action without reconciling the lockfile first.** pnpm 11's
