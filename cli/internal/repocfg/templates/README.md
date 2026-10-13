@@ -62,7 +62,9 @@ posts without that ping.
 Independent of class, `repo update` commits a uniform `.github/CODEOWNERS`
 (`governance/CODEOWNERS` — a single owner today) to every repo so review
 requests route automatically, and removes any stray root `CODEOWNERS` so a repo
-never carries two (GitHub honors `.github/` over the root).
+never carries two (GitHub honors `.github/` over the root). Dependency manifests
+and lockfiles stay unowned, so a bot's version bump requests no review; the
+`check-dependencies` check holds a person's manifest change instead.
 
 It also reconciles a uniform **label set** (`governance/labels.yaml`) on every
 repo: `ensure` labels are upserted (created, or recolored / re-described to
@@ -143,7 +145,8 @@ Decides which CI jobs gate the default branch and its release lines. The
 `master` and `release-lines` rulesets' required checks are:
 
 1. the **`always`** set — required on every repo regardless of class (the
-   [Agent] App's `merge-gate` and `epic-freeze`); plus
+   [Agent] App's `merge-gate` and `epic-freeze`, and the `check-dependencies`
+   job of the governance workflow of that name); plus
 2. **every job declared in the repo's `.github/workflows/main.yaml`**, minus the
    **`exclude`** rules.
 

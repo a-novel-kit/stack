@@ -27,7 +27,7 @@ func TestDiscover(t *testing.T) {
 		mainYAML string
 		want     []string
 	}{
-		{name: "Success/NoMainYaml", want: []string{"epic-freeze", "merge-gate"}},
+		{name: "Success/NoMainYaml", want: []string{"check-dependencies", "epic-freeze", "merge-gate"}},
 		{
 			name: "Success/MainYaml",
 			mainYAML: `
@@ -43,7 +43,7 @@ jobs:
     if: "github.ref == 'refs/heads/master' && success()"
     runs-on: ubuntu-latest
 `,
-			want: []string{"epic-freeze", "lint-go", "merge-gate", "test-go"},
+			want: []string{"check-dependencies", "epic-freeze", "lint-go", "merge-gate", "test-go"},
 		},
 	}
 	for _, testCase := range testCases {
@@ -69,6 +69,10 @@ jobs:
 				// merge-gate + epic-freeze are required against the injected per-org [Agent] app id.
 				if (c.Context == "merge-gate" || c.Context == "epic-freeze") && c.IntegrationID != 4242 {
 					t.Errorf("%s integration id = %d, want the injected 4242", c.Context, c.IntegrationID)
+				}
+				// check-dependencies is a workflow job, so GitHub Actions posts it.
+				if c.Context == "check-dependencies" && c.IntegrationID != cc.Integrations[integrationActions] {
+					t.Errorf("check-dependencies integration id = %d, want Actions", c.IntegrationID)
 				}
 			}
 			if !slices.Equal(got, testCase.want) {

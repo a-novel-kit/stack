@@ -28,6 +28,11 @@ always:
   # and fails on a PR whose Epic landed partially, posted by the [Agent] App
   # from epic-freeze.yaml and the sweep.
   - { context: "epic-freeze", integration: agent }
+  # check-dependencies: holds a person's dependency manifest change until a
+  # reviewer adds the allow-dependency-change label, posted by Actions from
+  # check-dependencies.yaml. Bots and merge-queue groups pass inside the check:
+  # the queue's merges have no actor a ruleset could exempt.
+  - { context: "check-dependencies", integration: actions }
 
 # main.yaml jobs are required by default, except those matching these rules:
 exclude:
