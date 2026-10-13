@@ -3,7 +3,9 @@
 These YAML files are the editable source of truth for the `a-novel repo create`
 and `a-novel repo update` commands. They are embedded into the CLI binary, but
 an on-disk copy here (or under `$REPO_CONFIG_DIR`) takes precedence, so edits
-take effect without a rebuild.
+take effect without a rebuild. The files decode strictly, so a new field breaks
+every older installed CLI once the stack checkout pulls it: its rollout runs
+`a-novel install` right after the merge.
 
 A repo's desired config is composed from three inputs:
 
