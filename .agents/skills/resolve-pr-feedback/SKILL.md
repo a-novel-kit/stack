@@ -1,9 +1,9 @@
 ---
 name: resolve-pr-feedback
 description: >
-  Inspect PR status and linked issues, evaluate review feedback, reply, resolve settled threads,
-  and request re-review. Load for PR status checks, before reading a new review, or for issue
-  discussions.
+  Review PRs and post the review on GitHub; inspect PR status and linked issues, evaluate review
+  feedback, reply, resolve settled threads, and request re-review. Load to review a PR, for PR
+  status checks, before reading a new review, or for issue discussions.
 ---
 
 # Resolve PR Feedback
@@ -30,8 +30,10 @@ flat comments, no review threads, no resolution state.
 
 ## Choose the review path
 
-- PR status or review request: read [the survey procedure](references/survey.md) first.
-  Status-only work ends after reporting evidence; it does not authorize edits or replies.
+- Reviewing a PR: read [reviewing a pull request](references/review.md). The request authorizes
+  posting it as one GitHub review with inline comments; post it without asking.
+- PR status: read [the survey procedure](references/survey.md) first. Status-only work ends after
+  reporting evidence; it does not authorize edits or replies.
 - Addressing PR feedback: survey, classify, and fix using the phases here. Before replying,
   resolving, or requesting re-review, read [closing the loop](references/close-loop.md).
 - Issue discussion: read [issue discussions](references/issues.md); issue comments have no PR
@@ -233,9 +235,12 @@ force-push to `master`.
 - **Replying with the wrong mode.** A top-level comment does not thread with an inline review
   comment. To reply on a review thread, pass `--reply-to <comment-id>` to `a-novel core bot-comment`;
   a bare comment (no `--reply-to`) posts at the top level.
-- **Commenting as yourself.** Every PR/issue/review comment goes through `a-novel core
+- **Commenting as yourself.** Every PR/issue comment and thread reply goes through `a-novel core
 bot-comment` so it attributes to `<app-slug>[bot]`. Bare `gh pr comment` / `gh api …
-comments` posts as your user account — only reads use plain `gh`.
+comments` posts as your user account — only reads use plain `gh`. The one write that runs as
+  the operator is a review you perform ([reviewing a pull request](references/review.md)).
+- **Posting a review as comments.** A review is one `POST …/pulls/<n>/reviews` carrying inline
+  comments, never a top-level comment that links `file:line`, nor a series of comments.
 - **Leaving clear-cut threads open.** Resolve a thread you have decisively answered; reserve the open
   state for genuinely-pending decisions (rule 1).
 - **Amending or force-pushing to address review.** Review comments are anchored to the SHA that was
@@ -280,7 +285,7 @@ comments` posts as your user account — only reads use plain `gh`.
 | CI status                          | `gh pr checks <n>`                                                                                                  |
 | Reply on a review thread (bot)     | `a-novel core bot-comment <o> <r> <n> --reply-to <cid> --body "..."`                                                |
 | Resolve a thread                   | GraphQL `resolveReviewThread` mutation (Phase 5.2)                                                                  |
-| Start a new inline thread          | not a bot action — post a top-level bot comment naming `file:line` (see "Starting your own thread")                 |
+| Post a review (new inline threads) | `gh api …/pulls/<n>/reviews --method POST --input review.json` as the operator ([review](references/review.md))     |
 | Comment on a PR or issue (bot)     | `a-novel core bot-comment <o> <r> <n> --body "..."`                                                                 |
 | Re-request review                  | `gh api .../pulls/<n>/requested_reviewers -X POST -F 'reviewers[]=<login>'`                                         |
 | **Issue** envelope                 | `gh issue view <n> --repo <o>/<r> --json number,state,title,labels,assignees,body,comments`                         |

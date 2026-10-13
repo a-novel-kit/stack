@@ -36,9 +36,12 @@ walkthrough does not prove how a model will behave.
    `testing-building.md`, Go test conventions/patterns, and the applicable service layer pattern.
    Do not load daemon, secrets, repository governance, or release runbooks unless the operation
    actually needs them.
-10. **PR status versus feedback.** A status query loads the survey and reports evidence. An
-    authorized feedback task also loads classification and closing-the-loop guidance before
-    replies or resolution. Preserve unresolved discussions and the bot-comment identity rule.
+10. **PR status, review and feedback.** A status query loads the survey and reports evidence. A
+    review request loads the review reference and posts one GitHub review with inline comments as
+    the operator, without asking; reject a terminal-only summary or a top-level comment listing
+    `file:line`. An authorized feedback task also loads classification and closing-the-loop
+    guidance before replies or resolution. Preserve unresolved discussions and the bot-comment
+    identity rule.
 11. **Publication after agreement.** An approved change is ready to publish. Reuse the agreement;
     load authoring, applicable checks, and handoff rules at their stages. Do not restart abstract
     planning or infer permission to merge from green CI.

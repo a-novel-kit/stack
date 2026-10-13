@@ -50,8 +50,8 @@ the surfaced run log and retry.
 >
 > The narrow thing the bot genuinely **cannot** do is create a _review_ carrying **new**
 > line-anchored comments — that needs `POST /pulls/{n}/reviews`, which the dispatcher does not
-> implement. Replying into an **existing** thread is fully supported. Do not let the real carve-out
-> excuse the reply path.
+> implement, so a review runs as the operator under [reviewing a pull request](review.md). Replying
+> into an **existing** thread is fully supported. Do not let the real carve-out excuse the reply path.
 
 ### 5.2 Resolve settled threads
 
@@ -128,8 +128,7 @@ Claude may initiate a thread when:
 
 Every comment you post goes through the bot (`a-novel core bot-comment`), never bare `gh`.
 
-**Top-level comment** (general discussion — or a concern that points at specific code,
-naming the `file:line` in the body):
+**Top-level comment** (general discussion that points at no specific line):
 
 ```bash
 a-novel core bot-comment <org> <repo> <number> --body "..."
@@ -141,6 +140,6 @@ a-novel core bot-comment <org> <repo> <number> --body "..."
 a-novel core bot-comment <org> <repo> <number> --reply-to <comment-id> --body "..."
 ```
 
-Starting a _brand-new_ inline thread anchored to a code line is not a bot capability — the dispatcher
-posts top-level comments and thread replies only. To raise line-specific code as the bot, post a
-top-level comment that names the `file:line`; anchored-thread creation is a human reviewer's.
+A _brand-new_ thread anchored to a code line is a review comment, which the bot cannot create. Post
+it in a review with your operator token, following [reviewing a pull request](review.md); never
+substitute a top-level comment that names the `file:line`.
