@@ -214,6 +214,8 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	drop("lock-pr.yaml")
 	// Every repo reports its default-branch failures and its releases to Discord.
 	put("notify.yaml")
+	// Every repo assigns a person's pull request to its author.
+	put("auto-assign-author.yaml")
 	// The trusted dependency bots' PRs are auto-approved wherever
 	// require-approval would otherwise hold their version bumps for a human.
 	if c.Rulesets.RequireApproval {

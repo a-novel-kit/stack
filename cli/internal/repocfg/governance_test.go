@@ -291,6 +291,22 @@ func TestLockClosedGovernance(t *testing.T) {
 	}
 }
 
+// TestAutoAssignAuthorGovernance pins that only a person's pull request is
+// assigned. Dependabot's and Renovate's pull requests both carry the Bot user
+// type, so the job never starts for them.
+func TestAutoAssignAuthorGovernance(t *testing.T) {
+	t.Parallel()
+	var workflow struct {
+		Jobs map[string]struct {
+			If string `yaml:"if"`
+		} `yaml:"jobs"`
+	}
+	loadWorkflow(t, "auto-assign-author.yaml", &workflow)
+	if got, want := workflow.Jobs["assign-author"].If, "github.event.pull_request.user.type != 'Bot'"; got != want {
+		t.Errorf("auto-assign-author if = %q, want %q", got, want)
+	}
+}
+
 // TestNotifyGovernance pins what the Discord notifier watches. Watching
 // release as well as main is what reports a release that fails after its tag,
 // and main on the bots' and the merge queue's branches is what reports a bot's
