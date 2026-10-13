@@ -235,10 +235,6 @@ CREATE INDEX active_keys_usage_idx ON active_keys (usage);
 --bun:split
 -- Step 3: populate the view (requires step 2 to have completed)
 REFRESH MATERIALIZED VIEW active_keys;
-
---bun:split
--- Step 4: schedule background refresh (requires the view to exist)
-SELECT cron.schedule('refresh-active-keys', '0 * * * *', $$...$$);
 ```
 
 Statements with no ordering dependency (`CREATE TABLE` then `CREATE INDEX` on that table) need
@@ -254,13 +250,9 @@ Down migrations reverse the up migration in **reverse creation order**:
 - Indexes are dropped before the table or view they index.
 - Dependent objects (views, materialized views) are dropped before the tables they read from.
 
-Example — down for a migration that created a materialized view with an index and a pg_cron job:
+Example — down for a migration that created a materialized view with an index:
 
 ```sql
--- Unschedule first, before the view it depends on is dropped.
-SELECT cron.unschedule('refresh-active-keys');
-
---bun:split
 DROP INDEX IF EXISTS active_keys_usage_idx;
 
 DROP MATERIALIZED VIEW IF EXISTS active_keys;
@@ -292,25 +284,72 @@ accidental re-application is worse than surfacing it as an error.
 
 ### pg_cron Scheduled Jobs
 
-When a migration adds a pg_cron job, the paired down migration must unschedule it by the
-same name:
+A job's command calls a function the same migration defines, so a later release changes the job by
+replacing the function, the schema census snapshots it, and a test calls it. Schedule it only where
+pg_cron is installed: the databases `postgrestest.RunDBTest` clones have no `cron` schema, so a bare
+`cron.schedule` fails every data-access test. PL/pgSQL resolves `cron.*` only when the guarded
+statement runs, and scheduling an existing name replaces its job. The paired down migration
+unschedules it by the same name, the same way:
 
 ```sql
 -- up
-SELECT
-  cron.schedule (
-    'refresh-active-keys',
-    '0 * * * *',
-    $$REFRESH MATERIALIZED VIEW CONCURRENTLY active_keys;$$
-  );
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM pg_extension WHERE extname = 'pg_cron') THEN
+    PERFORM cron.schedule(
+      'service-genai-purge-settled',
+      '* * * * *',
+      format('SELECT %I.purge_settled_generations()', current_schema())
+    );
+  END IF;
+END
+$$;
 
 -- down
-SELECT
-  cron.unschedule ('refresh-active-keys');
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM pg_extension WHERE extname = 'pg_cron') THEN
+    PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = 'service-genai-purge-settled';
+  END IF;
+END
+$$;
 ```
 
 Job names are global within the PostgreSQL instance, so a generic name collides with jobs from
-other services. Use a descriptive, service-scoped one: `refresh-active-keys`, not `refresh`.
+other services. Use a descriptive, service-scoped one: `service-genai-purge-settled`, not `purge`.
+The database image creates the extension in its init SQL, which runs before the first migration.
+
+### Migrations on live tables
+
+A migration runs while the previous release still serves and long requests are in flight. The
+migrations job gives up a lock wait after 3 seconds and retries the file, and a server whose sessions
+set a `lock_timeout` fails a write that waits longer instead of delaying it. Keep any lock that blocks
+writes on a populated table under a second or two:
+
+- **Build an index concurrently, alone in its file.** A file runs as one implicit transaction, which
+  `CREATE INDEX CONCURRENTLY` refuses. A concurrent build that fails leaves an invalid index behind
+  and the runner reruns the file, so drop it first, in its own split section:
+
+  ```sql
+  DROP INDEX CONCURRENTLY IF EXISTS generations_owner_idx;
+
+  --bun:split
+  CREATE INDEX CONCURRENTLY generations_owner_idx ON generations (owner_id);
+  ```
+
+  Its down migration is `DROP INDEX CONCURRENTLY IF EXISTS generations_owner_idx;`.
+
+- **Add a constraint `NOT VALID`, then validate it in a later file.** Adding a `CHECK` or a foreign
+  key scans the table under a lock that blocks writes; `VALIDATE CONSTRAINT` scans under one that
+  lets them through.
+- **Add a column without rewriting the table.** A nullable column, or one with a constant default,
+  changes only the catalog. A volatile default or a type change rewrites every row under an exclusive
+  lock.
+- **Backfill in batches, outside the migration.** One `UPDATE` over a table holds every row lock it
+  takes until it commits.
+
+A table that stays small, such as one purged within hours, can take a plain statement: judge by the
+size it reaches in production, not by its size today.
 
 ### Materialized Views
 
@@ -489,3 +528,6 @@ The rules above, as a pre-push checklist:
 - `varchar(n)` over `text`, bare `timestamp` over `timestamp(0) with time zone`, `NOW()` over
   `CURRENT_TIMESTAMP`.
 - Generic pg_cron job names that collide across services.
+- A bare `cron.schedule` in a migration, which fails in the test clones that lack pg_cron.
+- A plain `CREATE INDEX`, a constraint added without `NOT VALID`, or a table rewrite on a populated
+  live table.
