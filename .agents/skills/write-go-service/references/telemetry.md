@@ -45,7 +45,9 @@ recorded once. Here is how it lands on the service layers:
   a report on a path that goes through it. A handler that writes its own error status reports only a
   server fault's cause.
 - **gRPC handler** → `_ = otel.ReportError(span, err)` before a server-fault code (`Internal`,
-  `Unavailable`); a client-error code (`InvalidArgument`, `NotFound`) returns without it.
+  `Unavailable`); a client-error code (`InvalidArgument`, `NotFound`) returns without it. A server
+  stream whose caller left returns `status.FromContextError(ctx.Err())` before mapping its error:
+  leaving cuts the upstream read the stream forwards, which would otherwise map to a server fault.
 - **Handled conditions** (a best-effort cleanup failed, a cap was hit) → no span status. The child
   span that failed already holds the error; log only what needs an operator and no span records.
 - **Anti-pattern**: a `reportUnexpected(span, err)` keyed on a list of "known" sentinels, or a bare
