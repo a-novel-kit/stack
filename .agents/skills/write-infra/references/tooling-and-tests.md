@@ -97,5 +97,5 @@ Run the whole gate the way CI does:
 - **GitHub starts this repository's scheduled workflows hours late:** every 4 to 7 hours in
   October 2026, whatever the cron (a-novel-kit/.github#288). Never rely on `schedule:` for a
   deadline. The downtime announcements run on Cloud Workflows for that reason, the `github-dispatch`
-  clock dispatches the `.github` repos' timed workflows every hour from Cloud Scheduler, and
-  `drift.yaml` runs far less often than its cron says.
+  clock dispatches each `.github` repo's timed workflows at their own crons from Cloud Scheduler
+  (`github_dispatch_schedules`), and `drift.yaml` runs far less often than its cron says.
