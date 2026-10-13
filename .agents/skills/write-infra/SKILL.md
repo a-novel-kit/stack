@@ -39,9 +39,10 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
   them with `gcloud`.
 - **Images are pinned** as `ghcr.io/…:tag@sha256:…`. Deploy verifies their attestation and copies
   them to Artifact Registry with `skopeo --preserve-digests`.
-- **Releases pin themselves.** A service or platform release dispatches `pin-release.yaml` once all
-  its images are published, which opens their pull request as the Dependencies App, so it merges
-  like a Renovate update. Renovate leaves `ghcr.io/a-novel/**` alone.
+- **Releases pin themselves.** Once all its images are published, a service or platform release
+  dispatches `pin-release.yaml` through the shared `publish-actions/deploy-release` action. That
+  opens their pull request as the Dependencies App, so it merges like a Renovate update. Renovate
+  leaves `ghcr.io/a-novel/**` alone.
 - **Secrets are pinned** as numeric versions.
 - **The docs** are in `docs/ops-basics.md`, `docs/architecture.md` and `docs/runbooks/`.
 
