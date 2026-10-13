@@ -325,6 +325,12 @@ approves once Renovate marks the update stable, and its job needs `statuses: rea
 cannot read commit statuses. `recover-prs.yaml` re-arms auto-merge on a PR the merge queue dropped for
 `checks_timed_out`, and dispatches Renovate when a merge leaves a dependency PR conflicting.
 
+On `a-novel/infra` the auto-approver runs strict, because a merge there deploys production. A bot's
+PR merges on its own only as a release pin, or as a version update Renovate itself put on
+auto-merge whose every changed line moves only a dependency reference's version, or a digest with its
+version. Anything else, Renovate's `automerge: false` updates included, waits for `approve-pr`. The
+approval names the commit it classified, so a later push needs its own.
+
 A bot's PR notifies nobody on GitHub: it has no assignee, and CODEOWNERS leaves dependency manifests
 and lockfiles unowned, so a version bump requests no review. A failing one reaches the Discord
 dependencies feed instead, and so does one still green and out of the merge queue 2 hours after its

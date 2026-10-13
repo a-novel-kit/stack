@@ -43,6 +43,10 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
   dispatches `pin-release.yaml` through the shared `publish-actions/deploy-release` action. That
   opens their pull request as the Dependencies App, so it merges like a Renovate update. Renovate
   leaves `ghcr.io/a-novel/**` alone.
+- **Bot pull requests merge alone only when they are safe to.** The auto-approver runs strict here:
+  a release pin, or an update Renovate itself put on auto-merge that only moves versions. Provider,
+  OpenTofu and major updates, a moved action tag, and anything else a bot opens wait for
+  `approve-pr`.
 - **Secrets are pinned** as numeric versions.
 - **The docs** are in `docs/ops-basics.md`, `docs/architecture.md` and `docs/runbooks/`.
 
