@@ -269,6 +269,64 @@ func TestCheckDependenciesGovernance(t *testing.T) {
 	}
 }
 
+// TestFeatureEnvGovernance pins how long with-feature-env lasts: until the next
+// push. The removal runs on GITHUB_TOKEN, which triggers no new run, and treats
+// a label an earlier push already removed as done.
+func TestFeatureEnvGovernance(t *testing.T) {
+	t.Parallel()
+	var workflow struct {
+		On struct {
+			PullRequest struct {
+				Types []string `yaml:"types"`
+			} `yaml:"pull_request"`
+		} `yaml:"on"`
+		Jobs map[string]struct {
+			If          string            `yaml:"if"`
+			Permissions map[string]string `yaml:"permissions"`
+			Env         map[string]string `yaml:"env"`
+			Steps       []struct {
+				Run string `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	loadWorkflow(t, "feature-env.yaml", &workflow)
+	if got := strings.Join(workflow.On.PullRequest.Types, ","); got != "synchronize" {
+		t.Errorf("feature-env pull_request types = %q, want synchronize", got)
+	}
+	job := workflow.Jobs["revoke-feature-env"]
+	if job.If != "contains(github.event.pull_request.labels.*.name, 'with-feature-env')" {
+		t.Errorf("revoke-feature-env if = %q, want the with-feature-env label", job.If)
+	}
+	if job.Permissions["pull-requests"] != "write" || job.Env["GH_TOKEN"] != "${{ github.token }}" {
+		t.Errorf("revoke-feature-env = %v / %v, want pull-requests: write through GITHUB_TOKEN", job.Permissions, job.Env)
+	}
+	if len(job.Steps) != 1 {
+		t.Fatalf("revoke-feature-env steps = %d, want 1", len(job.Steps))
+	}
+
+	for _, tc := range []struct {
+		name, labelError string
+		wantError        bool
+	}{
+		{name: "Removed"},
+		{name: "AlreadyRemoved", labelError: "gh: Label does not exist (HTTP 404)"},
+		{name: "Error", labelError: "gh: Resource not accessible by integration (HTTP 403)", wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			output, calls, err := runGovernanceScript(t, job.Steps[0].Run, []string{
+				"GITHUB_REPOSITORY=example/repo", "NUMBER=7", "LABEL_ERROR=" + tc.labelError,
+			})
+			if (err != nil) != tc.wantError {
+				t.Fatalf("script error = %v, output = %s", err, output)
+			}
+			if !strings.Contains(calls, "--method DELETE repos/example/repo/issues/7/labels/with-feature-env") {
+				t.Errorf("calls = %q, want the label removed", calls)
+			}
+		})
+	}
+}
+
 // TestLockClosedGovernance pins when conversations lock: only once an issue or
 // pull request closes. A locked conversation refuses a GitHub App's review, so
 // locking an open pull request would block the dependency bots' approval.

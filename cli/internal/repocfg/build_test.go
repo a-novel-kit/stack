@@ -112,6 +112,7 @@ func TestBuildPlanProvisions(t *testing.T) {
 			name: "CheckDependencies", plan: master, method: http.MethodPut, path: "/check-dependencies.yaml",
 			content: "generic-actions/check-dependencies@", gated: true,
 		},
+		{name: "FeatureEnv", plan: master, method: http.MethodPut, path: "/feature-env.yaml", content: "labels/with-feature-env", gated: true},
 		{name: "AutoApprove", plan: approval, method: http.MethodPut, path: "/auto-approve-dependabot.yaml", content: "auto-approve-dependabot-run.yaml@", gated: true},
 		// GitHub Code Quality bills per active committer and per AI credit, so it follows the class flag.
 		{name: "CodeQuality/Off", plan: bare, method: http.MethodPatch, path: "/code-quality/setup", body: map[string]any{"state": "not-configured"}},
