@@ -6,6 +6,7 @@ signing_required: true
 bots:
   dependencies: 1717331 # AnovelBot[Dependencies] — Renovate
   agent: 3549319 # AnovelBot[Agent] — PR/issue comment proxy
+  release: 5307879 # AnovelBot[Release] — release tags, commits and packages
   publish: 1718144 # AnovelBot[Publish] — release automation
 # Org secrets with selected-repository visibility. Each repo can read one
 # exactly when one of its workflows names it; every other org secret stays

@@ -127,6 +127,18 @@ func (o Op) Title() string {
 	return o.Method + " " + o.Path
 }
 
+// DeploymentPolicy is one branch or tag pattern an environment admits.
+type DeploymentPolicy struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// releases reports whether the repo's workflows release through the release
+// environment.
+func releases(t *RepoTarget) bool {
+	return slices.Contains(t.Discovered.Environments, "release")
+}
+
 // Plan is the ordered set of operations to bring a repo to desired state.
 type Plan struct {
 	Ops []Op
@@ -226,6 +238,23 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 			"approval_policy": "all_external_contributors",
 		}},
 	)
+
+	// The release App's key is a secret of the release environment, so that
+	// environment opens only on refs a ruleset guards: the default branch, and
+	// release lines and version tags where the tags rulesets limit who creates
+	// them. A feature branch's workflow never unlocks it.
+	if releases(t) {
+		policies := []DeploymentPolicy{{Name: t.DefaultBranch, Type: "branch"}}
+		if t.Class.Rulesets.Tags {
+			policies = append(policies, DeploymentPolicy{Name: "release/v*", Type: "branch"}, DeploymentPolicy{Name: "v*", Type: "tag"})
+		}
+		p.Ops = append(p.Ops,
+			Op{Method: http.MethodPut, Path: repoPath + "/environments/release", Body: map[string]any{
+				"deployment_branch_policy": map[string]any{"protected_branches": false, "custom_branch_policies": true},
+			}},
+			Op{Method: http.MethodPut, Path: repoPath + "/environments/release/deployment-branch-policies", Body: policies},
+		)
+	}
 
 	// A scoped org secret reaches exactly the repos whose workflows name it.
 	for _, name := range t.OrgProfile.ScopedSecrets {
@@ -357,6 +386,10 @@ func rulesetOp(name string, t *RepoTarget, checks []CheckRef) (Op, error) {
 	// which are the classes that enable its security updates.
 	if !t.Class.Security.Dependabot {
 		spec.Bypass = slices.DeleteFunc(spec.Bypass, func(entry string) bool { return entry == "dependabot" })
+	}
+	// The release App acts only in a repo whose workflows release.
+	if !releases(t) {
+		spec.Bypass = slices.DeleteFunc(spec.Bypass, func(entry string) bool { return entry == "release" })
 	}
 	if t.Class.Rulesets.AdminsOnly {
 		spec.Bypass = slices.DeleteFunc(spec.Bypass, func(entry string) bool { return entry != "admins" })

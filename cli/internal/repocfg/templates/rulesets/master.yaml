@@ -1,8 +1,10 @@
 # Branch protection for the default branch. The CLI injects the required status
 # checks from discovery, and omits the code_quality rule for classes that set
-# code_quality: false. Admins bypass, as do two bots that push to the default
+# code_quality: false. Admins bypass, as do the bots that push to the default
 # branch directly: the agent bot, which cuts releases and pushes their
 # version-bump commit, and the publish bot, which pushes the scheduled audit fix.
+# The release bot is joining them in releasing repos, to take the release writes
+# over from the agent bot (a-novel/.github#414).
 # Every status check is required for everyone else.
 #
 # required_signatures enforces verified commits on the default branch. The merge
@@ -20,6 +22,7 @@ bypass:
   - admins
   - publish
   - agent
+  - release
 rules:
   deletion: true
   non_fast_forward: true

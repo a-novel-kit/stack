@@ -527,6 +527,39 @@ func TestApplyLabels(t *testing.T) {
 	})
 }
 
+func TestApplyDeploymentPolicies(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam.
+	path := "repos/o/r/environments/release/deployment-branch-policies"
+	t.Run("Success", func(t *testing.T) {
+		// master matches; the v* pattern exists as a branch, not a tag; release/v* is missing.
+		calls := fakeGH(t, map[string]string{"--paginate": "11\tbranch\tmaster\n12\tbranch\tv*\n"})
+		op := repocfg.Op{Method: http.MethodPut, Path: path, Body: []repocfg.DeploymentPolicy{
+			{Name: "master", Type: "branch"},
+			{Name: "release/v*", Type: "branch"},
+			{Name: "v*", Type: "tag"},
+		}}
+
+		detail, err := applyDeploymentPolicies(op)
+		if err != nil || detail != "2 created, 1 deleted" {
+			t.Fatalf("applyDeploymentPolicies = (%q, %v), want %q", detail, err, "2 created, 1 deleted")
+		}
+		joined := strings.Join(*calls, "\n")
+		if countCalls(*calls, "api -X POST "+path+" --input -") != 2 || !strings.Contains(joined, "api -X DELETE "+path+"/12") {
+			t.Errorf("want two creates and the branch v* deleted; calls:\n%s", joined)
+		}
+		if strings.Contains(joined, path+"/11") {
+			t.Errorf("master matched and must not be deleted; calls:\n%s", joined)
+		}
+	})
+
+	t.Run("Error/BadBody", func(t *testing.T) {
+		fakeGH(t, nil)
+		if _, err := applyDeploymentPolicies(repocfg.Op{Path: path, Body: map[string]any{}}); err == nil {
+			t.Fatal("expected an error for a non-[]DeploymentPolicy body")
+		}
+	})
+}
+
 // TestApplyTeams pins the tier-team reconcile: a missing team is created under
 // its tier, each area team is granted its role, and only grants inside the tier
 // namespace are removed, since core reaches every repo through its org role and

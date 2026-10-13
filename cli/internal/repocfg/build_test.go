@@ -339,6 +339,65 @@ func TestBuildPlanScopesSecrets(t *testing.T) {
 	}
 }
 
+// TestBuildPlanProtectsReleaseEnvironment pins the release App's reach: a repo
+// whose workflows name the release environment gets that environment opened to
+// the refs its rulesets guard, and the App in those rulesets' bypass. Release
+// lines and tags count only where the tags rulesets limit who creates them. Any
+// other repo gets neither.
+func TestBuildPlanProtectsReleaseEnvironment(t *testing.T) {
+	t.Parallel()
+	master := DeploymentPolicy{Name: "master", Type: "branch"}
+	testCases := []struct {
+		name         string
+		environments []string
+		tags         bool
+		wantPolicies any
+	}{
+		{
+			name: "Releasing", environments: []string{"production", "release"}, tags: true,
+			wantPolicies: []DeploymentPolicy{master, {Name: "release/v*", Type: "branch"}, {Name: "v*", Type: "tag"}},
+		},
+		{name: "ReleasingWithoutTagRulesets", environments: []string{"release"}, wantPolicies: []DeploymentPolicy{master}},
+		{name: "NotReleasing", environments: []string{"production"}, tags: true},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			plan, err := BuildPlan(&RepoTarget{
+				Org: "a-novel", Repo: "example", DefaultBranch: "master",
+				Class: &ClassPreset{Rulesets: ClassRulesets{Master: true, RequireApproval: true, Tags: testCase.tags}},
+				OrgProfile: &OrgProfile{Org: "a-novel", Bots: map[string]int64{
+					"agent": 3549319, "publish": 1718144, "dependencies": 1718123, "release": 5307879,
+				}},
+				Discovered: &Discovered{Environments: testCase.environments},
+			})
+			if err != nil {
+				t.Fatalf("BuildPlan: %v", err)
+			}
+			var policies any
+			for _, op := range plan.Ops {
+				if strings.HasSuffix(op.Path, "/environments/release/deployment-branch-policies") {
+					policies = op.Body
+				}
+			}
+			if !reflect.DeepEqual(policies, testCase.wantPolicies) {
+				t.Errorf("deployment policies = %#v, want %#v", policies, testCase.wantPolicies)
+			}
+			for _, op := range plan.Ops {
+				if op.RulesetName == "" || op.RulesetName == "commit-messages" {
+					continue
+				}
+				hasRelease := slices.ContainsFunc(op.Body.(*APIRuleset).BypassActors, func(a APIBypassActor) bool {
+					return a.ActorID != nil && *a.ActorID == 5307879
+				})
+				if want := testCase.wantPolicies != nil; hasRelease != want {
+					t.Errorf("%s: release bypass = %v, want %v", op.RulesetName, hasRelease, want)
+				}
+			}
+		})
+	}
+}
+
 // TestBuildPlanGrantsTierTeams pins how access follows a repo's class: each
 // tier's area team for that class holds the tier's role, and the op names the
 // complete set, so apply can remove any other tier team's grant.
