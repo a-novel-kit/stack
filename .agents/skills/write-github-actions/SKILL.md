@@ -165,7 +165,10 @@ its own App token declares `permissions: {}`, because the default token is never
 
 Pin every `uses:` to a release tag. Renovate groups the whole workflows repo under one
 `a-novel-kit workflows` update, so a repo's references move together and must sit at one version.
-Third-party actions are pinned by tag too (`actions/checkout@v7`).
+Third-party actions are pinned by tag too (`actions/checkout@v7`), which keeps every reference
+readable. `a-novel/infra` is the one exception: its jobs hold the production identity, so it pins
+third-party actions to their release commit, as `write-infra` describes. No other repository pins
+by commit.
 
 `vars.*` and `secrets.*` belong here. The bot credentials are org-level: `AGENT_BOT_CLIENT_ID` /
 `AGENT_BOT_PRIVATE_KEY` for governance work, `DEPENDENCY_BOT_*` for the node lane, `PUBLISH_BOT_*`

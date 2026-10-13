@@ -50,6 +50,17 @@ Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub
   - Renaming or removing a job needs an admin-bypass merge, then `a-novel repo update` on `master`.
 - **Local actions use GitHub's `$/.github/actions/<name>` self-repository syntax.** The repository's
   actionlint config ignores its false positive; zizmor prefers it.
+- **Third-party actions are pinned to their release commit,** as `owner/repo@<sha> # vX.Y.Z`. The
+  rest of the fleet pins by tag; infra is the exception because its jobs mint the production
+  identity, and a moved tag would run whatever it points to.
+  - Before adding one, resolve the tag's commit with
+    `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`, and check that it is an immutable
+    release or lies on the project's default branch.
+  - Renovate keeps the pins current by semver (`helpers:pinGitHubActionDigestsToSemver`). A digest
+    update, the same version on another commit, means the tag moved, so it waits for review. New
+    third-party releases wait three days.
+  - The `a-novel-kit/workflows` actions and the managed governance workflows stay on release tags.
+    `sha_pinning_required` stays off, since the shared actions reference each other by tag.
 - **Label events re-run the whole workflow.** Never skip non-plan jobs on label events: a later
   skipped check replaces an earlier failure.
 - **Keep a state change and its best-effort follow-up in separate jobs.** `downtime.yaml` writes the
