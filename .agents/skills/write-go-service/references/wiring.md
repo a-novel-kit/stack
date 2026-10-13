@@ -21,8 +21,10 @@ Configuration structs + loading from env vars or YAML. No logic beyond parsing a
   `grpcf.NewServer(ctx, cfg.Otel, cfg.Logger, cfg.App.DowntimeStart, ctxInterceptor)` and
   `grpcf.ListenAndServe(ctx, cfg.Grpc, server)`. Both servers take the process context: when it ends,
   requests and unary calls drain within the shutdown timeout, while gRPC streams end with
-  `UNAVAILABLE` so their clients resume elsewhere. What differs per service, such as the ping path or
-  the CORS methods, is a default on the config copy, never an argument.
+  `UNAVAILABLE` so their clients resume elsewhere. A REST request that keeps taking on work, such as
+  a batch, mounts `httpf.EndOnShutdown(ctx)` with `With`: its context ends when shutdown begins, so
+  it stops starting work, which it must check its context for. What differs per service, such as the
+  ping path or the CORS methods, is a default on the config copy, never an argument.
 - **`main` reads as wiring.** One line per dependency, server and route. No option literals, middleware
   chains or explanatory comments inline: a route's middleware is a named value from its own file,
   mounted with chi's `With`.
