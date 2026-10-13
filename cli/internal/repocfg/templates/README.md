@@ -59,6 +59,10 @@ resolve a GitHub account to the Discord user it pings; and the
 missing webhook skips the post; a person or repository missing from its map
 posts without that ping.
 
+Every repo also gets `.github/workflows/auto-assign-author.yaml`
+(`governance/auto-assign-author.yaml`), which assigns a person's pull request to
+its author. A bot's pull request, Dependabot's or Renovate's, stays unassigned.
+
 Independent of class, `repo update` commits a uniform `.github/CODEOWNERS`
 (`governance/CODEOWNERS` — a single owner today) to every repo so review
 requests route automatically, and removes any stray root `CODEOWNERS` so a repo
