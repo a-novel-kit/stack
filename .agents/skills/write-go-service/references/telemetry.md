@@ -16,6 +16,10 @@ defer span.End()
 return &user, nil
 ```
 
+A deferred `span.End()` ends with the function. An operation that returns a lazy iterator
+(`iter.Seq2`) does its work later, as the caller reads it, so the iterator opens a sub-span of its
+own, such as `"core.GenerationStream(events)"`, and reports there the error that ends it.
+
 **Span names** follow `"<layer>.<identifier>"`:
 
 - **Handlers** — strip the protocol prefix from the type name; the span prefix already encodes it:
