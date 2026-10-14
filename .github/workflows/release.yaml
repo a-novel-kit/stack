@@ -1,9 +1,10 @@
 name: release
 
-# Releases are cut from the GitHub UI (Actions ▸ release ▸ pick a type ▸ Run),
-# not from a tag push. workflow_call exposes the same inputs so an agent can
-# drive an identical release later. The protected `release` environment is the
-# "who can publish" gate (configure its required reviewers).
+# Releases are cut from the GitHub UI (Actions ▸ release ▸ pick a type ▸ Run) or
+# by the release train, through workflow_call's identical inputs. `plan`
+# rehearses with no credential; `cut` runs in the protected `release` environment,
+# the "who can publish" gate whose key only it reads, and pushes the version
+# commit, the tags and the GitHub Release as the release App.
 #
 # The CLI's Go module lives under cli/, so release-core derives the cli/vX.Y.Z
 # tag prefix from go.mod automatically; the release name, the tag, and the
@@ -41,28 +42,36 @@ run-name: "🚀 release ${{ inputs.release_type }}${{ inputs.dry_run && ' (dry-r
 # anything ships. A queue would instead let the second cut a second release.
 
 jobs:
-  release:
+  plan:
     runs-on: ubuntu-latest
-    environment: release
     permissions:
-      contents: write
-    outputs:
-      version: ${{ steps.core.outputs.version }}
-      tag: ${{ steps.core.outputs.tag }}
+      contents: read
     steps:
-      - id: core
-        uses: a-novel-kit/workflows/publish-actions/release-core@v1.57.0
+      - uses: a-novel-kit/workflows/publish-actions/release-core@v1.57.0
         with:
           # renovate: datasource=go depName=github.com/a-novel-kit/stack/cli
           cli_version: "1.7.5"
           release_type: ${{ inputs.release_type }}
-          dry_run: ${{ inputs.dry_run }}
-          client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
-          app_private_key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
+          dry_run: "true"
+
+  cut:
+    needs: [plan]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: a-novel-kit/workflows/publish-actions/release-core@v1.57.0
+        with:
+          # renovate: datasource=go depName=github.com/a-novel-kit/stack/cli
+          cli_version: "1.7.5"
+          release_type: ${{ inputs.release_type }}
+          client_id: ${{ vars.RELEASE_BOT_CLIENT_ID }}
+          app_private_key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
       # Everything on the default branch just shipped — clear this repo's
-      # awaiting-release items off the board. Skipped on a dry run.
-      - if: ${{ !inputs.dry_run }}
-        uses: a-novel-kit/workflows/generic-actions/archive-board-items@v1.57.0
+      # awaiting-release items off the board.
+      - uses: a-novel-kit/workflows/generic-actions/archive-board-items@v1.57.0
         with:
           client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
           app_private_key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
