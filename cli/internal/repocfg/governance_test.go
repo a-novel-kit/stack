@@ -2,6 +2,7 @@ package repocfg_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"maps"
 	"os"
 	"os/exec"
@@ -517,12 +518,14 @@ func TestFeatureEnvGovernance(t *testing.T) {
 	}
 }
 
-// TestCleanImagesGovernance pins who may delete images and when: only the scheduled or dispatched
-// default-branch copy, one non-cancelled job per package, and packages named by the images the
-// repository's own workflows publish, since a workflow token cannot list the organization's.
+// TestCleanImagesGovernance pins who may delete images and when: a closed same-repository pull request
+// deletes its own tag, while only the scheduled or dispatched sweep deletes the rest, one uncancelled
+// job per package. Packages are named by the images the repository's own workflows publish, since a
+// workflow token cannot list the organization's.
 func TestCleanImagesGovernance(t *testing.T) {
 	t.Parallel()
 	type job struct {
+		If          string            `yaml:"if"`
 		Permissions map[string]string `yaml:"permissions"`
 		Strategy    struct {
 			MaxParallel int `yaml:"max-parallel"`
@@ -532,8 +535,9 @@ func TestCleanImagesGovernance(t *testing.T) {
 			CancelInProgress bool   `yaml:"cancel-in-progress"`
 		} `yaml:"concurrency"`
 		Steps []struct {
-			ID  string `yaml:"id"`
-			Run string `yaml:"run"`
+			ID   string            `yaml:"id"`
+			Run  string            `yaml:"run"`
+			With map[string]string `yaml:"with"`
 		} `yaml:"steps"`
 	}
 	var workflow struct {
@@ -542,24 +546,38 @@ func TestCleanImagesGovernance(t *testing.T) {
 		Jobs        map[string]job    `yaml:"jobs"`
 	}
 	loadWorkflow(t, "clean-images.yaml", &workflow)
-	if len(workflow.On) != 2 || workflow.On["schedule"] == nil || workflow.On["workflow_dispatch"] == nil {
-		t.Errorf("clean-images triggers = %v, want schedule and workflow_dispatch only", workflow.On)
+	pullRequest, _ := workflow.On["pull_request"].(map[string]any)
+	if len(workflow.On) != 3 || workflow.On["schedule"] == nil || workflow.On["workflow_dispatch"] == nil ||
+		fmt.Sprint(pullRequest["types"]) != "[closed]" {
+		t.Errorf("clean-images triggers = %v, want schedule, workflow_dispatch and closed pull requests", workflow.On)
 	}
 	if len(workflow.Permissions) != 0 {
 		t.Errorf("clean-images workflow permissions = %v, want none", workflow.Permissions)
 	}
-	packages, clean := workflow.Jobs["packages"], workflow.Jobs["clean"]
+	packages, closing, sweep := workflow.Jobs["packages"], workflow.Jobs["close"], workflow.Jobs["sweep"]
 	if len(packages.Permissions) != 1 || packages.Permissions["contents"] != "read" {
 		t.Errorf("packages permissions = %v, want contents: read only", packages.Permissions)
 	}
-	if clean.Permissions["packages"] != "write" || clean.Permissions["pull-requests"] != "read" || len(clean.Permissions) != 2 {
-		t.Errorf("clean permissions = %v, want packages: write and pull-requests: read", clean.Permissions)
+	// A closed pull request's merge ref may be gone, so its base branch names the images.
+	if ref := packages.Steps[0].With["ref"]; ref != "${{ github.event.pull_request.base.ref || github.ref }}" {
+		t.Errorf("packages checkout ref = %q, want the pull request's base or the triggering ref", ref)
 	}
-	if clean.Concurrency.Group != "clean-images-${{ matrix.package }}" || clean.Concurrency.CancelInProgress {
-		t.Errorf("clean concurrency = %+v, want one uncancelled group per package", clean.Concurrency)
+	if len(closing.Permissions) != 1 || closing.Permissions["packages"] != "write" ||
+		!strings.Contains(closing.If, "github.event_name == 'pull_request'") ||
+		!strings.Contains(closing.If, "github.event.pull_request.head.repo.full_name == github.repository") {
+		t.Errorf("close = %q / %v, want same-repository pull requests with packages: write only", closing.If, closing.Permissions)
 	}
-	if clean.Strategy.MaxParallel != 1 {
-		t.Errorf("clean max-parallel = %d, want 1: deletions share the repository's API quota with its CI", clean.Strategy.MaxParallel)
+	if !strings.Contains(sweep.If, "github.event_name != 'pull_request'") {
+		t.Errorf("sweep if = %q, want no pull request event to start a sweep", sweep.If)
+	}
+	if !maps.Equal(sweep.Permissions, map[string]string{"packages": "write", "pull-requests": "read", "attestations": "read"}) {
+		t.Errorf("sweep permissions = %v, want packages: write, pull-requests: read and attestations: read", sweep.Permissions)
+	}
+	if sweep.Concurrency.Group != "clean-images-${{ matrix.package }}" || sweep.Concurrency.CancelInProgress {
+		t.Errorf("sweep concurrency = %+v, want one uncancelled group per package", sweep.Concurrency)
+	}
+	if sweep.Strategy.MaxParallel != 1 {
+		t.Errorf("sweep max-parallel = %d, want 1: deletions share the repository's API quota with its CI", sweep.Strategy.MaxParallel)
 	}
 
 	var list string

@@ -286,13 +286,18 @@ which gets the moving `pr-<N>` tag; every other build is pushed by digest alone 
 run. The managed `feature-env.yaml` removes the label on the next push, so the tag keeps naming the
 last head someone labeled. A repo's `main.yaml` must trigger on `labeled` for the label to build.
 
-Services and platforms (`clean_images: true`) also get the managed `clean-images.yaml`. Each day it
-deletes the images no deployment names once they are a week old: untagged builds, closed `pr-<N>`
-tags, and branch or merge-queue tags. Release tags, `master`, open `pr-<N>` tags and every `master`
-build stay, together with the manifests and attestations they reference.
-`build-actions/clean-images` recognizes a `master` build by its `org.opencontainers.image.version`
-label, because an earlier build loses the moving `master` tag. Infra does not set the flag, since it
-pins its tool images by digest. A deleted version can be restored for 30 days.
+Services and platforms (`clean_images: true`) also get the managed `clean-images.yaml`, which deletes
+images once the branch or pull request that built them is gone.
+
+- Closing a pull request deletes its `pr-<N>` image at once.
+- A weekly sweep takes the rest: untagged builds and tags of closed pull requests, merge-queue builds,
+  and old branch tags. It spares anything less than a day old, which a running job may still pull.
+
+Release tags, `master`, every `master` build and open pull requests' images stay, together with the
+manifests and attestations they reference. `build-actions/clean-images` reads a build's origin from its
+`org.opencontainers.image.version` label. A build pushed without a tag has no version, so its
+provenance attestation supplies the ref instead (`refs/pull/<N>/merge`). Infra does not set the flag,
+since it pins its tool images by digest. A deleted version can be restored for 30 days.
 
 `repo update` also owns the Actions security settings: a read-only workflow token that never
 approves a pull request, maintainer approval for every outside contributor's fork run, and access
