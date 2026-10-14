@@ -99,6 +99,7 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 		"PUT /contents/.github/workflows/lock-closed.yaml",
 		"DELETE /contents/.github/workflows/lock-pr.yaml",
 		"PUT /contents/.github/workflows/notify.yaml",
+		"PUT /contents/.github/workflows/notify-reviews.yaml",
 		"DELETE /contents/.github/workflows/clean-images.yaml",
 		"PUT /contents/.github/workflows/auto-assign-author.yaml",
 		"PUT /contents/.github/workflows/auto-approve-dependabot.yaml",
