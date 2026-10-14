@@ -99,6 +99,17 @@ backport cuts the patch. The default branch is never rewritten and never receive
 hotfix is a single-repo path; a bug spanning several repos is a fast **Epic** (see
 `coordinate-landing`).
 
+**Nothing rolls a release back.** Infra refuses a pin that lowers a version, so a bad release is
+fixed forward, and the hotfix is the fast path:
+
+- **When the default branch holds nothing unreleased** since the deployed release, skip the
+  hotfix: a normal patch release ships the fix with one review less.
+- **A hotfix deploys only on the deployed line or a newer one.** A patch to an older line than the
+  one infra pins reads as a lowered version, and infra refuses it.
+- **A pending newer release swallows a hotfix's pin.** `pin-release.yaml` keeps one pin pull request
+  per repository at the newest release it saw. While a newer release's pin is still open, the hotfix
+  folds into it and never deploys alone: close that pull request first.
+
 **Vocabulary** (single-repo hotfix — freeze it here):
 
 - **baseline** — the latest live tag on the target `X.Y` line (e.g. `v1.4.2` for line `1.4`).

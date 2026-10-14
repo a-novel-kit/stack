@@ -237,6 +237,9 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		Op{Method: http.MethodPut, Path: repoPath + "/actions/permissions/fork-pr-contributor-approval", Body: map[string]any{
 			"approval_policy": "all_external_contributors",
 		}},
+		// A published release keeps its tag and assets: no key that bypasses the
+		// tags ruleset can move a released tag to other code.
+		Op{Method: http.MethodPut, Path: repoPath + "/immutable-releases"},
 	)
 
 	// The release App's key is a secret of the release environment, so that

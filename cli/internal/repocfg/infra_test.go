@@ -80,6 +80,7 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 		"PATCH /code-quality/setup",
 		"PUT /actions/permissions/workflow",
 		"PUT /actions/permissions/fork-pr-contributor-approval",
+		"PUT /immutable-releases",
 		// Infra's workflows name none of the scoped secrets, so it can read none.
 		"DELETE orgs/a-novel/actions/secrets/CODECOV_TOKEN/repositories",
 		"DELETE orgs/a-novel/actions/secrets/PUBLISH_BOT_PRIVATE_KEY/repositories",

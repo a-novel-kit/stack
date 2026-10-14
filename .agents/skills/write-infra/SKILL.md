@@ -37,8 +37,10 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 
 - **Inputs live in each root's committed `terraform.tfvars`.** Secret values never do: humans add
   them with `gcloud`.
-- **Images are pinned** as `ghcr.io/…:tag@sha256:…`. Deploy verifies their attestation and copies
-  them to Artifact Registry with `skopeo --preserve-digests`.
+- **Images are pinned** as `ghcr.io/…:tag@sha256:…`. Every plan verifies each release image it
+  changes: its release tag's own run built it, the release App published that tag as an immutable
+  GitHub Release, and its version is not below the one deployed. Deploy then copies the images to
+  Artifact Registry with `skopeo --preserve-digests`.
 - **Releases pin themselves.** Once all its images are published, a service or platform release
   dispatches `pin-release.yaml` through the shared `publish-actions/deploy-release` action. That
   opens their pull request as the Dependencies App, so it merges like a Renovate update. Renovate

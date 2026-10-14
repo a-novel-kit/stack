@@ -110,8 +110,11 @@ func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
 			}
 			staged = append(staged, changes...)
 		case strings.HasSuffix(op.Path, "/vulnerability-alerts"):
-			detail, err := applyVulnerabilityAlerts(op)
+			detail, err := applyToggle(op)
 			note("Dependabot alerts", detail, err)
+		case strings.HasSuffix(op.Path, "/immutable-releases"):
+			detail, err := applyToggle(op)
+			note("immutable releases", detail, err)
 		case strings.HasSuffix(op.Path, "/pages"):
 			detail, err := applyPages(op)
 			note("pages", detail, err)
@@ -495,11 +498,12 @@ func applyPages(op repocfg.Op) (string, error) {
 	}
 }
 
-// applyVulnerabilityAlerts reconciles Dependabot alerts through their
-// bodyless enable/disable endpoint. Both operations are safe to repeat.
-func applyVulnerabilityAlerts(op repocfg.Op) (string, error) {
+// applyToggle reconciles a setting with a bodyless enable/disable endpoint,
+// such as Dependabot alerts or immutable releases. Both operations are safe to
+// repeat.
+func applyToggle(op repocfg.Op) (string, error) {
 	if op.Method != http.MethodPut && op.Method != http.MethodDelete {
-		return "", fmt.Errorf("unsupported Dependabot alerts method %q", op.Method)
+		return "", fmt.Errorf("unsupported %s method %q", path.Base(op.Path), op.Method)
 	}
 	if _, err := gh("api", "-X", op.Method, op.Path); err != nil {
 		if op.Method == http.MethodDelete && isNotFound(err) {

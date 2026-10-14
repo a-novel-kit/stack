@@ -829,7 +829,7 @@ func TestInfraDisabledStateOperationsAreIdempotent(t *testing.T) {
 		if got, err := applyPages(pages); err != nil || got != wantPages {
 			t.Fatalf("Pages disable = (%q, %v), want (%s, nil)", got, err, wantPages)
 		}
-		if got, err := applyVulnerabilityAlerts(alerts); err != nil || got != "enabled" {
+		if got, err := applyToggle(alerts); err != nil || got != "enabled" {
 			t.Fatalf("alerts enable = (%q, %v), want (enabled, nil)", got, err)
 		}
 	}
