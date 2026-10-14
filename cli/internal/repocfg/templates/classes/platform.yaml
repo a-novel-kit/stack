@@ -28,6 +28,8 @@ security:
 # so application screens and states have a review surface of their own.
 pages: true
 code_quality: false
+# A daily job deletes the images no deployment names; see governance/clean-images.yaml.
+clean_images: true
 rulesets:
   master: true
   require_approval: true

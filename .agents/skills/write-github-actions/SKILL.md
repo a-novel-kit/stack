@@ -286,6 +286,14 @@ which gets the moving `pr-<N>` tag; every other build is pushed by digest alone 
 run. The managed `feature-env.yaml` removes the label on the next push, so the tag keeps naming the
 last head someone labeled. A repo's `main.yaml` must trigger on `labeled` for the label to build.
 
+Services and platforms (`clean_images: true`) also get the managed `clean-images.yaml`. Each day it
+deletes the images no deployment names once they are a week old: untagged builds, closed `pr-<N>`
+tags, and branch or merge-queue tags. Release tags, `master`, open `pr-<N>` tags and every `master`
+build stay, together with the manifests and attestations they reference.
+`build-actions/clean-images` recognizes a `master` build by its `org.opencontainers.image.version`
+label, because an earlier build loses the moving `master` tag. Infra does not set the flag, since it
+pins its tool images by digest. A deleted version can be restored for 30 days.
+
 `repo update` also owns the Actions security settings: a read-only workflow token that never
 approves a pull request, maintainer approval for every outside contributor's fork run, and access
 to the org's `scoped_secrets`. A repo can read a scoped secret only once one of its workflows names
@@ -322,8 +330,9 @@ default-branch push, so every class sets `code_quality: false` and `repo update`
 
 The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.yaml`,
 `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`, `recover-prs.yaml`,
-`check-dependencies.yaml`, `feature-env.yaml`, `review-gate.yaml`, `pr-relay.yaml`, `auto-approve-dependabot.yaml`,
-`lock-closed.yaml`, `notify.yaml`, `auto-assign-author.yaml`) are rendered from `cli/internal/repocfg/templates/governance/`
+`check-dependencies.yaml`, `feature-env.yaml`, `clean-images.yaml`, `review-gate.yaml`, `pr-relay.yaml`,
+`auto-approve-dependabot.yaml`, `lock-closed.yaml`, `notify.yaml`, `auto-assign-author.yaml`) are rendered from
+`cli/internal/repocfg/templates/governance/`
 and carry a "Managed by `a-novel repo update`" banner. Edit the template in the stack repo; a change to
 the copy in a repo is overwritten. What those workflows mean is `coordinate-landing`'s subject.
 A rendered file must pass every repo's prettier, at width 120 in the fleet and 80 in infra, so write

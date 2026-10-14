@@ -310,6 +310,12 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	drop("lock-pr.yaml")
 	// Every repo reports its default-branch failures and its releases to Discord.
 	put("notify.yaml")
+	// Only classes whose images no deployment pins by digest delete the images nothing names.
+	if c.CleanImages {
+		put("clean-images.yaml")
+	} else {
+		drop("clean-images.yaml")
+	}
 	// Every repo assigns a person's pull request to its author.
 	put("auto-assign-author.yaml")
 	// The trusted dependency bots' PRs are auto-approved wherever
