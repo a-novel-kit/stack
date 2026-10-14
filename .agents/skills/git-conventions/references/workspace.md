@@ -79,6 +79,16 @@ you added, your subagents' worktrees, your scratch stacks and containers, and th
 requests you opened. List them as you create them, so cleanup removes exactly that list. A global
 cleanup that owns the whole workspace is always requested explicitly; a bare "clean up" never is one.
 
+Remove each item by the exact path, name or ID you listed: `git worktree remove <path>`,
+`podman rm -v <container>`, `podman rmi <image>`. `podman rm -v` takes the container's anonymous
+volumes with it and nothing else. Never run a store-wide `podman system|volume|image|container
+prune`, `podman rm --all`, or a delete selected by filter: they act on the whole container store,
+where an unused volume can hold the only copy of another checkout's development database.
+
+A subagent acts on its prompt. When you delegate work that may create or remove worktrees, branches,
+containers, volumes or images, state this rule in the prompt: the agent removes only what it created,
+by name, and leaves everything else.
+
 Everything else stays, however finished it looks. A clean worktree on a merged branch can still be
 the working directory of a live parallel session, and removing it, deleting its branch, or
 fast-forwarding a shared checkout pulls that session's ground from under it. Clean, merged and idle
