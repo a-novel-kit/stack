@@ -207,8 +207,10 @@ dispatches each repo's `release.yaml` with `dry_run=true` and cuts nothing), the
 - It records a **receipt** (the cut tag) per repo on the Epic. **Idempotent resume**: a re-dispatch
   skips every repo already shipped for this Epic (derived from _live tags_, never the receipt), so a
   partial train re-cuts only the unshipped.
-- A repo parked at the protected `release` environment approval gate is **pending**, not failed —
-  approve the run, then re-dispatch to record the receipt. A **botched cut** (tag pushed, Release
+- A live train waits up to an hour at each repo's protected `release` environment and links the
+  cut in its summary: approve it there. A rehearsal never meets the environment. A cut nobody
+  approves in time is **pending**, not failed — approve the run, then re-dispatch to record the
+  receipt. The receipt marks the tag; the tag's own run publishes the release. A **botched cut** (tag pushed, Release
   missing) is flagged loudly for manual repair, never silently skipped.
 
 ### Cross-repo hotfix

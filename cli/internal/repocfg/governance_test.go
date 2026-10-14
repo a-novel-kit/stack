@@ -200,7 +200,9 @@ func TestRecoverPRsGovernance(t *testing.T) {
 // TestHotfixGovernance pins the two hotfix paths of the caller. A dispatch
 // backports, and a backport merged into a release line cuts the patch. The cut
 // rides pull_request_target, the event GitHub runs from the default branch's
-// copy of the caller, and names its line from the merged pull request's base.
+// copy of the caller, names its line from the merged pull request's base, and
+// passes the release App's credentials, whose key only the callee's environment
+// resolves.
 func TestHotfixGovernance(t *testing.T) {
 	t.Parallel()
 	var workflow struct {
@@ -219,6 +221,7 @@ func TestHotfixGovernance(t *testing.T) {
 			If          string            `yaml:"if"`
 			Uses        string            `yaml:"uses"`
 			With        map[string]string `yaml:"with"`
+			Secrets     map[string]string `yaml:"secrets"`
 			Concurrency struct {
 				Group string `yaml:"group"`
 			} `yaml:"concurrency"`
@@ -257,8 +260,13 @@ func TestHotfixGovernance(t *testing.T) {
 				job, got.Uses, got.If, got.Concurrency.Group, want.uses, want.condition, want.group)
 		}
 	}
-	if got := workflow.Jobs["cut"].With["branch"]; got != "${{ github.event.pull_request.base.ref }}" {
+	cut := workflow.Jobs["cut"]
+	if got := cut.With["branch"]; got != "${{ github.event.pull_request.base.ref }}" {
 		t.Errorf("cut branch = %q, want the merged pull request's base", got)
+	}
+	if cut.With["release_client_id"] != "${{ vars.RELEASE_BOT_CLIENT_ID }}" ||
+		cut.Secrets["release_private_key"] != "${{ secrets.RELEASE_BOT_PRIVATE_KEY }}" {
+		t.Errorf("cut release credentials = %q, %q, want the release App's", cut.With["release_client_id"], cut.Secrets["release_private_key"])
 	}
 }
 
