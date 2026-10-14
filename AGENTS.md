@@ -9,7 +9,9 @@ current session created: its worktrees, branches, stacks, containers, issues and
 bare "clean up" or "clear", of worktrees, issues or anything else, stays inside that set; a global
 cleanup that owns the whole workspace is always requested explicitly. Another session's checkout can
 be clean, merged and idle while that session still runs in it, so when ownership is unclear, ask.
-See [workspace hygiene](.agents/skills/git-conventions/references/workspace.md#when-you-are-done).
+Remove what you own by exact name, never with a store-wide prune, and state that rule in every prompt
+that delegates work able to create or remove anything. See
+[workspace hygiene](.agents/skills/git-conventions/references/workspace.md#when-you-are-done).
 
 Prefer the smallest complete solution: fewer lines of maintained code, fewer moving parts,
 and clear, idiomatic control flow. Preserve required behavior and the project's architecture,
