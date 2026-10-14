@@ -65,8 +65,6 @@ jobs:
       - uses: a-novel-kit/workflows/node-actions/lint-node@v1.57.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          app_private_key: ${{ secrets.DEPENDENCY_BOT_PRIVATE_KEY }}
-          client_id: ${{ vars.DEPENDENCY_BOT_CLIENT_ID }}
 
   # Structural conventions golangci-lint cannot express.
   lint-semgrep:
