@@ -107,6 +107,8 @@ their approval is what `review-gate` waits for.
 Every repo gets the same Actions settings: a workflow token is read-only unless
 its job asks for more and never approves a pull request, and an outside
 contributor's fork pull request runs no workflow until a maintainer approves it.
+Every repo also turns on immutable releases, so a published release's tag can
+never move to other code, whoever bypasses the `tags` ruleset.
 Both orgs set the same values org-wide; the repo-level copy keeps a repo correct
 if an org setting loosens.
 

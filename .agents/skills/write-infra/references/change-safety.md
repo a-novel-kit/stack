@@ -87,8 +87,12 @@ pins in the same change.
    - deploy calls `/v2/healthcheck`;
    - each check skips once a planned downtime has started, and re-tests the start when it fails,
      since a check begun just before `start` fails when the services stop.
-4. Rollback is a revert pull request. Migrations stay backward compatible; data rollback is a
-   recovery, never part of a deploy.
+4. Nothing rolls a release back. A pull request that lowers a pinned version fails its plan, so a
+   bad release is fixed forward, through a hotfix when the service's `master` carries unreleased
+   work (`manage-versions`). Migrations stay backward compatible; data rollback is a recovery,
+   never part of a deploy.
+5. The pins the last apply deployed come from the plan's `output_changes.<output>.before`. The
+   plan's `prior_state` already holds the new outputs, so it cannot tell a changed pin apart.
 
 ## Capacity caps
 
@@ -153,8 +157,9 @@ pins in the same change.
 - **Only admins bypass the rulesets.** A merge to `master` deploys production, and every bot
   reaches it through a pull request. The bot Apps' keys are org secrets that any repository's
   workflows can read, so no bot may push `master` directly; the `infra` class sets
-  `rulesets.admins_only`. This closes the direct push only: a bot's pull request that the
-  auto-approver approves still deploys, tracked in a-novel/.github#414.
+  `rulesets.admins_only`. A bot's pull request merges alone only as a release pin or a version
+  update Renovate armed, and a pin deploys only an image of an immutable Release the release App
+  published, built by that tag's own run.
 - **The writer's federation condition** pins `deploy.yaml`, `roll-database.yaml` and
   `recovery.yaml` on `master` behind the `production` environment. Changing it is a bootstrap change, applied by the last trusted
   workflow before a new one depends on it.
