@@ -643,9 +643,9 @@ func TestNotifyGovernance(t *testing.T) {
 				Workflows []string `yaml:"workflows"`
 				Branches  []string `yaml:"branches"`
 			} `yaml:"workflow_run"`
-			Release           events `yaml:"release"`
-			PullRequestTarget events `yaml:"pull_request_target"`
-			PullRequestReview events `yaml:"pull_request_review"`
+			Release           events  `yaml:"release"`
+			PullRequestTarget events  `yaml:"pull_request_target"`
+			PullRequestReview *events `yaml:"pull_request_review"`
 		} `yaml:"on"`
 		Jobs map[string]struct {
 			Permissions map[string]string `yaml:"permissions"`
@@ -670,7 +670,6 @@ func TestNotifyGovernance(t *testing.T) {
 			want: "opened,ready_for_review,converted_to_draft,assigned,unassigned," +
 				"review_requested,review_request_removed,closed,reopened,dequeued",
 		},
-		{name: "pull_request_review types", got: workflow.On.PullRequestReview.Types, want: "submitted,dismissed"},
 	}
 	for _, testCase := range testCases {
 		if got := strings.Join(testCase.got, ","); got != testCase.want {
@@ -681,5 +680,26 @@ func TestNotifyGovernance(t *testing.T) {
 		if got := workflow.Jobs[job].Permissions["actions"]; got != "read" {
 			t.Errorf("notify %s permissions = %v, want actions: read", job, workflow.Jobs[job].Permissions)
 		}
+	}
+	// A review runs a pull request's own copy of a workflow, so notify-reviews posts it from pr-relay.
+	if workflow.On.PullRequestReview != nil {
+		t.Error("notify runs on pull_request_review, which runs a pull request's own copy with the Agent key")
+	}
+	var reviews struct {
+		On struct {
+			WorkflowRun struct {
+				Workflows []string `yaml:"workflows"`
+			} `yaml:"workflow_run"`
+		} `yaml:"on"`
+		Jobs map[string]struct {
+			If   string `yaml:"if"`
+			Uses string `yaml:"uses"`
+		} `yaml:"jobs"`
+	}
+	loadWorkflow(t, "notify-reviews.yaml", &reviews)
+	if !slices.Equal(reviews.On.WorkflowRun.Workflows, []string{"pr-relay"}) || len(reviews.Jobs) != 1 ||
+		reviews.Jobs["review"].If != "github.event.workflow_run.event == 'pull_request_review'" ||
+		!strings.HasPrefix(reviews.Jobs["review"].Uses, "a-novel-kit/workflows/.github/workflows/notify-pr-run.yaml@") {
+		t.Errorf("notify-reviews = %+v, want one job posting relayed reviews through notify-pr-run", reviews)
 	}
 }

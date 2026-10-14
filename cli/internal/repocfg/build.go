@@ -310,6 +310,8 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	drop("lock-pr.yaml")
 	// Every repo reports its default-branch failures and its releases to Discord.
 	put("notify.yaml")
+	// Reviews run a pull request's own workflow copy, so they post from pr-relay's runs.
+	put("notify-reviews.yaml")
 	// Only classes whose images no deployment pins by digest delete the images nothing names.
 	if c.CleanImages {
 		put("clean-images.yaml")

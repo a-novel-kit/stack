@@ -331,7 +331,7 @@ default-branch push, so every class sets `code_quality: false` and `repo update`
 The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.yaml`,
 `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`, `recover-prs.yaml`,
 `check-dependencies.yaml`, `feature-env.yaml`, `clean-images.yaml`, `review-gate.yaml`, `pr-relay.yaml`,
-`auto-approve-dependabot.yaml`, `lock-closed.yaml`, `notify.yaml`, `auto-assign-author.yaml`) are rendered from
+`auto-approve-dependabot.yaml`, `lock-closed.yaml`, `notify.yaml`, `notify-reviews.yaml`, `auto-assign-author.yaml`) are rendered from
 `cli/internal/repocfg/templates/governance/`
 and carry a "Managed by `a-novel repo update`" banner. Edit the template in the stack repo; a change to
 the copy in a repo is overwritten. What those workflows mean is `coordinate-landing`'s subject.

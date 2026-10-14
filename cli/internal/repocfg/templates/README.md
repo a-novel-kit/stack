@@ -59,7 +59,9 @@ It reads org-level values the operator provisions by hand: the `CI_WEBHOOK`,
 resolve a GitHub account to the Discord user it pings; and the
 `DISCORD_REPO_ROLES` variable mapping each `<org>/<repo>` to its role id. A
 missing webhook skips the post; a person or repository missing from its map
-posts without that ping.
+posts without that ping. Reviews post from `notify-reviews.yaml`, which follows
+`pr-relay.yaml`'s runs: a review runs a pull request's own copy of a workflow, so
+the Agent key cannot be read on that event.
 
 Every repo also gets `.github/workflows/auto-assign-author.yaml`
 (`governance/auto-assign-author.yaml`), which assigns a person's pull request to
