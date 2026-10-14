@@ -45,11 +45,21 @@ footer) and `implement-feature` (the layered-branch workflow these cross-repo pl
 
 ## Cutting a release
 
-A release is cut **in CI**, not from a developer's working tree. A maintainer triggers the repo's
-**release workflow** and picks a **release type** (patch / minor / major); the `release-core` action
-then runs the end-to-end sequence — bump version files (workspace-aware), refresh doc refs
-(`prepublish:doc` / `a-novel publish stamp`), commit, tag `vX.Y.Z`, push commit and tag, create the
-GitHub Release (notes, Docker images, npm packages follow). The [Agent] bot performs the push.
+A release is cut **in CI**, not from a developer's working tree. An admin triggers the repo's
+**release workflow** and picks a **release type** (patch / minor / major), or the release train does
+(`coordinate-landing`). `release.yaml` then runs in three parts (a-novel/.github#414):
+
+- **`plan`** runs the `release-core` action as a dry run, with no environment and no credential: it
+  computes the version and checks the bump, the doc stamp and the tags. A rehearsal runs only this.
+- **`cut`** runs `release-core` in the protected `release` environment as the release App, whose
+  key only that environment holds. It bumps version files (workspace-aware), refreshes doc refs
+  (`prepublish:doc` / `a-novel publish stamp`), commits, tags `vX.Y.Z`, pushes the commit and tags
+  together, and creates the GitHub Release.
+- **The tag publishes.** The root tag runs `release.yaml` again, and that run builds the images and
+  attestations, publishes the npm packages and dispatches infra's `pin-release.yaml`.
+
+A repository that has not adopted the split yet releases in one job as the [Agent] bot; the
+workflows repo's `docs/migrations/v1.57.0.md` is the adoption guide.
 
 There is **no local release command**, and no per-repo `publish.sh` or `publish:*` pnpm script —
 do not write or revive any of them. The bump is workspace-aware: `release-core` detects whether the
@@ -58,17 +68,21 @@ form — `--recursive` for workspaces, `--no-git-tag-version` for single-package
 under `a-novel publish` is `stamp`, the doc-version helper `prepublish:doc` calls (see
 `use-a-novel-cli`).
 
-**Who can actually publish is enforced server-side.** Two GitHub settings stack:
+**Who can actually publish is enforced server-side**, by rulesets and the environment that
+`a-novel repo update` reconciles:
 
-1. **Branch protection on `master`** — restricts who can push the version-bump commit.
-2. **Tag protection rule on `v*`** (Settings → Tags → New rule) — restricts who can create the
-   matching tag. Required because every release workflow triggers on `push: tags: ['**']`: without
-   it an unauthorized user can push a `v*` tag from any commit (even one not on `master`) and CI
-   releases from it.
+1. **The `master` ruleset** restricts who can push the version-bump commit.
+2. **The `tags` ruleset** restricts who can create a tag. A tag is the release decision: it starts
+   the publishing run, so only admins and the release bots may create one.
+3. **The `release` environment** holds the release App's key and admits only the default branch,
+   `release/v*` lines and `v*` tags. Once it has reviewers (a-novel-kit/stack#609), every cut waits
+   for a person; the admin who dispatched may approve their own run.
 
 A `v*` tag is only ever created by a CI dispatch — the release or release-train job, running as the
-[Agent] bot. Nobody pushes one by hand, maintainers included. Repo admins can bypass every rule
-here, but that power exists to repair a broken state, never to cut a release.
+release App. Nobody pushes one by hand, maintainers included. Repo admins can bypass every rule
+here, but that power exists to repair a broken state, never to cut a release. GitHub starts no
+workflow when more than three tags arrive in one push, and the cut pushes the root tag with one tag
+per Go sub-module, so a repository keeps fewer than three sub-modules.
 
 **Releases are human-triggered but bot-run.** A human starts the release workflow; the agent never
 decides to publish (or merge, or push to master) on its own, and a non-interactive token must lack
@@ -91,13 +105,15 @@ hotfix is a single-repo path; a bug spanning several repos is a fast **Epic** (s
 - **release line** — `release/vX.Y`, created from the baseline the first time the line needs a fix.
   It holds released code plus backports only, and its head is always its latest patch. The
   `release-lines` ruleset protects it like the default branch: a PR, one approval, squash, and
-  master's required checks. Only admins and the agent bot write to it directly.
+  master's required checks. Only admins and the release bots write to it directly.
 - **backport** — a PR into a release line carrying a fix in the form that line's code needs, titled
   `<fix subject> [vX.Y]`. Its checks run against the released code, so a fix that leans on unreleased
   code fails before it ships.
-- **cut** — merging a backport runs `release-core-hotfix` behind the protected `release` environment.
-  It bumps the patch, then pushes the bump commit to the line together with the `vX.Y.(Z+1)` tag. It
-  creates the Release with `--latest=false`, so a patch to an old line never becomes "Latest".
+- **cut** — merging a backport runs `release-core-hotfix` behind the protected `release` environment,
+  as the release App. It bumps the patch, then pushes the bump commit to the line together with the
+  `vX.Y.(Z+1)` tag. It creates the Release with `--latest=false`, so a patch to an old line never
+  becomes "Latest". The tag runs the line's own publishing jobs, so the patch reaches production,
+  except on a line cut before its repository adopted the release split.
 - **retract** — for a Go module, a `retract vX.Y.Z` directive (added in a later release) marks a bad
   version so `go get` skips it. The tag stays (immutable); `retract` is the downstream "don't use this".
 
