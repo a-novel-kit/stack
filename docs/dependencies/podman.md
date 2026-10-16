@@ -1,6 +1,6 @@
 # Podman
 
-[Podman](https://podman.io) runs, in containers, the databases and services you start locally. `podman compose` hands compose files to [podman-compose](https://github.com/containers/podman-compose), which must be 1.6.0 or newer: older releases mishandle health-gated start-up and can hang.
+[Podman](https://podman.io) runs the local databases and services in containers. It needs [podman-compose](https://github.com/containers/podman-compose) 1.6.0 or newer; older releases can hang on start-up.
 
 ## Install
 
@@ -15,7 +15,7 @@ podman compose version
 === Linux
 :::tabs key:distro
 == Debian / Ubuntu
-The distribution's podman-compose is older than 1.6.0; [pipx](https://pipx.pypa.io) installs the current release:
+The distribution's podman-compose is too old; use [pipx](https://pipx.pypa.io):
 
 ```bash
 sudo apt install -y podman pipx
@@ -51,7 +51,7 @@ brew install podman podman-compose
 ```
 
 === Windows
-Podman runs its containers in a WSL2 virtual machine. podman-compose is a Python program, installed through pipx:
+Podman runs containers in a WSL2 machine, and podman-compose comes from pipx:
 
 ```powershell
 winget install --id RedHat.Podman -e
@@ -72,20 +72,20 @@ pipx install podman-compose
 
 :::tabs key:os
 == Linux
-Podman runs natively, so there is nothing to start. It runs container health checks with systemd timers, which WSL2 leaves off on older installs. Check that systemd runs:
+Nothing to start on Linux. Under WSL2, check that systemd runs, since health checks need it:
 
 ```bash
 ps -p 1 -o comm=
 ```
 
-Anything but `systemd` means it is off. Turn it on, then restart WSL with `wsl --shutdown` from Windows:
+If it prints anything else, turn systemd on, then restart WSL with `wsl --shutdown`:
 
 ```bash
 printf '[boot]\nsystemd=true\n' | sudo tee -a /etc/wsl.conf
 ```
 
 == macOS
-Containers run in a Podman machine, a Linux virtual machine. Create it once, then start it after each reboot:
+Create the Podman machine once, and start it after each reboot:
 
 ```bash
 podman machine init
@@ -93,7 +93,7 @@ podman machine start
 ```
 
 == Windows
-Containers run in a Podman machine, a Linux virtual machine. Create it once, then start it after each reboot:
+Create the Podman machine once, and start it after each reboot:
 
 ```powershell
 podman machine init
@@ -108,4 +108,4 @@ Check that Podman runs:
 podman info --format '{{.Version.Version}}'
 ```
 
-It prints the Podman version; an error means Podman, or its machine, is not running. `podman compose version` must name `podman-compose` as the external compose provider: another provider installed first, such as docker-compose, takes precedence.
+An error means Podman or its machine is down. `podman compose version` must name podman-compose; an installed docker-compose would take precedence.

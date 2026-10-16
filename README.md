@@ -15,9 +15,7 @@ The backbone of Agora development: one workspace and one CLI for every project a
 
 ## What this is
 
-Agora is built from many repositories spread over two GitHub organizations. The **stack** is the central place they are developed and kept in sync from: one checkout holds all of them, and one tool, the `a-novel` CLI, works on every one the same way.
-
-The CLI clones the whole project into your workspace and keeps it current. It runs any repository's tests and builds, and starts its services on your machine with everything they depend on, so the same few commands cover a backend service, a frontend platform or a shared library.
+Agora spans many repositories across two GitHub organizations. The **stack** brings them into one workspace, and its `a-novel` CLI works on all of them the same way: it keeps every repository in sync, tests and builds any of them, and runs services on your machine. Day to day, an AI agent that knows the team's conventions drives it.
 
 ```
 ~/git-projects/a-novel/   the stack (github.com/a-novel-kit/stack)
@@ -35,7 +33,8 @@ The CLI runs on Linux, macOS, or WSL2 on Windows, and needs:
 - [Go](https://go.dev)
 - [Node.js](https://nodejs.org) and [pnpm](https://pnpm.io)
 - [Podman](https://podman.io) and [podman-compose](https://github.com/containers/podman-compose) 1.6.0 or newer
-- [Bitwarden Secrets Manager CLI](https://bitwarden.com/help/secrets-manager-cli/), for maintainers
+- An AI agent: [Claude Code](https://code.claude.com/docs/en/overview) or [Codex](https://developers.openai.com/codex)
+- For sysadmins: [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) and [Bitwarden Secrets Manager CLI](https://bitwarden.com/help/secrets-manager-cli/)
 
 Install the CLI:
 
@@ -43,20 +42,18 @@ Install the CLI:
 go install github.com/a-novel-kit/stack/cli/cmd/a-novel@latest
 ```
 
-Then set up your workspace, once: `core setup` clones the stack and starts the CLI's background service, and `core sync` clones every repository into it.
+Then set up your workspace:
 
 ```bash
 a-novel core setup
 a-novel core sync
 ```
 
-From there, `a-novel run ui` shows every service, ready to start.
+`a-novel claude` then opens Claude Code at the stack root, and `a-novel run ui` shows every service.
 
 ## Documentation
 
-New to Agora? The [developer guide](https://a-novel-kit.github.io/stack/) sets up your machine as a contributor, from the tools to the access you need from the team, then walks through the everyday work.
-
-[`cli/README.md`](cli/README.md) is the CLI reference: its commands and the workflows they serve.
+New to Agora? Start with the [developer guide](https://a-novel-kit.github.io/stack/). [`cli/README.md`](cli/README.md) is the CLI reference.
 
 ## Contributing
 

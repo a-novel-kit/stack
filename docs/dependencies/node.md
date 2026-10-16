@@ -1,6 +1,6 @@
 # Node.js and pnpm
 
-[Node.js](https://nodejs.org) runs the JavaScript tooling and the frontend platforms. [pnpm](https://pnpm.io) is the package manager of every JavaScript workspace; the repositories refuse npm and yarn. Node.js must meet `engines.node` in the stack's [`package.json`](https://github.com/a-novel-kit/stack/blob/master/package.json).
+[Node.js](https://nodejs.org) runs the JavaScript tooling and frontends, and [pnpm](https://pnpm.io) manages their packages; the repositories refuse npm and yarn.
 
 ## Install
 
@@ -16,7 +16,7 @@ curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/package.js
 === Linux
 :::tabs key:distro
 == Debian / Ubuntu
-The distribution's Node.js is too old. [nvm](https://github.com/nvm-sh/nvm) installs the current release, then npm installs pnpm:
+The distribution's Node.js is too old; use [nvm](https://github.com/nvm-sh/nvm):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh | bash
@@ -26,7 +26,7 @@ npm install --global pnpm
 ```
 
 == Fedora
-[nvm](https://github.com/nvm-sh/nvm) installs the current Node.js release, then npm installs pnpm:
+Use [nvm](https://github.com/nvm-sh/nvm):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh | bash
@@ -63,24 +63,23 @@ winget install --id pnpm.pnpm -e
 
 ::::
 
-Each repository pins its pnpm version, and pnpm switches to it on its own: inside a repository, `pnpm --version` prints the pinned version once pnpm has fetched it.
+Any recent pnpm works: each repository pins its version, and pnpm switches to it.
 
 ## Configure
 
-The `@a-novel` and `@a-novel-kit` packages live on [GitHub Packages](https://docs.github.com/packages), which asks for a token even to read. Give pnpm one with the `read:packages` scope only.
+The team's packages live on [GitHub Packages](https://docs.github.com/packages), which needs a token even to read.
 
-Skip the two steps below if this already prints a version; a `401` error means you need the token:
+Skip this section if this prints a version:
 
 ```bash
 npm view @a-novel-kit/nodelib-config version --registry=https://npm.pkg.github.com
 ```
 
-1. Create a classic token on GitHub; this step needs the browser. The link preselects the scope: [new token with `read:packages`](https://github.com/settings/tokens/new?scopes=read:packages&description=a-novel%20packages). Pick an expiry, generate it, and copy it.
-2. Store it in the `.npmrc` of your home directory. A repository's `.npmrc` is committed, so the token never goes there.
+1. [Create a classic token](https://github.com/settings/tokens/new?scopes=read:packages&description=a-novel%20packages) with only the `read:packages` scope, and copy it.
+2. Save it in your home `.npmrc`, never a repository's:
 
 :::tabs key:shell
 == Linux / macOS
-The token is read with no echo, so it lands in neither the terminal nor your shell history:
 
 ```bash
 read -rs GITHUB_PACKAGES_TOKEN   # paste the token, then press Enter
@@ -90,7 +89,6 @@ unset GITHUB_PACKAGES_TOKEN
 ```
 
 == Windows
-The token is read masked, so it lands in neither the terminal nor your shell history:
 
 ```powershell
 $Token = Read-Host -MaskInput "GitHub Packages token"
@@ -100,4 +98,4 @@ Remove-Variable Token
 
 :::
 
-Run the check above again: it now prints the latest version of a team package. Platform repositories also read this token when they build images: the [secrets runbook](/cli/secrets#the-github-packages-token) stores a copy for the CLI.
+Run the check again to confirm. Platform image builds also need the token in the [CLI's secrets](/cli/secrets#the-github-packages-token).

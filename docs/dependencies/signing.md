@@ -1,8 +1,8 @@
 # Commit signing
 
-A signed commit proves it was made with your key, and GitHub marks it **Verified**. The protected branches of every A-Novel repository accept verified commits only, so sign every commit you make. Git signs with the SSH key from the [GitHub](./github#add-an-ssh-key) page; no GPG is involved.
+Protected branches accept only verified commits, so sign every commit. Git signs with the SSH key from the [GitHub](./github#add-an-ssh-key) page.
 
-Skip this page if your commits already show **Verified** on GitHub. Otherwise pick the tab of the key you created there; a key at another path works the same, with its path in place of the one shown. With a security key, each signature asks for its own touch: the [shared connection](./github#share-one-connection) spares pushes and fetches, never signatures.
+Skip this page if your commits already show **Verified** on GitHub. With a security key, every signature takes a touch.
 
 ## Configure Git
 
@@ -19,7 +19,7 @@ git config --global tag.gpgsign true
 ```
 
 == Windows
-The first command makes Git sign with Windows OpenSSH, the client that reaches security keys.
+The first command makes Git sign with Windows OpenSSH, which reaches security keys.
 
 ```powershell
 git config --global gpg.ssh.program "C:/Windows/System32/OpenSSH/ssh-keygen.exe"
@@ -55,7 +55,7 @@ git config --global tag.gpgsign true
 
 ## Register the key for signing
 
-GitHub verifies a signature only against a key registered as a signing key, even when the same key already authenticates you. Register it a second time, with the signing type:
+GitHub checks signatures against signing keys only. Register your key again, as a signing key:
 
 ::::tabs key:sshkey
 === Security key
@@ -98,11 +98,11 @@ gh auth refresh -h github.com --remove-scopes admin:ssh_signing_key
 :::
 ::::
 
-A backup security key signs too once you register it the same way.
+Register a backup key the same way.
 
 ## Check a signature
 
-Git checks SSH signatures against a list of trusted keys, the allowed signers file. Add your key to it, then sign a throwaway commit:
+Trust your key locally, then sign a test commit:
 
 ::::tabs key:sshkey
 === Security key
@@ -151,11 +151,11 @@ git init -q; git commit -q --allow-empty -m "test: signing"; git log --show-sign
 :::
 ::::
 
-The log opens with `Good "git" signature for you@example.com`. On GitHub, your next pushed commit shows **Verified**.
+The log shows `Good "git" signature`, and GitHub marks your next push **Verified**.
 
 ## Keep commits signed
 
-A commit stays signed until something rewrites it without your key. GitHub's **Update branch** button is the usual culprit, and the repositories refuse what it produces. Bring a branch up to date locally instead; the rebase signs every commit it replays:
+GitHub's **Update branch** button rewrites commits without your key, and the repositories refuse the result. Rebase locally instead:
 
 ```bash
 git fetch origin

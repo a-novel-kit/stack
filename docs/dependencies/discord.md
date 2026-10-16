@@ -1,11 +1,13 @@
 # Discord
 
-Discord is where the team syncs and talks. Private channels hold the internal work, and public ones let the wider community reach the team, for non-technical reports among other things. CI posts there too.
+Discord is where the team syncs and talks. Public channels are open to the whole community, for questions and non-technical reports; private channels hold the team's work.
 
 ## Join
 
-Open the [A-Novel server invite](https://discord.gg/rp4Qr8cA) in the browser or the [desktop app](https://discord.com/download), and accept it. Then ask a maintainer there to open the team's private channels to you.
+Accept the [server invite](https://discord.gg/rp4Qr8cA), in the browser or the [desktop app](https://discord.com/download).
 
-## Get mentioned
+## Get enrolled
 
-CI notifications mention you once a maintainer links your GitHub and Discord accounts. Send them your GitHub username and your Discord user ID: Discord shows the ID once Developer Mode is on in its advanced settings, from **Copy User ID** on your profile.
+Introduce yourself in the community channels, get to know the team, and share what you want to work on. A project member then enrolls you. You get the member role, which opens the private working channels, and access to the GitHub repositories you work on.
+
+Have your GitHub username at hand, and your Discord user ID so CI can mention you. Copying the ID takes Developer Mode, in Discord's advanced settings.
