@@ -79,7 +79,7 @@ gh auth status
 
 Git reaches GitHub over SSH, and the same key [signs your commits](./signing). A hardware security key, such as a YubiKey, keeps the private key on the device: nothing authenticates without a touch. A key file needs no hardware.
 
-Skip to [Request access](#request-access) if your GitHub account already has a key for this machine, which `ssh -T git@github.com` confirms by greeting you by name. The [signing page](./signing) then needs that key's path in place of the one its commands use.
+Skip to [Share one connection](#share-one-connection) if your GitHub account already has a key for this machine, which `ssh -T git@github.com` confirms by greeting you by name. The [signing page](./signing) then needs that key's path in place of the one its commands use.
 
 `gh` asks for one extra permission to upload the key, through the browser again, and the last command gives it back.
 
@@ -143,6 +143,32 @@ ssh -T git@github.com
 ```
 
 GitHub answers `Hi <you>! You've successfully authenticated, but GitHub does not provide shell access.` and the command exits with status 1, which is expected.
+
+### Share one connection
+
+Every new SSH connection to GitHub authenticates again, which with a security key means another touch. SSH can instead keep one authenticated connection open for an hour and carry every push, fetch and clone through it, and `a-novel core sync` reuses that connection for all repositories rather than opening one each. It helps with any key, and spares a security key user most of the touches.
+
+Linux and macOS share connections from a block in your SSH config:
+
+```bash
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+cat >> ~/.ssh/config <<'EOF'
+
+Host github.com
+    ControlMaster auto
+    ControlPath ~/.ssh/cm-%C
+    ControlPersist 1h
+EOF
+```
+
+The next git operation opens the connection, with the usual touch, and those of the following hour reuse it. While it is open, any program running as you can push through it, so close it when you step away:
+
+```bash
+ssh -O check git@github.com   # is a connection open?
+ssh -O exit git@github.com    # close it now
+```
+
+The OpenSSH that ships with Windows cannot share connections; inside WSL2, this setup works as on Linux.
 
 ## Request access
 

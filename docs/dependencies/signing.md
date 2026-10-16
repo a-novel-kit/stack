@@ -2,7 +2,7 @@
 
 A signed commit proves it was made with your key, and GitHub marks it **Verified**. The protected branches of every A-Novel repository accept verified commits only, so sign every commit you make. Git signs with the SSH key from the [GitHub](./github#add-an-ssh-key) page; no GPG is involved.
 
-Skip this page if your commits already show **Verified** on GitHub. Otherwise pick the tab of the key you created there; a key at another path works the same, with its path in place of the one shown. With a security key, each signature asks for a touch.
+Skip this page if your commits already show **Verified** on GitHub. Otherwise pick the tab of the key you created there; a key at another path works the same, with its path in place of the one shown. With a security key, each signature asks for its own touch: the [shared connection](./github#share-one-connection) spares pushes and fetches, never signatures.
 
 ## Configure Git
 
