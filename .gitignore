@@ -19,3 +19,7 @@ plan-*.md
 
 node_modules
 /.secrets/
+
+# VitePress build output and cache.
+docs/.vitepress/cache/
+docs/.vitepress/dist/

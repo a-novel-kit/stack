@@ -63,6 +63,14 @@
       "matchStrings": ["a-novel-kit/workflows/[^@\\s]+@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
       "depNameTemplate": "a-novel-kit/workflows",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Keep the nvm installer URL in the developer guide on nvm's latest release. The guide pins it because nvm publishes its installer per tag.",
+      "managerFilePatterns": ["docs/**/*.md"],
+      "matchStrings": ["raw\\.githubusercontent\\.com/nvm-sh/nvm/(?<currentValue>v\\d+\\.\\d+\\.\\d+)/install\\.sh"],
+      "depNameTemplate": "nvm-sh/nvm",
+      "datasourceTemplate": "github-releases"
     }
   ]
 }
