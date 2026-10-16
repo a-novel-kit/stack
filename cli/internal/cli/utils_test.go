@@ -15,6 +15,24 @@ import (
 // Tests never wait out GitHub's secondary rate limit.
 func init() { rateLimitWait = 0 }
 
+// TestMain runs every git command under a fixed identity and no global or
+// system config, so a developer's commit.gpgsign cannot stall fixture commits.
+func TestMain(m *testing.M) {
+	for key, value := range map[string]string{
+		"GIT_CONFIG_GLOBAL":   os.DevNull,
+		"GIT_CONFIG_NOSYSTEM": "1",
+		"GIT_AUTHOR_NAME":     "test",
+		"GIT_AUTHOR_EMAIL":    "test@a-novel.dev",
+		"GIT_COMMITTER_NAME":  "test",
+		"GIT_COMMITTER_EMAIL": "test@a-novel.dev",
+	} {
+		if err := os.Setenv(key, value); err != nil {
+			panic(err)
+		}
+	}
+	m.Run()
+}
+
 // Failures the stubbed gh returns, worded as gh reports them.
 var (
 	errGHNotFound       = errors.New("gh: Not Found (HTTP 404)")
@@ -129,13 +147,11 @@ func commitFixture(t *testing.T, dir, name, content string) {
 	mustGit(t, dir, "commit", "--quiet", "-m", "update "+name)
 }
 
-// initRepo creates a repository in a new temp dir with a committer configured.
+// initRepo creates a repository in a new temp dir.
 func initRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	mustGit(t, dir, "init", "--quiet", "--initial-branch=master")
-	mustGit(t, dir, "config", "user.email", "test@a-novel.dev")
-	mustGit(t, dir, "config", "user.name", "test")
 	return dir
 }
 
@@ -161,7 +177,7 @@ func initSyncRepo(t *testing.T) (string, string) {
 	mustGit(t, seed, "push", "--quiet", "-u", "origin", "master")
 
 	local := t.TempDir()
-	mustGit(t, seed, "clone", "--quiet", "-c", "user.email=test@a-novel.dev", "-c", "user.name=test", origin, local)
+	mustGit(t, seed, "clone", "--quiet", origin, local)
 	return local, seed
 }
 
