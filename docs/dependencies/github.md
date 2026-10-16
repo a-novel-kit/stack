@@ -73,64 +73,44 @@ Approve the one-time code in your browser.
 
 ### Add an SSH key
 
-Git talks to GitHub over SSH, and the same key [signs your commits](./signing). Prefer a hardware security key, such as a YubiKey: the private key never leaves it. A key file works without hardware.
+Git reaches GitHub over SSH, and the same key [signs your commits](./signing), which every repository requires.
 
 Already have a key on GitHub? If `ssh -T git@github.com` greets you by name, skip to [Share one connection](#share-one-connection).
 
-`gh` asks for a temporary permission to upload the key.
-
-::::tabs key:sshkey
-=== Security key
-Plug the key in. On macOS, run `brew install openssh` first: the system OpenSSH lacks security key support.
-
-:::tabs key:shell
-== Linux / macOS
-
-```bash
-ssh-keygen -t ed25519-sk -C "$(git config user.email)" -f ~/.ssh/id_ed25519_sk
-gh auth refresh -h github.com -s admin:public_key
-gh ssh-key add ~/.ssh/id_ed25519_sk.pub --type authentication --title "$(hostname)"
-gh auth refresh -h github.com --remove-scopes admin:public_key
-```
-
-== Windows
-The first command makes Git use Windows OpenSSH, which reaches the key through Windows Hello.
-
-```powershell
-git config --global core.sshCommand "C:/Windows/System32/OpenSSH/ssh.exe"
-ssh-keygen -t ed25519-sk -C (git config user.email) -f "$HOME\.ssh\id_ed25519_sk"
-gh auth refresh -h github.com -s admin:public_key
-gh ssh-key add "$HOME\.ssh\id_ed25519_sk.pub" --type authentication --title $env:COMPUTERNAME
-gh auth refresh -h github.com --remove-scopes admin:public_key
-```
-
-:::
-
-Register a backup key the same way, with `-f ~/.ssh/id_ed25519_sk_backup`, and list both keys as `IdentityFile` under `Host github.com` in `~/.ssh/config`.
-=== Key file
-Set a passphrase when asked.
+Protect the key with a passphrase, then load it into your SSH agent with `ssh-add`. The agent holds the unlocked key, so Git signs and connects without asking again, even when an AI agent commits for you. `gh` asks for a temporary permission to upload the key.
 
 :::tabs key:shell
 == Linux / macOS
 
 ```bash
 ssh-keygen -t ed25519 -C "$(git config user.email)" -f ~/.ssh/id_ed25519
+ssh-add ~/.ssh/id_ed25519
 gh auth refresh -h github.com -s admin:public_key
 gh ssh-key add ~/.ssh/id_ed25519.pub --type authentication --title "$(hostname)"
 gh auth refresh -h github.com --remove-scopes admin:public_key
 ```
 
+After a restart, run `ssh-add` again.
+
 == Windows
+Start the SSH agent once, from an administrator PowerShell. It keeps the key across restarts.
+
+```powershell
+Get-Service ssh-agent | Set-Service -StartupType Automatic -PassThru | Start-Service
+```
+
+Then run these in a regular PowerShell; the `git config` line points Git at Windows OpenSSH and its agent:
 
 ```powershell
 ssh-keygen -t ed25519 -C (git config user.email) -f "$HOME\.ssh\id_ed25519"
+ssh-add "$HOME\.ssh\id_ed25519"
+git config --global core.sshCommand "C:/Windows/System32/OpenSSH/ssh.exe"
 gh auth refresh -h github.com -s admin:public_key
 gh ssh-key add "$HOME\.ssh\id_ed25519.pub" --type authentication --title $env:COMPUTERNAME
 gh auth refresh -h github.com --remove-scopes admin:public_key
 ```
 
 :::
-::::
 
 Check the connection:
 
@@ -142,7 +122,7 @@ GitHub greets you by name; the exit status 1 is normal.
 
 ### Share one connection
 
-Each new SSH connection authenticates again: one more touch on a security key. Let SSH keep one connection open and reuse it, as `a-novel core sync` does.
+The CLI already reuses one GitHub connection across its multi-repository commands. Let every Git command reuse it too, so pushes and pulls skip the handshake.
 
 Skip if `ssh -G git@github.com | grep '^controlpath'` prints a path. Otherwise, on Linux or macOS:
 
@@ -157,14 +137,11 @@ Host github.com
 EOF
 ```
 
-The connection closes after an idle hour. While it is open, any program running as you can use it, so close it when you step away:
+The connection closes after an idle hour; `ssh -O exit git@github.com` closes it sooner. Windows OpenSSH cannot share connections; WSL2 can.
 
-```bash
-ssh -O check git@github.com   # is a connection open?
-ssh -O exit git@github.com    # close it now
-```
-
-Windows OpenSSH cannot share connections; WSL2 can.
+::: tip Sysadmins
+Sysadmins use a stricter setup: see [GitHub with a security key](/sysadmins/#github-with-a-security-key).
+:::
 
 ## Accept your invitations
 

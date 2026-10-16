@@ -18,7 +18,9 @@ contributors and is theirs to do; the one thing the team grants them, enrollment
 Discord page with what it brings (the member role for the private working channels, GitHub access).
 **Sysadmins** holds the admin side: stricter security requirements, extra tools (Google Cloud CLI,
 Bitwarden), and duties such as enrolling contributors and applying repository settings. Maintainers
-get no section: their access widens the contributor setup without changing it.
+get no section: their access widens the contributor setup without changing it. Write the
+contributor path without exceptions: a sysadmin difference gets at most a one-line note linking to
+the Sysadmins section, which holds the stricter setup (the security key, for one).
 
 A tool's page opens with its role in the team's work, never its current feature set: a list of what
 Discord posts, which plans an agent accepts or which keys the UI binds goes stale, and the tool's own
@@ -65,7 +67,6 @@ the stored label shows its first tab, so reuse these sets exactly:
 | `os`     | `Linux`, `macOS`, `Windows`                     | Commands that differ per system           |
 | `distro` | `Debian / Ubuntu`, `Fedora`, `openSUSE`, `Arch` | Inside `Linux`, when distributions differ |
 | `shell`  | `Linux / macOS`, `Windows`                      | Commands that differ only by shell        |
-| `sshkey` | `Security key`, `Key file`                      | The two SSH key kinds                     |
 
 A nested group's parent takes one more colon and one more equals sign:
 

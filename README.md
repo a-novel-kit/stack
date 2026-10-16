@@ -1,6 +1,6 @@
 # a-novel stack
 
-The backbone of Agora development: one workspace and one CLI for every project across the [`a-novel`](https://github.com/a-novel) and [`a-novel-kit`](https://github.com/a-novel-kit) organizations.
+The backbone of A-Novel development: one workspace and one CLI for every project across the [`a-novel`](https://github.com/a-novel) and [`a-novel-kit`](https://github.com/a-novel-kit) organizations.
 
 [![X (formerly Twitter) Follow](https://img.shields.io/twitter/follow/agorastoryverse)](https://twitter.com/agorastoryverse)
 [![Discord](https://img.shields.io/discord/1315240114691248138?logo=discord)](https://discord.gg/rp4Qr8cA)
@@ -15,7 +15,7 @@ The backbone of Agora development: one workspace and one CLI for every project a
 
 ## What this is
 
-Agora spans many repositories across two GitHub organizations. The **stack** brings them into one workspace, and its `a-novel` CLI works on all of them the same way: it keeps every repository in sync, tests and builds any of them, and runs services on your machine. Day to day, an AI agent that knows the team's conventions drives it.
+A-Novel spans many repositories across two GitHub organizations: the brand's applications and business code, Agora among them, and their shared tooling. The **stack** brings them into one workspace, and its `a-novel` CLI works on all of them the same way: it keeps every repository in sync, tests and builds any of them, and runs services on your machine. Day to day, an AI agent that knows the team's conventions drives it.
 
 ```
 ~/git-projects/a-novel/   the stack (github.com/a-novel-kit/stack)
@@ -53,8 +53,8 @@ a-novel core sync
 
 ## Documentation
 
-New to Agora? Start with the [developer guide](https://a-novel-kit.github.io/stack/). [`cli/README.md`](cli/README.md) is the CLI reference.
+New to A-Novel? Start with the [developer guide](https://a-novel-kit.github.io/stack/). [`cli/README.md`](cli/README.md) is the CLI reference.
 
 ## Contributing
 
-New to the platform? Start with the [developer guide](https://a-novel-kit.github.io/stack/). To work on this repository, [CONTRIBUTING.md](CONTRIBUTING.md) covers its layout and how the CLI works.
+To work on this repository, [CONTRIBUTING.md](CONTRIBUTING.md) covers its layout and how the CLI works.

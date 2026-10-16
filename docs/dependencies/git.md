@@ -54,13 +54,13 @@ winget install --id Git.Git -e
 
 ## Configure
 
-Set the name and email your commits carry. Use an email verified on GitHub, or your private [noreply address](https://github.com/settings/emails).
+Set the name and email your commits carry. Use your GitHub username as the name. GitHub links a commit to your account by its email alone, so use an address added and verified in your [email settings](https://github.com/settings/emails), or the private `…@users.noreply.github.com` address shown there under **Keep my email addresses private**.
 
 :::tabs key:shell
 == Linux / macOS
 
 ```bash
-GIT_NAME="Your Name"
+GIT_NAME="your-github-username"
 GIT_EMAIL="you@example.com"
 git config --global user.name "$GIT_NAME"
 git config --global user.email "$GIT_EMAIL"
@@ -69,7 +69,7 @@ git config --global user.email "$GIT_EMAIL"
 == Windows
 
 ```powershell
-$GitName = "Your Name"
+$GitName = "your-github-username"
 $GitEmail = "you@example.com"
 git config --global user.name $GitName
 git config --global user.email $GitEmail

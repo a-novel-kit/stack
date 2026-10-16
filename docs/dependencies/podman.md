@@ -72,13 +72,13 @@ pipx install podman-compose
 
 :::tabs key:os
 == Linux
-Nothing to start on Linux. Under WSL2, check that systemd runs, since health checks need it:
+Nothing to start on Linux. Under WSL2, health checks need systemd, and this prints `systemd` when it runs:
 
 ```bash
 ps -p 1 -o comm=
 ```
 
-If it prints anything else, turn systemd on, then restart WSL with `wsl --shutdown`:
+Otherwise, turn it on, then restart WSL from Windows with `wsl --shutdown`:
 
 ```bash
 printf '[boot]\nsystemd=true\n' | sudo tee -a /etc/wsl.conf

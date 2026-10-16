@@ -4,10 +4,42 @@ Sysadmins hold admin rights over the repositories and the cloud, and keep the or
 
 ## Security requirements
 
-- **A FIDO2 security key, with a backup.** Your SSH key, for GitHub and commit signing, lives on a hardware key: follow the Security key tab of the [GitHub](/dependencies/github#add-an-ssh-key) page, then register a second key. Key files are not allowed.
+- **A FIDO2 security key, with a backup.** Your SSH key, for GitHub and commit signing, lives on a hardware key, as [set up below](#github-with-a-security-key). Key files are not allowed.
 - **One shared connection.** Set up [connection sharing](/dependencies/github#share-one-connection), and close it when you leave your machine.
 - **Elevated scopes for one task only.** Keep your `gh` session on its default scopes. Add `admin:org` or another for a single run, then remove it.
 - **No credential in clear.** Keep tokens in the CLI's encrypted store, never in a file or your shell history.
+
+## GitHub with a security key
+
+This replaces the key file of the contributor setup. Plug the key in; on macOS, run `brew install openssh` first, as the system OpenSSH lacks security key support.
+
+:::tabs key:shell
+== Linux / macOS
+
+```bash
+ssh-keygen -t ed25519-sk -C "$(git config user.email)" -f ~/.ssh/id_ed25519_sk
+gh auth refresh -h github.com -s admin:public_key,admin:ssh_signing_key
+gh ssh-key add ~/.ssh/id_ed25519_sk.pub --type authentication --title "$(hostname)"
+gh ssh-key add ~/.ssh/id_ed25519_sk.pub --type signing --title "$(hostname)"
+gh auth refresh -h github.com --remove-scopes admin:public_key,admin:ssh_signing_key
+git config --global user.signingkey ~/.ssh/id_ed25519_sk.pub
+```
+
+== Windows
+Windows OpenSSH, which Git already uses, reaches the key through Windows Hello.
+
+```powershell
+ssh-keygen -t ed25519-sk -C (git config user.email) -f "$HOME\.ssh\id_ed25519_sk"
+gh auth refresh -h github.com -s admin:public_key,admin:ssh_signing_key
+gh ssh-key add "$HOME\.ssh\id_ed25519_sk.pub" --type authentication --title $env:COMPUTERNAME
+gh ssh-key add "$HOME\.ssh\id_ed25519_sk.pub" --type signing --title $env:COMPUTERNAME
+gh auth refresh -h github.com --remove-scopes admin:public_key,admin:ssh_signing_key
+git config --global user.signingkey "$HOME\.ssh\id_ed25519_sk.pub"
+```
+
+:::
+
+Set up the backup key the same way, with `-f ~/.ssh/id_ed25519_sk_backup`, list both keys as `IdentityFile` under `Host github.com` in `~/.ssh/config`, and add both to your [allowed signers](/dependencies/signing#check-a-signature). Then remove the key file from your GitHub account. Each signature now asks for a touch, as does each new connection; the [shared connection](/dependencies/github#share-one-connection) makes those rare.
 
 ## Duties
 
