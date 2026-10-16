@@ -26,7 +26,7 @@ features:
 
 A-Novel spans two GitHub organizations: [`a-novel`](https://github.com/a-novel) holds the Agora writing studio, its services and platforms; [`a-novel-kit`](https://github.com/a-novel-kit) holds the shared libraries, CI actions and tooling. One setup covers both.
 
-The work happens through the `a-novel` CLI, which lives in the [stack repository](https://github.com/a-novel-kit/stack). It clones the repositories you work on, runs their tests and builds, and starts their services on your machine. Repository settings are code too: maintainers apply them with the same CLI.
+The work happens through the `a-novel` CLI, which lives in the [stack repository](https://github.com/a-novel-kit/stack). It clones the repositories you work on, runs their tests and builds, and starts their services on your machine. Repository settings are code too, applied with the same CLI by the repositories' administrators.
 
 The guide follows the order you set a machine up in:
 

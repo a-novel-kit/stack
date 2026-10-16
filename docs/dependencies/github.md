@@ -146,9 +146,9 @@ GitHub answers `Hi <you>! You've successfully authenticated, but GitHub does not
 
 ### Share one connection
 
-Every new SSH connection to GitHub authenticates again, which with a security key means another touch. SSH can instead keep one authenticated connection open for an hour and carry every push, fetch and clone through it, and `a-novel core sync` reuses that connection for all repositories rather than opening one each. It helps with any key, and spares a security key user most of the touches.
+Every new SSH connection to GitHub authenticates again, which with a security key means another touch. SSH can instead keep one authenticated connection open and carry every push, fetch and clone through it until it sits unused for an hour, and `a-novel core sync` reuses that connection for all repositories rather than opening one each. It helps with any key, and spares a security key user most of the touches.
 
-Linux and macOS share connections from a block in your SSH config:
+Skip this step if `ssh -G git@github.com | grep '^controlpath'` already prints a path. Linux and macOS share connections from a block in your SSH config:
 
 ```bash
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -161,7 +161,7 @@ Host github.com
 EOF
 ```
 
-The next git operation opens the connection, with the usual touch, and those of the following hour reuse it. While it is open, any program running as you can push through it, so close it when you step away:
+The next git operation opens the connection, with the usual touch, and every later one reuses it until an hour passes without any. While it is open, any program running as you can push through it, so close it when you step away:
 
 ```bash
 ssh -O check git@github.com   # is a connection open?

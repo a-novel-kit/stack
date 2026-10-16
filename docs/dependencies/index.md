@@ -2,7 +2,7 @@
 
 This section sets up the tools A-Novel development relies on, one page each. Work through them in order, since later pages build on earlier ones: the GitHub page uses the identity you give Git, and the signing page uses the key you create for GitHub.
 
-A tool's page has two parts. **Install** opens with a check: if the tool is already there and recent enough, jump to **Configure**, which holds the A-Novel-specific setup everyone needs.
+A tool's page has two parts. **Install** opens with a check: if the tool is already there and recent enough, jump to **Configure**, which holds the A-Novel-specific setup everyone needs. Access granted by the team takes time, so read [what to ask the team for](#what-to-ask-the-team-for) before you start.
 
 | Tool                        | What it does here                                        | Who needs it |
 | --------------------------- | -------------------------------------------------------- | ------------ |
@@ -15,27 +15,6 @@ A tool's page has two parts. **Install** opens with a check: if the tool is alre
 | [Discord](./discord)        | Team chat, and where CI mentions you                     | Everyone     |
 | [Bitwarden](./bitwarden)    | Holds the organizations' privileged keys                 | Maintainers  |
 | [AI agents](./ai-agents)    | Coding agents preloaded with the team's conventions      | Optional     |
-
-## Check what you already have
-
-Run each check; a tool that answers with a recent enough version needs only its page's Configure section.
-
-| Tool       | Check                                        | Needed                                       |
-| ---------- | -------------------------------------------- | -------------------------------------------- |
-| Git        | `git --version`                              | Any current release                          |
-| GitHub CLI | `gh --version`                               | Any current release                          |
-| Go         | `go version`                                 | The version in the stack's `cli/go.mod`      |
-| Node.js    | `node --version`                             | `engines.node` in the stack's `package.json` |
-| pnpm       | `pnpm --version`                             | Any current release                          |
-| Podman     | `podman --version`, `podman compose version` | podman-compose 1.6.0 or newer                |
-| Bitwarden  | `bws --version`                              | Maintainers only                             |
-
-The Go and Node.js minimums move with the stack. Print the current ones:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/cli/go.mod | grep '^go '
-curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/package.json | grep '"node"'
-```
 
 ## Choose your system
 
@@ -101,6 +80,27 @@ Open a new terminal after each winget install, so the new command is on your `PA
 ::::
 
 Some Linux and macOS commands add a line to your shell profile. They target `$HOME/.$(basename "$SHELL")rc`, which is `~/.zshrc` under zsh and `~/.bashrc` under bash. Under fish, add the same directories with `fish_add_path`.
+
+## Check what you already have
+
+Run each check; a tool that answers with a recent enough version needs only its page's Configure section.
+
+| Tool       | Check                                        | Needed                                       |
+| ---------- | -------------------------------------------- | -------------------------------------------- |
+| Git        | `git --version`                              | Any current release                          |
+| GitHub CLI | `gh --version`                               | Any current release                          |
+| Go         | `go version`                                 | The version in the stack's `cli/go.mod`      |
+| Node.js    | `node --version`                             | `engines.node` in the stack's `package.json` |
+| pnpm       | `pnpm --version`                             | Any current release                          |
+| Podman     | `podman --version`, `podman compose version` | podman-compose 1.6.0 or newer                |
+| Bitwarden  | `bws --version`                              | Any current release, for maintainers         |
+
+The Go and Node.js minimums move with the stack. Print the current ones:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/cli/go.mod | grep '^go '
+curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/package.json | grep '"node"'
+```
 
 ## What to ask the team for
 

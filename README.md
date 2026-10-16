@@ -21,8 +21,8 @@ This repository, the **stack**, hosts the `a-novel` CLI and anchors local checko
 a-novel/                  this repo (github.com/a-novel-kit/stack)
 ├── cli/                  the a-novel CLI (Go)
 ├── docs/                 the developer guide
-├── app/                  a-novel org checkouts (services)   — gitignored
-└── kit/                  a-novel-kit org checkouts (libraries) — gitignored
+├── app/                  a-novel org checkouts (services, platforms, infra) — gitignored
+└── kit/                  a-novel-kit org checkouts (libraries, CI actions)  — gitignored
 ```
 
 ## Install

@@ -1,7 +1,7 @@
 # Bitwarden (maintainers)
 
 ::: info Maintainers only
-Developers skip this page.
+Only maintainers who apply repository settings with `a-novel repo update` need `bws`. Developers skip this page.
 :::
 
 [Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) holds the organizations' privileged keys, one project per GitHub organization, along with the map CI uses to mention people on Discord. Maintainers read the keys with `bws`, the Secrets Manager CLI, when `a-novel repo update` provisions them into the repositories.
