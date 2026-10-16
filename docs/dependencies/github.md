@@ -1,8 +1,8 @@
 # GitHub
 
-GitHub hosts the code, the reviews and the CI of both A-Novel organizations. The [GitHub CLI](https://cli.github.com), `gh`, drives pull requests and the GitHub API from the terminal, and the `a-novel` CLI calls it too.
+GitHub hosts the code, reviews and CI. The [GitHub CLI](https://cli.github.com), `gh`, works with it from the terminal, and the `a-novel` CLI relies on it.
 
-You need a GitHub account: [sign up](https://github.com/signup) if you have none.
+You need a [GitHub account](https://github.com/signup).
 
 ## Install
 
@@ -16,7 +16,7 @@ gh --version
 === Linux
 :::tabs key:distro
 == Debian / Ubuntu
-The distribution's `gh` is years behind; install it from GitHub's own repository:
+The distribution's `gh` is outdated; use GitHub's repository:
 
 ```bash
 sudo mkdir -p -m 755 /etc/apt/keyrings
@@ -63,29 +63,25 @@ winget install --id GitHub.cli -e
 
 ### Sign in
 
-Skip this step if `gh auth status` already shows you logged in to github.com.
+Skip if `gh auth status` shows you logged in.
 
 ```bash
 gh auth login --hostname github.com --git-protocol ssh --web --skip-ssh-key
 ```
 
-`gh` prints a one-time code and opens your browser to approve it. It skips the SSH key offer because the next step creates the key. Check the session:
-
-```bash
-gh auth status
-```
+Approve the one-time code in your browser.
 
 ### Add an SSH key
 
-Git reaches GitHub over SSH, and the same key [signs your commits](./signing). A hardware security key, such as a YubiKey, keeps the private key on the device: nothing authenticates without a touch. A key file needs no hardware.
+Git talks to GitHub over SSH, and the same key [signs your commits](./signing). Prefer a hardware security key, such as a YubiKey: the private key never leaves it. A key file works without hardware.
 
-Skip to [Share one connection](#share-one-connection) if your GitHub account already has a key for this machine, which `ssh -T git@github.com` confirms by greeting you by name. The [signing page](./signing) then needs that key's path in place of the one its commands use.
+Already have a key on GitHub? If `ssh -T git@github.com` greets you by name, skip to [Share one connection](#share-one-connection).
 
-`gh` asks for one extra permission to upload the key, through the browser again, and the last command gives it back.
+`gh` asks for a temporary permission to upload the key.
 
 ::::tabs key:sshkey
 === Security key
-Plug the key in. On macOS, first run `brew install openssh` and open a new terminal: the system OpenSSH has no security key support.
+Plug the key in. On macOS, run `brew install openssh` first: the system OpenSSH lacks security key support.
 
 :::tabs key:shell
 == Linux / macOS
@@ -98,7 +94,7 @@ gh auth refresh -h github.com --remove-scopes admin:public_key
 ```
 
 == Windows
-Windows OpenSSH reaches the key through Windows Hello; the first command points Git at it rather than the client Git bundles.
+The first command makes Git use Windows OpenSSH, which reaches the key through Windows Hello.
 
 ```powershell
 git config --global core.sshCommand "C:/Windows/System32/OpenSSH/ssh.exe"
@@ -110,9 +106,9 @@ gh auth refresh -h github.com --remove-scopes admin:public_key
 
 :::
 
-Register a second security key as a backup, so losing one does not lock you out: repeat with `-f ~/.ssh/id_ed25519_sk_backup`, then list both keys as `IdentityFile` lines under `Host github.com` in `~/.ssh/config`.
+Register a backup key the same way, with `-f ~/.ssh/id_ed25519_sk_backup`, and list both keys as `IdentityFile` under `Host github.com` in `~/.ssh/config`.
 === Key file
-Pick a passphrase when asked: it protects the file if the disk is ever copied.
+Set a passphrase when asked.
 
 :::tabs key:shell
 == Linux / macOS
@@ -142,13 +138,13 @@ Check the connection:
 ssh -T git@github.com
 ```
 
-GitHub answers `Hi <you>! You've successfully authenticated, but GitHub does not provide shell access.` and the command exits with status 1, which is expected.
+GitHub greets you by name; the exit status 1 is normal.
 
 ### Share one connection
 
-Every new SSH connection to GitHub authenticates again, which with a security key means another touch. SSH can instead keep one authenticated connection open and carry every push, fetch and clone through it until it sits unused for an hour, and `a-novel core sync` reuses that connection for all repositories rather than opening one each. It helps with any key, and spares a security key user most of the touches.
+Each new SSH connection authenticates again: one more touch on a security key. Let SSH keep one connection open and reuse it for every push, fetch and clone; `a-novel core sync` reuses it too.
 
-Skip this step if `ssh -G git@github.com | grep '^controlpath'` already prints a path. Linux and macOS share connections from a block in your SSH config:
+Skip if `ssh -G git@github.com | grep '^controlpath'` prints a path. Otherwise, on Linux or macOS:
 
 ```bash
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -161,23 +157,15 @@ Host github.com
 EOF
 ```
 
-The next git operation opens the connection, with the usual touch, and every later one reuses it until an hour passes without any. While it is open, any program running as you can push through it, so close it when you step away:
+The connection closes after an idle hour. While it is open, any program running as you can use it, so close it when you step away:
 
 ```bash
 ssh -O check git@github.com   # is a connection open?
 ssh -O exit git@github.com    # close it now
 ```
 
-The OpenSSH that ships with Windows cannot share connections; inside WSL2, this setup works as on Linux.
+Windows OpenSSH cannot share connections; WSL2 can.
 
-## Request access
+## Accept your invitations
 
-Pull requests are open to organization members, so the team adds you. Ask a maintainer on [Discord](./discord) for membership in the [`a-novel`](https://github.com/a-novel) and [`a-novel-kit`](https://github.com/a-novel-kit) organizations, and say which repositories you will work on: they add you to the teams that cover them.
-
-Send your GitHub username with the request:
-
-```bash
-gh api user --jq .login
-```
-
-GitHub then emails an invitation per organization. Accept both, from the email or the invitation pages ([`a-novel`](https://github.com/orgs/a-novel/invitation), [`a-novel-kit`](https://github.com/orgs/a-novel-kit/invitation)).
+Once you are [enrolled](./discord#get-enrolled), GitHub emails an invitation per organization. Accept both, from the email or the invitation pages ([`a-novel`](https://github.com/orgs/a-novel/invitation), [`a-novel-kit`](https://github.com/orgs/a-novel-kit/invitation)).

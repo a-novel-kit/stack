@@ -16,7 +16,9 @@ export default defineConfig({
     nav: [
       { text: "Dependencies", link: "/dependencies/", activeMatch: "^/dependencies/" },
       { text: "a-novel CLI", link: "/cli/", activeMatch: "^/cli/$" },
+      { text: "Working with AI", link: "/ai/", activeMatch: "^/ai/" },
       { text: "Runbooks", link: "/cli/ui", activeMatch: "^/cli/.+" },
+      { text: "Sysadmins", link: "/sysadmins/", activeMatch: "^/sysadmins/" },
     ],
     sidebar: [
       {
@@ -30,27 +32,38 @@ export default defineConfig({
           { text: "Go", link: "/dependencies/go" },
           { text: "Node.js and pnpm", link: "/dependencies/node" },
           { text: "Podman", link: "/dependencies/podman" },
-          { text: "Bitwarden (maintainers)", link: "/dependencies/bitwarden" },
-          { text: "AI agents (optional)", link: "/dependencies/ai-agents" },
         ],
       },
       {
         text: "a-novel CLI",
+        items: [{ text: "Install and set up", link: "/cli/" }],
+      },
+      {
+        text: "Working with AI",
         items: [
-          { text: "Install and set up", link: "/cli/" },
-          {
-            text: "Runbooks",
-            items: [
-              { text: "Use the terminal UI", link: "/cli/ui" },
-              { text: "Run services", link: "/cli/services" },
-              { text: "Test and build", link: "/cli/test-build" },
-              { text: "Manage secrets", link: "/cli/secrets" },
-              { text: "Back up service data", link: "/cli/volumes" },
-              { text: "Work in parallel stacks", link: "/cli/stacks" },
-              { text: "Comment as the bot", link: "/cli/bot-comments" },
-              { text: "Configure repositories", link: "/cli/repositories" },
-            ],
-          },
+          { text: "Set up an agent", link: "/ai/setup" },
+          { text: "Work with an agent", link: "/ai/" },
+        ],
+      },
+      {
+        text: "Runbooks",
+        items: [
+          { text: "Use the terminal UI", link: "/cli/ui" },
+          { text: "Run services", link: "/cli/services" },
+          { text: "Test and build", link: "/cli/test-build" },
+          { text: "Manage secrets", link: "/cli/secrets" },
+          { text: "Back up service data", link: "/cli/volumes" },
+          { text: "Work in parallel stacks", link: "/cli/stacks" },
+          { text: "Comment as the bot", link: "/cli/bot-comments" },
+        ],
+      },
+      {
+        text: "Sysadmins",
+        items: [
+          { text: "Requirements and duties", link: "/sysadmins/" },
+          { text: "Google Cloud CLI", link: "/sysadmins/gcloud" },
+          { text: "Bitwarden", link: "/sysadmins/bitwarden" },
+          { text: "Configure repositories", link: "/sysadmins/repositories" },
         ],
       },
     ],

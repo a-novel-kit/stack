@@ -1,10 +1,10 @@
 # Go
 
-[Go](https://go.dev) builds the services, the shared libraries and the `a-novel` CLI. The CLI needs at least the Go version its [`cli/go.mod`](https://github.com/a-novel-kit/stack/blob/master/cli/go.mod) names, and it tracks the latest release.
+[Go](https://go.dev) builds the services, libraries and CLI. Use at least the version in [`cli/go.mod`](https://github.com/a-novel-kit/stack/blob/master/cli/go.mod), which tracks the latest release.
 
 ## Install
 
-Skip to [Configure](#configure) if your Go is at least the version the stack names; the second command prints it:
+Skip to [Configure](#configure) if your Go meets the version the second command prints:
 
 ```bash
 go version
@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/cli/go.mod
 === Linux
 :::tabs key:distro
 == Debian / Ubuntu
-The distribution's Go trails the release the CLI needs; install the official build:
+The distribution's Go lags behind; install the official build:
 
 ```bash
 GO_VERSION=$(curl -fsSL "https://go.dev/VERSION?m=text" | head -n 1)
@@ -28,7 +28,7 @@ exec "$SHELL"
 
 To upgrade, run the first four lines again.
 == Fedora
-The distribution's Go trails the release the CLI needs; install the official build:
+The distribution's Go lags behind; install the official build:
 
 ```bash
 GO_VERSION=$(curl -fsSL "https://go.dev/VERSION?m=text" | head -n 1)
@@ -68,12 +68,12 @@ winget install --id GoLang.Go -e
 ::::
 
 ::: tip An older Go still works
-A Go older than `cli/go.mod` downloads the toolchain the CLI asks for, unless your distribution switched that off. Switch it back on with `go env -w GOTOOLCHAIN=auto`.
+It fetches the toolchain the CLI needs, unless your distribution disabled that: `go env -w GOTOOLCHAIN=auto` turns it back on.
 :::
 
 ## Configure
 
-`go install` writes programs to `$(go env GOPATH)/bin`, `~/go/bin` by default, which is where the `a-novel` CLI lands. Put that directory on your `PATH`:
+Put Go's program directory, where the CLI installs, on your `PATH`:
 
 :::tabs key:shell
 == Linux / macOS
