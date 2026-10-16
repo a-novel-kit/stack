@@ -4,6 +4,14 @@
 
 ## Install
 
+Skip to [Configure](#configure) if pnpm answers and Node.js meets the floor the third command prints:
+
+```bash
+node --version
+pnpm --version
+curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/package.json | grep '"node"'
+```
+
 ::::tabs key:os
 === Linux
 :::tabs key:distro
@@ -55,16 +63,17 @@ winget install --id pnpm.pnpm -e
 
 ::::
 
-```bash
-node --version
-pnpm --version
-```
-
 Each repository pins its pnpm version, and pnpm switches to it on its own: inside a repository, `pnpm --version` prints the pinned version once pnpm has fetched it.
 
 ## Configure
 
 The `@a-novel` and `@a-novel-kit` packages live on [GitHub Packages](https://docs.github.com/packages), which asks for a token even to read. Give pnpm one with the `read:packages` scope only.
+
+Skip the two steps below if this already prints a version; a `401` error means you need the token:
+
+```bash
+npm view @a-novel-kit/nodelib-config version --registry=https://npm.pkg.github.com
+```
 
 1. Create a classic token on GitHub; this step needs the browser. The link preselects the scope: [new token with `read:packages`](https://github.com/settings/tokens/new?scopes=read:packages&description=a-novel%20packages). Pick an expiry, generate it, and copy it.
 2. Store it in the `.npmrc` of your home directory. A repository's `.npmrc` is committed, so the token never goes there.
@@ -91,10 +100,4 @@ Remove-Variable Token
 
 :::
 
-Check that the registry accepts it:
-
-```bash
-npm view @a-novel-kit/nodelib-config version --registry=https://npm.pkg.github.com
-```
-
-It prints the latest version of a team package. Platform repositories also read this token when they build images: the [secrets runbook](/cli/secrets#the-github-packages-token) stores a copy for the CLI.
+Run the check above again: it now prints the latest version of a team package. Platform repositories also read this token when they build images: the [secrets runbook](/cli/secrets#the-github-packages-token) stores a copy for the CLI.

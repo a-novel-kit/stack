@@ -4,6 +4,13 @@
 
 ## Install
 
+Skip to [Configure](#configure) if both commands answer and podman-compose reports 1.6.0 or newer:
+
+```bash
+podman --version
+podman compose version
+```
+
 ::::tabs key:os
 === Linux
 :::tabs key:distro
@@ -95,11 +102,10 @@ podman machine start
 
 :::
 
-Check both pieces:
+Check that Podman runs:
 
 ```bash
 podman info --format '{{.Version.Version}}'
-podman compose version
 ```
 
-The first prints the Podman version; an error means Podman, or its machine, is not running. The second names `podman-compose` as the external compose provider, and its version must be 1.6.0 or newer.
+It prints the Podman version; an error means Podman, or its machine, is not running. `podman compose version` must name `podman-compose` as the external compose provider: another provider installed first, such as docker-compose, takes precedence.

@@ -4,6 +4,12 @@
 
 ## Install
 
+Skip to [Configure](#configure) if this already prints a version:
+
+```bash
+git --version
+```
+
 ::::tabs key:os
 === Linux
 :::tabs key:distro
@@ -45,12 +51,6 @@ winget install --id Git.Git -e
 ```
 
 ::::
-
-Check that it answers; any current release works:
-
-```bash
-git --version
-```
 
 ## Configure
 

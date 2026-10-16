@@ -33,7 +33,7 @@ secrets:
     description: OpenAI API key used by narrative generation.
 ```
 
-`a-novel test`, `a-novel run` and the terminal UI read the manifest and pass each declared secret into the environment of what they start. A secret you have not set is skipped with a warning naming its ID, so the rest still runs. A repository's `CONTRIBUTING.md` says where to get the values it needs.
+`a-novel test`, `a-novel run` and the terminal UI read the manifest and pass each declared secret into the environment of what they start. A secret you have not set is skipped with a warning naming its ID and description, so the rest still runs. Ask the team on Discord for a value you do not have.
 
 ## The GitHub Packages token
 

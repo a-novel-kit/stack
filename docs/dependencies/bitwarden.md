@@ -8,6 +8,12 @@ Developers skip this page.
 
 ## Install
 
+Skip to [Configure](#configure) if this already prints a version:
+
+```bash
+bws --version
+```
+
 :::tabs key:os
 == Linux
 Bitwarden's installer checks the download against its published checksum, then installs to `/usr/local/bin`, or `~/.local/bin` without sudo:
@@ -30,10 +36,6 @@ winget install --id Bitwarden.BWS -e
 ```
 
 :::
-
-```bash
-bws --version
-```
 
 ## Configure
 

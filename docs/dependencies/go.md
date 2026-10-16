@@ -4,6 +4,13 @@
 
 ## Install
 
+Skip to [Configure](#configure) if your Go is at least the version the stack names; the second command prints it:
+
+```bash
+go version
+curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/cli/go.mod | grep '^go '
+```
+
 ::::tabs key:os
 === Linux
 :::tabs key:distro
@@ -59,10 +66,6 @@ winget install --id GoLang.Go -e
 ```
 
 ::::
-
-```bash
-go version
-```
 
 ::: tip An older Go still works
 A Go older than `cli/go.mod` downloads the toolchain the CLI asks for, unless your distribution switched that off. Switch it back on with `go env -w GOTOOLCHAIN=auto`.

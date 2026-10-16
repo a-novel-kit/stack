@@ -1,8 +1,8 @@
 # Dependencies
 
-This section installs the tools A-Novel development relies on, one page each. Work through them in order: later pages use earlier ones, as Go installs the CLI and GitHub serves the repositories Git clones.
+This section sets up the tools A-Novel development relies on, one page each. Work through them in order, since later pages build on earlier ones: the GitHub page uses the identity you give Git, and the signing page uses the key you create for GitHub.
 
-Every page has an **Install** section and a **Configure** section. If you already have a tool, check its version under Install and go straight to Configure.
+A tool's page has two parts. **Install** opens with a check: if the tool is already there and recent enough, jump to **Configure**, which holds the A-Novel-specific setup everyone needs.
 
 | Tool                        | What it does here                                        | Who needs it |
 | --------------------------- | -------------------------------------------------------- | ------------ |
@@ -14,7 +14,28 @@ Every page has an **Install** section and a **Configure** section. If you alread
 | [Podman](./podman)          | Runs databases and services in containers                | Everyone     |
 | [Discord](./discord)        | Team chat, and where CI mentions you                     | Everyone     |
 | [Bitwarden](./bitwarden)    | Holds the organizations' privileged keys                 | Maintainers  |
-| [AI agents](./ai-agents)    | Coding agents the repositories configure for you         | Optional     |
+| [AI agents](./ai-agents)    | Coding agents preloaded with the team's conventions      | Optional     |
+
+## Check what you already have
+
+Run each check; a tool that answers with a recent enough version needs only its page's Configure section.
+
+| Tool       | Check                                        | Needed                                       |
+| ---------- | -------------------------------------------- | -------------------------------------------- |
+| Git        | `git --version`                              | Any current release                          |
+| GitHub CLI | `gh --version`                               | Any current release                          |
+| Go         | `go version`                                 | The version in the stack's `cli/go.mod`      |
+| Node.js    | `node --version`                             | `engines.node` in the stack's `package.json` |
+| pnpm       | `pnpm --version`                             | Any current release                          |
+| Podman     | `podman --version`, `podman compose version` | podman-compose 1.6.0 or newer                |
+| Bitwarden  | `bws --version`                              | Maintainers only                             |
+
+The Go and Node.js minimums move with the stack. Print the current ones:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/cli/go.mod | grep '^go '
+curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/package.json | grep '"node"'
+```
 
 ## Choose your system
 
@@ -83,7 +104,7 @@ Some Linux and macOS commands add a line to your shell profile. They target `$HO
 
 ## What to ask the team for
 
-Some access is granted by the team rather than set up by you. Ask on [Discord](./discord) once you have the account each line names; the page linked explains what to send.
+Some access is granted by the team rather than set up by you. [Join Discord](./discord#join) first and ask there as soon as you have the account a row names: you can keep installing while a request is pending, and the linked page says what to send.
 
 | Access                                                 | Ask          | Page                                                   |
 | ------------------------------------------------------ | ------------ | ------------------------------------------------------ |

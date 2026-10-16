@@ -6,6 +6,8 @@ It needs every tool from the [dependencies](/dependencies/), on Linux, macOS, or
 
 ## Install
 
+Skip to [Configure](#configure) if `a-novel --version` already answers; [Update](#update) brings an older build current.
+
 `go install` builds the CLI straight from its module path, with no clone:
 
 ```bash
@@ -28,7 +30,7 @@ Setup checks Podman, Git and your SSH access to GitHub, then:
 3. adds a block to your shell profile that starts the daemon and loads tab completion in every new shell;
 4. starts the daemon.
 
-Run it again whenever you like: on a machine already set up, it changes nothing.
+Run it again whenever you like: on a machine already set up, it changes nothing, which also makes it a health check.
 
 To put the workspace elsewhere, name the directory in `A_NOVEL_STACKS` for setup, which then records it in your shell profile:
 

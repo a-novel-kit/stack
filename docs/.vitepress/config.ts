@@ -48,6 +48,8 @@ export default defineConfig({
         ],
       },
     ],
+    // List sub-sections too, so a reader can jump past a step already done.
+    outline: [2, 3],
     search: { provider: "local" },
     editLink: {
       pattern: "https://github.com/a-novel-kit/stack/edit/master/docs/:path",

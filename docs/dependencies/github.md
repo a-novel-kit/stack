@@ -6,6 +6,12 @@ You need a GitHub account: [sign up](https://github.com/signup) if you have none
 
 ## Install
 
+Skip to [Configure](#configure) if this already prints a version:
+
+```bash
+gh --version
+```
+
 ::::tabs key:os
 === Linux
 :::tabs key:distro
@@ -53,13 +59,11 @@ winget install --id GitHub.cli -e
 
 ::::
 
-```bash
-gh --version
-```
-
 ## Configure
 
 ### Sign in
+
+Skip this step if `gh auth status` already shows you logged in to github.com.
 
 ```bash
 gh auth login --hostname github.com --git-protocol ssh --web --skip-ssh-key
@@ -74,6 +78,8 @@ gh auth status
 ### Add an SSH key
 
 Git reaches GitHub over SSH, and the same key [signs your commits](./signing). A hardware security key, such as a YubiKey, keeps the private key on the device: nothing authenticates without a touch. A key file needs no hardware.
+
+Skip to [Request access](#request-access) if your GitHub account already has a key for this machine, which `ssh -T git@github.com` confirms by greeting you by name. The [signing page](./signing) then needs that key's path in place of the one its commands use.
 
 `gh` asks for one extra permission to upload the key, through the browser again, and the last command gives it back.
 
