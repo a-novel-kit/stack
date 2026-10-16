@@ -163,7 +163,7 @@ pull request.
 
 For platform-wide setup (Go, Node, Podman, the `a-novel` CLI) and the day-to-day `a-novel` /
 `pnpm` commands, see the
-[developer onboarding guide](https://github.com/{{developer-onboarding-url}}). This file
+[developer guide]({{developer-onboarding-url}}). This file
 documents what is specific to {{project-display-name}}.
 
 ---

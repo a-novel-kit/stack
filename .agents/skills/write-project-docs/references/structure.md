@@ -121,9 +121,9 @@ section before slot 2 — its primary reader is forking it. No other repo reorde
 
 Every repo ends with a short `## Contributing` section that points at TWO things:
 
-1. The **developer onboarding guide** for platform setup (toolchain, the `a-novel` CLI, daily
-   usage): `https://github.com/a-novel-kit/.github/blob/master/README.md`. This is the single
-   canonical onboarding doc for BOTH orgs.
+1. The **developer guide** for platform setup (toolchain, the `a-novel` CLI, daily usage):
+   `https://a-novel-kit.github.io/stack/`, the stack's GitHub Pages site built from its `docs/`.
+   This is the single canonical onboarding doc for BOTH orgs.
 2. The repo's own `./CONTRIBUTING.md` for repo-specific concepts.
 
 Each org's `.github` repo does carry a `CONTRIBUTING.md` — the **concepts** doc holding what is true
