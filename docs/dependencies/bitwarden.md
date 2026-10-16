@@ -4,7 +4,7 @@
 Only maintainers who apply repository settings with `a-novel repo update` need `bws`. Developers skip this page.
 :::
 
-[Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) holds the organizations' privileged keys, one project per GitHub organization, along with the map CI uses to mention people on Discord. Maintainers read the keys with `bws`, the Secrets Manager CLI, when `a-novel repo update` provisions them into the repositories.
+[Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) holds the organizations' shared credentials. Maintainers read them with `bws`, its CLI, when `a-novel repo update` provisions them into the repositories.
 
 ## Install
 
@@ -16,14 +16,14 @@ bws --version
 
 :::tabs key:os
 == Linux
-Bitwarden's installer checks the download against its published checksum, then installs to `/usr/local/bin`, or `~/.local/bin` without sudo:
+Bitwarden's installer verifies the download before installing it:
 
 ```bash
 curl -fsSL https://bws.bitwarden.com/install | sh
 ```
 
 == macOS
-Bitwarden's installer checks the download against its published checksum, then installs to `/usr/local/bin`, or `~/.local/bin` without sudo:
+Bitwarden's installer verifies the download before installing it:
 
 ```bash
 curl -fsSL https://bws.bitwarden.com/install | sh
@@ -41,7 +41,7 @@ winget install --id Bitwarden.BWS -e
 
 `bws` authenticates with the access token of a machine account. Ask an owner for:
 
-- an access token for the machine account that reads both organizations' projects;
+- an access token for the organizations' credentials;
 - the Bitwarden region the organization uses, US or EU cloud.
 
 On the EU cloud, point `bws` at it:
@@ -72,4 +72,4 @@ Remove-Item Env:BWS_ACCESS_TOKEN
 
 :::
 
-The list shows one project per organization. Once the CLI is installed, store the token in its encrypted store, as [Configure repositories](/cli/repositories#store-the-bitwarden-token) shows.
+The list shows the projects the token reads. Once the CLI is installed, store the token in its encrypted store, as [Configure repositories](/cli/repositories#store-the-bitwarden-token) shows.

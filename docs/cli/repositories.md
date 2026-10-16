@@ -52,11 +52,11 @@ CLASS=service
 a-novel repo create "$ORG" "$NAME" --class "$CLASS" --template service-template
 ```
 
-The class is one of `service`, `platform`, `library`, `infra`, `workflows` or `meta`. Repositories are public unless you pass `--private`. Add the new repository to the stack's `workspace-repos.yaml` so `core sync` clones it.
+`--class` names the kind of repository, and `a-novel repo create --help` lists the kinds. Repositories are public unless you pass `--private`. Add the new repository to the stack's `workspace-repos.yaml` so `core sync` clones it.
 
 ## Store the Bitwarden token
 
-`repo update` provisions the organizations' privileged keys from Bitwarden Secrets Manager, with the access token from the [Bitwarden](/dependencies/bitwarden#configure) page. Store the token in the CLI's encrypted store; it is read with no echo:
+`repo update` provisions the organizations' shared credentials from Bitwarden Secrets Manager, with the access token from the [Bitwarden](/dependencies/bitwarden#configure) page. Store the token in the CLI's encrypted store; it is read with no echo:
 
 ```bash
 a-novel secrets set BWS_ACCESS_TOKEN

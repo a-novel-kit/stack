@@ -1,6 +1,6 @@
 # Podman
 
-[Podman](https://podman.io) runs the local infrastructure, such as Postgres, and the services' containers, rootless and without a daemon. `podman compose` hands compose files to [podman-compose](https://github.com/containers/podman-compose), which must be 1.6.0 or newer: older releases mishandle health-gated start-up and can hang.
+[Podman](https://podman.io) runs, in containers, the databases and services you start locally. `podman compose` hands compose files to [podman-compose](https://github.com/containers/podman-compose), which must be 1.6.0 or newer: older releases mishandle health-gated start-up and can hang.
 
 ## Install
 

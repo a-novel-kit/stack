@@ -8,15 +8,9 @@
 a-novel test
 ```
 
-The picker lists a target per Go module and per pnpm `test` or `test:*` script, all selected. Tests that need a database get a throwaway one, started before them and removed after, so several suites run side by side.
+The picker lists every Go and JavaScript test suite it finds, all selected. Tests that need a database get a throwaway one, started before them and removed after, so several suites run side by side.
 
-| Command                   | Runs                                                       |
-| ------------------------- | ---------------------------------------------------------- |
-| `a-novel test -y`         | Everything, without the picker, one target at a time       |
-| `a-novel test -t go`      | Go targets only; `-t pnpm` for JavaScript                  |
-| `a-novel test --dry-run`  | Nothing: lists the targets and their environments          |
-| `a-novel test --keep`     | As usual, leaving the environment up for a faster next run |
-| `a-novel test --no-cover` | Without coverage, which is on by default                   |
+`-y` runs everything without the picker, `-t go` keeps one kind of target (`pnpm`, `podman`), and `--dry-run` lists the targets without running them. `a-novel test --help` describes the rest.
 
 While iterating on one package, plain `go test ./<package>/...` stays the quickest loop. Tests that read a secret, such as an API key, get it from the CLI's [encrypted store](./secrets).
 
@@ -26,17 +20,13 @@ While iterating on one package, plain `go test ./<package>/...` stays the quicke
 a-novel build
 ```
 
-The picker lists a target per Go module, per pnpm `build` or `build:*` script, and per Dockerfile: the root `Dockerfile` and each `builds/*.Dockerfile`. Images build the way CI builds them.
+The picker lists everything it can build: Go binaries, JavaScript bundles and container images. Images build the way CI builds them.
 
-| Command                   | Builds                                                       |
-| ------------------------- | ------------------------------------------------------------ |
-| `a-novel build -y`        | Everything, without the picker, one target at a time         |
-| `a-novel build -t podman` | Images only; `-t go`, `-t pnpm`, or a list like `-t go,pnpm` |
-| `a-novel build --dry-run` | Nothing: lists the targets                                   |
+The same `-y`, `-t` and `--dry-run` apply; `a-novel build --help` describes the rest.
 
 ## Parallelism
 
-Behind the picker, a quarter of your CPUs' worth of targets run at once. `-y`, which scripts and agents use, runs one at a time; `-j` sets the limit in both modes:
+Behind the picker, several targets run at once; `-y`, which scripts and agents use, runs them one at a time. `-j` sets the limit in both modes:
 
 ```bash
 a-novel test -y -j 4

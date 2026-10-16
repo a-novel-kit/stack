@@ -172,21 +172,7 @@ The OpenSSH that ships with Windows cannot share connections; inside WSL2, this 
 
 ## Request access
 
-Pull requests are open to organization members, so the team adds you. Ask a maintainer on [Discord](./discord) for:
-
-- membership in the [`a-novel`](https://github.com/a-novel) and [`a-novel-kit`](https://github.com/a-novel-kit) organizations;
-- the developer teams of the areas you work in, named `developers-<area>`.
-
-The area is the kind of repository:
-
-| Area        | Repositories                         |
-| ----------- | ------------------------------------ |
-| `service`   | The backend services, `service-*`    |
-| `platform`  | The frontend platforms, `platform-*` |
-| `library`   | The shared libraries and the stack   |
-| `infra`     | The infrastructure code              |
-| `workflows` | The shared CI actions                |
-| `meta`      | Each organization's `.github`        |
+Pull requests are open to organization members, so the team adds you. Ask a maintainer on [Discord](./discord) for membership in the [`a-novel`](https://github.com/a-novel) and [`a-novel-kit`](https://github.com/a-novel-kit) organizations, and say which repositories you will work on: they add you to the teams that cover them.
 
 Send your GitHub username with the request:
 

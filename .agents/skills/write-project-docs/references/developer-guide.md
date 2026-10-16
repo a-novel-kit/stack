@@ -12,6 +12,10 @@ The sidebar in `docs/.vitepress/config.ts` lists every page, so a new page needs
 new runbook goes in the CLI group's Runbooks sub-group, which the top bar's Runbooks entry also covers.
 
 A dependency page opens with what the tool does here and its version floor, then holds two sections.
+Describe a tool's role in the team's work, never its current feature set: a list of what Discord
+posts, which plans an agent accepts or which keys the UI binds goes stale, and the tool's own help
+shows it anyway. The same holds in the runbooks, which name the everyday flags and leave the rest to
+`--help`.
 `## Install` opens with the tool's version check and a link that skips to `## Configure`, then holds
 only the install commands, so a reader who already has the tool runs one command. Every step inside
 Configure that a reader may have done before opens with its own check and skip link, and a new tool

@@ -23,12 +23,7 @@ a-novel --version
 a-novel core setup
 ```
 
-Setup checks Podman, Git and your SSH access to GitHub, then:
-
-1. creates the CLI's state directories;
-2. clones the stack repository into `~/git-projects/a-novel`, after asking;
-3. adds a block to your shell profile that starts the daemon and loads tab completion in every new shell;
-4. starts the daemon.
+Setup checks your tools, clones the stack into `~/git-projects/a-novel` after asking, and starts the daemon. It also adds a block to your shell profile, so every new shell starts the daemon and completes `a-novel` commands.
 
 Run it again whenever you like: on a machine already set up, it changes nothing, which also makes it a health check.
 
@@ -85,6 +80,6 @@ a-novel install
 | [Back up service data](./volumes)        | Save, restore or reset a service's database             |
 | [Work in parallel stacks](./stacks)      | Keep a second workspace for a separate task             |
 | [Comment as the bot](./bot-comments)     | Post automated notes on pull requests and issues        |
-| [Configure repositories](./repositories) | Maintainers: apply the repository settings              |
+| [Configure repositories](./repositories) | Administrators: apply the repository settings           |
 
 Every command documents its flags: `a-novel <command> --help`.

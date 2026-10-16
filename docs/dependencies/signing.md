@@ -155,7 +155,7 @@ The log opens with `Good "git" signature for you@example.com`. On GitHub, your n
 
 ## Keep commits signed
 
-A commit stays signed until something rewrites it without your key. GitHub's **Update branch** button is the usual culprit: its merge variant adds a merge commit the repositories refuse, and its rebase variant rewrites your commits unsigned, so the merge queue rejects the pull request. Bring a branch up to date locally instead; the rebase signs every commit it replays:
+A commit stays signed until something rewrites it without your key. GitHub's **Update branch** button is the usual culprit, and the repositories refuse what it produces. Bring a branch up to date locally instead; the rebase signs every commit it replays:
 
 ```bash
 git fetch origin

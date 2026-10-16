@@ -56,7 +56,7 @@ a-novel run logs "$SERVICE/$TARGET" --tail=100   # the last 100 lines
 a-novel run logs "$SERVICE/$TARGET" --previous   # the run before this
 ```
 
-Ctrl+C stops following and leaves the target running. The CLI keeps each target's current run and its five previous ones. An infrastructure container streams too, by its ID from `run ps`, such as `service-json-keys/infra/postgres-json-keys`.
+Ctrl+C stops following and leaves the target running. The CLI also keeps the logs of a target's previous runs. An infrastructure container streams too, by its ID from `run ps`, such as `service-json-keys/infra/postgres-json-keys`.
 
 ## Reach a running service
 
