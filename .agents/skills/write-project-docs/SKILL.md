@@ -1,8 +1,9 @@
 ---
 name: write-project-docs
 description: >
-  Create or update README.md, SECURITY.md, and CONTRIBUTING.md in either organization. Route by
-  document and edit scope; source comments use document-code; excludes CODE_OF_CONDUCT.md.
+  Create or update README.md, SECURITY.md, CONTRIBUTING.md, and the developer guide site in either
+  organization. Route by document and edit scope; source comments use document-code; excludes
+  CODE_OF_CONDUCT.md.
 ---
 
 # Project Docs
@@ -50,6 +51,8 @@ Separate concerns:
    Reuse verified inputs and session decisions; ask only for required information still missing.
 5. For badges or coverage graphs, read [badge patterns](references/badges.md). Load templates only
    for scaffolding or adding a missing standard section.
+6. For the developer guide, the VitePress site in the stack's `docs/`, read
+   [developer guide](references/developer-guide.md).
 
 The existing phases and numbered principles are in these references. Their requirements remain
 binding for the selected path; moving the material does not change the fleet standard.

@@ -153,6 +153,9 @@ review route.
 
 ## Phase 2: Push the Branch
 
+Push over the shared GitHub connection, opened first as
+[git-conventions](../git-conventions/SKILL.md#reuse-the-github-ssh-connection) shows.
+
 ### 2.1 First push — set upstream
 
 ```bash

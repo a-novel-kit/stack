@@ -1,6 +1,6 @@
 # Contributing to stack
 
-The platform taxonomy — repository kinds, libraries vs tooling, and where the `a-novel` CLI sits — lives in the [libraries, tooling & platform concepts](https://github.com/a-novel-kit/.github/blob/master/CONTRIBUTING.md). The service anatomy the CLI operates on (target, server / job, infra, the clean-arch layers) is defined in the [service & architecture concepts](https://github.com/a-novel/.github/blob/master/CONTRIBUTING.md) and only referenced here. Platform setup and day-to-day commands are in the [developer onboarding guide](https://github.com/a-novel-kit/.github/blob/master/README.md); read the [README](./README.md) first for what the CLI does.
+The platform taxonomy — repository kinds, libraries vs tooling, and where the `a-novel` CLI sits — lives in the [libraries, tooling & platform concepts](https://github.com/a-novel-kit/.github/blob/master/CONTRIBUTING.md). The service anatomy the CLI operates on (target, server / job, infra, the clean-arch layers) is defined in the [service & architecture concepts](https://github.com/a-novel/.github/blob/master/CONTRIBUTING.md) and only referenced here. Platform setup and day-to-day commands are in the [developer guide](https://a-novel-kit.github.io/stack/); read the [README](./README.md) first for what the CLI does.
 
 This repo is the source of the `a-novel` CLI; [`cli/README.md`](./cli/README.md) is the deep reference. This file covers how to work on the repo.
 
@@ -21,6 +21,7 @@ The CLI's own vocabulary. Terms borrowed from service anatomy — **target**, **
 ## Layout
 
 - `cli/` — the CLI's Go module (`github.com/a-novel-kit/stack/cli`). Commands live under `cli/internal/cli/` as Cobra subcommands.
+- `docs/` — the developer guide, a [VitePress](https://vitepress.dev) site that `main.yaml` publishes to GitHub Pages from `master`. `pnpm docs:dev` serves it with live reload; `pnpm docs:build` fails on a dead internal link, as CI does.
 - `app/`, `kit/` — checkouts of the repos the CLI operates on. Gitignored and populated by `a-novel core sync`; never commit inside them.
 
 ## Agent skills

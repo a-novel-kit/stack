@@ -37,10 +37,10 @@ so committing it is safe (see [Badge Catalog](badges.md#badge-catalog)).
 
 ### 1.4 Required for CONTRIBUTING.md
 
-| Input                    | Example                                     | Default                                                                                                                        |
-| ------------------------ | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Project slug             | `service-json-keys`                         | (ask — used in page title)                                                                                                     |
-| Developer onboarding URL | `a-novel-kit/.github/blob/master/README.md` | `a-novel-kit/.github/blob/master/README.md` (single canonical onboarding doc for both orgs; there is NO org `CONTRIBUTING.md`) |
+| Input                    | Example                                | Default                                                                                                         |
+| ------------------------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Project slug             | `service-json-keys`                    | (ask — used in page title)                                                                                      |
+| Developer onboarding URL | `https://a-novel-kit.github.io/stack/` | `https://a-novel-kit.github.io/stack/` (the developer guide, the single canonical onboarding doc for both orgs) |
 
 ### 1.5 Capability flags (shape template output)
 

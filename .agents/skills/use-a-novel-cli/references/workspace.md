@@ -66,6 +66,12 @@ which `resolve-pr-feedback` posts with your own `gh` token.
 
 `core setup` is interactive; everything else is non-interactive and `.zshrc`-safe.
 
+**`core sync` shares one SSH connection to GitHub** across its parallel jobs, so a security key
+asks for one touch per run. It reuses the connection the user's `~/.ssh/config` multiplexes when
+`ssh -G git@github.com` lists a `controlpath`, else opens its own at `~/.ssh/a-novel-%C` for ten
+minutes, and steps aside when `GIT_SSH_COMMAND` or `core.sshCommand` is set. Open the shared
+connection beforehand as `git-conventions` shows, and the run reuses it.
+
 **Sub-agents spawning fresh stacks**: run `a-novel core sync --root=<new-stack-root>`
 as the first action in the new workspace, so later test/build/run commands have
 something to operate on.

@@ -1,6 +1,6 @@
 # a-novel stack
 
-The `a-novel` CLI — one tool to build, test, run, and release every project across the [`a-novel`](https://github.com/a-novel) and [`a-novel-kit`](https://github.com/a-novel-kit) organizations, in place of the per-repo Makefiles and scripts.
+The `a-novel` CLI — one tool to build, test, run, and configure every project across the [`a-novel`](https://github.com/a-novel) and [`a-novel-kit`](https://github.com/a-novel-kit) organizations, in place of the per-repo Makefiles and scripts.
 
 [![X (formerly Twitter) Follow](https://img.shields.io/twitter/follow/agorastoryverse)](https://twitter.com/agorastoryverse)
 [![Discord](https://img.shields.io/discord/1315240114691248138?logo=discord)](https://discord.gg/rp4Qr8cA)
@@ -15,216 +15,39 @@ The `a-novel` CLI — one tool to build, test, run, and release every project ac
 
 ## What this is
 
-This repository — the **stack** — hosts that CLI and anchors local checkouts of
-the projects it operates on:
+This repository, the **stack**, hosts the `a-novel` CLI and anchors local checkouts of the projects it operates on. A background daemon started by the CLI runs services with their databases on your machine, and the same CLI applies every repository's GitHub settings from the templates kept here.
 
 ```
 a-novel/                  this repo (github.com/a-novel-kit/stack)
 ├── cli/                  the a-novel CLI (Go)
-├── app/                  a-novel org checkouts (services)   — gitignored
-└── kit/                  a-novel-kit org checkouts (libraries) — gitignored
+├── docs/                 the developer guide
+├── app/                  a-novel org checkouts (services, platforms, infra) — gitignored
+└── kit/                  a-novel-kit org checkouts (libraries, CI actions)  — gitignored
 ```
-
-`app/` and `kit/` are not submodules — they are plain clones managed by
-`a-novel core sync`, kept out of this repo's history.
 
 ## Install
 
-Building the CLI needs Go; `a-novel core setup` then preflights your environment
-and requires `git` and a running Podman. The rest of the toolchain (Node + pnpm,
-`gh`) and the per-OS install commands live in the
-[developer onboarding guide](https://github.com/a-novel-kit/.github/blob/master/README.md).
+The CLI needs these tools, on Linux, macOS, or WSL2 on Windows:
+
+- [Git](https://git-scm.com)
+- [GitHub CLI](https://cli.github.com)
+- [Go](https://go.dev)
+- [Node.js](https://nodejs.org) and [pnpm](https://pnpm.io)
+- [Podman](https://podman.io) and [podman-compose](https://github.com/containers/podman-compose) 1.6.0 or newer
+- [Bitwarden Secrets Manager CLI](https://bitwarden.com/help/secrets-manager-cli/), for maintainers
 
 ```bash
 go install github.com/a-novel-kit/stack/cli/cmd/a-novel@latest
-
-a-novel core setup    # one-time bootstrap: env checks, state dirs, shell rc, daemon
-a-novel core sync     # clone / fast-forward the workspace repos into app/ and kit/, in parallel
+a-novel core setup    # one-time bootstrap: checks, state dirs, the stack clone, shell rc, daemon
+a-novel core sync     # clone or fast-forward the workspace repos into app/ and kit/
 ```
 
-`go install` pulls and builds the binary straight from the module path — no
-upfront clone. `core setup` then clones the stack repo itself into
-`~/git-projects/a-novel` (the default stack) when it's missing, so you don't
-bootstrap the workspace by hand. It is otherwise idempotent, and installs a block
-in your shell rc (zsh, bash and fish are supported) that auto-starts the
-background daemon and loads tab-completion in every new shell.
+## Documentation
 
-Verify:
+The [developer guide](https://a-novel-kit.github.io/stack/) takes a fresh machine through each tool, per operating system, with the access to request from the team, then covers the CLI one runbook per task. Its source is in [`docs/`](docs/).
 
-```bash
-a-novel --version     # the binary resolves a build version
-a-novel core status   # the daemon is up
-a-novel run ps        # the daemon answers over its unix socket
-```
-
-After a `git pull` that touches `cli/`, run `a-novel install` to rebuild and
-reinstall — the new binary takes over from the running daemon in place, so
-services already running stay up.
-
-If a service needs an API secret (e.g. `OPENAI_API_KEY`), provision it once,
-encrypted and locally:
-
-```bash
-a-novel secrets init                 # one-time: local key + store
-a-novel secrets set openai-key       # reads the value with no echo
-```
-
-Secrets are AES-256-GCM-encrypted at rest, never printed, and injected into the
-child env of `test`/`run`/`ui` via a value-free `.a-novel/secrets.yaml` manifest
-in the service repo. See
-[`cli/README.md`](https://github.com/a-novel-kit/stack/blob/master/cli/README.md#secrets)
-for the full model.
-
-## The UI — start here
-
-For day-to-day work, open the terminal UI:
-
-```bash
-a-novel run ui
-```
-
-It is a full-screen dashboard: a services list on the left, a tabbed detail and
-live log viewer on the right, and a command palette (press **Esc**) that covers
-the entire CLI surface, each command a `:verb` entry. Press **?** for a
-searchable key and command reference; **q** quits.
-
-The UI is a thin client over the same daemon as the command line, so anything
-you do in it is visible to the CLI and vice-versa. If you learn one command,
-learn this one.
-
-## Non-interactive commands
-
-Everything the UI does is also a discrete command — what you reach for in
-scripts, in CI, or when you already know exactly what you want.
-
-**Build and test** discover their targets in the working tree, show an
-interactive picker by default, and run the selection in parallel. `-y` skips
-the picker and runs everything, sequentially unless `-j` sets a limit (also the
-default when there is no TTY):
-
-```bash
-a-novel test -y                       # run every Go + pnpm test in the tree
-a-novel build -y --type=podman        # build only the Podman images
-```
-
-**Run services.** The daemon auto-starts a target's dependencies — Postgres,
-migrations — before the target itself:
-
-```bash
-a-novel run start service-json-keys/rest      # <service>/<target>
-a-novel run logs  service-json-keys/rest --follow
-a-novel run ps                                # what is running
-a-novel run kill  service-json-keys/rest
-```
-
-**Release.** Releases are cut in CI: trigger the repo's release workflow and
-pick a release type (patch / minor / major). The `release-core` action bumps the
-version, refreshes doc refs, commits, tags `vX.Y.Z`, pushes, and creates the
-GitHub Release. There is no local release command; the only verb under
-`a-novel publish` is `stamp` (the doc-version stamper that `prepublish:doc`
-calls).
-
-Run `a-novel <verb> --help` for any command's full flags. The complete
-reference — command tree, daemon architecture, state directories, the compose
-contract — is in [`cli/README.md`](cli/README.md).
-
-> Lint, format and generate are deliberately **not** CLI verbs: each repo
-> exposes them as uniform pnpm scripts (`pnpm lint:go`, `pnpm format:go`,
-> `pnpm generate:go`, …).
-
-## GitHub access
-
-Two identities talk to GitHub: **you** (the operator, via `gh`) and the **org
-bot** (a GitHub App). Anything that authors or merges — PR creation, edits,
-ready/merge/close — runs as you. The bot is strictly for comments, so automated
-notes attribute to `<app>[bot]` rather than a human account.
-
-The bot's signing keys never touch a dev machine. To comment as the bot you
-trigger your org's dispatcher workflow with your **own** `gh` token; the
-workflow holds the key and posts:
-
-```bash
-gh auth login   # operator: pick GitHub.com + SSH
-a-novel core bot-comment a-novel service-authentication 123 \
-    --body "automated review note"
-```
-
-`bot-comment` dispatches the
-[`bot-comment`](.github/workflows/bot-comment.yaml) workflow in the **target
-org's dispatcher repo** and waits for the run. The workflow mints a short-lived
-token scoped to the single target repo (issues + pull-request writes only — no
-`contents`, so it cannot push, merge or release), then posts a comment and
-exits — it never authors or edits a PR/issue. So an operator
-(or the agent) only needs `gh` plus `actions: write` on that dispatcher repo;
-**no `.pem` is ever stored locally**, and a compromised machine cannot do
-anything as the bot beyond ask for a comment. It handles top-level comments on
-PRs **or** issues, and `--reply-to` replies inside a PR review thread.
-
-There is **one dispatcher per org**, because the App key is an org-level secret
-and org secrets do not cross org boundaries:
-
-| Org           | Dispatcher repo     |
-| ------------- | ------------------- |
-| `a-novel-kit` | `a-novel-kit/stack` |
-| `a-novel`     | `a-novel/.github`   |
-
-<details>
-<summary>One-time GitHub App setup (per org) + dispatcher secrets</summary>
-
-Each org has a dedicated GitHub App (`anovelbot-agent` for `a-novel`,
-`anovelkitbot-agent` for `a-novel-kit`). Both are already registered — these
-steps are kept for new orgs or App re-creation.
-
-**Per org.**
-[Register a GitHub App](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app)
-on the org with:
-
-- **Repository permissions**: `Issues: Read and write`,
-  `Pull requests: Read and write`, `Metadata: Read-only` — and nothing else, so
-  the bot cannot push, merge or release.
-- **Webhook**: disabled. The App is outbound-only.
-- Install the App on **all repositories** of the org.
-
-Each App's **client ID** is public and lives in an organization-level Actions
-variable named `AGENT_BOT_CLIENT_ID`, not inlined in
-[`bot-comment.yaml`](.github/workflows/bot-comment.yaml); no Installation ID is
-needed — `create-github-app-token` resolves it from the org owner.
-
-**Dispatcher secret + client ID (once per org — never on a dev machine).**
-Generate a private key from each App's settings page (downloads a `.pem`) and
-store it as an **organization-level Actions secret** named
-`AGENT_BOT_PRIVATE_KEY` in that org (one in `a-novel` for `anovelbot-agent`, one
-in `a-novel-kit` for `anovelkitbot-agent`). Store the App's client ID alongside
-it as an organization-level Actions **variable** named `AGENT_BOT_CLIENT_ID` —
-public, so a variable rather than a secret. Make sure the secret's repository
-visibility includes that org's dispatcher repo. The workflow derives which
-key/App/owner to use from `github.repository_owner`, so the two copies are
-identical.
-
-Then grant each operator/agent `actions: write` on the dispatcher repo so they
-can dispatch. Verify end-to-end by commenting on a scratch PR or issue:
-
-```bash
-a-novel core bot-comment a-novel <repo> <number> --body "bot test"
-```
-
-</details>
-
-## Security model
-
-Releases, merges and pushes to `master` are human-only. Releases run in CI (the
-`release-core` action, triggered from the repo's release workflow), never from a
-dev machine, and the real boundary is server-side:
-branch protection on `master`, tag protection on `v*`, and a comments-only bot
-whose signing keys live only in CI (never on a dev machine — see
-[GitHub access](#github-access)), reached through a per-org dispatcher workflow
-that can do nothing but post a comment. The org-wide security policy lives in
-[a-novel/.github](https://github.com/a-novel/.github/blob/master/SECURITY.md).
+[`cli/README.md`](cli/README.md) is the CLI's design reference: the command tree, the daemon, its state directories, and the compose contract services follow.
 
 ## Contributing
 
-New to the platform? The [developer onboarding guide](https://github.com/a-novel-kit/.github/blob/master/README.md)
-walks through the full toolchain and the CLI bootstrap. To work on the CLI
-itself, [`cli/README.md`](cli/README.md) is the deep reference, and
-[CONTRIBUTING.md](CONTRIBUTING.md) covers how the repo is laid out and how to
-add a command.
+New to the platform? Start with the [developer guide](https://a-novel-kit.github.io/stack/). To work on this repository, [CONTRIBUTING.md](CONTRIBUTING.md) covers its layout and how to add a command.
