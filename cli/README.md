@@ -1,6 +1,6 @@
 # a-novel
 
-The command-line tool for developing Agora. It keeps one workspace holding every repository of the project in sync, and tests, builds and runs any of them with the same commands.
+The command-line tool for developing Agora: one workspace, and the same commands to test, build and run every repository.
 
 ## Install
 
@@ -15,7 +15,7 @@ a-novel core setup    # once: checks your tools, clones the stack, starts the ba
 a-novel core sync     # clone every repository; run it again to bring them all up to date
 ```
 
-Setup also adds a block to your shell profile, so every new shell starts the background service and completes `a-novel` commands. The [developer guide](https://a-novel-kit.github.io/stack/) lists the tools the CLI needs and how to install them.
+The [developer guide](https://a-novel-kit.github.io/stack/) covers the tools the CLI needs.
 
 ## Usage
 
@@ -32,17 +32,17 @@ a-novel <command> --help
 | `build`         | Build binaries, JavaScript bundles and container images                        |
 | `secrets`       | Keep API keys encrypted on your machine and pass them to what needs them       |
 | `core ...`      | The workspace and the background service: setup, sync, stacks, bot comments    |
-| `repo ...`      | Apply repositories' GitHub settings, for administrators                        |
+| `repo ...`      | Apply repositories' GitHub settings, for sysadmins                             |
 | `install`       | Rebuild the CLI from your stack checkout, keeping running services up          |
 | `claude`        | Open Claude Code at the root of the stack, where the team's skills load        |
 | `publish stamp` | Refresh version references in documentation, called by release scripts         |
 | `version`       | Print the CLI's version                                                        |
 
-The `run` commands go through a background service, which keeps your services running between commands and after you close the terminal. The other commands work on their own. Lint, format and code generation are not CLI commands: every repository exposes them as pnpm scripts, `pnpm lint`, `pnpm format` and `pnpm generate:go`.
+A background service keeps your services running between commands. Lint, format and code generation are pnpm scripts in every repository: `pnpm lint`, `pnpm format`, `pnpm generate:go`.
 
 ## Workflows
 
-The examples name a service and one of its targets, the programs under its `cmd/` directory. Set them once in your shell:
+An AI agent runs these for you: `a-novel claude` starts one at the stack root. The workflows below do the same work by hand, on the service and target set here:
 
 ```bash
 SERVICE=service-json-keys
@@ -51,7 +51,7 @@ TARGET=rest
 
 ### Start the day
 
-Bring the stack and every repository up to date, rebuild the CLI when the stack's pull changed it, then open the UI:
+Update the stack, the CLI and every repository, then open the UI:
 
 ```bash
 git -C ~/git-projects/a-novel pull --ff-only
@@ -62,32 +62,32 @@ a-novel run ui
 
 ### Work on a service
 
-Start a target: its database comes up and its migrations run first.
+Start a target; its database and migrations come first.
 
 ```bash
 a-novel run start "$SERVICE/$TARGET"
 ```
 
-Follow its logs while you edit, in the UI or in a second terminal with the same two variables set. The stream holds that terminal until Ctrl+C, which stops the stream, not the target:
+Follow its logs in the UI, or in a second terminal with the same variables. Ctrl+C stops the stream, not the target:
 
 ```bash
 a-novel run logs "$SERVICE/$TARGET" --follow
 ```
 
-Restart the target to pick up a code change:
+Restart it to pick up a code change:
 
 ```bash
 a-novel run restart "$SERVICE/$TARGET"
 ```
 
-Ports change on every run, so ask the CLI for them:
+Ports change on every run; ask the CLI:
 
 ```bash
 eval "$(a-novel run env "$SERVICE")"
 curl "$REST_URL/ping"
 ```
 
-When you are done, stop the target; its database keeps running for next time.
+Stop it when you are done; its database keeps running:
 
 ```bash
 a-novel run kill "$SERVICE/$TARGET"
@@ -104,7 +104,7 @@ pnpm lint
 a-novel build -y -t podman    # when the change touches what goes into an image
 ```
 
-To try the target from its image rather than from source, restart it in container mode:
+To test the image instead of the source:
 
 ```bash
 a-novel run restart "$SERVICE/$TARGET" --mode=container
@@ -112,7 +112,7 @@ a-novel run restart "$SERVICE/$TARGET" --mode=container
 
 ### Reset a service's data
 
-Clearing stops the service, backs its data up, then empties it; the next start recreates the database and reruns the migrations.
+Clearing backs the data up, then empties it; the next start recreates the database.
 
 ```bash
 a-novel run volume clear "$SERVICE" --force
@@ -123,7 +123,7 @@ a-novel run start "$SERVICE/$TARGET"
 
 ### Give a service an API key
 
-A repository that needs a secret names it, by an id, in its `.a-novel/secrets.yaml`, and `test` or `run` warn with that id while it is missing. Store the value once, typed with no echo; from then on `test` and `run` pass it to the service, and no command prints it.
+A repository names its secrets in `.a-novel/secrets.yaml`, and `test` or `run` warn about a missing one. Store its value once; no command prints it.
 
 ```bash
 a-novel secrets init                  # once per machine
@@ -133,7 +133,7 @@ a-novel secrets set "$SECRET_ID"
 
 ### Debug a target
 
-For a target running from source, print the `dlv attach` command, then run it in another terminal:
+Print the debugger's attach command for a target running from source:
 
 ```bash
 a-novel run debug "$SERVICE/$TARGET"
@@ -141,7 +141,7 @@ a-novel run debug "$SERVICE/$TARGET"
 
 ### Work on two tasks at once
 
-A second stack is a separate workspace with its own branches and services. Create and fill it:
+A second stack is a separate workspace, with its own branches and services:
 
 ```bash
 STACK_NAME=review
@@ -150,20 +150,20 @@ a-novel core stacks new "$STACK_NAME"
 a-novel core sync --root="$STACK_DIR"
 ```
 
-`A_NOVEL_STACKS` lists every stack the daemon serves, the default first. The export below keeps the stacks you already have, or names your default one when the variable was unset, and the restart hands the list to the daemon while starting again what was running:
+Register it with the daemon, keeping your default stack first:
 
 ```bash
 export A_NOVEL_STACKS="${A_NOVEL_STACKS:-default:$HOME/git-projects/a-novel},$STACK_NAME:$STACK_DIR"
 a-novel core restart --preserve-targets
 ```
 
-The export lasts as long as this shell, which suits a scratch task; to keep the stack, put the same value in your shell profile. Then point commands at it:
+Add the export to your profile to keep the stack. Point commands at it:
 
 ```bash
 a-novel run start "$SERVICE/$TARGET" --stack="$STACK_NAME"
 ```
 
-Remove it, with its services and data, when the task is done:
+Remove it when done:
 
 ```bash
 a-novel core stacks prune "$STACK_NAME"
@@ -171,7 +171,7 @@ a-novel core stacks prune "$STACK_NAME"
 
 ### Comment as the bot
 
-Automated notes, such as an agent's review replies, post as the organization's bot rather than as you:
+Automated notes post as the organization's bot, not as you:
 
 ```bash
 a-novel core bot-comment a-novel service-authentication 123 --body "Automated review note."
