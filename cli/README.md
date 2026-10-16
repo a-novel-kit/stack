@@ -1,302 +1,208 @@
 # a-novel
 
-The A-Novel storyverse build tool. Single CLI replacing the per-repo bash
-scripts.
+The command-line tool for developing Agora. It keeps one workspace holding every repository of the project in sync, and tests, builds and runs any of them with the same commands.
 
 ## Install
 
 ```bash
 go install github.com/a-novel-kit/stack/cli/cmd/a-novel@latest
-a-novel core setup    # one-time interactive bootstrap (checks, dirs, .zshrc)
 ```
 
-No upfront clone: `go install` builds the binary straight from the module path,
-and `core setup` clones the stack repo into `~/git-projects/a-novel` (the default
-stack) for you. After setup, every new shell auto-starts the daemon
-(`a-novel core start` silent if already running). Then use the verbs.
-
-## Command groups
-
-```
-a-novel
-├── test          standalone — runs Go + pnpm tests in the working tree
-├── build         standalone — builds Go binaries, pnpm bundles, Podman images
-├── publish       standalone — release doc helpers (releases run in CI)
-│   └── stamp <prefix> <file>           refresh vX.Y.Z references in doc files
-├── repo          standalone — GitHub repo configuration (interactive, human-only)
-│   ├── create <org> <name>             create a repo (class: service|platform|library|…) + apply config
-│   └── update                          reconcile the current repo (or --all, in parallel) to its class template
-├── secrets       standalone — local, encrypted secrets manager (child-env only)
-│   ├── init                            create the local key + store dir
-│   ├── set <id>                        store a value (no echo); never printed
-│   ├── ls / rm <id>                    list ids / delete a secret
-│   └── exec --env NAME=<id> -- <cmd>   run a command with secrets in its env
-├── claude        standalone — launch Claude Code from the stack root
-├── install       graceful binary upgrade (daemon handoff via checkpoint)
-├── core          daemon control + workspace plumbing
-│   ├── start / setup / kill / restart / status / prepare-reinstall
-│   ├── sync                            clone/ff-pull the curated workspace repos, in parallel
-│   └── bot-comment <org> <repo> <n>    comment as the org bot (via dispatcher workflow)
-└── run           daemon-backed surface for operating on services/targets:
-    ├── ui                              full-screen TUI (Bubble Tea)
-    ├── ps / stacks / topology          discovery & state
-    ├── service (status / infra)         service-level operations
-    ├── start / kill / restart           target lifecycle (go-exec | container)
-    ├── logs / env / watch               observability
-    ├── volume (list / backup / restore / clear)   service-scoped volumes
-    └── exec / debug                    inside-container shells
-```
-
-`test`, `build`, `publish`, `repo`, `secrets` and `claude` don't need the
-daemon. Everything under `run` does.
-
-Prefix a standalone command with `--sandbox` to run it from a freshly cloned
-and synced temporary stack. The CLI removes the stack after the command exits,
-including failures and interrupts:
+## Set up
 
 ```bash
-a-novel --sandbox repo update --all
+a-novel core setup    # once: checks your tools, clones the stack, starts the background service
+a-novel core sync     # clone every repository; run it again to bring them all up to date
 ```
 
-The flag isolates working trees only; the command keeps normal machine and
-network access. Daemon commands (`run`, `core`, and `install`) are refused
-because their process and socket are user-wide.
+Setup also adds a block to your shell profile, so every new shell starts the background service and completes `a-novel` commands. The [developer guide](https://a-novel-kit.github.io/stack/) lists the tools the CLI needs and how to install them.
 
-## Quick reference
+## Usage
+
+```text
+a-novel <command> [flags]
+a-novel <command> --help
+```
+
+| Command         | What it is for                                                                 |
+| --------------- | ------------------------------------------------------------------------------ |
+| `run ui`        | The everyday view: every service, its logs, and a palette to start and stop it |
+| `run ...`       | Start, stop, restart and inspect services, read their logs, reach their data   |
+| `test`          | Run a repository's tests, or the whole workspace's                             |
+| `build`         | Build binaries, JavaScript bundles and container images                        |
+| `secrets`       | Keep API keys encrypted on your machine and pass them to what needs them       |
+| `core ...`      | The workspace and the background service: setup, sync, stacks, bot comments    |
+| `repo ...`      | Apply repositories' GitHub settings, for administrators                        |
+| `install`       | Rebuild the CLI from your stack checkout, keeping running services up          |
+| `claude`        | Open Claude Code at the root of the stack, where the team's skills load        |
+| `publish stamp` | Refresh version references in documentation, called by release scripts         |
+| `version`       | Print the CLI's version                                                        |
+
+The `run` commands go through a background service, which keeps your services running between commands and after you close the terminal. The other commands work on their own. Lint, format and code generation are not CLI commands: every repository exposes them as pnpm scripts, `pnpm lint`, `pnpm format` and `pnpm generate:go`.
+
+## Workflows
+
+The examples name a service and one of its targets, the programs under its `cmd/` directory. Set them once in your shell:
 
 ```bash
-# Daemon
-a-novel core start            # silent if already running (lives in .zshrc)
-a-novel core status           # is it running? what stacks? checkpoint?
-a-novel core kill             # graceful shutdown
-
-# Discovery
-a-novel run ps                                # list services + target states
-a-novel run topology --service=service-X      # ASCII dependency tree
-a-novel run service status <service>          # one service in detail
-
-# Lifecycle (deps auto-cascade — infra + one-shots come up first)
-a-novel run start <service>/<target>          # go-exec by default
-a-novel run start <service>/<target> --mode=container
-a-novel run kill <service>/<target>
-a-novel run restart <service>/<target>
-a-novel run service infra start <service>     # bring up infra + one-shots
-a-novel run service infra kill <service>      # refuses if targets running
-
-# Observability
-a-novel run logs <service>/<target> --follow
-a-novel run env <service>                     # shell-evalable env block
-eval "$(a-novel run env <service>)"
-
-# Volumes (service-scoped; refuses while service is up unless --force)
-a-novel run volume list <service>
-a-novel run volume backup <service> --tag=<label>
-a-novel run volume restore <service> [--from=<ts>]
-a-novel run volume clear <service> [--no-backup]
-
-# TUI
-a-novel run ui                                # ? for help, Esc for commands
-
-# Releases run in CI (the release-core action); there is no local release verb.
-# publish stamp rewrites vX.Y.Z doc refs to the current version (run by prepublish:doc).
-a-novel publish stamp 'version: ' openapi.yaml
-
-# Secrets (local, encrypted; injected into the child env only)
-a-novel secrets init                          # one-time: create key + store
-a-novel secrets set OPENAI_KEY                # reads value with no echo
-a-novel secrets ls                            # ids only, never values
-a-novel secrets exec --env OPENAI_API_KEY=OPENAI_KEY -- python main.py
-
-# Claude Code, always rooted at the stack (args forward verbatim)
-a-novel claude
-a-novel claude --continue
+SERVICE=service-json-keys
+TARGET=rest
 ```
 
-## Secrets
+### Start the day
 
-`a-novel secrets` is a local, encrypted secrets manager. It lets you (and an
-AI agent) run the toolchain with API secrets — e.g. `OPENAI_API_KEY` — injected
-into a **child process's environment only**, so a secret is never seen on a
-terminal, printed, logged, committed, or passed as a CLI argument.
+Bring the stack, the CLI and every repository up to date, then open the UI:
 
 ```bash
-a-novel secrets init                 # create the local key + store dir (idempotent)
-a-novel secrets set <id>             # read a value with no echo, store it encrypted
-a-novel secrets ls                   # list secret ids (never values)
-a-novel secrets rm <id>              # delete a secret
-a-novel secrets exec --env NAME=<id> [--env ...] -- <cmd> [args...]
-```
-
-### Per-repo manifest + auto-injection
-
-A service repo can commit a **value-free** manifest at `.a-novel/secrets.yaml`
-in its root, declaring the secrets it needs. Each entry pairs a target
-environment-variable name with a secret `id` in the local store (never a value)
-and an optional description:
-
-```yaml
-# .a-novel/secrets.yaml — safe to commit; contains no secrets
-secrets:
-  - env: OPENAI_API_KEY
-    id: openai-key
-    description: OpenAI API key used by narrative generation.
-  - env: ANTHROPIC_API_KEY
-    id: anthropic-key
-```
-
-The declared secrets are decrypted from the local store and injected
-automatically into the child env of `a-novel test`, `a-novel run` and
-`a-novel run ui`. If the local key or the store is absent — or a declared secret
-isn't set yet — that secret is **skipped, never injected, and never an error**:
-the repo can still run the tests that don't need it. A skipped secret surfaces a
-value-free warning (its env var, id, and description, plus `a-novel secrets set
-<id>`) in the `test` output and in the service log shown by `run logs` and the
-UI, so you know exactly what to provision.
-
-### Security properties
-
-- **Encrypted at rest.** The store (`store.enc`) is the whole secrets map
-  encrypted with **AES-256-GCM**; a fresh random 12-byte nonce per write, so two
-  writes of the same value yield different ciphertext, and a tampered store fails
-  to decrypt. Crypto is Go standard library only.
-- **0600 local key.** A 32-byte key (`key`, mode `0600`) inside a `0700`
-  directory under `$XDG_DATA_HOME/a-novel/secrets/`. Generated once and never
-  overwritten. Writes are atomic (temp file + rename).
-- **TTY-set, never piped.** `secrets set` reads the value with echo disabled and
-  refuses to run without a terminal, so a value can't be piped through a log or
-  shell history.
-- **Never printed.** No command prints a secret value — not `ls`, not `env`, not
-  the test/run env progress block. Errors carry the secret **id**, never the
-  value.
-- **Value-free git manifests.** Only the env-var → id (+ description)
-  declarations live in git; values stay encrypted on the developer's machine.
-- **Child-env only.** Secrets reach a process exclusively through its
-  environment — never a command line.
-
-## Architecture
-
-`a-novel` is a single binary that fronts a long-lived background daemon.
-Clients (CLI, TUI, future web UI) communicate with the daemon over a
-Unix-domain socket using [connect-rpc](https://connectrpc.com/). The same
-daemon supervises every running target, owns the env/port allocator,
-streams logs, and manages volumes. Multiple clients see consistent state.
-
-### Package layout
-
-```
-cli/
-├── cmd/a-novel/main.go            single binary: sandbox dispatch, Cobra root, exit codes
-├── proto/anovel/v1/core.proto     connect-rpc contract
-└── internal/
-    ├── daemon/                    daemon-side (server, runner, env, logs, volumes, ...)
-    ├── client/rpc/                Unix-socket connect-rpc client
-    ├── cli/                       Cobra command tree, workspace model, gh/git helpers
-    ├── detect/                    working-tree discovery of test and build targets
-    ├── build/                     a detected target as a job: env, compose up/down, deadline
-    ├── jobs/                      bounded parallel job runner with live progress
-    ├── repocfg/                   GitHub repo config templates + apply engine
-    ├── tui/                       Bubble Tea TUI
-    ├── ui/                        picker, live job view and report for every batch command
-    ├── setup/                     `core setup` bootstrap
-    ├── secrets/                   local AES-256-GCM secrets store + env injection
-    ├── update/                    best-effort "newer version available" notice
-    ├── version/                   build-version resolution (ldflags / buildinfo)
-    └── shared/                    XDG paths, stacks parser, compose files, archive retention
-```
-
-### Parallel jobs
-
-`test`, `build`, `core sync` and `repo update --all` hand their work to one
-runner (`internal/jobs`): at most `--jobs` units run at once, each with its
-output captured. On a terminal, each finished job prints one status line that
-stays in scrollback, above a live view of the running jobs (spinner, latest
-output line, timer). Without a terminal, each job prints a line as it starts and
-as it finishes, so output never interleaves. A report closes the run: outcome
-counts, coverage for tests, and the full output of every failure (of every repo,
-for `repo update --all`, as the audit trail of its writes).
-
-The default limit follows what bounds the work. `test` and `build` split the CPUs
-(NumCPU/4 behind the picker, one at a time with `-y`); `core sync` runs one repo
-per CPU; `repo update --all` applies six repos at a time, under GitHub's
-secondary rate limit, and a rate-limited `gh` call is retried after a minute.
-
-### Key invariants
-
-- **One daemon per user**, Unix socket at `$XDG_RUNTIME_DIR/a-novel.sock`.
-- **Stateless recovery**: daemon doesn't checkpoint its own state —
-  every restart rebuilds from podman labels + filesystem + env var. The
-  reinstall checkpoint is the named exception, scoped to one handoff
-  cycle.
-- **Strict refusal of incoherent ops** with always-included remediation
-  hints (e.g., "kill the target first" rather than silently failing).
-- **Multi-stack** by default: configure via `A_NOVEL_STACKS=name1:path1,name2:path2`.
-- **Containers are labeled** (`anovel.stack`, `anovel.service`,
-  `anovel.target`) so adoption + cleanup work across daemon restarts.
-- **The daemon owns dependency ordering and health-gating**, not compose. It
-  walks a target's deps itself — bringing infra up and waiting for health, then
-  running one-shots to success — before starting the target, and passes
-  `--no-deps` on every container `up`. Two reasons it can't delegate to compose:
-  the dependency graph crosses the container boundary (a go-exec host process
-  depending on a container's health), which compose has no way to express; and
-  podman-compose does not reliably enforce `depends_on` conditions — notably
-  one-shot completion, the gate that holds a server back until migrations
-  finish. The compose files still declare `depends_on` for readers and for a
-  direct `podman compose up`, but the daemon does not rely on it.
-
-## State directories
-
-- `$XDG_STATE_HOME/a-novel/` (default `~/.local/state/a-novel/`)
-  - `logs/<stack>/<service>/<target>/{current.log, run-*.log}`
-  - `reinstall.json` (single-purpose handoff; deleted after replay)
-- `$XDG_DATA_HOME/a-novel/` (default `~/.local/share/a-novel/`)
-  - `backups/<stack>/<service>/<volume>/<timestamp>.tar.zst` (max 5/volume)
-  - `secrets/{key, store.enc}` (0600 local key + AES-256-GCM encrypted store)
-- `$XDG_RUNTIME_DIR/a-novel.sock` (daemon's unix socket)
-
-## Development
-
-```bash
-# Edit the proto (cli/proto/anovel/v1/core.proto), then:
-go generate ./...      # regenerates proto Go bindings via buf
-go test ./...          # or, dogfooding: a-novel test --type=go -y
-
-# Graceful binary upgrade (preserves running go-exec targets via the
-# reinstall checkpoint):
+git -C ~/git-projects/a-novel pull --ff-only
 a-novel install
+a-novel core sync
+a-novel run ui
 ```
 
-CI's `generated-go` job runs `go generate ./...` and fails on diff —
-keeps proto bindings in sync.
+### Work on a service
 
-## The compose contract
+Start a target: its database comes up and its migrations run first. Then follow its logs while you edit, and restart it to pick up a change.
 
-In **container** mode the daemon doesn't invent how to run a target — it defers
-to the compose file a service repo ships at `builds/podman-compose.yaml`.
-Discovery only works when that file mirrors the service's targets exactly, so the
-mirror is a contract every service repo upholds:
+```bash
+a-novel run start "$SERVICE/$TARGET"
+a-novel run logs "$SERVICE/$TARGET" --follow
+a-novel run restart "$SERVICE/$TARGET"
+```
 
-- **One profile per target.** Each `cmd/<target>/` has a matching compose service
-  gated behind `--profile <target>`, so `a-novel run start <service>/<target>`
-  becomes `podman compose --profile <target> up`. A `cmd/` with no compose mirror
-  is invisible to container mode.
-- **Healthcheck ⇒ target kind.** A server (long-running, exposes an API) declares
-  a `HEALTHCHECK`; a job (one-shot) does not. The daemon reads that presence to
-  tell the two apart — a server is "ready" when its healthcheck passes, a job when
-  it exits 0.
-- **Complete `depends_on`.** Every dependency a target needs — infra such as
-  Postgres, and one-shot jobs such as migrations — is declared, with
-  `condition: service_healthy` for servers and `service_completed_successfully`
-  for jobs, so the daemon cascades start-up in the right order.
-- **`${VAR}` ports.** Host ports are `${VAR}` references, never hard-coded: the
-  daemon owns the port allocator and injects a free port per run, so two stacks —
-  or two targets — never collide.
+Ports change on every run, so ask the CLI for them:
 
-What a target, server, job, or infra _is_ belongs to
-[service anatomy](https://github.com/a-novel/.github/blob/master/CONTRIBUTING.md);
-this section is only how the daemon discovers it through compose.
+```bash
+eval "$(a-novel run env "$SERVICE")"
+curl "$REST_URL/ping"
+```
 
-## See also
+When you are done, stop the target; its database keeps running for next time.
 
-- Per-service `app/service-*/builds/podman-compose.yaml` — the compose mirror
-  each service ships; see [The compose contract](#the-compose-contract) above.
-- `.agents/skills/use-a-novel-cli/` — the full raw-command → CLI mapping.
+```bash
+a-novel run kill "$SERVICE/$TARGET"
+```
+
+### Check your work before pushing
+
+From the repository you changed:
+
+```bash
+a-novel test -y
+pnpm lint
+a-novel build -y -t podman    # when the change touches what goes into an image
+```
+
+To try the target from its image rather than from source, restart it in container mode:
+
+```bash
+a-novel run restart "$SERVICE/$TARGET" --mode=container
+```
+
+### Reset a service's data
+
+Clearing stops the service, backs its data up, then empties it; the next start recreates the database and reruns the migrations.
+
+```bash
+a-novel run volume clear "$SERVICE" --force
+a-novel run start "$SERVICE/$TARGET"
+```
+
+`a-novel run volume restore "$SERVICE"` brings the backup back.
+
+### Give a service an API key
+
+A repository that needs a secret names it in `.a-novel/secrets.yaml`. Store its value once, typed with no echo; `test` and `run` pass it to the service from then on, and no command prints it.
+
+```bash
+a-novel secrets init
+a-novel secrets set openai-key
+```
+
+### Debug a target
+
+For a target running from source, print the `dlv attach` command, then run it in another terminal:
+
+```bash
+a-novel run debug "$SERVICE/$TARGET"
+```
+
+### Work on two tasks at once
+
+A second stack is a separate workspace with its own branches and services. Create it, register the printed entry in `A_NOVEL_STACKS` in your shell profile, restart the background service without stopping what runs, and fill the stack:
+
+```bash
+a-novel core stacks new review
+a-novel core restart --preserve-targets
+a-novel core sync --root="${TMPDIR:-/tmp}/a-novel-stacks/review"
+a-novel run start "$SERVICE/$TARGET" --stack=review
+```
+
+Remove it, with its services and data, when the task is done:
+
+```bash
+a-novel core stacks prune review
+```
+
+### Comment as the bot
+
+Automated notes, such as an agent's review replies, post as the organization's bot rather than as you:
+
+```bash
+a-novel core bot-comment a-novel service-authentication 123 --body "Automated review note."
+```
+
+## Configuration
+
+| Setting                 | Where               | Effect                                                                                                                                |
+| ----------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `A_NOVEL_STACKS`        | Your shell profile  | The registered stacks, as comma-separated `name:path` pairs, the first one the default. Unset, one stack at `~/git-projects/a-novel`. |
+| `workspace-repos.yaml`  | The stack's root    | The repositories `core sync` clones.                                                                                                  |
+| `.a-novel/secrets.yaml` | A repository's root | The secrets the repository needs, as environment variables mapped to secret IDs. It holds no values.                                  |
+
+## Files
+
+| Path                              | Holds                                                    |
+| --------------------------------- | -------------------------------------------------------- |
+| `~/.local/state/a-novel/logs/`    | Each target's current log and its five previous runs     |
+| `~/.local/share/a-novel/backups/` | Volume backups, five per volume, the oldest pruned first |
+| `~/.local/share/a-novel/secrets/` | The encrypted secrets store and its key                  |
+
+The logs follow `XDG_STATE_HOME` and the other two `XDG_DATA_HOME` when those are set.
+
+## Command reference
+
+```text
+a-novel
+├── test                              run Go and pnpm tests in the working tree
+├── build                             build Go binaries, pnpm bundles, Podman images
+├── secrets
+│   ├── init                          create the local key and store
+│   ├── set <id>                      store a value, typed with no echo
+│   ├── ls / rm <id>                  list ids / delete a secret
+│   └── exec --env NAME=<id> -- <cmd> run a command with secrets in its environment
+├── run
+│   ├── ui                            the terminal UI
+│   ├── ps / stacks / topology        what runs, the stacks, the dependency graph
+│   ├── service (status / infra)      one service, its infrastructure
+│   ├── start / kill / restart        a target's lifecycle (go-exec or container)
+│   ├── logs / env / watch            logs, environment, a stream of state changes
+│   ├── volume (list / backup / restore / clear)   a service's data
+│   └── exec / debug                  a command beside a target, a debugger
+├── core
+│   ├── setup / start / kill / restart / status    the background service
+│   ├── sync                          clone or fast-forward the workspace repositories
+│   ├── stacks (new / list / prune)   extra workspaces
+│   └── bot-comment <org> <repo> <n>  comment as the organization bot
+├── repo
+│   ├── create <org> <name>           create a repository and apply its class settings
+│   └── update                        reconcile a repository's settings (--all: every one)
+├── install                           rebuild and reinstall the CLI, keeping services up
+├── claude                            launch Claude Code from the stack root
+├── publish stamp <prefix> <file>     refresh vX.Y.Z references in documentation
+└── version                           print the CLI version
+```
+
+`--sandbox`, placed before a command that needs no background service, runs it in a freshly cloned temporary stack that is removed afterwards: `a-novel --sandbox test -y`.
+
+Every command documents its flags and examples in `a-novel <command> --help`. How the CLI works inside, and the conventions a service follows for it, are in [CONTRIBUTING.md](../CONTRIBUTING.md#how-the-cli-works).
