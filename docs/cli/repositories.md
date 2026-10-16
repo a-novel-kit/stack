@@ -1,7 +1,7 @@
 # Configure repositories
 
 ::: info Repository administrators
-Writing settings takes admin rights on the repositories. Anyone can preview them.
+Writing settings takes admin rights on the repositories and the `admin:org` scope on your `gh` token. Anyone can preview them.
 :::
 
 Every repository's GitHub settings are code: its features and merge rules, security options, Pages, rulesets and required checks, plus the governance workflows, labels and code owners it carries. The stack derives them from templates in [`cli/internal/repocfg/templates`](https://github.com/a-novel-kit/stack/tree/master/cli/internal/repocfg/templates), from three inputs: the preset of the repository's class, or its own override; its organization's profile; and the checks its workflows declare.
@@ -20,9 +20,15 @@ a-novel repo update --dry-run
 
 ## Apply
 
+Besides the repository's own settings, `repo update` chooses which repositories can read the organization's scoped secrets, and that takes the `admin:org` scope on your `gh` token. Grant it for the run, then give it back:
+
 ```bash
+gh auth refresh -h github.com -s admin:org
 a-novel repo update
+gh auth refresh -h github.com --remove-scopes admin:org
 ```
+
+Without the scope, the secret grants fail with HTTP 403 while everything else applies; run the update again once you have it.
 
 The command shows the plan and waits for your confirmation before writing anything; only a person runs it. To reconcile the whole workspace, run it from anywhere with `--all`:
 

@@ -21,7 +21,7 @@ a-novel repo update              # interactive, human-only: a human must run thi
 a-novel repo update --all        # every whitelisted checkout present under app/ or kit/, in parallel
 ```
 
-Four behaviours to know before running it:
+Behaviours to know before running it:
 
 - **Required checks are derived, not configured.** They are the jobs in the repo's `main.yaml` (minus
   `report-*` and master-only jobs) plus the always-required set. A new job becomes a required check on
@@ -39,6 +39,12 @@ Four behaviours to know before running it:
   (default 6): the cap is GitHub's secondary rate limit on writes, not CPU, and a rate-limited call
   is retried after a minute. Each repo prints one status line as it finishes; the closing report
   carries every repo's per-operation log.
+- **Scoped secrets need `admin:org`.** `update` grants each scoped org secret to the repos whose
+  workflows name it, an org-level write that needs the `admin:org` scope on the operator's `gh`
+  token on top of repo admin rights. Without it those operations fail with HTTP 403 ("You must be
+  an org admin or have the actions secrets fine-grained permission") and the rest applies. The human
+  runs `gh auth refresh -h github.com -s admin:org` before the update and `--remove-scopes
+admin:org` after.
 - **A newer deployed pin survives.** For files pinning `a-novel-kit/workflows` actions, a version
   already ahead of the template's is kept, so `update` never rolls back a bump Renovate landed.
 
