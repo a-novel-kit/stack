@@ -66,6 +66,40 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
+  # The developer guide in docs/. VitePress fails the build on a dead internal
+  # link, so every branch checks the links; master's build is what publish-docs
+  # deploys.
+  build-docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: a-novel-kit/workflows/node-actions/build-node@v1.58.0
+        with:
+          build_action: docs:build
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - if: github.ref == 'refs/heads/master'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/.vitepress/dist
+
+  publish-docs:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' && success()
+    needs: [build-docs]
+    # GitHub Pages allows one deployment in flight per site. The group serializes
+    # concurrent master runs.
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
   # Structural conventions golangci-lint cannot express.
   lint-semgrep:
     runs-on: ubuntu-latest

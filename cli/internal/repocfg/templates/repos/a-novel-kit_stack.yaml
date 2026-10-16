@@ -20,7 +20,7 @@ security:
   secret_scanning: true
   push_protection: true
   dependabot: true
-pages: false
+pages: true
 code_quality: false
 clean_images: false
 rulesets:
