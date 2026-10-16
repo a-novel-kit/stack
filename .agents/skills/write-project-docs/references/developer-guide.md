@@ -6,21 +6,37 @@ The [editorial principles](editorial.md) apply to its prose, as to any guide.
 
 ## Shape
 
-The site runs in setup order: the home page says what the stack does, **Dependencies** has one page
-per tool in install order, and **a-novel CLI** opens with its installation, then one runbook per task.
-The sidebar in `docs/.vitepress/config.ts` lists every page, so a new page needs its entry there: a
-new runbook goes in the CLI group's Runbooks sub-group, which the top bar's Runbooks entry also covers.
+The site runs in the order a contributor works: **Dependencies** (one page per tool, Discord first),
+**a-novel CLI** (installation), **Working with AI** (agent setup, then working through an agent),
+**Runbooks** (the same work by hand) and **Sysadmins**. AI comes before the runbooks because the team
+works through agents first; a runbook is the more specific, manual path. The sidebar in
+`docs/.vitepress/config.ts` lists every page and the top bar has one entry per group, so a new page
+needs its sidebar entry under the right group.
 
-A dependency page opens with what the tool does here and its version floor, then holds two sections.
-Describe a tool's role in the team's work, never its current feature set: a list of what Discord
-posts, which plans an agent accepts or which keys the UI binds goes stale, and the tool's own help
-shows it anyway. The same holds in the runbooks, which name the everyday flags and leave the rest to
-`--help`.
-`## Install` opens with the tool's version check and a link that skips to `## Configure`, then holds
-only the install commands, so a reader who already has the tool runs one command. Every step inside
-Configure that a reader may have done before opens with its own check and skip link, and a new tool
-adds a row to the overview's "Check what you already have" table. Access the team grants gets its own section naming what to ask for, whom
-to ask and what to send, and a row in the overview's "What to ask the team for" table.
+Access has two levels, and the structure carries them. Everything outside **Sysadmins** is for
+contributors and is theirs to do; the one thing the team grants them, enrollment, lives on the
+Discord page with what it brings (the member role for the private working channels, GitHub access).
+**Sysadmins** holds the admin side: stricter security requirements, extra tools (Google Cloud CLI,
+Bitwarden), and duties such as enrolling contributors and applying repository settings. Maintainers
+get no section: their access widens the contributor setup without changing it.
+
+A tool's page opens with its role in the team's work, never its current feature set: a list of what
+Discord posts, which plans an agent accepts or which keys the UI binds goes stale, and the tool's own
+help shows it. `## Install` opens with the version check and a link that skips to `## Configure`;
+every step inside Configure a reader may have done before opens with its own check. A new
+contributor tool adds a row to the overview's "Check what you already have" table.
+
+## Prose
+
+Write assertive, short sentences, one idea each, and trust the reader with what the page shows:
+
+- State the step: "Accept the server invite", not "Joining needs the browser or the app: open the
+  invite and accept it". A sentence that chains clauses with colons and semicolons splits in two.
+- Never describe the page's own structure ("every page has an Install and a Configure section"); a
+  reader sees it by opening one.
+- Say a fact once. A code block shows what a command does; the prose adds only what the block
+  cannot, such as why or when.
+- Guide where the reader cannot guess: where to look and whom to ask, then what comes out of it.
 
 ## Commands
 
