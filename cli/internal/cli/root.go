@@ -74,8 +74,8 @@ Commands fall into three groups:
 Run 'a-novel help <command>' or 'a-novel <command> --help' for any command's
 flags and examples.
 
-See https://github.com/a-novel-kit/stack/blob/master/cli/README.md for the full
-design.`,
+See https://github.com/a-novel-kit/stack/blob/master/cli/README.md for the
+everyday workflows.`,
 		// main prints errors itself, so a status-only ExitError stays silent.
 		SilenceErrors: true,
 		SilenceUsage:  true,

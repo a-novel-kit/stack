@@ -56,7 +56,8 @@ Check the token. It is read with no echo and kept only for this session, so it l
 == Linux / macOS
 
 ```bash
-read -rs BWS_ACCESS_TOKEN && export BWS_ACCESS_TOKEN   # paste the token, then press Enter
+read -rs BWS_ACCESS_TOKEN   # paste the token, then press Enter
+export BWS_ACCESS_TOKEN
 bws project list
 unset BWS_ACCESS_TOKEN
 ```

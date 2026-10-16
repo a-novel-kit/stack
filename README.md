@@ -1,6 +1,6 @@
 # a-novel stack
 
-The `a-novel` CLI — one tool to build, test, run, and configure every project across the [`a-novel`](https://github.com/a-novel) and [`a-novel-kit`](https://github.com/a-novel-kit) organizations, in place of the per-repo Makefiles and scripts.
+The backbone of Agora development: one workspace and one CLI for every project across the [`a-novel`](https://github.com/a-novel) and [`a-novel-kit`](https://github.com/a-novel-kit) organizations.
 
 [![X (formerly Twitter) Follow](https://img.shields.io/twitter/follow/agorastoryverse)](https://twitter.com/agorastoryverse)
 [![Discord](https://img.shields.io/discord/1315240114691248138?logo=discord)](https://discord.gg/rp4Qr8cA)
@@ -15,19 +15,20 @@ The `a-novel` CLI — one tool to build, test, run, and configure every project 
 
 ## What this is
 
-This repository, the **stack**, hosts the `a-novel` CLI and anchors local checkouts of the projects it operates on. A background daemon started by the CLI runs services with their databases on your machine, and the same CLI applies every repository's GitHub settings from the templates kept here.
+Agora is built from many repositories spread over two GitHub organizations. The **stack** is the central place they are developed and kept in sync from: one checkout holds all of them, and one tool, the `a-novel` CLI, works on every one the same way.
+
+The CLI clones the whole project into your workspace and keeps it current. It runs any repository's tests and builds, and starts its services on your machine with everything they depend on, so the same few commands cover a backend service, a frontend platform or a shared library.
 
 ```
-a-novel/                  this repo (github.com/a-novel-kit/stack)
-├── cli/                  the a-novel CLI (Go)
-├── docs/                 the developer guide
-├── app/                  a-novel org checkouts (services, platforms, infra) — gitignored
-└── kit/                  a-novel-kit org checkouts (libraries, CI actions)  — gitignored
+~/git-projects/a-novel/   the stack (github.com/a-novel-kit/stack)
+├── cli/                  the a-novel CLI
+├── app/                  a-novel repositories: services, platforms, infra
+└── kit/                  a-novel-kit repositories: libraries, CI actions
 ```
 
 ## Install
 
-The CLI needs these tools, on Linux, macOS, or WSL2 on Windows:
+The CLI runs on Linux, macOS, or WSL2 on Windows, and needs:
 
 - [Git](https://git-scm.com)
 - [GitHub CLI](https://cli.github.com)
@@ -36,18 +37,27 @@ The CLI needs these tools, on Linux, macOS, or WSL2 on Windows:
 - [Podman](https://podman.io) and [podman-compose](https://github.com/containers/podman-compose) 1.6.0 or newer
 - [Bitwarden Secrets Manager CLI](https://bitwarden.com/help/secrets-manager-cli/), for maintainers
 
+Install the CLI:
+
 ```bash
 go install github.com/a-novel-kit/stack/cli/cmd/a-novel@latest
-a-novel core setup    # one-time bootstrap: checks, state dirs, the stack clone, shell rc, daemon
-a-novel core sync     # clone or fast-forward the workspace repos into app/ and kit/
 ```
+
+Then set up your workspace, once: `core setup` clones the stack and starts the CLI's background service, and `core sync` clones every repository into it.
+
+```bash
+a-novel core setup
+a-novel core sync
+```
+
+From there, `a-novel run ui` shows every service, ready to start.
 
 ## Documentation
 
-The [developer guide](https://a-novel-kit.github.io/stack/) takes a fresh machine through each tool, per operating system, with the access to request from the team, then covers the CLI one runbook per task. Its source is in [`docs/`](docs/).
+New to Agora? The [developer guide](https://a-novel-kit.github.io/stack/) sets up your machine as a contributor, from the tools to the access you need from the team, then walks through the everyday work.
 
-[`cli/README.md`](cli/README.md) is the CLI's design reference: the command tree, the daemon, its state directories, and the compose contract services follow.
+[`cli/README.md`](cli/README.md) is the CLI reference: its commands and the workflows they serve.
 
 ## Contributing
 
-New to the platform? Start with the [developer guide](https://a-novel-kit.github.io/stack/). To work on this repository, [CONTRIBUTING.md](CONTRIBUTING.md) covers its layout and how to add a command.
+New to the platform? Start with the [developer guide](https://a-novel-kit.github.io/stack/). To work on this repository, [CONTRIBUTING.md](CONTRIBUTING.md) covers its layout and how the CLI works.

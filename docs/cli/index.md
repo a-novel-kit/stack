@@ -1,12 +1,12 @@
 # The a-novel CLI
 
-The `a-novel` CLI builds, tests and runs every A-Novel project, and configures their GitHub repositories. A background daemon, one per user, supervises the services you start, allocates their ports and keeps their logs. The terminal UI and the commands are two views of that same daemon: what one starts, the other sees.
+The `a-novel` CLI is how you work on Agora day to day. It keeps your workspace of repositories in sync, runs any repository's tests and builds, and starts services on your machine with what they depend on. The services run under a background service, the daemon, so they outlive your terminal and the UI and the commands always agree on what runs.
 
 It needs every tool from the [dependencies](/dependencies/), on Linux, macOS, or WSL2 on Windows.
 
 ## Install
 
-Skip to [Configure](#configure) if `a-novel --version` already answers; [Update](#update) brings an older build current.
+Skip to [Set up](#set-up) if `a-novel --version` already answers; [Update](#update) brings an older build current.
 
 `go install` builds the CLI straight from its module path, with no clone:
 
@@ -15,9 +15,9 @@ go install github.com/a-novel-kit/stack/cli/cmd/a-novel@latest
 a-novel --version
 ```
 
-## Configure
+## Set up
 
-### Set up the workspace
+### Create the workspace
 
 ```bash
 a-novel core setup

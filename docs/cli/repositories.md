@@ -4,9 +4,9 @@
 Writing settings takes admin rights on the repositories and the `admin:org` scope on your `gh` token. Anyone can preview them.
 :::
 
-Every repository's GitHub settings are code: its features and merge rules, security options, Pages, rulesets and required checks, plus the governance workflows, labels and code owners it carries. The stack derives them from templates in [`cli/internal/repocfg/templates`](https://github.com/a-novel-kit/stack/tree/master/cli/internal/repocfg/templates), from three inputs: the preset of the repository's class, or its own override; its organization's profile; and the checks its workflows declare.
+Every repository's GitHub settings are code: merge rules, branch protection, required checks, Pages and the shared workflows all come from [templates](https://github.com/a-novel-kit/stack/tree/master/cli/internal/repocfg/templates) in the stack, so every repository of a kind is set up the same way.
 
-`a-novel repo update` reconciles a repository to that derived state: it resets every setting the templates name and deletes every ruleset they do not produce, so a change made by hand in GitHub does not last. To change a setting, change the templates through a pull request, then apply.
+`a-novel repo update` applies them and undoes any change made by hand in GitHub. To change a setting, change the templates through a pull request, then apply.
 
 ## Preview
 

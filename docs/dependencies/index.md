@@ -1,18 +1,18 @@
 # Dependencies
 
-This section sets up the tools A-Novel development relies on, one page each. Work through them in order, since later pages build on earlier ones: the GitHub page uses the identity you give Git, and the signing page uses the key you create for GitHub.
+This section sets up the tools A-Novel development relies on, one page each. Work through them in order, since later pages build on earlier ones: Discord comes first because access requests go through it, the GitHub page uses the identity you give Git, and the signing page uses the key you create for GitHub.
 
 A tool's page has two parts. **Install** opens with a check: if the tool is already there and recent enough, jump to **Configure**, which holds the A-Novel-specific setup everyone needs. Access granted by the team takes time, so read [what to ask the team for](#what-to-ask-the-team-for) before you start.
 
 | Tool                        | What it does here                                        | Who needs it |
 | --------------------------- | -------------------------------------------------------- | ------------ |
+| [Discord](./discord)        | Team chat, and where CI mentions you                     | Everyone     |
 | [Git](./git)                | Versions every repository                                | Everyone     |
 | [GitHub](./github)          | Hosts the code, reviews and CI; `gh` drives it           | Everyone     |
 | [Commit signing](./signing) | Proves your commits come from you                        | Everyone     |
 | [Go](./go)                  | Builds the services, the libraries and the `a-novel` CLI | Everyone     |
 | [Node.js and pnpm](./node)  | Run the JavaScript tooling and the frontend platforms    | Everyone     |
 | [Podman](./podman)          | Runs databases and services in containers                | Everyone     |
-| [Discord](./discord)        | Team chat, and where CI mentions you                     | Everyone     |
 | [Bitwarden](./bitwarden)    | Holds the organizations' privileged keys                 | Maintainers  |
 | [AI agents](./ai-agents)    | Coding agents preloaded with the team's conventions      | Optional     |
 

@@ -66,8 +66,9 @@ a-novel core sync --root=<new-root>  # populate it with the whitelisted repos
 
 `stacks new` puts the checkout under the OS temp directory unless `--root` says otherwise, so a
 stack nobody prunes expires instead of accumulating. Add the printed entry to `A_NOVEL_STACKS` and
-`a-novel core restart` so daemon-backed verbs (`a-novel run …`) reach it, then work from there —
-see `use-a-novel-cli`.
+run `a-novel core restart --preserve-targets` so daemon-backed verbs (`a-novel run …`) reach it, then
+work from there — see `use-a-novel-cli`. A bare restart stops the developer's running go-exec
+targets; the flag starts them again.
 
 Resuming a branch **you** created earlier in the same session is your own work; carry on with it.
 

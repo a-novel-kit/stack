@@ -8,7 +8,8 @@ The [editorial principles](editorial.md) apply to its prose, as to any guide.
 
 The site runs in setup order: the home page says what the stack does, **Dependencies** has one page
 per tool in install order, and **a-novel CLI** opens with its installation, then one runbook per task.
-The sidebar in `docs/.vitepress/config.ts` lists every page, so a new page needs its entry there.
+The sidebar in `docs/.vitepress/config.ts` lists every page, so a new page needs its entry there: a
+new runbook goes in the CLI group's Runbooks sub-group, which the top bar's Runbooks entry also covers.
 
 A dependency page opens with what the tool does here and its version floor, then holds two sections.
 `## Install` opens with the tool's version check and a link that skips to `## Configure`, then holds
@@ -29,6 +30,9 @@ to ask and what to send, and a row in the overview's "What to ask the team for" 
   [Repology](https://repology.org); otherwise the vendor's own channel, with one line saying why.
 - A pinned version in a command needs a Renovate manager in the stack's `renovate.json`, as the nvm
   installer URL has.
+- Keep a code line within about 78 characters where the command allows: the content column shows no
+  more, and a trailing comment past it hides behind a scroll. Shorten the comment or move it into
+  the prose; a long URL or command can stay, since the copy button takes the whole line.
 
 ## Tabs
 

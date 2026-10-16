@@ -4,27 +4,23 @@ A stack is one complete checkout of the workspace: the stack repository with its
 
 ## Create a stack
 
-Name the stack, then clone and fill it:
+Name the stack, then clone and fill it. A new stack lands in the system's temporary directory, so one you forget expires on its own; `--root` on `stacks new` puts it somewhere durable, and the directory it prints then replaces `STACK_DIR`.
 
 ```bash
 STACK_NAME=review
-a-novel core stacks new "$STACK_NAME"
-```
-
-The command prints the stack's directory and the entry to add to `A_NOVEL_STACKS`, the variable that registers stacks with the daemon as comma-separated `name:path` pairs, the first one the default. A new stack lands in the system's temporary directory unless `--root` names a durable place, so one you forget expires on its own.
-
-Fill it with the repositories. Without `--root`, the stack's directory is the one below; otherwise use the directory the previous command printed:
-
-```bash
 STACK_DIR="${TMPDIR:-/tmp}/a-novel-stacks/$STACK_NAME"
+a-novel core stacks new "$STACK_NAME"
 a-novel core sync --root="$STACK_DIR"
 ```
 
-Add the printed entry to `A_NOVEL_STACKS` in your shell profile, then restart the daemon so it serves the new stack:
+`A_NOVEL_STACKS` lists every stack the daemon serves, the default first. The export below keeps the stacks you already have, or names your default one when the variable was unset, and the restart hands the list to the daemon while starting again what was running:
 
 ```bash
-a-novel core restart
+export A_NOVEL_STACKS="${A_NOVEL_STACKS:-default:$HOME/git-projects/a-novel},$STACK_NAME:$STACK_DIR"
+a-novel core restart --preserve-targets
 ```
+
+The export lasts as long as this shell, which suits a scratch task; to keep the stack, put the same value in your shell profile.
 
 `run` commands take `--stack` to act on a stack other than the default:
 
@@ -35,8 +31,8 @@ a-novel run start service-json-keys/rest --stack="$STACK_NAME"
 ## List and remove stacks
 
 ```bash
-a-novel core stacks list                          # every stack, its running services and volumes
-a-novel core stacks prune "$STACK_NAME" --dry-run # what removal would reclaim
+a-novel core stacks list                         # every stack and what it holds
+a-novel core stacks prune "$STACK_NAME" --dry-run   # what removal reclaims
 a-novel core stacks prune "$STACK_NAME"
 ```
 
