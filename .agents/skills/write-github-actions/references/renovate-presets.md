@@ -63,6 +63,11 @@ A release without a timestamp cannot pass the gate: under the default `minimumRe
 timestamp-required` it stays pending forever. MCR images and lockfile maintenance have none.
 
 - Keep the gate off updates that carry no timestamp, such as lockfile maintenance.
+- Lockfile maintenance obeys only pnpm's shorter release age, so it moves a range past the version
+  the group PR still offers. Inside one lockstep group, such as `vitest monorepo`, every repo uses
+  one specifier form: all exact, or all the same range. A preset `rangeStrategy: "pin"` cannot
+  enforce it: its pin update and the group's own update collide in one branch, the pin wins, and
+  the group PR splits the family the other way.
 - When a container image must match a package, pin the image to the package's releases with an
   annotated workflow line and disable the image's docker lookup:
 

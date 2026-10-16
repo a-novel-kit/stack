@@ -84,6 +84,11 @@ Do not manufacture cases that the public contract cannot reach.
 
 - Use Vitest APIs documented for the installed version. Prefer typed dynamic module paths when a
   module mock is genuinely necessary.
+- Give every Vitest project config file an explicit `root`:
+  `fileURLToPath(new URL(".", import.meta.url))`. Since Vitest 5.0.4, a project gets its root after
+  `svelte()` has read it. Without one, the plugin starts from the workspace root, leaves Svelte
+  libraries untransformed (`Unknown file extension ".svelte"`) and loads a second Svelte runtime
+  (`lifecycle_outside_component`).
 - Keep `vi.mock` scope and hoisting rules visible. Refactor an inseparable module boundary rather
   than relying on a mock the runtime cannot intercept.
 - Render DOM, not component instances. Follow Testing Library query priority and guiding principle:
