@@ -1,16 +1,6 @@
 # Dependencies
 
-Install these tools in order; each page builds on the previous ones. Everything here is yours to do, except your enrollment, which the team handles.
-
-| Tool                        | What it does here                                          |
-| --------------------------- | ---------------------------------------------------------- |
-| [Discord](./discord)        | Where the team syncs and talks, and where you get enrolled |
-| [Git](./git)                | Versions every repository                                  |
-| [GitHub](./github)          | Hosts the code, reviews and CI                             |
-| [Commit signing](./signing) | Proves your commits are yours                              |
-| [Go](./go)                  | Builds the services, libraries and CLI                     |
-| [Node.js and pnpm](./node)  | Run the JavaScript tooling and frontends                   |
-| [Podman](./podman)          | Runs databases and services in containers                  |
+Install these tools in order. Everything is yours to do, except enrollment, which the team handles.
 
 ## Choose your system
 
@@ -69,31 +59,8 @@ Open a new terminal after each install.
 
 Commands that edit your shell profile target zsh and bash. With fish, add the same paths with `fish_add_path`.
 
-## Check what you already have
-
-A tool that passes its check only needs the Configure step of its page.
-
-| Tool       | Check                                        | Needed                                       |
-| ---------- | -------------------------------------------- | -------------------------------------------- |
-| Git        | `git --version`                              | Any current release                          |
-| GitHub CLI | `gh --version`                               | Any current release                          |
-| Go         | `go version`                                 | The version in the stack's `cli/go.mod`      |
-| Node.js    | `node --version`                             | `engines.node` in the stack's `package.json` |
-| pnpm       | `pnpm --version`                             | Any current release                          |
-| Podman     | `podman --version`, `podman compose version` | podman-compose 1.6.0 or newer                |
-
-Print the current Go and Node.js minimums:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/cli/go.mod | grep '^go '
-curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/package.json | grep '"node"'
-```
-
 ## Access
 
-Access comes in two levels:
+Contributors use this whole guide except the Sysadmins section. [Get enrolled](./discord#get-enrolled) first; nothing else waits on it.
 
-- **Contributors** get the member role on Discord, which opens the private working channels, and access to the GitHub repositories they work on. [Get enrolled](./discord#get-enrolled) first: the rest of these pages needs no access, so install while you wait.
-- **Sysadmins** hold admin rights and the organizations' credentials, with [extra requirements](/sysadmins/).
-
-Maintainers get wider repository access than contributors, with the same setup.
+[Sysadmins](/sysadmins/) hold admin rights and the organizations' credentials, and add their own setup. Maintainers get wider repository access with the contributor setup.

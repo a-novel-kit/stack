@@ -1,6 +1,6 @@
 # Work with an agent
 
-Most of the work on Agora goes through an AI agent. The stack ships the team's conventions as skills: how work is planned, written, tested and reviewed in every kind of repository. An agent started at the stack root follows them, with every repository in reach.
+Most work on Agora goes through an AI agent. The stack ships the team's conventions as skills, and an agent started at its root follows them across every repository.
 
 ## Start a session
 
@@ -14,17 +14,13 @@ With Codex, run `codex` from the stack root.
 
 ## Hand over a task
 
-Describe the outcome in plain words: a bug to fix, a feature to build, a pull request to review. The agent follows the team's process from draft to pull request. It plans, writes the code, runs tests and services through the CLI, commits and opens the pull request.
+Describe the outcome in plain words, such as a bug to fix or a feature to build. The agent takes it from draft to pull request, running the CLI itself.
 
 Review its work as you would a colleague's, and answer when it asks.
 
 ## What stays yours
 
-Some steps need you, by design:
-
-- touching your security key when it signs commits;
-- typing secret values, which the CLI never takes from a pipe;
-- approving pull requests, releasing, and applying repository settings.
+Security-key touches, secret values, approvals, releases and repository settings need you, by design.
 
 ## Run several agents
 

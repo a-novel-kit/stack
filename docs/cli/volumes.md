@@ -1,6 +1,6 @@
 # Back up service data
 
-A service keeps its data in volumes that survive restarts. Back them up, restore them, or reset them.
+A service keeps its data in volumes that survive restarts.
 
 ```bash
 SERVICE=service-json-keys

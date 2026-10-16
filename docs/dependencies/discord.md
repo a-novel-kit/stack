@@ -8,13 +8,6 @@ Accept the [server invite](https://discord.gg/rp4Qr8cA), in the browser or the [
 
 ## Get enrolled
 
-Project members enroll contributors. Introduce yourself in the community channels, get to know the team, and share what you would like to work on, along with your GitHub username.
+Introduce yourself in the community channels, get to know the team, and share what you want to work on. A project member then enrolls you. You get the member role, which opens the private working channels, and access to the GitHub repositories you work on.
 
-Enrollment brings:
-
-- the member role, which opens the private working channels;
-- access to the GitHub organizations and the repositories you work on.
-
-## Get mentioned
-
-For CI to mention you, send a team member your Discord user ID. Copying it takes Developer Mode, in Discord's advanced settings.
+Have your GitHub username at hand, and your Discord user ID so CI can mention you. Copying the ID takes Developer Mode, in Discord's advanced settings.

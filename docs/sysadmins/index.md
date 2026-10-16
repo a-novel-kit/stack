@@ -1,6 +1,6 @@
 # Sysadmins
 
-Sysadmins hold admin rights over the repositories and the cloud, and keep the organizations' credentials. They set up everything a contributor does, then meet the requirements below.
+Sysadmins hold admin rights over the repositories and the cloud, and keep the organizations' credentials. On top of the contributor setup, they meet stricter security requirements and add two tools: the [Google Cloud CLI](./gcloud) and [Bitwarden](./bitwarden).
 
 ## Security requirements
 
@@ -9,17 +9,10 @@ Sysadmins hold admin rights over the repositories and the cloud, and keep the or
 - **Elevated scopes for one task only.** Keep your `gh` session on its default scopes. Add `admin:org` or another for a single run, then remove it.
 - **No credential in clear.** Keep tokens in the CLI's encrypted store, never in a file or your shell history.
 
-## Extra tools
-
-| Tool                         | What it does here                                  |
-| ---------------------------- | -------------------------------------------------- |
-| [Google Cloud CLI](./gcloud) | Operates production: secrets, logs, database hosts |
-| [Bitwarden](./bitwarden)     | Holds the organizations' shared credentials        |
-
 ## Duties
 
 - **Enroll contributors:** give them the member role on Discord, invite them to both GitHub organizations and to the teams of their repositories, and add them to the CI mention map in Bitwarden.
-- **Apply repository settings:** [configure repositories](./repositories) from the stack's templates.
+- **Apply repository settings** with [`repo update`](./repositories).
 - **Operate production:** follow the [infra runbooks](https://github.com/a-novel/infra/tree/master/docs/runbooks).
 
 ### Set up the bot for an organization

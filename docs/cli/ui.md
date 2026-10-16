@@ -1,6 +1,6 @@
 # Use the terminal UI
 
-The terminal UI is the everyday view: every service, its live logs, and a palette to start and stop it. It shares its state with the commands.
+The terminal UI shows every service with its live logs, and starts or stops them from a palette. It sees what the commands start, and the reverse.
 
 ```bash
 a-novel run ui

@@ -1,6 +1,6 @@
 # GitHub
 
-GitHub hosts the code, reviews and CI. The [GitHub CLI](https://cli.github.com), `gh`, works with it from the terminal, and the `a-novel` CLI relies on it.
+GitHub hosts the code, reviews and CI. Install its terminal client, [`gh`](https://cli.github.com); the `a-novel` CLI uses it too.
 
 You need a [GitHub account](https://github.com/signup).
 
@@ -142,7 +142,7 @@ GitHub greets you by name; the exit status 1 is normal.
 
 ### Share one connection
 
-Each new SSH connection authenticates again: one more touch on a security key. Let SSH keep one connection open and reuse it for every push, fetch and clone; `a-novel core sync` reuses it too.
+Each new SSH connection authenticates again: one more touch on a security key. Let SSH keep one connection open and reuse it, as `a-novel core sync` does.
 
 Skip if `ssh -G git@github.com | grep '^controlpath'` prints a path. Otherwise, on Linux or macOS:
 

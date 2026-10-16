@@ -19,7 +19,7 @@ a-novel core setup
 a-novel core sync
 ```
 
-Setup clones the stack into `~/git-projects/a-novel` and starts the daemon, now and in every new shell. Sync clones every repository of [`workspace-repos.yaml`](https://github.com/a-novel-kit/stack/blob/master/workspace-repos.yaml), then fast-forwards them on later runs without touching your branches or uncommitted work. Rerun either any time.
+Setup clones the stack into `~/git-projects/a-novel`, starts the daemon, and makes every new shell start it too. Sync clones the repositories, and brings them up to date whenever you rerun it.
 
 To put the workspace elsewhere, run setup this way instead:
 

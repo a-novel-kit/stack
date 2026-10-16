@@ -8,7 +8,7 @@
 a-novel test
 ```
 
-Tests that need a database get a throwaway one. `-y` skips the picker, `-t go` keeps one kind of target, `--dry-run` only lists. For a single package, plain `go test` is quicker.
+Tests that need a database get a throwaway one. `-y` skips the picker, and `--help` lists the filters. For a single package, plain `go test` is quicker.
 
 ## Build
 
@@ -16,7 +16,7 @@ Tests that need a database get a throwaway one. `-y` skips the picker, `-t go` k
 a-novel build
 ```
 
-Builds cover Go binaries, JavaScript bundles and container images, built as CI builds them. The same flags apply.
+It builds binaries, bundles and container images the way CI does.
 
 ## Parallelism
 

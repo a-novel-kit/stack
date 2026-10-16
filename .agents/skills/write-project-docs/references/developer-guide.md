@@ -23,8 +23,8 @@ get no section: their access widens the contributor setup without changing it.
 A tool's page opens with its role in the team's work, never its current feature set: a list of what
 Discord posts, which plans an agent accepts or which keys the UI binds goes stale, and the tool's own
 help shows it. `## Install` opens with the version check and a link that skips to `## Configure`;
-every step inside Configure a reader may have done before opens with its own check. A new
-contributor tool adds a row to the overview's "Check what you already have" table.
+every step inside Configure a reader may have done before opens with its own check. Never repeat
+what the sidebar or a page already shows, such as a table of pages or of their checks.
 
 ## Prose
 

@@ -1,6 +1,6 @@
 # Set up an agent
 
-The team works with [Claude Code](https://code.claude.com/docs/en/overview) or [Codex](https://developers.openai.com/codex). Both run in the terminal and in IDEs, and both need a paid plan.
+The team works with [Claude Code](https://code.claude.com/docs/en/overview) or [Codex](https://developers.openai.com/codex); both need a paid plan.
 
 ## Claude Code
 

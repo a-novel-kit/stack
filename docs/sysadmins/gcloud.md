@@ -1,6 +1,6 @@
 # Google Cloud CLI
 
-Production runs on Google Cloud. Sysadmins use the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), `gcloud`, to manage its secrets, read its logs and reach the database hosts, as the [infra runbooks](https://github.com/a-novel/infra/tree/master/docs/runbooks) describe.
+Production runs on Google Cloud, which sysadmins operate with the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), `gcloud`, as the [infra runbooks](https://github.com/a-novel/infra/tree/master/docs/runbooks) describe.
 
 ## Install
 
