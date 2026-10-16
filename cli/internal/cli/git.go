@@ -14,8 +14,20 @@ const branchMaster = "master"
 // runGit runs `git -C dir <args...>` with LFS smudging disabled, so LFS blobs
 // stay unfetched, and returns the combined output.
 func runGit(dir string, args ...string) (string, error) {
+	return runGitEnv(dir, nil, args...)
+}
+
+// runGitRemote is runGit for a command that reaches GitHub. It rides the shared
+// SSH connection once the running command has opened one.
+func runGitRemote(dir string, args ...string) (string, error) {
+	env, release := githubMux.acquire()
+	defer release()
+	return runGitEnv(dir, env, args...)
+}
+
+func runGitEnv(dir string, env []string, args ...string) (string, error) {
 	c := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	c.Env = append(os.Environ(), "GIT_LFS_SKIP_SMUDGE=1")
+	c.Env = append(os.Environ(), append(env, "GIT_LFS_SKIP_SMUDGE=1")...)
 	out, err := c.CombinedOutput()
 	return string(out), err
 }
