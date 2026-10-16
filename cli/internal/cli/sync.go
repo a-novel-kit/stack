@@ -42,7 +42,10 @@ nothing to sync). Each "<org>/<repo>" entry lands in:
   a-novel-kit/<repo> → kit/<repo>
   a-novel/<repo>     → app/<repo>
 
-Repos sync in parallel, up to --jobs at once (default: one per CPU).
+Repos sync in parallel, up to --jobs at once (default: one per CPU). They share
+one SSH connection to GitHub, kept open 10 minutes for the next run, so a
+hardware security key asks for a single touch; GitHub serves 10 repos at a
+time on it.
 
 Existing repos are fast-forward pulled on the default branch (or have their
 default-branch ref updated when you are on a feature branch). sync never
@@ -101,6 +104,7 @@ and app/.`,
 			if len(list) == 0 {
 				return nil
 			}
+			githubMux.open()
 			batch := ui.RunJobs(cmd.Context(), list, limit, stdoutIsTTY())
 			_, _ = fmt.Fprint(out, ui.Report("SYNC", batch, func(r jobs.Result) bool {
 				return r.Err != nil || r.Status == syncSkipped
@@ -129,7 +133,7 @@ func syncRepo(root string, r repoEntry, out io.Writer) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return "", fmt.Errorf("create parent: %w", err)
 	}
-	if gitOut, err := runGit(filepath.Dir(dir), "clone", "--quiet", r.SSHURL(), dir); err != nil {
+	if gitOut, err := runGitRemote(filepath.Dir(dir), "clone", "--quiet", r.SSHURL(), dir); err != nil {
 		return "", fmt.Errorf("clone failed: %w\n%s", err, strings.TrimSpace(gitOut))
 	}
 	_, _ = fmt.Fprintf(out, "cloned → %s\n", dir)
@@ -144,7 +148,7 @@ func syncRepo(root string, r repoEntry, out io.Writer) (string, error) {
 //   - a diverged default is skipped.
 func updateRepo(dir string, out io.Writer) (string, error) {
 	def := defaultBranch(dir)
-	if gitOut, err := runGit(dir, "fetch", "--quiet", "--tags", "--prune", "origin"); err != nil {
+	if gitOut, err := runGitRemote(dir, "fetch", "--quiet", "--tags", "--prune", "origin"); err != nil {
 		return "", fmt.Errorf("fetch failed: %w\n%s", err, gitOut)
 	}
 	// The on-default path's pull needs a local branch tracking origin/<def>.
@@ -163,7 +167,7 @@ func updateRepo(dir string, out io.Writer) (string, error) {
 	if strings.TrimSpace(current) == def {
 		args = []string{"pull", "--quiet", "--ff-only", "origin", def}
 	}
-	if gitOut, err := runGit(dir, args...); err != nil {
+	if gitOut, err := runGitRemote(dir, args...); err != nil {
 		reason := "local " + def + " diverged from origin"
 		if strings.Contains(gitOut, "overwritten") {
 			reason = "unstaged changes on " + def + " would be overwritten (changes kept)"
