@@ -31,8 +31,8 @@ a-novel run start service-json-keys/rest --stack="$STACK_NAME"
 ## List and remove stacks
 
 ```bash
-a-novel core stacks list                          # every stack, its running services and volumes
-a-novel core stacks prune "$STACK_NAME" --dry-run # what removal would reclaim
+a-novel core stacks list                         # every stack and what it holds
+a-novel core stacks prune "$STACK_NAME" --dry-run   # what removal reclaims
 a-novel core stacks prune "$STACK_NAME"
 ```
 

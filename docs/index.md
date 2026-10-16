@@ -10,16 +10,22 @@ hero:
       text: Get started
       link: /dependencies/
     - theme: alt
-      text: The a-novel CLI
-      link: /cli/
+      text: Runbooks
+      link: /cli/ui
 
 features:
   - title: One workspace
     details: Every repository of Agora, across both GitHub organizations, in one checkout that a single command keeps in sync.
+    link: /cli/#set-up
+    linkText: Set it up
   - title: One CLI
     details: The same commands test, build and run a backend service, a frontend platform or a shared library.
+    link: /cli/test-build
+    linkText: Test and build
   - title: Agora on your machine
     details: Start any service with everything it depends on, then follow it live from one terminal view.
+    link: /cli/services
+    linkText: Run services
 ---
 
 ## What this guide covers

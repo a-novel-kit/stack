@@ -12,14 +12,8 @@ CI mentions you when your pull requests move and when someone requests your revi
 
 1. Turn on Developer Mode in Discord: **User Settings**, then **Advanced**, then **Developer Mode**. Discord only shows IDs in this mode.
 2. Click your avatar, then **Copy User ID**.
-3. Print your GitHub username:
-
-   ```bash
-   gh api user --jq .login
-   ```
-
-4. Send a maintainer, in a direct message:
-   - your GitHub username;
+3. Send a maintainer, in a direct message:
+   - your GitHub username, the name in your GitHub profile's address;
    - your Discord user ID;
    - the repositories you work on, for their roles.
 

@@ -12,9 +12,9 @@ TARGET=rest
 ## Find what to run
 
 ```bash
-a-novel run ps                                   # every service, its targets and their state
-a-novel run topology --service="$SERVICE"        # what the service's targets depend on
-a-novel run service status "$SERVICE"            # one service in detail
+a-novel run ps                              # every service and its state
+a-novel run topology --service="$SERVICE"   # what its targets depend on
+a-novel run service status "$SERVICE"       # one service in detail
 ```
 
 ## Start and stop a target
@@ -36,23 +36,27 @@ a-novel run restart "$SERVICE/$TARGET"           # stop, then start again
 a-novel run kill "$SERVICE/$TARGET"              # stop the target
 ```
 
-The infrastructure stays up when a target stops, so the next start is quick. Manage it on its own:
+The infrastructure stays up when a target stops, so the next start is quick. Bring it up on its own, with its one-shot jobs and no target:
 
 ```bash
-a-novel run service infra start "$SERVICE"       # infrastructure and one-shot jobs, no target
-a-novel run service infra kill "$SERVICE"        # refused while a target runs
-a-novel run service infra kill "$SERVICE" --force   # stop the targets too
+a-novel run service infra start "$SERVICE"
+```
+
+Stop it once no target runs; `--force` stops the targets first:
+
+```bash
+a-novel run service infra kill "$SERVICE"
 ```
 
 ## Read the logs
 
 ```bash
-a-novel run logs "$SERVICE/$TARGET" --follow     # stream until Ctrl+C, which leaves the target running
+a-novel run logs "$SERVICE/$TARGET" --follow     # live, until Ctrl+C
 a-novel run logs "$SERVICE/$TARGET" --tail=100   # the last 100 lines
-a-novel run logs "$SERVICE/$TARGET" --previous   # the run before this one
+a-novel run logs "$SERVICE/$TARGET" --previous   # the run before this
 ```
 
-The CLI keeps each target's current run and its five previous ones. An infrastructure container streams too, by its ID from `run ps`, such as `service-json-keys/infra/postgres-json-keys`.
+Ctrl+C stops following and leaves the target running. The CLI keeps each target's current run and its five previous ones. An infrastructure container streams too, by its ID from `run ps`, such as `service-json-keys/infra/postgres-json-keys`.
 
 ## Reach a running service
 
