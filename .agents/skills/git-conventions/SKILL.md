@@ -120,6 +120,34 @@ EOF
 
 ---
 
+## Reuse the GitHub SSH Connection
+
+Every new SSH connection to GitHub authenticates again, and a developer with a FIDO security key
+touches it each time. Run every network git operation (push, fetch, pull, clone, `ls-remote`) over
+one shared connection that stays open for an hour. Before the first one, confirm it is up or open it:
+
+```bash
+ssh -O check git@github.com 2>/dev/null || ssh -o ControlPersist=1h -fN git@github.com
+```
+
+That needs `~/.ssh/config` to multiplex github.com, which the developer guide's GitHub page sets up:
+`ssh -G git@github.com` then prints a `controlpath` line. `a-novel core sync` checks for that same
+connection and reuses it, so the two never clash. Without the config, ask the developer to add the
+guide's block. Meanwhile, prefix each network git command with the socket the CLI opens itself:
+
+```bash
+GIT_SSH_COMMAND='ssh -o ControlMaster=auto -o ControlPath=~/.ssh/a-novel-%C -o ControlPersist=1h' git push
+```
+
+Prefix it rather than export it: an exported `GIT_SSH_COMMAND` makes the CLI skip its own sharing,
+which keeps a sync under GitHub's limit of ten sessions per connection.
+
+A signature shares nothing: every signed commit or tag asks for its own touch. Put a batch of commits
+in one script, run it where the developer sees its terminal, and warn them before it starts, because
+git hides ssh-keygen's "Confirm user presence" prompt until it fails.
+
+---
+
 ## Branch and PR Freedom
 
 Follow [develop-feature](../develop-feature/SKILL.md): during local drafting, keep branches and
