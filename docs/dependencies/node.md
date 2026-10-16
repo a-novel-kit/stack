@@ -1,6 +1,6 @@
 # Node.js and pnpm
 
-[Node.js](https://nodejs.org) runs the JavaScript tooling (linters, formatters, client packages) and the frontend platforms. [pnpm](https://pnpm.io) is the package manager of every JavaScript workspace; the repositories refuse npm and yarn. Node.js must meet `engines.node` in the stack's [`package.json`](https://github.com/a-novel-kit/stack/blob/master/package.json).
+[Node.js](https://nodejs.org) runs the JavaScript tooling and the frontend platforms. [pnpm](https://pnpm.io) is the package manager of every JavaScript workspace; the repositories refuse npm and yarn. Node.js must meet `engines.node` in the stack's [`package.json`](https://github.com/a-novel-kit/stack/blob/master/package.json).
 
 ## Install
 

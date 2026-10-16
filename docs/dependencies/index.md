@@ -6,7 +6,7 @@ A tool's page has two parts. **Install** opens with a check: if the tool is alre
 
 | Tool                        | What it does here                                        | Who needs it |
 | --------------------------- | -------------------------------------------------------- | ------------ |
-| [Discord](./discord)        | Team chat, and where CI mentions you                     | Everyone     |
+| [Discord](./discord)        | Where the team syncs and talks                           | Everyone     |
 | [Git](./git)                | Versions every repository                                | Everyone     |
 | [GitHub](./github)          | Hosts the code, reviews and CI; `gh` drives it           | Everyone     |
 | [Commit signing](./signing) | Proves your commits come from you                        | Everyone     |
@@ -109,6 +109,7 @@ Some access is granted by the team rather than set up by you. [Join Discord](./d
 | Access                                                 | Ask          | Page                                                   |
 | ------------------------------------------------------ | ------------ | ------------------------------------------------------ |
 | Membership in both GitHub organizations and area teams | A maintainer | [GitHub](./github#request-access)                      |
-| Discord mentions for your accounts and repositories    | A maintainer | [Discord](./discord#get-mentioned)                     |
+| The team's private channels on Discord                 | A maintainer | [Discord](./discord#join)                              |
+| CI mentions on Discord                                 | A maintainer | [Discord](./discord#get-mentioned)                     |
 | Comments as the organization bot, for agent workflows  | A maintainer | [Comment as the bot](/cli/bot-comments#request-access) |
 | A Secrets Manager access token, for maintainers        | An owner     | [Bitwarden](./bitwarden#configure)                     |

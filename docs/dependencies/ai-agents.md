@@ -4,7 +4,7 @@ The stack repository ships the team's conventions as agent skills, under `.agent
 
 ## Claude Code
 
-[Claude Code](https://code.claude.com/docs/en/overview) is Anthropic's agent. It reads the skills through the stack's `.claude/skills` link. It runs in the terminal and has [IDE extensions](https://code.claude.com/docs/en/ide-integrations) for VS Code and JetBrains. It needs a Claude Pro, Max, Team or Enterprise plan, or a Claude Console account.
+[Claude Code](https://code.claude.com/docs/en/overview) is Anthropic's agent. It reads the skills through the stack's `.claude/skills` link. It runs in the terminal and in [IDEs](https://code.claude.com/docs/en/ide-integrations).
 
 ### Install
 
@@ -44,19 +44,13 @@ exec "$SHELL"
 
 ### Configure
 
-Run `claude` and sign in on first launch. Three settings sharpen it on this codebase, set from inside a session:
-
-| Setting      | Command                          | Value                                   |
-| ------------ | -------------------------------- | --------------------------------------- |
-| Model        | `/model`                         | The latest and most capable             |
-| Output style | `/config`, then **Output style** | **Explanatory**                         |
-| Effort       | `/effort xhigh`                  | `xhigh` by default, `max` for hard work |
+Run `claude` and sign in on first launch. The team runs it on the most capable model, with the Explanatory output style, which explains its choices as it works.
 
 Once the [CLI](/cli/) is set up, start it with `a-novel claude`: from any directory, it opens Claude Code at the root of the stack, where the skills load.
 
 ## Codex
 
-[Codex](https://developers.openai.com/codex) is OpenAI's agent. It reads `.agents/skills/` directly, so start it from the stack root. It runs in the terminal and has [IDE extensions](https://developers.openai.com/codex/ide) for VS Code and its forks, JetBrains and Xcode. It needs a paid ChatGPT plan or an OpenAI API key.
+[Codex](https://developers.openai.com/codex) is OpenAI's agent. It reads `.agents/skills/` directly, so start it from the stack root. It runs in the terminal and in [IDEs](https://developers.openai.com/codex/ide).
 
 ### Install
 
