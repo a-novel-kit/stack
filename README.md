@@ -50,6 +50,8 @@ a-novel core setup
 a-novel core sync
 ```
 
+From there, `a-novel run ui` shows every service, ready to start.
+
 ## Documentation
 
 New to Agora? The [developer guide](https://a-novel-kit.github.io/stack/) sets up your machine as a contributor, from the tools to the access you need from the team, then walks through the everyday work.

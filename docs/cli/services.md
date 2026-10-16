@@ -47,7 +47,7 @@ a-novel run service infra kill "$SERVICE" --force   # stop the targets too
 ## Read the logs
 
 ```bash
-a-novel run logs "$SERVICE/$TARGET" --follow     # stream as lines arrive
+a-novel run logs "$SERVICE/$TARGET" --follow     # stream until Ctrl+C, which leaves the target running
 a-novel run logs "$SERVICE/$TARGET" --tail=100   # the last 100 lines
 a-novel run logs "$SERVICE/$TARGET" --previous   # the run before this one
 ```

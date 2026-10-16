@@ -51,22 +51,32 @@ TARGET=rest
 
 ### Start the day
 
-Bring the stack, the CLI and every repository up to date, then open the UI:
+Bring the stack and every repository up to date, rebuild the CLI when the stack's pull changed it, then open the UI:
 
 ```bash
 git -C ~/git-projects/a-novel pull --ff-only
-a-novel install
+a-novel install       # only when that pull changed cli/
 a-novel core sync
 a-novel run ui
 ```
 
 ### Work on a service
 
-Start a target: its database comes up and its migrations run first. Then follow its logs while you edit, and restart it to pick up a change.
+Start a target: its database comes up and its migrations run first.
 
 ```bash
 a-novel run start "$SERVICE/$TARGET"
+```
+
+Follow its logs while you edit, in the UI or in a second terminal with the same two variables set. The stream holds that terminal until Ctrl+C, which stops the stream, not the target:
+
+```bash
 a-novel run logs "$SERVICE/$TARGET" --follow
+```
+
+Restart the target to pick up a code change:
+
+```bash
 a-novel run restart "$SERVICE/$TARGET"
 ```
 
@@ -88,6 +98,7 @@ a-novel run kill "$SERVICE/$TARGET"
 From the repository you changed:
 
 ```bash
+pnpm format                   # lint checks formatting, so fix it first
 a-novel test -y
 pnpm lint
 a-novel build -y -t podman    # when the change touches what goes into an image
@@ -112,11 +123,12 @@ a-novel run start "$SERVICE/$TARGET"
 
 ### Give a service an API key
 
-A repository that needs a secret names it in `.a-novel/secrets.yaml`. Store its value once, typed with no echo; `test` and `run` pass it to the service from then on, and no command prints it.
+A repository that needs a secret names it, by an id, in its `.a-novel/secrets.yaml`, and `test` or `run` warn with that id while it is missing. Store the value once, typed with no echo; from then on `test` and `run` pass it to the service, and no command prints it.
 
 ```bash
-a-novel secrets init
-a-novel secrets set openai-key
+a-novel secrets init                  # once per machine
+SECRET_ID=openai-key                  # the id the manifest names
+a-novel secrets set "$SECRET_ID"
 ```
 
 ### Debug a target
@@ -129,19 +141,32 @@ a-novel run debug "$SERVICE/$TARGET"
 
 ### Work on two tasks at once
 
-A second stack is a separate workspace with its own branches and services. Create it, register the printed entry in `A_NOVEL_STACKS` in your shell profile, restart the background service without stopping what runs, and fill the stack:
+A second stack is a separate workspace with its own branches and services. Create and fill it:
 
 ```bash
-a-novel core stacks new review
+STACK_NAME=review
+STACK_DIR="${TMPDIR:-/tmp}/a-novel-stacks/$STACK_NAME"
+a-novel core stacks new "$STACK_NAME"
+a-novel core sync --root="$STACK_DIR"
+```
+
+`A_NOVEL_STACKS` lists every stack the daemon serves, the default first. The export below keeps the stacks you already have, or names your default one when the variable was unset, and the restart hands the list to the daemon while starting again what was running:
+
+```bash
+export A_NOVEL_STACKS="${A_NOVEL_STACKS:-default:$HOME/git-projects/a-novel},$STACK_NAME:$STACK_DIR"
 a-novel core restart --preserve-targets
-a-novel core sync --root="${TMPDIR:-/tmp}/a-novel-stacks/review"
-a-novel run start "$SERVICE/$TARGET" --stack=review
+```
+
+The export lasts as long as this shell, which suits a scratch task; to keep the stack, put the same value in your shell profile. Then point commands at it:
+
+```bash
+a-novel run start "$SERVICE/$TARGET" --stack="$STACK_NAME"
 ```
 
 Remove it, with its services and data, when the task is done:
 
 ```bash
-a-novel core stacks prune review
+a-novel core stacks prune "$STACK_NAME"
 ```
 
 ### Comment as the bot
