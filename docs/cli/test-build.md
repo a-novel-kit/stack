@@ -26,7 +26,7 @@ The same `-y`, `-t` and `--dry-run` apply; `a-novel build --help` describes the 
 
 ## Parallelism
 
-Behind the picker, a quarter of your CPUs' worth of targets run at once. `-y`, which scripts and agents use, runs one at a time; `-j` sets the limit in both modes:
+Behind the picker, several targets run at once; `-y`, which scripts and agents use, runs them one at a time. `-j` sets the limit in both modes:
 
 ```bash
 a-novel test -y -j 4

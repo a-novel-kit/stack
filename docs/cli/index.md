@@ -80,6 +80,6 @@ a-novel install
 | [Back up service data](./volumes)        | Save, restore or reset a service's database             |
 | [Work in parallel stacks](./stacks)      | Keep a second workspace for a separate task             |
 | [Comment as the bot](./bot-comments)     | Post automated notes on pull requests and issues        |
-| [Configure repositories](./repositories) | Maintainers: apply the repository settings              |
+| [Configure repositories](./repositories) | Administrators: apply the repository settings           |
 
 Every command documents its flags: `a-novel <command> --help`.

@@ -35,13 +35,6 @@ winget install --id Anthropic.ClaudeCode -e
 
 :::
 
-On Linux and macOS, the installer puts `claude` in `~/.local/bin`. If the command is not found, add that directory to your `PATH`:
-
-```bash
-echo 'export PATH="$PATH:$HOME/.local/bin"' >> "$HOME/.$(basename "$SHELL")rc"
-exec "$SHELL"
-```
-
 ### Configure
 
 Run `claude` and sign in on first launch. The team runs it on the most capable model, with the Explanatory output style, which explains its choices as it works.

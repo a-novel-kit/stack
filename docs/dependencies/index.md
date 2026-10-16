@@ -13,7 +13,7 @@ A tool's page has two parts. **Install** opens with a check: if the tool is alre
 | [Go](./go)                  | Builds the services, the libraries and the `a-novel` CLI | Everyone     |
 | [Node.js and pnpm](./node)  | Run the JavaScript tooling and the frontend platforms    | Everyone     |
 | [Podman](./podman)          | Runs databases and services in containers                | Everyone     |
-| [Bitwarden](./bitwarden)    | Holds the organizations' privileged keys                 | Maintainers  |
+| [Bitwarden](./bitwarden)    | Holds the organizations' shared credentials              | Maintainers  |
 | [AI agents](./ai-agents)    | Coding agents preloaded with the team's conventions      | Optional     |
 
 ## Choose your system
@@ -106,10 +106,10 @@ curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/package.js
 
 Some access is granted by the team rather than set up by you. [Join Discord](./discord#join) first and ask there as soon as you have the account a row names: you can keep installing while a request is pending, and the linked page says what to send.
 
-| Access                                                 | Ask          | Page                                                   |
-| ------------------------------------------------------ | ------------ | ------------------------------------------------------ |
-| Membership in both GitHub organizations and area teams | A maintainer | [GitHub](./github#request-access)                      |
-| The team's private channels on Discord                 | A maintainer | [Discord](./discord#join)                              |
-| CI mentions on Discord                                 | A maintainer | [Discord](./discord#get-mentioned)                     |
-| Comments as the organization bot, for agent workflows  | A maintainer | [Comment as the bot](/cli/bot-comments#request-access) |
-| A Secrets Manager access token, for maintainers        | An owner     | [Bitwarden](./bitwarden#configure)                     |
+| Access                                                | Ask          | Page                                                   |
+| ----------------------------------------------------- | ------------ | ------------------------------------------------------ |
+| Membership in both GitHub organizations               | A maintainer | [GitHub](./github#request-access)                      |
+| The team's private channels on Discord                | A maintainer | [Discord](./discord#join)                              |
+| CI mentions on Discord                                | A maintainer | [Discord](./discord#get-mentioned)                     |
+| Comments as the organization bot, for agent workflows | A maintainer | [Comment as the bot](/cli/bot-comments#request-access) |
+| A Secrets Manager access token, for maintainers       | An owner     | [Bitwarden](./bitwarden#configure)                     |

@@ -187,11 +187,11 @@ a-novel core bot-comment a-novel service-authentication 123 --body "Automated re
 
 ## Files
 
-| Path                              | Holds                                                    |
-| --------------------------------- | -------------------------------------------------------- |
-| `~/.local/state/a-novel/logs/`    | Each target's current log and its five previous runs     |
-| `~/.local/share/a-novel/backups/` | Volume backups, five per volume, the oldest pruned first |
-| `~/.local/share/a-novel/secrets/` | The encrypted secrets store and its key                  |
+| Path                              | Holds                                                |
+| --------------------------------- | ---------------------------------------------------- |
+| `~/.local/state/a-novel/logs/`    | Each target's current log and those of its last runs |
+| `~/.local/share/a-novel/backups/` | Recent volume backups, the oldest pruned first       |
+| `~/.local/share/a-novel/secrets/` | The encrypted secrets store and its key              |
 
 The logs follow `XDG_STATE_HOME` and the other two `XDG_DATA_HOME` when those are set.
 

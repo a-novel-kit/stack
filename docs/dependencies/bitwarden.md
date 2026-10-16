@@ -16,14 +16,14 @@ bws --version
 
 :::tabs key:os
 == Linux
-Bitwarden's installer checks the download against its published checksum, then installs to `/usr/local/bin`, or `~/.local/bin` without sudo:
+Bitwarden's installer verifies the download before installing it:
 
 ```bash
 curl -fsSL https://bws.bitwarden.com/install | sh
 ```
 
 == macOS
-Bitwarden's installer checks the download against its published checksum, then installs to `/usr/local/bin`, or `~/.local/bin` without sudo:
+Bitwarden's installer verifies the download before installing it:
 
 ```bash
 curl -fsSL https://bws.bitwarden.com/install | sh

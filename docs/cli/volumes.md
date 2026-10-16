@@ -25,7 +25,7 @@ a-novel run volume backup "$SERVICE" --tag="$BACKUP_TAG"
 a-novel run volume restore "$SERVICE"                  # the latest backup
 ```
 
-To restore an older one, pass its timestamp from `volume list` with `--from`. The CLI keeps the latest five backups of each volume.
+To restore an older one, pass its timestamp from `volume list` with `--from`. The CLI keeps a few recent backups of each volume and prunes older ones.
 
 ## Reset to empty
 
