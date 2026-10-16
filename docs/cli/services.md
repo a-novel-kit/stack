@@ -23,9 +23,9 @@ a-novel run service status "$SERVICE"            # one service in detail
 a-novel run start "$SERVICE/$TARGET"
 ```
 
-The daemon brings the dependencies up first: it starts the infrastructure and waits for it to be healthy, then runs the one-shot jobs such as migrations to success, and only then starts the target. Starting a target already running does nothing.
+Its dependencies come up first: the database, then one-shot jobs such as migrations, then the target itself. Starting a target that already runs does nothing.
 
-A target runs as a host process by default, built with `go run`: the fastest loop while you edit code. Run it as its container instead to test the image:
+A target runs from source by default, the fastest loop while you edit code. Run it from its container image instead to test the image:
 
 ```bash
 a-novel run start "$SERVICE/$TARGET" --mode=container
@@ -52,11 +52,11 @@ a-novel run logs "$SERVICE/$TARGET" --tail=100   # the last 100 lines
 a-novel run logs "$SERVICE/$TARGET" --previous   # the run before this one
 ```
 
-The daemon keeps the current run and five archived runs per target. An infrastructure container streams too, by its ID from `run ps`, such as `service-json-keys/infra/postgres-json-keys`.
+The CLI keeps each target's current run and its five previous ones. An infrastructure container streams too, by its ID from `run ps`, such as `service-json-keys/infra/postgres-json-keys`.
 
 ## Reach a running service
 
-The daemon picks free ports for every run, so read them from it rather than guessing. `run env` prints the variables a target receives: ports, URLs, the database DSN.
+Ports change on every run, so ask the CLI for them rather than guessing. `run env` prints the variables a target receives: ports, URLs, the database DSN.
 
 ```bash
 eval "$(a-novel run env "$SERVICE")"

@@ -1,6 +1,6 @@
 # Manage secrets
 
-Some services need a secret to run, such as an API key. The CLI keeps such values in a local store, encrypted with AES-256-GCM under a key only your user can read, and hands them to the programs that need them through their environment. No command ever prints a value, so a secret stays out of your terminal, your logs and your shell history, even when an AI agent drives the toolchain.
+Some services need a secret to run, such as an API key. The CLI keeps such values encrypted on your machine and hands them only to the programs that need them, through their environment. No command ever prints a value, so a secret stays out of your terminal, your logs and your shell history, even when an AI agent drives the toolchain.
 
 ## Store a secret
 

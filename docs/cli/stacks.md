@@ -20,10 +20,10 @@ STACK_DIR="${TMPDIR:-/tmp}/a-novel-stacks/$STACK_NAME"
 a-novel core sync --root="$STACK_DIR"
 ```
 
-Add the printed entry to `A_NOVEL_STACKS` in your shell profile, then restart the daemon so it serves the new stack:
+Add the printed entry to `A_NOVEL_STACKS` in your shell profile, then restart the daemon so it serves the new stack. `--preserve-targets` starts again what was running:
 
 ```bash
-a-novel core restart
+a-novel core restart --preserve-targets
 ```
 
 `run` commands take `--stack` to act on a stack other than the default:

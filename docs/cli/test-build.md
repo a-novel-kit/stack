@@ -8,7 +8,7 @@
 a-novel test
 ```
 
-The picker lists a target per Go module and per pnpm `test` or `test:*` script, all selected. A Go module that needs a database gets it: the CLI starts the test environment on free ports, waits for it to be healthy, and removes it afterwards, so separate environments run side by side.
+The picker lists a target per Go module and per pnpm `test` or `test:*` script, all selected. Tests that need a database get a throwaway one, started before them and removed after, so several suites run side by side.
 
 | Command                   | Runs                                                       |
 | ------------------------- | ---------------------------------------------------------- |

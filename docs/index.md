@@ -15,18 +15,18 @@ hero:
 
 features:
   - title: One workspace
-    details: The stack repository anchors local checkouts of every repository in both GitHub organizations, cloned and kept current by one command.
+    details: Every repository of Agora, across both GitHub organizations, in one checkout that a single command keeps in sync.
   - title: One CLI
-    details: a-novel builds, tests and runs every project the same way, in place of per-repository scripts and Makefiles.
-  - title: Local services
-    details: A background daemon starts services with their databases and migrations, allocates their ports and streams their logs.
+    details: The same commands test, build and run a backend service, a frontend platform or a shared library.
+  - title: Agora on your machine
+    details: Start any service with everything it depends on, then follow it live from one terminal view.
 ---
 
 ## What this guide covers
 
-A-Novel spans two GitHub organizations: [`a-novel`](https://github.com/a-novel) holds the Agora writing studio, its services and platforms; [`a-novel-kit`](https://github.com/a-novel-kit) holds the shared libraries, CI actions and tooling. One setup covers both.
+Agora is built from many repositories across two GitHub organizations: [`a-novel`](https://github.com/a-novel) holds the writing studio, its services and platforms, and [`a-novel-kit`](https://github.com/a-novel-kit) the shared libraries, CI actions and tooling. The [stack repository](https://github.com/a-novel-kit/stack) is the central place they are all developed and kept in sync from, through one tool, the `a-novel` CLI.
 
-The work happens through the `a-novel` CLI, which lives in the [stack repository](https://github.com/a-novel-kit/stack). It clones the repositories you work on, runs their tests and builds, and starts their services on your machine. Repository settings are code too, applied with the same CLI by the repositories' administrators.
+This guide sets your machine up for that work, then shows the work itself.
 
 The guide follows the order you set a machine up in:
 

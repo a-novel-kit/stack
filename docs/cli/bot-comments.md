@@ -2,7 +2,7 @@
 
 Automated notes, such as an AI agent's review replies, post as each organization's bot rather than as you, so readers can tell them from a person's words. The bot can only comment: opening, editing and merging pull requests always happen under your own `gh` account.
 
-The bot's signing key never reaches your machine. `a-novel core bot-comment` asks a workflow in the organization's dispatcher repository to post, with your own `gh` session, and that workflow alone holds the key. It mints a token limited to comments on the one target repository, posts, and exits.
+The bot's key never reaches your machine: `a-novel core bot-comment` asks a workflow in the organization's dispatcher repository to post for you, and only that workflow holds the key.
 
 | Organization  | Dispatcher repository |
 | ------------- | --------------------- |
