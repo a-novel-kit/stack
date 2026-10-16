@@ -124,7 +124,8 @@ EOF
 
 Every new SSH connection to GitHub authenticates again, and a developer with a FIDO security key
 touches it each time. Run every network git operation (push, fetch, pull, clone, `ls-remote`) over
-one shared connection that stays open for an hour. Before the first one, confirm it is up or open it:
+one shared connection, which closes once it sits unused for an hour. Before the first one, confirm it
+is up or open it:
 
 ```bash
 ssh -O check git@github.com 2>/dev/null || ssh -o ControlPersist=1h -fN git@github.com

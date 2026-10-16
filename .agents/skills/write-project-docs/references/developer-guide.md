@@ -11,8 +11,10 @@ per tool in install order, and **a-novel CLI** opens with its installation, then
 The sidebar in `docs/.vitepress/config.ts` lists every page, so a new page needs its entry there.
 
 A dependency page opens with what the tool does here and its version floor, then holds two sections.
-`## Install` carries only the install commands and a version check, so a reader who already has the
-tool skips to `## Configure`. Access the team grants gets its own section naming what to ask for, whom
+`## Install` opens with the tool's version check and a link that skips to `## Configure`, then holds
+only the install commands, so a reader who already has the tool runs one command. Every step inside
+Configure that a reader may have done before opens with its own check and skip link, and a new tool
+adds a row to the overview's "Check what you already have" table. Access the team grants gets its own section naming what to ask for, whom
 to ask and what to send, and a row in the overview's "What to ask the team for" table.
 
 ## Commands
