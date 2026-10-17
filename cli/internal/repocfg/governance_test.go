@@ -752,8 +752,7 @@ func TestNotifyGovernance(t *testing.T) {
 		{
 			name: "pull_request_target types",
 			got:  workflow.On.PullRequestTarget.Types,
-			want: "opened,ready_for_review,converted_to_draft,assigned,unassigned," +
-				"review_requested,review_request_removed,closed,reopened,dequeued",
+			want: "opened,ready_for_review,review_requested,review_request_removed,closed,dequeued",
 		},
 	}
 	for _, testCase := range testCases {
