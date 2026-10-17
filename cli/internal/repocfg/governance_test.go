@@ -7,9 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
+
+	"github.com/a-novel-kit/stack/cli/internal/repocfg"
 )
 
 // botCommit is a commit as the REST API lists Dependabot's own: GitHub signs it
@@ -20,6 +25,54 @@ const botCommit = `{"author":{"login":"dependabot[bot]"},"committer":{"login":"w
 // The engine must also hold Renovate's release age: it triggers on the status
 // event that reports it and reads the statuses the App lacks, since a nested
 // job asking for more than its caller grants fails.
+// TestGovernanceEnvironment pins where the privileged keys are read: a template
+// job that runs steps with one names the governance environment, which no
+// feature branch opens, without recording a deployment. A job calling a
+// reusable workflow leaves the environment to the called job.
+func TestGovernanceEnvironment(t *testing.T) {
+	t.Parallel()
+	var privileged []string
+	for _, org := range []string{"a-novel", "a-novel-kit"} {
+		profile, err := repocfg.LoadOrg(org)
+		if err != nil {
+			t.Fatalf("LoadOrg(%s): %v", org, err)
+		}
+		privileged = append(privileged, profile.Governance.Secrets...)
+	}
+	if len(privileged) == 0 {
+		t.Fatal("no org profile names a privileged secret")
+	}
+	entries, err := os.ReadDir(filepath.Join("templates", "governance"))
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	for _, entry := range entries {
+		if filepath.Ext(entry.Name()) != ".yaml" {
+			continue
+		}
+		var workflow struct {
+			Jobs map[string]map[string]any `yaml:"jobs"`
+		}
+		loadWorkflow(t, entry.Name(), &workflow)
+		for id, job := range workflow.Jobs {
+			if _, calls := job["uses"]; calls {
+				continue
+			}
+			raw, err := yaml.Marshal(job)
+			if err != nil {
+				t.Fatalf("%s %s: %v", entry.Name(), id, err)
+			}
+			named := slices.ContainsFunc(privileged, func(name string) bool {
+				return strings.Contains(string(raw), "secrets."+name)
+			})
+			want := map[string]any{"name": "governance", "deployment": false}
+			if environment := job["environment"]; named && !reflect.DeepEqual(environment, want) {
+				t.Errorf("%s job %s reads a privileged secret with environment %v, want %v", entry.Name(), id, environment, want)
+			}
+		}
+	}
+}
+
 func TestDependabotGovernance(t *testing.T) {
 	t.Parallel()
 	var workflow struct {

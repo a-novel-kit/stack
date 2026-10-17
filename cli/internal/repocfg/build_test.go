@@ -343,6 +343,76 @@ func TestBuildPlanScopesSecrets(t *testing.T) {
 	}
 }
 
+// TestBuildPlanProvisionsGovernanceEnvironment pins where the privileged keys
+// live: a repo whose workflows name one gets the governance environment, opened
+// to the refs the release environment admits, holding exactly the privileged
+// secrets it names. A repo that names none gets no environment.
+func TestBuildPlanProvisionsGovernanceEnvironment(t *testing.T) {
+	t.Parallel()
+	base := "repos/a-novel/example/environments/governance"
+	governance := Governance{
+		BWSProject: "project", BWSServerURL: "https://vault.bitwarden.eu",
+		Secrets: []string{"AGENT_BOT_PRIVATE_KEY", "BWS_READ_TOKEN", "DEPENDENCY_BOT_PRIVATE_KEY"},
+	}
+	held := governance
+	held.Secrets = []string{"AGENT_BOT_PRIVATE_KEY", "DEPENDENCY_BOT_PRIVATE_KEY"}
+	master := DeploymentPolicy{Name: "master", Type: "branch"}
+	unlocked := map[string]any{"deployment_branch_policy": map[string]any{"protected_branches": false, "custom_branch_policies": true}}
+	testCases := []struct {
+		name    string
+		secrets []string
+		tags    bool
+		want    []Op
+	}{
+		{
+			name: "NamesPrivilegedSecrets", tags: true,
+			secrets: []string{"AGENT_BOT_PRIVATE_KEY", "CODECOV_TOKEN", "DEPENDENCY_BOT_PRIVATE_KEY"},
+			want: []Op{
+				{Method: http.MethodPut, Path: base, Body: unlocked},
+				{Method: http.MethodPut, Path: base + "/deployment-branch-policies", Body: []DeploymentPolicy{
+					master, {Name: "release/v*", Type: "branch"}, {Name: "v*", Type: "tag"},
+				}},
+				{Path: base + "/secrets", Governance: &held},
+			},
+		},
+		{
+			name:    "WithoutTagRulesets",
+			secrets: []string{"AGENT_BOT_PRIVATE_KEY", "DEPENDENCY_BOT_PRIVATE_KEY"},
+			want: []Op{
+				{Method: http.MethodPut, Path: base, Body: unlocked},
+				{Method: http.MethodPut, Path: base + "/deployment-branch-policies", Body: []DeploymentPolicy{master}},
+				{Path: base + "/secrets", Governance: &held},
+			},
+		},
+		{name: "NamesNone", secrets: []string{"CODECOV_TOKEN"}, tags: true},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			plan, err := BuildPlan(&RepoTarget{
+				Org: "a-novel", Repo: "example", DefaultBranch: "master",
+				Class: &ClassPreset{Rulesets: ClassRulesets{Tags: testCase.tags}},
+				OrgProfile: &OrgProfile{Org: "a-novel", Governance: governance, Bots: map[string]int64{
+					"agent": 3549319, "publish": 1718144, "dependencies": 1718123, "release": 5307879,
+				}},
+				Discovered: &Discovered{Secrets: testCase.secrets},
+			})
+			if err != nil {
+				t.Fatalf("BuildPlan: %v", err)
+			}
+			var got []Op
+			for _, op := range plan.Ops {
+				if strings.HasPrefix(op.Path, base) {
+					got = append(got, op)
+				}
+			}
+			if !reflect.DeepEqual(got, testCase.want) {
+				t.Errorf("governance ops = %#v, want %#v", got, testCase.want)
+			}
+		})
+	}
+}
+
 // TestBuildPlanProtectsReleaseEnvironment pins the release App's reach: a repo
 // whose workflows name the release environment gets that environment opened to
 // the refs its rulesets guard, and the App in those rulesets' bypass. Release

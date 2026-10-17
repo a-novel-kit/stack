@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/mod/semver"
 
@@ -129,7 +130,10 @@ func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
 			note("labels", detail, err)
 		case strings.HasSuffix(op.Path, "/deployment-branch-policies"):
 			detail, err := applyDeploymentPolicies(op)
-			note("release environment policies", detail, err)
+			note(path.Base(path.Dir(op.Path))+" environment policies", detail, err)
+		case op.Governance != nil:
+			detail, err := applyEnvSecrets(org, repo, op)
+			note("governance secrets", detail, err)
 		case len(op.Teams) > 0:
 			detail, err := applyTeams(org, repo, op)
 			note("tier teams", detail, err)
@@ -171,6 +175,67 @@ func applySettings(op repocfg.Op) error {
 		return err
 	}
 	return nil
+}
+
+// applyEnvSecrets reconciles an environment's secrets with the org's Bitwarden
+// project. A named secret is written when the environment lacks it or Bitwarden
+// holds a newer revision, and a secret no workflow names is deleted. Without an
+// access token the named secrets stay as they are, and one the environment
+// lacks fails the op. Values travel on stdin only.
+func applyEnvSecrets(org, repo string, op repocfg.Op) (string, error) {
+	out, err := gh("api", "--paginate", op.Path+"?per_page=100", "--jq", `.secrets[] | "\(.name)\t\(.updated_at)"`)
+	if err != nil {
+		return "", err
+	}
+	live := map[string]time.Time{}
+	for line := range strings.Lines(out) {
+		if name, at, ok := strings.Cut(strings.TrimSpace(line), "\t"); ok {
+			live[name], _ = time.Parse(time.RFC3339, at)
+		}
+	}
+	env, target := path.Base(path.Dir(op.Path)), org+"/"+repo
+	var set, deleted int
+	for name := range live {
+		if !slices.Contains(op.Governance.Secrets, name) {
+			if _, err := gh("secret", "delete", name, "--env", env, "--repo", target); err != nil {
+				return "", err
+			}
+			deleted++
+		}
+	}
+	source, err := bwsSecrets(op.Governance)
+	if err != nil {
+		return "", err
+	}
+	// Every named secret must be available before the first write.
+	var missing []string
+	for _, name := range op.Governance.Secrets {
+		_, found := live[name]
+		secret, ok := source[name]
+		switch {
+		case source == nil && !found:
+			missing = append(missing, name)
+		case source != nil && (!ok || secret.Value == ""):
+			return "", fmt.Errorf("the Bitwarden project %s holds no %s", op.Governance.BWSProject, name)
+		}
+	}
+	if len(missing) > 0 {
+		return "", fmt.Errorf("%s missing; store a Bitwarden access token with `a-novel secrets set %s`",
+			strings.Join(missing, ", "), bwsTokenID)
+	}
+	if source == nil {
+		return fmt.Sprintf("%d deleted, none compared with Bitwarden (no access token)", deleted), nil
+	}
+	for _, name := range op.Governance.Secrets {
+		if at, found := live[name]; found && !at.Before(source[name].RevisionDate) {
+			continue
+		}
+		if _, err := ghRun(source[name].Value, "secret", "set", name, "--env", env, "--repo", target); err != nil {
+			return "", err
+		}
+		set++
+	}
+	return fmt.Sprintf("%d set, %d deleted", set, deleted), nil
 }
 
 // applySecretAccess grants or revokes the repo's access to a scoped org secret.

@@ -10,3 +10,11 @@ scoped_secrets:
   - CODECOV_TOKEN
   - PUBLISH_BOT_PRIVATE_KEY
   - TOKEN_EXPIRY_ADMIN
+governance:
+  bws_project: 798341e3-084e-4d90-b3a0-b4e3004ce18e
+  bws_server_url: https://vault.bitwarden.eu
+  secrets:
+    - AGENT_BOT_PRIVATE_KEY
+    - BWS_READ_TOKEN
+    - DEPENDENCY_BOT_PRIVATE_KEY
+    - PUBLISH_BOT_PRIVATE_KEY
