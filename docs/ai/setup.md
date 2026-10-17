@@ -1,8 +1,8 @@
 # Set up an agent
 
-The workspace is built for AI agents. Its root holds the team's conventions: `AGENTS.md`, and the skills in `.agents/skills`. An agent loads them when the stack root, `~/git-projects/a-novel` by default, is its workspace. Each repository below it is a separate checkout, so an agent started inside one misses them.
+An agent loads the team's conventions, `AGENTS.md` and the skills in `.agents/skills`, from its workspace root. Make that the stack root, `~/git-projects/a-novel` by default. Each repository below it is a separate checkout, so an agent started inside one misses them.
 
-The team works mostly with Claude Code and Codex. Any agent that reads `AGENTS.md` and Agent Skills works too, such as the others below.
+The team works mostly with Claude Code and Codex. Any agent that loads these conventions works too, such as the others below.
 
 ## Claude Code
 
@@ -35,7 +35,7 @@ winget install --id Anthropic.ClaudeCode -e
 
 :::
 
-The [desktop app](https://claude.ai/download) includes Claude Code. The [VS Code](https://code.claude.com/docs/en/vs-code) and [JetBrains](https://code.claude.com/docs/en/jetbrains) extensions install from their marketplaces.
+The [desktop app](https://claude.ai/download) includes Claude Code. The [VS Code extension](https://code.claude.com/docs/en/vs-code) installs from its marketplace, and the [JetBrains plugin](https://code.claude.com/docs/en/jetbrains) runs the terminal version.
 
 ### Open the workspace
 
@@ -139,7 +139,3 @@ An open-source terminal agent that works with your own model provider:
 npm install -g opencode-ai
 opencode ~/git-projects/a-novel
 ```
-
-## Other agents
-
-Any other agent that reads `AGENTS.md` and Agent Skills works the same way: open the stack root as its workspace.

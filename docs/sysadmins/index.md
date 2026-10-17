@@ -4,7 +4,7 @@ Sysadmins hold admin rights over the repositories and the cloud, and keep the or
 
 ## Security requirements
 
-- **A FIDO2 security key, with a backup.** Your SSH keys, for GitHub and commit signing, live on a hardware key, as [set up below](#github-with-a-security-key). Key files are not allowed.
+- **A FIDO2 security key, with a backup.** Your SSH keys, for GitHub logins and commit signing, live on a hardware key, as [set up below](#github-with-a-security-key). Key files are not allowed.
 - **Nothing open when you leave.** Set up [connection sharing](/dependencies/github#share-one-connection). Close the connection and unplug your security key whenever you leave your machine, since its signing key needs no touch.
 - **Elevated scopes for one task only.** Keep your `gh` session on its default scopes. Add `admin:org` or another for a single run, then remove it.
 - **No credential in clear.** Keep tokens in the CLI's encrypted store, never in a file or your shell history.
@@ -13,11 +13,9 @@ Sysadmins hold admin rights over the repositories and the cloud, and keep the or
 
 This replaces the key file of the contributor setup. Each security key holds two SSH keys. The authentication key asks for a touch on every new connection to GitHub. The signing key signs without one, so commits, rebases and agents never wait on you.
 
-Run these steps once for your main key, then again for each backup.
-
 ### Name the key
 
-Set the key's file name and the title GitHub shows for it. For a backup, add `_backup` to the file name and use `backup` in the title.
+Set the key's file name and the title GitHub shows for it. Start with your main key. For a backup, add `_backup` to the file name and use `backup` in the title.
 
 :::tabs key:shell
 == Linux / macOS
@@ -87,7 +85,15 @@ gh auth refresh -h github.com --remove-scopes admin:public_key,admin:ssh_signing
 
 ### Use them on this machine
 
-List the authentication key as `IdentityFile` under `Host github.com` in `~/.ssh/config`. Then add the signing key to your [allowed signers](/dependencies/signing#check-a-signature):
+List the authentication key as an `IdentityFile` under `Host github.com` in `~/.ssh/config`. With a backup, the entry reads:
+
+```text
+Host github.com
+    IdentityFile ~/.ssh/id_ed25519_sk
+    IdentityFile ~/.ssh/id_ed25519_sk_backup
+```
+
+Then add the signing key to your [allowed signers](/dependencies/signing#check-a-signature):
 
 :::tabs key:shell
 == Linux / macOS
