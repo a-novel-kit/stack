@@ -364,6 +364,10 @@ auto-merge whose every changed line moves only a dependency reference's version,
 version. Anything else, Renovate's `automerge: false` updates included, waits for `approve-pr`. The
 approval names the commit it classified, so a later push needs its own.
 
+A person's PR posts to the Discord reviews feed alone, through `notify-pr-run`: a review request
+pings its reviewers, a review or a drop from the merge queue pings its owner, and its merge posts
+without a ping. Nothing posts its draft, assignee or reopen changes.
+
 A bot's PR notifies nobody on GitHub: it has no assignee, and CODEOWNERS leaves dependency manifests
 and lockfiles unowned, so a version bump requests no review. A failing one reaches the Discord
 dependencies feed instead, and so does one still green and out of the merge queue 2 hours after its
