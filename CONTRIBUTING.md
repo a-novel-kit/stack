@@ -72,9 +72,11 @@ runner (`internal/jobs`): at most `--jobs` units run at once, each with its
 output captured. On a terminal, each finished job prints one status line that
 stays in scrollback, above a live view of the running jobs (spinner, latest
 output line, timer). Without a terminal, each job prints a line as it starts and
-as it finishes, so output never interleaves. A report closes the run: outcome
-counts, coverage for tests, and the full output of every failure (of every repo,
-for `repo update --all`, as the audit trail of its writes).
+as it finishes, so output never interleaves. A report closes the run: the full
+output of every failure (of every repo, for `repo update --all`, as the audit
+trail of its writes), then coverage for tests. The summary prints last, so it is
+on screen when the command returns: the status lines again when the output above
+pushed them out of view, then the outcome counts.
 
 The default limit follows what bounds the work. `test` and `build` split the CPUs
 (NumCPU/4 behind the picker, one at a time with `-y`); `core sync` runs one repo

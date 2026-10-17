@@ -10,58 +10,16 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/jobs"
 )
 
-// Report renders a finished batch under title ("TEST", "SYNC"): a headline,
-// outcome counts, coverage when the output carries it, then the full output of
-// every job show selects, so nothing is lost to a truncated view.
+// Report renders a finished batch under title ("TEST", "SYNC"): the full output
+// of every job show selects, so nothing is lost to a truncated view, and
+// coverage when the output carries it.
+//
+// The summary closes the report, so it is what the terminal shows when the
+// command returns. It repeats the job status lines when the sections above
+// pushed them out of view, then gives the headline and outcome counts.
 func Report(title string, b Batch, show func(jobs.Result) bool) string {
 	w := termWidth()
-	var failed int
-	counts := map[string]int{}
-	var outcomes []string
-	for _, r := range b.Results {
-		if r.Err != nil {
-			failed++
-			continue
-		}
-		status := cmp.Or(r.Status, "passed")
-		if counts[status] == 0 {
-			outcomes = append(outcomes, status)
-		}
-		counts[status]++
-	}
-
-	headline, lead := OK.Render(glyphOK+" "+title+" PASSED"), "Every job succeeded."
-	switch {
-	case b.Aborted:
-		headline, lead = Warn.Render("! "+title+" ABORTED"), "Interrupted before every job finished — results below are partial."
-	case failed > 0:
-		headline, lead = Crit.Render(glyphFail+" "+title+" FAILED"), "One or more jobs failed; their full output follows."
-	}
-
 	var s strings.Builder
-	s.WriteString("\n" + headline + "\n" + para(lead, w) + "\n\n")
-
-	var failColor color.Color = colMuted
-	if failed > 0 {
-		failColor = colCrit
-	}
-	if len(outcomes) == 0 {
-		outcomes = []string{"passed"}
-	}
-	pills := make([]string, 0, len(outcomes)+3)
-	for _, o := range outcomes {
-		pills = append(pills, pill(o, strconv.Itoa(counts[o]), colOK))
-	}
-	pills = append(pills,
-		pill("failed", strconv.Itoa(failed), failColor),
-		pill("total", strconv.Itoa(len(b.Results)), colGold),
-		pill("took", b.Elapsed.Round(10*time.Millisecond).String(), colAccent),
-	)
-	s.WriteString(pillRow(pills...) + "\n")
-
-	if cv := CoverageView(b.Results, w); cv != "" {
-		s.WriteString("\n" + cv)
-	}
 
 	var shown []jobs.Result
 	for _, r := range b.Results {
@@ -81,6 +39,57 @@ func Report(title string, b Batch, show func(jobs.Result) bool) string {
 			s.WriteString("\n" + outputPanel(r, w) + "\n")
 		}
 	}
+	if cv := CoverageView(b.Results, w); cv != "" {
+		s.WriteString("\n" + cv)
+	}
+	if s.Len() > 0 {
+		s.WriteString("\n")
+		for _, r := range b.Results {
+			s.WriteString(statusLine(r) + "\n")
+		}
+	}
+
+	var failed int
+	counts := map[string]int{}
+	var outcomes []string
+	for _, r := range b.Results {
+		if r.Err != nil {
+			failed++
+			continue
+		}
+		status := cmp.Or(r.Status, "passed")
+		if counts[status] == 0 {
+			outcomes = append(outcomes, status)
+		}
+		counts[status]++
+	}
+
+	headline, lead := OK.Render(glyphOK+" "+title+" PASSED"), "Every job succeeded."
+	switch {
+	case b.Aborted:
+		headline, lead = Warn.Render("! "+title+" ABORTED"), "Interrupted before every job finished — results above are partial."
+	case failed > 0:
+		headline, lead = Crit.Render(glyphFail+" "+title+" FAILED"), "One or more jobs failed; their full output is above."
+	}
+	s.WriteString("\n" + headline + "\n" + para(lead, w) + "\n\n")
+
+	var failColor color.Color = colMuted
+	if failed > 0 {
+		failColor = colCrit
+	}
+	if len(outcomes) == 0 {
+		outcomes = []string{"passed"}
+	}
+	pills := make([]string, 0, len(outcomes)+3)
+	for _, o := range outcomes {
+		pills = append(pills, pill(o, strconv.Itoa(counts[o]), colOK))
+	}
+	pills = append(pills,
+		pill("failed", strconv.Itoa(failed), failColor),
+		pill("total", strconv.Itoa(len(b.Results)), colGold),
+		pill("took", b.Elapsed.Round(10*time.Millisecond).String(), colAccent),
+	)
+	s.WriteString(pillRow(pills...) + "\n")
 	return s.String()
 }
 
