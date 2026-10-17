@@ -53,6 +53,10 @@ maximum supported`. A tool's indirect `golang.org/x/tools` cannot read the new c
   the Renovate preset rules in `write-github-actions`.
 - **One member of a lockstep group moved alone.** An age gate held its pair; for example, the
   Playwright image ran ahead of npm `playwright` and the browser jobs could not find their executable.
+  Lockfile maintenance does the same to a ranged member whose siblings are exact: `vitest: ^5.0.0`
+  reached 5.0.5 beside `@vitest/browser-playwright` 5.0.3, and the browser jobs failed on
+  `closeBrowserProvider is not a function`. Fix it on master: give the whole family one specifier
+  form, all exact or the same range (see `write-github-actions` Renovate presets).
 - **`build-*` fails with `go.mod requires go >= X (running go Y; GOTOOLCHAIN=local)`.** A dependency
   raised the `go` directive before the go-toolchain PR moved the images. Land the toolchain PR first;
   the other heals on rebase.
