@@ -633,6 +633,11 @@ func TestApplyEnvSecrets(t *testing.T) {
 			wantErr: dependency + " missing; store a Bitwarden access token with `a-novel secrets set BWS_ACCESS_TOKEN`",
 		},
 		{
+			name:    "Error/UnreadableProject",
+			source:  map[string]bwsSecret{},
+			wantErr: "the Bitwarden access token reads no secret in project governance-a-novel; store the token of a machine account that reads it with `a-novel secrets set BWS_ACCESS_TOKEN`",
+		},
+		{
 			name:    "Error/AbsentFromBitwarden",
 			source:  map[string]bwsSecret{agent: secret(agent, 9)},
 			wantErr: "the Bitwarden project governance-a-novel holds no " + dependency,
