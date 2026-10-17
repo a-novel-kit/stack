@@ -24,6 +24,7 @@ Contents:
 - [17. Make every reference land on something the reader already holds](#17-make-every-reference-land-on-something-the-reader-already-holds)
 - [18. State what is, not what is not](#18-state-what-is-not-what-is-not)
 - [19. State each thing once; duplicate only to go deeper](#19-state-each-thing-once-duplicate-only-to-go-deeper)
+- [20. Say plainly what applies to the reader](#20-say-plainly-what-applies-to-the-reader)
 
 ## Editorial Principles
 
@@ -97,7 +98,8 @@ about encryption. Before describing any of:
 - API surface (RPC names, REST paths, status codes)
 - Lifecycle states (active / expired / deleted)
 - What a named thing _is_ in the platform (a GitHub Milestone is a grouping feature, not an issue type;
-  a label is not a status)
+  a label is not a status), and what an organization or brand covers (`a-novel` holds every
+  application of the brand, not one product)
 - File paths referenced in prose
 
 …open the source and confirm. The doc commit must reflect the code at the same SHA; when the code
@@ -109,7 +111,13 @@ option the platform merely offers is not taxonomy either — an enabled type car
 configured, not real, so check usage, not just config. Name the condition on a conditional rule ("only
 for Epics under one Initiative or Milestone"), or it reads as universal. Mark a workaround a current
 limitation forces as temporary ("for now, a Milestone is tied to one repository"): unmarked, it hardens
-into apparent design and no one revisits it when the limitation lifts.
+into apparent design and no one revisits it when the limitation lifts. Leave out a product or plan the
+docs are not ready to cover: a name the reader cannot act on is noise.
+
+For a third-party tool, the source is its current official documentation or code. An issue report, a
+forum post or a search summary records what was once true, and the fix may already have shipped.
+Check each vendor's own pages for every surface you document, since a terminal agent and its desktop
+app open a workspace in different ways.
 
 ### 5. Show the canonical, link or table the variants
 
@@ -312,3 +320,18 @@ apart. When two passages say nearly the same thing at the same altitude, keep th
 home — the mechanism with the machinery, the practice with the workflow — and cut the other. When a
 passage carries a fresh point wrapped around restated material, keep the point and link the rest: a
 philosophy recap states the philosophy and points at the mechanism it rests on.
+
+### 20. Say plainly what applies to the reader
+
+A reader decides from the page what they must do, what they may skip, and what it costs them. Make
+each of those plain.
+
+- Ask for the minimum that works. A stricter setup, such as a hardware security key, belongs to the
+  audience that needs it, behind a link (principle 14).
+- Name a limit the reader will hit by its consequence: "native Windows gets the tools without the
+  CLI's automated setup, so you run and manage them yourself". "The Windows tabs cover the tools
+  alone" leaves the reader to guess what they lose.
+- Let the sentence structure carry an option. Open on the reader's condition, "If you would rather keep
+  them apart, you can create dedicated accounts", so the choice reads as theirs before the step does.
+- When you ask for personal data, say what it is for, how it is stored and who reads it, and offer the
+  way out for readers who would rather not share it.

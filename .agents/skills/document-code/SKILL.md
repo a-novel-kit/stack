@@ -124,7 +124,8 @@ matters, in as few words as it takes, and stop.
   possible antecedent: "comprehension and judgment are the whole job, so spend your attention there"
   beats "so spend them there", where "them" reaches back past "the whole job" for its noun. Name earlier
   content by a plain description rather than an abstract handle the reader has to decode; a handle earns
-  its place only once you have attached it to the thing.
+  its place only once you have attached it to the thing. A remainder names its set: "protected branches
+  refuse anything else", where "refuse the rest" sends the reader looking for a list.
 - **Concision is careful word choice, not dropped grammar.** Keep sentences fully formed — subject and
   verb — rather than clipping them to fragments. A doc that is short but cryptic has failed.
 - **Write the choice, not the rejected alternative.** State what holds and stop. The contrast form
