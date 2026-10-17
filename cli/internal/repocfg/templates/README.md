@@ -51,10 +51,10 @@ GitHub App's review.
 Every repo also gets `.github/workflows/notify.yaml` (`governance/notify.yaml`),
 which posts to the org's Discord server: a failed `main` or `release` run on the
 default branch, pinging the repository's role, then the run that fixes it; each
-published release with its notes; a person's pull request lifecycle and reviews,
-pinging its owner and reviewers; and a bot's pull request whose `main` fails.
-It reads org-level values the operator provisions by hand: the `CI_WEBHOOK`,
-`RELEASES_WEBHOOK`, `PULL_REQUESTS_WEBHOOK`, `REVIEWS_WEBHOOK` and
+published release with its notes; a person's pull request reviews, merge and
+drop from the merge queue, pinging its reviewers or owner; and a bot's pull
+request whose `main` fails. It reads org-level values the operator provisions by
+hand: the `CI_WEBHOOK`, `RELEASES_WEBHOOK`, `REVIEWS_WEBHOOK` and
 `DEPENDENCIES_WEBHOOK` secrets; `BWS_READ_TOKEN` and `BWS_SERVER_URL`, which
 resolve a GitHub account to the Discord user it pings; and the
 `DISCORD_REPO_ROLES` variable mapping each `<org>/<repo>` to its role id. A
