@@ -1,6 +1,6 @@
 # Commit signing
 
-Every repository requires signed commits: protected branches accept only verified ones. Git signs with the SSH key from the [GitHub](./github#add-an-ssh-key) page.
+Every repository requires signed commits, and protected branches refuse the rest. Git signs them with the SSH key from the [GitHub](./github#add-an-ssh-key) page.
 
 Skip this page if your commits already show **Verified** on GitHub. Using another key? Put its path in place of `~/.ssh/id_ed25519.pub`.
 

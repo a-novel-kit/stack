@@ -1,6 +1,6 @@
 # Dependencies
 
-This guide sets up your machine as an A-Novel contributor. Install these tools in order. Everything is yours to do, except enrollment, which the team handles: start it first, on [Discord](./discord).
+This guide sets up your machine as an A-Novel contributor, one tool per page, in order. Everything is yours to do except enrollment, which the team grants. Ask for it first, on [Discord](./discord).
 
 ## Choose your system
 

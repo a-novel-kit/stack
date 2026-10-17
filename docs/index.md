@@ -28,9 +28,9 @@ features:
     linkText: Run services
 ---
 
-## What this guide covers
+## Start here
 
-A-Novel spans two GitHub organizations. [`a-novel`](https://github.com/a-novel) holds the applications and business code of the A-Novel brand, Agora among them; [`a-novel-kit`](https://github.com/a-novel-kit) holds the shared libraries and tooling. The [stack repository](https://github.com/a-novel-kit/stack) gathers them into one workspace, worked on through the `a-novel` CLI and AI agents.
+A-Novel spans two GitHub organizations. [`a-novel`](https://github.com/a-novel) holds the applications and business code of the A-Novel brand, Agora among them; [`a-novel-kit`](https://github.com/a-novel-kit) holds the shared libraries and tooling. The [stack repository](https://github.com/a-novel-kit/stack) gathers them into one workspace. You work in it through the `a-novel` CLI, mostly with an AI agent driving.
 
 [Start your contributor setup](/dependencies/).
 

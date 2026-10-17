@@ -99,7 +99,7 @@ Start the SSH agent once, from an administrator PowerShell. It keeps the key acr
 Get-Service ssh-agent | Set-Service -StartupType Automatic -PassThru | Start-Service
 ```
 
-Then run these in a regular PowerShell; the `git config` line points Git at Windows OpenSSH and its agent:
+Run the rest in a regular PowerShell. Its `git config` line points Git at Windows OpenSSH, which talks to that agent.
 
 ```powershell
 ssh-keygen -t ed25519 -C (git config user.email) -f "$HOME\.ssh\id_ed25519"
@@ -137,7 +137,7 @@ Host github.com
 EOF
 ```
 
-The connection closes after an idle hour; `ssh -O exit git@github.com` closes it sooner. Windows OpenSSH cannot share connections; WSL2 can.
+The connection closes after an idle hour, or at once with `ssh -O exit git@github.com`. Windows OpenSSH cannot share connections.
 
 ::: tip Sysadmins
 Sysadmins use a stricter setup: see [GitHub with a security key](/sysadmins/#github-with-a-security-key).

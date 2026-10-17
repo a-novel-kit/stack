@@ -1,14 +1,13 @@
 # Go
 
-[Go](https://go.dev) builds the services, libraries and CLI. Use at least the version in [`cli/go.mod`](https://github.com/a-novel-kit/stack/blob/master/cli/go.mod), which tracks the latest release.
+[Go](https://go.dev) builds the services, libraries and CLI. Any Go from 1.21 on works: it downloads the newer toolchain a repository asks for.
 
 ## Install
 
-Skip to [Configure](#configure) if your Go meets the version the second command prints:
+Skip to [Configure](#configure) if this prints `go1.21` or newer:
 
 ```bash
 go version
-curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/cli/go.mod | grep '^go '
 ```
 
 ::::tabs key:os
@@ -67,13 +66,25 @@ winget install --id GoLang.Go -e
 
 ::::
 
-::: tip An older Go still works
-It fetches the toolchain the CLI needs, unless your distribution disabled that: `go env -w GOTOOLCHAIN=auto` turns it back on.
-:::
-
 ## Configure
 
-Put Go's program directory, where the CLI installs, on your `PATH`:
+### Allow toolchain downloads
+
+Skip if this prints `auto`:
+
+```bash
+go env GOTOOLCHAIN
+```
+
+Otherwise, your distribution turned downloads off. Turn them back on:
+
+```bash
+go env -w GOTOOLCHAIN=auto
+```
+
+### Put Go programs on your PATH
+
+The CLI installs into Go's program directory, `~/go/bin` unless you moved it. Skip if `echo $PATH` lists it already.
 
 :::tabs key:shell
 == Linux / macOS

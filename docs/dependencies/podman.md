@@ -108,4 +108,4 @@ Check that Podman runs:
 podman info --format '{{.Version.Version}}'
 ```
 
-An error means Podman or its machine is down. `podman compose version` must name podman-compose; an installed docker-compose would take precedence.
+An error means Podman or its machine is down. `podman compose version` must name podman-compose, since an installed docker-compose takes precedence.

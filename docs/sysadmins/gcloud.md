@@ -76,13 +76,13 @@ winget install --id Google.CloudSDK -e
 
 ## Configure
 
-Ask an owner for your roles on the management and production projects, then sign in with that Google account:
+Ask another sysadmin to grant your Google account roles on the management and production projects. Then sign in with it:
 
 ```bash
 gcloud auth login
 ```
 
-Both projects should be listed:
+Check that both projects are listed:
 
 ```bash
 gcloud projects list

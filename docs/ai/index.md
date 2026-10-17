@@ -20,7 +20,7 @@ Review its work as you would a colleague's, and answer when it asks.
 
 ## What stays yours
 
-Unlocking your SSH key and typing secret values need you, by design.
+Two steps need you, by design: unlocking your SSH key with `ssh-add`, and typing secret values into [`secrets set`](/cli/secrets), which no agent can read.
 
 ## Run several agents
 
