@@ -82,6 +82,10 @@ permissions: {}
 jobs:
   comment:
     runs-on: ubuntu-latest
+    # The privileged keys are secrets of the governance environment, which no feature branch opens.
+    environment:
+      name: governance
+      deployment: false
     steps:
       # Validate every input the later steps rely on, before minting a
       # token — so a hand-made manual dispatch fails fast and safely.
