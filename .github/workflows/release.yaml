@@ -47,7 +47,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: a-novel-kit/workflows/publish-actions/release-core@v1.58.1
+      - uses: a-novel-kit/workflows/publish-actions/release-core@v1.58.2
         with:
           # renovate: datasource=go depName=github.com/a-novel-kit/stack/cli
           cli_version: "1.7.5"
@@ -62,7 +62,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: a-novel-kit/workflows/publish-actions/release-core@v1.58.1
+      - uses: a-novel-kit/workflows/publish-actions/release-core@v1.58.2
         with:
           # renovate: datasource=go depName=github.com/a-novel-kit/stack/cli
           cli_version: "1.7.5"
@@ -71,7 +71,7 @@ jobs:
           app_private_key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
       # Everything on the default branch just shipped — clear this repo's
       # awaiting-release items off the board.
-      - uses: a-novel-kit/workflows/generic-actions/archive-board-items@v1.58.1
+      - uses: a-novel-kit/workflows/generic-actions/archive-board-items@v1.58.2
         with:
           client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
           app_private_key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
