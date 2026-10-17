@@ -11,7 +11,8 @@ The site runs in the order a contributor works: **Dependencies** (one page per t
 **Runbooks** (the same work by hand) and **Sysadmins**. AI comes before the runbooks because the workspace
 is optimized for agents; a runbook is the same work by hand. Agents are a tool, not a requirement:
 never claim most work goes through them, and give each supported agent its own way to open the
-stack root rather than one provider's launcher. The sidebar in
+stack root rather than one provider's launcher. Leave to the skills what they already teach agents,
+such as running sessions side by side: the guide covers what the human operator does. The sidebar in
 `docs/.vitepress/config.ts` lists every page and the top bar has one entry per group, so a new page
 needs its sidebar entry under the right group.
 
