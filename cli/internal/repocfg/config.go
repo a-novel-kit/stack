@@ -80,6 +80,17 @@ type OrgProfile struct {
 	// ScopedSecrets are the org secrets with selected-repository visibility. A
 	// repository can read one exactly when one of its workflows names it.
 	ScopedSecrets []string `yaml:"scoped_secrets"`
+	// Governance holds the privileged secrets, which no org secret carries.
+	Governance Governance `yaml:"governance"`
+}
+
+// Governance is an org's privileged secrets. Each repository's governance
+// environment holds the ones its workflows name, copied from a Bitwarden
+// Secrets Manager project that keys each secret by its GitHub name.
+type Governance struct {
+	BWSProject   string   `json:"bws_project"    yaml:"bws_project"`
+	BWSServerURL string   `json:"bws_server_url" yaml:"bws_server_url"`
+	Secrets      []string `json:"secrets"        yaml:"secrets"`
 }
 
 // Features mirrors the repo "Features" toggles.

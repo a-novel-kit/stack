@@ -92,6 +92,7 @@ type Op struct {
 	KeepRulesets  []string    `json:"keep_rulesets,omitempty"`
 	Secret        string      `json:"secret,omitempty"`
 	Teams         []TeamGrant `json:"teams,omitempty"`
+	Governance    *Governance `json:"governance,omitempty"`
 }
 
 // TeamGrant is one area team's role on a repository. Team is the area team,
@@ -116,6 +117,9 @@ func (o Op) Title() string {
 	}
 	if o.Secret != "" {
 		return o.Method + " " + o.Path + "/{repository_id}"
+	}
+	if o.Governance != nil {
+		return fmt.Sprintf("RECONCILE environment secrets (%s) — hold only: %s", o.Path, strings.Join(o.Governance.Secrets, ", "))
 	}
 	if len(o.Teams) > 0 {
 		grants := make([]string, 0, len(o.Teams))
@@ -242,21 +246,36 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		Op{Method: http.MethodPut, Path: repoPath + "/immutable-releases"},
 	)
 
-	// The release App's key is a secret of the release environment, so that
-	// environment opens only on refs a ruleset guards: the default branch, and
-	// release lines and version tags where the tags rulesets limit who creates
-	// them. A feature branch's workflow never unlocks it.
-	if releases(t) {
-		policies := []DeploymentPolicy{{Name: t.DefaultBranch, Type: "branch"}}
-		if t.Class.Rulesets.Tags {
-			policies = append(policies, DeploymentPolicy{Name: "release/v*", Type: "branch"}, DeploymentPolicy{Name: "v*", Type: "tag"})
-		}
+	// The release and governance environments open only on refs a ruleset
+	// guards: the default branch, and release lines and version tags where the
+	// tags rulesets limit who creates them. A feature branch's workflow never
+	// unlocks them.
+	policies := []DeploymentPolicy{{Name: t.DefaultBranch, Type: "branch"}}
+	if t.Class.Rulesets.Tags {
+		policies = append(policies, DeploymentPolicy{Name: "release/v*", Type: "branch"}, DeploymentPolicy{Name: "v*", Type: "tag"})
+	}
+	environment := func(name string) {
 		p.Ops = append(p.Ops,
-			Op{Method: http.MethodPut, Path: repoPath + "/environments/release", Body: map[string]any{
+			Op{Method: http.MethodPut, Path: repoPath + "/environments/" + name, Body: map[string]any{
 				"deployment_branch_policy": map[string]any{"protected_branches": false, "custom_branch_policies": true},
 			}},
-			Op{Method: http.MethodPut, Path: repoPath + "/environments/release/deployment-branch-policies", Body: policies},
+			Op{Method: http.MethodPut, Path: repoPath + "/environments/" + name + "/deployment-branch-policies", Body: policies},
 		)
+	}
+	// The release App's key is a secret of the release environment.
+	if releases(t) {
+		environment("release")
+	}
+	// The privileged keys are secrets of the governance environment alone, so
+	// a branch's copy of a workflow cannot read them. It holds the ones the
+	// repo's workflows name.
+	governance := t.OrgProfile.Governance
+	governance.Secrets = slices.DeleteFunc(slices.Clone(t.Discovered.Secrets), func(name string) bool {
+		return !slices.Contains(t.OrgProfile.Governance.Secrets, name)
+	})
+	if len(governance.Secrets) > 0 {
+		environment("governance")
+		p.Ops = append(p.Ops, Op{Path: repoPath + "/environments/governance/secrets", Governance: &governance})
 	}
 
 	// A scoped org secret reaches exactly the repos whose workflows name it.

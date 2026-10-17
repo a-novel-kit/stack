@@ -170,9 +170,13 @@ readable. `a-novel/infra` is the one exception: its jobs hold the production ide
 third-party actions to their release commit, as `write-infra` describes. No other repository pins
 by commit.
 
-`vars.*` and `secrets.*` belong here. The bot credentials are org-level: `AGENT_BOT_CLIENT_ID` /
-`AGENT_BOT_PRIVATE_KEY` for governance work, `DEPENDENCY_BOT_*` for the node lane, `PUBLISH_BOT_*`
-for publishing.
+`vars.*` and `secrets.*` belong here. The bot client ids are org variables: `AGENT_BOT_CLIENT_ID`
+for governance work, `DEPENDENCY_BOT_CLIENT_ID` for the node lane, `PUBLISH_BOT_CLIENT_ID` for
+publishing. Their private keys and `BWS_READ_TOKEN` are secrets of each repo's `governance`
+environment, which `repo update` fills from Bitwarden. A job that reads one names
+`environment: {name: governance, deployment: false}`; a job calling a reusable workflow passes the
+secret by name, and the called job names the environment. Only the release path, which
+a-novel/.github#414 moves to the release App, still reads the org copies.
 
 Add a `concurrency` group with `cancel-in-progress: true` only where a superseded run's result is
 worthless, such as a lint-only workflow. Anything that releases or deploys must run to completion.
@@ -328,6 +332,11 @@ carries reviews and merge groups to them through `workflow_run`. The privileged 
 run only as a wake-up signal: `generic-actions/relay-context` admits a real review or merge group and
 reads the pull request's current head through the API. A job on these triggers never checks out or
 runs pull request code.
+
+The `governance` environment is what makes that hold for any copy of a workflow. It admits the
+default branch, plus `release/v*` lines and `v*` tags where the tags rulesets guard them, and
+`deployment: false` keeps that check: a feature branch's job naming the environment is refused
+before its first step, so a branch that brings back an old workflow reads no key.
 
 The enterprise subscription is the only spend. Standard runners on public repos and the free security
 features cost nothing; GitHub Code Quality bills per active committer and per AI credit on every

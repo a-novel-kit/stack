@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/a-novel-kit/stack/cli/internal/repocfg"
 )
@@ -558,6 +559,88 @@ func TestApplyDeploymentPolicies(t *testing.T) {
 			t.Fatal("expected an error for a non-[]DeploymentPolicy body")
 		}
 	})
+}
+
+// TestApplyEnvSecrets pins the governance environment's reconcile: a named
+// secret is written when it is missing or Bitwarden holds a newer revision, a
+// secret no workflow names is deleted, and without a Bitwarden token only a
+// missing secret fails. No message ever carries a value.
+func TestApplyEnvSecrets(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin and bwsSecrets seams.
+	path := "repos/o/r/environments/governance/secrets"
+	op := repocfg.Op{Path: path, Governance: &repocfg.Governance{
+		BWSProject: "governance-a-novel", Secrets: []string{"AGENT_BOT_PRIVATE_KEY", "DEPENDENCY_BOT_PRIVATE_KEY"},
+	}}
+	// Bitwarden revised the secret at that hour of 2026-10-14; GitHub's copies date from 10:00.
+	secret := func(key string, hour int) bwsSecret {
+		return bwsSecret{Key: key, Value: key + "-value", RevisionDate: time.Date(2026, 10, 14, hour, 0, 0, 0, time.UTC)}
+	}
+	agent, dependency := "AGENT_BOT_PRIVATE_KEY", "DEPENDENCY_BOT_PRIVATE_KEY"
+	set := func(name string) string {
+		return "secret set " + name + " --env governance --repo o/r " + name + "-value"
+	}
+
+	testCases := []struct {
+		name       string
+		live       string
+		source     map[string]bwsSecret
+		wantDetail string
+		wantErr    string
+		wantCalls  []string
+	}{
+		{
+			name:       "WritesMissingAndDeletesUnnamed",
+			live:       agent + "\t2026-10-14T10:00:00Z\nOLD_KEY\t2026-10-01T00:00:00Z\n",
+			source:     map[string]bwsSecret{agent: secret(agent, 9), dependency: secret(dependency, 9)},
+			wantDetail: "1 set, 1 deleted",
+			wantCalls:  []string{"secret delete OLD_KEY --env governance --repo o/r", set(dependency)},
+		},
+		{
+			name:       "RewritesRotated",
+			live:       agent + "\t2026-10-14T10:00:00Z\n" + dependency + "\t2026-10-14T10:00:00Z\n",
+			source:     map[string]bwsSecret{agent: secret(agent, 11), dependency: secret(dependency, 9)},
+			wantDetail: "1 set, 0 deleted",
+			wantCalls:  []string{set(agent)},
+		},
+		{
+			name:       "WithoutTokenKeepsPresent",
+			live:       agent + "\t2026-10-14T10:00:00Z\n" + dependency + "\t2026-10-14T10:00:00Z\n",
+			wantDetail: "0 deleted, none compared with Bitwarden (no access token)",
+		},
+		{
+			name:    "Error/WithoutTokenMissing",
+			live:    agent + "\t2026-10-14T10:00:00Z\n",
+			wantErr: dependency + " missing; store a Bitwarden access token with `a-novel secrets set BWS_ACCESS_TOKEN`",
+		},
+		{
+			name:    "Error/AbsentFromBitwarden",
+			source:  map[string]bwsSecret{agent: secret(agent, 9)},
+			wantErr: "the Bitwarden project governance-a-novel holds no " + dependency,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			calls := fakeGH(t, map[string]string{"--paginate": testCase.live})
+			swap(t, &bwsSecrets, func(*repocfg.Governance) (map[string]bwsSecret, error) { return testCase.source, nil })
+
+			detail, err := applyEnvSecrets("o", "r", op)
+			got := detail
+			if err != nil {
+				got = err.Error()
+			}
+			if want := testCase.wantDetail + testCase.wantErr; got != want || (err != nil) != (testCase.wantErr != "") {
+				t.Fatalf("applyEnvSecrets = (%q, %v), want %q", detail, err, want)
+			}
+			if strings.Contains(got, "-value") {
+				t.Errorf("message %q carries a secret value", got)
+			}
+			writes := slices.DeleteFunc(slices.Clone(*calls), func(call string) bool { return strings.HasPrefix(call, "api ") })
+			slices.Sort(writes)
+			if !slices.Equal(writes, testCase.wantCalls) {
+				t.Errorf("writes = %q, want %q", writes, testCase.wantCalls)
+			}
+		})
+	}
 }
 
 // TestApplyTeams pins the tier-team reconcile: a missing team is created under

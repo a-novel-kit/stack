@@ -137,6 +137,24 @@ from service-template included, joins the App's installation in the org
 settings before its first `repo update`; until then its rulesets fail with
 HTTP 422.
 
+## The governance environment
+
+The privileged keys, listed under `governance.secrets` in `orgs/<org>.yaml`,
+are secrets of each repo's `governance` environment, never org secrets. A repo
+whose workflows name one gets the environment, opened to the refs the release
+environment admits, and `repo update` copies into it exactly the privileged
+secrets the repo names from the org's Bitwarden Secrets Manager project, where
+each secret's key is its GitHub name. A secret is rewritten when Bitwarden's
+revision is newer than GitHub's copy, and one no workflow names is deleted, so
+rotating a key is updating it in Bitwarden and running `repo update --all`.
+
+The CLI runs `bws` with the access token stored by
+`a-novel secrets set BWS_ACCESS_TOKEN`. Without one the environment keeps its
+secrets, and a named secret it lacks fails the run. A job that reads a key
+names `environment: {name: governance, deployment: false}`; a job calling a
+reusable workflow passes the secret by name and leaves the environment to the
+called job, which receives the environment's value.
+
 ## `classes/<class>.yaml` and `repos/<org>_<repo>.yaml`
 
 Same schema. A `repos/` file is for a one-off repo and **replaces** the
@@ -176,6 +194,8 @@ with `a-novel repo create a-novel infra --class infra` after releasing the CLI.
 | `signing_required`                                       | bool     | Require signed + signed-off commits.                                                                                |
 | `bots.dependencies` / `.agent` / `.publish` / `.release` | int      | GitHub App IDs of the org bots; the CLI resolves a ruleset bypass entry like `publish` to the right ID for the org. |
 | `scoped_secrets`                                         | []string | Org secrets with selected-repository visibility. Each repo can read exactly the ones its workflows name.            |
+| `governance.secrets`                                     | []string | Privileged secrets, held only by each repo's `governance` environment.                                              |
+| `governance.bws_project` / `.bws_server_url`             | string   | Bitwarden Secrets Manager project the CLI copies them from, keyed by GitHub name, and its server.                   |
 
 ## `rulesets/<name>.yaml`
 

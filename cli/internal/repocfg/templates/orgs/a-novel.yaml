@@ -18,3 +18,15 @@ scoped_secrets:
   - CODECOV_TOKEN
   - PUBLISH_BOT_PRIVATE_KEY
   - TOKEN_EXPIRY_ADMIN
+# Privileged secrets, which no org secret carries. Each repo's governance
+# environment holds the ones its workflows name, copied by `repo update` from
+# this Bitwarden Secrets Manager project, which keys each secret by its GitHub
+# name. Rotating one is updating it in Bitwarden, then running `repo update`.
+governance:
+  bws_project: 329646a4-ae62-41c9-89a3-b4e30048f0c7
+  bws_server_url: https://vault.bitwarden.eu
+  secrets:
+    - AGENT_BOT_PRIVATE_KEY
+    - BWS_READ_TOKEN
+    - DEPENDENCY_BOT_PRIVATE_KEY
+    - PUBLISH_BOT_PRIVATE_KEY
