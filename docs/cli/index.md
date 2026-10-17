@@ -53,4 +53,4 @@ a-novel install
 
 ## Next
 
-Most work goes through an AI agent: [set one up](/ai/setup). The [runbooks](/cli/ui) cover doing it by hand.
+Next, [set up an AI agent](/ai/setup), or work by hand with the [runbooks](/cli/ui).

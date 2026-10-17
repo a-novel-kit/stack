@@ -17,4 +17,4 @@ Enrollment links your GitHub and Discord accounts, so CI can mention you on Disc
 - **Your GitHub username**, shown in your profile's address: `github.com/<username>`.
 - **Your Discord user ID**, a long number rather than your display name. In Discord, open **User Settings** (the gear at the bottom left), then **Advanced**, and turn on **Developer Mode**. Then click your avatar at the bottom left and choose **Copy User ID**.
 
-The link between your two accounts is private. It is stored encrypted in the team's secrets manager, read only by the CI account that mentions you, and masked in every log. Your main accounts are safe to use. To keep them apart anyway, create dedicated GitHub and Discord accounts for your A-Novel work.
+The link between your two accounts is private. It is stored encrypted in the team's secrets manager, read only by the CI account that mentions you, and masked in every log. Your main accounts are safe to use. If you would rather keep A-Novel apart from them, you can create dedicated GitHub and Discord accounts instead.

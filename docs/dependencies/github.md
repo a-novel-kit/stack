@@ -71,40 +71,49 @@ gh auth login --hostname github.com --git-protocol ssh --web --skip-ssh-key
 
 Approve the one-time code in your browser.
 
-### Add an SSH key
+### Create an SSH key
 
-Git reaches GitHub over SSH, and the same key [signs your commits](./signing), which every repository requires.
+Git reaches GitHub over SSH, with a key registered on your account.
 
-Already have a key on GitHub? If `ssh -T git@github.com` greets you by name, skip to [Share one connection](#share-one-connection).
-
-Protect the key with a passphrase, then load it into your SSH agent with `ssh-add`. The agent holds the unlocked key, so Git signs and connects without asking again, even when an AI agent commits for you. `gh` asks for a temporary permission to upload the key.
+Skip if `ls ~/.ssh/*.pub` lists a key already, and put its path in place of `~/.ssh/id_ed25519.pub` below.
 
 :::tabs key:shell
 == Linux / macOS
 
 ```bash
 ssh-keygen -t ed25519 -C "$(git config user.email)" -f ~/.ssh/id_ed25519
-ssh-add ~/.ssh/id_ed25519
+```
+
+== Windows
+
+```powershell
+ssh-keygen -t ed25519 -C (git config user.email) -f "$HOME\.ssh\id_ed25519"
+```
+
+:::
+
+### Register the key on GitHub
+
+Skip if this greets you by name. The exit status 1 that follows is normal.
+
+```bash
+ssh -T git@github.com
+```
+
+Otherwise, register the key for authentication. `gh` asks for a temporary permission to upload it.
+
+:::tabs key:shell
+== Linux / macOS
+
+```bash
 gh auth refresh -h github.com -s admin:public_key
 gh ssh-key add ~/.ssh/id_ed25519.pub --type authentication --title "$(hostname)"
 gh auth refresh -h github.com --remove-scopes admin:public_key
 ```
 
-After a restart, run `ssh-add` again.
-
 == Windows
-Start the SSH agent once, from an administrator PowerShell. It keeps the key across restarts.
 
 ```powershell
-Get-Service ssh-agent | Set-Service -StartupType Automatic -PassThru | Start-Service
-```
-
-Run the rest in a regular PowerShell. Its `git config` line points Git at Windows OpenSSH, which talks to that agent.
-
-```powershell
-ssh-keygen -t ed25519 -C (git config user.email) -f "$HOME\.ssh\id_ed25519"
-ssh-add "$HOME\.ssh\id_ed25519"
-git config --global core.sshCommand "C:/Windows/System32/OpenSSH/ssh.exe"
 gh auth refresh -h github.com -s admin:public_key
 gh ssh-key add "$HOME\.ssh\id_ed25519.pub" --type authentication --title $env:COMPUTERNAME
 gh auth refresh -h github.com --remove-scopes admin:public_key
@@ -112,13 +121,11 @@ gh auth refresh -h github.com --remove-scopes admin:public_key
 
 :::
 
-Check the connection:
+Run the check again: GitHub now greets you by name.
 
-```bash
-ssh -T git@github.com
-```
-
-GitHub greets you by name; the exit status 1 is normal.
+::: tip Sysadmins
+Sysadmins use a stricter setup: see [GitHub with a security key](/sysadmins/#github-with-a-security-key).
+:::
 
 ### Share one connection
 
@@ -138,10 +145,6 @@ EOF
 ```
 
 The connection closes after an idle hour, or at once with `ssh -O exit git@github.com`. Windows OpenSSH cannot share connections.
-
-::: tip Sysadmins
-Sysadmins use a stricter setup: see [GitHub with a security key](/sysadmins/#github-with-a-security-key).
-:::
 
 ## Accept your invitations
 

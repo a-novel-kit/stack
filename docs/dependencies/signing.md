@@ -1,6 +1,6 @@
 # Commit signing
 
-Every repository requires signed commits, and protected branches refuse the rest. Git signs them with the SSH key from the [GitHub](./github#add-an-ssh-key) page.
+Every repository requires signed commits, and protected branches refuse anything else. Git signs them with the SSH key from the [GitHub](./github#create-an-ssh-key) page.
 
 Skip this page if your commits already show **Verified** on GitHub. Using another key? Put its path in place of `~/.ssh/id_ed25519.pub`.
 
@@ -17,14 +17,12 @@ git config --global tag.gpgsign true
 ```
 
 == Windows
-The last line makes Git sign with Windows OpenSSH, which reaches your SSH agent.
 
 ```powershell
 git config --global gpg.format ssh
 git config --global user.signingkey "$HOME\.ssh\id_ed25519.pub"
 git config --global commit.gpgsign true
 git config --global tag.gpgsign true
-git config --global gpg.ssh.program "C:/Windows/System32/OpenSSH/ssh-keygen.exe"
 ```
 
 :::
