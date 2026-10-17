@@ -15,7 +15,7 @@ The backbone of A-Novel development: one workspace and one CLI for every project
 
 ## What this is
 
-A-Novel spans many repositories across two GitHub organizations: the brand's applications and business code, Agora among them, and their shared tooling. The **stack** brings them into one workspace, and its `a-novel` CLI works on all of them the same way: it keeps every repository in sync, tests and builds any of them, and runs services on your machine. Day to day, an AI agent that knows the team's conventions drives it.
+A-Novel spans many repositories across two GitHub organizations: the brand's applications and business code, and their shared tooling. The **stack** brings them into one workspace, and its `a-novel` CLI works on all of them the same way: it keeps every repository in sync, tests and builds any of them, and runs services on your machine. The workspace is optimized for AI agents that know the team's conventions, and every tool stays usable by hand.
 
 ```
 ~/git-projects/a-novel/   the stack (github.com/a-novel-kit/stack)
@@ -49,7 +49,7 @@ a-novel core setup
 a-novel core sync
 ```
 
-`a-novel claude` then opens Claude Code at the stack root, and `a-novel run ui` shows every service.
+Open your AI agent with the stack root as its workspace, and run `a-novel run ui` to see every service.
 
 ## Documentation
 

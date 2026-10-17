@@ -26,9 +26,11 @@ git config --global user.signingkey ~/.ssh/id_ed25519_sk.pub
 ```
 
 == Windows
-Windows OpenSSH, which Git already uses, reaches the key through Windows Hello.
+Windows OpenSSH reaches the key through Windows Hello. The first two commands point Git at it.
 
 ```powershell
+git config --global core.sshCommand "C:/Windows/System32/OpenSSH/ssh.exe"
+git config --global gpg.ssh.program "C:/Windows/System32/OpenSSH/ssh-keygen.exe"
 ssh-keygen -t ed25519-sk -C (git config user.email) -f "$HOME\.ssh\id_ed25519_sk"
 gh auth refresh -h github.com -s admin:public_key,admin:ssh_signing_key
 gh ssh-key add "$HOME\.ssh\id_ed25519_sk.pub" --type authentication --title $env:COMPUTERNAME

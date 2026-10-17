@@ -42,7 +42,7 @@ A background service keeps your services running between commands. Lint, format 
 
 ## Workflows
 
-An AI agent runs these for you: `a-novel claude` starts one at the stack root. The workflows below do the same work by hand, on the service and target set here:
+An AI agent started at the stack root runs these for you. The workflows below do the same work by hand, on the service and target set here:
 
 ```bash
 SERVICE=service-json-keys

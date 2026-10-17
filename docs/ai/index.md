@@ -1,26 +1,16 @@
 # Work with an agent
 
-Most A-Novel work goes through an AI agent. The stack ships the team's conventions as skills, and an agent started at its root follows them across every repository.
+The workspace is optimized for AI agents. The stack ships the team's conventions as skills, and an agent started at its root follows them across every repository. Agents are a tool, not a requirement: the code and tools stay easy to audit and use by hand, as the [runbooks](/cli/ui) show.
 
 ## Start a session
 
-[Set up an agent](./setup) first, then open Claude Code at the stack root, from anywhere:
-
-```bash
-a-novel claude
-```
-
-With Codex, run `codex` from the stack root.
+Open your agent with the stack root as its workspace, as [set up](./setup) for your tool.
 
 ## Hand over a task
 
 Describe the outcome in plain words, such as a bug to fix or a feature to build. The agent takes it from draft to pull request, running the CLI itself.
 
-Review its work as you would a colleague's, and answer when it asks.
-
-## What stays yours
-
-Two steps need you, by design: unlocking your SSH key with `ssh-add`, and typing secret values into [`secrets set`](/cli/secrets), which no agent can read.
+Review its work as you would a colleague's, and answer when it asks. Secret values stay yours to type: [`secrets set`](/cli/secrets) reads them from your keyboard, and no agent can read them back.
 
 ## Run several agents
 
