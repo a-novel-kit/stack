@@ -58,12 +58,12 @@ browsers.
 ## Design-system references
 
 - [Design Tokens Community Group format](https://www.designtokens.org/tr/drafts/format/) — shared
-  vocabulary and interoperability direction; Agora may use CSS-native tokens instead of its JSON
+  vocabulary and interoperability direction; A-Novel may use CSS-native tokens instead of its JSON
   interchange format.
 - [GitHub Primer Primitives](https://github.com/primer/primitives) and
   [IBM Carbon design tokens](https://carbondesignsystem.com/elements/themes/overview/) — maintained
   FOSS examples of primitive-to-semantic token architecture. Use as comparative evidence, not as an
-  Agora dependency or visual source.
+  A-Novel dependency or visual source.
 
 ## Decision record
 

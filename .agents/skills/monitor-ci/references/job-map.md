@@ -2,9 +2,9 @@
 
 Read this reference when routed here by [monitor-ci](../SKILL.md). Its rules apply to the selected work.
 
-## CI Job Map (typical Agora service repo)
+## CI Job Map (typical A-Novel service repo)
 
-The `main` workflow on Agora service repos under `a-novel/service-*` runs on every push to any
+The `main` workflow on A-Novel service repos under `a-novel/service-*` runs on every push to any
 branch. The job set varies by repo; the table below is the common surface across those services.
 For the jobs on the current checkout, run `gh pr checks <n>` (or read
 `.github/workflows/main.yaml`) and intersect with the rows below; anything unlisted is

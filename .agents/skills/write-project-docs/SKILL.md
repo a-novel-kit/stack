@@ -36,6 +36,19 @@ Separate concerns:
   sentence-level prose craft on every surface we write, README sections included. Load it alongside
   this skill and treat it as the base layer for the [editorial principles](references/editorial.md).
 
+## Name A-Novel and Agora apart
+
+**A-Novel** owns the code: both organizations, every service, library and tool, and every document
+about them. **Agora** is the brand of the product family users see: Studio today, Storyverse next.
+Name Agora only in those products and in the copy their users read, such as pages and emails.
+Everything else is A-Novel in prose and `a-novel` in identifiers.
+
+A few names predate the rule and stay: the Agora logo, the `agora-storyverse` Google Cloud project,
+the `agorastoryverse.com` Workspace domain and social handles, and the `agora-` production resource
+IDs until their migration lands. The
+[taxonomy](https://github.com/a-novel/.github/blob/master/docs/taxonomy.md#a-novel-and-agora) holds
+the rule for every reader.
+
 ---
 
 ## Choose the edit path
@@ -115,7 +128,7 @@ project documentation to verified project capabilities while retaining the fleet
 - **Do not edit `CODE_OF_CONDUCT.md`.** It's the Contributor Covenant verbatim. Changes to
   it are org-wide policy, not per-repo.
 - **Do not add "Live Demo" / "Screenshots" / "Roadmap" sections** unless the user asks.
-  They become stale fast and aren't in the Agora template.
+  They become stale fast and aren't in the A-Novel template.
 - **Do not write long prose.** README and CONTRIBUTING are reference documents; tables, bullet
   lists, and runnable code blocks beat paragraphs. See Fleet-standard hard rule 4.
 - **Do not put case-specific examples in generic prose.** A particular provider, key, or

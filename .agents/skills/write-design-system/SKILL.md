@@ -104,7 +104,7 @@ Rules:
 - Use `rem`-based spacing and type, unitless line heights, named duration/easing tokens, and logical
   dimensions. Zero and intrinsic keywords need tokens only when they represent a selectable public
   design decision.
-- Keep dark mode the Agora default. Add themes through semantic aliases rather than branching every
+- Keep dark mode the A-Novel default. Add themes through semantic aliases rather than branching every
   component selector.
 - Change or remove a published token only through the repository breaking-change/version workflow.
 
@@ -146,7 +146,7 @@ Rules:
 - Define state precedence explicitly. Persistent selected, checked, expanded, invalid, loading, and
   disabled states outrank transient hover and active treatments; transient feedback must not visually
   erase or contradict the persistent state.
-- Keep an Agora control's selected treatment stable while hovered. Use a modest lightening for hover
+- Keep an A-Novel control's selected treatment stable while hovered. Use a modest lightening for hover
   and localized glow for selection when the component contract calls for it; keep resting, hovered,
   selected, and disabled emphasis visibly distinct. Preserve each variant's semantic color family
   unless a cross-family state meaning is explicit.
@@ -170,7 +170,7 @@ Rules:
 
 ## Refinement passes
 
-Preserve the reviewed Agora direction: a dark gray-blue field, border-light surfaces, compact
+Preserve the reviewed A-Novel direction: a dark gray-blue field, border-light surfaces, compact
 metadata, and vivid semantic accents. Keep canonical brand, pressure, and signal colors stable
 unless the brief explicitly changes them. Tune the owning semantic role and compare before/after
 renders across its consumers.
@@ -211,9 +211,9 @@ components unchanged; change only what the rendered comparison or code ownership
   motion systems as applicable. Show token names beside rendered values.
 - Prefer official maintained Storybook blocks/addons. Write a small local block only when official
   tooling cannot express the contract; do not add a dependency for a decorative docs widget.
-- Default manager, docs, and canvas to the Agora dark theme. Keep a contrasting background option
+- Default manager, docs, and canvas to the A-Novel dark theme. Keep a contrasting background option
   for component verification.
-- Align Storybook manager and docs typography and color roles with Agora while retaining Storybook's
+- Align Storybook manager and docs typography and color roles with A-Novel while retaining Storybook's
   default spacing and widget geometry unless a verified clash requires a narrow override.
 - Start local Storybook for every rendered UI change with both `BROWSER=none` and `--no-open`; the
   process must not launch an external browser tab. Wait for readiness and keep it running for the

@@ -16,7 +16,7 @@ Apply this base layer to every browser-facing change. Read the target file, its 
 the package manifest, TypeScript config, lint config, and public exports before editing. Preserve a
 coherent local pattern unless it conflicts with a rule below or a current platform standard.
 
-This skill owns generic implementation quality, not repository placement. In the Agora workspace,
+This skill owns generic implementation quality, not repository placement. In the A-Novel workspace,
 use `write-platform` for terminal application shells and product policy, `write-design-system` for
 uikit visual contracts, and nodelib for reusable non-visual client runtime or tooling configuration.
 Load `write-svelte` for Svelte files, `write-frontend-tests` for tests or stories, and

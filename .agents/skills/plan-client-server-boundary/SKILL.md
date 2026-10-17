@@ -14,7 +14,7 @@ API, data model, or work breakdown.
 ## Use the established foundation
 
 Apply **secure server primitives with client-side composition**. Use **SSS/CEC — Simple Secure
-Server, Composable Ergonomic Client** as the Agora shorthand, not as the name of an external
+Server, Composable Ergonomic Client** as the A-Novel shorthand, not as the name of an external
 standard. No single established pattern captures the whole rule; it combines these foundations:
 
 - Separate protected mechanism from replaceable product policy. The Exokernel architecture is the

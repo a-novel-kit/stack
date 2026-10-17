@@ -7,7 +7,7 @@ description: >
 
 # Dockerfile and Compose Writing Skill
 
-This skill governs how to write and maintain container build files for Agora backend services.
+This skill governs how to write and maintain container build files for A-Novel backend services.
 All build artifacts live under `builds/`. Read the relevant section for the task at hand; the
 conventions at the end apply to every Dockerfile.
 
