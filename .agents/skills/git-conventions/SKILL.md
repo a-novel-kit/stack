@@ -122,14 +122,19 @@ EOF
 
 ## Reuse the GitHub SSH Connection
 
-Every new SSH connection to GitHub authenticates again, and a developer with a FIDO security key
-touches it each time. Run every network git operation (push, fetch, pull, clone, `ls-remote`) over
-one shared connection, which closes once it sits unused for an hour. Before the first one, confirm it
-is up or open it:
+The one goal: a chain of git operations must not ask a FIDO security key for presence again and
+again. Every new SSH connection to GitHub needs a touch. So when you start a chain of network git
+operations (push, fetch, pull, clone, `ls-remote`), reuse the shared connection if it is up, or open
+it:
 
 ```bash
 ssh -O check git@github.com 2>/dev/null || ssh -o ControlPersist=1h -fN git@github.com
 ```
+
+Every operation in the chain rides that connection, which closes once it sits unused for an hour.
+Do nothing else around the key: never probe, list, poll or wait on it or on the connection. A probe
+opens the device and competes with ssh-keygen for it. When a connection or a signature fails, stop
+and tell the developer.
 
 That needs `~/.ssh/config` to multiplex github.com, which the developer guide's GitHub page sets up:
 `ssh -G git@github.com` then prints a `controlpath` line. `a-novel core sync` checks for that same
@@ -145,7 +150,9 @@ which keeps a sync under GitHub's limit of ten sessions per connection.
 
 A signature shares nothing: every signed commit or tag asks for its own touch. Put a batch of commits
 in one script, run it where the developer sees its terminal, and warn them before it starts, because
-git hides ssh-keygen's "Confirm user presence" prompt until it fails.
+git hides ssh-keygen's "Confirm user presence" prompt until it fails. Commits nobody asked to sign
+must not reach the key: scratch repositories and test suites that commit inherit `commit.gpgsign`,
+so run them with `-c commit.gpgsign=false` or `GIT_CONFIG_GLOBAL=/dev/null`.
 
 ---
 
