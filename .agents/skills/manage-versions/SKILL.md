@@ -140,8 +140,11 @@ fixed forward, and the hotfix is the fast path:
    that the line lacks. The escalation ticket carries the commands to write the line's form of the fix
    by hand: cherry-pick, resolve the conflicts against the released code, and open the PR into
    `release/vX.Y`.
-4. Review and merge the backport. The merge cuts the patch once a `release` environment reviewer
-   approves. Backports merged together cut one patch.
+4. A clean backport, whose patch-id equals its fix's on the default branch, is opened by the
+   Dependencies App, approved by the agent and merged once its checks pass: it carries the fix's
+   review. A backport that git fitted to different context opens as the agent: review and merge
+   it. The merge cuts the patch once a `release` environment reviewer approves. Backports merged
+   together cut one patch.
 
 A backport never receives a required check that was added after its line's tag, so an admin merges
 past that check. Nothing reminds anyone of a backport left open, so merge it once it is approved. A
