@@ -193,11 +193,10 @@ func TestBuildPlanGovernsReleaseLines(t *testing.T) {
 	if ruleset.Target != "branch" || !slices.Equal(refs["include"].([]string), []string{"refs/heads/release/**"}) {
 		t.Fatalf("target/ref_name = %s/%v, want branch release/**", ruleset.Target, refs)
 	}
-	agent := slices.IndexFunc(ruleset.BypassActors, func(a APIBypassActor) bool {
-		return a.ActorID != nil && *a.ActorID == 3549379
-	})
-	if agent < 0 || ruleset.BypassActors[agent].BypassMode != modeAlways {
-		t.Fatalf("bypass actors = %+v, want the agent bot in always mode", ruleset.BypassActors)
+	// A repo that does not release lets no bot write its lines; the release bot's
+	// bypass is pinned by TestBuildPlanProtectsReleaseEnvironment.
+	if slices.ContainsFunc(ruleset.BypassActors, func(a APIBypassActor) bool { return a.ActorType == "Integration" }) {
+		t.Fatalf("bypass actors = %+v, want admins only", ruleset.BypassActors)
 	}
 	rules := map[string]map[string]any{}
 	for _, r := range ruleset.Rules {
@@ -439,7 +438,7 @@ func TestBuildPlanProtectsReleaseEnvironment(t *testing.T) {
 			t.Parallel()
 			plan, err := BuildPlan(&RepoTarget{
 				Org: "a-novel", Repo: "example", DefaultBranch: "master",
-				Class: &ClassPreset{Rulesets: ClassRulesets{Master: true, RequireApproval: true, Tags: testCase.tags}},
+				Class: &ClassPreset{Class: ClassService, Rulesets: ClassRulesets{Master: true, RequireApproval: true, Tags: testCase.tags}},
 				OrgProfile: &OrgProfile{Org: "a-novel", Bots: map[string]int64{
 					"agent": 3549319, "publish": 1718144, "dependencies": 1718123, "release": 5307879,
 				}},
@@ -449,13 +448,21 @@ func TestBuildPlanProtectsReleaseEnvironment(t *testing.T) {
 				t.Fatalf("BuildPlan: %v", err)
 			}
 			var policies any
+			var reviewers []string
 			for _, op := range plan.Ops {
-				if strings.HasSuffix(op.Path, "/environments/release/deployment-branch-policies") {
+				switch {
+				case strings.HasSuffix(op.Path, "/environments/release/deployment-branch-policies"):
 					policies = op.Body
+				case strings.HasSuffix(op.Path, "/environments/release"):
+					reviewers = op.Reviewers
 				}
 			}
 			if !reflect.DeepEqual(policies, testCase.wantPolicies) {
 				t.Errorf("deployment policies = %#v, want %#v", policies, testCase.wantPolicies)
+			}
+			// Every cut waits for a person: core or the repo's owners, never a bot.
+			if want := []string{"core", "owners-service"}; testCase.wantPolicies != nil && !slices.Equal(reviewers, want) {
+				t.Errorf("release environment reviewers = %v, want %v", reviewers, want)
 			}
 			for _, op := range plan.Ops {
 				if op.RulesetName == "" || op.RulesetName == "commit-messages" {
@@ -466,6 +473,12 @@ func TestBuildPlanProtectsReleaseEnvironment(t *testing.T) {
 				})
 				if want := testCase.wantPolicies != nil; hasRelease != want {
 					t.Errorf("%s: release bypass = %v, want %v", op.RulesetName, hasRelease, want)
+				}
+				// Only the release bot writes these refs: the agent and publish bots bypass nothing.
+				if slices.ContainsFunc(op.Body.(*APIRuleset).BypassActors, func(a APIBypassActor) bool {
+					return a.ActorID != nil && (*a.ActorID == 3549319 || *a.ActorID == 1718144)
+				}) {
+					t.Errorf("%s: the agent or publish bot bypasses it", op.RulesetName)
 				}
 			}
 		})

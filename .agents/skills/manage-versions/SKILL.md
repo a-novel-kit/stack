@@ -73,10 +73,11 @@ under `a-novel publish` is `stamp`, the doc-version helper `prepublish:doc` call
 
 1. **The `master` ruleset** restricts who can push the version-bump commit.
 2. **The `tags` ruleset** restricts who can create a tag. A tag is the release decision: it starts
-   the publishing run, so only admins and the release bots may create one.
+   the publishing run, so only admins and the release bot may create one.
 3. **The `release` environment** holds the release App's key and admits only the default branch,
-   `release/v*` lines and `v*` tags. Once it has reviewers (a-novel-kit/stack#609), every cut waits
-   for a person; the admin who dispatched may approve their own run.
+   `release/v*` lines and `v*` tags. Every cut waits there for `core` or the repo's `owners-<class>`
+   team; the person who dispatched may approve their own run. The first backport onto a new line
+   waits there too, since only the release App may create the line.
 
 A `v*` tag is only ever created by a CI dispatch — the release or release-train job, running as the
 release App. Nobody pushes one by hand, maintainers included. Repo admins can bypass every rule
@@ -116,7 +117,7 @@ fixed forward, and the hotfix is the fast path:
 - **release line** — `release/vX.Y`, created from the baseline the first time the line needs a fix.
   It holds released code plus backports only, and its head is always its latest patch. The
   `release-lines` ruleset protects it like the default branch: a PR, one approval, squash, and
-  master's required checks. Only admins and the release bots write to it directly.
+  master's required checks. Only admins and the release bot write to it directly.
 - **backport** — a PR into a release line carrying a fix in the form that line's code needs, titled
   `<fix subject> [vX.Y]`. Its checks run against the released code, so a fix that leans on unreleased
   code fails before it ships.

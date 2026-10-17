@@ -528,6 +528,26 @@ func TestApplyLabels(t *testing.T) {
 	})
 }
 
+func TestApplyEnvironment(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam.
+	calls := fakeGH(t, map[string]string{"orgs/o/teams/core ": "11\n", "orgs/o/teams/owners-service ": "12\n"})
+	op := repocfg.Op{
+		Method: http.MethodPut, Path: "repos/o/r/environments/release", Reviewers: []string{"core", "owners-service"},
+		Body: map[string]any{"deployment_branch_policy": map[string]any{"custom_branch_policies": true}},
+	}
+	if err := applyEnvironment("o", op); err != nil {
+		t.Fatalf("applyEnvironment: %v", err)
+	}
+	put := (*calls)[len(*calls)-1]
+	want := `"prevent_self_review":false,"reviewers":[{"id":11,"type":"Team"},{"id":12,"type":"Team"}]`
+	if !strings.HasPrefix(put, "api -X PUT repos/o/r/environments/release --input -") || !strings.Contains(put, want) {
+		t.Errorf("environment write = %q, want the reviewers resolved to team ids and self-review allowed", put)
+	}
+	if _, ok := op.Body.(map[string]any)["reviewers"]; ok {
+		t.Error("applyEnvironment mutated the plan's body")
+	}
+}
+
 func TestApplyDeploymentPolicies(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam.
 	path := "repos/o/r/environments/release/deployment-branch-policies"

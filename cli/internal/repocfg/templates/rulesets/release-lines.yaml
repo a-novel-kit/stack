@@ -5,11 +5,9 @@
 # A backport runs those checks from the line's own workflow files, so a check
 # added after the line's tag never reports there, and an admin merges past it.
 #
-# Only admins and the release bots may create a line, so every line starts at a
-# tag. The agent bot bypasses with mode "always" for its direct writes: the
+# Only admins and the release bot may create a line, so every line starts at a
+# tag. The release bot bypasses with mode "always" for its direct writes: the
 # line's creation and the patch's version-bump commit, pushed with its tags.
-# The release bot joins it in releasing repos, to take those writes over
-# (a-novel/.github#414).
 name: release-lines
 target: branch
 enforcement: active
@@ -19,7 +17,6 @@ conditions:
     exclude: []
 bypass:
   - admins
-  - agent
   - release
 rules:
   creation: true

@@ -82,6 +82,9 @@ type RepoTarget struct {
 // A team op sets Teams, the complete set of tier-team grants the repo holds:
 // apply creates a missing team, grants each one, and removes the grant of any
 // other tier team.
+//
+// An environment op may set Reviewers, the slugs of the teams whose approval
+// its jobs wait for; apply resolves them to the team ids GitHub expects.
 type Op struct {
 	Method        string      `json:"method,omitempty"`
 	Path          string      `json:"path,omitempty"`
@@ -93,6 +96,7 @@ type Op struct {
 	Secret        string      `json:"secret,omitempty"`
 	Teams         []TeamGrant `json:"teams,omitempty"`
 	Governance    *Governance `json:"governance,omitempty"`
+	Reviewers     []string    `json:"reviewers,omitempty"`
 }
 
 // TeamGrant is one area team's role on a repository. Team is the area team,
@@ -254,17 +258,19 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	if t.Class.Rulesets.Tags {
 		policies = append(policies, DeploymentPolicy{Name: "release/v*", Type: "branch"}, DeploymentPolicy{Name: "v*", Type: "tag"})
 	}
-	environment := func(name string) {
+	environment := func(name string, reviewers ...string) {
 		p.Ops = append(p.Ops,
-			Op{Method: http.MethodPut, Path: repoPath + "/environments/" + name, Body: map[string]any{
+			Op{Method: http.MethodPut, Path: repoPath + "/environments/" + name, Reviewers: reviewers, Body: map[string]any{
 				"deployment_branch_policy": map[string]any{"protected_branches": false, "custom_branch_policies": true},
 			}},
 			Op{Method: http.MethodPut, Path: repoPath + "/environments/" + name + "/deployment-branch-policies", Body: policies},
 		)
 	}
-	// The release App's key is a secret of the release environment.
+	// The release App's key is a secret of the release environment, and every
+	// cut waits there for core or the repo's owners, who may approve a run they
+	// dispatched. No bot can approve, so no bot can release.
 	if releases(t) {
-		environment("release")
+		environment("release", "core", "owners-"+string(c.Class))
 	}
 	// The privileged keys are secrets of the governance environment alone, so
 	// a branch's copy of a workflow cannot read them. It holds the ones the

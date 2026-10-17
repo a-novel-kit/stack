@@ -134,6 +134,8 @@ func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
 		case op.Governance != nil:
 			detail, err := applyEnvSecrets(org, repo, op)
 			note("governance secrets", detail, err)
+		case len(op.Reviewers) > 0:
+			note(path.Base(op.Path)+" environment", "", applyEnvironment(org, op))
 		case len(op.Teams) > 0:
 			detail, err := applyTeams(org, repo, op)
 			note("tier teams", detail, err)
@@ -175,6 +177,31 @@ func applySettings(op repocfg.Op) error {
 		return err
 	}
 	return nil
+}
+
+// applyEnvironment writes an environment with its reviewer teams, resolved from
+// slugs to the ids GitHub expects. A reviewer may approve a run they dispatched.
+func applyEnvironment(org string, op repocfg.Op) error {
+	body, ok := op.Body.(map[string]any)
+	if !ok {
+		return fmt.Errorf("environment body is %T, want map", op.Body)
+	}
+	reviewers := make([]map[string]any, 0, len(op.Reviewers))
+	for _, slug := range op.Reviewers {
+		out, err := gh("api", "orgs/"+org+"/teams/"+slug, "--jq", ".id")
+		if err != nil {
+			return fmt.Errorf("reviewer team %s: %w", slug, err)
+		}
+		id, err := strconv.Atoi(strings.TrimSpace(out))
+		if err != nil {
+			return fmt.Errorf("reviewer team %s id %q: %w", slug, out, err)
+		}
+		reviewers = append(reviewers, map[string]any{"type": "Team", "id": id})
+	}
+	body = maps.Clone(body)
+	body["reviewers"] = reviewers
+	body["prevent_self_review"] = false
+	return ghJSON(op.Method, op.Path, body)
 }
 
 // applyEnvSecrets reconciles an environment's secrets with the org's Bitwarden
