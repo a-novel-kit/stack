@@ -154,6 +154,9 @@ matters, in as few words as it takes, and stop.
 This applies to every prose surface we write — doc comments, package docs, README sections, PR
 descriptions (see `open-pull-request`), and planning issues (see `plan-feature`). Load this section
 before writing prose on any of them, including surfaces this skill does not otherwise own.
+On each of them, name the entity as
+[write-project-docs](../write-project-docs/SKILL.md#name-a-novel-and-agora-apart) rules: A-Novel for
+the code and its tooling, Agora only for the user-facing products.
 
 ---
 

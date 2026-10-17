@@ -10,7 +10,7 @@ edited.
 
 ### 1.1 Always required
 
-| Input                | Example                     | Default for Agora        |
+| Input                | Example                     | Default for A-Novel      |
 | -------------------- | --------------------------- | ------------------------ |
 | Project display name | `JSON Keys service`         | (ask)                    |
 | Repo path (org/repo) | `a-novel/service-json-keys` | `a-novel/<service-slug>` |

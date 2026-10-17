@@ -7,7 +7,7 @@ description: >
 
 # Bash Script Writing Skill
 
-Shell scripts in Agora backend services live in `scripts/` (developer tooling) or `builds/`
+Shell scripts in A-Novel backend services live in `scripts/` (developer tooling) or `builds/`
 (container entrypoints). Read the relevant section for the task at hand; the conventions at the end
 apply to every script.
 

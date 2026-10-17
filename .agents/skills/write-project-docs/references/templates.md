@@ -97,7 +97,7 @@ fills slot content; it never reorders the slots.
   shown there (socials, then `<hr />`, then the type's tech badges, then the Codecov sunburst only
   when the repo reports coverage). Deviating breaks the visual rhythm across the fleet.
 - The `<hr />` literal (not `---`) separates the social badges from the repo metrics, matching
-  the existing Agora convention.
+  the existing A-Novel convention.
 - Docker compose examples pin images by an explicit release tag, never `:latest`. In prose, link
   the latest release (`…/releases/latest`) instead of a `(current: vX.Y.Z)` string that goes stale
   — see Fleet-standard hard rule 7.
@@ -109,7 +109,7 @@ fills slot content; it never reorders the slots.
 ### 4.2 SECURITY.md template
 
 This file is near-boilerplate: only `{{org-label}}` and `{{security-email}}` are substituted. Do
-not rewrite it to "improve" it — consistency across Agora services matters more than prose polish.
+not rewrite it to "improve" it — consistency across A-Novel services matters more than prose polish.
 
 ```markdown
 # Security Policies and Procedures

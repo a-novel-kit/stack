@@ -8,7 +8,7 @@ description: >
 
 # Git Conventions
 
-This skill governs workspace state, branch naming, and commit messages across all Agora backend
+This skill governs workspace state, branch naming, and commit messages across all A-Novel backend
 services. Every branch and commit produced by an agent follows these conventions exactly — they
 drive automation (Renovate, CI tagging, changelogs) and signal intent to reviewers at a glance.
 

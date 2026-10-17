@@ -2,7 +2,7 @@
 
 Use the current version of the relevant source. Treat standards as requirements, established design
 systems as comparative evidence, and agent skills as workflow inspiration rather than authority. Do
-not copy another system's visual identity or component code into Agora.
+not copy another system's visual identity or component code into A-Novel.
 
 ## User need, contribution, and governance
 
@@ -31,7 +31,7 @@ not copy another system's visual identity or component code into Agora.
 
 - [Design Tokens Community Group Format 2025.10](https://www.w3.org/community/reports/design-tokens/CG-FINAL-format-20251028/)
   — use its token, group, type, alias, and composite vocabulary when planning interoperable token
-  sources. A CSS-native implementation may remain appropriate for Agora.
+  sources. A CSS-native implementation may remain appropriate for A-Novel.
 - [Design Tokens Community Group Color Module 2025.10](https://www.w3.org/community/reports/design-tokens/CG-FINAL-color-20251028/)
   — reference interoperable OKLCH and Display P3 token values and fallback-aware color representation.
 - [CSS Color 4](https://www.w3.org/TR/css-color-4/) — normative CSS color syntax, conversion, gamut,
@@ -47,7 +47,7 @@ not copy another system's visual identity or component code into Agora.
 - [Adobe Leonardo](https://github.com/adobe/leonardo) — maintained FOSS reference for generating
   adaptive scales from target contrast. Use as comparative tooling, not a mandatory dependency.
 - [Radix Colors scale roles](https://www.radix-ui.com/colors/docs/palette-composition/understanding-the-scale)
-  — compare explicit background, component, border, solid, and text slots while retaining Agora's own
+  — compare explicit background, component, border, solid, and text slots while retaining A-Novel's own
   palette formula and semantics.
 - [Material Color Utilities](https://github.com/material-foundation/material-color-utilities) —
   compare HCT tonal-palette behavior when dynamic themes are a product requirement; do not inherit
@@ -103,7 +103,7 @@ accessibility claims to primary standards before adopting them.
 - [Anthropic frontend-design skill](https://github.com/anthropics/skills/tree/main/skills/frontend-design)
   ([Apache-2.0 per-skill license](https://github.com/anthropics/skills/blob/main/skills/frontend-design/LICENSE.txt))
   — use its product-grounded direction, memorable-signature, and anti-generic critique as workflow
-  precedents. Agora's authority order, accessibility gate, implementation rules, and wording remain
+  precedents. A-Novel's authority order, accessibility gate, implementation rules, and wording remain
   independent.
 - [Vercel Web Interface Guidelines](https://github.com/vercel-labs/web-interface-guidelines)
   ([MIT](https://github.com/vercel-labs/web-interface-guidelines/blob/main/LICENSE)) — use as a
@@ -117,11 +117,11 @@ accessibility claims to primary standards before adopting them.
   ([MIT](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill/blob/main/LICENSE)) — use its broad
   state, accessibility, token, and render-verification coverage as a discovery checklist. Do not
   import its style catalog, popularity-based recommendations, framework assumptions, generated
-  palettes, or subjective scoring as Agora standards.
+  palettes, or subjective scoring as A-Novel standards.
 - [UX/UI Agent Skills](https://github.com/plugin87/ux-ui-agent-skills) — evaluated for its component
   state matrix and rendered QA emphasis. The repository README declares MIT, but GitHub exposes no
   repository license file as of the 2026-08-11 review, so no text, scripts, data, or templates are
-  copied or incorporated. Equivalent rules in Agora must stand on primary standards or independently
+  copied or incorporated. Equivalent rules in A-Novel must stand on primary standards or independently
   authored contracts.
 
 ## Source selection rule
