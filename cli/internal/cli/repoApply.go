@@ -234,6 +234,11 @@ func applyEnvSecrets(org, repo string, op repocfg.Op) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// A token whose machine account cannot read the project lists no secret at all.
+	if source != nil && len(source) == 0 {
+		return "", fmt.Errorf("the Bitwarden access token reads no secret in project %s; store the token of a machine account "+
+			"that reads it with `a-novel secrets set %s`", op.Governance.BWSProject, bwsTokenID)
+	}
 	// Every named secret must be available before the first write.
 	var missing []string
 	for _, name := range op.Governance.Secrets {
