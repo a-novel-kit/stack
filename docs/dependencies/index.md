@@ -1,13 +1,13 @@
 # Dependencies
 
-Install these tools in order. Everything is yours to do, except enrollment, which the team handles.
+This guide sets up your machine as an A-Novel contributor, one tool per page, in order. Everything is yours to do except enrollment, which the team grants. Ask for it first, on [Discord](./discord).
 
 ## Choose your system
 
 Pick your system in any tab; every page follows. Under WSL2, pick Linux.
 
 ::: warning The a-novel CLI runs on Linux and macOS
-On Windows, install everything inside [WSL2](https://learn.microsoft.com/windows/wsl/install) with the Linux tabs. The Windows tabs cover the tools alone.
+Native Windows gets the tools only: no CLI and none of its automated setup, so you install, run and manage everything yourself. To use the CLI on Windows, install everything inside [WSL2](https://learn.microsoft.com/windows/wsl/install) with the Linux tabs.
 :::
 
 ## Before you begin
@@ -59,8 +59,6 @@ Open a new terminal after each install.
 
 Commands that edit your shell profile target zsh and bash. With fish, add the same paths with `fish_add_path`.
 
-## Access
+## For sysadmins
 
-Contributors use this whole guide except the Sysadmins section. [Get enrolled](./discord#get-enrolled) first; nothing else waits on it.
-
-[Sysadmins](/sysadmins/) hold admin rights and the organizations' credentials, and add their own setup. Maintainers get wider repository access with the contributor setup.
+Sysadmins hold admin rights over the repositories, the cloud and the organizations' credentials, so a compromised machine costs more. After this setup, follow the [sysadmin setup](/sysadmins/).

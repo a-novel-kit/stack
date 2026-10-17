@@ -1,6 +1,6 @@
 # Work with an agent
 
-Most work on Agora goes through an AI agent. The stack ships the team's conventions as skills, and an agent started at its root follows them across every repository.
+Most A-Novel work goes through an AI agent. The stack ships the team's conventions as skills, and an agent started at its root follows them across every repository.
 
 ## Start a session
 
@@ -20,7 +20,7 @@ Review its work as you would a colleague's, and answer when it asks.
 
 ## What stays yours
 
-Security-key touches, secret values, approvals, releases and repository settings need you, by design.
+Two steps need you, by design: unlocking your SSH key with `ssh-add`, and typing secret values into [`secrets set`](/cli/secrets), which no agent can read.
 
 ## Run several agents
 

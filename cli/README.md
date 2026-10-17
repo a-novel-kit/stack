@@ -1,6 +1,6 @@
 # a-novel
 
-The command-line tool for developing Agora: one workspace, and the same commands to test, build and run every repository.
+The command-line tool for developing A-Novel: one workspace, and the same commands to test, build and run every repository.
 
 ## Install
 
