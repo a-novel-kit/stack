@@ -11,7 +11,7 @@ description: >
 This skill governs the three root-level Markdown files that describe a project to external
 readers: `README.md`, `SECURITY.md`, `CONTRIBUTING.md`. They are the first thing visitors see,
 setting expectations for usage, security contact, and how to contribute, so they must be accurate,
-scannable, and consistent across all Agora services.
+scannable, and consistent across every repository of both organizations.
 
 They carry the **global picture** — the architecture, the layer split, the principles behind the
 shape of the system — which code comments defer to instead of re-explaining the system from inside
