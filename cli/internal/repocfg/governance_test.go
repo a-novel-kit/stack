@@ -651,32 +651,49 @@ func TestCleanImagesGovernance(t *testing.T) {
 			list = step.Run
 		}
 	}
-	directory := t.TempDir()
-	workflows := filepath.Join(directory, ".github", "workflows")
-	if err := os.MkdirAll(workflows, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	for name, content := range map[string]string{
-		"main.yaml":    "image_name: ${{ github.repository }}/database\nimage_name: ${{ github.repository }}/jobs/migrations\n",
-		"release.yaml": "image_name: ${{ github.repository }}/database\nimage_name: \"ghcr.io/other\"\n",
-		"studio.yaml":  "          image_name: ${{ github.repository }}\n",
+	for _, tc := range []struct {
+		name      string
+		workflows map[string]string
+		want      string
+	}{
+		{
+			name: "Images",
+			workflows: map[string]string{
+				"main.yaml":    "image_name: ${{ github.repository }}/database\nimage_name: ${{ github.repository }}/jobs/migrations\n",
+				"release.yaml": "image_name: ${{ github.repository }}/database\nimage_name: \"ghcr.io/other\"\n",
+				"studio.yaml":  "          image_name: ${{ github.repository }}\n",
+			},
+			want: `["service","service/database","service/jobs/migrations"]`,
+		},
+		// A template repository publishes no image, and the close and sweep jobs skip an empty list.
+		{name: "NoImages", workflows: map[string]string{"clean-images.yaml": "name: clean images\n"}, want: `[]`},
 	} {
-		if err := os.WriteFile(filepath.Join(workflows, name), []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	command := exec.CommandContext(t.Context(), "bash", "-c", list)
-	command.Dir = directory
-	command.Env = append(os.Environ(), "GITHUB_REPOSITORY=a-novel/service", "GITHUB_OUTPUT="+filepath.Join(directory, "output"))
-	if logs, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("list script: %v: %s", err, logs)
-	}
-	output, err := os.ReadFile(filepath.Join(directory, "output"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := string(output), `names=["service","service/database","service/jobs/migrations"]`+"\n"; got != want {
-		t.Errorf("listed packages = %q, want %q", got, want)
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			directory := t.TempDir()
+			workflows := filepath.Join(directory, ".github", "workflows")
+			if err := os.MkdirAll(workflows, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			for name, content := range tc.workflows {
+				if err := os.WriteFile(filepath.Join(workflows, name), []byte(content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			command := exec.CommandContext(t.Context(), "bash", "-c", list)
+			command.Dir = directory
+			command.Env = append(os.Environ(), "GITHUB_REPOSITORY=a-novel/service", "GITHUB_OUTPUT="+filepath.Join(directory, "output"))
+			if logs, err := command.CombinedOutput(); err != nil {
+				t.Fatalf("list script: %v: %s", err, logs)
+			}
+			output, err := os.ReadFile(filepath.Join(directory, "output"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := string(output), "names="+tc.want+"\n"; got != want {
+				t.Errorf("listed packages = %q, want %q", got, want)
+			}
+		})
 	}
 }
 
