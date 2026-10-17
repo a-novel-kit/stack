@@ -12,8 +12,10 @@ import (
 
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
-// TestReport pins what every batch command prints at the end: the headline,
-// one pill per outcome, and the full output of exactly the selected jobs.
+// TestReport pins what every batch command prints at the end, in order: the
+// full output of exactly the selected jobs, the job status lines again when
+// that output pushed them out of view, then the headline and one pill per
+// outcome.
 func TestReport(t *testing.T) {
 	t.Parallel()
 
@@ -26,7 +28,7 @@ func TestReport(t *testing.T) {
 		name    string
 		batch   Batch
 		show    func(jobs.Result) bool
-		want    []string
+		want    []string // in the order they print
 		notWant []string
 	}{
 		{
@@ -34,7 +36,7 @@ func TestReport(t *testing.T) {
 			batch:   Batch{Results: []jobs.Result{ok, skipped, ok}, Elapsed: time.Second},
 			show:    Failed,
 			want:    []string{"✓ SYNC PASSED", "updated 2", "skipped 1", "failed 0", "total 3", "took 1s"},
-			notWant: []string{"FAILURES", "master updated"},
+			notWant: []string{"FAILURES", "master updated", "a-novel-kit/golib"},
 		},
 		{
 			name:    "Success/EmptyStatusReadsPassed",
@@ -44,23 +46,31 @@ func TestReport(t *testing.T) {
 			notWant: []string{"OUTPUT"},
 		},
 		{
-			name:    "Error/FailedOutputInFull",
-			batch:   Batch{Results: []jobs.Result{ok, failed}},
-			show:    Failed,
-			want:    []string{"✗ SYNC FAILED", "failed 1", "FAILURES", "error: fetch failed", "ssh: refused"},
+			name:  "Error/FailedOutputInFull",
+			batch: Batch{Results: []jobs.Result{ok, failed}},
+			show:  Failed,
+			want: []string{
+				"FAILURES", "error: fetch failed", "ssh: refused",
+				"✓ a-novel-kit/golib updated", "✗ a-novel/service-x fetch failed",
+				"✗ SYNC FAILED", "failed 1",
+			},
 			notWant: []string{"master updated"},
 		},
 		{
 			name:  "Success/EveryOutputWhenSelected",
 			batch: Batch{Results: []jobs.Result{ok, skipped}},
 			show:  func(jobs.Result) bool { return true },
-			want:  []string{"OUTPUT", "master updated", "diverged"},
+			want: []string{
+				"OUTPUT", "master updated", "diverged",
+				"✓ a-novel-kit/golib updated", "✓ a-novel/infra skipped",
+				"✓ SYNC PASSED", "total 2",
+			},
 		},
 		{
 			name:  "Error/Aborted",
 			batch: Batch{Results: []jobs.Result{ok, {Job: jobs.Job{Name: "late"}, Err: jobs.ErrAborted}}, Aborted: true},
 			show:  Failed,
-			want:  []string{"! SYNC ABORTED", "aborted before completion"},
+			want:  []string{"error: aborted before completion", "✗ late aborted before completion", "! SYNC ABORTED"},
 		},
 	}
 
@@ -69,10 +79,14 @@ func TestReport(t *testing.T) {
 			t.Parallel()
 
 			got := ansiEscape.ReplaceAllString(Report("SYNC", c.batch, c.show), "")
+			rest := got
 			for _, want := range c.want {
-				if !strings.Contains(got, want) {
-					t.Errorf("report missing %q:\n%s", want, got)
+				_, after, found := strings.Cut(rest, want)
+				if !found {
+					t.Errorf("report missing %q, or out of order:\n%s", want, got)
+					continue
 				}
+				rest = after
 			}
 			for _, notWant := range c.notWant {
 				if strings.Contains(got, notWant) {
