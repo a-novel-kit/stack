@@ -1,6 +1,6 @@
-# Mandatory review on the default branch. The org bots are exempt, so
-# automation (dependency PRs, releases, the comment proxy) can merge
-# without a human approval.
+# Mandatory review on the default branch. The dependency bot's pull requests
+# are exempt, and the release bot's version-bump commit, pushed directly, must
+# pass this rule's pull-request requirement too.
 name: require-approval
 target: branch
 enforcement: active
@@ -11,9 +11,7 @@ conditions:
 bypass:
   - admins
   - dependencies
-  - agent
   - release
-  - publish
 rules:
   pull_request:
     allowed_merge_methods: ["squash"]

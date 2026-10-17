@@ -319,6 +319,12 @@ func TestHotfixGovernance(t *testing.T) {
 	if got := cut.With["branch"]; got != "${{ github.event.pull_request.base.ref }}" {
 		t.Errorf("cut branch = %q, want the merged pull request's base", got)
 	}
+	// A missing release line is created by the release App, the one bot its ruleset admits.
+	if backport := workflow.Jobs["backport"]; backport.With["release_client_id"] != "${{ vars.RELEASE_BOT_CLIENT_ID }}" ||
+		backport.Secrets["release_private_key"] != "${{ secrets.RELEASE_BOT_PRIVATE_KEY }}" {
+		t.Errorf("backport release credentials = %q, %q, want the release App's",
+			backport.With["release_client_id"], backport.Secrets["release_private_key"])
+	}
 	// A clean backport is opened by the Dependencies App, so the agent can approve it.
 	if backport := workflow.Jobs["backport"]; backport.With["dependency_client_id"] != "${{ vars.DEPENDENCY_BOT_CLIENT_ID }}" ||
 		backport.Secrets["dependency_private_key"] != "${{ secrets.DEPENDENCY_BOT_PRIVATE_KEY }}" {
