@@ -4,7 +4,7 @@ Sysadmins hold admin rights over the repositories and the cloud, and keep the or
 
 ## Security requirements
 
-- **A FIDO2 security key, with a backup.** Your SSH keys, for GitHub and commit signing, live on a hardware key, as [set up below](#github-with-a-security-key). Key files are not allowed.
+- **A FIDO2 security key, with a backup.** Your SSH keys, for GitHub logins and commit signing, live on a hardware key, as [set up below](#github-with-a-security-key). Key files are not allowed.
 - **Nothing open when you leave.** Set up [connection sharing](/dependencies/github#share-one-connection). Close the connection and unplug your security key whenever you leave your machine, since its signing key needs no touch.
 - **Elevated scopes for one task only.** Keep your `gh` session on its default scopes. Add `admin:org` or another for a single run, then remove it.
 - **No credential in clear.** Keep tokens in the CLI's encrypted store, never in a file or your shell history.
@@ -13,41 +13,124 @@ Sysadmins hold admin rights over the repositories and the cloud, and keep the or
 
 This replaces the key file of the contributor setup. Each security key holds two SSH keys. The authentication key asks for a touch on every new connection to GitHub. The signing key signs without one, so commits, rebases and agents never wait on you.
 
-Plug the key in. On macOS, run `brew install openssh` first, as the system OpenSSH lacks security key support. Leave the signing key's passphrase empty, or every commit asks for it.
+### Name the key
+
+Set the key's file name and the title GitHub shows for it. Start with your main key. For a backup, add `_backup` to the file name and use `backup` in the title.
 
 :::tabs key:shell
 == Linux / macOS
 
 ```bash
-EMAIL=$(git config user.email)
-ssh-keygen -t ed25519-sk -C "$EMAIL" -f ~/.ssh/id_ed25519_sk
-ssh-keygen -t ed25519-sk -O no-touch-required -C "$EMAIL" -f ~/.ssh/id_ed25519_sk_signing
-gh auth refresh -h github.com -s admin:public_key,admin:ssh_signing_key
-gh ssh-key add ~/.ssh/id_ed25519_sk.pub --type authentication --title "$(hostname)"
-gh ssh-key add ~/.ssh/id_ed25519_sk_signing.pub --type signing --title "$(hostname)"
-gh auth refresh -h github.com --remove-scopes admin:public_key,admin:ssh_signing_key
-git config --global user.signingkey ~/.ssh/id_ed25519_sk_signing.pub
+KEY_FILE=~/.ssh/id_ed25519_sk
+KEY_TITLE="$(hostname) main"
+```
+
+== Windows
+
+```powershell
+$KeyFile = "$HOME\.ssh\id_ed25519_sk"
+$KeyTitle = "$env:COMPUTERNAME main"
+```
+
+:::
+
+### Create the SSH keys
+
+Plug the security key in. On macOS, run `brew install openssh` first, as the system OpenSSH lacks security key support. Leave the signing key's passphrase empty, or every commit asks for it.
+
+:::tabs key:shell
+== Linux / macOS
+
+```bash
+ssh-keygen -t ed25519-sk -C "$(git config user.email)" -f "$KEY_FILE"
+ssh-keygen -t ed25519-sk -O no-touch-required -C "$(git config user.email)" -f "${KEY_FILE}_signing"
 ```
 
 == Windows
 Windows OpenSSH reaches the key through Windows Hello, which may still ask for a touch on each signature. The two `git config` lines point Git at it.
 
 ```powershell
-$Email = git config user.email
 git config --global core.sshCommand "C:/Windows/System32/OpenSSH/ssh.exe"
 git config --global gpg.ssh.program "C:/Windows/System32/OpenSSH/ssh-keygen.exe"
-ssh-keygen -t ed25519-sk -C $Email -f "$HOME\.ssh\id_ed25519_sk"
-ssh-keygen -t ed25519-sk -O no-touch-required -C $Email -f "$HOME\.ssh\id_ed25519_sk_signing"
+ssh-keygen -t ed25519-sk -C (git config user.email) -f $KeyFile
+ssh-keygen -t ed25519-sk -O no-touch-required -C (git config user.email) -f "${KeyFile}_signing"
+```
+
+:::
+
+### Register them on GitHub
+
+`gh` asks for a temporary permission to upload the keys.
+
+:::tabs key:shell
+== Linux / macOS
+
+```bash
 gh auth refresh -h github.com -s admin:public_key,admin:ssh_signing_key
-gh ssh-key add "$HOME\.ssh\id_ed25519_sk.pub" --type authentication --title $env:COMPUTERNAME
-gh ssh-key add "$HOME\.ssh\id_ed25519_sk_signing.pub" --type signing --title $env:COMPUTERNAME
+gh ssh-key add "$KEY_FILE.pub" --type authentication --title "$KEY_TITLE"
+gh ssh-key add "${KEY_FILE}_signing.pub" --type signing --title "$KEY_TITLE"
 gh auth refresh -h github.com --remove-scopes admin:public_key,admin:ssh_signing_key
+```
+
+== Windows
+
+```powershell
+gh auth refresh -h github.com -s admin:public_key,admin:ssh_signing_key
+gh ssh-key add "$KeyFile.pub" --type authentication --title $KeyTitle
+gh ssh-key add "${KeyFile}_signing.pub" --type signing --title $KeyTitle
+gh auth refresh -h github.com --remove-scopes admin:public_key,admin:ssh_signing_key
+```
+
+:::
+
+### Use them on this machine
+
+List the authentication key as an `IdentityFile` under `Host github.com` in `~/.ssh/config`. With a backup, the entry reads:
+
+```text
+Host github.com
+    IdentityFile ~/.ssh/id_ed25519_sk
+    IdentityFile ~/.ssh/id_ed25519_sk_backup
+```
+
+Then add the signing key to your [allowed signers](/dependencies/signing#check-a-signature):
+
+:::tabs key:shell
+== Linux / macOS
+
+```bash
+SIGNERS=$(git config --global gpg.ssh.allowedSignersFile)
+echo "$(git config user.email) namespaces=\"git\" $(cat "${KEY_FILE}_signing.pub")" >> "$SIGNERS"
+```
+
+== Windows
+
+```powershell
+Add-Content (git config --global gpg.ssh.allowedSignersFile) "$(git config user.email) namespaces=`"git`" $(Get-Content "${KeyFile}_signing.pub")"
+```
+
+:::
+
+Repeat from [Name the key](#name-the-key) for each backup.
+
+### Sign with your main key
+
+:::tabs key:shell
+== Linux / macOS
+
+```bash
+git config --global user.signingkey ~/.ssh/id_ed25519_sk_signing.pub
+```
+
+== Windows
+
+```powershell
 git config --global user.signingkey "$HOME\.ssh\id_ed25519_sk_signing.pub"
 ```
 
 :::
 
-Set up the backup key the same way, with `_backup` at the end of both file names. List both authentication keys as `IdentityFile` under `Host github.com` in `~/.ssh/config`, and add both signing keys to your [allowed signers](/dependencies/signing#check-a-signature). When you work with the backup, point `user.signingkey` at its signing key. Then remove the key file from your GitHub account.
+When you work with a backup, point `user.signingkey` at its signing key instead. Last, delete the contributor setup's key file from your GitHub account, both its authentication and signing entries.
 
 ## Duties
 
