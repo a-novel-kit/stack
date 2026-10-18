@@ -28,10 +28,19 @@ Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub
   matrix, and `drift.yaml` checks each one. Only what GitHub cannot derive is listed by hand: a
   root's `plan-<root>` required check and its `roll-database.yaml` option, which
   `check-service-roots.sh` enforces.
-- **Go** is reserved for programs that run on hosts. **Bash** is reserved for host scripts and
-  workflow steps.
-- **There is no Node toolchain.** CI runs Prettier and `renovate-config-validator` through `npx`, at
-  versions Renovate tracks.
+- **Go** is reserved for programs that run on hosts. **Bash** runs the host scripts, and the
+  workflow steps that mostly call `tofu`, `gh`, `gcloud`, `skopeo` or `jq`. `smoke.sh` is POSIX `sh`,
+  since it also runs inside the services' Alpine images.
+- **Workflow rules that can stop or misdeploy production live in tested scripts:** zero-dependency
+  `.mjs` modules in `.github/scripts`, run with the runner's Node. They hold the downtime window and
+  its announcements, the release pins and the release provenance check. Pure exported functions
+  carry the rules, and `main` runs the CLIs around them. `node --test '.github/scripts/*.test.mjs'`
+  runs in `lint-repository`.
+  - Port a step for its rules, not to shorten it: a port is longer than the bash it replaces.
+  - Prove a port before review: run the old step and the script on the same inputs, with stub CLIs
+    that log their calls, and compare the calls, outputs and file edits.
+- **There is no Node toolchain:** no `package.json` and no dependencies. CI runs Prettier and
+  `renovate-config-validator` through `npx`, at versions Renovate tracks.
 
 ## Tests that earn their place
 
