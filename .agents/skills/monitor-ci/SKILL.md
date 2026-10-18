@@ -51,7 +51,8 @@ gh run list --branch "$(git rev-parse --abbrev-ref HEAD)" --limit 1 \
 Possible states:
 
 - `queued` / `in_progress` / `pending` → wait and re-check (Phase 1.2)
-- `completed` + `success` → done, hand off to the developer
+- `completed` + `success` → done, hand off to the developer; a PR still `BLOCKED` with required
+  checks shown as "Expected" has [stranded required checks](references/dependency-prs.md#stranded-required-checks)
 - `completed` + `failure` → classify and fix (Phase 2)
 - `completed` + `cancelled` → superseded, timed out, or stopped by hand; read why before retrying
 - `completed` + `skipped` → a job it `needs:` failed or skipped, so fix that job; on a green

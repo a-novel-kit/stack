@@ -36,6 +36,7 @@ Read the PR's timeline (`RemovedFromMergeQueueEvent.reason`) before acting.
 | Green, approved, not queued; last removal `checks_timed_out`                             | The queue's checks did not report in time, usually runner saturation                    | `recover-prs.yaml` re-arms it, up to three times. By hand: `gh pr merge <n> --repo <r>`, with no method flag, since the queue owns it. |
 | Green, approved, armed, never queued; head commit's `verification.reason` is `unsigned`  | The bot built the commit with git, and `master` and `release/**` require signed commits | Fix the producer to commit through the API (`write-github-actions` pitfalls); its next run replaces the head.                          |
 | Green, approved, armed, never queued; `BEHIND`                                           | Another merge landed before its checks finished; rulesets require an up-to-date branch  | Rebase it: `gh workflow run renovate.yaml --repo <r>`. Auto-merge queues it once the rerun is green.                                   |
+| Green, approved, armed, never queued; `BLOCKED`, required checks "Expected"              | The newest run of a workflow on the head was cancelled before it started                | Re-run that run; see [stranded required checks](#stranded-required-checks).                                                            |
 | `DIRTY`                                                                                  | A sibling PR on the same lines merged first, often two `[security]` PRs on one modfile  | `recover-prs.yaml` dispatches Renovate. By hand: `gh workflow run renovate.yaml --repo <r>`.                                           |
 | `auto-approve` failed: `Issue is locked`                                                 | The conversation was locked while open                                                  | Unlock it; `lock-closed.yaml` locks only on close.                                                                                     |
 | Approval withheld: `renovate/stability-days` pending                                     | The update is younger than its release age                                              | Wait for Renovate to mark it green; that status approves it.                                                                           |
@@ -69,6 +70,30 @@ maximum supported`. A tool's indirect `golang.org/x/tools` cannot read the new c
   its database host's template, so it merges only during that service's planned downtime, with the
   label. A release without a database change keeps the digest and plans nothing for the hosts. Both
   the downtime and the label are human decisions.
+
+### Stranded required checks
+
+A pull request fires one event per label. Renovate opens its PR and then adds two labels, so a
+`main.yaml` that triggers on `labeled` starts three runs on one head within seconds. Where that
+workflow has a `concurrency` group, as infra's and platform-studio's do, GitHub can admit the runs to
+it in an order other than their creation order. The run created last can then be cancelled while
+still pending, with no jobs, after an older run went green (a-novel/infra#857).
+
+The merge box reads only the newest run of each workflow on the head. It shows every required check
+as "Expected — Waiting for status to be reported", and the PR stays `BLOCKED`. `gh pr checks` and
+`statusCheckRollup` count the older green run and report success. Nothing looks wrong, yet auto-merge
+never queues the PR. The dependencies feed reports it as stuck after 2 hours.
+
+Confirm it on the head commit:
+
+```bash
+gh run list --repo <r> --commit <head-sha> --workflow main.yaml \
+  --json databaseId,conclusion --jq 'max_by(.databaseId)'
+gh run view <id> --repo <r> --json jobs --jq '.jobs | length'
+```
+
+A `cancelled` newest run with 0 jobs is stranded. Re-run it with `gh run rerun <id> --repo <r>`: the
+new attempt runs every job, and auto-merge queues the PR once they pass.
 
 ## Land them without saturating CI
 
