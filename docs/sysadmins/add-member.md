@@ -6,11 +6,10 @@ Enroll a newcomer once the team agrees and they have [sent you their accounts](/
 
 ## Set the member
 
-Use the GitHub username and Discord user ID they sent. Their GitHub numeric ID keys the account link, since it survives a username change.
+Use the GitHub username they sent. Their GitHub numeric ID keys the account link, since it survives a username change.
 
 ```bash
 LOGIN=octocat
-DISCORD_ID=123456789012345678
 GITHUB_ID=$(gh api "users/$LOGIN" --jq .id)
 echo "$GITHUB_ID"
 ```
@@ -19,7 +18,7 @@ echo "$GITHUB_ID"
 
 The `github-discord-map` project in Bitwarden Secrets Manager holds one secret per member, which CI reads to mention them on Discord. This step needs the [Bitwarden web app](https://vault.bitwarden.eu).
 
-Open **Secrets Manager → Projects → github-discord-map**, then **New → Secret**. Set **Name** to their GitHub ID and **Value** to their Discord ID.
+Open **Secrets Manager → Projects → github-discord-map**, then **New → Secret**. Set **Name** to their GitHub ID and **Value** to the Discord user ID they sent.
 
 ## Give the Discord role
 
