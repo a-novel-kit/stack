@@ -34,7 +34,7 @@ The CLI runs on Linux, macOS, or WSL2 on Windows, and needs:
 - [Node.js](https://nodejs.org) and [pnpm](https://pnpm.io)
 - [Podman](https://podman.io) and [podman-compose](https://github.com/containers/podman-compose) 1.6.0 or newer
 - An AI agent that reads `AGENTS.md`, such as [Claude Code](https://code.claude.com/docs/en/overview) or [Codex](https://learn.chatgpt.com/docs)
-- For sysadmins: [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) and [Bitwarden Secrets Manager CLI](https://bitwarden.com/help/secrets-manager-cli/)
+- For sysadmins: [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), [OpenTofu](https://opentofu.org/docs/intro/install/) and [Bitwarden Secrets Manager CLI](https://bitwarden.com/help/secrets-manager-cli/)
 
 Install the CLI:
 

@@ -67,4 +67,4 @@ Production access is code in [a-novel/infra](https://github.com/a-novel/infra). 
 - `operator_principals` in `bootstrap/terraform.tfvars`, for the management plane and recovery.
 - `database_operator_principals` in `environments/production/foundation/terraform.tfvars`, for the database hosts and workload logs.
 
-The merge applies both. They then set up the [Google Cloud CLI](./gcloud).
+The merge applies both. They then set up the [Google Cloud CLI](./gcloud) and [OpenTofu](./opentofu).
