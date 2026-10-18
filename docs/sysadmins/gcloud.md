@@ -76,7 +76,7 @@ winget install --id Google.CloudSDK -e
 
 ## Configure
 
-Ask another sysadmin to grant your Google account roles on the management and production projects. Then sign in with it:
+Ask another sysadmin for an `agorastoryverse.com` account with [production access](./add-member#ops-open-their-google-account). Then sign in with it:
 
 ```bash
 gcloud auth login
