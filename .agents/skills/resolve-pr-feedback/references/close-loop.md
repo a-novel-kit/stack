@@ -38,8 +38,10 @@ echo '[{"number":21,"reply_to":3654568470,"body":"Removed."},
   | a-novel core bot-comment <org> <repo> --batch -
 ```
 
-The command triggers the dispatcher workflow and blocks until it finishes; on a non-zero exit, read
-the surfaced run log and retry.
+The command triggers the dispatcher workflow and blocks until it finishes. Its exit status follows
+the run's own conclusion, so a non-zero exit means the run did not succeed. A failed run can still
+have posted some of a batch, so before retrying, list the thread's replies and resend only the
+entries that are missing.
 
 > **`gh api …/pulls/<n>/comments/<id>/replies` is the trap.** It is the obvious REST call, it works,
 > and it posts as the **human**. There is no capability gap driving you to it — `bot-comment`
