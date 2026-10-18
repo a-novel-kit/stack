@@ -156,8 +156,10 @@ pins in the same change.
     compromised release.
   - State holds no secret values, because those are added outside OpenTofu.
 - **Only admins bypass the rulesets.** A merge to `master` deploys production, and every bot
-  reaches it through a pull request. The bot Apps' keys are org secrets that any repository's
-  workflows can read, so no bot may push `master` directly; the `infra` class sets
+  reaches it through a pull request. The Agent and Dependencies keys live only in each repository's
+  `governance` environment, filled from Bitwarden by `a-novel repo update`. That environment admits
+  the default branch, plus guarded release lines and tags. Every repository's default-branch
+  workflows can read the keys, so no bot may push `master` directly. The `infra` class sets
   `rulesets.admins_only`. A bot's pull request merges alone only as a release pin or a version
   update Renovate armed, and a pin deploys only an image of an immutable Release the release App
   published, built by that tag's own run.

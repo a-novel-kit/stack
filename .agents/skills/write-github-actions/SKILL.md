@@ -175,8 +175,7 @@ for governance work, `DEPENDENCY_BOT_CLIENT_ID` for the node lane and the audit 
 keys and `BWS_READ_TOKEN` are secrets of each repo's `governance` environment, which `repo update`
 fills from Bitwarden. A job that reads one names `environment: {name: governance, deployment: false}`;
 a job calling a reusable workflow passes the secret by name, and the called job names the
-environment. The release App's key lives only in the `release` environment. Only the release path,
-which a-novel/.github#414 moves to the release App, still reads the Agent key's org copy.
+environment. The release App's key lives only in the `release` environment.
 
 Add a `concurrency` group with `cancel-in-progress: true` only where a superseded run's result is
 worthless, such as a lint-only workflow. Anything that releases or deploys must run to completion.
