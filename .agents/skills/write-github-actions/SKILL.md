@@ -439,6 +439,11 @@ There is no local runner, so verification is reading plus CI.
   Scheduler job dispatches it in each org. A poll reads the window since its caller's last successful
   run, as `notify-stuck-run` does, so a missed tick is caught up instead of lost. `token-expiry` warns
   before a dispatch token lapses, the likeliest way the clock stops.
+- **`lfs: true` on a checkout whose job reads a few LFS files.** The checkout downloads every LFS
+  object at the ref. Limit it in the step's `env`, which actions/checkout passes to git:
+  `GIT_CONFIG_COUNT: 1`, `GIT_CONFIG_KEY_0: lfs.fetchinclude`, and `GIT_CONFIG_VALUE_0: <pattern>`.
+  A second checkout over an existing tree leaves its pointer files in place; run `git lfs checkout`
+  after it. uikit's `main.yaml` `lint-js` does both.
 - **Interpolating an input straight into a `run:` script.** Bind it through `env:` so the value cannot
   be read as shell syntax.
 - **A `pnpm <script>` step in an action without reconciling the lockfile first.** pnpm 11's

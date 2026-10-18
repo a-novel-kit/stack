@@ -43,6 +43,21 @@ publish the private workbench itself as a package.
 Use one curated, maintained icon source through typed component exports. Bundle custom SVG icons and
 their provenance with the asset package; do not require a remote icon service or icon font at runtime.
 
+## Brand images
+
+`@a-novel-kit/uikit-images` publishes logo banners and icons. Each logo keeps its sources in
+`packages/images/raw/<logo>/`: the GIMP project, its export plug-in, the fonts, and the
+`exports/*.png` files the generator reads. Git LFS stores `raw/`; follow
+[Git LFS](../git-conventions/SKILL.md#git-lfs) before committing there. The generated files in
+`packages/images/files/` stay in plain Git, so every checkout reads them without LFS.
+
+`scripts/generate-images.mjs` lists the logos, sizes, and variants. After changing a source, run
+`git lfs pull`, then `pnpm generate:images`; `pnpm lint:generated` fails on drift. Banners are keyed
+by height (`banner/{h}h/`), the one dimension every logo shares. Icons are keyed `icon/{n}x{n}/`.
+File names end in a variant suffix: none for dark on transparent, `-black` for dark on black,
+`-light` for light on transparent, and `-light-white` for light on white. Every uikit tag
+republishes the package, about 10 MB, so each added size or variant ships in every release.
+
 ## Token architecture
 
 Use three deliberate tiers:

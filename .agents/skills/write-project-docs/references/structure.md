@@ -6,6 +6,7 @@ Contents:
 
 - [Fleet standard (current)](#fleet-standard-current)
 - [Header — identical shape across all repos](#header--identical-shape-across-all-repos)
+- [Logos](#logos)
 - [Section order — ONE order, every repo](#section-order--one-order-every-repo)
 - [Contributing section + links (fix the fleet-wide 404s)](#contributing-section--links-fix-the-fleet-wide-404s)
 
@@ -52,6 +53,24 @@ whose CI uploads coverage.
 "Codecov if applicable" = the repo's CI calls the `generic-actions/codecov` action. Verify
 before adding the badge: `grep -rl generic-actions/codecov <repo>/.github/workflows`. Today
 services + `nodelib` report coverage; `golib`, `workflows`, `stack` do not.
+
+### Logos
+
+Show a logo with `<picture>`: one `<source>` per `prefers-color-scheme`, and an `<img>` fallback.
+GitHub wraps it in `<themed-picture>`, which follows the viewer's GitHub theme. Link the transparent
+`960h` banners of `@a-novel-kit/uikit-images` at
+`https://raw.githubusercontent.com/a-novel-kit/uikit/{tag}/packages/images/files`, written `{files}`
+below. Pin `{tag}` to a uikit tag or commit, so a later uikit change cannot break the page. Set only
+the `<img>` `width`, scaled from the file's width to the display height: KIT's `960h` file is 1591
+pixels wide, so 240 pixels high is `398`.
+
+```html
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="{files}/banner/960h/kit-banner.png" />
+  <source media="(prefers-color-scheme: light)" srcset="{files}/banner/960h/kit-banner-light.png" />
+  <img alt="KIT" src="{files}/banner/960h/kit-banner-light.png" width="398" />
+</picture>
+```
 
 ### Section order — ONE order, every repo
 
