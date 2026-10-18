@@ -129,8 +129,11 @@ pins in the same change.
   `allow-downtime`, and `DOWNTIME` must list `service-<service>.database` with a `start` already
   passed. Ask for a full backup before the downtime starts.
 - **Planned downtimes come only from the admin-only `downtime.yaml`,** which writes `DOWNTIME`. A
-  full deploy applies it once the run ends. Listed services refuse work from `start` until someone
-  clears it; `end` only informs users.
+  full deploy applies it once the run ends, but only when the run's `downtime` job succeeded: a run
+  that failed before writing deploys nothing. Listed services refuse work from `start` until
+  someone clears it; `end` only informs users.
+- **A downtime post's color follows its headline.** Once `start` has passed, every post that reads
+  "Expected back" shows the in-progress color, whatever change it announces.
 - **Users see a downtime whenever a deploy can enforce one.** Any deploy applies `DOWNTIME`, so a
   schedule publishes `downtime.json` before writing it, and a clear deletes it before publishing.
 - **The deploy's `rollout` job rolls hosts from observed state, not the diff,** so a cancelled or
