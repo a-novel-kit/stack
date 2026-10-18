@@ -113,6 +113,8 @@ Run the whole gate the way CI does:
   it; bound actual usage with instance caps instead.
 - **A workload identity provider's display name is capped at 32 characters,** and only the apply
   checks it. Bootstrap's test enforces the limit.
+- **Cloud Workflows refuses environment variable names that begin with `GOOGLE` or `WORKFLOWS`,**
+  and only the apply checks it. Bootstrap's test enforces the rule.
 - **An alert condition with `evaluation_missing_data` needs a non-zero `duration`.** The plan
   passes, and Cloud Monitoring refuses the apply with a 400.
 - **`gcloud` asks before cancelling or deleting, and nobody answers in CI.** Set
