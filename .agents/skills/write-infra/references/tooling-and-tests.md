@@ -110,3 +110,8 @@ Run the whole gate the way CI does:
   deadline. The downtime announcements run on Cloud Workflows for that reason, the `github-dispatch`
   clock dispatches each `.github` repo's timed workflows at their own crons from Cloud Scheduler
   (`github_dispatch_schedules`), and `drift.yaml` runs far less often than its cron says.
+- **A `github.token` dispatch of `deploy.yaml` fails its `require-role admin` gate.** The run belongs
+  to `github-actions[bot]`, which
+  [no role gate exempts](../../write-github-actions/SKILL.md#required-checks-and-rulesets).
+  `deploy.yaml` runs on the `workflow_run` of `downtime` on `master` instead. That run inherits the
+  downtime run's triggering actor, so the same gate holds.

@@ -115,9 +115,9 @@ pins in the same change.
   template replacement or group update, which is not a deletion. Its pull request needs
   `allow-downtime`, and `DOWNTIME` must list `service-<service>.database` with a `start` already
   passed. Ask for a full backup before the downtime starts.
-- **Planned downtimes come only from the admin-only `downtime.yaml`,** which writes `DOWNTIME` and
-  deploys. Listed services refuse work from `start` until someone clears it; `end` only informs
-  users.
+- **Planned downtimes come only from the admin-only `downtime.yaml`,** which writes `DOWNTIME`. A
+  full deploy applies it once the run ends. Listed services refuse work from `start` until someone
+  clears it; `end` only informs users.
 - **Users see a downtime whenever a deploy can enforce one.** Any deploy applies `DOWNTIME`, so a
   schedule publishes `downtime.json` before writing it, and a clear deletes it before publishing.
 - **The deploy's `rollout` job rolls hosts from observed state, not the diff,** so a cancelled or
@@ -156,8 +156,10 @@ pins in the same change.
     compromised release.
   - State holds no secret values, because those are added outside OpenTofu.
 - **Only admins bypass the rulesets.** A merge to `master` deploys production, and every bot
-  reaches it through a pull request. The bot Apps' keys are org secrets that any repository's
-  workflows can read, so no bot may push `master` directly; the `infra` class sets
+  reaches it through a pull request. The Agent and Dependencies keys live only in each repository's
+  `governance` environment, filled from Bitwarden by `a-novel repo update`. That environment admits
+  the default branch, plus guarded release lines and tags. Every repository's default-branch
+  workflows can read the keys, so no bot may push `master` directly. The `infra` class sets
   `rulesets.admins_only`. A bot's pull request merges alone only as a release pin or a version
   update Renovate armed, and a pin deploys only an image of an immutable Release the release App
   published, built by that tag's own run.
