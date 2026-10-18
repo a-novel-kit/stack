@@ -89,6 +89,12 @@ Do not manufacture cases that the public contract cannot reach.
   `svelte()` has read it. Without one, the plugin starts from the workspace root, leaves Svelte
   libraries untransformed (`Unknown file extension ".svelte"`) and loads a second Svelte runtime
   (`lifecycle_outside_component`).
+- Name a config that holds only Vitest options `vitest.config.ts`, never `vite.config.ts`. Since
+  4.7.7, `svelte-check` reads `.svelte` files from symlinked workspace packages at their real path
+  and configures each from the nearest `vite.config.*` or `svelte.config.*`, the Vite one winning
+  within a directory. A Vite config without the Svelte plugin then fails with
+  `No Svelte configuration found in vite config`, as uikit's `packages/storybook-config` did.
+  Vitest tries `vitest.config.*` first, so the rename costs nothing.
 - Keep `vi.mock` scope and hoisting rules visible. Refactor an inseparable module boundary rather
   than relying on a mock the runtime cannot intercept.
 - Render DOM, not component instances. Follow Testing Library query priority and guiding principle:
