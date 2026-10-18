@@ -88,6 +88,10 @@ pins in the same change.
    - **Derive it from a `terraform_data` its inputs replace,** never from the inputs alone. A hash
      repeats when they come back, as on a revert or a cleared downtime. The plan policy exempts
      that replacement.
+   - **A failed execution still records its token,** so the next plan shows nothing to do. Every
+     plan runs `.github/scripts/rerun-failed-jobs.mjs`, which reads each token job's last
+     execution from the Cloud Run v2 API and re-plans with `-replace` on the token source of one
+     that failed. The provider does not expose the execution's status.
 2. Traffic is `TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST`. Cloud Run routes to a revision only after its
    startup probe passes.
 3. Post-deploy checks run one script, `modules/smoke-check/smoke.sh`:
