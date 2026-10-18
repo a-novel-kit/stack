@@ -120,6 +120,19 @@ EOF
 
 ---
 
+## Git LFS
+
+GitHub keeps every LFS object pushed to it. Deleting the file or rewriting history frees no
+storage; only deleting the repository or a GitHub Support request does. Squash LFS iterations into
+one commit before pushing, so only the final version uploads.
+
+Check `git lfs version` before committing under a `filter=lfs` path. Without git-lfs, git ignores
+the attribute and silently commits the file as an ordinary blob. A checkout without git-lfs's
+pre-push hook pushes pointers whose content never reaches the remote. Run
+`git lfs push origin <branch>` before `git push` there; it skips objects the remote already holds.
+
+---
+
 ## Reuse the GitHub SSH Connection
 
 The one goal: a chain of git operations must not ask a FIDO security key for presence again and
