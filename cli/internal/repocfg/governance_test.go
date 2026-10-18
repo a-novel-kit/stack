@@ -710,12 +710,53 @@ func TestLockClosedGovernance(t *testing.T) {
 			Issues      trigger `yaml:"issues"`
 			PullRequest trigger `yaml:"pull_request"`
 		} `yaml:"on"`
+		Concurrency struct {
+			Group            string `yaml:"group"`
+			CancelInProgress bool   `yaml:"cancel-in-progress"`
+		} `yaml:"concurrency"`
+		Jobs map[string]struct {
+			Steps []struct {
+				Run string `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
 	}
 	loadWorkflow(t, "lock-closed.yaml", &workflow)
 	for event, types := range map[string][]string{"issues": workflow.On.Issues.Types, "pull_request": workflow.On.PullRequest.Types} {
 		if got := strings.Join(types, ","); got != "closed,reopened" {
 			t.Errorf("lock-closed %s types = %q, want closed,reopened", event, got)
 		}
+	}
+	// A close and a quick reopen queue in event order instead of racing.
+	want := "lock-closed-${{ github.event.issue.number || github.event.pull_request.number }}"
+	if workflow.Concurrency.Group != want || workflow.Concurrency.CancelInProgress {
+		t.Errorf("concurrency = %+v, want group %q without cancel-in-progress", workflow.Concurrency, want)
+	}
+
+	// Whatever the event, the step acts on the conversation's live state.
+	lock, unlock := "api --method PUT repos/example/repo/issues/7/lock", "api --method DELETE repos/example/repo/issues/7/lock"
+	for _, testCase := range []struct {
+		name, state, want string
+	}{
+		{name: "ClosedAndUnlocked", state: "closed false", want: lock},
+		{name: "OpenAndLocked", state: "open true", want: unlock},
+		{name: "ReopenedBeforeTheLock", state: "open false"},
+		{name: "AlreadyLocked", state: "closed true"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			output, calls, err := runGovernanceScript(t, workflow.Jobs["lock"].Steps[0].Run, []string{
+				"GITHUB_REPOSITORY=example/repo", "NUMBER=7", "ISSUE=" + testCase.state,
+			})
+			if err != nil {
+				t.Fatalf("lock step: %v\n%s", err, output)
+			}
+			writes := slices.DeleteFunc(strings.Split(strings.TrimSpace(calls), "\n"), func(call string) bool {
+				return !strings.HasSuffix(call, "/lock")
+			})
+			if got := strings.Join(writes, ""); got != testCase.want {
+				t.Errorf("writes = %q, want %q", got, testCase.want)
+			}
+		})
 	}
 }
 
