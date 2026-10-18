@@ -584,7 +584,7 @@ func TestFeatureEnvGovernance(t *testing.T) {
 }
 
 // TestCleanImagesGovernance pins who may delete images and when: a closed same-repository pull request
-// deletes its own tag, while only the scheduled or dispatched sweep deletes the rest, one uncancelled
+// deletes its own tag, while only the dispatched sweep deletes the rest, one uncancelled
 // job per package. Packages are named by the images the repository's own workflows publish, since a
 // workflow token cannot list the organization's.
 func TestCleanImagesGovernance(t *testing.T) {
@@ -612,9 +612,9 @@ func TestCleanImagesGovernance(t *testing.T) {
 	}
 	loadWorkflow(t, "clean-images.yaml", &workflow)
 	pullRequest, _ := workflow.On["pull_request"].(map[string]any)
-	if len(workflow.On) != 3 || workflow.On["schedule"] == nil || workflow.On["workflow_dispatch"] == nil ||
-		fmt.Sprint(pullRequest["types"]) != "[closed]" {
-		t.Errorf("clean-images triggers = %v, want schedule, workflow_dispatch and closed pull requests", workflow.On)
+	// a-novel/infra's Cloud Scheduler dispatches the sweep, since GitHub starts scheduled runs late.
+	if len(workflow.On) != 2 || workflow.On["workflow_dispatch"] == nil || fmt.Sprint(pullRequest["types"]) != "[closed]" {
+		t.Errorf("clean-images triggers = %v, want workflow_dispatch and closed pull requests", workflow.On)
 	}
 	if len(workflow.Permissions) != 0 {
 		t.Errorf("clean-images workflow permissions = %v, want none", workflow.Permissions)

@@ -300,7 +300,7 @@ Services and platforms (`clean_images: true`) also get the managed `clean-images
 images once the branch or pull request that built them is gone.
 
 - Closing a pull request deletes its `pr-<N>` image at once.
-- A weekly sweep takes the rest: untagged builds and tags of closed pull requests, merge-queue builds,
+- A daily sweep, which a-novel/infra's Cloud Scheduler dispatches, takes the rest: untagged builds and tags of closed pull requests, merge-queue builds,
   and old branch tags. It spares anything less than a day old, which a running job may still pull.
 
 Release tags, `master`, every `master` build and open pull requests' images stay, together with the
