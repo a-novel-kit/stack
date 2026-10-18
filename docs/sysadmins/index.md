@@ -1,6 +1,6 @@
 # Sysadmins
 
-Sysadmins hold admin rights over the repositories and the cloud, and keep the organizations' credentials. On top of the contributor setup, they meet stricter security requirements and add two tools: the [Google Cloud CLI](./gcloud) and [Bitwarden](./bitwarden).
+Sysadmins hold admin rights over the repositories and the cloud, and keep the organizations' credentials. On top of the contributor setup, they meet stricter security requirements and add three tools: the [Google Cloud CLI](./gcloud), [OpenTofu](./opentofu) and [Bitwarden](./bitwarden).
 
 ## Security requirements
 

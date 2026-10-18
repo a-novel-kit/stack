@@ -62,6 +62,7 @@ export default defineConfig({
         items: [
           { text: "Requirements and duties", link: "/sysadmins/" },
           { text: "Google Cloud CLI", link: "/sysadmins/gcloud" },
+          { text: "OpenTofu", link: "/sysadmins/opentofu" },
           { text: "Bitwarden", link: "/sysadmins/bitwarden" },
           { text: "Configure repositories", link: "/sysadmins/repositories" },
           { text: "Create a repository", link: "/sysadmins/create-repository" },
