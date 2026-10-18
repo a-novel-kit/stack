@@ -1,7 +1,8 @@
 # Change safety
 
 - [Prove the plan before review](#prove-the-plan-before-review): zero-diff proofs, moves, imports
-- [Retire protected resources](#retire-protected-resources): unlock, retire, forget
+- [Retire protected resources](#retire-protected-resources): unlock, retire, forget, tainted
+  replacements
 - [Read the live state](#read-the-live-state-before-trusting-the-code)
 - [Release contract](#release-contract), [Capacity caps](#capacity-caps),
   [Database and backup hosts](#database-and-backup-hosts), [Trust boundaries](#trust-boundaries),
@@ -58,8 +59,14 @@
 - **A green plan does not prove the writer's permissions.** Plans run as the read-only identity,
   and an apply also polls each long-running operation. Operations carry no tags, so the writer's
   tag-conditioned roles never cover `run.operations.get`; it lives on an unconditional read role.
-  When the writer starts managing a new resource type, add its write and operation permissions in
-  foundation first.
+  When the writer starts managing a new resource type, or takes an action it never took before,
+  add the permissions in foundation first.
+- **A resource whose creation failed halfway is tainted, and its replacement destroys it first.**
+  OpenTofu orders that destroy before an update to any resource its state recorded as a dependency
+  at creation, whatever the configuration says now. A permission granted in the same change through
+  one of those resources arrives too late: the destroy fails, and so does every re-run. Grant it
+  through a role outside the recorded dependencies. Never make a resource `depends_on` an IAM role
+  or member to order one creation: the edge then binds every later replacement.
 - **A newly enabled API's service agent may not exist yet.** Google creates it lazily, and Workflows
   refused the first workflow with `service agent does not exist`. Create it with
   `google_project_service_identity`, the one resource on `google-beta`, and grant its `serviceAgent`
@@ -83,11 +90,16 @@ pins in the same change.
      that replacement.
 2. Traffic is `TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST`. Cloud Run routes to a revision only after its
    startup probe passes.
-3. Post-deploy checks:
-   - the JSON Keys smoke job runs on every new gRPC image, and again once a downtime clears;
-   - deploy calls `/v2/healthcheck`;
-   - each check skips once a planned downtime has started, and re-tests the start when it fails,
-     since a check begun just before `start` fails when the services stop.
+3. Post-deploy checks run one script, `modules/service-runtime/smoke.sh`:
+   - each service's smoke job runs `module.runtime.smoke_script` in `grpc` mode on every new gRPC
+     image, on every change to the script, whose hash is a trigger, and again once a downtime
+     clears;
+   - the `health` action runs it in `http` mode on Authentication's `/v2/healthcheck`, after each
+     deploy and from `drift.yaml`;
+   - it retries for two minutes, since a fresh invoker grant takes that long to apply, then prints
+     the last exit code and answer;
+   - it skips once a planned downtime has started, and re-tests the start when it fails, since a
+     check begun just before `start` fails when the services stop.
 4. Nothing rolls a release back. A pull request that lowers a pinned version fails its plan, so a
    bad release is fixed forward, through a hotfix when the service's `master` carries unreleased
    work (`manage-versions`). Migrations stay backward compatible; data rollback is a recovery,
@@ -168,6 +180,9 @@ pins in the same change.
   workflow before a new one depends on it.
 - **`infra-downtime` trusts only `downtime.yaml` on `master`.** It can start, list and cancel the
   `downtime-announcements` executions in the management project, and nothing else.
+- **`infra-health` trusts only `drift.yaml` on `master`, never a pull request.** It can read and
+  invoke Authentication's REST service, for the scheduled health check, and nothing else. Pull
+  requests can mint the read-only identity, so that identity never calls a service.
 - **The `github-dispatch` clock holds the only GitHub credentials in Google Cloud:** one
   fine-grained token per org, limited to Actions on that org's `.github` repo, which only
   `github-dispatcher` reads. `github-dispatch-clock` holds `workflows.invoker`, which Workflows grants
@@ -181,7 +196,8 @@ pins in the same change.
   `call_log_level = "LOG_NONE"` and `execution_history_level = "EXECUTION_HISTORY_BASIC"`.
   Bootstrap's test checks both for every workflow it deploys.
 - **A service that trusts a forwarded visitor header requires IAM.** Its invokers are only the
-  platform and the deploy health check, which sends an ID token for the service's custom audience.
+  platform and the health checks after each deploy and from drift, which send an ID token for the
+  service's custom audience.
 - **Inventory IAM by principal and resource:**
   - runtime accounts read only their own secrets;
   - database and repository hosts pull only their service's images;
@@ -219,9 +235,15 @@ deployed. a-novel/infra#785 is the worked example.
 
 - **In the private project, the deploy identity can create a workload but not run it.**
   `infraFoundationPrivateProvisioning` grants creating Cloud Run services and jobs and Cloud
-  Scheduler jobs, and reading them back, without a condition: neither API supports resource-name
-  conditions, and no tag exists before creation. Updating, running and invoking need the invocation
-  tag foundation binds in step 5.
+  Scheduler jobs, binding tags to them and reading both back, without a condition: neither API
+  supports resource-name conditions, and no tag exists before creation. Updating, running and
+  invoking need the invocation tag foundation binds in step 5.
+- **Step 5 binds tags and creates schedules,** which no pull-request plan can prove:
+  - a binding also takes `tagUser` on the tag value, which `foundation_application_tags` grants;
+    the project's `tagAdmin` does not include it;
+  - the provider resumes every Cloud Scheduler job it creates, which takes
+    `cloudscheduler.jobs.enable`. `infraFoundationScheduler` holds it, with the `delete` that
+    replaces a schedule whose creation failed.
 - **The new root's first plan fails.** OpenTofu's GCS backend creates a missing state under a lock
   even with `-lock=false`, and the plan identity only reads the state bucket, so
   `storage.objects.create` is denied on `<root>/default.tflock`. The deploy creates the state on
