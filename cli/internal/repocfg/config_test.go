@@ -126,8 +126,9 @@ func TestLoadLabels(t *testing.T) {
 			t.Errorf("ensure set lacks the `%s` label", name)
 		}
 	}
-	// triage gave way to the Triage board status, and hotfix-reconcile to backports.
-	for _, name := range []string{"triage", "hotfix-reconcile"} {
+	// triage gave way to the Triage board status, hotfix-reconcile to backports,
+	// and renovate to unlabeled Renovate pull requests.
+	for _, name := range []string{"triage", "hotfix-reconcile", "renovate"} {
 		if !slices.Contains(l.Retire, name) {
 			t.Errorf("retire set missing `%s`; got %v", name, l.Retire)
 		}

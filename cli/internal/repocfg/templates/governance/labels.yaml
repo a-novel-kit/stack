@@ -28,10 +28,8 @@ ensure:
   - name: wontfix
     color: "ffffff"
     description: This will not be worked on
+  # Dependabot labels its own pull requests with it.
   - name: dependencies
-    color: "ededed"
-    description: ""
-  - name: renovate
     color: "ededed"
     description: ""
   - name: meta
@@ -70,3 +68,6 @@ retire:
   # Marked a hotfix's forward-port Task. Hotfixes now land on the default branch
   # first and are backported, so nothing forward-ports.
   - hotfix-reconcile
+  # Marked Renovate's pull requests. Renovate no longer labels them: each label
+  # started another main run, and a cancelled one stranded a-novel/infra#857.
+  - renovate
