@@ -141,7 +141,10 @@ pins in the same change.
   - a database host off its group's target rolls only during its service's downtime, once the
     service's serving revision carries the downtime's start, after a snapshot of its data disk.
     Until then the deploy warns "rollout pending", or fails when the service missed the downtime.
-    It restarts in place or is replaced; the stateful disk and IP stay;
+    It restarts in place or is replaced; the stateful disk and IP stay. The rollout then waits up
+    to 10 minutes for the new boot's `agora/database-release` guest attribute to read `healthy`.
+    A stable group proves only that the VM runs: a startup that failed closed leaves PostgreSQL
+    stopped;
   - a backup repository VM restarts when its `config` label differs from `running-config`, after
     its database host;
   - `roll-database.yaml` forces both, whatever the downtime.
@@ -208,7 +211,9 @@ pins in the same change.
   - each workload runs as its own identity and reads only the secrets it mounts: the runtime
     account is the main server's, and `service-runtime`'s `workloads` map creates one account per
     job, sweep or smoke check;
-  - database and repository hosts pull only their service's images;
+  - database and repository hosts pull only their service's images. `service-runtime` grants the
+    database host's pull, so a host without native backups pulls too. Genai lost its database for
+    over an hour on 2026-10-18 when that grant lived in the backup module;
   - humans get no write access in workload projects.
 
 ## Recovery
