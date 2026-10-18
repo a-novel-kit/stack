@@ -68,6 +68,10 @@ Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub
     third-party releases wait three days.
   - The `a-novel-kit/workflows` actions and the managed governance workflows stay on release tags.
     `sha_pinning_required` stays off, since the shared actions reference each other by tag.
+- **Only jobs that ship nothing may reuse state from other runs.** Lint and test jobs may restore
+  the caches `master` runs save: `lint-repository` lints through the shared `go-actions/lint-go`. A
+  job that builds, publishes or deploys what reaches production restores nothing, so its build
+  state lives and dies with the job.
 - **Label events re-run the whole workflow.** Never skip non-plan jobs on label events: a later
   skipped check replaces an earlier failure.
 - **Keep a state change and its best-effort follow-up in separate jobs.** `downtime.yaml` writes the
