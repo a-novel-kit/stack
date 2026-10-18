@@ -298,8 +298,9 @@ does all three, hiding the instruction behind the warning meant to drive it home
 
 ### 17. Make every reference land on something the reader already holds
 
-`document-code`'s **Prose economy** owns this: a pronoun sits beside its one possible antecedent, and
-earlier content is named by a plain description rather than an abstract handle the reader must decode.
+`document-code`'s **Prose economy** owns this. Each sentence names its subject, a pronoun points only
+at the subject of its own or the previous sentence, and earlier content is named by a plain
+description rather than an abstract handle the reader must decode.
 
 ### 18. State what is, not what is not
 

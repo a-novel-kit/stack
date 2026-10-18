@@ -117,15 +117,23 @@ matters, in as few words as it takes, and stop.
   because a paraphrase can carry a connotation the precise term rules out: a "convoy" may lose
   stragglers and still be one, where an "atomic landing" is all-or-none by name. When a name doubles as
   a common word, name its category on first use — "a dedicated Tracking status" reads as a place on the
-  board where "Tracking" alone reads as an activity — and use it bare afterwards. When one concept spans
+  board where "Tracking" alone reads as an activity — and use it bare afterwards. A code name, such as
+  a job, a file or a command, also takes backticks, and keeps its category wherever a verb or a plural
+  could fuse with it: "the `changes` job read" parses at once, while "the deploy's changes job read"
+  offers three verbs in four words. When one concept spans
   several concrete forms, name the umbrella too, and never reuse that word in its ordinary sense a line
   later.
-- **Make every reference land on something the reader already holds.** Keep a pronoun beside its one
-  possible antecedent: "comprehension and judgment are the whole job, so spend your attention there"
-  beats "so spend them there", where "them" reaches back past "the whole job" for its noun. Name earlier
-  content by a plain description rather than an abstract handle the reader has to decode; a handle earns
-  its place only once you have attached it to the thing. A remainder names its set: "protected branches
-  refuse anything else", where "refuse the rest" sends the reader looking for a list.
+- **Name the subject in every sentence.** Open each sentence with the noun the sentence is about, not
+  "it", "this", "this one", "that" or "the former". A reader who loses the subject stops to search for it.
+  Use a pronoun only when its noun is the subject of the same sentence or of the one just before, and
+  nothing else could match: "the deploy applies every root, and it skips none" holds, while "it"
+  three sentences later does not. Name earlier content by a plain description, never an abstract
+  handle the reader has to decode. A remainder names its set: "protected branches refuse anything
+  else", where "refuse the rest" sends the reader looking for a list.
+- **Keep the subject short.** A subject built from possessives and modifiers, such as "each merged
+  pull request's current labels", makes the reader assemble five words before the verb arrives. Name
+  the thing first, then describe it in its own clause or sentence: "The job reads labels from each
+  merged pull request, as they are today."
 - **Concision is careful word choice, not dropped grammar.** Keep sentences fully formed — subject and
   verb — rather than clipping them to fragments. A doc that is short but cryptic has failed.
 - **Write the choice, not the rejected alternative.** State what holds and stop. The contrast form
@@ -144,12 +152,14 @@ matters, in as few words as it takes, and stop.
   the code branches on it. And the wrong-path counter-example above: "depend on the typed structs
   declared here rather than reading os.Getenv directly" names the call a reader would otherwise reach
   for. When the conditional describes what the reader is shown or a condition that occurs, keep it.
-- **Prefer affirmative sentences to clause chains.** Give a rule its own sentence rather than trailing
-  it off another as "…, so X must Y", and split a chain of subordinate clauses into plain statements.
-  "…the MAC and ENC keys of an AES-CBC-HMAC key, so they must differ" becomes "…the MAC and ENC keys
-  of an AES-CBC-HMAC key. Both must differ." This is not license to shred prose into fragments — the
-  aim is statements a reader takes in one at a time, and the fully-formed-sentence rule above still
-  holds.
+- **Write short sentences, one claim each.** A sentence that strings clauses and asides together with
+  commas loses its subject before it ends. Split it, and give each new sentence its subject again.
+  Give a rule its own sentence rather than trailing it off another as "…, so X must Y": "…the MAC and
+  ENC keys of an AES-CBC-HMAC key, so they must differ" becomes "…the MAC and ENC keys of an
+  AES-CBC-HMAC key. Both keys must differ." Each sentence stays fully formed, per the rule above.
+- **Let structure carry parallel facts.** Three or more facts of the same kind go in a list or a
+  table, one per row, not in one long sentence. A short lead sentence says what they have in common.
+  The reader then takes the most information from the least text.
 
 This applies to every prose surface we write — doc comments, package docs, README sections, PR
 descriptions (see `open-pull-request`), and planning issues (see `plan-feature`). Load this section
@@ -452,7 +462,7 @@ Wrong documentation is a liability. Every time you write or touch it:
   "A counterfactual is that same defect in other grammar" above, including the three cases where a
   conditional stays.
 - **A rule trailing off another sentence**: `// …, so they must differ`. Give it its own sentence —
-  see "Prefer affirmative sentences to clause chains" above.
+  see "Write short sentences, one claim each" above.
 - **Rhetorical labels standing in for a sentence**: `// Why this matters: ...`, `// Note: ...`,
   `// The reason: ...` — state the point plainly, as under "Write plain sentences, not labels" above.
 - **Change narrative and references to deleted code or transient docs** — see "Document the code as
