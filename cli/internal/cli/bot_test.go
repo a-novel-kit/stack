@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // testBotRepo is one const so the repeated literal does not trip goconst.
@@ -128,4 +129,37 @@ func TestChunkBotComments(t *testing.T) {
 			t.Fatal("expected an error for a comment larger than the cap, got nil")
 		}
 	})
+}
+
+// TestRunSucceeded pins that the run's own conclusion decides, waiting while it
+// is unfinished: gh run watch can stop before a run that goes on to succeed.
+func TestRunSucceeded(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam and the poll pacing.
+	swap(t, &botRunPoll, time.Millisecond)
+	swap(t, &botRunFinishTimeout, 50*time.Millisecond)
+	testCases := []struct {
+		name    string
+		replies []string
+		want    bool
+		wantErr bool
+	}{
+		{name: "Success", replies: []string{"completed success"}, want: true},
+		{name: "Failure", replies: []string{"completed failure"}},
+		{name: "WaitsForAnUnfinishedRun", replies: []string{"in_progress ", "queued ", "completed success"}, want: true},
+		{name: "Error/NeverCompletes", replies: []string{"in_progress "}, wantErr: true},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			call := 0
+			stubGH(t, func(string) (string, error) {
+				reply := testCase.replies[min(call, len(testCase.replies)-1)]
+				call++
+				return reply + "\n", nil
+			})
+			got, err := runSucceeded("a-novel-kit/stack", 42)
+			if got != testCase.want || (err != nil) != testCase.wantErr {
+				t.Errorf("runSucceeded = (%v, %v), want (%v, error %v)", got, err, testCase.want, testCase.wantErr)
+			}
+		})
+	}
 }

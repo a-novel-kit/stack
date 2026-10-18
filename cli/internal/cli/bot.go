@@ -34,6 +34,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// botRunPoll and botRunFinishTimeout pace and bound the wait for a dispatched
+// run's conclusion once gh run watch has stopped watching it.
+var (
+	botRunPoll          = 3 * time.Second
+	botRunFinishTimeout = 10 * time.Minute
+)
+
 const (
 	// botWorkflowFile is the workflow_dispatch file, by basename.
 	botWorkflowFile = "bot-comment.yaml"
@@ -326,12 +333,34 @@ func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs
 	watch.Stdout = cmd.OutOrStdout()
 	watch.Stderr = cmd.ErrOrStderr()
 	if err := watch.Run(); err != nil {
-		// The run failed; pull the failed step's logs to explain why.
+		// A failed poll stops gh run watch while the run goes on to post, so the
+		// run's own conclusion decides whether the comments landed.
+		if succeeded, viewErr := runSucceeded(dispatchRepo, runID); viewErr == nil && succeeded {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "gh run watch stopped (%v), but run %d succeeded\n", err, runID)
+			return nil
+		}
 		logs, _ := gh(commandRun, "view", strconv.FormatInt(runID, 10),
 			"--repo", dispatchRepo, "--log-failed")
 		return fmt.Errorf("bot-comment: workflow run %d failed: %w\n%s", runID, err, logs)
 	}
 	return nil
+}
+
+// runSucceeded waits for a run to complete and reports whether it concluded in
+// success. A failed read counts as not yet complete until botRunFinishTimeout.
+func runSucceeded(dispatchRepo string, runID int64) (bool, error) {
+	deadline := time.Now().Add(botRunFinishTimeout)
+	for {
+		out, err := gh(commandRun, "view", strconv.FormatInt(runID, 10), "--repo", dispatchRepo,
+			"--json", "status,conclusion", "--jq", `.status + " " + .conclusion`)
+		if status, conclusion, _ := strings.Cut(strings.TrimSpace(out), " "); err == nil && status == "completed" {
+			return conclusion == "success", nil
+		}
+		if time.Now().After(deadline) {
+			return false, fmt.Errorf("run %d did not complete within %s", runID, botRunFinishTimeout)
+		}
+		time.Sleep(botRunPoll)
+	}
 }
 
 // waitForDispatchedRun polls the run list until a run whose name carries the
