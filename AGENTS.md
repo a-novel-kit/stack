@@ -13,6 +13,12 @@ Remove what you own by exact name, never with a store-wide prune, and state that
 that delegates work able to create or remove anything. See
 [workspace hygiene](.agents/skills/git-conventions/references/workspace.md#when-you-are-done).
 
+Commands handed to the developer to run must paste cleanly into zsh with oh-my-zsh, which bash
+accepts too. Put a space before a `;`, `&` or `|` that follows a URL: `url-quote-magic` escapes it
+on paste, so `…/pull/12; done` arrives as `…/pull/12\; done` and fails to parse. Quote arguments
+holding `[]`, `?` or `*`, list loop items literally, and quote every expansion: zsh neither splits
+an unquoted `$VAR` into words nor passes an unmatched glob through.
+
 Prefer the smallest complete solution: fewer lines of maintained code, fewer moving parts,
 and clear, idiomatic control flow. Preserve required behavior and the project's architecture,
 dependency policy, security, and testing standards. Simplify the whole affected path before
