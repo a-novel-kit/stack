@@ -6,6 +6,7 @@
 - [Release contract](#release-contract), [Capacity caps](#capacity-caps),
   [Database and backup hosts](#database-and-backup-hosts), [Trust boundaries](#trust-boundaries),
   [Recovery](#recovery)
+- [Add a service](#add-a-service): the pull-request order, the first plan, native backups
 
 ## Prove the plan before review
 
@@ -190,3 +191,51 @@ Restores go into a disposable `a-novel-recovery-<id>` project, never production.
 plans or applies the drill host from one JSON input; the runbook covers project creation, the
 temporary grants, the restore units and cleanup. A successful backup proves nothing until a drill
 restores it and its SQL checks pass.
+
+## Add a service
+
+A private service with a database ships in six pull requests, each merged once the previous one has
+deployed. a-novel/infra#785 is the worked example.
+
+1. **Bootstrap** creates the secret containers. Add version 1 of each value before a later step pins
+   it: the database host reads its password at boot.
+2. **The service root starts with its `runtime` module alone,** plus its `plan-<root>` job, its
+   `deploy.yaml` and `drift.yaml` entries, and foundation's `service_release_zones` entry and
+   quotas. The deploy copies a root's `image_copies` into Artifact Registry before it applies, into
+   the repositories `service-runtime` creates. Foundation copies the database image into the
+   service's `agora-<service>-private-production`, so it pins that image only once this step has
+   deployed.
+3. **Foundation adds the database host.** A new host starts at its target template, so it needs no
+   downtime.
+4. **The root creates its jobs without a `run_execution_token` and its services without invokers.**
+   The service joins the deploy's rollout matrix and `roll-database.yaml`. Name every Cloud Run
+   service that writes to its database in the roll action: the host rolls only once all of them have
+   taken the downtime.
+5. **Foundation binds the workloads' invocation tags,** grants the scheduler and creates the
+   schedules.
+6. **The root sets the execution tokens and grants its invokers.**
+
+- **In the private project, the deploy identity can create a workload but not run it.**
+  `infraFoundationPrivateProvisioning` grants creating Cloud Run services and jobs and Cloud
+  Scheduler jobs, and reading them back, without a condition: neither API supports resource-name
+  conditions, and no tag exists before creation. Updating, running and invoking need the invocation
+  tag foundation binds in step 5.
+- **The new root's first plan fails.** OpenTofu's GCS backend creates a missing state under a lock
+  even with `-lock=false`, and the plan identity only reads the state bucket, so
+  `storage.objects.create` is denied on `<root>/default.tflock`. The deploy creates the state on
+  merge. `plan-<root>` is not a required check until `a-novel repo update`, and plan jobs skip the
+  merge queue, so the failure blocks nothing. List `a-novel repo update` in the handoff.
+- **The database host scripts are shared.** `modules/database-runtime`'s `startup.sh` and
+  `shutdown.sh` read the service, port and database name from foundation's template metadata
+  (`agora-database-service`, `agora-database-port`, `agora-database-name`), so a new service changes
+  neither. Any change to them is a [database host change](#database-and-backup-hosts) for every
+  service.
+- **Native backups enroll after the first deploy.** Until then, the roll action skips the missing
+  repository VM. Each step needs the one before:
+  1. `host-credentials`, `native-restore` and the recovery SQL accept the service. Publish them,
+     then pin `host-credentials`, a database host change for every service.
+  2. The root's `backup-repository` module creates `agora-pgbr-<service>` and the repository VM.
+  3. Bootstrap adds the pgBackRest bucket, roles and TLS secrets, which bind that account. Then add
+     the TLS certificates by hand.
+  4. Foundation adds `native_backups.<service>` during the service's planned downtime. Then take a
+     full backup and run a recovery drill.

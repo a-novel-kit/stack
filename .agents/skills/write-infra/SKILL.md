@@ -70,8 +70,8 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 
 ## Route the work
 
-- Changing resources, state layout, releases, database hosts or recovery: read
-  [Change safety](references/change-safety.md).
+- Adding a service, or changing resources, state layout, releases, database hosts or recovery:
+  read [Change safety](references/change-safety.md).
 - Workflows, tests, linting or tooling: read [Tooling and tests](references/tooling-and-tests.md).
 
 ## Deliver
