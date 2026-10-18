@@ -325,7 +325,10 @@ a privileged label only when one of them applied it last; the list of privileged
 `review-gate.yaml` template, mirrored by the Dependabot job's step. A dispatch-only workflow that
 must stay with admins or maintainers runs `generic-actions/require-role` first: it checks
 `github.triggering_actor`, because `github.actor` still names the original dispatcher on a re-run,
-and the role name, because the legacy permission field reports Maintain as `write`.
+and the role name, because the legacy permission field reports Maintain as `write`. Another workflow
+starts a gated one through `workflow_run`, whose run inherits the upstream run's triggering actor. A
+dispatch with the workflow token runs as `github-actions[bot]`, which the gate refuses. Never exempt
+that bot: any writer's branch workflow can dispatch as it.
 
 A workflow that reads the Agent key runs from the default branch's copy, which no pull request can
 rewrite. `pull_request`, `pull_request_review` and `merge_group` run the pull request's own copy, so
