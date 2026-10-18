@@ -29,6 +29,12 @@ landed since, collides in review with changes it never saw, and forces a rebase 
 can look, rather than silently tangling histories. A branch whose parent is already merged (as a
 completed task's branch is, once its PR lands) is finished work; leave it and branch from master.
 
+**Rebase onto a freshly fetched `origin/master` right before every push.** Other pull requests
+merge while you work, so a branch cut fresh is often behind by the time you open or update its pull
+request. Run `git fetch origin master` and `git rebase origin/master` first, then push, with
+`--force-with-lease` once the branch is on the remote. A stale branch shows reviewers a diff against
+a `master` that no longer exists, and in `infra` its plans undo whatever merged since.
+
 Unrecognized uncommitted changes, or a checkout on another task's branch,
 mean **someone else may be working in this checkout** — the operator in another terminal, or a parallel
 agent session. The mere _existence_ of stale unmerged branches is not that signal: a repo that has
