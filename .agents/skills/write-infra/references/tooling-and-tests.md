@@ -22,11 +22,25 @@ Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub
 - **A shared step sequence** becomes a repository composite action:
   - `.github/actions/tofu` plans, enforces the policy, copies images and applies;
   - `.github/actions/health` checks production health with the shared
-    `modules/service-runtime/smoke.sh`, which the caller checks out.
-- **Go** is reserved for programs that run on hosts. **Bash** is reserved for host scripts and
-  workflow steps.
-- **There is no Node toolchain.** CI runs Prettier and `renovate-config-validator` through `npx`, at
-  versions Renovate tracks.
+    `modules/smoke-check/smoke.sh`, which the caller checks out, and the ID token it passes;
+  - `.github/actions/roll` moves a service's hosts onto their applied configuration.
+- **Service roots are found on disk.** `deploy.yaml` applies and rolls out each one through a
+  matrix, and `drift.yaml` checks each one. Only what GitHub cannot derive is listed by hand: a
+  root's `plan-<root>` required check and its `roll-database.yaml` option, which
+  `check-service-roots.sh` enforces.
+- **Go** is reserved for programs that run on hosts. **Bash** runs the host scripts, and the
+  workflow steps that mostly call `tofu`, `gh`, `gcloud`, `skopeo` or `jq`. `smoke.sh` is POSIX `sh`,
+  since it also runs inside the services' Alpine images.
+- **Workflow rules that can stop or misdeploy production live in tested scripts:** zero-dependency
+  `.mjs` modules in `.github/scripts`, run with the runner's Node. They hold the downtime window and
+  its announcements, the release pins and the release provenance check. Pure exported functions
+  carry the rules, and `main` runs the CLIs around them. `node --test '.github/scripts/*.test.mjs'`
+  runs in `lint-repository`.
+  - Port a step for its rules, not to shorten it: a port is longer than the bash it replaces.
+  - Prove a port before review: run the old step and the script on the same inputs, with stub CLIs
+    that log their calls, and compare the calls, outputs and file edits.
+- **There is no Node toolchain:** no `package.json` and no dependencies. CI runs Prettier and
+  `renovate-config-validator` through `npx`, at versions Renovate tracks.
 
 ## Tests that earn their place
 
@@ -39,6 +53,8 @@ Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub
   - deny-all egress below the allows;
   - no owner or editor roles.
 - **Do not assert literals that only restate an argument.** Do not grep docs or workflow text.
+- **Test assertions see a child module's outputs, never its resources.** A resource moved into a
+  module takes its assertions to that module's own `tests/`, which `validate-opentofu` runs.
 - **Mocked providers panic on `import` blocks:** `tofu test` cannot run configuration-driven
   imports, and a root's tests plan its real `terraform.tfvars`. Add tests for a root only after its
   imports are removed. In a root that already has tests, gate the import behind a variable its tests

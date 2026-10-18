@@ -90,14 +90,15 @@ pins in the same change.
      that replacement.
 2. Traffic is `TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST`. Cloud Run routes to a revision only after its
    startup probe passes.
-3. Post-deploy checks run one script, `modules/service-runtime/smoke.sh`:
-   - each service's smoke job runs `module.runtime.smoke_script` in `grpc` mode on every new gRPC
-     image, on every change to the script, whose hash is a trigger, and again once a downtime
-     clears;
+3. Post-deploy checks run one script, `modules/smoke-check/smoke.sh`:
+   - each private service's `smoke-check` module runs it in `grpc` mode, as the service's smoke
+     identity, on every new gRPC image, script or identity, which are triggers, and again once a
+     downtime clears;
    - the `health` action runs it in `http` mode on Authentication's `/v2/healthcheck`, after each
-     deploy and from `drift.yaml`;
-   - it retries for two minutes, since a fresh invoker grant takes that long to apply, then prints
-     the last exit code and answer;
+     deploy and from `drift.yaml`, with the ID token its caller passes as `id_token`;
+   - it retries every five seconds for two minutes, since a fresh invoker grant takes that long to
+     apply, then prints the last exit code and answer. A deadline, not an attempt count, bounds it,
+     so slow attempts cannot outlast the job;
    - it skips once a planned downtime has started, and re-tests the start when it fails, since a
      check begun just before `start` fails when the services stop.
 4. Nothing rolls a release back. A pull request that lowers a pinned version fails its plan, so a
@@ -178,8 +179,10 @@ pins in the same change.
 - **The writer's federation condition** pins `deploy.yaml`, `roll-database.yaml` and
   `recovery.yaml` on `master` behind the `production` environment. Changing it is a bootstrap change, applied by the last trusted
   workflow before a new one depends on it.
-- **`infra-downtime` trusts only `downtime.yaml` on `master`.** It can start, list and cancel the
-  `downtime-announcements` executions in the management project, and nothing else.
+- **`infra-downtime` trusts only `downtime.yaml` on `master`.** It starts, lists and cancels the
+  `downtime-announcements` executions. Workflows grants that project-wide, so it could start
+  `github-dispatch` too, which therefore refuses any workflow its schedules do not list. Both
+  `downtime.yaml` jobs gate on the admin role, since "Re-run this job" skips the first one.
 - **`infra-health` trusts only `drift.yaml` on `master`, never a pull request.** It can read and
   invoke Authentication's REST service, for the scheduled health check, and nothing else. Pull
   requests can mint the read-only identity, so that identity never calls a service.
@@ -199,7 +202,9 @@ pins in the same change.
   platform and the health checks after each deploy and from drift, which send an ID token for the
   service's custom audience.
 - **Inventory IAM by principal and resource:**
-  - runtime accounts read only their own secrets;
+  - each workload runs as its own identity and reads only the secrets it mounts: the runtime
+    account is the main server's, and `service-runtime`'s `workloads` map creates one account per
+    job, sweep or smoke check;
   - database and repository hosts pull only their service's images;
   - humans get no write access in workload projects.
 
@@ -217,21 +222,22 @@ deployed. a-novel/infra#785 is the worked example.
 
 1. **Bootstrap** creates the secret containers. Add version 1 of each value before a later step pins
    it: the database host reads its password at boot.
-2. **The service root starts with its `runtime` module alone,** plus its `plan-<root>` job, its
-   `deploy.yaml` and `drift.yaml` entries, and foundation's `service_release_zones` entry and
-   quotas. The deploy copies a root's `image_copies` into Artifact Registry before it applies, into
-   the repositories `service-runtime` creates. Foundation copies the database image into the
-   service's `agora-<service>-private-production`, so it pins that image only once this step has
-   deployed.
+2. **The service root starts with its `runtime` module alone,** its workloads' identities
+   included, plus its `plan-<root>` job and `roll-database.yaml` option, and foundation's
+   `service_release_zones` entry and quotas. `deploy.yaml` and `drift.yaml` find the root on disk;
+   `lint-repository` names what is missing. The deploy copies a root's `image_copies` into Artifact
+   Registry before it applies, into the repositories `service-runtime` creates. Foundation copies
+   the database image into the service's `agora-<service>-private-production`, so it pins that
+   image only once this step has deployed.
 3. **Foundation adds the database host.** A new host starts at its target template, so it needs no
    downtime.
 4. **The root creates its jobs without a `run_execution_token` and its services without invokers.**
-   The service joins the deploy's rollout matrix and `roll-database.yaml`. Name every Cloud Run
-   service that writes to its database in the roll action: the host rolls only once all of them have
-   taken the downtime.
+   Name every Cloud Run service that writes to its database in the roll action: the host rolls only
+   once all of them have taken the downtime. The rollout skips a service until its host exists.
 5. **Foundation binds the workloads' invocation tags,** grants the scheduler and creates the
    schedules.
-6. **The root sets the execution tokens and grants its invokers.**
+6. **The root sets the execution tokens and grants its invokers.** A private gRPC service adds its
+   `smoke-check` module here: the module grants its invoker and runs its job at once.
 
 - **In the private project, the deploy identity can create a workload but not run it.**
   `infraFoundationPrivateProvisioning` grants creating Cloud Run services and jobs and Cloud

@@ -20,7 +20,8 @@ Services deploy independently. When one needs a change from another, that change
 its own pull request.
 
 Keep it that way. Prefer OpenTofu, provider features and native GitHub Actions over custom code.
-Custom code exists only for software that runs **on the VMs**: the TLS loader and the restore worker.
+Custom code exists only for software that runs **on the VMs**, the TLS loader and the restore worker,
+and for the workflow rules that can stop or misdeploy production, in tested `.github/scripts`.
 
 Load `prefer-small-solutions` throughout, `write-github-actions` for workflows, `plan-feature` for
 architecture, and `choose-dependency` before adding a tool. Prose follows `document-code`.
