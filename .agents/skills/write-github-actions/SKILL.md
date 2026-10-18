@@ -368,6 +368,13 @@ A person's PR posts to the Discord reviews feed alone, through `notify-pr-run`: 
 pings its reviewers, a review or a drop from the merge queue pings its owner, and its merge posts
 without a ping. Nothing posts its draft, assignee or reopen changes.
 
+Each repository has its own reviews and issues channels. The `REVIEWS_WEBHOOKS` org secret and the
+`.github` repo's `ISSUES_WEBHOOKS` secret map `<org>/<repo>` to that channel's webhook, and a
+repository missing from a map posts to the org's channel (`REVIEWS_WEBHOOK`, `ISSUES_WEBHOOK`), which
+is the `.github` repo's own. `discord-post` picks the entry and masks it: GitHub masks a JSON secret
+only as a whole, so an expression such as `fromJSON(secrets.X)[repo]` would print the URL in the
+step's inputs. Changing a channel rewrites the whole map, since a secret cannot be read back.
+
 A bot's PR notifies nobody on GitHub: it has no assignee, and CODEOWNERS leaves dependency manifests
 and lockfiles unowned, so a version bump requests no review. A failing one reaches the Discord
 dependencies feed instead, and so does one still green and out of the merge queue 2 hours after its
