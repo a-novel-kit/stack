@@ -36,6 +36,11 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 | `environments/recovery`              | One manual disaster-recovery drill host per disposable project               |
 | `modules/`                           | Only code with two callers or one shared invariant                           |
 
+- **Projects are one per trust zone, and the zone's services share it.** An organization holds a
+  limited number of Google Cloud projects, and raising that quota is a slow request to Google.
+  Services keep apart inside a zone through their own identities, image repositories, network tags,
+  database hosts and secrets. Never propose a project per service: audits treat the shared zone
+  project, its quota pool and its project-wide log writing as settled.
 - **Inputs live in each root's committed `terraform.tfvars`.** Secret values never do: humans add
   them with `gcloud`.
 - **Images are pinned** as `ghcr.io/…:tag@sha256:…`. Every plan verifies each release image it
