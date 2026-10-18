@@ -376,8 +376,8 @@ func TestCheckDependenciesGovernance(t *testing.T) {
 
 // TestReviewGateGovernance pins the review-gate caller: it runs from the default
 // branch, re-evaluates on every event that can change the verdict (reviews and merge
-// groups through pr-relay), runs under an id clear of the check the App posts, lets
-// only the latest run finish since nothing re-posts the check, and leaves Dependabot
+// groups through pr-relay), runs under an id clear of the check the App posts, runs
+// one evaluation at a time since nothing re-posts the check, and leaves Dependabot
 // to the CI-completion job, which gates its pull requests against the same
 // privileged labels.
 func TestReviewGateGovernance(t *testing.T) {
@@ -414,9 +414,9 @@ func TestReviewGateGovernance(t *testing.T) {
 	if !slices.Equal(workflow.On.WorkflowRun.Workflows, []string{"pr-relay"}) {
 		t.Errorf("review-gate workflow_run = %v, want pr-relay, which carries reviews and merge groups", workflow.On.WorkflowRun.Workflows)
 	}
-	if !workflow.Concurrency.CancelInProgress || !strings.Contains(workflow.Concurrency.Group, "github.event.pull_request.number") ||
+	if workflow.Concurrency.CancelInProgress || !strings.Contains(workflow.Concurrency.Group, "github.event.pull_request.number") ||
 		!strings.Contains(workflow.Concurrency.Group, "github.event.workflow_run.pull_requests[0].number") {
-		t.Errorf("concurrency = %+v, want a per-pull-request group across both triggers that cancels a superseded run", workflow.Concurrency)
+		t.Errorf("concurrency = %+v, want a per-pull-request group across both triggers that queues runs without cancelling a running one", workflow.Concurrency)
 	}
 	if _, ok := workflow.Jobs["review-gate"]; ok {
 		t.Error("a review-gate job would collide with the check the App posts")

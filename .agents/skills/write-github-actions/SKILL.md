@@ -182,7 +182,12 @@ worthless, such as a lint-only workflow. Anything that releases or deploys must 
 platform-studio's `main.yaml` groups by
 `${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}`. A pull request's
 newer run cancels the older one, which could otherwise post a stale screenshot verdict last, while
-every other run gets a group of its own and finishes. A workflow-level group on a workflow that
+every other run gets a group of its own and finishes. Cancel only where a newer head supersedes the
+run, since a push moves the merge box to the new head. A cancelled job on the current head stays red
+there, because the merge box shows each workflow's newest run. A gate that events on one head
+re-trigger, such as `review-gate` on labels and reviews, queues with `cancel-in-progress: false`: its
+runs never overlap, so the last one reads the latest state, and a newer event replaces the waiting run
+before it starts. A workflow-level group on a workflow that
 triggers on `labeled`, as that one does, can strand a pull request's required checks; `monitor-ci`
 covers the [diagnosis and recovery](../monitor-ci/references/dependency-prs.md#stranded-required-checks).
 

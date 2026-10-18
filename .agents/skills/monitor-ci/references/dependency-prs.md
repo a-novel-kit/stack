@@ -95,6 +95,11 @@ gh run view <id> --repo <r> --json jobs --jq '.jobs | length'
 A `cancelled` newest run with 0 jobs is stranded. Re-run it with `gh run rerun <id> --repo <r>`: the
 new attempt runs every job, and auto-merge queues the PR once they pass.
 
+A red `evaluate` job from `review-gate` is the same class in a repository whose managed copy still
+cancels runs in progress. A label or a review starts a run while another runs on the same head, and
+the cancelled one stays red, though the `review-gate` check the [Agent] App posts passed. Re-run the
+newest cancelled run the same way; `a-novel repo update` brings the queued template.
+
 ## Land them without saturating CI
 
 Each merge-queue entry builds its own merge group, and a service pipeline is about 30 jobs. Several
