@@ -162,8 +162,12 @@ pins in the same change.
   digest reference. A new pin is a database host change.
 - **Each backup repository VM keeps a reserved address,** taken from foundation's
   `native_backups.<service>.repository_ip`, the same value its database host trusts.
-- **A database password rotation** bumps foundation's `password_version` and the service's
-  `postgres-password` in one pull request, merged during a planned downtime, which rolls the host.
+- **Services connect as `<database>_app`,** which owns schema `public` without superuser rights.
+  Each boot of the host converges that role and hands it what a superuser created. The owner
+  `<database>` has no password and logs in only through the host's local socket, so a leaked
+  service password reaches no shell.
+- **A database password rotation** bumps foundation's `app_password_version` and the service's
+  `app-password` in one pull request, merged during a planned downtime, which rolls the host.
 - **pgBackRest owns backup expiry.** Never add age-based deletion to a backup bucket. Never delete
   WAL to free space.
 
@@ -229,7 +233,7 @@ A private service with a database ships in six pull requests, each merged once t
 deployed. a-novel/infra#785 is the worked example.
 
 1. **Bootstrap** creates the secret containers. Add version 1 of each value before a later step pins
-   it: the database host reads its password at boot.
+   it: the database host reads the application role's `app-password` at boot.
 2. **The service root starts with its `runtime` module alone,** its workloads' identities
    included, plus its `plan-<root>` job and `roll-database.yaml` option, and foundation's
    `service_release_zones` entry and quotas. `deploy.yaml` and `drift.yaml` find the root on disk;
