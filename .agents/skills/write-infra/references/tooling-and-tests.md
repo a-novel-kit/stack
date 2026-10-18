@@ -1,5 +1,9 @@
 # Tooling and tests
 
+- [Native first](#native-first), [Tests that earn their place](#tests-that-earn-their-place)
+- [Required checks and workflows](#required-checks-and-workflows),
+  [Local verification](#local-verification), [Known traps](#known-traps)
+
 ## Native first
 
 Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub Actions.
@@ -17,7 +21,8 @@ Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub
 - **Inline workflow steps** call `tofu`, `gh`, `gcloud`, `jq` and `curl` directly.
 - **A shared step sequence** becomes a repository composite action:
   - `.github/actions/tofu` plans, enforces the policy, copies images and applies;
-  - `.github/actions/health` checks production health.
+  - `.github/actions/health` checks production health with the shared
+    `modules/service-runtime/smoke.sh`, which the caller checks out.
 - **Go** is reserved for programs that run on hosts. **Bash** is reserved for host scripts and
   workflow steps.
 - **There is no Node toolchain.** CI runs Prettier and `renovate-config-validator` through `npx`, at
@@ -34,8 +39,10 @@ Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub
   - deny-all egress below the allows;
   - no owner or editor roles.
 - **Do not assert literals that only restate an argument.** Do not grep docs or workflow text.
-- **Mocked providers panic on `import` blocks.** Add tests for a root only after its imports are
-  removed.
+- **Mocked providers panic on `import` blocks:** `tofu test` cannot run configuration-driven
+  imports, and a root's tests plan its real `terraform.tfvars`. Add tests for a root only after its
+  imports are removed. In a root that already has tests, gate the import behind a variable its tests
+  set to `false`, or do without it.
 - **Mocks need realistic values.** Service-account `email`, `member` and `name` must be well-formed,
   or provider validation fails. A data-source mock cannot override a non-computed field such as
   `name`.
@@ -102,6 +109,8 @@ Run the whole gate the way CI does:
   it; bound actual usage with instance caps instead.
 - **A workload identity provider's display name is capped at 32 characters,** and only the apply
   checks it. Bootstrap's test enforces the limit.
+- **An alert condition with `evaluation_missing_data` needs a non-zero `duration`.** The plan
+  passes, and Cloud Monitoring refuses the apply with a 400.
 - **`gcloud` asks before cancelling or deleting, and nobody answers in CI.** Set
   `CLOUDSDK_CORE_DISABLE_PROMPTS: "1"` on the step and pass `--quiet`. A test stub that accepts every
   call hides the prompt, so make stubs refuse an unconfirmed call.
