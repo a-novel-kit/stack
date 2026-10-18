@@ -183,7 +183,9 @@ worthless, such as a lint-only workflow. Anything that releases or deploys must 
 platform-studio's `main.yaml` groups by
 `${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}`. A pull request's
 newer run cancels the older one, which could otherwise post a stale screenshot verdict last, while
-every other run gets a group of its own and finishes.
+every other run gets a group of its own and finishes. A workflow-level group on a workflow that
+triggers on `labeled`, as that one does, can strand a pull request's required checks; `monitor-ci`
+covers the [diagnosis and recovery](../monitor-ci/references/dependency-prs.md#stranded-required-checks).
 
 ---
 
