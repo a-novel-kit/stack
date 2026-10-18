@@ -16,7 +16,6 @@ bots:
 # grant and revoke with 409.
 scoped_secrets:
   - CODECOV_TOKEN
-  - PUBLISH_BOT_PRIVATE_KEY
   - TOKEN_EXPIRY_ADMIN
 # Privileged secrets, which no org secret carries. Each repo's governance
 # environment holds the ones its workflows name, copied by `repo update` from
@@ -29,4 +28,3 @@ governance:
     - AGENT_BOT_PRIVATE_KEY
     - BWS_READ_TOKEN
     - DEPENDENCY_BOT_PRIVATE_KEY
-    - PUBLISH_BOT_PRIVATE_KEY
