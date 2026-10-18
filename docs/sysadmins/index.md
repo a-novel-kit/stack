@@ -134,8 +134,8 @@ When you work with a backup, point `user.signingkey` at its signing key instead.
 
 ## Duties
 
-- **Enroll contributors:** give them the member role on Discord, invite them to both GitHub organizations and to the teams of their repositories, and add them to the CI mention map in Bitwarden.
-- **Apply repository settings** with [`repo update`](./repositories).
+- **Manage members:** [add](./add-member), [promote](./promote-member) and [offboard](./offboard-member) them.
+- **Manage repositories:** [create](./create-repository) them and apply their settings with [`repo update`](./repositories).
 - **Operate production:** follow the [infra runbooks](https://github.com/a-novel/infra/tree/master/docs/runbooks).
 
 ### Set up the bot for an organization

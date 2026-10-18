@@ -8,7 +8,7 @@ Accept the [server invite](https://discord.gg/rp4Qr8cA), in the browser or the [
 
 ## Get enrolled
 
-Introduce yourself in the community channels, get to know the team, and share what you want to work on. A project member then enrolls you. You get the member role, which opens the private working channels, and access to the GitHub repositories you work on.
+Introduce yourself in the community channels, get to know the team, and share what you want to work on. A project member then enrolls you. You get the `developers` or `ops` role, which opens the private working channels, and access to the GitHub repositories you work on.
 
 ### Link your accounts
 

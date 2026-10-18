@@ -33,17 +33,6 @@ a-novel repo update --all
 
 Template changes apply without a rebuild, except a new field, which needs `a-novel install` first.
 
-## Create a repository
-
-```bash
-ORG=a-novel
-NAME=service-example
-CLASS=service
-a-novel repo create "$ORG" "$NAME" --class "$CLASS" --template service-template
-```
-
-Add it to the stack's `workspace-repos.yaml` so `core sync` clones it.
-
 ## Store the Bitwarden token
 
 Store the [Bitwarden](./bitwarden#configure) access token once; `repo update` reads it from there:
