@@ -47,7 +47,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: a-novel-kit/workflows/publish-actions/release-core@v1.62.0
+      - uses: a-novel-kit/workflows/publish-actions/release-core@v1.63.0
         with:
           # renovate: datasource=go depName=github.com/a-novel-kit/stack/cli
           cli_version: "1.7.5"
@@ -62,7 +62,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: a-novel-kit/workflows/publish-actions/release-core@v1.62.0
+      - uses: a-novel-kit/workflows/publish-actions/release-core@v1.63.0
         with:
           # renovate: datasource=go depName=github.com/a-novel-kit/stack/cli
           cli_version: "1.7.5"
@@ -80,7 +80,7 @@ jobs:
       deployment: false
     permissions: {}
     steps:
-      - uses: a-novel-kit/workflows/generic-actions/archive-board-items@v1.62.0
+      - uses: a-novel-kit/workflows/generic-actions/archive-board-items@v1.63.0
         with:
           client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
           app_private_key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
