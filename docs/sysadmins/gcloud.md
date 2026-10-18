@@ -87,3 +87,9 @@ Check that both projects are listed:
 ```bash
 gcloud projects list
 ```
+
+Tools such as [OpenTofu](./opentofu) sign in separately, through application default credentials. Give them the same account:
+
+```bash
+gcloud auth application-default login
+```

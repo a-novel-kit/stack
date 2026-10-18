@@ -38,15 +38,11 @@ Rerun this step whenever the pin moves, as `tofu init` refuses any other version
 
 ## Configure
 
-OpenTofu reaches Google Cloud as your [Google Cloud CLI](./gcloud) account. Check from an up-to-date infra checkout, where `init` reads the foundation state:
+OpenTofu reaches Google Cloud through the [application default credentials](./gcloud#configure) of your Google Cloud CLI account. Check from an up-to-date infra checkout, where `init` reads the foundation state:
 
 ```bash
 cd ~/git-projects/a-novel/app/infra
 tofu -chdir=environments/production/foundation init
 ```
 
-It ends with `OpenTofu has been successfully initialized!`. If it fails on credentials instead, hand OpenTofu your account and run the check again:
-
-```bash
-gcloud auth application-default login
-```
+It ends with `OpenTofu has been successfully initialized!`.
