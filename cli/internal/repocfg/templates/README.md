@@ -55,8 +55,10 @@ published release with its notes; a person's pull request reviews, merge and
 drop from the merge queue, pinging its reviewers or owner; and a bot's pull
 request whose `main` fails. It reads org-level values the operator provisions by
 hand: the `CI_WEBHOOK`, `RELEASES_WEBHOOK`, `REVIEWS_WEBHOOK` and
-`DEPENDENCIES_WEBHOOK` secrets; `BWS_READ_TOKEN` and `BWS_SERVER_URL`, which
-resolve a GitHub account to the Discord user it pings; and the
+`DEPENDENCIES_WEBHOOK` secrets; `REVIEWS_WEBHOOKS`, a JSON map from
+`<org>/<repo>` to that repository's own reviews channel, which wins over
+`REVIEWS_WEBHOOK`; `BWS_READ_TOKEN` and `BWS_SERVER_URL`, which resolve a
+GitHub account to the Discord user it pings; and the
 `DISCORD_REPO_ROLES` variable mapping each `<org>/<repo>` to its role id. A
 missing webhook skips the post; a person or repository missing from its map
 posts without that ping. Reviews post from `notify-reviews.yaml`, which follows
