@@ -52,6 +52,10 @@ Use the nearest established equivalent when a repository already has a coherent 
 rename working boundaries merely to match these directory names. Dependencies point inward: routes
 and adapters compose pure application/UI code, never the reverse.
 
+`a-novel/platform-template` is the shortcut to start a new platform, so it tracks the platforms'
+conventions. A change that sets or changes a convention in a platform ships with the matching
+`platform-template` change, in a pull request opened alongside it.
+
 Keep platform configuration entrypoints thin: import shared factories and supply only product paths,
 catalog policy, environment policy, or test selection. Generic defaults and their representative
 fixtures stay with the shared package; product catalogs, route models, and workflows stay in the

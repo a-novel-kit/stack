@@ -23,6 +23,10 @@ hygiene, the span-reporting rule — applies here unchanged; this skill adds the
 interfaces it exposes. These services are deliberately consistent — copy the established pattern
 exactly; coherence outranks preference.
 
+`a-novel/service-template` is the shortcut to start a new service, so it tracks the services'
+conventions. A change that sets or changes a convention in a service ships with the matching
+`service-template` change, in a pull request opened alongside it.
+
 ---
 
 ## Load the affected layer
