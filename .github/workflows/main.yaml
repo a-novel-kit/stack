@@ -9,9 +9,8 @@ on:
 
 jobs:
   generated-go-cli:
-    # Ensures `go generate ./...` in cli/ produces no diff against what's
-    # committed (proto bindings, mocks, etc.). Mirrors the per-service
-    # generated-go job.
+    # Ensures `go generate ./...` in cli/ produces no diff against the
+    # committed proto bindings, like the per-service generated-go job.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,9 +30,9 @@ jobs:
           fail_message: cli/ go generate definitions are not up-to-date, please run 'go generate ./...' inside cli/ and commit the changes
 
   lint-proto-cli:
-    # buf lint over the cli/proto contract. Catches schema-style violations
-    # (naming, field-number reuse, breaking-change patterns) before generated
-    # code drifts from intent.
+    # buf build over the cli/proto contract, which fails on a contract that does
+    # not compile. buf-action lints, checks formatting and checks for breaking
+    # changes only on pull_request events, which this workflow never runs on.
     runs-on: ubuntu-latest
     permissions:
       contents: read
