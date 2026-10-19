@@ -84,6 +84,37 @@ func TestPrepareEnv(t *testing.T) {
 	}
 }
 
+// TestComposeEnv pins that the derived connection vars follow the ports the
+// run allocates, even when the inherited environment already sets the same
+// port variable, and that referenced credentials get their local defaults.
+func TestComposeEnv(t *testing.T) {
+	t.Parallel()
+
+	env := &detect.ComposeEnv{Ports: []string{"POSTGRES_PORT", "REST_PORT"}, Refs: []string{"POSTGRES_USER"}}
+	added, err := composeEnv(env, []string{"POSTGRES_PORT=5432", "REST_PORT=8080"})
+	if err != nil {
+		t.Fatalf("composeEnv: %v", err)
+	}
+	vars := map[string]string{}
+	for _, kv := range added {
+		key, value, _ := strings.Cut(kv, "=")
+		vars[key] = value
+	}
+	if vars["POSTGRES_PORT"] == "5432" || vars["REST_PORT"] == "8080" {
+		t.Fatalf("composeEnv kept an inherited port: %v", added)
+	}
+	wantDSN := "postgres://postgres:postgres@localhost:" + vars["POSTGRES_PORT"] + "/postgres?sslmode=disable"
+	if vars["POSTGRES_DSN"] != wantDSN {
+		t.Errorf("POSTGRES_DSN = %q, want %q", vars["POSTGRES_DSN"], wantDSN)
+	}
+	if want := "http://localhost:" + vars["REST_PORT"]; vars["REST_URL"] != want {
+		t.Errorf("REST_URL = %q, want %q", vars["REST_URL"], want)
+	}
+	if vars["POSTGRES_USER"] != "postgres" {
+		t.Errorf("POSTGRES_USER = %q, want the local default", vars["POSTGRES_USER"])
+	}
+}
+
 // TestJob_GOMAXPROCSCap verifies a job injects GOMAXPROCS from its maxProcs
 // argument (the per-target CPU cap the parallel runner uses), and leaves it
 // untouched when maxProcs is 0 (the sequential path).

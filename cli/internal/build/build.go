@@ -101,7 +101,7 @@ func composeEnv(e *detect.ComposeEnv, base []string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("port allocation failed: %w", err)
 	}
-	added := slices.Concat(ports, derivedURLs(e.Ports, slices.Concat(base, ports)))
+	added := slices.Concat(ports, derivedURLs(e.Ports, ports))
 	return append(added, testDefaults(e.Refs, slices.Concat(base, added))...), nil
 }
 
