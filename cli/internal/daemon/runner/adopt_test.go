@@ -13,7 +13,7 @@ import (
 // The strings are what podman prints in the Status column.
 
 func TestTranslatePodmanStatus(t *testing.T) {
-	cases := []struct {
+	testCases := []struct {
 		status string
 		phase  anovelv1.Phase
 		health anovelv1.Health
@@ -33,11 +33,11 @@ func TestTranslatePodmanStatus(t *testing.T) {
 		{"Created", anovelv1.Phase_PHASE_STARTING, anovelv1.Health_HEALTH_UNKNOWN},
 	}
 
-	for _, c := range cases {
-		phase, health := translatePodmanStatus(c.status)
-		if phase != c.phase || health != c.health {
+	for _, testCase := range testCases {
+		phase, health := translatePodmanStatus(testCase.status)
+		if phase != testCase.phase || health != testCase.health {
 			t.Errorf("translatePodmanStatus(%q): got (%v, %v) want (%v, %v)",
-				c.status, phase, health, c.phase, c.health)
+				testCase.status, phase, health, testCase.phase, testCase.health)
 		}
 	}
 }
@@ -47,7 +47,7 @@ func TestTranslatePodmanStatus(t *testing.T) {
 // clears it, so a stopped or half-created one leaves EnsureDepsReady to bring
 // the infra up. discovery is absent, so only the infra decisions run.
 func TestAdoptEntriesMarksTheSessionUpFromRunningContainersOnly(t *testing.T) {
-	cases := []struct {
+	testCases := []struct {
 		statuses []string
 		up       bool
 	}{
@@ -64,16 +64,16 @@ func TestAdoptEntriesMarksTheSessionUpFromRunningContainersOnly(t *testing.T) {
 	}
 
 	labels := map[string]string{"anovel.stack": "default", "anovel.service": "service-json-keys"}
-	for _, c := range cases {
+	for _, testCase := range testCases {
 		r := &Runner{instances: map[string]*Instance{}, infraSessions: map[string]*infraSession{}}
-		entries := make([]psEntry, len(c.statuses))
-		for i, status := range c.statuses {
+		entries := make([]psEntry, len(testCase.statuses))
+		for i, status := range testCase.statuses {
 			entries[i] = psEntry{ID: "cid-" + status, Status: status, Labels: labels}
 		}
 		r.adoptEntries(t.Context(), entries)
 
-		if sess, _ := r.InfraSession("default", "service-json-keys"); sess.Up != c.up {
-			t.Errorf("infra %q: session up = %v, want %v", c.statuses, sess.Up, c.up)
+		if sess, _ := r.InfraSession("default", "service-json-keys"); sess.Up != testCase.up {
+			t.Errorf("infra %q: session up = %v, want %v", testCase.statuses, sess.Up, testCase.up)
 		}
 	}
 }

@@ -28,7 +28,7 @@ func mustWrite(t *testing.T, path, content string) {
 func TestEnvFileToEnv(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
+	testCases := []struct {
 		name       string
 		yaml       string
 		services   []string
@@ -61,16 +61,16 @@ func TestEnvFileToEnv(t *testing.T) {
 		},
 		{name: "Malformed", yaml: "services: [unclosed\n"},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			f := filepath.Join(t.TempDir(), "podman-compose.go.test.yaml")
-			mustWrite(t, f, tc.yaml)
+			mustWrite(t, f, testCase.yaml)
 			env := envFile{env: "go", file: f, id: "go"}.toEnv(".")
-			if !reflect.DeepEqual(env.Services, tc.services) || !reflect.DeepEqual(env.Dependents, tc.dependents) ||
-				!reflect.DeepEqual(env.Ports, tc.ports) {
+			if !reflect.DeepEqual(env.Services, testCase.services) || !reflect.DeepEqual(env.Dependents, testCase.dependents) ||
+				!reflect.DeepEqual(env.Ports, testCase.ports) {
 				t.Errorf("toEnv = services %v, dependents %v, ports %v; want %v, %v, %v",
-					env.Services, env.Dependents, env.Ports, tc.services, tc.dependents, tc.ports)
+					env.Services, env.Dependents, env.Ports, testCase.services, testCase.dependents, testCase.ports)
 			}
 		})
 	}
@@ -87,7 +87,7 @@ func TestEnvFileToEnv(t *testing.T) {
 func TestGoTests(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
+	testCases := []struct {
 		name  string
 		tests []string  // test package dirs
 		envs  []envFile // go envs over compose.yaml; a nil path is a bare env
@@ -118,17 +118,17 @@ func TestGoTests(t *testing.T) {
 			want:  []string{"go test -count=1 ./... +env"},
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
 			mustWrite(t, filepath.Join(dir, "go.mod"), "module x\n\ngo 1.26.4\n")
-			for _, pkg := range tc.tests {
+			for _, pkg := range testCase.tests {
 				mustWrite(t, filepath.Join(dir, pkg, "x_test.go"), "package x\n")
 			}
 			compose := filepath.Join(dir, "compose.yaml")
 			mustWrite(t, compose, "services:\n  db:\n    image: postgres\n")
-			envs := slices.Clone(tc.envs)
+			envs := slices.Clone(testCase.envs)
 			for i := range envs {
 				envs[i].env, envs[i].file = string(KindGo), compose
 			}
@@ -141,8 +141,8 @@ func TestGoTests(t *testing.T) {
 					got[i] += " +env"
 				}
 			}
-			if !slices.Equal(got, tc.want) {
-				t.Errorf("targets = %q, want %q", got, tc.want)
+			if !slices.Equal(got, testCase.want) {
+				t.Errorf("targets = %q, want %q", got, testCase.want)
 			}
 		})
 	}
@@ -153,7 +153,7 @@ func TestUncoveredGoSelectors(t *testing.T) {
 
 	seg := func(parts ...string) []string { return parts }
 
-	cases := []struct {
+	testCases := []struct {
 		name    string
 		testPkg [][]string
 		scoped  [][]string
@@ -187,11 +187,11 @@ func TestUncoveredGoSelectors(t *testing.T) {
 		},
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got := uncoveredGoSelectors(c.testPkg, c.scoped)
-			if !reflect.DeepEqual(got, c.want) {
-				t.Errorf("uncoveredGoSelectors = %v, want %v", got, c.want)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got := uncoveredGoSelectors(testCase.testPkg, testCase.scoped)
+			if !reflect.DeepEqual(got, testCase.want) {
+				t.Errorf("uncoveredGoSelectors = %v, want %v", got, testCase.want)
 			}
 		})
 	}

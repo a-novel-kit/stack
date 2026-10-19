@@ -24,7 +24,7 @@ func TestReport(t *testing.T) {
 	failed := jobs.Result{Job: jobs.Job{Name: "a-novel/service-x"}, Err: errors.New("fetch failed"), Output: "ssh: refused"}
 	passed := jobs.Result{Job: jobs.Job{Name: "x", Group: "go"}, Output: "ok x"}
 
-	cases := []struct {
+	testCases := []struct {
 		name    string
 		batch   Batch
 		show    func(jobs.Result) bool
@@ -74,13 +74,13 @@ func TestReport(t *testing.T) {
 		},
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := ansiEscape.ReplaceAllString(Report("SYNC", c.batch, c.show), "")
+			got := ansiEscape.ReplaceAllString(Report("SYNC", testCase.batch, testCase.show), "")
 			rest := got
-			for _, want := range c.want {
+			for _, want := range testCase.want {
 				_, after, found := strings.Cut(rest, want)
 				if !found {
 					t.Errorf("report missing %q, or out of order:\n%s", want, got)
@@ -88,7 +88,7 @@ func TestReport(t *testing.T) {
 				}
 				rest = after
 			}
-			for _, notWant := range c.notWant {
+			for _, notWant := range testCase.notWant {
 				if strings.Contains(got, notWant) {
 					t.Errorf("report unexpectedly holds %q:\n%s", notWant, got)
 				}

@@ -202,7 +202,8 @@ func TestBuildPlanGovernsReleaseLines(t *testing.T) {
 	for _, r := range ruleset.Rules {
 		rules[r.Type] = r.Parameters
 	}
-	for _, rule := range []string{"creation", "deletion", "non_fast_forward", "required_signatures"} {
+	wantRules := []string{"creation", "deletion", "non_fast_forward", "required_signatures"}
+	for _, rule := range wantRules {
 		if _, ok := rules[rule]; !ok {
 			t.Errorf("release-lines lacks the %s rule", rule)
 		}
@@ -296,10 +297,11 @@ func TestSettingsBody(t *testing.T) {
 func TestBuildPlanDependabotBypassFollowsSecurityUpdates(t *testing.T) {
 	t.Parallel()
 	for _, securityUpdates := range []bool{true, false} {
-		ruleset := rulesetBody(planFor(t, &ClassPreset{
+		class := &ClassPreset{
 			Rulesets: ClassRulesets{Master: true},
 			Security: SecurityToggles{Dependabot: securityUpdates},
-		}), "commit-messages")
+		}
+		ruleset := rulesetBody(planFor(t, class), "commit-messages")
 		if ruleset == nil {
 			t.Fatal("plan carries no commit-messages ruleset")
 		}

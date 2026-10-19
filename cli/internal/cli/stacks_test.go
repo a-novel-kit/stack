@@ -24,7 +24,7 @@ func TestSelectPruneTargets(t *testing.T) {
 
 	registered := []*anovelv1.Stack{stack(stacks.DefaultName, true), stack("agent-a", false), stack("agent-b", false)}
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		name       string
 		registered []*anovelv1.Stack
 		args       []string
@@ -39,18 +39,20 @@ func TestSelectPruneTargets(t *testing.T) {
 		{name: "Success/Named", registered: registered, args: []string{"agent-b"}, want: []string{"agent-b"}},
 		{name: "Error/NamedDefault", registered: registered, args: []string{stacks.DefaultName}, wantErr: "is the default stack"},
 		{name: "Error/Unknown", registered: registered, args: []string{"nope"}, wantErr: "no registered stack"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := selectPruneTargets(tc.registered, tc.args, tc.all)
-			if tc.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("error = %v, want it to mention %q", err, tc.wantErr)
+			got, err := selectPruneTargets(testCase.registered, testCase.args, testCase.all)
+			if testCase.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+					t.Fatalf("error = %v, want it to mention %q", err, testCase.wantErr)
 				}
 				return
 			}
-			if err != nil || !slices.EqualFunc(got, tc.want, func(s *anovelv1.Stack, name string) bool { return s.GetName() == name }) {
-				t.Fatalf("selectPruneTargets = (%v, %v), want %v", got, err, tc.want)
+			if err != nil || !slices.EqualFunc(got, testCase.want, func(s *anovelv1.Stack, name string) bool { return s.GetName() == name }) {
+				t.Fatalf("selectPruneTargets = (%v, %v), want %v", got, err, testCase.want)
 			}
 		})
 	}
@@ -62,7 +64,7 @@ func TestHoldingsOf(t *testing.T) {
 	target := func(id string, p anovelv1.Phase) *anovelv1.Target { return &anovelv1.Target{Id: id, Phase: p} }
 	infra := func(p anovelv1.Phase) *anovelv1.Infra { return &anovelv1.Infra{Phase: p} }
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		name     string
 		services []*anovelv1.Service
 		want     stackHoldings
@@ -105,11 +107,13 @@ func TestHoldingsOf(t *testing.T) {
 			}},
 			want: stackHoldings{services: []string{"service-a"}},
 		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			if got := holdingsOf(tc.services); !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("holdingsOf = %+v, want %+v", got, tc.want)
+			if got := holdingsOf(testCase.services); !reflect.DeepEqual(got, testCase.want) {
+				t.Errorf("holdingsOf = %+v, want %+v", got, testCase.want)
 			}
 		})
 	}
@@ -186,7 +190,7 @@ func TestReportUnmanaged(t *testing.T) {
 func TestDryRunVerdict(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
+	testCases := []struct {
 		name     string
 		blockers []string
 		force    bool
@@ -197,11 +201,11 @@ func TestDryRunVerdict(t *testing.T) {
 		{name: "force overrides the refusal", blockers: []string{"golib: uncommitted changes"}, force: true, want: "nothing changed"},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			if got := dryRunVerdict(tc.blockers, tc.force); !strings.Contains(got, tc.want) {
-				t.Errorf("dryRunVerdict = %q, want it to mention %q", got, tc.want)
+			if got := dryRunVerdict(testCase.blockers, testCase.force); !strings.Contains(got, testCase.want) {
+				t.Errorf("dryRunVerdict = %q, want it to mention %q", got, testCase.want)
 			}
 		})
 	}
@@ -210,7 +214,7 @@ func TestDryRunVerdict(t *testing.T) {
 func TestPruneBlockers(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		name  string
 		setup func(t *testing.T, local string) // nil: the root does not exist
 		want  string                           // in the lone blocker; "" for none
@@ -232,23 +236,25 @@ func TestPruneBlockers(t *testing.T) {
 			setup: func(t *testing.T, local string) { commitFixture(t, local, "c.txt", "c0\n") },
 			want:  "unpushed",
 		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			root := filepath.Join(t.TempDir(), "gone")
-			if tc.setup != nil {
+			if testCase.setup != nil {
 				root, _ = initSyncRepo(t)
-				tc.setup(t, root)
+				testCase.setup(t, root)
 			}
 			got := pruneBlockers(root)
-			if tc.want == "" {
+			if testCase.want == "" {
 				if len(got) != 0 {
 					t.Fatalf("blockers = %v, want none", got)
 				}
 				return
 			}
-			if len(got) != 1 || !strings.Contains(got[0], tc.want) {
-				t.Fatalf("blockers = %v, want one mentioning %q", got, tc.want)
+			if len(got) != 1 || !strings.Contains(got[0], testCase.want) {
+				t.Fatalf("blockers = %v, want one mentioning %q", got, testCase.want)
 			}
 		})
 	}

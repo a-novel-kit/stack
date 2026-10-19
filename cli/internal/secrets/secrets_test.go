@@ -99,11 +99,13 @@ func TestStore(t *testing.T) {
 		saveStore(t, map[string]string{"k": "v"})
 
 		root := paths.SecretsRoot()
-		for path, want := range map[string]os.FileMode{
+		wantModes := map[string]os.FileMode{
 			filepath.Join(root, "key"):       0o600,
 			filepath.Join(root, "store.enc"): 0o600,
 			root:                             0o700,
-		} {
+		}
+
+		for path, want := range wantModes {
 			info, err := os.Stat(path)
 			if err != nil {
 				t.Fatalf("stat %s: %v", path, err)

@@ -11,7 +11,7 @@ import (
 func TestUpdateRepo(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
+	testCases := []struct {
 		name string
 		// The local clone checks out branch (when set), origin advances a.txt
 		// (when advance), then dirty is written to the clone's working tree.
@@ -56,37 +56,37 @@ func TestUpdateRepo(t *testing.T) {
 		{name: "UpToDate", wantStatus: syncUpToDate, wantFF: true},
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			local, seed := initSyncRepo(t)
-			if c.branch != "" {
-				mustGit(t, local, "checkout", "--quiet", "-b", c.branch)
+			if testCase.branch != "" {
+				mustGit(t, local, "checkout", "--quiet", "-b", testCase.branch)
 			}
-			if c.advance {
+			if testCase.advance {
 				advanceOrigin(t, seed)
 			}
-			for name, content := range c.dirty {
+			for name, content := range testCase.dirty {
 				writeFixture(t, local, name, content)
 			}
 			masterBefore := gitOut(t, local, "rev-parse", "refs/heads/master")
 
 			status, err := updateRepo(local, io.Discard)
-			if err != nil || status != c.wantStatus {
-				t.Fatalf("updateRepo = (%q, %v), want %q", status, err, c.wantStatus)
+			if err != nil || status != testCase.wantStatus {
+				t.Fatalf("updateRepo = (%q, %v), want %q", status, err, testCase.wantStatus)
 			}
 			wantMaster := masterBefore
-			if c.wantFF {
+			if testCase.wantFF {
 				wantMaster = gitOut(t, local, "rev-parse", "refs/remotes/origin/master")
 			}
 			if got := gitOut(t, local, "rev-parse", "refs/heads/master"); got != wantMaster {
-				t.Errorf("local master = %s, want %s (fast-forward %v)", got, wantMaster, c.wantFF)
+				t.Errorf("local master = %s, want %s (fast-forward %v)", got, wantMaster, testCase.wantFF)
 			}
-			if got, want := gitOut(t, local, "symbolic-ref", "--short", "HEAD"), cmp.Or(c.branch, branchMaster); got != want {
+			if got, want := gitOut(t, local, "symbolic-ref", "--short", "HEAD"), cmp.Or(testCase.branch, branchMaster); got != want {
 				t.Errorf("HEAD = %q, want to stay on %q", got, want)
 			}
-			for name, want := range c.wantFiles {
+			for name, want := range testCase.wantFiles {
 				if got := readFixture(t, local, name); got != want {
 					t.Errorf("%s = %q, want %q", name, got, want)
 				}

@@ -39,9 +39,11 @@ ok  	x/pkg/go  0.05s  coverage: 60.0% of statements`
 
 	// Every excluded shape is dropped — a mocks tree at any depth, a test-support tree,
 	// and generated protobuf.
-	for _, excluded := range []string{
+	excludedPackages := []string{
 		"x/internal/mocks", "x/internal/handlers/mocks", "x/internal/test", "x/proto/gen/protogen",
-	} {
+	}
+
+	for _, excluded := range excludedPackages {
 		if _, present := got[excluded]; present {
 			t.Errorf("%s must be excluded from the coverage mean", excluded)
 		}

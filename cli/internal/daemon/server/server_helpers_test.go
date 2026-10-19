@@ -16,7 +16,7 @@ import (
 // reaches the user.
 
 func TestParseInfraLogID(t *testing.T) {
-	cases := []struct {
+	testCases := []struct {
 		in             string
 		stack, svc, nm string
 		ok             bool
@@ -30,18 +30,18 @@ func TestParseInfraLogID(t *testing.T) {
 		// Empty.
 		{"", "", "", "", false},
 	}
-	for _, c := range cases {
-		s, v, n, ok := parseInfraLogID(c.in)
-		if s != c.stack || v != c.svc || n != c.nm || ok != c.ok {
+	for _, testCase := range testCases {
+		s, v, n, ok := parseInfraLogID(testCase.in)
+		if s != testCase.stack || v != testCase.svc || n != testCase.nm || ok != testCase.ok {
 			t.Errorf("parseInfraLogID(%q): got (%q, %q, %q, %v) want (%q, %q, %q, %v)",
-				c.in, s, v, n, ok, c.stack, c.svc, c.nm, c.ok)
+				testCase.in, s, v, n, ok, testCase.stack, testCase.svc, testCase.nm, testCase.ok)
 		}
 	}
 }
 
 func TestDescribePhaseEvent(t *testing.T) {
 	const id = "default/svc/rest"
-	cases := []struct {
+	testCases := []struct {
 		phase  anovelv1.Phase
 		reason anovelv1.ExitReason
 		want   string
@@ -58,10 +58,10 @@ func TestDescribePhaseEvent(t *testing.T) {
 		// enum form.
 		{anovelv1.Phase_PHASE_PENDING, 0, anovelv1.Phase_PHASE_PENDING.String()},
 	}
-	for _, c := range cases {
-		ev := runner.PhaseEvent{TargetID: id, NewPhase: c.phase, ExitReason: c.reason}
-		if got := describePhaseEvent(ev); got != id+" "+c.want {
-			t.Errorf("describePhaseEvent(%v): got %q want %q", ev, got, id+" "+c.want)
+	for _, testCase := range testCases {
+		ev := runner.PhaseEvent{TargetID: id, NewPhase: testCase.phase, ExitReason: testCase.reason}
+		if got := describePhaseEvent(ev); got != id+" "+testCase.want {
+			t.Errorf("describePhaseEvent(%v): got %q want %q", ev, got, id+" "+testCase.want)
 		}
 	}
 }
@@ -103,7 +103,7 @@ func TestExecExitCode(t *testing.T) {
 		return exec.Command("sh", "-c", "exit "+strconv.Itoa(code)).Run() //nolint:gosec
 	}
 
-	cases := []struct {
+	testCases := []struct {
 		name    string
 		in      error
 		want    int32
@@ -114,14 +114,14 @@ func TestExecExitCode(t *testing.T) {
 		// Not an *exec.ExitError: the child's status was never obtained.
 		{"wait failure", errors.New("pipe closed"), 0, true},
 	}
-	for _, c := range cases {
-		got, err := execExitCode(c.in)
-		if (err != nil) != c.wantErr {
-			t.Errorf("execExitCode(%s): got err %v want wantErr=%v", c.name, err, c.wantErr)
+	for _, testCase := range testCases {
+		got, err := execExitCode(testCase.in)
+		if (err != nil) != testCase.wantErr {
+			t.Errorf("execExitCode(%s): got err %v want wantErr=%v", testCase.name, err, testCase.wantErr)
 			continue
 		}
-		if got != c.want {
-			t.Errorf("execExitCode(%s): got %d want %d", c.name, got, c.want)
+		if got != testCase.want {
+			t.Errorf("execExitCode(%s): got %d want %d", testCase.name, got, testCase.want)
 		}
 	}
 }

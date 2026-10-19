@@ -15,7 +15,8 @@ func TestPrune(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
 	// Names run against modification order, so only the mtime can rank them.
-	for i, name := range []string{"d.zst", "c.zst", "b.zst", "a.zst", "keep.txt"} {
+	archives := []string{"d.zst", "c.zst", "b.zst", "a.zst", "keep.txt"}
+	for i, name := range archives {
 		path := filepath.Join(dir, name)
 		if err := os.WriteFile(path, nil, 0o600); err != nil {
 			t.Fatal(err)

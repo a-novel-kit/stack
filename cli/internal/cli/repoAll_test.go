@@ -24,11 +24,13 @@ func TestRenderCompactSummary(t *testing.T) {
 	var buf bytes.Buffer
 	renderCompactSummary(&buf, target)
 	got := buf.String()
-	for _, want := range []string{
+	wantSummary := []string{
 		"a-novel/service-auth", "class service",
 		"master", "require-approval",
 		"lint-go, test-go (2)",
-	} {
+	}
+
+	for _, want := range wantSummary {
 		if !strings.Contains(got, want) {
 			t.Errorf("compact summary missing %q\n--- got ---\n%s", want, got)
 		}
@@ -54,7 +56,8 @@ func TestRenderAllJSON(t *testing.T) {
 		if err := renderAllJSON(&buf, items); err != nil {
 			t.Fatalf("renderAllJSON: %v", err)
 		}
-		for _, want := range []string{`"repo": "a-novel/service-json-keys"`, `"method": "PATCH"`, `"ops"`} {
+		wantJSON := []string{`"repo": "a-novel/service-json-keys"`, `"method": "PATCH"`, `"ops"`}
+		for _, want := range wantJSON {
 			if !strings.Contains(buf.String(), want) {
 				t.Errorf("json missing %q\n%s", want, buf.String())
 			}

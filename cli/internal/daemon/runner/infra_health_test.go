@@ -17,7 +17,7 @@ func TestInfraHealthy(t *testing.T) {
 	oneShotFailed := infraContainerState{phase: pmPhaseExited, exitCode: 1}
 	inspectFailed := infraContainerState{inspectErr: true}
 
-	cases := []struct {
+	testCases := []struct {
 		name          string
 		declaredInfra int
 		states        []infraContainerState
@@ -40,11 +40,11 @@ func TestInfraHealthy(t *testing.T) {
 		{"an inspect failure is not ready", 1, []infraContainerState{inspectFailed}, false},
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got := infraHealthy(c.declaredInfra, c.states)
-			if got != c.want {
-				t.Errorf("infraHealthy(%d, %v) = %v, want %v", c.declaredInfra, c.states, got, c.want)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got := infraHealthy(testCase.declaredInfra, testCase.states)
+			if got != testCase.want {
+				t.Errorf("infraHealthy(%d, %v) = %v, want %v", testCase.declaredInfra, testCase.states, got, testCase.want)
 			}
 		})
 	}

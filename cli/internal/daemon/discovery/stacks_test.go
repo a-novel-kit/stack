@@ -25,7 +25,7 @@ func TestDiscoverStacks(t *testing.T) {
 		t.Fatalf("fixture: %v", err)
 	}
 
-	cases := []struct {
+	testCases := []struct {
 		name    string
 		stacks  []stacks.Stack
 		wantErr bool
@@ -34,18 +34,18 @@ func TestDiscoverStacks(t *testing.T) {
 		{name: "Success/SkipsNonDirectory", stacks: []stacks.Stack{{Name: "bogus", Path: file}}},
 		{name: "Error/VanishedDefault", stacks: []stacks.Stack{{Name: "default", Path: gone, IsDefault: true}}, wantErr: true},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			in := c.stacks
-			if !c.wantErr {
+			in := testCase.stacks
+			if !testCase.wantErr {
 				in = append([]stacks.Stack{{Name: "default", Path: present, IsDefault: true}}, in...)
 			}
 			got, err := DiscoverStacks(in)
-			if (err != nil) != c.wantErr {
-				t.Fatalf("DiscoverStacks: got err %v, want error %v", err, c.wantErr)
+			if (err != nil) != testCase.wantErr {
+				t.Fatalf("DiscoverStacks: got err %v, want error %v", err, testCase.wantErr)
 			}
-			if !c.wantErr && (len(got) != 1 || got[0].Name != "default") {
+			if !testCase.wantErr && (len(got) != 1 || got[0].Name != "default") {
 				t.Fatalf("discovered %v, want only the default stack", got)
 			}
 		})

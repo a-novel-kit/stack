@@ -162,7 +162,8 @@ func TestStore_NoSubscriberStillWritesFile(t *testing.T) {
 func TestStore_ListRunsSkipsMalformedNames(t *testing.T) {
 	s, _, _ := withStore(t)
 	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "a-novel", "logs", "default", "test", "x")
-	for _, name := range []string{"run-x", "run-", "run-2026-07-01.log", "run-2026-07-02.log", "notes.log"} {
+	runFiles := []string{"run-x", "run-", "run-2026-07-01.log", "run-2026-07-02.log", "notes.log"}
+	for _, name := range runFiles {
 		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o600); err != nil {
 			t.Fatal(err)
 		}

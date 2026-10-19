@@ -13,7 +13,7 @@ import (
 func TestExecResult(t *testing.T) {
 	code := func(v int32) *int32 { return &v }
 
-	cases := []struct {
+	testCases := []struct {
 		name     string
 		exitCode *int32
 		// wantExit is the code carried by an *ExitError; 0 means "expect no error".
@@ -30,15 +30,15 @@ func TestExecResult(t *testing.T) {
 		{"no terminal message", nil, 0, true},
 	}
 
-	for _, c := range cases {
-		err := execResult(c.exitCode)
+	for _, testCase := range testCases {
+		err := execResult(testCase.exitCode)
 		var exitErr *ExitError
 		gotExit := 0
 		if errors.As(err, &exitErr) {
 			gotExit = exitErr.Code
 		}
-		if gotExit != c.wantExit || (err != nil && gotExit == 0) != c.wantErr {
-			t.Errorf("execResult(%s) = %v, want exit code %d (non-exit error %v)", c.name, err, c.wantExit, c.wantErr)
+		if gotExit != testCase.wantExit || (err != nil && gotExit == 0) != testCase.wantErr {
+			t.Errorf("execResult(%s) = %v, want exit code %d (non-exit error %v)", testCase.name, err, testCase.wantExit, testCase.wantErr)
 		}
 	}
 }
@@ -50,7 +50,7 @@ func TestParseEntityID(t *testing.T) {
 	// Not parallel: t.Setenv redirects the stack registry.
 	t.Setenv("A_NOVEL_STACKS", "main:/srv/main,fork:/srv/fork")
 
-	cases := []struct {
+	testCases := []struct {
 		arg, stack string
 		want       entityRef
 	}{
@@ -62,9 +62,9 @@ func TestParseEntityID(t *testing.T) {
 		// "infra" anywhere but second-to-last is an ordinary target name.
 		{arg: "svc/infra", want: entityRef{Stack: "main", Service: "svc", Target: "infra", ID: "main/svc/infra"}},
 	}
-	for _, c := range cases {
-		if got := parseEntityID(c.arg, c.stack); got != c.want {
-			t.Errorf("parseEntityID(%q, %q) = %+v, want %+v", c.arg, c.stack, got, c.want)
+	for _, testCase := range testCases {
+		if got := parseEntityID(testCase.arg, testCase.stack); got != testCase.want {
+			t.Errorf("parseEntityID(%q, %q) = %+v, want %+v", testCase.arg, testCase.stack, got, testCase.want)
 		}
 	}
 }

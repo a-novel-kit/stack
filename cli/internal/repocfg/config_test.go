@@ -30,7 +30,7 @@ func TestLoadAllClasses(t *testing.T) {
 
 func TestDetectClass(t *testing.T) {
 	t.Parallel()
-	cases := map[string]Class{
+	testCases := map[string]Class{
 		"service-authentication": ClassService,
 		"service-json-keys":      ClassService,
 		"infra":                  ClassInfra,
@@ -42,7 +42,7 @@ func TestDetectClass(t *testing.T) {
 		"platform-web":           ClassPlatform,
 		"platform-studio":        ClassPlatform,
 	}
-	for repo, want := range cases {
+	for repo, want := range testCases {
 		t.Run(repo, func(t *testing.T) {
 			t.Parallel()
 			if got := DetectClass(repo); got != want {
@@ -57,7 +57,8 @@ func TestDetectClass(t *testing.T) {
 // own profile. Only that org's own app id can satisfy its required check.
 func TestLoadOrgs(t *testing.T) {
 	t.Parallel()
-	for org, agent := range map[string]int64{"a-novel": 3549319, "a-novel-kit": 3549379} {
+	agentIDs := map[string]int64{"a-novel": 3549319, "a-novel-kit": 3549379}
+	for org, agent := range agentIDs {
 		t.Run(org, func(t *testing.T) {
 			t.Parallel()
 			o, err := LoadOrg(org)
@@ -67,7 +68,8 @@ func TestLoadOrgs(t *testing.T) {
 			if o.Org != org {
 				t.Fatalf("org field = %q, want %q", o.Org, org)
 			}
-			for _, bot := range []string{"dependencies", "agent", "publish", "release"} {
+			bots := []string{"dependencies", "agent", "publish", "release"}
+			for _, bot := range bots {
 				if o.Bots[bot] == 0 {
 					t.Fatalf("%s: bots.%s missing", org, bot)
 				}
@@ -128,7 +130,8 @@ func TestLoadLabels(t *testing.T) {
 	}
 	// triage gave way to the Triage board status, hotfix-reconcile to backports,
 	// and renovate to unlabeled Renovate pull requests.
-	for _, name := range []string{"triage", "hotfix-reconcile", "renovate"} {
+	retired := []string{"triage", "hotfix-reconcile", "renovate"}
+	for _, name := range retired {
 		if !slices.Contains(l.Retire, name) {
 			t.Errorf("retire set missing `%s`; got %v", name, l.Retire)
 		}
@@ -161,7 +164,8 @@ func TestLoadTeams(t *testing.T) {
 // ruleset SET is derived (see TestBuildPlanPrunesUnknownRulesets).
 func TestLoadRulesets(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"master", "commit-messages", "require-approval", "tags", "release-lines"} {
+	rulesets := []string{"master", "commit-messages", "require-approval", "tags", "release-lines"}
+	for _, name := range rulesets {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			r, err := LoadRuleset(name)
@@ -287,7 +291,7 @@ func TestBuildRulesetCommitMessagePattern(t *testing.T) {
 	}
 	pattern := regexp.MustCompile(params["pattern"].(string))
 
-	for _, subject := range []string{
+	conventional := []string{
 		"feat(repocfg): restrict pull requests to collaborators (#530)",
 		"chore(deps): update module golang.org/x/text to v0.41.0 [security] (#525)",
 		"fix!: drop the legacy flag",
@@ -295,12 +299,14 @@ func TestBuildRulesetCommitMessagePattern(t *testing.T) {
 		"revert: feat(repocfg): restrict pull requests to collaborators",
 		"chore(release): 1.43.0",
 		"fix(auth): refuse banned owners [v1.4]",
-	} {
+	}
+
+	for _, subject := range conventional {
 		if !pattern.MatchString(subject) {
 			t.Errorf("pattern rejects conventional subject %q", subject)
 		}
 	}
-	for _, subject := range []string{
+	unconventional := []string{
 		"2.9.0",
 		"Update README.md",
 		"feat: ",
@@ -312,7 +318,9 @@ func TestBuildRulesetCommitMessagePattern(t *testing.T) {
 		"WIP",
 		"Merge branch 'master' into feat/repocfg/x",
 		`Revert "feat(repocfg): restrict pull requests to collaborators"`,
-	} {
+	}
+
+	for _, subject := range unconventional {
 		if pattern.MatchString(subject) {
 			t.Errorf("pattern accepts non-conventional subject %q", subject)
 		}

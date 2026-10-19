@@ -10,7 +10,7 @@ import (
 func TestStampFile(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		name, content, prefix, version string
 		wantCount                      int
 		wantContent                    string
@@ -34,28 +34,30 @@ func TestStampFile(t *testing.T) {
 			wantContent: "nothing to see here\n",
 		},
 		{name: "Error/InvalidPrefixRegex", content: "version: v1.0.0\n", prefix: "version: (", version: "1.1.0", wantErr: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			dir := t.TempDir()
-			writeFixture(t, dir, "doc.md", tc.content)
-			re, err := stampPattern(tc.prefix)
+			writeFixture(t, dir, "doc.md", testCase.content)
+			re, err := stampPattern(testCase.prefix)
 			count := 0
 			if err == nil {
-				count, err = stampFile(filepath.Join(dir, "doc.md"), re, tc.version)
+				count, err = stampFile(filepath.Join(dir, "doc.md"), re, testCase.version)
 			}
-			if tc.wantErr {
+			if testCase.wantErr {
 				if err == nil {
 					t.Fatal("expected an error, got none")
 				}
 				return
 			}
-			if err != nil || count != tc.wantCount {
-				t.Fatalf("stampFile = (%d, %v), want %d", count, err, tc.wantCount)
+			if err != nil || count != testCase.wantCount {
+				t.Fatalf("stampFile = (%d, %v), want %d", count, err, testCase.wantCount)
 			}
-			if got := readFixture(t, dir, "doc.md"); got != tc.wantContent {
-				t.Errorf("content = %q, want %q", got, tc.wantContent)
+			if got := readFixture(t, dir, "doc.md"); got != testCase.wantContent {
+				t.Errorf("content = %q, want %q", got, testCase.wantContent)
 			}
 		})
 	}
@@ -64,7 +66,7 @@ func TestStampFile(t *testing.T) {
 func TestReadPackageVersion(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		name        string
 		packageJSON string // "" leaves the file absent
 		want        string
@@ -74,16 +76,18 @@ func TestReadPackageVersion(t *testing.T) {
 		{name: "Error/MissingVersion", packageJSON: `{"name": "stack"}`, wantErr: true},
 		{name: "Error/InvalidJSON", packageJSON: `{`, wantErr: true},
 		{name: "Error/MissingFile", wantErr: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			root := t.TempDir()
-			if tc.packageJSON != "" {
-				writeFixture(t, root, "package.json", tc.packageJSON)
+			if testCase.packageJSON != "" {
+				writeFixture(t, root, "package.json", testCase.packageJSON)
 			}
-			if got, err := readPackageVersion(root); (err != nil) != tc.wantErr || got != tc.want {
-				t.Fatalf("readPackageVersion = (%q, %v), want (%q, error %v)", got, err, tc.want, tc.wantErr)
+			if got, err := readPackageVersion(root); (err != nil) != testCase.wantErr || got != testCase.want {
+				t.Fatalf("readPackageVersion = (%q, %v), want (%q, error %v)", got, err, testCase.want, testCase.wantErr)
 			}
 		})
 	}
@@ -93,7 +97,8 @@ func TestResolveStampTargets(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	for _, rel := range []string{"a/x/action.yaml", "a/y/action.yaml", "b/z/action.yaml", "top.yaml", "weird[1].yaml"} {
+	fixtures := []string{"a/x/action.yaml", "a/y/action.yaml", "b/z/action.yaml", "top.yaml", "weird[1].yaml"}
+	for _, rel := range fixtures {
 		writeFixture(t, dir, rel, "x")
 	}
 	in := func(rels ...string) []string {
@@ -105,7 +110,7 @@ func TestResolveStampTargets(t *testing.T) {
 	}
 	actions := in("a/x/action.yaml", "a/y/action.yaml", "b/z/action.yaml")
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		name     string
 		patterns []string
 		want     []string // nil: the patterns must be refused
@@ -118,13 +123,15 @@ func TestResolveStampTargets(t *testing.T) {
 		{name: "Success/OverlappingPatternsDedupe", patterns: in("a/*/action.yaml", "*/*/action.yaml"), want: actions},
 		// Nothing matched is an error: it catches typos.
 		{name: "Error/NothingMatches", patterns: in("nope/*.yaml")},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := resolveStampTargets(tc.patterns)
+			got, err := resolveStampTargets(testCase.patterns)
 			slices.Sort(got)
-			if (err != nil) != (tc.want == nil) || !slices.Equal(got, tc.want) {
-				t.Fatalf("resolveStampTargets(%v) = (%v, %v), want %v", tc.patterns, got, err, tc.want)
+			if (err != nil) != (testCase.want == nil) || !slices.Equal(got, testCase.want) {
+				t.Fatalf("resolveStampTargets(%v) = (%v, %v), want %v", testCase.patterns, got, err, testCase.want)
 			}
 		})
 	}

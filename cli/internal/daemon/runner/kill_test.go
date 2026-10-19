@@ -19,10 +19,10 @@ import (
 // that never started, which carries no cancel.
 func TestMarkTerminatedClosesTheInstanceContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
-	for _, cancel := range []context.CancelFunc{cancel, nil} {
+	for _, instanceCancel := range []context.CancelFunc{cancel, nil} {
 		const id = "default/svc/rest"
 		r := &Runner{instances: map[string]*Instance{
-			id: {ID: id, Service: "svc", Stack: "default", Phase: anovelv1.Phase_PHASE_RUNNING, cancel: cancel},
+			id: {ID: id, Service: "svc", Stack: "default", Phase: anovelv1.Phase_PHASE_RUNNING, cancel: instanceCancel},
 		}}
 
 		r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_KILLED, "")

@@ -168,7 +168,8 @@ func TestBuilderForTarget(t *testing.T) {
 				if len(warnings) != 1 {
 					t.Fatalf("expected 1 warning line, got %d: %v", len(warnings), warnings)
 				}
-				for _, want := range []string{"OPENAI_API_KEY", "openai-key", "used by generation", "a-novel secrets set openai-key"} {
+				wantWarning := []string{"OPENAI_API_KEY", "openai-key", "used by generation", "a-novel secrets set openai-key"}
+				for _, want := range wantWarning {
 					if !strings.Contains(warnings[0], want) {
 						t.Errorf("warning %q lacks %q", warnings[0], want)
 					}
@@ -324,7 +325,7 @@ func TestBuilderKeepPorts(t *testing.T) {
 	}
 	held := []string{"REST_PORT=41001", "SERVICE_OTHER_GRPC_PORT=41002", "ALIAS_PORT=41003", "STRAY_PORT=41004", "PATH=/bin"}
 
-	cases := []struct {
+	testCases := []struct {
 		name string
 		// seed reserves a slot before KeepPorts runs, as adopting a container does.
 		seed     func(a *Allocator)
@@ -333,12 +334,12 @@ func TestBuilderKeepPorts(t *testing.T) {
 		{name: "Success/KeepsReferencedPorts", seed: func(*Allocator) {}, wantRest: 41001},
 		{name: "Success/AllocatedSlotKeepsItsPort", seed: func(a *Allocator) { a.Reserve("svc", "REST_PORT", 40000, "default/svc-infra") }, wantRest: 40000},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			b, alloc := newBuilderWith([]string{"svc", "service-other"})
-			c.seed(alloc)
+			testCase.seed(alloc)
 			tgt := target()
 			b.KeepPorts(tgt, held)
 
@@ -347,9 +348,9 @@ func TestBuilderKeepPorts(t *testing.T) {
 				t.Fatal(err)
 			}
 			env := toMap(entries)
-			if env["REST_PORT"] != strconv.Itoa(c.wantRest) || env["DEP_PORT"] != "41002" || env["ALIAS_PORT"] != "1234" {
+			if env["REST_PORT"] != strconv.Itoa(testCase.wantRest) || env["DEP_PORT"] != "41002" || env["ALIAS_PORT"] != "1234" {
 				t.Errorf("env: REST_PORT=%s DEP_PORT=%s ALIAS_PORT=%s, want %d, 41002, 1234",
-					env["REST_PORT"], env["DEP_PORT"], env["ALIAS_PORT"], c.wantRest)
+					env["REST_PORT"], env["DEP_PORT"], env["ALIAS_PORT"], testCase.wantRest)
 			}
 			snap := alloc.Snapshot()
 			claimed := make([]string, len(snap))
@@ -368,8 +369,8 @@ func TestBuilderKeepPorts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := toMap(siblingEnv)["API_PORT"]; got != strconv.Itoa(c.wantRest) {
-				t.Errorf("sibling API_PORT = %s, want %d", got, c.wantRest)
+			if got := toMap(siblingEnv)["API_PORT"]; got != strconv.Itoa(testCase.wantRest) {
+				t.Errorf("sibling API_PORT = %s, want %d", got, testCase.wantRest)
 			}
 			// Releasing the relaunched target drops its claims like any other.
 			alloc.Release(tgt.ID())

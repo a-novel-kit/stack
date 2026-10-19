@@ -26,7 +26,7 @@ func TestEnsureDepsReadyGatesALongRunnerOnItsOneShots(t *testing.T) {
 		Targets: []*discovery.Target{grpc, migrations},
 	}
 
-	cases := []struct {
+	testCases := []struct {
 		name    string
 		target  *discovery.Target
 		result  anovelv1.ExitReason
@@ -38,19 +38,19 @@ func TestEnsureDepsReadyGatesALongRunnerOnItsOneShots(t *testing.T) {
 		{name: "OneShotIgnoresTheOthers", target: migrations, result: anovelv1.ExitReason_EXIT_REASON_ERROR},
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			sess := newInfraSession("default", "service-x")
 			sess.Up = true
-			sess.OneShotResults["migrations"] = c.result
+			sess.OneShotResults["migrations"] = testCase.result
 			r := &Runner{
 				instances:     map[string]*Instance{},
 				infraSessions: map[string]*infraSession{sessionKey("default", "service-x"): sess},
 			}
 
-			err := r.EnsureDepsReady(t.Context(), c.target, svc, anovelv1.Mode_MODE_GO_EXEC)
-			if (err != nil) != c.wantErr {
-				t.Fatalf("EnsureDepsReady(%s) = %v, want error %v", c.target.Name, err, c.wantErr)
+			err := r.EnsureDepsReady(t.Context(), testCase.target, svc, anovelv1.Mode_MODE_GO_EXEC)
+			if (err != nil) != testCase.wantErr {
+				t.Fatalf("EnsureDepsReady(%s) = %v, want error %v", testCase.target.Name, err, testCase.wantErr)
 			}
 		})
 	}

@@ -21,7 +21,7 @@ func TestRun(t *testing.T) {
 
 	errBoom := errors.New("boom")
 
-	cases := []struct {
+	testCases := []struct {
 		name  string
 		limit int
 		jobs  int
@@ -93,15 +93,15 @@ func TestRun(t *testing.T) {
 		},
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 
 			var running, peak atomic.Int32
-			list := make([]jobs.Job, c.jobs)
+			list := make([]jobs.Job, testCase.jobs)
 			for i := range list {
 				list[i] = jobs.Job{
 					Name: fmt.Sprintf("job-%d", i),
@@ -110,7 +110,7 @@ func TestRun(t *testing.T) {
 						defer running.Add(-1)
 						for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
 						}
-						return c.run(i, out)
+						return testCase.run(i, out)
 					},
 				}
 			}
@@ -120,19 +120,19 @@ func TestRun(t *testing.T) {
 			progress := &jobs.Progress{OnDone: func(int, jobs.Result) {
 				mu.Lock()
 				defer mu.Unlock()
-				if done++; done == c.cancelAfter {
+				if done++; done == testCase.cancelAfter {
 					cancel()
 				}
 			}}
 
-			results := jobs.Run(ctx, list, c.limit, progress)
-			if len(results) != c.jobs {
-				t.Fatalf("got %d results, want %d", len(results), c.jobs)
+			results := jobs.Run(ctx, list, testCase.limit, progress)
+			if len(results) != testCase.jobs {
+				t.Fatalf("got %d results, want %d", len(results), testCase.jobs)
 			}
-			if done != c.jobs {
-				t.Errorf("OnDone ran %d times, want once per job (%d)", done, c.jobs)
+			if done != testCase.jobs {
+				t.Errorf("OnDone ran %d times, want once per job (%d)", done, testCase.jobs)
 			}
-			c.check(t, results, int(peak.Load()))
+			testCase.check(t, results, int(peak.Load()))
 		})
 	}
 }
@@ -142,7 +142,7 @@ func TestRun(t *testing.T) {
 func TestProgress(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
+	testCases := []struct {
 		name  string
 		write []string
 		want  string
@@ -154,14 +154,14 @@ func TestProgress(t *testing.T) {
 		{name: "BlankLineKeepsPrevious", write: []string{"real\n", "\n"}, want: "real"},
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			progress := &jobs.Progress{}
 			written, release := make(chan struct{}), make(chan struct{})
 			job := jobs.Job{Run: func(_ context.Context, out io.Writer) (string, error) {
-				for _, w := range c.write {
+				for _, w := range testCase.write {
 					_, _ = io.WriteString(out, w)
 				}
 				close(written)
@@ -174,8 +174,8 @@ func TestProgress(t *testing.T) {
 				if _, ok := progress.Running(0); !ok || progress.Count() != 1 {
 					t.Errorf("job not reported running")
 				}
-				if got := progress.Last(0); got != c.want {
-					t.Errorf("Last = %q, want %q", got, c.want)
+				if got := progress.Last(0); got != testCase.want {
+					t.Errorf("Last = %q, want %q", got, testCase.want)
 				}
 			}()
 			jobs.Run(t.Context(), []jobs.Job{job}, 1, progress)
