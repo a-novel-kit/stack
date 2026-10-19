@@ -31,6 +31,9 @@ Behaviours to know before running it:
   reports each one as `⏸ <org>/<repo> — on <branch>, skipped`, so a partial run is visible in the
   output rather than silent. The **single-repo** form has no such guard: run from a feature branch,
   it reconciles from that branch's `main.yaml`. Be on an up-to-date default branch before running it.
+  A new repository whose workflows arrive in its first pull request merges that pull request first,
+  since its `report-*` jobs are not required yet, then updates from the default branch. Run from the
+  default branch before that merge, `update` finds no workflow naming a scoped secret and revokes it.
 - **`--all` shares `core sync`'s whitelist.** Both read `workspace-repos.yaml` at the workspace root
   through the same loader, so the batch covers every whitelisted repo actually cloned under `app/` or
   `kit/`, plus the stack repo itself. A whitelisted repo not yet cloned is simply absent. (`repo create`
