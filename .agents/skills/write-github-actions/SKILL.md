@@ -287,7 +287,9 @@ Two GitHub constraints shape the bypass lists:
 `allow-resource-deletion` and `allow-downtime`) approves the commit it was reviewed on, so a push removes it and a reviewer
 adds it again. The removal runs in a job holding `pull-requests: write`, and the label change re-runs
 the gate. A gate reads labels live through the API, or ignores them on a `synchronize` payload, since
-a rerun replays its original event. `check-append-only` removes its label only when the step gets
+a rerun replays its original event. `buf skip breaking` is the exception: `bufbuild/buf-action` reads
+it from the event payload, so it stays across pushes, and `review-gate`'s approval of the head covers
+a later push. `check-append-only` removes its label only when the step gets
 `github_token`.
 
 `with-feature-env` follows the same rule to publish rather than waive. `build-actions/docker` tags

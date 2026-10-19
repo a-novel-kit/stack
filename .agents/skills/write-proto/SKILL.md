@@ -253,6 +253,10 @@ Renaming is never the safe refactor it looks like — buf rejects it at `FILE` l
 field, add a new field with the correct name and a new number, deprecate the old one with a
 comment, then remove it in a coordinated release.
 
+An intended break, such as a package that was never released or a planned major, needs no admin
+override. A reviewer adds the `buf skip breaking` label, and `bufbuild/buf-action` skips the
+breaking check on that pull request. `a-novel repo update` provisions the label in every repository.
+
 ---
 
 ## Well-Known Types
