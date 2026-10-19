@@ -41,6 +41,11 @@ ensure:
   - name: allow-dependency-change
     color: "fbca04"
     description: A reviewer acknowledges the dependency manifests this pull request changes
+  # bufbuild/buf-action skips its breaking-change check on a pull request carrying this exact
+  # name, so an intended break lands through review instead of an admin override.
+  - name: buf skip breaking
+    color: "fbca04"
+    description: A reviewer accepts the breaking proto change this pull request makes
   - name: with-feature-env
     color: "0e8a16"
     description: Tags this pull request's images for its current head; a push removes it
