@@ -160,19 +160,19 @@ func TestUncoveredGoSelectors(t *testing.T) {
 		want    []string
 	}{
 		{
-			name:    "pkg/go uncovered by an internal-only env",
+			name:    "Success/PkgGoUncoveredByAnInternalEnv",
 			testPkg: [][]string{seg("internal", "dao"), seg("pkg", "go")},
 			scoped:  [][]string{seg("internal")},
 			want:    []string{"./pkg/go"},
 		},
 		{
-			name:    "everything covered yields nothing",
+			name:    "Success/EverythingCovered",
 			testPkg: [][]string{seg("internal", "dao"), seg("pkg", "go")},
 			scoped:  [][]string{seg("internal"), seg("pkg", "go")},
 			want:    nil,
 		},
 		{
-			name:    "the module root is a selector on its own",
+			name:    "Success/ModuleRootIsItsOwnSelector",
 			testPkg: [][]string{{}, seg("cmd", "rest")},
 			scoped:  [][]string{seg("internal")},
 			want:    []string{".", "./cmd/rest"},
@@ -180,7 +180,7 @@ func TestUncoveredGoSelectors(t *testing.T) {
 		{
 			// pkg is not covered by pkg/go — the prefix must match whole segments,
 			// not a string prefix.
-			name:    "a sibling under a partly-scoped tree stays uncovered",
+			name:    "Success/SiblingOfAScopedTreeStaysUncovered",
 			testPkg: [][]string{seg("pkg", "js"), seg("pkg", "go")},
 			scoped:  [][]string{seg("pkg", "go")},
 			want:    []string{"./pkg/js"},

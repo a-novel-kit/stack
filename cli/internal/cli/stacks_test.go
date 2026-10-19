@@ -196,9 +196,9 @@ func TestDryRunVerdict(t *testing.T) {
 		force    bool
 		want     string
 	}{
-		{name: "clean stack", want: "nothing changed"},
-		{name: "blocked stack reports the refusal", blockers: []string{"golib: uncommitted changes"}, want: "would refuse"},
-		{name: "force overrides the refusal", blockers: []string{"golib: uncommitted changes"}, force: true, want: "nothing changed"},
+		{name: "Success/CleanStack", want: "nothing changed"},
+		{name: "Success/BlockedStackReportsTheRefusal", blockers: []string{"golib: uncommitted changes"}, want: "would refuse"},
+		{name: "Success/ForceOverridesTheRefusal", blockers: []string{"golib: uncommitted changes"}, force: true, want: "nothing changed"},
 	}
 
 	for _, testCase := range testCases {

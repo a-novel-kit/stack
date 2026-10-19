@@ -131,8 +131,8 @@ func TestJob_GOMAXPROCSCap(t *testing.T) {
 		maxProcs int
 		want     string // expected value of $GOMAXPROCS in the child ("" = unset)
 	}{
-		{name: "caps when positive", maxProcs: 3, want: "3"},
-		{name: "untouched when zero", maxProcs: 0, want: ""},
+		{name: "Success/CapsWhenPositive", maxProcs: 3, want: "3"},
+		{name: "Success/UntouchedWhenZero", maxProcs: 0, want: ""},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {

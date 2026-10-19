@@ -22,12 +22,12 @@ func TestSandboxArgs(t *testing.T) {
 		enabled bool
 		wantErr bool
 	}{
-		{name: "leading flag", args: []string{"--sandbox", "alpha"}, want: []string{"alpha"}, enabled: true},
-		{name: "missing flag", args: []string{"beta"}, want: []string{"beta"}},
-		{name: "later flag", args: []string{"gamma", "--sandbox"}, wantErr: true},
-		{name: "duplicate flag", args: []string{"--sandbox", "--sandbox", "gamma"}, wantErr: true},
-		{name: "child flag after separator", args: []string{"gamma", "--", "--sandbox"}, want: []string{"gamma", "--", "--sandbox"}},
-		{name: "empty invocation"},
+		{name: "Success/LeadingFlag", args: []string{"--sandbox", "alpha"}, want: []string{"alpha"}, enabled: true},
+		{name: "Success/MissingFlag", args: []string{"beta"}, want: []string{"beta"}},
+		{name: "Error/LaterFlag", args: []string{"gamma", "--sandbox"}, wantErr: true},
+		{name: "Error/DuplicateFlag", args: []string{"--sandbox", "--sandbox", "gamma"}, wantErr: true},
+		{name: "Success/ChildFlagAfterSeparator", args: []string{"gamma", "--", "--sandbox"}, want: []string{"gamma", "--", "--sandbox"}},
+		{name: "Success/EmptyInvocation"},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {

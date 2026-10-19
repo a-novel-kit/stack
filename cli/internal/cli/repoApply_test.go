@@ -306,7 +306,7 @@ func TestCommitSync(t *testing.T) {
 }
 
 func TestSyncCommitMessage(t *testing.T) {
-	t.Run("short change lists name the files", func(t *testing.T) {
+	t.Run("Success/ShortListsNameTheFiles", func(t *testing.T) {
 		headline, body := syncCommitMessage([]contentChange{
 			{path: ".github/workflows/managed.yaml", outcome: opUpdated},
 			{path: "CODEOWNERS", outcome: opDeleted},
@@ -322,7 +322,7 @@ func TestSyncCommitMessage(t *testing.T) {
 		}
 	})
 
-	t.Run("long change lists fall back to a count", func(t *testing.T) {
+	t.Run("Success/LongListsFallBackToACount", func(t *testing.T) {
 		headline, _ := syncCommitMessage([]contentChange{
 			{path: ".github/CODEOWNERS"},
 			{path: ".github/workflows/managed.yaml"},
