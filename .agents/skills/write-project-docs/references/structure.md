@@ -133,8 +133,9 @@ locally`, the LAST section before Contributing. `### Configuration` lives inside
    or link the latest release. A hard-coded version in prose is redundant with the repo and goes
    stale.
 
-**The one documented exception:** `service-template` MAY prepend a `## Using this template`
-section before slot 2 — its primary reader is forking it. No other repo reorders the five slots.
+**The one documented exception:** a template repository, `service-template` or `platform-template`,
+MAY prepend a `## Using this template` section before slot 2 — its primary reader is forking it.
+No other repo reorders the five slots.
 
 ### Contributing section + links (fix the fleet-wide 404s)
 
