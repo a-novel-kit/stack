@@ -165,6 +165,18 @@ Treat any `new(T)` you find as cleanup-on-sight when the file is already in scop
 
 ---
 
+## Declarations outside control flow
+
+Keep a declaration out of the statement it feeds, so the statement reads as control flow and a name
+says what the data is:
+
+- A long literal, such as a table, a slice of structs or a map, written inside a `range`, `if`,
+  `switch` or call argument becomes a named variable declared just before the statement.
+- A closure longer than three lines becomes a named function or method, unless a closure is the
+  idiomatic form there, as for a `t.Run` body, an `errgroup.Go` task or an HTTP handler.
+
+---
+
 ## Error handling
 
 - **Lowercase, no trailing punctuation.** Errors get wrapped and read mid-sentence:

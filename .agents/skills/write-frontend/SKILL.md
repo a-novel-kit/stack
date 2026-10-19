@@ -127,6 +127,13 @@ or instruction to find an earlier link does not replace it.
 - Treat API, URL, storage, message, and DOM data as untrusted at runtime even when TypeScript types it.
 - Catch `unknown`; preserve the original cause when translating errors. Never silently discard a
   rejected promise.
+- Keep a declaration out of the statement it feeds. A long literal inside an `if`, `switch`, loop
+  header or call argument becomes a named constant declared just before the statement. A
+  configuration object passed to its factory, as in `defineConfig({…})`, keeps its idiomatic form.
+- Pipes are idiomatic, but a callback longer than three lines passed to `map`, `filter`, `reduce`,
+  `flatMap`, `forEach`, `find`, `some`, `every`, `sort`, `then`, `catch` or a similar method becomes
+  a named function. Declare it outside the enclosing function and pass what it uses as parameters,
+  which makes its captures explicit.
 
 ## Naming and files
 

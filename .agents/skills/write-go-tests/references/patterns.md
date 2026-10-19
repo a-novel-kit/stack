@@ -58,6 +58,8 @@ func TestGrpcJwkGet(t *testing.T) {
 
 **Key rules:**
 
+- Declare the case table in its own variable, `testCases := []struct{…}{…}`, before the loop. Never
+  write it inline as `for _, testCase := range []struct{…}{…}`.
 - Call `t.Parallel()` at the top of the outer test function.
 - Call `t.Parallel()` at the top of every sub-test body.
 - Exception: when the test genuinely cannot be parallelized (it mutates global state, or uses a
