@@ -27,8 +27,9 @@ a-novel
 
 `secrets`, `install`, `claude` and `version` complete the surface; their details live in
 [installation and secrets](references/installation-secrets.md). `a-novel <verb> --help` is the
-exhaustive reference; in the stack repo, `cli/README.md` covers the everyday workflows and
-`CONTRIBUTING.md` how the CLI works.
+exhaustive reference. In the stack repo, `cli/README.md` is the command reference, the developer
+guide's [runbooks](https://a-novel-kit.github.io/stack/cli/ui) cover the everyday workflows, and
+`CONTRIBUTING.md` explains how the CLI works.
 
 **Always prefer `a-novel <verb>` over the equivalent raw command** when one exists.
 Makefiles are gone from every repo — `make` is never the answer. What the CLI doesn't

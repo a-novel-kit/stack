@@ -132,10 +132,10 @@ do not call an unrun check passed.
 
 Always finish with an intentional review of the whole affected path using `prefer-small-solutions`.
 Remove draft scaffolding, dead code, duplication, redundant state and conversions, unnecessary
-abstractions, and obsolete fixtures. Prefer fewer maintained lines after normal formatting when
-behavior and clarity are equal. Preserve strict code practices, security, architecture, contracts,
-and useful tests. Make future changes easy through clear ownership and idiomatic interfaces;
-avoid speculative extension points.
+abstractions, and obsolete fixtures. Prefer fewer instructions, as `prefer-small-solutions` counts
+them, when behavior and clarity are equal. Preserve strict code practices, security, architecture,
+contracts, and useful tests. Make future changes easy through clear ownership and idiomatic
+interfaces; avoid speculative extension points.
 
 Keep cleanup within the agreed scope. If it changes observable behavior or the design, return that
 decision to discussion and update the tests. Re-run checks affected by cleanup, inspect the final

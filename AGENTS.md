@@ -19,7 +19,7 @@ on paste, so `…/pull/12; done` arrives as `…/pull/12\; done` and fails to pa
 holding `[]`, `?` or `*`, list loop items literally, and quote every expansion: zsh neither splits
 an unquoted `$VAR` into words nor passes an unmatched glob through.
 
-Prefer the smallest complete solution: fewer lines of maintained code, fewer moving parts,
+Prefer the smallest complete solution: fewer instructions for a reader to hold, fewer moving parts,
 and clear, idiomatic control flow. Preserve required behavior and the project's architecture,
 dependency policy, security, and testing standards. Simplify the whole affected path before
 shortening individual functions; do not compress formatting or hide complexity to reduce line count.

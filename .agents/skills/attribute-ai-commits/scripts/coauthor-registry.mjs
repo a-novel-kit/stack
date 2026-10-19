@@ -104,18 +104,16 @@ function parseArguments(arguments_) {
   return { registryPath, command: values[0], operands: values.slice(1) };
 }
 
+function listEntry([agent, entry]) {
+  return { agent, status: entry.status, label: entry.label };
+}
+
 function main() {
   const { registryPath, command, operands } = parseArguments(process.argv.slice(2));
   const registry = loadRegistry(registryPath);
   const counts = validateRegistry(registry);
   if (command === "list" && operands.length === 0) {
-    output(
-      Object.entries(registry.providers).map(([agent, entry]) => ({
-        agent,
-        status: entry.status,
-        label: entry.label,
-      }))
-    );
+    output(Object.entries(registry.providers).map(listEntry));
     return 0;
   }
   if (command === "validate" && operands.length === 0) {

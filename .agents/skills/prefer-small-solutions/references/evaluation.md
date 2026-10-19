@@ -48,6 +48,10 @@ walkthrough does not prove how a model will behave.
 12. **Transaction and error behavior.** A shorter DAO implementation appears to remove a guard or
     conversion. Verify atomicity, absence semantics, public error mapping, and observability before
     deletion. A database constraint does not replace authorization.
+13. **Instructions, not lines.** A change would replace a 40-line case table with a loop that
+    computes the cases, and join statements to shorten a busy function. Expect the table kept and
+    the function judged by its distinct operations. Reject a reduction won by compressing layout or
+    merging unrelated logic.
 
 ## Routing regression checks
 
