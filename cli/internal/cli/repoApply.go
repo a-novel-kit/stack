@@ -30,23 +30,8 @@ import (
 // Independent operations continue after failures, but rulesets are skipped
 // when managed-file staging or sync fails.
 func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
-	org, repo, branch := t.Org, t.Repo, t.DefaultBranch
-	var failures []string
-	note := func(label, detail string, err error) {
-		mark := "✓"
-		if err != nil {
-			mark = "✗"
-			if detail == "" {
-				detail = firstLine(err.Error())
-			}
-			failures = append(failures, label+": "+detail)
-		}
-		line := "  " + mark + " " + label
-		if detail != "" {
-			line += " — " + detail
-		}
-		_, _ = fmt.Fprintln(out, line)
-	}
+	org, repo := t.Org, t.Repo
+	run := &planRun{out: out, target: t}
 	// The live rulesets are read once: a reconcile only adds kept rulesets, so
 	// the prune's candidates are fixed before the first write.
 	rulesets := sync.OnceValues(func() (map[string]string, error) { return liveRulesets(org, repo) })
@@ -55,105 +40,132 @@ func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
 		return strings.TrimSpace(out), err
 	})
 
-	var staged []contentChange
-	managedFilesFailed := false
-	flushStaged := func() bool {
-		if len(staged) == 0 {
-			return true
-		}
-		detail, err := commitSync(org, repo, branch, staged)
-		if err == nil {
-			for _, change := range staged {
-				note(change.path, change.outcome, nil)
-			}
-		}
-		note("sync commit", detail, err)
-		staged = nil
-		return err == nil
-	}
 	for _, op := range plan.Ops {
 		if op.RulesetName != "" || op.PruneRulesets {
-			if !flushStaged() {
-				managedFilesFailed = true
-			}
-			if managedFilesFailed {
-				note(op.Title(), "skipped because managed-file sync failed", errSkipped)
+			run.flushStaged()
+			if run.managedFilesFailed {
+				run.note(op.Title(), "skipped because managed-file sync failed", errSkipped)
 				continue
 			}
 		}
 		switch {
 		case op.PruneRulesets:
 			detail, err := pruneRulesets(org, repo, rulesets, op)
-			note("rulesets (prune)", detail, err)
+			run.note("rulesets (prune)", detail, err)
 		case op.RulesetName != "":
 			detail, err := applyRuleset(op, rulesets)
-			note("ruleset "+op.RulesetName, detail, err)
-		case op.Method == http.MethodDelete && strings.Contains(op.Path, "/contents/"):
-			change, unchanged, err := stageContentDeletion(op)
-			switch {
-			case err != nil:
-				managedFilesFailed = true
-				note(shortPath(op.Path), "", err)
-			case unchanged:
-				note(shortPath(op.Path), opUnchanged, nil)
-			default:
-				staged = append(staged, change)
-			}
-		case op.Content != "":
-			changes, unchanged, err := stageContents(op)
-			if err != nil {
-				managedFilesFailed = true
-				note(shortPath(op.Path), "", err)
-				continue
-			}
-			if unchanged {
-				note(shortPath(op.Path), opUnchanged, nil)
-			}
-			staged = append(staged, changes...)
+			run.note("ruleset "+op.RulesetName, detail, err)
+		case op.Content != "" || (op.Method == http.MethodDelete && strings.Contains(op.Path, "/contents/")):
+			run.stage(op)
 		case strings.HasSuffix(op.Path, "/vulnerability-alerts"):
 			detail, err := applyToggle(op)
-			note("Dependabot alerts", detail, err)
+			run.note("Dependabot alerts", detail, err)
 		case strings.HasSuffix(op.Path, "/immutable-releases"):
 			detail, err := applyToggle(op)
-			note("immutable releases", detail, err)
+			run.note("immutable releases", detail, err)
 		case strings.HasSuffix(op.Path, "/pages"):
 			detail, err := applyPages(op)
-			note("pages", detail, err)
+			run.note("pages", detail, err)
 		case strings.HasSuffix(op.Path, "/code-scanning/default-setup"):
 			detail, err := applyCodeScanning(op)
-			note("code scanning", detail, err)
+			run.note("code scanning", detail, err)
 		case strings.HasSuffix(op.Path, "/code-quality/setup"):
 			detail, err := applyCodeQuality(op)
-			note("code quality", detail, err)
+			run.note("code quality", detail, err)
 		case strings.HasSuffix(op.Path, "/labels"):
 			detail, err := applyLabels(org, repo, op)
-			note("labels", detail, err)
+			run.note("labels", detail, err)
 		case strings.HasSuffix(op.Path, "/deployment-branch-policies"):
 			detail, err := applyDeploymentPolicies(op)
-			note(path.Base(path.Dir(op.Path))+" environment policies", detail, err)
+			run.note(path.Base(path.Dir(op.Path))+" environment policies", detail, err)
 		case op.Governance != nil:
 			detail, err := applyEnvSecrets(org, repo, op)
-			note("governance secrets", detail, err)
+			run.note("governance secrets", detail, err)
 		case len(op.Reviewers) > 0:
-			note(path.Base(op.Path)+" environment", "", applyEnvironment(org, op))
+			run.note(path.Base(op.Path)+" environment", "", applyEnvironment(org, op))
 		case len(op.Teams) > 0:
 			detail, err := applyTeams(org, repo, op)
-			note("tier teams", detail, err)
+			run.note("tier teams", detail, err)
 		case op.Secret != "":
 			detail, err := applySecretAccess(op, repoID)
-			note("secret "+op.Secret, detail, err)
+			run.note("secret "+op.Secret, detail, err)
 		default: // settings
-			note("settings ("+op.Method+" "+shortPath(op.Path)+")", "", applySettings(op))
+			run.note("settings ("+op.Method+" "+shortPath(op.Path)+")", "", applySettings(op))
 		}
 	}
 
 	// Plans without rulesets still flush their managed files at the end.
-	_ = flushStaged()
+	run.flushStaged()
 
-	if len(failures) > 0 {
-		return fmt.Errorf("%d operation(s) failed:\n  - %s", len(failures), strings.Join(failures, "\n  - "))
+	if len(run.failures) > 0 {
+		return fmt.Errorf("%d operation(s) failed:\n  - %s", len(run.failures), strings.Join(run.failures, "\n  - "))
 	}
 	return nil
+}
+
+// planRun is one applyPlan pass: the outcome log it prints, the failures it
+// returns, and the managed-file changes staged for the next sync commit.
+type planRun struct {
+	out      io.Writer
+	target   *repocfg.RepoTarget
+	failures []string
+	staged   []contentChange
+	// managedFilesFailed reports that a managed file failed to stage or sync,
+	// which skips every ruleset after it.
+	managedFilesFailed bool
+}
+
+// note prints one outcome line and records a failure. A failure without a
+// detail shows the first line of its error.
+func (r *planRun) note(label, detail string, err error) {
+	mark := "✓"
+	if err != nil {
+		mark = "✗"
+		if detail == "" {
+			detail = firstLine(err.Error())
+		}
+		r.failures = append(r.failures, label+": "+detail)
+	}
+	line := "  " + mark + " " + label
+	if detail != "" {
+		line += " — " + detail
+	}
+	_, _ = fmt.Fprintln(r.out, line)
+}
+
+// stage queues the changes a managed-file op needs for the next sync commit.
+func (r *planRun) stage(op repocfg.Op) {
+	stageOp := stageContents
+	if op.Method == http.MethodDelete {
+		stageOp = stageContentDeletion
+	}
+	changes, unchanged, err := stageOp(op)
+	switch {
+	case err != nil:
+		r.managedFilesFailed = true
+		r.note(shortPath(op.Path), "", err)
+		return
+	case unchanged:
+		r.note(shortPath(op.Path), opUnchanged, nil)
+	}
+	r.staged = append(r.staged, changes...)
+}
+
+// flushStaged commits the staged managed files, if any.
+func (r *planRun) flushStaged() {
+	if len(r.staged) == 0 {
+		return
+	}
+	detail, err := commitSync(r.target.Org, r.target.Repo, r.target.DefaultBranch, r.staged)
+	if err != nil {
+		r.managedFilesFailed = true
+	} else {
+		for _, change := range r.staged {
+			r.note(change.path, change.outcome, nil)
+		}
+	}
+	r.note("sync commit", detail, err)
+	r.staged = nil
 }
 
 // errSkipped marks an operation applyPlan did not attempt.
@@ -215,10 +227,8 @@ func applyEnvSecrets(org, repo string, op repocfg.Op) (string, error) {
 		return "", err
 	}
 	live := map[string]time.Time{}
-	for line := range strings.Lines(out) {
-		if name, at, ok := strings.Cut(strings.TrimSpace(line), "\t"); ok {
-			live[name], _ = time.Parse(time.RFC3339, at)
-		}
+	for name, at := range tabPairs(out) {
+		live[name], _ = time.Parse(time.RFC3339, at)
 	}
 	env, target := path.Base(path.Dir(op.Path)), org+"/"+repo
 	var set, deleted int
@@ -333,9 +343,8 @@ const codeownersName = "CODEOWNERS"
 // carry. unchanged reports that the file already matches the desired content,
 // so nothing is staged for it and a sync that changes nothing commits nothing.
 //
-// A stray root CODEOWNERS is
-// staged as a deletion — GitHub honors the .github/ copy — even when that copy
-// is itself unchanged, so a repo never carries two. For a file that pins
+// A stray root CODEOWNERS is staged as a deletion even when the .github/ copy
+// is unchanged, so a repo never carries two. For a file that pins
 // a-novel-kit/workflows actions, deployed pins newer than the template's
 // survive (see preserveNewerPins).
 func stageContents(op repocfg.Op) ([]contentChange, bool, error) {
@@ -350,25 +359,18 @@ func stageContents(op repocfg.Op) ([]contentChange, bool, error) {
 	// Pin-bearing files are compared against the deployed text, at the cost of
 	// one extra read, so a newer deployed pin survives; everything else takes
 	// the cheaper sha-only path.
-	desired := op.Content
-	var sha string
+	var deployed, sha string
+	var err error
 	if workflowsPinRe.MatchString(op.Content) {
-		deployed, deployedSHA, err := contentText(op.Path)
-		if err != nil {
-			return nil, false, err
-		}
-		if deployed != "" {
-			desired = preserveNewerPins(op.Content, deployed)
-		}
-		sha = deployedSHA
+		deployed, sha, err = contentText(op.Path)
 	} else {
-		s, err := contentSHA(op.Path)
-		if err != nil {
-			return nil, false, err
-		}
-		sha = s
+		sha, err = contentSHA(op.Path)
+	}
+	if err != nil {
+		return nil, false, err
 	}
 
+	desired := preserveNewerPins(op.Content, deployed)
 	if sha == blobSHA(desired) {
 		return changes, true, nil
 	}
@@ -379,16 +381,17 @@ func stageContents(op repocfg.Op) ([]contentChange, bool, error) {
 	return append(changes, contentChange{path: shortPath(op.Path), content: desired, outcome: outcome}), false, nil
 }
 
-// stageContentDeletion stages a managed file only when it exists.
-func stageContentDeletion(op repocfg.Op) (contentChange, bool, error) {
+// stageContentDeletion stages the deletion of a managed file. unchanged
+// reports that the file is already absent.
+func stageContentDeletion(op repocfg.Op) ([]contentChange, bool, error) {
 	sha, err := contentSHA(op.Path)
-	if err != nil {
-		return contentChange{}, false, err
+	switch {
+	case err != nil:
+		return nil, false, err
+	case sha == "":
+		return nil, true, nil
 	}
-	if sha == "" {
-		return contentChange{}, true, nil
-	}
-	return contentChange{path: shortPath(op.Path), outcome: opDeleted}, false, nil
+	return []contentChange{{path: shortPath(op.Path), outcome: opDeleted}}, false, nil
 }
 
 // syncCommitQuery applies every staged change as a single commit on the
@@ -405,18 +408,18 @@ func commitSync(org, repo, branch string, changes []contentChange) (string, erro
 	additions, deletions := []map[string]string{}, []map[string]string{}
 	for _, change := range changes {
 		if change.outcome == opDeleted {
-			deletions = append(deletions, map[string]string{keyPath: change.path})
+			deletions = append(deletions, map[string]string{"path": change.path})
 			continue
 		}
 		additions = append(additions, map[string]string{
-			keyPath:    change.path,
+			"path":     change.path,
 			"contents": base64.StdEncoding.EncodeToString([]byte(change.content)),
 		})
 	}
 
 	// One retry when the branch tip moves between the oid read and the commit
 	// (STALE_DATA). repocfg is the only writer of the staged files, so a moved
-	// tip means unrelated commits landed — the staged content stays valid.
+	// tip means unrelated commits landed, and the staged content stays valid.
 	for attempt := 0; ; attempt++ {
 		oid, err := branchHeadOid(org, repo, branch)
 		if err != nil {
@@ -457,20 +460,14 @@ func commitSync(org, repo, branch string, changes []contentChange) (string, erro
 
 // bootstrapEmpty seeds a repository that has no commits yet. Both
 // createCommitOnBranch and the Git Data API (blobs/trees/commits) build on an
-// existing object store and 409 on an empty repo, so the initial commit has to
-// come from the Contents API — the one endpoint that creates a repo's first
-// commit and its default branch. It seeds the first managed file that way (a
-// GitHub-verified commit, so required_signatures is satisfied), then lands any
-// remaining files through the normal createCommitOnBranch path now that the
-// branch exists. Deletions are dropped: an empty repo has nothing to remove,
-// and the staging pass never produces one against a repo with no files.
+// existing object store and answer 409 on an empty repo. The Contents API is
+// the one endpoint that creates a repo's first commit and its default branch,
+// so the first managed file lands through it, as a GitHub-verified commit that
+// satisfies required_signatures. The remaining files then take the normal
+// createCommitOnBranch path. An empty repo has nothing to delete, so deletions
+// are dropped.
 func bootstrapEmpty(org, repo, branch string, changes []contentChange) (string, error) {
-	adds := make([]contentChange, 0, len(changes))
-	for _, change := range changes {
-		if change.outcome != opDeleted {
-			adds = append(adds, change)
-		}
-	}
+	adds := slices.DeleteFunc(slices.Clone(changes), func(change contentChange) bool { return change.outcome == opDeleted })
 	if len(adds) == 0 {
 		return "", nil
 	}
@@ -632,16 +629,14 @@ func applyLabels(org, repo string, op repocfg.Op) (string, error) {
 	for _, l := range cfg.Ensure {
 		switch cur, found := existing[l.Name]; {
 		case !found:
-			if err := ghJSON("POST", base, map[string]any{
-				"name": l.Name, "color": l.Color, keyDescription: l.Description,
-			}); err != nil {
+			body := map[string]any{"name": l.Name, "color": l.Color, keyDescription: l.Description}
+			if err := ghJSON(http.MethodPost, base, body); err != nil {
 				return "", err
 			}
 			created++
 		case cur.Color != l.Color || cur.Description != l.Description:
-			if err := ghJSON("PATCH", base+"/"+url.PathEscape(l.Name), map[string]any{
-				"new_name": l.Name, "color": l.Color, keyDescription: l.Description,
-			}); err != nil {
+			body := map[string]any{"new_name": l.Name, "color": l.Color, keyDescription: l.Description}
+			if err := ghJSON(http.MethodPatch, base+"/"+url.PathEscape(l.Name), body); err != nil {
 				return "", err
 			}
 			updated++
@@ -672,11 +667,9 @@ func applyDeploymentPolicies(op repocfg.Op) (string, error) {
 		return "", err
 	}
 	live := map[repocfg.DeploymentPolicy]string{}
-	for line := range strings.Lines(out) {
-		if id, policy, ok := strings.Cut(strings.TrimSpace(line), "\t"); ok {
-			kind, name, _ := strings.Cut(policy, "\t")
-			live[repocfg.DeploymentPolicy{Name: name, Type: kind}] = id
-		}
+	for id, policy := range tabPairs(out) {
+		kind, name, _ := strings.Cut(policy, "\t")
+		live[repocfg.DeploymentPolicy{Name: name, Type: kind}] = id
 	}
 	var created, deleted int
 	for _, policy := range want {
@@ -703,71 +696,24 @@ func applyDeploymentPolicies(op repocfg.Op) (string, error) {
 // its role; and a grant any other tier team holds here is removed. Teams
 // outside the tiers are left untouched: core reaches every repo through its org
 // role, which no repository grant can remove.
-//
-// GitHub makes a team's creator its maintainer, so the operator leaves each team
-// it creates: tier membership is the record of who holds the tier.
 func applyTeams(org, repo string, op repocfg.Op) (string, error) {
 	out, err := gh("api", "--paginate", "orgs/"+org+"/teams", "--jq", `.[] | "\(.slug)\t\(.id)"`)
 	if err != nil {
 		return "", err
 	}
-	ids := map[string]string{}
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if slug, id, ok := strings.Cut(line, "\t"); ok {
-			ids[slug] = id
-		}
-	}
-	operator := sync.OnceValues(func() (string, error) {
+	teams := &orgTeams{org: org, ids: tabPairs(out), operator: sync.OnceValues(func() (string, error) {
 		out, err := gh("api", "user", "--jq", ".login")
 		return strings.TrimSpace(out), err
-	})
-	created := 0
-	ensure := func(name, parentID string) (string, error) {
-		if id, ok := ids[name]; ok {
-			return id, nil
-		}
-		body := map[string]any{"name": name, "privacy": "closed"}
-		if parentID != "" {
-			parent, err := strconv.ParseInt(parentID, 10, 64)
-			if err != nil {
-				return "", fmt.Errorf("parent of team %q: %w", name, err)
-			}
-			body["parent_team_id"] = parent
-		}
-		raw, err := json.Marshal(body)
-		if err != nil {
-			return "", err
-		}
-		id, err := ghRun(string(raw), "api", "-X", http.MethodPost, "orgs/"+org+"/teams", "--input", "-", "--jq", ".id")
-		if err != nil {
-			// `repo update --all` applies several repos at once, and another one may have
-			// created the team since the listing.
-			if id, getErr := gh("api", "orgs/"+org+"/teams/"+name, "--jq", ".id"); getErr == nil && strings.TrimSpace(id) != "" {
-				ids[name] = strings.TrimSpace(id)
-				return ids[name], nil
-			}
-			return "", fmt.Errorf("create team %q: %w", name, err)
-		}
-		login, err := operator()
-		if err != nil {
-			return "", err
-		}
-		if _, err := gh("api", "-X", http.MethodDelete, fmt.Sprintf("orgs/%s/teams/%s/memberships/%s", org, name, login)); err != nil {
-			return "", fmt.Errorf("leave team %q: %w", name, err)
-		}
-		ids[name] = strings.TrimSpace(id)
-		created++
-		return ids[name], nil
-	}
+	})}
 
 	granted := make([]string, 0, len(op.Teams))
 	tiers := make([]string, 0, len(op.Teams))
 	for _, g := range op.Teams {
-		parentID, err := ensure(g.Parent, "")
+		parentID, err := teams.ensure(g.Parent, "")
 		if err != nil {
 			return "", err
 		}
-		if _, err := ensure(g.Team, parentID); err != nil {
+		if _, err := teams.ensure(g.Team, parentID); err != nil {
 			return "", err
 		}
 		grant := fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s", org, g.Team, org, repo)
@@ -793,10 +739,61 @@ func applyTeams(org, repo string, op repocfg.Op) (string, error) {
 		}
 		removed++
 	}
-	return fmt.Sprintf("%d granted, %d created, %d removed", len(granted), created, removed), nil
+	return fmt.Sprintf("%d granted, %d created, %d removed", len(granted), teams.created, removed), nil
 }
 
-// ghLabel is the subset of a GitHub label object we reconcile against.
+// orgTeams is an org's teams by slug, as applyTeams creates the missing ones.
+type orgTeams struct {
+	org      string
+	ids      map[string]string
+	created  int
+	operator func() (string, error)
+}
+
+// ensure returns the id of the named team, creating it under parentID when the
+// org lacks it.
+//
+// GitHub makes a team's creator its maintainer, so the operator leaves each team
+// it creates: tier membership is the record of who holds the tier.
+func (t *orgTeams) ensure(name, parentID string) (string, error) {
+	if id, ok := t.ids[name]; ok {
+		return id, nil
+	}
+	body := map[string]any{"name": name, "privacy": "closed"}
+	if parentID != "" {
+		parent, err := strconv.ParseInt(parentID, 10, 64)
+		if err != nil {
+			return "", fmt.Errorf("parent of team %q: %w", name, err)
+		}
+		body["parent_team_id"] = parent
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return "", err
+	}
+	id, err := ghRun(string(raw), "api", "-X", http.MethodPost, "orgs/"+t.org+"/teams", "--input", "-", "--jq", ".id")
+	if err != nil {
+		// `repo update --all` applies several repos at once, and another one may have
+		// created the team since the listing.
+		if id, getErr := gh("api", "orgs/"+t.org+"/teams/"+name, "--jq", ".id"); getErr == nil && strings.TrimSpace(id) != "" {
+			t.ids[name] = strings.TrimSpace(id)
+			return t.ids[name], nil
+		}
+		return "", fmt.Errorf("create team %q: %w", name, err)
+	}
+	login, err := t.operator()
+	if err != nil {
+		return "", err
+	}
+	if _, err := gh("api", "-X", http.MethodDelete, fmt.Sprintf("orgs/%s/teams/%s/memberships/%s", t.org, name, login)); err != nil {
+		return "", fmt.Errorf("leave team %q: %w", name, err)
+	}
+	t.ids[name] = strings.TrimSpace(id)
+	t.created++
+	return t.ids[name], nil
+}
+
+// ghLabel is the subset of a GitHub label object applyLabels reconciles.
 type ghLabel struct {
 	Name        string `json:"name"`
 	Color       string `json:"color"`
@@ -804,7 +801,7 @@ type ghLabel struct {
 }
 
 // listLabels returns a repo's current labels keyed by name. Repos carry far
-// fewer than 100 labels, so a single page is enough — no pagination.
+// fewer than 100 labels, so it reads a single page.
 func listLabels(org, repo string) (map[string]ghLabel, error) {
 	out, err := gh("api", fmt.Sprintf("repos/%s/%s/labels?per_page=100", org, repo))
 	if err != nil {
@@ -828,15 +825,18 @@ func liveRulesets(org, repo string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	live := map[string]string{}
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		name, id, ok := strings.Cut(line, "\t")
-		if !ok {
-			continue
+	return tabPairs(out), nil
+}
+
+// tabPairs maps the first field of each "key\tvalue" line of out to its second.
+func tabPairs(out string) map[string]string {
+	pairs := map[string]string{}
+	for line := range strings.Lines(out) {
+		if key, value, ok := strings.Cut(strings.TrimRight(line, "\r\n"), "\t"); ok {
+			pairs[key] = value
 		}
-		live[name] = id
 	}
-	return live, nil
+	return pairs
 }
 
 // pruneRulesets reconciles the repo's ruleset set: every live ruleset the plan
@@ -844,8 +844,8 @@ func liveRulesets(org, repo string) (map[string]string, error) {
 //
 // This is what keeps repo config derived. The desired set follows entirely
 // from the class preset, the org profile and code-driven discovery, so
-// anything else on the repo is drift — a ruleset this version no longer ships,
-// or one added by hand in the UI — and a reconcile removes it.
+// anything else on the repo is drift, such as a ruleset this version no longer
+// ships or one added by hand in the UI, and a reconcile removes it.
 func pruneRulesets(org, repo string, rulesets func() (map[string]string, error), op repocfg.Op) (string, error) {
 	live, err := rulesets()
 	if err != nil {
@@ -898,6 +898,9 @@ func pruneImpact(t *repocfg.RepoTarget, plan *repocfg.Plan) string {
 	return "# rulesets to DELETE: " + strings.Join(drop, ", ")
 }
 
+// keyDescription is the "description" field of a GitHub label.
+const keyDescription = "description"
+
 // outcome labels for staged managed-file changes.
 const (
 	opCreated   = "created"
@@ -906,22 +909,9 @@ const (
 	opDeleted   = "deleted"
 )
 
-// keyPath is the JSON/tree "path" field name and encodingBase64 the blob
-// encoding literal, hoisted so their repeated use across the sync and bootstrap
-// paths satisfies goconst.
-const (
-	keyPath        = "path"
-	encodingBase64 = "base64"
-)
-
-// keyDescription is the JSON "description" field name, a constant so the
-// package's repeated use of it satisfies goconst.
-const keyDescription = "description"
-
 // contentSHA returns the blob sha of an existing file at path, or "" when the
-// file does not exist yet (a 404, the create case). Only a 404 reads as the
-// create case. Any other error — auth, network, rate limit — is returned to
-// the caller.
+// file does not exist yet. Only a 404 reads as the create case, and any other
+// error, such as an auth, network or rate-limit failure, is returned.
 func contentSHA(path string) (string, error) {
 	out, err := gh("api", path, "--jq", ".sha")
 	if err != nil {
@@ -933,8 +923,8 @@ func contentSHA(path string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// ghContent is the subset of the contents API's file object we read: the blob
-// sha and the base64-encoded content.
+// ghContent is the subset of the contents API's file object contentText reads:
+// the blob sha and the base64-encoded content.
 type ghContent struct {
 	SHA      string `json:"sha"`
 	Content  string `json:"content"`
@@ -943,9 +933,9 @@ type ghContent struct {
 
 // contentText returns the decoded text and blob sha of an existing file at
 // path, or ("", "", nil) when it does not exist yet (a 404). Like contentSHA,
-// any other error is propagated. An encoding the contents API does not base64
-// — files over 1MB use a separate blob endpoint — yields ("", sha, nil); the
-// managed files are a few KB, so that is a safe no-splice fallback.
+// any other error is propagated. A file the contents API does not base64,
+// which happens over 1MB, yields ("", sha, nil). The managed files are a few
+// KB, so that is a safe fallback that keeps the template's pins.
 func contentText(path string) (string, string, error) {
 	out, err := gh("api", path)
 	if err != nil {
@@ -958,7 +948,7 @@ func contentText(path string) (string, string, error) {
 	if err := json.Unmarshal([]byte(out), &obj); err != nil {
 		return "", "", fmt.Errorf("parse contents %s: %w", path, err)
 	}
-	if obj.Encoding != encodingBase64 {
+	if obj.Encoding != "base64" {
 		return "", obj.SHA, nil
 	}
 	// The contents API wraps its base64 at 60 columns; strip the newlines the

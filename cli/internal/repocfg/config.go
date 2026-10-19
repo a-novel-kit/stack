@@ -1,17 +1,3 @@
-// Package repocfg models and applies a repository's GitHub configuration —
-// general settings, security, Pages and the per-repo rulesets —
-// from editable YAML templates under templates/.
-//
-// The desired state for a repo is composed from three inputs:
-//
-//   - a class preset (classes/<class>.yaml) — the per-kind toggles,
-//   - an org profile (orgs/<org>.yaml) — bypass actors and signing,
-//   - discovered checks (checks.yaml + the detect package),
-//
-// then overridden by CLI flags / the interactive form. The templates are
-// plain YAML so they can be edited without touching Go; an on-disk copy
-// (under the stack checkout, or $REPO_CONFIG_DIR) wins over the embedded
-// copy so edits don't need a rebuild.
 package repocfg
 
 import (
@@ -71,8 +57,8 @@ func DetectClass(repo string) Class {
 	}
 }
 
-// OrgProfile is orgs/<org>.yaml — per-org bot ids and signing policy. A
-// ruleset's generic bot name (bots key) resolves to the app id here.
+// OrgProfile is orgs/<org>.yaml, an org's bot ids and signing policy. A
+// ruleset's generic bot name, a key of Bots, resolves to its App id here.
 type OrgProfile struct {
 	Org             string           `yaml:"org"`
 	SigningRequired bool             `yaml:"signing_required"`
@@ -114,7 +100,7 @@ type Merge struct {
 	SignoffRequired     bool `yaml:"signoff_required"`
 }
 
-// SecurityToggles mirrors the repository security settings we manage.
+// SecurityToggles mirrors the repository security settings repocfg manages.
 // DependabotAlerts is optional because GitHub exposes alerts through a
 // dedicated endpoint; nil leaves that setting unmanaged for older presets.
 type SecurityToggles struct {
@@ -172,36 +158,25 @@ type ChecksConfig struct {
 
 // LoadClass reads and parses classes/<class>.yaml.
 func LoadClass(c Class) (*ClassPreset, error) {
-	var p ClassPreset
-	if err := loadTemplateYAML(path.Join("classes", string(c)+".yaml"), &p); err != nil {
-		return nil, fmt.Errorf("load class %q: %w", c, err)
-	}
-	return &p, nil
+	return loadTemplate[ClassPreset](path.Join("classes", string(c)+".yaml"), fmt.Sprintf("class %q", c))
 }
 
 // LoadOrg reads and parses orgs/<org>.yaml.
 func LoadOrg(org string) (*OrgProfile, error) {
-	var o OrgProfile
-	if err := loadTemplateYAML(path.Join("orgs", org+".yaml"), &o); err != nil {
-		return nil, fmt.Errorf("load org %q: %w", org, err)
-	}
-	return &o, nil
+	return loadTemplate[OrgProfile](path.Join("orgs", org+".yaml"), fmt.Sprintf("org %q", org))
 }
 
 // LoadChecks reads and parses checks.yaml.
 func LoadChecks() (*ChecksConfig, error) {
-	var c ChecksConfig
-	if err := loadTemplateYAML("checks.yaml", &c); err != nil {
-		return nil, fmt.Errorf("load checks.yaml: %w", err)
-	}
-	return &c, nil
+	return loadTemplate[ChecksConfig]("checks.yaml", "checks.yaml")
 }
 
 // ResolveBotIntegrations fills the integration ids that belong to a per-org
 // bot. checks.yaml cannot hardcode these: each org runs its own [Agent] App
 // with a distinct id, and the same checks.yaml is loaded for both. Call it with
-// the target repo's org profile before discovery, so a check posted by that
-// org's App — the merge-gate — is required against an App that can satisfy it.
+// the target repo's org profile before discovery, so a check that org's App
+// posts, such as the merge-gate, is required against an App that can satisfy
+// it.
 func (c *ChecksConfig) ResolveBotIntegrations(org *OrgProfile) {
 	if c.Integrations == nil {
 		c.Integrations = map[string]int64{}
@@ -220,9 +195,9 @@ type LabelDef struct {
 }
 
 // LabelsConfig is governance/labels.yaml: the uniform label vocabulary every
-// repo carries, provisioned like CODEOWNERS. Ensure labels are upserted —
-// created when absent, recolored or re-described when they drift — and Retire
-// labels are deleted. A label in neither list is left untouched, so apply never
+// repo carries, provisioned like CODEOWNERS. An Ensure label is created when
+// absent and updated when its color or description drifts, and a Retire label
+// is deleted. A label in neither list is left untouched, so apply never
 // removes a label it was not told about.
 type LabelsConfig struct {
 	Ensure []LabelDef `yaml:"ensure"`
@@ -231,11 +206,7 @@ type LabelsConfig struct {
 
 // LoadLabels reads and parses governance/labels.yaml.
 func LoadLabels() (*LabelsConfig, error) {
-	var l LabelsConfig
-	if err := loadTemplateYAML(path.Join("governance", "labels.yaml"), &l); err != nil {
-		return nil, fmt.Errorf("load labels.yaml: %w", err)
-	}
-	return &l, nil
+	return loadTemplate[LabelsConfig](path.Join("governance", "labels.yaml"), "labels.yaml")
 }
 
 // TeamTier is one contributor tier in teams.yaml: a team with no repository
@@ -253,11 +224,7 @@ type TeamsConfig struct {
 
 // LoadTeams reads and parses teams.yaml.
 func LoadTeams() (*TeamsConfig, error) {
-	var teams TeamsConfig
-	if err := loadTemplateYAML("teams.yaml", &teams); err != nil {
-		return nil, fmt.Errorf("load teams.yaml: %w", err)
-	}
-	return &teams, nil
+	return loadTemplate[TeamsConfig]("teams.yaml", "teams.yaml")
 }
 
 // RulesetSpec is one rulesets/<name>.yaml base. The required-status-checks
@@ -311,11 +278,7 @@ type CodeQualityParams struct {
 
 // LoadRuleset reads rulesets/<name>.yaml.
 func LoadRuleset(name string) (*RulesetSpec, error) {
-	var r RulesetSpec
-	if err := loadTemplateYAML(path.Join("rulesets", name+".yaml"), &r); err != nil {
-		return nil, fmt.Errorf("load ruleset %q: %w", name, err)
-	}
-	return &r, nil
+	return loadTemplate[RulesetSpec](path.Join("rulesets", name+".yaml"), fmt.Sprintf("ruleset %q", name))
 }
 
 // LoadRepoOverride reads repos/<org>_<repo>.yaml if it exists. The bool is
@@ -331,6 +294,18 @@ func LoadRepoOverride(org, repo string) (*ClassPreset, bool, error) {
 	return &p, true, nil
 }
 
+// loadTemplate parses templates/<rel> into a T, naming the template what in
+// an error.
+func loadTemplate[T any](rel, what string) (*T, error) {
+	var out T
+	if err := loadTemplateYAML(rel, &out); err != nil {
+		return nil, fmt.Errorf("load %s: %w", what, err)
+	}
+	return &out, nil
+}
+
+// loadTemplateYAML parses templates/<rel> into out, refusing unknown fields so
+// a typo in a template fails loudly.
 func loadTemplateYAML(rel string, out any) error {
 	raw, err := ReadTemplate(rel)
 	if err != nil {

@@ -1,12 +1,3 @@
-// `a-novel secrets` — a local, encrypted secrets manager. Secrets are stored
-// AES-256-GCM-encrypted at rest under a 0600 local key, set interactively with
-// no echo, and never printed by any command. They are injected into a child
-// process's environment only — by `secrets exec`, and automatically by
-// `test`/`run`/`ui` via the value-free per-repo manifest (.a-novel/secrets.yaml).
-//
-// The goal is to prevent accidental exposure of API secrets (e.g.
-// OPENAI_API_KEY) when a developer — or an AI agent — runs the toolchain: the
-// value is never seen on a terminal, in a log, in git, or as a CLI argument.
 package cli
 
 import (
@@ -27,6 +18,9 @@ import (
 // secret never appears on screen.
 var readPassword = func() ([]byte, error) { return term.ReadPassword(int(os.Stdin.Fd())) }
 
+// newSecretsCmd manages the local encrypted secrets the secrets package stores.
+// A secret reaches a child process through its environment only, so it never
+// shows on a terminal, in a log, in git or as a CLI argument.
 func newSecretsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "secrets",
@@ -198,25 +192,10 @@ sees, <secret-id> is the id in the local store.
 			if len(envPairs) == 0 {
 				return errors.New("secrets exec: at least one --env NAME=<secret-id> is required")
 			}
-			st, err := secrets.Open()
+			extra, err := secretEnv(envPairs)
 			if err != nil {
 				return err
 			}
-			// Build NAME=value child-env additions. Every id resolves before
-			// exec, so a typo fails before the command runs.
-			extra := make([]string, 0, len(envPairs))
-			for _, pair := range envPairs {
-				name, id, ok := strings.Cut(pair, "=")
-				if !ok || name == "" || id == "" {
-					return fmt.Errorf("secrets exec: --env %q must be NAME=<secret-id>", pair)
-				}
-				value, found := st.Get(id)
-				if !found {
-					return fmt.Errorf("secrets exec: no secret named %q (used for %s)", id, name)
-				}
-				extra = append(extra, name+"="+value)
-			}
-
 			child := exec.CommandContext(cmd.Context(), args[0], args[1:]...)
 			child.Env = append(os.Environ(), extra...)
 			child.Stdin = cmd.InOrStdin()
@@ -237,4 +216,26 @@ sees, <secret-id> is the id in the local store.
 	// Stop flag parsing after `--` so the child command's own flags pass through.
 	cmd.Flags().SetInterspersed(false)
 	return cmd
+}
+
+// secretEnv resolves each NAME=<secret-id> pair into a NAME=value child-env
+// entry. Every id resolves before the child starts, so a typo fails first.
+func secretEnv(pairs []string) ([]string, error) {
+	st, err := secrets.Open()
+	if err != nil {
+		return nil, err
+	}
+	env := make([]string, 0, len(pairs))
+	for _, pair := range pairs {
+		name, id, ok := strings.Cut(pair, "=")
+		if !ok || name == "" || id == "" {
+			return nil, fmt.Errorf("secrets exec: --env %q must be NAME=<secret-id>", pair)
+		}
+		value, found := st.Get(id)
+		if !found {
+			return nil, fmt.Errorf("secrets exec: no secret named %q (used for %s)", id, name)
+		}
+		env = append(env, name+"="+value)
+	}
+	return env, nil
 }

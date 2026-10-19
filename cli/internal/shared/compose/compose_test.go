@@ -12,7 +12,7 @@ import (
 func TestReadFile(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
+	testCases := []struct {
 		name    string
 		yaml    string
 		want    *File
@@ -60,22 +60,22 @@ volumes:
 		{name: "Error/MissingFile", wantErr: true},
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			path := filepath.Join(t.TempDir(), "podman-compose.yaml")
-			if c.yaml != "" {
-				if err := os.WriteFile(path, []byte(c.yaml), 0o600); err != nil {
+			if testCase.yaml != "" {
+				if err := os.WriteFile(path, []byte(testCase.yaml), 0o600); err != nil {
 					panic(err)
 				}
 			}
 			got, err := ReadFile(path)
-			if (err != nil) != c.wantErr {
-				t.Fatalf("ReadFile error = %v, wantErr %v", err, c.wantErr)
+			if (err != nil) != testCase.wantErr {
+				t.Fatalf("ReadFile error = %v, wantErr %v", err, testCase.wantErr)
 			}
-			if !c.wantErr && !reflect.DeepEqual(got, c.want) {
-				t.Errorf("ReadFile =\n%+v\nwant\n%+v", got, c.want)
+			if !testCase.wantErr && !reflect.DeepEqual(got, testCase.want) {
+				t.Errorf("ReadFile =\n%+v\nwant\n%+v", got, testCase.want)
 			}
 		})
 	}
@@ -84,7 +84,7 @@ volumes:
 func TestRefs(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
+	testCases := []struct {
 		in   string
 		want []string
 	}{
@@ -95,11 +95,11 @@ func TestRefs(t *testing.T) {
 		{"${X}/${X}", []string{"X"}},
 		{"plain-literal", nil},
 	}
-	for _, c := range cases {
-		t.Run(c.in, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.in, func(t *testing.T) {
 			t.Parallel()
-			if got := Refs(c.in); !reflect.DeepEqual(got, c.want) {
-				t.Errorf("Refs(%q) = %v, want %v", c.in, got, c.want)
+			if got := Refs(testCase.in); !reflect.DeepEqual(got, testCase.want) {
+				t.Errorf("Refs(%q) = %v, want %v", testCase.in, got, testCase.want)
 			}
 		})
 	}
@@ -109,18 +109,18 @@ func TestSubstitute(t *testing.T) {
 	t.Parallel()
 
 	vars := map[string]string{"HOST": "localhost", "PORT": "5432"}
-	cases := []struct{ in, want string }{
+	testCases := []struct{ in, want string }{
 		{"${HOST}:${PORT}", "localhost:5432"},
 		{"${HOST:-ignored}", "localhost"},
 		// An unknown reference resolves empty, as compose does.
 		{"prefix ${UNKNOWN} suffix", "prefix  suffix"},
 		{"plain", "plain"},
 	}
-	for _, c := range cases {
-		t.Run(c.in, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.in, func(t *testing.T) {
 			t.Parallel()
-			if got := Substitute(c.in, vars); got != c.want {
-				t.Errorf("Substitute(%q) = %q, want %q", c.in, got, c.want)
+			if got := Substitute(testCase.in, vars); got != testCase.want {
+				t.Errorf("Substitute(%q) = %q, want %q", testCase.in, got, testCase.want)
 			}
 		})
 	}
@@ -129,7 +129,7 @@ func TestSubstitute(t *testing.T) {
 func TestHostPort(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
+	testCases := []struct {
 		in             string
 		name, port     string
 		wantAllocation bool
@@ -139,12 +139,12 @@ func TestHostPort(t *testing.T) {
 		{in: "5432:5432"},
 		{in: "${DATA}:/var/lib/data"},
 	}
-	for _, c := range cases {
-		t.Run(c.in, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.in, func(t *testing.T) {
 			t.Parallel()
-			name, port, ok := HostPort(c.in)
-			if name != c.name || port != c.port || ok != c.wantAllocation {
-				t.Errorf("HostPort(%q) = %q, %q, %v; want %q, %q, %v", c.in, name, port, ok, c.name, c.port, c.wantAllocation)
+			name, port, ok := HostPort(testCase.in)
+			if name != testCase.name || port != testCase.port || ok != testCase.wantAllocation {
+				t.Errorf("HostPort(%q) = %q, %q, %v; want %q, %q, %v", testCase.in, name, port, ok, testCase.name, testCase.port, testCase.wantAllocation)
 			}
 		})
 	}

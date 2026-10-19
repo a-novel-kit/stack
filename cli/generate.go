@@ -1,8 +1,8 @@
-// Package generate hosts the go:generate directives for the cli module.
-// Run `go generate ./...` from the cli/ root to regenerate derived code.
+// Package cli hosts the go:generate directives of the cli module. Run
+// `go generate ./...` from cli/ to regenerate the derived code.
 package cli
 
-// Generate proto stubs (Go bindings + connect-rpc handlers).
+// The proto stubs: Go bindings and connect-rpc handlers.
 //
 //go:generate rm -rf proto/gen
 //go:generate go tool -modfile=buf.mod buf generate

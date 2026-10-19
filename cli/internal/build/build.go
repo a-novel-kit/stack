@@ -1,6 +1,3 @@
-// Package build turns a detected target into a [jobs.Job]: it assembles the
-// target's environment, brings its compose env up and down around the command,
-// and enforces the per-target deadline.
 package build
 
 import (
@@ -50,60 +47,59 @@ func Job(t detect.Target, timeout time.Duration, maxProcs int, keep bool) jobs.J
 func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, error) {
 	runEnv := os.Environ()
 	if t.Env != nil {
-		var added []string
-		if len(t.Env.Ports) > 0 {
-			portEnv, err := allocPorts(t.Env.Ports)
-			if err != nil {
-				return nil, fmt.Errorf("port allocation failed: %w", err)
-			}
-			runEnv = append(runEnv, portEnv...)
-			derived := derivedURLs(t.Env.Ports, runEnv)
-			runEnv = append(runEnv, derived...)
-			added = append(added, portEnv...)
-			added = append(added, derived...)
+		added, err := composeEnv(t.Env, runEnv)
+		if err != nil {
+			return nil, err
 		}
-		// Standard local test values for the vars the compose file references
-		// that no host port produced, such as an internal-only Postgres'
-		// credentials.
-		def := testDefaults(t.Env.Refs, runEnv)
-		runEnv = append(runEnv, def...)
-		added = append(added, def...)
+		runEnv = append(runEnv, added...)
 		if len(added) > 0 {
 			_, _ = io.WriteString(out, formatEnvBlock(added))
 		}
+	}
+	root := repoRoot(t)
+	if root == "" {
+		return runEnv, nil
 	}
 
 	// Source scripts/setup-env.sh for the service constants it defines, such as
 	// APP_MASTER_KEY. It already sees the ports and URLs set above, so its
 	// `${VAR:=…}` defaults stay inert and cannot override them.
-	if root := repoRoot(t); root != "" {
-		if se := filepath.Join(root, "scripts", "setup-env.sh"); detect.IsFile(se) {
-			_, _ = fmt.Fprintf(out, "── setup-env: %s ──\n", rel(root, se))
-			env, err := sourceEnv(ctx, se, root, runEnv, out)
-			if err != nil {
-				return nil, fmt.Errorf("setup-env.sh failed: %w", err)
-			}
-			runEnv = env
+	if se := filepath.Join(root, "scripts", "setup-env.sh"); detect.IsFile(se) {
+		_, _ = fmt.Fprintf(out, "── setup-env: %s ──\n", rel(root, se))
+		env, err := sourceEnv(ctx, se, root, runEnv, out)
+		if err != nil {
+			return nil, fmt.Errorf("setup-env.sh failed: %w", err)
 		}
+		runEnv = env
 	}
 
 	// Secrets come last so a provisioned value wins over any default. Values
 	// never reach the `── env ──` block above, and a declared-but-unset secret
 	// only raises a value-free warning, so tests that don't need it still run.
-	if root := repoRoot(t); root != "" {
-		res, err := secrets.InjectForRepo(root)
-		if err != nil {
-			return nil, fmt.Errorf("secrets injection failed: %w", err)
-		}
-		for name, value := range res.Env {
-			runEnv = append(runEnv, name+"="+value)
-		}
-		for _, w := range res.Warnings() {
-			_, _ = fmt.Fprintln(out, w)
-		}
+	res, err := secrets.InjectForRepo(root)
+	if err != nil {
+		return nil, fmt.Errorf("secrets injection failed: %w", err)
 	}
-
+	for name, value := range res.Env {
+		runEnv = append(runEnv, name+"="+value)
+	}
+	for _, w := range res.Warnings() {
+		_, _ = fmt.Fprintln(out, w)
+	}
 	return runEnv, nil
+}
+
+// composeEnv lists the vars a compose env adds to base: allocated host ports,
+// the URLs derived from them, and standard local test values for the vars the
+// compose file references that no host port produced, such as an
+// internal-only Postgres' credentials.
+func composeEnv(e *detect.ComposeEnv, base []string) ([]string, error) {
+	ports, err := allocPorts(e.Ports)
+	if err != nil {
+		return nil, fmt.Errorf("port allocation failed: %w", err)
+	}
+	added := slices.Concat(ports, derivedURLs(e.Ports, ports))
+	return append(added, testDefaults(e.Refs, slices.Concat(base, added))...), nil
 }
 
 // ANSI SGR codes used by formatEnvBlock. The block lands in captured output, so
@@ -336,13 +332,7 @@ func sourceEnv(ctx context.Context, script, dir string, baseEnv []string, log io
 	if err := cmd.Run(); err != nil {
 		return nil, err
 	}
-	var env []string
-	for _, kv := range strings.Split(out.String(), "\x00") {
-		if kv != "" {
-			env = append(env, kv)
-		}
-	}
-	return env, nil
+	return strings.FieldsFunc(out.String(), func(r rune) bool { return r == 0 }), nil
 }
 
 // compose runs `podman compose [global...] -p <project> -f <file> <args...>`
@@ -437,8 +427,8 @@ func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
 //     already be gone or may never have come up.
 //
 // The names follow podman-compose's conventions: the pod is "pod_<project>",
-// and the network "<project>_api" — matching every service compose file's
-// `networks: { api: }` declaration.
+// and the network "<project>_api", after the `networks: { api: }` every service
+// compose file declares.
 func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	var buf bytes.Buffer
 	err := compose(ctx, &buf, os.Environ(), &e, nil,
@@ -451,6 +441,10 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	_ = exec.CommandContext(ctx, "podman", "network", "rm", "-f", e.Project+"_api").Run()
 	return err
 }
+
+// dockerFormatBuildArgs builds images in the docker format. Podman's default
+// OCI format drops a Dockerfile's HEALTHCHECK, which waitHealthy follows.
+const dockerFormatBuildArgs = "--podman-build-args=--format docker -q"
 
 // composeUpPhased brings a compose env up in two waves: dependency-free
 // services first, then the ones declaring `depends_on:` (e.Dependents), waiting
@@ -468,8 +462,7 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect.ComposeEnv, healthTimeout time.Duration) error {
 	if len(e.Services) == 0 {
 		// Unknown service list: bring the whole env up at once.
-		if err := compose(ctx, out, env, e,
-			[]string{"--podman-build-args=--format docker -q"}, "up", "-d", "--build"); err != nil {
+		if err := compose(ctx, out, env, e, []string{dockerFormatBuildArgs}, "up", "-d", "--build"); err != nil {
 			return err
 		}
 		return waitHealthy(ctx, out, env, e, healthTimeout)
@@ -492,8 +485,7 @@ func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect
 		waveNum++
 		_, _ = fmt.Fprintf(out, "── env up (wave %d: %s) ──\n", waveNum, strings.Join(wave, " "))
 		args := append([]string{"up", "-d", "--build", "--no-deps"}, wave...)
-		if err := compose(ctx, out, env, e,
-			[]string{"--podman-build-args=--format docker -q"}, args...); err != nil {
+		if err := compose(ctx, out, env, e, []string{dockerFormatBuildArgs}, args...); err != nil {
 			return err
 		}
 		_, _ = fmt.Fprint(out, "── env wait ──\n")
@@ -512,54 +504,21 @@ func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect
 // tails so the user sees why they never came up.
 func waitHealthy(ctx context.Context, log io.Writer, env []string, e *detect.ComposeEnv, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	prefix := e.Project + "_"
-	var last string
-	var lastUnhealthy []string // ids of containers not yet ready at last check
 	for {
-		ids, err := podmanOut(ctx, env, "ps", "-a", "--filter", "name="+prefix, "--format", "{{.ID}}")
+		poll, err := pollEnv(ctx, env, e.Project+"_")
 		if err != nil {
-			return fmt.Errorf("listing containers: %w", err)
+			return err
 		}
-		idList := strings.Fields(ids)
-		ready := len(idList) > 0
-		var states []string
-		var unhealthy []string
-		for _, id := range idList {
-			out, ierr := podmanOut(ctx, env, "inspect", id, "--format",
-				"{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}")
-			parts := strings.Split(out, "|")
-			if ierr != nil || len(parts) < 4 {
-				ready = false
-				unhealthy = append(unhealthy, id)
-				continue
-			}
-			name, st, health, code := parts[0], parts[1], parts[2], parts[3]
-			states = append(states, fmt.Sprintf("%s=%s/%s", name, st, health))
-			switch {
-			case st == "exited" && code == "0":
-				// one-shot completed successfully
-			case st == "running" && (health == "-" || health == "healthy"):
-				// long-lived service ready
-			case st == "exited":
-				return fmt.Errorf("container %s exited with code %s:\n%s",
-					name, code, containerLogTail(ctx, env, id, 30))
-			default:
-				ready = false
-				unhealthy = append(unhealthy, id)
-			}
-		}
-		last = strings.Join(states, "  ")
-		lastUnhealthy = unhealthy
-		if ready {
-			_, _ = fmt.Fprintf(log, "ready: %s\n", last)
+		states := strings.Join(poll.states, "  ")
+		if poll.ready {
+			_, _ = fmt.Fprintf(log, "ready: %s\n", states)
 			return nil
 		}
 		if time.Now().After(deadline) {
 			var b strings.Builder
-			fmt.Fprintf(&b, "timed out after %s; last state: %s", timeout, last)
-			for _, id := range lastUnhealthy {
-				tail := containerLogTail(ctx, env, id, 20)
-				if tail != "" {
+			fmt.Fprintf(&b, "timed out after %s; last state: %s", timeout, states)
+			for _, id := range poll.pending {
+				if tail := containerLogTail(ctx, env, id, 20); tail != "" {
 					fmt.Fprintf(&b, "\n── tail %s ──\n%s", id[:12], tail)
 				}
 			}
@@ -571,6 +530,49 @@ func waitHealthy(ctx context.Context, log io.Writer, env []string, e *detect.Com
 		case <-time.After(1500 * time.Millisecond):
 		}
 	}
+}
+
+// envPoll is one inspection of a compose env's containers.
+type envPoll struct {
+	ready   bool
+	states  []string // "<name>=<status>/<health>" per inspected container
+	pending []string // ids of the containers not ready yet
+}
+
+// pollEnv inspects every container whose name starts with prefix. It fails on
+// a container that exited non-zero, quoting its log tail.
+func pollEnv(ctx context.Context, env []string, prefix string) (envPoll, error) {
+	ids, err := podmanOut(ctx, env, "ps", "-a", "--filter", "name="+prefix, "--format", "{{.ID}}")
+	if err != nil {
+		return envPoll{}, fmt.Errorf("listing containers: %w", err)
+	}
+	idList := strings.Fields(ids)
+	poll := envPoll{ready: len(idList) > 0}
+	for _, id := range idList {
+		out, ierr := podmanOut(ctx, env, "inspect", id, "--format",
+			"{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}")
+		parts := strings.Split(out, "|")
+		if ierr != nil || len(parts) < 4 {
+			poll.ready = false
+			poll.pending = append(poll.pending, id)
+			continue
+		}
+		name, st, health, code := parts[0], parts[1], parts[2], parts[3]
+		poll.states = append(poll.states, fmt.Sprintf("%s=%s/%s", name, st, health))
+		switch {
+		case st == "exited" && code == "0":
+			// one-shot completed successfully
+		case st == "running" && (health == "-" || health == "healthy"):
+			// long-lived service ready
+		case st == "exited":
+			return envPoll{}, fmt.Errorf("container %s exited with code %s:\n%s",
+				name, code, containerLogTail(ctx, env, id, 30))
+		default:
+			poll.ready = false
+			poll.pending = append(poll.pending, id)
+		}
+	}
+	return poll, nil
 }
 
 // containerLogTail returns the last `lines` lines of a container's combined

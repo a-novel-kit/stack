@@ -1,21 +1,3 @@
-// `a-novel core bot-comment <org> <repo> <number> --body <text>` — post a
-// PR/issue/review comment as the org's GitHub App bot, or many at once with
-// `--batch`.
-//
-// The bot's signing key never lives on a dev machine. The command hands the
-// comment (body plus target metadata) to the per-org `bot-comment`
-// workflow_dispatch — one dispatcher per org, see botDispatchRepos — triggered
-// with the operator's own gh token. The workflow holds the App key, mints a
-// scoped short-lived token, and posts as <app-slug>[bot].
-//
-// That split is the trust boundary. A user needs only gh and actions:write on
-// the dispatcher repo and never handles a .pem, so revocation is per-user. The
-// workflow can only post a comment, so a compromised trigger cannot push, merge
-// or author a PR. And the trigger token cannot change what the workflow does,
-// which is code on the protected master branch.
-//
-// The command waits for each dispatched run synchronously (gh run watch
-// --exit-status) and surfaces failures, so callers can react to errors.
 package cli
 
 import (
@@ -74,6 +56,14 @@ type botBatchItem struct {
 	ReplyTo int64  `json:"reply_to,omitempty"`
 }
 
+// newCoreBotCommentCmd posts PR, issue and review comments as the org's GitHub
+// App bot. It dispatches the org's bot-comment workflow with the operator's own
+// gh token and waits for each run to finish.
+//
+// The workflow holds the App key, so the key never reaches a dev machine. An
+// operator needs only actions:write on the dispatcher repository, revoked per
+// user, and the workflow can only post comments, so a compromised trigger
+// cannot push, merge or author a pull request.
 func newCoreBotCommentCmd() *cobra.Command {
 	var (
 		body      string
@@ -226,8 +216,8 @@ func runBotCommentBatch(cmd *cobra.Command, org, repo, batchPath string) error {
 	return nil
 }
 
-// readBotBatch reads the --batch input — a file path, or "-" for stdin —
-// parses it into comment items, and validates the shape the dispatcher cannot
+// readBotBatch reads the --batch input, a file path or "-" for stdin, parses
+// it into comment items, and validates the shape the dispatcher cannot
 // report on cheaply: a non-empty array whose entries carry a positive number
 // and a non-empty body. Per-comment posting errors stay with the GitHub API at
 // run time.
@@ -267,7 +257,7 @@ func readBotBatch(path string, stdin io.Reader) ([]botBatchItem, error) {
 
 // chunkBotComments greedily packs comments into chunks whose marshaled JSON
 // stays within maxBytes, so each chunk fits a single workflow_dispatch. A
-// lone comment larger than maxBytes is a hard error — it cannot be split.
+// lone comment larger than maxBytes is an error, since it cannot be split.
 func chunkBotComments(items []botBatchItem, maxBytes int) ([][]botBatchItem, error) {
 	var (
 		chunks  [][]botBatchItem
@@ -282,8 +272,8 @@ func chunkBotComments(items []botBatchItem, maxBytes int) ([][]botBatchItem, err
 			return nil, fmt.Errorf("comment number %d is %d bytes, over the %d-byte dispatch limit", item.Number, len(solo), maxBytes)
 		}
 		if len(current) > 0 {
-			// Full three-index slice so append can't alias current's backing
-			// array while we are only measuring the trial size.
+			// The full three-index slice keeps append from writing into
+			// current's backing array while measuring the trial size.
 			trial, err := json.Marshal(append(current[:len(current):len(current)], item))
 			if err != nil {
 				return nil, fmt.Errorf("marshal batch chunk: %w", err)
@@ -375,18 +365,8 @@ func waitForDispatchedRun(dispatchRepo, nonce string) (int64, error) {
 			"--event", "workflow_dispatch",
 			"--limit", "30",
 			"--json", "databaseId,displayTitle")
-		if err == nil {
-			var runs []struct {
-				DatabaseID   int64  `json:"databaseId"`
-				DisplayTitle string `json:"displayTitle"`
-			}
-			if jsonErr := json.Unmarshal([]byte(out), &runs); jsonErr == nil {
-				for _, r := range runs {
-					if strings.Contains(r.DisplayTitle, "("+nonce+")") {
-						return r.DatabaseID, nil
-					}
-				}
-			}
+		if id := runWithNonce(out, nonce); err == nil && id != 0 {
+			return id, nil
 		}
 		if time.Now().After(deadline) {
 			return 0, fmt.Errorf("dispatched run did not appear within %s "+
@@ -394,6 +374,22 @@ func waitForDispatchedRun(dispatchRepo, nonce string) (int64, error) {
 		}
 		time.Sleep(2 * time.Second)
 	}
+}
+
+// runWithNonce returns the id of the run in a `gh run list` JSON listing whose
+// name carries nonce, or 0 when none does.
+func runWithNonce(listing, nonce string) int64 {
+	var runs []struct {
+		DatabaseID   int64  `json:"databaseId"`
+		DisplayTitle string `json:"displayTitle"`
+	}
+	_ = json.Unmarshal([]byte(listing), &runs) // An unreadable listing names no run.
+	for _, r := range runs {
+		if strings.Contains(r.DisplayTitle, "("+nonce+")") {
+			return r.DatabaseID
+		}
+	}
+	return 0
 }
 
 // newNonce returns a short random hex token used to correlate a dispatch

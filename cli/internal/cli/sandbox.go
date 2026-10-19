@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/a-novel-kit/stack/cli/internal/setup"
@@ -16,6 +17,8 @@ import (
 
 const sandboxFlag = "--sandbox"
 
+// sandboxSystem is the filesystem and process access runSandbox works
+// through, so tests run it without cloning or spawning anything.
 type sandboxSystem struct {
 	tempDir   func() (string, error)
 	clone     func(string) error
@@ -70,32 +73,11 @@ func RunSandbox(
 		},
 		clone:     setup.CloneStack,
 		removeAll: os.RemoveAll,
-		run: func(
-			ctx context.Context,
-			dir string,
-			env []string,
-			args []string,
-			commandOut io.Writer,
-			commandErr io.Writer,
-		) error {
+		run: func(ctx context.Context, dir string, env, args []string, commandOut, commandErr io.Writer) error {
 			cmd := exec.CommandContext(ctx, executable, args...)
-			cmd.Dir = dir
-			cmd.Env = env
-			cmd.Stdin = stdin
-			cmd.Stdout = commandOut
-			cmd.Stderr = commandErr
-			if err := cmd.Run(); err != nil {
-				var exitErr *exec.ExitError
-				if errors.As(err, &exitErr) {
-					code := exitErr.ExitCode()
-					if code < 0 && ctx.Err() != nil {
-						code = 130
-					}
-					return &ExitError{Code: code}
-				}
-				return err
-			}
-			return nil
+			cmd.Dir, cmd.Env = dir, env
+			cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, commandOut, commandErr
+			return childExit(ctx, cmd.Run())
 		},
 		cwd:     cwd,
 		environ: os.Environ(),
@@ -103,6 +85,22 @@ func RunSandbox(
 	return runSandbox(ctx, args, system, stdout, stderr)
 }
 
+// childExit carries a child's exit status as an ExitError. A child killed by
+// the interrupt that cancelled ctx exits as interrupted.
+func childExit(ctx context.Context, err error) error {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return err
+	}
+	code := exitErr.ExitCode()
+	if code < 0 && ctx.Err() != nil {
+		code = exitAborted
+	}
+	return &ExitError{Code: code}
+}
+
+// runSandbox clones a temporary stack, populates it with `core sync`, and runs
+// args in it from the directory matching the caller's.
 func runSandbox(
 	ctx context.Context,
 	args []string,
@@ -158,13 +156,10 @@ func runSandbox(
 	return system.run(ctx, dir, env, args, stdout, stderr)
 }
 
+// unsupportedSandboxCommand reports whether command drives the user-wide
+// daemon, which a temporary stack cannot isolate.
 func unsupportedSandboxCommand(command string) bool {
-	switch command {
-	case commandCore, commandInstall, commandRun:
-		return true
-	default:
-		return false
-	}
+	return slices.Contains([]string{commandCore, commandInstall, commandRun}, command)
 }
 
 // sandboxWorkingDir maps cwd, when it sits in a workspace repository, onto the
@@ -189,13 +184,9 @@ func sandboxWorkingDir(root, cwd string) (string, error) {
 	return mapped, nil
 }
 
+// replaceEnv returns env with name set to value, and any earlier value dropped.
 func replaceEnv(env []string, name, value string) []string {
 	prefix := name + "="
-	out := make([]string, 0, len(env)+1)
-	for _, entry := range env {
-		if !strings.HasPrefix(entry, prefix) {
-			out = append(out, entry)
-		}
-	}
+	out := slices.DeleteFunc(slices.Clone(env), func(entry string) bool { return strings.HasPrefix(entry, prefix) })
 	return append(out, prefix+value)
 }

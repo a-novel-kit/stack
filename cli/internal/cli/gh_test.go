@@ -10,7 +10,7 @@ import (
 func TestGhRun(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam.
 	rateLimited := errors.New("gh: You have exceeded a secondary rate limit (HTTP 403)")
-	cases := []struct {
+	testCases := []struct {
 		name      string
 		failures  []error // returned by successive attempts, then success
 		wantCalls int
@@ -21,22 +21,22 @@ func TestGhRun(t *testing.T) {
 		{name: "Error/RateLimitPersists", failures: []error{rateLimited, rateLimited, rateLimited}, wantCalls: 3, wantErr: true},
 		{name: "Error/NotRetried", failures: []error{errGHNotFound}, wantCalls: 1, wantErr: true},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			attempts := 0
 			stubGH(t, func(string) (string, error) {
 				attempts++
-				if attempts <= len(c.failures) {
-					return "", c.failures[attempts-1]
+				if attempts <= len(testCase.failures) {
+					return "", testCase.failures[attempts-1]
 				}
 				return "ok", nil
 			})
 			_, err := ghRun("", "api", "repos/o/r")
-			if (err != nil) != c.wantErr {
-				t.Errorf("err = %v, wantErr %v", err, c.wantErr)
+			if (err != nil) != testCase.wantErr {
+				t.Errorf("err = %v, wantErr %v", err, testCase.wantErr)
 			}
-			if attempts != c.wantCalls {
-				t.Errorf("calls = %d, want %d", attempts, c.wantCalls)
+			if attempts != testCase.wantCalls {
+				t.Errorf("calls = %d, want %d", attempts, testCase.wantCalls)
 			}
 		})
 	}
@@ -44,7 +44,7 @@ func TestGhRun(t *testing.T) {
 
 func TestGhError(t *testing.T) {
 	base := errors.New("exit status 1")
-	for _, tc := range []struct {
+	testCases := []struct {
 		name, stdout, stderr, want string
 	}{
 		{
@@ -55,14 +55,16 @@ func TestGhError(t *testing.T) {
 		},
 		{name: "Success/NonJSONStdoutIsDropped", stdout: "partial output", stderr: "gh: not found", want: "exit status 1: gh: not found"},
 		{name: "Success/NothingToAdd", want: "exit status 1"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			err := ghError(base, tc.stdout, tc.stderr)
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := ghError(base, testCase.stdout, testCase.stderr)
 			if !errors.Is(err, base) {
 				t.Fatalf("ghError dropped the wrapped error: %v", err)
 			}
-			if err.Error() != tc.want {
-				t.Fatalf("ghError = %q, want %q", err.Error(), tc.want)
+			if err.Error() != testCase.want {
+				t.Fatalf("ghError = %q, want %q", err.Error(), testCase.want)
 			}
 		})
 	}

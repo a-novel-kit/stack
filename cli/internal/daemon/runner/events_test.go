@@ -7,12 +7,6 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Tests for the runner's phase-event broadcaster, SubscribePhases and
-// emitPhase. The fanout iterates its subscribers under the read lock and sends
-// without blocking, so these cover delivery, filtering, the drop on a full
-// buffer, and unsubscribe. The events surface needs nothing beyond a
-// zero-value runner and its subs slice.
-
 func TestEvents_FilterDropsNonMatching(t *testing.T) {
 	r := &Runner{}
 	// Filter: only events for svc=alpha get through.

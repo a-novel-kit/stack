@@ -1,19 +1,3 @@
-// Package env owns the daemon's environment-variable handling: port
-// allocation (with refcounting), value synthesis (HOST / URL for allocated
-// ports), cross-service propagation, and operator un-prefix.
-//
-// The package exposes two surfaces:
-//
-//	Allocator — picks free host ports, tracks refcounts, frees on release.
-//	Builder   — assembles the full env block for one service, including
-//	            constants from compose, allocated values, derived values,
-//	            and cross-service references resolved against other
-//	            services' allocations.
-//
-// The runner calls Builder.ForTarget at process spawn time, Builder.ForService
-// to claim infra ports at infra-up, and Allocator.Release when the process
-// terminates. The server's GetEnv RPC calls Builder.ForService for read-only
-// inspection.
 package env
 
 import (

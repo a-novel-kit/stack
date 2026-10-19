@@ -17,7 +17,7 @@ import (
 //
 // Not parallel: uses t.Setenv("XDG_DATA_HOME", ...) for store isolation.
 func TestInjectForRepo(t *testing.T) {
-	cases := []struct {
+	testCases := []struct {
 		name        string
 		store       map[string]string // nil: never opened, so no key or store exists
 		manifest    string            // empty: the repo has no .a-novel/secrets.yaml
@@ -63,30 +63,30 @@ func TestInjectForRepo(t *testing.T) {
 		// silently skipped.
 		{name: "Error/MissingRequiredField", manifest: "secrets:\n  - env: OPENAI_API_KEY\n", wantErr: true},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Setenv("XDG_DATA_HOME", t.TempDir())
-			if c.store != nil {
-				saveStore(t, c.store)
+			if testCase.store != nil {
+				saveStore(t, testCase.store)
 			}
 			repoRoot := t.TempDir()
-			if c.manifest != "" {
+			if testCase.manifest != "" {
 				dir := filepath.Join(repoRoot, ".a-novel")
 				if err := os.MkdirAll(dir, 0o755); err != nil {
 					panic(err)
 				}
-				if err := os.WriteFile(filepath.Join(dir, "secrets.yaml"), []byte(c.manifest), 0o600); err != nil {
+				if err := os.WriteFile(filepath.Join(dir, "secrets.yaml"), []byte(testCase.manifest), 0o600); err != nil {
 					panic(err)
 				}
 			}
 
 			res, err := secrets.InjectForRepo(repoRoot)
-			if (err != nil) != c.wantErr {
-				t.Fatalf("inject: got err %v, want error %v", err, c.wantErr)
+			if (err != nil) != testCase.wantErr {
+				t.Fatalf("inject: got err %v, want error %v", err, testCase.wantErr)
 			}
-			if !maps.Equal(res.Env, c.wantEnv) || !slices.Equal(res.Missing, c.wantMissing) {
+			if !maps.Equal(res.Env, testCase.wantEnv) || !slices.Equal(res.Missing, testCase.wantMissing) {
 				t.Errorf("resolution = env %v, missing %+v; want env %v, missing %+v",
-					res.Env, res.Missing, c.wantEnv, c.wantMissing)
+					res.Env, res.Missing, testCase.wantEnv, testCase.wantMissing)
 			}
 		})
 	}
@@ -105,11 +105,13 @@ func TestResolutionWarnings(t *testing.T) {
 	if len(w) != 2 {
 		t.Fatalf("expected 2 warnings, got %d: %v", len(w), w)
 	}
-	for i, wants := range [][]string{
+	wantWarnings := [][]string{
 		{"OPENAI_API_KEY", "openai-key", "used by generation", "a-novel secrets set openai-key"},
 		// A declaration without a description still names the env, id, and the fix.
 		{"BARE_VAR", "bare-id", "a-novel secrets set bare-id"},
-	} {
+	}
+
+	for i, wants := range wantWarnings {
 		for _, want := range wants {
 			if !strings.Contains(w[i], want) {
 				t.Errorf("warning %d %q lacks %q", i, w[i], want)

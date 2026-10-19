@@ -218,7 +218,7 @@ func (r *Runner) InfraContainer(ctx context.Context, stack, service, infraName, 
 
 // updateContainerState folds one inspect result into the runner's view of
 // a container instance, translating podman's state and health words into
-// our Phase and Health enums. A terminated instance is never revived, and
+// the Phase and Health enums. A terminated instance is never revived, and
 // a stopping instance isn't bumped back to running; the exited state is
 // handled by watchContainer, not here.
 func (r *Runner) updateContainerState(id, state, health string) {

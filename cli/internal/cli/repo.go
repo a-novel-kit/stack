@@ -1,7 +1,3 @@
-// `a-novel repo` — create and configure GitHub repositories from the editable
-// templates in internal/repocfg. Writes are interactive and human-only;
-// `--dry-run` prints the API operations that would run and is safe anywhere.
-
 package cli
 
 import (
@@ -29,11 +25,19 @@ const repoJobs = 6
 // returns true, so a bare Enter is a safe "no".
 func confirm(cmd *cobra.Command, prompt string) bool {
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s [y/N] ", prompt)
-	line, _ := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
-	answer := strings.ToLower(strings.TrimSpace(line))
+	answer := readAnswer(cmd.InOrStdin())
 	return answer == "y" || answer == "yes"
 }
 
+// readAnswer reads one line of in, trimmed and lowercased.
+func readAnswer(in io.Reader) string {
+	line, _ := bufio.NewReader(in).ReadString('\n')
+	return strings.ToLower(strings.TrimSpace(line))
+}
+
+// newRepoCmd creates and configures GitHub repositories from the templates in
+// internal/repocfg. Writes are interactive and human-only, while --dry-run
+// prints the API operations and is safe anywhere.
 func newRepoCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "repo",
@@ -93,31 +97,7 @@ rulesets and Pages. Interactive (human-only); repositories are public unless --p
 				return fmt.Errorf("repo create: %w\n%s", err, ghOut)
 			}
 			_, _ = fmt.Fprintf(out, "✓ created %s\n", repo.FullName())
-
-			// A fresh repo has no live ruleset or history yet, so its checks are
-			// discovered from a throwaway clone.
-			tmp, err := os.MkdirTemp("", "repo-create-")
-			if err != nil {
-				return err
-			}
-			defer func() { _ = os.RemoveAll(tmp) }()
-			cloneDir := filepath.Join(tmp, repo.Name)
-			if _, err := gh("repo", "clone", repo.FullName(), cloneDir); err != nil {
-				return fmt.Errorf("clone created repo for check discovery: %w", err)
-			}
-			target, plan, err := planRepo(repo, cloneDir, class)
-			if err != nil {
-				return err
-			}
-
-			_, _ = fmt.Fprintln(out)
-			renderSummary(out, target)
-			_, _ = fmt.Fprintf(out, "\n▸ Applying %s config...\n", preset.Class)
-			if err := applyPlan(out, target, plan); err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintf(out, "\n✓ %s created and configured.\n", repo.FullName())
-			return nil
+			return configureNewRepo(out, repo, class)
 		},
 	}
 	cmd.Flags().StringVar(&class, "class", "", classFlagUsage())
@@ -125,6 +105,34 @@ rulesets and Pages. Interactive (human-only); repositories are public unless --p
 	cmd.Flags().StringVar(&template, "template", "", "create from this org template repo (e.g. service-template)")
 	cmd.Flags().BoolVar(&private, "private", false, "create a private repository (default public)")
 	return cmd
+}
+
+// configureNewRepo applies a freshly created repo's class config. The repo has
+// no live ruleset or history yet, so its checks are discovered from a
+// throwaway clone.
+func configureNewRepo(out io.Writer, repo repoEntry, class string) error {
+	tmp, err := os.MkdirTemp("", "repo-create-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(tmp) }()
+	cloneDir := filepath.Join(tmp, repo.Name)
+	if _, err := gh("repo", "clone", repo.FullName(), cloneDir); err != nil {
+		return fmt.Errorf("clone created repo for check discovery: %w", err)
+	}
+	target, plan, err := planRepo(repo, cloneDir, class)
+	if err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintln(out)
+	renderSummary(out, target)
+	_, _ = fmt.Fprintf(out, "\n▸ Applying %s config...\n", target.Class.Class)
+	if err := applyPlan(out, target, plan); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(out, "\n✓ %s created and configured.\n", repo.FullName())
+	return nil
 }
 
 // classFlagUsage derives the accepted values from repocfg.AllClasses.
@@ -290,22 +298,38 @@ func checkContexts(t *repocfg.RepoTarget) []string {
 	return out
 }
 
-// rulesetNames lists the rulesets the class applies.
-func rulesetNames(c *repocfg.ClassPreset) []string {
-	var out []string
-	for _, rs := range []struct {
-		name string
-		on   bool
-	}{
-		{"master", c.Rulesets.Master},
-		{"require-approval", c.Rulesets.RequireApproval},
-		{"tags", c.Rulesets.Tags},
-	} {
-		if rs.on {
-			out = append(out, rs.name)
+// toggle is a named on/off setting of a class preset.
+type toggle struct {
+	name string
+	on   bool
+}
+
+// enabledNames lists the names of the toggles that are on, in order.
+func enabledNames(toggles ...toggle) []string {
+	var names []string
+	for _, t := range toggles {
+		if t.on {
+			names = append(names, t.name)
 		}
 	}
-	return out
+	return names
+}
+
+// rulesetNames lists the rulesets the class applies.
+func rulesetNames(c *repocfg.ClassPreset) []string {
+	return enabledNames(
+		toggle{"master", c.Rulesets.Master},
+		toggle{"require-approval", c.Rulesets.RequireApproval},
+		toggle{"tags", c.Rulesets.Tags},
+	)
+}
+
+// onOff renders a setting's label green when on and muted with a ✗ when off.
+func onOff(label string, on bool) string {
+	if on {
+		return ui.OK.Render(label)
+	}
+	return ui.Muted.Render(label + "✗")
 }
 
 // renderSummary prints a grouped overview of the desired config, the readable
@@ -315,25 +339,11 @@ func renderSummary(w io.Writer, t *repocfg.RepoTarget) {
 	line := func(label string, values ...string) {
 		_, _ = fmt.Fprintf(w, "  %s  %s\n", ui.Gold.Render(fmt.Sprintf("%-10s", label)), strings.Join(values, " "))
 	}
-	onOff := func(label string, on bool) string {
-		if on {
-			return ui.OK.Render(label)
-		}
-		return ui.Muted.Render(label + "✗")
-	}
 
 	_, _ = fmt.Fprintf(w, "%s — class %s\n", ui.Brand.Render(t.Org+"/"+t.Repo), c.Class)
 	line("Features", onOff("issues", c.Features.Issues), onOff("projects", c.Features.Projects),
 		onOff("discussions", c.Features.Discussions), onOff("wiki", c.Features.Wiki))
-	var merge []string
-	for _, m := range []struct {
-		name string
-		on   bool
-	}{{"squash", c.Merge.Squash}, {"merge", c.Merge.MergeCommit}, {"rebase", c.Merge.Rebase}} {
-		if m.on {
-			merge = append(merge, m.name)
-		}
-	}
+	merge := enabledNames(toggle{"squash", c.Merge.Squash}, toggle{"merge", c.Merge.MergeCommit}, toggle{"rebase", c.Merge.Rebase})
 	mergeLine := strings.Join(merge, "+")
 	if c.Merge.AutoMerge {
 		mergeLine += ", auto-merge"

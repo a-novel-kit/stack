@@ -20,7 +20,7 @@ import (
 // Not parallel: uses t.Setenv("XDG_DATA_HOME", ...) for store isolation.
 func TestPrepareEnv(t *testing.T) {
 	const manifest = "secrets:\n  - env: OPENAI_API_KEY\n    id: openai-key\n    description: used by generation\n"
-	cases := []struct {
+	testCases := []struct {
 		name     string
 		secret   string // stored as openai-key; empty: never set
 		manifest string // empty: no .a-novel/secrets.yaml
@@ -34,26 +34,26 @@ func TestPrepareEnv(t *testing.T) {
 			outHas: []string{"OPENAI_API_KEY", "openai-key", "used by generation", "a-novel secrets set openai-key"},
 		},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Setenv("XDG_DATA_HOME", t.TempDir())
-			if c.secret != "" {
+			if testCase.secret != "" {
 				st, err := secrets.Open()
 				if err != nil {
 					t.Fatalf("open store: %v", err)
 				}
-				st.Set("openai-key", c.secret)
+				st.Set("openai-key", testCase.secret)
 				if err := st.Save(); err != nil {
 					t.Fatalf("save store: %v", err)
 				}
 			}
 			// With no compose Env, repoRoot(t) == t.Dir, which is this directory.
 			repoRoot := t.TempDir()
-			if c.manifest != "" {
+			if testCase.manifest != "" {
 				if err := os.MkdirAll(filepath.Join(repoRoot, ".a-novel"), 0o755); err != nil {
 					t.Fatalf("mkdir mapping: %v", err)
 				}
-				if err := os.WriteFile(filepath.Join(repoRoot, ".a-novel", "secrets.yaml"), []byte(c.manifest), 0o600); err != nil {
+				if err := os.WriteFile(filepath.Join(repoRoot, ".a-novel", "secrets.yaml"), []byte(testCase.manifest), 0o600); err != nil {
 					t.Fatalf("write mapping: %v", err)
 				}
 			}
@@ -69,18 +69,49 @@ func TestPrepareEnv(t *testing.T) {
 					got = e
 				}
 			}
-			if got != c.wantEnv {
-				t.Errorf("runEnv OPENAI_API_KEY entry = %q, want %q", got, c.wantEnv)
+			if got != testCase.wantEnv {
+				t.Errorf("runEnv OPENAI_API_KEY entry = %q, want %q", got, testCase.wantEnv)
 			}
-			if c.secret != "" && strings.Contains(out.String(), c.secret) {
+			if testCase.secret != "" && strings.Contains(out.String(), testCase.secret) {
 				t.Errorf("PrepareEnv progress output leaked the secret value:\n%s", out.String())
 			}
-			for _, want := range c.outHas {
+			for _, want := range testCase.outHas {
 				if !strings.Contains(out.String(), want) {
 					t.Errorf("expected a descriptive missing-secret warning naming %q, got:\n%s", want, out.String())
 				}
 			}
 		})
+	}
+}
+
+// TestComposeEnv pins that the derived connection vars follow the ports the
+// run allocates, even when the inherited environment already sets the same
+// port variable, and that referenced credentials get their local defaults.
+func TestComposeEnv(t *testing.T) {
+	t.Parallel()
+
+	env := &detect.ComposeEnv{Ports: []string{"POSTGRES_PORT", "REST_PORT"}, Refs: []string{"POSTGRES_USER"}}
+	added, err := composeEnv(env, []string{"POSTGRES_PORT=5432", "REST_PORT=8080"})
+	if err != nil {
+		t.Fatalf("composeEnv: %v", err)
+	}
+	vars := map[string]string{}
+	for _, kv := range added {
+		key, value, _ := strings.Cut(kv, "=")
+		vars[key] = value
+	}
+	if vars["POSTGRES_PORT"] == "5432" || vars["REST_PORT"] == "8080" {
+		t.Fatalf("composeEnv kept an inherited port: %v", added)
+	}
+	wantDSN := "postgres://postgres:postgres@localhost:" + vars["POSTGRES_PORT"] + "/postgres?sslmode=disable"
+	if vars["POSTGRES_DSN"] != wantDSN {
+		t.Errorf("POSTGRES_DSN = %q, want %q", vars["POSTGRES_DSN"], wantDSN)
+	}
+	if want := "http://localhost:" + vars["REST_PORT"]; vars["REST_URL"] != want {
+		t.Errorf("REST_URL = %q, want %q", vars["REST_URL"], want)
+	}
+	if vars["POSTGRES_USER"] != "postgres" {
+		t.Errorf("POSTGRES_USER = %q, want the local default", vars["POSTGRES_USER"])
 	}
 }
 
@@ -95,16 +126,16 @@ func TestJob_GOMAXPROCSCap(t *testing.T) {
 		t.Cleanup(func() { _ = os.Setenv("GOMAXPROCS", orig) })
 	}
 
-	tests := []struct {
+	testCases := []struct {
 		name     string
 		maxProcs int
 		want     string // expected value of $GOMAXPROCS in the child ("" = unset)
 	}{
-		{name: "caps when positive", maxProcs: 3, want: "3"},
-		{name: "untouched when zero", maxProcs: 0, want: ""},
+		{name: "Success/CapsWhenPositive", maxProcs: 3, want: "3"},
+		{name: "Success/UntouchedWhenZero", maxProcs: 0, want: ""},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			tgt := detect.Target{
 				Kind: detect.KindGo,
 				Name: "echo-gomaxprocs",
@@ -113,10 +144,10 @@ func TestJob_GOMAXPROCSCap(t *testing.T) {
 				Args: []string{"-c", `printf 'GMP=[%s]' "$GOMAXPROCS"`},
 			}
 			var out strings.Builder
-			if _, err := Job(tgt, 0, tt.maxProcs, false).Run(t.Context(), &out); err != nil {
+			if _, err := Job(tgt, 0, testCase.maxProcs, false).Run(t.Context(), &out); err != nil {
 				t.Fatalf("target failed: %v\n%s", err, out.String())
 			}
-			if want := "GMP=[" + tt.want + "]"; !strings.Contains(out.String(), want) {
+			if want := "GMP=[" + testCase.want + "]"; !strings.Contains(out.String(), want) {
 				t.Errorf("output %q does not contain %q", out.String(), want)
 			}
 		})

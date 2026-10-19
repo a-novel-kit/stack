@@ -12,7 +12,7 @@ import (
 func TestOngoingWork(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		name  string
 		setup func(t *testing.T, local string)
 		want  string
@@ -33,13 +33,15 @@ func TestOngoingWork(t *testing.T) {
 			setup: func(t *testing.T, local string) { writeFixture(t, local, "a.txt", "work in progress\n") },
 			want:  "uncommitted changes",
 		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			local, _ := initSyncRepo(t)
-			tc.setup(t, local)
-			if got := ongoingWork(local); got != tc.want {
-				t.Errorf("ongoingWork = %q, want %q", got, tc.want)
+			testCase.setup(t, local)
+			if got := ongoingWork(local); got != testCase.want {
+				t.Errorf("ongoingWork = %q, want %q", got, testCase.want)
 			}
 		})
 	}
@@ -80,21 +82,23 @@ func TestGitToplevel(t *testing.T) {
 	}
 	mustGit(t, nested, "init", "--quiet", "--initial-branch=master")
 
-	for _, tc := range []struct{ name, dir, want string }{
+	testCases := []struct{ name, dir, want string }{
 		{"Success/Subdirectory", sub, root},
 		// An independent repo nested inside (a pulled checkout under app/) is
 		// its own toplevel: this scopes `publish` to the service you cd into.
 		{"Success/NestedRepo", nested, nested},
 		{"Error/OutsideARepo", t.TempDir(), ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := gitToplevel(tc.dir)
+			got, err := gitToplevel(testCase.dir)
 			// Resolve symlinks on both sides — macOS TempDirs live under /private.
 			gotResolved, _ := filepath.EvalSymlinks(got)
-			wantResolved, _ := filepath.EvalSymlinks(tc.want)
-			if (err != nil) != (tc.want == "") || gotResolved != wantResolved {
-				t.Errorf("gitToplevel = (%q, %v), want %q", got, err, tc.want)
+			wantResolved, _ := filepath.EvalSymlinks(testCase.want)
+			if (err != nil) != (testCase.want == "") || gotResolved != wantResolved {
+				t.Errorf("gitToplevel = (%q, %v), want %q", got, err, testCase.want)
 			}
 		})
 	}

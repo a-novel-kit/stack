@@ -8,7 +8,7 @@ import (
 func TestParse(t *testing.T) {
 	t.Setenv("HOME", "/home/me")
 
-	cases := []struct {
+	testCases := []struct {
 		raw     string
 		want    []Stack
 		wantErr bool
@@ -24,21 +24,21 @@ func TestParse(t *testing.T) {
 		{"main:", nil, true},
 		{"a:/x,a:/y", nil, true},
 	}
-	for _, c := range cases {
-		got, err := Parse(c.raw)
-		if (err != nil) != c.wantErr {
-			t.Errorf("Parse(%q): got err %v, want error %v", c.raw, err, c.wantErr)
+	for _, testCase := range testCases {
+		got, err := Parse(testCase.raw)
+		if (err != nil) != testCase.wantErr {
+			t.Errorf("Parse(%q): got err %v, want error %v", testCase.raw, err, testCase.wantErr)
 			continue
 		}
-		if !slices.Equal(got, c.want) {
-			t.Errorf("Parse(%q): got %+v, want %+v", c.raw, got, c.want)
+		if !slices.Equal(got, testCase.want) {
+			t.Errorf("Parse(%q): got %+v, want %+v", testCase.raw, got, testCase.want)
 		}
 	}
 }
 
 // Not parallel: every case calls t.Setenv, which forbids it.
 func TestDefault(t *testing.T) {
-	cases := []struct {
+	testCases := []struct {
 		name    string
 		stacks  string
 		want    string
@@ -48,16 +48,16 @@ func TestDefault(t *testing.T) {
 		{name: "UnsetFallsBackToImplicitDefault", stacks: "", want: "/home/tester/git-projects/a-novel"},
 		{name: "MalformedEntry", stacks: "no-path-here", wantErr: true},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			t.Setenv(EnvVar, c.stacks)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Setenv(EnvVar, testCase.stacks)
 			t.Setenv("HOME", "/home/tester")
 			got, err := Default()
-			if (err != nil) != c.wantErr {
-				t.Fatalf("Default() error = %v, wantErr %v", err, c.wantErr)
+			if (err != nil) != testCase.wantErr {
+				t.Fatalf("Default() error = %v, wantErr %v", err, testCase.wantErr)
 			}
-			if got.Path != c.want {
-				t.Errorf("Default().Path = %q, want %q", got.Path, c.want)
+			if got.Path != testCase.want {
+				t.Errorf("Default().Path = %q, want %q", got.Path, testCase.want)
 			}
 		})
 	}

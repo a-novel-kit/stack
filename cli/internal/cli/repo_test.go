@@ -41,14 +41,16 @@ func TestRepoCreateInfraDefaultsPublicAndBootstrapsBeforeRulesets(t *testing.T) 
 
 	calls := *recorded
 	joined := strings.Join(calls, "\n")
-	for _, want := range []string{
+	wantCalls := []string{
 		"repo create a-novel/infra --public",
 		"api -X PUT repos/a-novel/infra/vulnerability-alerts",
 		"api -X PUT repos/a-novel/infra/immutable-releases",
 		"api -X DELETE repos/a-novel/infra/pages",
 		`"context":"epic-freeze"`,
 		`"context":"merge-gate"`,
-	} {
+	}
+
+	for _, want := range wantCalls {
 		if !strings.Contains(joined, want) {
 			t.Errorf("GitHub calls missing %q:\n%s", want, joined)
 		}
@@ -111,20 +113,21 @@ func TestRenderSummary(t *testing.T) {
 	renderSummary(&buf, target)
 	got := buf.String()
 
-	for _, want := range []string{
+	wantSummary := []string{
 		"a-novel/service-auth", "class service",
 		"Features", "squash", "auto-merge", "signoff",
 		"lint-go, test (2)", // discovered checks
-	} {
+	}
+
+	for _, want := range wantSummary {
 		if !strings.Contains(got, want) {
 			t.Errorf("summary missing %q\n--- got ---\n%s", want, got)
 		}
 	}
 }
 
-// TestRenderSummaryOmitsRetiredRulesets guards the summary against announcing a
-// ruleset repocfg no longer applies. An operator reads the summary before
-// confirming a reconcile, so it names only the protection the plan keeps.
+// TestRenderSummaryOmitsRetiredRulesets pins that the summary names only the
+// rulesets the plan keeps. An operator reads it before confirming a reconcile.
 func TestRenderSummaryOmitsRetiredRulesets(t *testing.T) {
 	t.Parallel()
 	target := &repocfg.RepoTarget{

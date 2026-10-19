@@ -1,4 +1,3 @@
-// Package cli wires every subcommand the a-novel binary exposes.
 package cli
 
 import (
@@ -74,8 +73,7 @@ Commands fall into three groups:
 Run 'a-novel help <command>' or 'a-novel <command> --help' for any command's
 flags and examples.
 
-See https://github.com/a-novel-kit/stack/blob/master/cli/README.md for the
-everyday workflows.`,
+See https://a-novel-kit.github.io/stack/ for the everyday workflows.`,
 		// main prints errors itself, so a status-only ExitError stays silent.
 		SilenceErrors: true,
 		SilenceUsage:  true,
@@ -110,7 +108,9 @@ everyday workflows.`,
 	return root
 }
 
-// newRunCmd is the parent of every daemon-backed verb.
+// newRunCmd is the parent of every daemon-backed verb. Each verb is a thin
+// client of the daemon's RPC holding no supervision state: the daemon owns the
+// running targets, their phases and their logs.
 func newRunCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   commandRun,

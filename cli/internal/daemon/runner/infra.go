@@ -50,9 +50,9 @@ func (r *Runner) InfraSession(stack, service string) (infraSession, bool) {
 	return *s, true
 }
 
-// InfraSessionRef identifies one tracked infra session (its stack + service
-// pair). Used by callers that need to iterate every active session — e.g.,
-// Shutdown(force=true) which tears down every service's infra in one go.
+// InfraSessionRef identifies one tracked infra session by its stack and
+// service, for a caller that walks every active session, such as a forced
+// Shutdown tearing down every service's infra.
 type InfraSessionRef struct {
 	Stack   string
 	Service string
@@ -96,17 +96,12 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 	sess := newInfraSession(stack, service)
 	r.infraSessions[key] = sess
 	r.sessMu.Unlock()
-	dropSession := func() {
-		r.sessMu.Lock()
-		delete(r.infraSessions, key)
-		r.sessMu.Unlock()
-	}
 
 	// Allocate the port slots infra services reference, so compose's
 	// substitution at infra-up time produces real port numbers.
 	envEntries, err := r.builder.ForService(svc, infraConsumer(stack, service))
 	if err != nil {
-		dropSession()
+		r.dropInfraSession(stack, service)
 		return fmt.Errorf("infra env for %s/%s: %w", stack, service, err)
 	}
 
@@ -119,11 +114,11 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 		dockerFormatBuildArgs,
 		"up", "-d", "--build",
 	); err != nil {
-		dropSession()
+		r.dropInfraSession(stack, service)
 		return fmt.Errorf("infra up for %s/%s: %w", stack, service, err)
 	}
 
-	// 2. Wait for healthchecks (where declared). Bounded — 60s default.
+	// 2. Wait up to 60s for the declared healthchecks.
 	if err := r.waitInfraHealthy(ctx, svc, 60*time.Second); err != nil {
 		// A health-wait failure leaves the containers up for debugging, and
 		// the session stays un-Up so later target starts surface the issue.
@@ -186,9 +181,7 @@ func (r *Runner) KillInfra(ctx context.Context, stack, service string, force boo
 		"down", "--remove-orphans", "-t", "10")
 	// Reset session regardless of compose's exit; the user can re-run
 	// to recover from a half-stuck state.
-	r.sessMu.Lock()
-	delete(r.infraSessions, sessionKey(stack, service))
-	r.sessMu.Unlock()
+	r.dropInfraSession(stack, service)
 	if r.alloc != nil {
 		r.alloc.Release(infraConsumer(stack, service))
 	}
@@ -196,6 +189,13 @@ func (r *Runner) KillInfra(ctx context.Context, stack, service string, force boo
 		return fmt.Errorf("compose down for %s/%s: %w", stack, service, err)
 	}
 	return nil
+}
+
+// dropInfraSession forgets the infra session of (stack, service).
+func (r *Runner) dropInfraSession(stack, service string) {
+	r.sessMu.Lock()
+	delete(r.infraSessions, sessionKey(stack, service))
+	r.sessMu.Unlock()
 }
 
 // runOneShot spawns a one-shot target and blocks until it terminates.
@@ -312,19 +312,7 @@ func (r *Runner) waitInfraHealthy(ctx context.Context, svc *discovery.Service, t
 			return err
 		}
 
-		states := make([]infraContainerState, 0, len(ids))
-
-		for _, cid := range ids {
-			phase, health, exitCode, inspectErr := podmanInspect(ctx, cid)
-			states = append(states, infraContainerState{
-				phase:      phase,
-				health:     health,
-				exitCode:   exitCode,
-				inspectErr: inspectErr != nil,
-			})
-		}
-
-		if infraHealthy(len(svc.Infra), states) {
+		if infraHealthy(len(svc.Infra), inspectInfra(ctx, ids)) {
 			return nil
 		}
 
@@ -336,6 +324,16 @@ func (r *Runner) waitInfraHealthy(ctx context.Context, svc *discovery.Service, t
 	}
 
 	return fmt.Errorf("infra not healthy within %s", timeout)
+}
+
+// inspectInfra inspects each container of ids.
+func inspectInfra(ctx context.Context, ids []string) []infraContainerState {
+	states := make([]infraContainerState, 0, len(ids))
+	for _, cid := range ids {
+		phase, health, exitCode, err := podmanInspect(ctx, cid)
+		states = append(states, infraContainerState{phase: phase, health: health, exitCode: exitCode, inspectErr: err != nil})
+	}
+	return states
 }
 
 // topoSortOneShots returns the service's one-shot targets with dependencies

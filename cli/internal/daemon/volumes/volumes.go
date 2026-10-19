@@ -1,14 +1,3 @@
-// Package volumes owns the daemon-side volume operations: list, backup,
-// restore, clear — all service-scoped.
-//
-// Backup format: `podman volume export` produces a tar stream; we pipe
-// it through zstd into $XDG_DATA_HOME/a-novel/backups/<stack>/<service>/<volume>/<ts>.tar.zst.
-// Restore reverses: zstd-decompress + `podman volume import`. Clear is
-// auto-backup (unless --no-backup) + `podman volume rm -f`.
-//
-// A destructive operation runs only against a service whose infra and targets
-// are down, since working on a live volume produces inconsistent state. The
-// daemon's handlers enforce that, and --force cascade-kills the service first.
 package volumes
 
 import (
@@ -229,15 +218,17 @@ func compressTo(dst io.Writer, src io.Reader) error {
 
 // sanitizeTag replaces shell-unfriendly chars with dashes so the filename is
 // safe.
-func sanitizeTag(tag string) string {
-	return strings.Map(func(c rune) rune {
-		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
-			return c
-		default:
-			return '-'
-		}
-	}, tag)
+func sanitizeTag(tag string) string { return strings.Map(tagRune, tag) }
+
+// tagRune keeps an ASCII letter, digit, dash or underscore, and turns any
+// other rune into a dash.
+func tagRune(c rune) rune {
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
+		return c
+	default:
+		return '-'
+	}
 }
 
 // =============================================================================
@@ -287,35 +278,37 @@ func resolveBackup(dir, from string) (string, error) {
 		return "", fmt.Errorf("read backups dir %s: %w", dir, err)
 	}
 	if from != "" {
-		// A prefix match covers both `<ts>.tar.zst` and `<ts>.<tag>.tar.zst`. A bare
-		// timestamp matches every tagged variant of it, so returning the first — which
-		// os.ReadDir sorts by name, putting .auto-pre-clear ahead of the plain
-		// archive — restores something other than what the operator named. An
-		// ambiguous prefix is an error they resolve with a fuller name; a full
-		// filename prefix-matches only itself.
-		var matches []string
-
-		for _, e := range entries {
-			if strings.HasPrefix(e.Name(), from) && isArchive(e.Name()) {
-				matches = append(matches, e.Name())
-			}
-		}
-
-		switch len(matches) {
-		case 0:
-			return "", fmt.Errorf("no backup matching timestamp %q", from)
-		case 1:
-			return filepath.Join(dir, matches[0]), nil
-		default:
-			return "", fmt.Errorf("timestamp %q matches %d backups (%s); pass a longer prefix to pick one",
-				from, len(matches), strings.Join(matches, ", "))
-		}
+		return backupMatching(dir, entries, from)
 	}
 	archives := retention.Files(dir, isArchive)
 	if len(archives) == 0 {
 		return "", errors.New("no backups available")
 	}
 	return archives[len(archives)-1], nil
+}
+
+// backupMatching returns the one archive among entries of dir whose name
+// starts with from.
+// A prefix covers both `<ts>.tar.zst` and `<ts>.<tag>.tar.zst`, so a bare
+// timestamp matches every tagged variant of it. An ambiguous prefix is an error
+// the operator resolves with a fuller name, and a full filename matches only
+// itself.
+func backupMatching(dir string, entries []os.DirEntry, from string) (string, error) {
+	var matches []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), from) && isArchive(e.Name()) {
+			matches = append(matches, e.Name())
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return "", fmt.Errorf("no backup matching timestamp %q", from)
+	case 1:
+		return filepath.Join(dir, matches[0]), nil
+	default:
+		return "", fmt.Errorf("timestamp %q matches %d backups (%s); pass a longer prefix to pick one",
+			from, len(matches), strings.Join(matches, ", "))
+	}
 }
 
 // validateArchive reads the archive through to confirm it decompresses cleanly.

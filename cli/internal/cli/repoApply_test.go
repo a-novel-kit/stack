@@ -41,12 +41,13 @@ func contentsJSON(t *testing.T, text string) string {
 
 func TestApplyPlan(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam.
-	calls := fakeGH(t, map[string]string{
-		// no existing master ruleset → POST; codecov ruleset exists → PUT.
+	// No master ruleset exists yet, so it is created; the codecov one is updated.
+	responses := map[string]string{
 		"rulesets --jq":        "codecov\t777\n",
 		"git/ref/heads/master": "headoid123\n",
 		"repos/o/r --jq .id":   "4321\n",
-	})
+	}
+	calls := fakeGH(t, responses)
 
 	plan := &repocfg.Plan{Ops: []repocfg.Op{
 		{Method: "PATCH", Path: "repos/o/r", Body: map[string]any{"has_wiki": false}},
@@ -64,7 +65,7 @@ func TestApplyPlan(t *testing.T) {
 	}
 
 	joined := strings.Join(*calls, "\n")
-	for _, w := range []string{
+	wantCalls := []string{
 		"api -X PATCH repos/o/r --input -",                              // settings
 		"api -X PATCH repos/o/r/code-scanning/default-setup --input -",  // code scanning stays off
 		"api -X PUT repos/o/r/actions/permissions/workflow --input -",   // a settings op keeps its method
@@ -75,9 +76,11 @@ func TestApplyPlan(t *testing.T) {
 		`"path":".github/workflows/managed.yaml"`,                       // sync commit: carries the staged file
 		"api -X POST repos/o/r/rulesets --input -",                      // master ruleset created (no existing id)
 		"api -X PUT repos/o/r/rulesets/777 --input -",                   // codecov ruleset updated (existing id 777)
-	} {
-		if !strings.Contains(joined, w) {
-			t.Errorf("expected a gh call containing %q; calls:\n%s", w, joined)
+	}
+
+	for _, want := range wantCalls {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected a gh call containing %q; calls:\n%s", want, joined)
 		}
 	}
 	if n := countCalls(*calls, "repos/o/r --jq .id"); n != 1 {
@@ -102,7 +105,7 @@ func TestStageContents(t *testing.T) {
 	}
 	deployedGate := map[string]string{gatePath: contentsJSON(t, pin("v1.15.0"))}
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		name          string
 		responses     map[string]string
 		op            repocfg.Op
@@ -159,12 +162,14 @@ func TestStageContents(t *testing.T) {
 				path: ".github/workflows/merge-gate.yaml", content: "# refreshed comment\n" + pin("v1.15.0"), outcome: opUpdated,
 			}},
 		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			fakeGH(t, tc.responses)
-			changes, unchanged, err := stageContents(tc.op)
-			if err != nil || unchanged != tc.wantUnchanged || !slices.Equal(changes, tc.wantChanges) {
-				t.Fatalf("stageContents = (%+v, %v, %v), want (%+v, %v, nil)", changes, unchanged, err, tc.wantChanges, tc.wantUnchanged)
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			fakeGH(t, testCase.responses)
+			changes, unchanged, err := stageContents(testCase.op)
+			if err != nil || unchanged != testCase.wantUnchanged || !slices.Equal(changes, testCase.wantChanges) {
+				t.Fatalf("stageContents = (%+v, %v, %v), want (%+v, %v, nil)", changes, unchanged, err, testCase.wantChanges, testCase.wantUnchanged)
 			}
 		})
 	}
@@ -185,14 +190,16 @@ func TestCommitSync(t *testing.T) {
 			t.Fatalf("commitSync = (%q, %v), want the short commit id", detail, err)
 		}
 		joined := strings.Join(*calls, "\n")
-		for _, w := range []string{
+		wantPayload := []string{
 			`"expectedHeadOid":"headoid123"`,
 			`"additions":[{"contents":"` + base64.StdEncoding.EncodeToString([]byte("name: Managed\n")),
 			`"deletions":[{"path":"CODEOWNERS"}]`,
 			`"headline":"ci: sync managed config (managed, CODEOWNERS)"`,
-		} {
-			if !strings.Contains(joined, w) {
-				t.Errorf("expected the mutation payload to contain %q; calls:\n%s", w, joined)
+		}
+
+		for _, want := range wantPayload {
+			if !strings.Contains(joined, want) {
+				t.Errorf("expected the mutation payload to contain %q; calls:\n%s", want, joined)
 			}
 		}
 	})
@@ -216,13 +223,15 @@ func TestCommitSync(t *testing.T) {
 			t.Fatalf("commitSync = (%q, %v), want the short seed-commit id", detail, err)
 		}
 		joined := strings.Join(*calls, "\n")
-		for _, w := range []string{
+		wantSeed := []string{
 			"api -X PUT repos/o/r/contents/.github/workflows/managed.yaml", // the seed file
 			`"branch":"master"`, // ...onto the default branch
 			`"content":"`,       // ...carrying its base64 content
-		} {
-			if !strings.Contains(joined, w) {
-				t.Errorf("expected a Contents-API seed call containing %q; calls:\n%s", w, joined)
+		}
+
+		for _, want := range wantSeed {
+			if !strings.Contains(joined, want) {
+				t.Errorf("expected a Contents-API seed call containing %q; calls:\n%s", want, joined)
 			}
 		}
 		if strings.Contains(joined, "api graphql") {
@@ -249,10 +258,11 @@ func TestCommitSync(t *testing.T) {
 			}
 			return "", nil
 		})
-		detail, err := commitSync("o", "r", branchMaster, []contentChange{
+		created := []contentChange{
 			{path: ".github/workflows/managed.yaml", content: "name: Managed\n", outcome: opCreated},
 			{path: ".github/CODEOWNERS", content: "* @team\n", outcome: opCreated},
-		})
+		}
+		detail, err := commitSync("o", "r", branchMaster, created)
 		if err != nil || detail != "restcom" {
 			t.Fatalf("commitSync = (%q, %v), want the follow-up sync commit's short id", detail, err)
 		}
@@ -296,7 +306,7 @@ func TestCommitSync(t *testing.T) {
 }
 
 func TestSyncCommitMessage(t *testing.T) {
-	t.Run("short change lists name the files", func(t *testing.T) {
+	t.Run("Success/ShortListsNameTheFiles", func(t *testing.T) {
 		headline, body := syncCommitMessage([]contentChange{
 			{path: ".github/workflows/managed.yaml", outcome: opUpdated},
 			{path: "CODEOWNERS", outcome: opDeleted},
@@ -304,14 +314,15 @@ func TestSyncCommitMessage(t *testing.T) {
 		if headline != "ci: sync managed config (managed, CODEOWNERS)" {
 			t.Errorf("headline = %q", headline)
 		}
-		for _, w := range []string{"updated .github/workflows/managed.yaml", "deleted CODEOWNERS", "Managed by a-novel repo sync."} {
-			if !strings.Contains(body, w) {
-				t.Errorf("body should contain %q; got:\n%s", w, body)
+		wantBody := []string{"updated .github/workflows/managed.yaml", "deleted CODEOWNERS", "Managed by a-novel repo sync."}
+		for _, want := range wantBody {
+			if !strings.Contains(body, want) {
+				t.Errorf("body should contain %q; got:\n%s", want, body)
 			}
 		}
 	})
 
-	t.Run("long change lists fall back to a count", func(t *testing.T) {
+	t.Run("Success/LongListsFallBackToACount", func(t *testing.T) {
 		headline, _ := syncCommitMessage([]contentChange{
 			{path: ".github/CODEOWNERS"},
 			{path: ".github/workflows/managed.yaml"},
@@ -409,7 +420,7 @@ func TestPreserveNewerPins(t *testing.T) {
 		autoMrg = "a-novel-kit/workflows/generic-actions/enable-auto-merge@"
 	)
 
-	for _, tc := range []struct{ name, desired, deployed, want string }{
+	testCases := []struct{ name, desired, deployed, want string }{
 		{"Success/DeployedNewerIsPreserved", gate + "v1.14.0", gate + "v1.15.0", gate + "v1.15.0"},
 		{"Success/DeployedOlderKeepsTemplate", gate + "v1.14.0", gate + "v1.13.0", gate + "v1.14.0"},
 		{"Success/Equal", gate + "v1.14.0", gate + "v1.14.0", gate + "v1.14.0"},
@@ -417,11 +428,13 @@ func TestPreserveNewerPins(t *testing.T) {
 		{"Success/DeployedHasNoPins", gate + "v1.14.0", "no workflows pins here", gate + "v1.14.0"},
 		// v1.10.0 > v1.2.0 by semver, though lexically the reverse.
 		{"Success/SemverNotLexical", gate + "v1.2.0", gate + "v1.10.0", gate + "v1.10.0"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			if got := preserveNewerPins(tc.desired, tc.deployed); got != tc.want {
-				t.Fatalf("preserveNewerPins() = %q, want %q", got, tc.want)
+			if got := preserveNewerPins(testCase.desired, testCase.deployed); got != testCase.want {
+				t.Fatalf("preserveNewerPins() = %q, want %q", got, testCase.want)
 			}
 		})
 	}
@@ -431,7 +444,7 @@ func TestContentText(t *testing.T) {
 	// Not parallel: sub-tests swap the package-level ghStdin seam.
 	const path = "repos/o/r/contents/x.yaml"
 	text := "hello: world\n"
-	for _, tc := range []struct {
+	testCases := []struct {
 		name              string
 		out               string
 		err               error
@@ -443,12 +456,14 @@ func TestContentText(t *testing.T) {
 		// Files over 1MB are not base64-encoded: sha only, a safe no-splice fallback.
 		{name: "Success/NonBase64", out: `{"sha":"deadbeef","content":"","encoding":"none"}`, wantSHA: "deadbeef"},
 		{name: "Error/Propagated", err: errGHBadCredentials, wantErr: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			calls := stubGH(t, func(string) (string, error) { return tc.out, tc.err })
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			calls := stubGH(t, func(string) (string, error) { return testCase.out, testCase.err })
 			got, sha, err := contentText(path)
-			if got != tc.wantText || sha != tc.wantSHA || (err != nil) != tc.wantErr || !strings.Contains((*calls)[0], path) {
-				t.Fatalf("contentText = (%q, %q, %v) via %q, want (%q, %q, error %v)", got, sha, err, *calls, tc.wantText, tc.wantSHA, tc.wantErr)
+			if got != testCase.wantText || sha != testCase.wantSHA || (err != nil) != testCase.wantErr || !strings.Contains((*calls)[0], path) {
+				t.Fatalf("contentText = (%q, %q, %v) via %q, want (%q, %q, error %v)", got, sha, err, *calls, testCase.wantText, testCase.wantSHA, testCase.wantErr)
 			}
 		})
 	}
@@ -457,7 +472,7 @@ func TestContentText(t *testing.T) {
 func TestContentSHA(t *testing.T) {
 	// Not parallel: sub-tests swap the package-level ghStdin seam.
 	const path = "repos/o/r/contents/x.yml"
-	for _, tc := range []struct {
+	testCases := []struct {
 		name, out, wantSHA string
 		err                error
 		wantErr            bool
@@ -466,12 +481,14 @@ func TestContentSHA(t *testing.T) {
 		// A 404 is the create case.
 		{name: "Success/NotFound", err: errGHNotFound},
 		{name: "Error/Propagated", err: errGHBadCredentials, wantErr: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			calls := stubGH(t, func(string) (string, error) { return tc.out, tc.err })
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			calls := stubGH(t, func(string) (string, error) { return testCase.out, testCase.err })
 			sha, err := contentSHA(path)
-			if sha != tc.wantSHA || (err != nil) != tc.wantErr || !strings.Contains((*calls)[0], path) {
-				t.Fatalf("contentSHA = (%q, %v) via %q, want (%q, error %v)", sha, err, *calls, tc.wantSHA, tc.wantErr)
+			if sha != testCase.wantSHA || (err != nil) != testCase.wantErr || !strings.Contains((*calls)[0], path) {
+				t.Fatalf("contentSHA = (%q, %v) via %q, want (%q, error %v)", sha, err, *calls, testCase.wantSHA, testCase.wantErr)
 			}
 		})
 	}
@@ -480,14 +497,15 @@ func TestContentSHA(t *testing.T) {
 func TestApplyLabels(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam.
 	t.Run("Success", func(t *testing.T) {
-		calls := fakeGH(t, map[string]string{
-			// meta matches; documentation's colour has drifted; triage lingers.
+		// meta matches, documentation's color has drifted, and triage lingers.
+		responses := map[string]string{
 			"labels?per_page=100": `[
 				{"name":"meta","color":"bfd4f2","description":"No-PR work (manual ops / config); also marks Meta Epics"},
 				{"name":"documentation","color":"000000","description":"Improvements or additions to documentation"},
 				{"name":"triage","color":"fbca04","description":"old"}
 			]`,
-		})
+		}
+		calls := fakeGH(t, responses)
 		op := repocfg.Op{Path: "repos/o/r/labels", Body: &repocfg.LabelsConfig{
 			Ensure: []repocfg.LabelDef{
 				{Name: "meta", Color: "bfd4f2", Description: "No-PR work (manual ops / config); also marks Meta Epics"},
@@ -503,14 +521,16 @@ func TestApplyLabels(t *testing.T) {
 		}
 
 		joined := strings.Join(*calls, "\n")
-		for _, w := range []string{
+		wantCalls := []string{
 			"repos/o/r/labels?per_page=100",                         // list existing
 			"api -X POST repos/o/r/labels --input -",                // create the missing one
 			"api -X PATCH repos/o/r/labels/documentation --input -", // recolour the drifted one
 			"api -X DELETE repos/o/r/labels/triage",                 // retire
-		} {
-			if !strings.Contains(joined, w) {
-				t.Errorf("expected a gh call containing %q; calls:\n%s", w, joined)
+		}
+
+		for _, want := range wantCalls {
+			if !strings.Contains(joined, want) {
+				t.Errorf("expected a gh call containing %q; calls:\n%s", want, joined)
 			}
 		}
 		// meta matched the canonical set exactly — it must not be re-written.
@@ -702,7 +722,7 @@ func TestApplyTeams(t *testing.T) {
 			t.Fatalf("applyTeams = (%q, %v), want %q", detail, err, want)
 		}
 		joined := strings.Join(*calls, "\n")
-		for _, want := range []string{
+		wantCalls := []string{
 			`-X POST orgs/o/teams --input - --jq .id {"name":"developers-service","parent_team_id":1,"privacy":"closed"}`,
 			`-X POST orgs/o/teams --input - --jq .id {"name":"maintainers","privacy":"closed"}`,
 			`-X POST orgs/o/teams --input - --jq .id {"name":"maintainers-service","parent_team_id":12,"privacy":"closed"}`,
@@ -713,15 +733,19 @@ func TestApplyTeams(t *testing.T) {
 			// GitHub made the operator a maintainer of each team it created.
 			"-X DELETE orgs/o/teams/developers-service/memberships/operator",
 			"-X DELETE orgs/o/teams/owners/memberships/operator",
-		} {
+		}
+
+		for _, want := range wantCalls {
 			if !strings.Contains(joined, want) {
 				t.Errorf("expected a gh call containing %q; calls:\n%s", want, joined)
 			}
 		}
-		for _, kept := range []string{
+		untouched := []string{
 			"teams/core/", "teams/releasers/", "DELETE orgs/o/teams/developers-service/repos", `"name":"developers",`,
 			"teams/developers/memberships",
-		} {
+		}
+
+		for _, kept := range untouched {
 			if strings.Contains(joined, kept) {
 				t.Errorf("must not touch %q; calls:\n%s", kept, joined)
 			}
@@ -776,7 +800,7 @@ func TestApplyTeams(t *testing.T) {
 func TestPruneRulesets(t *testing.T) {
 	// Not parallel: sub-tests swap the package-level ghStdin seam.
 	const copilot = "Code Quality Copilot review for default branch"
-	for _, tc := range []struct {
+	testCases := []struct {
 		name        string
 		keep        []string
 		listErr     error
@@ -809,16 +833,18 @@ func TestPruneRulesets(t *testing.T) {
 			listErr: errors.New("gh: API rate limit exceeded"),
 			wantErr: true,
 		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			calls := stubGH(t, func(call string) (string, error) {
 				if strings.Contains(call, "--jq") {
-					return "master\t1\nrequire-approval\t2\ntags\t3\ncodecov\t4\n" + copilot + "\t5\n", tc.listErr
+					return "master\t1\nrequire-approval\t2\ntags\t3\ncodecov\t4\n" + copilot + "\t5\n", testCase.listErr
 				}
 				return "", nil
 			})
 			detail, err := pruneRulesets("a-novel", "service-auth", liveOf("a-novel", "service-auth"),
-				repocfg.Op{PruneRulesets: true, KeepRulesets: tc.keep})
+				repocfg.Op{PruneRulesets: true, KeepRulesets: testCase.keep})
 			var deleted []string
 			for _, c := range *calls {
 				if strings.Contains(c, "-X DELETE") {
@@ -826,9 +852,9 @@ func TestPruneRulesets(t *testing.T) {
 				}
 			}
 			slices.Sort(deleted)
-			if (err != nil) != tc.wantErr || detail != tc.wantDetail || !slices.Equal(deleted, tc.wantDeleted) {
+			if (err != nil) != testCase.wantErr || detail != testCase.wantDetail || !slices.Equal(deleted, testCase.wantDeleted) {
 				t.Errorf("pruneRulesets = (%q, %v) deleting ids %v, want (%q, error %v) deleting %v",
-					detail, err, deleted, tc.wantDetail, tc.wantErr, tc.wantDeleted)
+					detail, err, deleted, testCase.wantDetail, testCase.wantErr, testCase.wantDeleted)
 			}
 		})
 	}
@@ -845,7 +871,7 @@ func TestPruneImpact(t *testing.T) {
 		{RulesetName: "master"},
 		{PruneRulesets: true, KeepRulesets: []string{"master", "require-approval", "tags"}},
 	}}
-	for _, tc := range []struct {
+	testCases := []struct {
 		name, listed string
 		listErr      error
 		want         string
@@ -853,11 +879,13 @@ func TestPruneImpact(t *testing.T) {
 		{name: "Success", listed: "master\t1\ntags\t2\ncodecov\t3\nCopilot review\t4\n", want: "# rulesets to DELETE: Copilot review, codecov"},
 		{name: "Success/NothingToDelete", listed: "master\t1\ntags\t2\n", want: "# rulesets to delete: none"},
 		{name: "Error/ReadFails", listErr: errors.New("gh: rate limited"), want: "# rulesets to delete: UNRESOLVED — gh: rate limited"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			stubGH(t, func(string) (string, error) { return tc.listed, tc.listErr })
-			if got := pruneImpact(target, plan); got != tc.want {
-				t.Errorf("pruneImpact = %q, want %q", got, tc.want)
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			stubGH(t, func(string) (string, error) { return testCase.listed, testCase.listErr })
+			if got := pruneImpact(target, plan); got != testCase.want {
+				t.Errorf("pruneImpact = %q, want %q", got, testCase.want)
 			}
 		})
 	}
@@ -869,24 +897,26 @@ func TestApplyCodeQuality(t *testing.T) {
 		Path:   "repos/o/r/code-quality/setup",
 		Body:   map[string]any{"state": "not-configured"},
 	}
-	for _, tc := range []struct {
+	testCases := []struct {
 		name, current, wantDetail string
 		wantPatch                 bool
 	}{
 		{name: "Success/AlreadyOff", current: "not-configured\n", wantDetail: opUnchanged},
 		{name: "Success/TurnsOff", current: "configured\n", wantDetail: "not-configured", wantPatch: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			calls := fakeGH(t, map[string]string{"api repos/o/r/code-quality/setup --jq": tc.current})
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			calls := fakeGH(t, map[string]string{"api repos/o/r/code-quality/setup --jq": testCase.current})
 			detail, err := applyCodeQuality(op)
 			if err != nil {
 				t.Fatalf("applyCodeQuality: %v", err)
 			}
-			if detail != tc.wantDetail {
-				t.Fatalf("detail = %q, want %q", detail, tc.wantDetail)
+			if detail != testCase.wantDetail {
+				t.Fatalf("detail = %q, want %q", detail, testCase.wantDetail)
 			}
-			if patched := countCalls(*calls, "-X PATCH repos/o/r/code-quality/setup") > 0; patched != tc.wantPatch {
-				t.Fatalf("PATCH sent = %v, want %v (calls %q)", patched, tc.wantPatch, *calls)
+			if patched := countCalls(*calls, "-X PATCH repos/o/r/code-quality/setup") > 0; patched != testCase.wantPatch {
+				t.Fatalf("PATCH sent = %v, want %v (calls %q)", patched, testCase.wantPatch, *calls)
 			}
 		})
 	}
@@ -958,12 +988,12 @@ func TestStageContentDeletionIsIdempotent(t *testing.T) {
 	})
 	op := repocfg.Op{Method: http.MethodDelete, Path: "repos/o/infra/contents/.github/workflows/release-train.yaml"}
 
-	change, unchanged, err := stageContentDeletion(op)
-	if err != nil || unchanged || change.outcome != opDeleted {
-		t.Fatalf("existing deletion = (%+v, %v, %v), want one staged deletion", change, unchanged, err)
+	changes, unchanged, err := stageContentDeletion(op)
+	if err != nil || unchanged || len(changes) != 1 || changes[0].outcome != opDeleted {
+		t.Fatalf("existing deletion = (%+v, %v, %v), want one staged deletion", changes, unchanged, err)
 	}
-	change, unchanged, err = stageContentDeletion(op)
-	if err != nil || !unchanged || change != (contentChange{}) {
-		t.Fatalf("missing deletion = (%+v, %v, %v), want unchanged", change, unchanged, err)
+	changes, unchanged, err = stageContentDeletion(op)
+	if err != nil || !unchanged || len(changes) != 0 {
+		t.Fatalf("missing deletion = (%+v, %v, %v), want unchanged", changes, unchanged, err)
 	}
 }

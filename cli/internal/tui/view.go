@@ -467,9 +467,9 @@ func serviceInfraLine(svc *anovelv1.Service) string {
 }
 
 // countInfraHealthy returns (healthy, total) across a service's infra entries.
-// A healthy infra is running and either reports HEALTH_HEALTHY or declares no
-// healthcheck at all — HEALTH_UNSPECIFIED on a running container means no
-// probe, which counts as up. A failing probe (HEALTH_STARTING) does not.
+// A healthy infra is running and reports HEALTH_HEALTHY or no health at all,
+// HEALTH_UNSPECIFIED, which the daemon's infra scan leaves unread. Any other
+// health counts as not ready.
 func countInfraHealthy(svc *anovelv1.Service) (int, int) {
 	total := len(svc.GetInfra())
 	healthy := 0

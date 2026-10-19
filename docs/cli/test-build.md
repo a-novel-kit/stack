@@ -37,3 +37,14 @@ pnpm generate:go     # Go repositories: regenerate mocks and protobuf code
 ```
 
 `pnpm run` lists the rest.
+
+## Before you push
+
+From the repository you changed, run the checks its CI runs. Lint checks formatting, so format first:
+
+```bash
+pnpm format
+a-novel test -y
+pnpm lint
+a-novel build -y -t podman   # when the change touches an image
+```

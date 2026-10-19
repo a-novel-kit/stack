@@ -17,7 +17,7 @@ func TestReadDaemonLogFrom(t *testing.T) {
 	t.Parallel()
 
 	const first = "Error: previous failure\n"
-	for _, tc := range []struct {
+	testCases := []struct {
 		name    string
 		content string // "" leaves the log absent
 		offset  int64
@@ -28,15 +28,17 @@ func TestReadDaemonLogFrom(t *testing.T) {
 		// A log that was never created: the readiness error is still reportable.
 		{name: "Success/Missing"},
 		{name: "Success/Capped", content: strings.Repeat("x", daemonLogTailLimit*3), want: strings.Repeat("x", daemonLogTailLimit)},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
-			if tc.content != "" {
-				writeFixture(t, dir, "daemon.log", tc.content)
+			if testCase.content != "" {
+				writeFixture(t, dir, "daemon.log", testCase.content)
 			}
-			if got := readDaemonLogFrom(filepath.Join(dir, "daemon.log"), tc.offset); got != tc.want {
-				t.Errorf("readDaemonLogFrom = %q, want %q", got, tc.want)
+			if got := readDaemonLogFrom(filepath.Join(dir, "daemon.log"), testCase.offset); got != testCase.want {
+				t.Errorf("readDaemonLogFrom = %q, want %q", got, testCase.want)
 			}
 		})
 	}

@@ -1,8 +1,3 @@
-// Package stacks parses and validates the A_NOVEL_STACKS environment variable,
-// the daemon's single source of truth for which checkouts to manage.
-//
-// Format: "name1:/path1,name2:/path2,..." — first entry is the default stack.
-// Unset / empty: a single inferred stack named "default" at ~/git-projects/a-novel.
 package stacks
 
 import (
@@ -29,8 +24,8 @@ type Stack struct {
 
 // Parse reads $A_NOVEL_STACKS (or the provided raw string for testing) and
 // returns the ordered list of stacks. The first entry is marked default.
-// Returns at least one stack on success — falls back to the implicit default
-// at ~/git-projects/a-novel if the env var is unset or empty.
+// It returns at least one stack on success, falling back to the implicit
+// default at ~/git-projects/a-novel when the variable is unset or empty.
 func Parse(raw string) ([]Stack, error) {
 	if raw == "" {
 		return []Stack{implicitDefault()}, nil

@@ -15,35 +15,35 @@ import (
 func TestSandboxArgs(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	testCases := []struct {
 		name    string
 		args    []string
 		want    []string
 		enabled bool
 		wantErr bool
 	}{
-		{name: "leading flag", args: []string{"--sandbox", "alpha"}, want: []string{"alpha"}, enabled: true},
-		{name: "missing flag", args: []string{"beta"}, want: []string{"beta"}},
-		{name: "later flag", args: []string{"gamma", "--sandbox"}, wantErr: true},
-		{name: "duplicate flag", args: []string{"--sandbox", "--sandbox", "gamma"}, wantErr: true},
-		{name: "child flag after separator", args: []string{"gamma", "--", "--sandbox"}, want: []string{"gamma", "--", "--sandbox"}},
-		{name: "empty invocation"},
+		{name: "Success/LeadingFlag", args: []string{"--sandbox", "alpha"}, want: []string{"alpha"}, enabled: true},
+		{name: "Success/MissingFlag", args: []string{"beta"}, want: []string{"beta"}},
+		{name: "Error/LaterFlag", args: []string{"gamma", "--sandbox"}, wantErr: true},
+		{name: "Error/DuplicateFlag", args: []string{"--sandbox", "--sandbox", "gamma"}, wantErr: true},
+		{name: "Success/ChildFlagAfterSeparator", args: []string{"gamma", "--", "--sandbox"}, want: []string{"gamma", "--", "--sandbox"}},
+		{name: "Success/EmptyInvocation"},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			got, enabled, err := SandboxArgs(test.args)
-			if (err != nil) != test.wantErr {
-				t.Fatalf("error = %v, wantErr %v", err, test.wantErr)
+			got, enabled, err := SandboxArgs(testCase.args)
+			if (err != nil) != testCase.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, testCase.wantErr)
 			}
-			if test.wantErr {
+			if testCase.wantErr {
 				return
 			}
-			if enabled != test.enabled {
-				t.Errorf("enabled = %v, want %v", enabled, test.enabled)
+			if enabled != testCase.enabled {
+				t.Errorf("enabled = %v, want %v", enabled, testCase.enabled)
 			}
-			if !slices.Equal(got, test.want) {
-				t.Errorf("args = %v, want %v", got, test.want)
+			if !slices.Equal(got, testCase.want) {
+				t.Errorf("args = %v, want %v", got, testCase.want)
 			}
 		})
 	}
@@ -122,7 +122,7 @@ func TestRunSandbox(t *testing.T) {
 func TestRunSandboxFailures(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		name, command, wantMsg string
 		runErr, removeErr      error
 		wantAllocated          bool
@@ -132,8 +132,10 @@ func TestRunSandboxFailures(t *testing.T) {
 		{name: "Error/DaemonCommand/core", command: commandCore, wantMsg: "user-wide daemon"},
 		{name: "Error/DaemonCommand/install", command: commandInstall, wantMsg: "user-wide daemon"},
 		{name: "Error/DaemonCommand/run", command: commandRun, wantMsg: "user-wide daemon"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			root := filepath.Join(t.TempDir(), "sandbox")
 			allocated, removed := false, false
@@ -145,11 +147,11 @@ func TestRunSandboxFailures(t *testing.T) {
 				clone: func(string) error { return nil },
 				removeAll: func(path string) error {
 					removed = true
-					return errors.Join(tc.removeErr, os.RemoveAll(path))
+					return errors.Join(testCase.removeErr, os.RemoveAll(path))
 				},
 				run: func(_ context.Context, _ string, _, args []string, _, _ io.Writer) error {
-					if args[0] == tc.command {
-						return tc.runErr
+					if args[0] == testCase.command {
+						return testCase.runErr
 					}
 					return nil
 				},
@@ -157,12 +159,12 @@ func TestRunSandboxFailures(t *testing.T) {
 				environ: []string{"PATH=/bin"},
 			}
 
-			err := runSandbox(t.Context(), []string{tc.command}, system, io.Discard, io.Discard)
-			if err == nil || !strings.Contains(err.Error(), tc.wantMsg) || (tc.runErr != nil && !errors.Is(err, tc.runErr)) {
-				t.Fatalf("error = %v, want %q", err, tc.wantMsg)
+			err := runSandbox(t.Context(), []string{testCase.command}, system, io.Discard, io.Discard)
+			if err == nil || !strings.Contains(err.Error(), testCase.wantMsg) || (testCase.runErr != nil && !errors.Is(err, testCase.runErr)) {
+				t.Fatalf("error = %v, want %q", err, testCase.wantMsg)
 			}
-			if allocated != tc.wantAllocated || removed != allocated {
-				t.Errorf("allocated = %v, removed = %v; want allocated %v and removed whenever allocated", allocated, removed, tc.wantAllocated)
+			if allocated != testCase.wantAllocated || removed != allocated {
+				t.Errorf("allocated = %v, removed = %v; want allocated %v and removed whenever allocated", allocated, removed, testCase.wantAllocated)
 			}
 		})
 	}

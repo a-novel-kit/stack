@@ -6,10 +6,10 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/jobs"
 )
 
-// goCoverage keeps generated and test-support packages out of the mean. Under coverage
-// mode every package now runs, so their zero-coverage lines appear in the output; dropping
-// them at parse time is what stops them from dragging the reported figure down — and it is
-// where the exclusion belongs, since the run no longer skips them.
+// TestGoCoverageExcludesGeneratedPackages pins that goCoverage keeps generated and
+// test-support packages out of the mean. Every package runs under coverage mode, so their
+// zero-coverage lines appear in the output, and parsing drops them before they drag the
+// reported figure down.
 func TestGoCoverageExcludesGeneratedPackages(t *testing.T) {
 	t.Parallel()
 
@@ -39,9 +39,11 @@ ok  	x/pkg/go  0.05s  coverage: 60.0% of statements`
 
 	// Every excluded shape is dropped — a mocks tree at any depth, a test-support tree,
 	// and generated protobuf.
-	for _, excluded := range []string{
+	excludedPackages := []string{
 		"x/internal/mocks", "x/internal/handlers/mocks", "x/internal/test", "x/proto/gen/protogen",
-	} {
+	}
+
+	for _, excluded := range excludedPackages {
 		if _, present := got[excluded]; present {
 			t.Errorf("%s must be excluded from the coverage mean", excluded)
 		}

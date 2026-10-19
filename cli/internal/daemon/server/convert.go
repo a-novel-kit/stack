@@ -112,3 +112,16 @@ func kindToProto(k discovery.TargetKind) anovelv1.TargetKind {
 		return anovelv1.TargetKind_TARGET_KIND_UNSPECIFIED
 	}
 }
+
+// stateEventToProto renders a phase event as the StateEvent Watch streams.
+func stateEventToProto(ev runner.PhaseEvent) *anovelv1.StateEvent {
+	return &anovelv1.StateEvent{
+		Ts:          timestamppb.New(ev.Ts),
+		TargetId:    ev.TargetID,
+		Service:     ev.Service,
+		Stack:       ev.Stack,
+		OldPhase:    ev.OldPhase,
+		NewPhase:    ev.NewPhase,
+		Description: describePhaseEvent(ev),
+	}
+}

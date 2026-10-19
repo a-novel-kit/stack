@@ -5,12 +5,10 @@ import (
 	"testing"
 )
 
-// Tests for the substitution-rule primitives the env builder hangs off. They
-// are pure functions, and the daemon's cross-service env wiring reads through
-// each of them on every Acquire.
-
+// TestServicePrefix pins the prefix a cross-service reference names a service
+// by, which the env builder resolves on every Acquire.
 func TestServicePrefix(t *testing.T) {
-	cases := []struct{ in, want string }{
+	testCases := []struct{ in, want string }{
 		{"service-json-keys", "SERVICE_JSON_KEYS"},
 		{"service-authentication", "SERVICE_AUTHENTICATION"},
 		// A bare name without hyphens is still uppercased, covering a
@@ -18,10 +16,10 @@ func TestServicePrefix(t *testing.T) {
 		{"plain", "PLAIN"},
 		{"", ""},
 	}
-	for _, c := range cases {
-		got := ServicePrefix(c.in)
-		if got != c.want {
-			t.Errorf("ServicePrefix(%q): got %q want %q", c.in, got, c.want)
+	for _, testCase := range testCases {
+		got := ServicePrefix(testCase.in)
+		if got != testCase.want {
+			t.Errorf("ServicePrefix(%q): got %q want %q", testCase.in, got, testCase.want)
 		}
 	}
 }
@@ -35,7 +33,7 @@ func TestResolveOwner(t *testing.T) {
 		"service-json-keys",
 		"service-template",
 	}
-	cases := []struct {
+	testCases := []struct {
 		varName   string
 		wantOwner string
 		wantLocal string
@@ -52,11 +50,11 @@ func TestResolveOwner(t *testing.T) {
 		// silently misroutes.
 		{"SERVICE_TEMPLATE_EXTRA_PORT", "service-template-extra", "PORT"},
 	}
-	for _, c := range cases {
-		gotOwner, gotLocal := resolveOwner(c.varName, services)
-		if gotOwner != c.wantOwner || gotLocal != c.wantLocal {
+	for _, testCase := range testCases {
+		gotOwner, gotLocal := resolveOwner(testCase.varName, services)
+		if gotOwner != testCase.wantOwner || gotLocal != testCase.wantLocal {
 			t.Errorf("resolveOwner(%q): got (%q, %q) want (%q, %q)",
-				c.varName, gotOwner, gotLocal, c.wantOwner, c.wantLocal)
+				testCase.varName, gotOwner, gotLocal, testCase.wantOwner, testCase.wantLocal)
 		}
 	}
 }
@@ -64,7 +62,7 @@ func TestResolveOwner(t *testing.T) {
 // TestVarKinds pins the suffix rules: a var is allocated, host or URL kind only
 // with its `_PORT`, `_HOST` or `_URL` suffix, so a bare PORT allocates nothing.
 func TestVarKinds(t *testing.T) {
-	cases := []struct {
+	testCases := []struct {
 		in              string
 		port, host, url bool
 	}{
@@ -79,9 +77,9 @@ func TestVarKinds(t *testing.T) {
 		{"URL", false, false, false},
 		{"", false, false, false},
 	}
-	for _, c := range cases {
-		if port, host, url := isAllocatedKind(c.in), isHostKind(c.in), isURLKind(c.in); port != c.port || host != c.host || url != c.url {
-			t.Errorf("kinds(%q): got port=%v host=%v url=%v, want %v/%v/%v", c.in, port, host, url, c.port, c.host, c.url)
+	for _, testCase := range testCases {
+		if port, host, url := isAllocatedKind(testCase.in), isHostKind(testCase.in), isURLKind(testCase.in); port != testCase.port || host != testCase.host || url != testCase.url {
+			t.Errorf("kinds(%q): got port=%v host=%v url=%v, want %v/%v/%v", testCase.in, port, host, url, testCase.port, testCase.host, testCase.url)
 		}
 	}
 }

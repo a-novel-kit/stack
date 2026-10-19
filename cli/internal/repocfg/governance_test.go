@@ -21,10 +21,6 @@ import (
 // and records web-flow as its committer.
 const botCommit = `{"author":{"login":"dependabot[bot]"},"committer":{"login":"web-flow"},"commit":{"verification":{"verified":true}}}`
 
-// TestDependabotGovernance runs the auto-approval scripts against a stubbed gh.
-// The engine must also hold Renovate's release age: it triggers on the status
-// event that reports it and reads the statuses the App lacks, since a nested
-// job asking for more than its caller grants fails.
 // TestGovernanceEnvironment pins where the privileged keys are read: a template
 // job that runs steps with one names the governance environment, which no
 // feature branch opens, without recording a deployment. A job calling a
@@ -73,6 +69,10 @@ func TestGovernanceEnvironment(t *testing.T) {
 	}
 }
 
+// TestDependabotGovernance runs the auto-approval scripts against a stubbed gh.
+// The engine must also hold Renovate's release age: it triggers on the status
+// event that reports it and reads the statuses the App lacks, since a nested
+// job asking for more than its caller grants fails.
 func TestDependabotGovernance(t *testing.T) {
 	t.Parallel()
 	var workflow struct {
@@ -128,15 +128,14 @@ func TestDependabotGovernance(t *testing.T) {
 	const sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	const bot = "dependabot[bot]"
 	type record = map[string]any
-	type testCase struct {
+	resolveCases := []struct {
 		name       string
 		mutate     func(record)
 		commits    string
 		duplicate  bool
 		wantOutput bool
 		wantError  bool
-	}
-	for _, tc := range []testCase{
+	}{
 		{name: "Success", wantOutput: true},
 		{name: "Ignore/StaleHead", mutate: func(p record) { p["head"].(record)["sha"] = strings.Repeat("b", 40) }},
 		{name: "Ignore/Fork", mutate: func(p record) { p["head"].(record)["repo"].(record)["full_name"] = "outsider/repo" }},
@@ -157,30 +156,41 @@ func TestDependabotGovernance(t *testing.T) {
 		},
 		{name: "Ignore/EmptyCommits", commits: `[[]]`},
 		{name: "Error/Ambiguous", duplicate: true, wantError: true},
-	} {
-		t.Run("Resolve/"+tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range resolveCases {
+		t.Run("Resolve/"+testCase.name, func(t *testing.T) {
 			t.Parallel()
-			pr := record{"number": 522, "node_id": "PR_fixture", "state": "open", "draft": false, "user": record{"login": bot}, "head": record{"sha": sha, "repo": record{"full_name": "example/repo"}}, "base": record{"ref": "master", "repo": record{"full_name": "example/repo", "default_branch": "master"}}}
-			if tc.mutate != nil {
-				tc.mutate(pr)
+			pr := record{
+				"number":  522,
+				"node_id": "PR_fixture",
+				"state":   "open",
+				"draft":   false,
+				"user":    record{"login": bot},
+				"head":    record{"sha": sha, "repo": record{"full_name": "example/repo"}},
+				"base":    record{"ref": "master", "repo": record{"full_name": "example/repo", "default_branch": "master"}},
+			}
+			if testCase.mutate != nil {
+				testCase.mutate(pr)
 			}
 			prs := []record{pr}
-			if tc.duplicate {
+			if testCase.duplicate {
 				prs = append(prs, pr)
 			}
 			payload, err := json.Marshal([][]record{prs})
 			if err != nil {
 				t.Fatal(err)
 			}
-			commits := tc.commits
+			commits := testCase.commits
 			if commits == "" {
 				commits = "[[" + botCommit + "]]"
 			}
-			output, calls, err := runGovernanceScript(t, scripts["resolve"], []string{"CANDIDATES=" + string(payload), "COMMITS=" + commits, "HEAD_SHA=" + sha, "BOT=" + bot})
-			if (err != nil) != tc.wantError {
+			env := []string{"CANDIDATES=" + string(payload), "COMMITS=" + commits, "HEAD_SHA=" + sha, "BOT=" + bot}
+			output, calls, err := runGovernanceScript(t, scripts["resolve"], env)
+			if (err != nil) != testCase.wantError {
 				t.Fatalf("script error=%v, output=%s", err, output)
 			}
-			if strings.Contains(output, "number=522") != tc.wantOutput {
+			if strings.Contains(output, "number=522") != testCase.wantOutput {
 				t.Fatalf("unexpected output %q", output)
 			}
 			if strings.Contains(calls, "reviews") || strings.Contains(calls, "enqueuePullRequest") {
@@ -188,7 +198,8 @@ func TestDependabotGovernance(t *testing.T) {
 			}
 		})
 	}
-	for _, tc := range []struct {
+
+	approveCases := []struct {
 		name, state, head, queue string
 		wantWrites               bool
 	}{
@@ -196,17 +207,20 @@ func TestDependabotGovernance(t *testing.T) {
 		{"Ignore/StaleHead", "OPEN", strings.Repeat("b", 40), "null", false},
 		{"Ignore/Closed", "CLOSED", sha, "null", false},
 		{"Ignore/AlreadyQueued", "OPEN", sha, `{"id":"queued"}`, false},
-	} {
-		t.Run("Approve/"+tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range approveCases {
+		t.Run("Approve/"+testCase.name, func(t *testing.T) {
 			t.Parallel()
-			current := `{"data":{"node":{"state":"` + tc.state + `","headRefOid":"` + tc.head + `","mergeQueueEntry":` + tc.queue + `}}}`
-			output, calls, err := runGovernanceScript(t, scripts["approve"], []string{"CURRENT=" + current, "HEAD_SHA=" + sha, "PR_NUMBER=522", "PR_NODE=PR_fixture"})
+			current := `{"data":{"node":{"state":"` + testCase.state + `","headRefOid":"` + testCase.head + `","mergeQueueEntry":` + testCase.queue + `}}}`
+			env := []string{"CURRENT=" + current, "HEAD_SHA=" + sha, "PR_NUMBER=522", "PR_NODE=PR_fixture"}
+			output, calls, err := runGovernanceScript(t, scripts["approve"], env)
 			if err != nil {
 				t.Fatalf("script failed: %v: %s", err, output)
 			}
 			reviewed := strings.Contains(calls, "commit_id="+sha)
 			queued := strings.Contains(calls, "expectedHeadOid: $sha") && strings.Contains(calls, "sha="+sha)
-			if reviewed != tc.wantWrites || queued != tc.wantWrites {
+			if reviewed != testCase.wantWrites || queued != testCase.wantWrites {
 				t.Fatalf("unexpected writes: %s", calls)
 			}
 			if strings.Contains(calls, "--squash") || strings.Contains(calls, "--admin") {
@@ -301,13 +315,15 @@ func TestHotfixGovernance(t *testing.T) {
 	if workflow.Concurrency != nil {
 		t.Error("the caller sets workflow-level concurrency")
 	}
-	for job, want := range map[string]struct{ uses, condition, group string }{
+	wantJobs := map[string]struct{ uses, condition, group string }{
 		"backport": {"backport-run.yaml@", "github.event_name == 'workflow_dispatch'", "hotfix-${{ github.repository }}"},
 		"cut": {
 			"release-line-run.yaml@", "github.event.pull_request.merged",
 			"release-line-${{ github.repository }}-${{ github.event.pull_request.base.ref }}",
 		},
-	} {
+	}
+
+	for job, want := range wantJobs {
 		got := workflow.Jobs[job]
 		if !strings.Contains(got.Uses, want.uses) || !strings.Contains(got.If, want.condition) ||
 			got.Concurrency.Group != want.group {
@@ -496,14 +512,16 @@ func TestPRRelayGovernance(t *testing.T) {
 		t.Error("pr-relay must name no secret: a pull request's own copy of it runs")
 	}
 
-	for _, name := range []string{"merge-gate.yaml", "review-gate.yaml", "epic-freeze.yaml", "derive-status.yaml", "recover-prs.yaml", "auto-approve-dependabot.yaml"} {
+	agentWorkflows := []string{"merge-gate.yaml", "review-gate.yaml", "epic-freeze.yaml", "derive-status.yaml", "recover-prs.yaml", "auto-approve-dependabot.yaml"}
+	for _, name := range agentWorkflows {
 		var workflow struct {
 			On map[string]struct {
 				Workflows []string `yaml:"workflows"`
 			} `yaml:"on"`
 		}
 		loadWorkflow(t, name, &workflow)
-		for _, branch := range []string{"pull_request", "pull_request_review", "merge_group"} {
+		untrustedEvents := []string{"pull_request", "pull_request_review", "merge_group"}
+		for _, branch := range untrustedEvents {
 			if _, ok := workflow.On[branch]; ok {
 				t.Errorf("%s runs on %s, which runs a pull request's own copy with the Agent key", name, branch)
 			}
@@ -512,7 +530,8 @@ func TestPRRelayGovernance(t *testing.T) {
 			t.Errorf("%s does not run on pull_request_target", name)
 		}
 	}
-	for _, name := range []string{"merge-gate.yaml", "review-gate.yaml", "epic-freeze.yaml", "derive-status.yaml"} {
+	relayedWorkflows := []string{"merge-gate.yaml", "review-gate.yaml", "epic-freeze.yaml", "derive-status.yaml"}
+	for _, name := range relayedWorkflows {
 		var workflow struct {
 			On map[string]struct {
 				Workflows []string `yaml:"workflows"`
@@ -560,20 +579,21 @@ func TestFeatureEnvGovernance(t *testing.T) {
 		t.Fatalf("revoke-feature-env steps = %d, want 1", len(job.Steps))
 	}
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		name, labelError string
 		wantError        bool
 	}{
 		{name: "Removed"},
 		{name: "AlreadyRemoved", labelError: "gh: Label does not exist (HTTP 404)"},
 		{name: "Error", labelError: "gh: Resource not accessible by integration (HTTP 403)", wantError: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			output, calls, err := runGovernanceScript(t, job.Steps[0].Run, []string{
-				"GITHUB_REPOSITORY=example/repo", "NUMBER=7", "LABEL_ERROR=" + tc.labelError,
-			})
-			if (err != nil) != tc.wantError {
+			env := []string{"GITHUB_REPOSITORY=example/repo", "NUMBER=7", "LABEL_ERROR=" + testCase.labelError}
+			output, calls, err := runGovernanceScript(t, job.Steps[0].Run, env)
+			if (err != nil) != testCase.wantError {
 				t.Fatalf("script error = %v, output = %s", err, output)
 			}
 			if !strings.Contains(calls, "--method DELETE repos/example/repo/issues/7/labels/with-feature-env") {
@@ -651,7 +671,7 @@ func TestCleanImagesGovernance(t *testing.T) {
 			list = step.Run
 		}
 	}
-	for _, tc := range []struct {
+	testCases := []struct {
 		name      string
 		workflows map[string]string
 		want      string
@@ -667,15 +687,17 @@ func TestCleanImagesGovernance(t *testing.T) {
 		},
 		// A template repository publishes no image, and the close and sweep jobs skip an empty list.
 		{name: "NoImages", workflows: map[string]string{"clean-images.yaml": "name: clean images\n"}, want: `[]`},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			directory := t.TempDir()
 			workflows := filepath.Join(directory, ".github", "workflows")
 			if err := os.MkdirAll(workflows, 0o700); err != nil {
 				t.Fatal(err)
 			}
-			for name, content := range tc.workflows {
+			for name, content := range testCase.workflows {
 				if err := os.WriteFile(filepath.Join(workflows, name), []byte(content), 0o600); err != nil {
 					t.Fatal(err)
 				}
@@ -690,7 +712,7 @@ func TestCleanImagesGovernance(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got, want := string(output), "names="+tc.want+"\n"; got != want {
+			if got, want := string(output), "names="+testCase.want+"\n"; got != want {
 				t.Errorf("listed packages = %q, want %q", got, want)
 			}
 		})
@@ -721,7 +743,8 @@ func TestLockClosedGovernance(t *testing.T) {
 		} `yaml:"jobs"`
 	}
 	loadWorkflow(t, "lock-closed.yaml", &workflow)
-	for event, types := range map[string][]string{"issues": workflow.On.Issues.Types, "pull_request": workflow.On.PullRequest.Types} {
+	eventTypes := map[string][]string{"issues": workflow.On.Issues.Types, "pull_request": workflow.On.PullRequest.Types}
+	for event, types := range eventTypes {
 		if got := strings.Join(types, ","); got != "closed,reopened" {
 			t.Errorf("lock-closed %s types = %q, want closed,reopened", event, got)
 		}
@@ -734,19 +757,20 @@ func TestLockClosedGovernance(t *testing.T) {
 
 	// Whatever the event, the step acts on the conversation's live state.
 	lock, unlock := "api --method PUT repos/example/repo/issues/7/lock", "api --method DELETE repos/example/repo/issues/7/lock"
-	for _, testCase := range []struct {
+	testCases := []struct {
 		name, state, want string
 	}{
 		{name: "ClosedAndUnlocked", state: "closed false", want: lock},
 		{name: "OpenAndLocked", state: "open true", want: unlock},
 		{name: "ReopenedBeforeTheLock", state: "open false"},
 		{name: "AlreadyLocked", state: "closed true"},
-	} {
+	}
+
+	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			output, calls, err := runGovernanceScript(t, workflow.Jobs["lock"].Steps[0].Run, []string{
-				"GITHUB_REPOSITORY=example/repo", "NUMBER=7", "ISSUE=" + testCase.state,
-			})
+			env := []string{"GITHUB_REPOSITORY=example/repo", "NUMBER=7", "ISSUE=" + testCase.state}
+			output, calls, err := runGovernanceScript(t, workflow.Jobs["lock"].Steps[0].Run, env)
 			if err != nil {
 				t.Fatalf("lock step: %v\n%s", err, output)
 			}

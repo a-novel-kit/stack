@@ -1,12 +1,3 @@
-// `a-novel repo update --all` — reconcile every pulled workspace repo in one
-// pass. The candidates are the workspace checkouts `core sync` manages, so the
-// operator never lists repos by hand.
-//
-// The sweep leaves ongoing work alone. Config is discovered from each working
-// tree, so a repo off its default branch or with uncommitted changes is skipped
-// untouched and only committed config reaches GitHub. Planning runs for every
-// repo at once; one confirm gates the batch, then --jobs repos apply at a time.
-
 package cli
 
 import (
@@ -34,6 +25,13 @@ type plannedUpdate struct {
 	prune  string // the dry-run's prune impact, resolved while planning
 }
 
+// runRepoUpdateAll reconciles every pulled workspace repo in one pass, so the
+// operator never lists repos by hand. It plans every repo at once, asks once,
+// then applies limit repos at a time.
+//
+// The sweep leaves ongoing work alone. Config is discovered from each working
+// tree, so a repo off its default branch or with uncommitted changes is skipped
+// untouched, and only committed config reaches GitHub.
 func runRepoUpdateAll(cmd *cobra.Command, rootDir, class string, exclude []string, dryRun, jsonOut bool, limit int) error {
 	root, err := workspaceRoot(rootDir)
 	if err != nil {
@@ -73,16 +71,28 @@ func runRepoUpdateAll(cmd *cobra.Command, rootDir, class string, exclude []strin
 		_, _ = fmt.Fprintln(progress, "\nnothing to reconcile — every repo was skipped or excluded.")
 		return nil
 	case dryRun:
-		for _, p := range planned {
-			_, _ = fmt.Fprintf(progress, "\n# dry-run %s — class %s\n%s\n", p.FullName(), p.target.Class.Class, p.prune)
-			if err := p.plan.Render(out); err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintln(out)
-		}
-		return nil
+		return renderAllDryRun(out, progress, planned)
 	}
+	return applyAll(cmd, planned, limit)
+}
 
+// renderAllDryRun prints each planned repo's operations to out, under a header
+// written to progress.
+func renderAllDryRun(out, progress io.Writer, planned []plannedUpdate) error {
+	for _, p := range planned {
+		_, _ = fmt.Fprintf(progress, "\n# dry-run %s — class %s\n%s\n", p.FullName(), p.target.Class.Class, p.prune)
+		if err := p.plan.Render(out); err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintln(out)
+	}
+	return nil
+}
+
+// applyAll shows the planned repos, asks once, then applies limit repos at a
+// time.
+func applyAll(cmd *cobra.Command, planned []plannedUpdate, limit int) error {
+	out := cmd.OutOrStdout()
 	_, _ = fmt.Fprintf(out, "\nReconcile %d repo(s):\n", len(planned))
 	for _, p := range planned {
 		renderCompactSummary(out, p.target)
@@ -118,26 +128,7 @@ func planAll(checkouts []checkout, class string, excluded map[string]bool, previ
 	notes := make([]string, len(checkouts))
 	var wg sync.WaitGroup
 	for i, c := range checkouts {
-		wg.Go(func() {
-			if c.listed(excluded) {
-				notes[i] = ui.Muted.Render("○") + " " + c.FullName() + " — excluded"
-				return
-			}
-			if reason := ongoingWork(c.dir); reason != "" {
-				notes[i] = ui.Muted.Render("⏸") + " " + c.FullName() + " — " + reason + ", skipped"
-				return
-			}
-			target, plan, err := planRepo(c.repoEntry, c.dir, class)
-			if err != nil {
-				notes[i] = ui.Muted.Render("✗") + " " + c.FullName() + " — " + firstLine(err.Error())
-				return
-			}
-			p := &plannedUpdate{checkout: c, target: target, plan: plan}
-			if preview {
-				p.prune = pruneImpact(target, plan)
-			}
-			plans[i] = p
-		})
+		wg.Go(func() { plans[i], notes[i] = planCheckout(c, class, excluded, preview) })
 	}
 	wg.Wait()
 
@@ -148,6 +139,26 @@ func planAll(checkouts []checkout, class string, excluded map[string]bool, previ
 		}
 	}
 	return planned, notes
+}
+
+// planCheckout plans one checkout, or returns the note saying why it is left
+// out.
+func planCheckout(c checkout, class string, excluded map[string]bool, preview bool) (*plannedUpdate, string) {
+	if c.listed(excluded) {
+		return nil, ui.Muted.Render("○") + " " + c.FullName() + " — excluded"
+	}
+	if reason := ongoingWork(c.dir); reason != "" {
+		return nil, ui.Muted.Render("⏸") + " " + c.FullName() + " — " + reason + ", skipped"
+	}
+	target, plan, err := planRepo(c.repoEntry, c.dir, class)
+	if err != nil {
+		return nil, ui.Muted.Render("✗") + " " + c.FullName() + " — " + firstLine(err.Error())
+	}
+	p := &plannedUpdate{checkout: c, target: target, plan: plan}
+	if preview {
+		p.prune = pruneImpact(target, plan)
+	}
+	return p, ""
 }
 
 // renderCompactSummary prints the batch confirm's two-line overview of a repo:

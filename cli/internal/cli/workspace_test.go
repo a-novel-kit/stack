@@ -24,7 +24,8 @@ func TestWorkspaceCheckouts(t *testing.T) {
   - a-novel-kit/stack # the root itself
 `)
 	// workspaceCheckouts only stats <dir>/.git, so a marker dir is enough.
-	for _, d := range []string{"kit/golib", "app/service-json-keys", "kit/stack"} {
+	checkouts := []string{"kit/golib", "app/service-json-keys", "kit/stack"}
+	for _, d := range checkouts {
 		if err := os.MkdirAll(filepath.Join(root, d, ".git"), 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", d, err)
 		}
@@ -51,7 +52,7 @@ func TestWorkspaceCheckouts(t *testing.T) {
 func TestLoadRepoWhitelist(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		name    string
 		content string // "" leaves the file absent
 		want    []repoEntry
@@ -66,16 +67,18 @@ func TestLoadRepoWhitelist(t *testing.T) {
 		{name: "Success/AbsentFile"},
 		{name: "Error/NoSlash", content: "repos:\n  - golib\n", wantErr: true},
 		{name: "Error/UnknownOrg", content: "repos:\n  - github/whatever\n", wantErr: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			root := t.TempDir()
-			if tc.content != "" {
-				writeFixture(t, root, repoWhitelistFile, tc.content)
+			if testCase.content != "" {
+				writeFixture(t, root, repoWhitelistFile, testCase.content)
 			}
 			got, err := loadRepoWhitelist(root)
-			if (err != nil) != tc.wantErr || !slices.Equal(got, tc.want) {
-				t.Fatalf("loadRepoWhitelist = (%+v, %v), want (%+v, error %v)", got, err, tc.want, tc.wantErr)
+			if (err != nil) != testCase.wantErr || !slices.Equal(got, testCase.want) {
+				t.Fatalf("loadRepoWhitelist = (%+v, %v), want (%+v, error %v)", got, err, testCase.want, testCase.wantErr)
 			}
 		})
 	}
@@ -86,7 +89,7 @@ func TestLoadRepoWhitelist(t *testing.T) {
 func TestRepoEntryListed(t *testing.T) {
 	t.Parallel()
 	c := repoEntry{Org: orgAnovel, Name: "service-json-keys"}
-	cases := []struct {
+	testCases := []struct {
 		name string
 		set  []string
 		want bool
@@ -97,11 +100,11 @@ func TestRepoEntryListed(t *testing.T) {
 		{"unrelated repo", []string{"a-novel-kit/golib"}, false},
 		{"comma-joined list", []string{"golib,service-json-keys"}, true},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			if got := c.listed(normaliseFilter(tc.set)); got != tc.want {
-				t.Errorf("listed(%v) = %v, want %v", tc.set, got, tc.want)
+			if got := c.listed(normaliseFilter(testCase.set)); got != testCase.want {
+				t.Errorf("listed(%v) = %v, want %v", testCase.set, got, testCase.want)
 			}
 		})
 	}
@@ -112,7 +115,7 @@ func TestRepoEntryListed(t *testing.T) {
 func TestRepoEntryDir(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
+	testCases := []struct {
 		repo repoEntry
 		want string
 	}{
@@ -120,11 +123,11 @@ func TestRepoEntryDir(t *testing.T) {
 		{repo: repoEntry{Org: orgAnovelKit, Name: "golib"}, want: "/ws/kit/golib"},
 		{repo: repoEntry{Org: orgAnovel, Name: "service-json-keys"}, want: "/ws/app/service-json-keys"},
 	}
-	for _, c := range cases {
-		t.Run(c.repo.FullName(), func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.repo.FullName(), func(t *testing.T) {
 			t.Parallel()
-			if got := c.repo.Dir("/ws"); got != c.want {
-				t.Errorf("Dir = %q, want %q", got, c.want)
+			if got := testCase.repo.Dir("/ws"); got != testCase.want {
+				t.Errorf("Dir = %q, want %q", got, testCase.want)
 			}
 		})
 	}

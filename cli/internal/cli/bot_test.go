@@ -14,7 +14,7 @@ const testBotRepo = "service-authentication"
 func TestValidateBotCommentArgs(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		name, org, repo, number string
 		wantErr                 bool
 	}{
@@ -26,11 +26,13 @@ func TestValidateBotCommentArgs(t *testing.T) {
 		{"Error/NonNumericNumber", orgAnovel, testBotRepo, "abc", true},
 		{"Error/ZeroNumber", orgAnovel, testBotRepo, "0", true},
 		{"Error/NegativeNumber", orgAnovel, testBotRepo, "-3", true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			if err := validateBotCommentArgs(tc.org, tc.repo, tc.number); (err != nil) != tc.wantErr {
-				t.Fatalf("validateBotCommentArgs(%q, %q, %q) = %v, wantErr %v", tc.org, tc.repo, tc.number, err, tc.wantErr)
+			if err := validateBotCommentArgs(testCase.org, testCase.repo, testCase.number); (err != nil) != testCase.wantErr {
+				t.Fatalf("validateBotCommentArgs(%q, %q, %q) = %v, wantErr %v", testCase.org, testCase.repo, testCase.number, err, testCase.wantErr)
 			}
 		})
 	}
@@ -39,7 +41,7 @@ func TestValidateBotCommentArgs(t *testing.T) {
 func TestValidateBotOrgRepo(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		name, org, repo string
 		wantErr         bool
 	}{
@@ -48,11 +50,13 @@ func TestValidateBotOrgRepo(t *testing.T) {
 		{"Error/UnknownOrg", "a-other", testBotRepo, true},
 		{"Error/EmptyRepo", orgAnovel, "", true},
 		{"Error/RepoCarriesOrgPrefix", orgAnovel, orgAnovel + "/" + testBotRepo, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			if err := validateBotOrgRepo(tc.org, tc.repo); (err != nil) != tc.wantErr {
-				t.Fatalf("validateBotOrgRepo(%q, %q) = %v, wantErr %v", tc.org, tc.repo, err, tc.wantErr)
+			if err := validateBotOrgRepo(testCase.org, testCase.repo); (err != nil) != testCase.wantErr {
+				t.Fatalf("validateBotOrgRepo(%q, %q) = %v, wantErr %v", testCase.org, testCase.repo, err, testCase.wantErr)
 			}
 		})
 	}
@@ -61,7 +65,7 @@ func TestValidateBotOrgRepo(t *testing.T) {
 func TestReadBotBatch(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		name, input string
 		wantLen     int
 		wantErr     bool
@@ -76,12 +80,14 @@ func TestReadBotBatch(t *testing.T) {
 		{name: "Error/NegativeNumber", input: `[{"number":-1,"body":"hi"}]`, wantErr: true},
 		{name: "Error/BlankBody", input: `[{"number":1,"body":"   "}]`, wantErr: true},
 		{name: "Error/NegativeReplyTo", input: `[{"number":1,"body":"hi","reply_to":-2}]`, wantErr: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			items, err := readBotBatch("-", strings.NewReader(tc.input))
-			if (err != nil) != tc.wantErr || len(items) != tc.wantLen {
-				t.Fatalf("readBotBatch(%q) = (%d items, %v), want (%d, error %v)", tc.input, len(items), err, tc.wantLen, tc.wantErr)
+			items, err := readBotBatch("-", strings.NewReader(testCase.input))
+			if (err != nil) != testCase.wantErr || len(items) != testCase.wantLen {
+				t.Fatalf("readBotBatch(%q) = (%d items, %v), want (%d, error %v)", testCase.input, len(items), err, testCase.wantLen, testCase.wantErr)
 			}
 		})
 	}

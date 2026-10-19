@@ -17,14 +17,14 @@ func TestShouldNotify(t *testing.T) {
 
 		want bool
 	}{
-		{name: "newer patch available", current: "v1.0.0", latest: "v1.0.1", want: true},
-		{name: "newer major available", current: "v1.0.0", latest: "v2.0.0", want: true},
-		{name: "up to date", current: "v1.0.0", latest: "v1.0.0", want: false},
-		{name: "local is ahead", current: "v1.2.0", latest: "v1.1.0", want: false},
-		{name: "current is a dev build", current: "a1b2c3d", latest: "v1.0.1", want: false},
-		{name: "current is a dirty build", current: "a1b2c3d-dirty", latest: "v1.0.1", want: false},
-		{name: "latest empty (fetch failed)", current: "v1.0.0", latest: "", want: false},
-		{name: "latest not a version", current: "v1.0.0", latest: "garbage", want: false},
+		{name: "Success/NewerPatch", current: "v1.0.0", latest: "v1.0.1", want: true},
+		{name: "Success/NewerMajor", current: "v1.0.0", latest: "v2.0.0", want: true},
+		{name: "Success/UpToDate", current: "v1.0.0", latest: "v1.0.0", want: false},
+		{name: "Success/LocalIsAhead", current: "v1.2.0", latest: "v1.1.0", want: false},
+		{name: "Success/DevBuild", current: "a1b2c3d", latest: "v1.0.1", want: false},
+		{name: "Success/DirtyBuild", current: "a1b2c3d-dirty", latest: "v1.0.1", want: false},
+		{name: "Success/LatestEmpty", current: "v1.0.0", latest: "", want: false},
+		{name: "Success/LatestNotAVersion", current: "v1.0.0", latest: "garbage", want: false},
 	}
 
 	for _, testCase := range testCases {

@@ -1,10 +1,3 @@
-// Daemon-control subcommands (`a-novel core ...`): the lifecycle of the
-// long-lived background daemon. `core start` is the .zshrc-friendly
-// entrypoint — silent when the daemon is already running, detaches it into
-// the background, and refuses with a hint when setup is missing. The sibling
-// verbs stop it, report status, and drive the checkpoint flow that restarts
-// the daemon without losing its running targets.
-
 package cli
 
 import (
@@ -48,6 +41,10 @@ func IsDaemonReexec(args []string) bool {
 	return len(args) >= 3 && args[1] == commandCore && args[2] == daemonInternalCmd
 }
 
+// newCoreCmd groups the verbs that manage the daemon's lifecycle and the
+// workspace it serves. `core start` is the .zshrc-friendly entrypoint: silent
+// when a daemon already runs, it detaches one into the background, and it
+// refuses with a hint when setup is missing.
 func newCoreCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   commandCore,
@@ -430,45 +427,48 @@ func startDetached() error {
 	c := exec.Command(bin, commandCore, daemonInternalCmd)
 	// Detach: new process group, no terminal.
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	c.Stdin = nil
 	// A detached daemon has nowhere to write but a file. Keeping its output
 	// is what separates a bad $A_NOVEL_STACKS from an unreadable stack path
 	// or an already-bound port; discard it and every startup failure reads
 	// alike as "did not become ready".
 	logFile, logErr := openDaemonLog()
-	if logErr == nil {
-		defer func() { _ = logFile.Close() }()
-		c.Stdout = logFile
-		c.Stderr = logFile
-	}
 	// Where this attempt's output begins, so a failure quotes only what this
 	// start wrote.
 	var logOffset int64
 	if logErr == nil {
-		if end, err := logFile.Seek(0, io.SeekEnd); err == nil {
-			logOffset = end
-		}
+		defer func() { _ = logFile.Close() }()
+		c.Stdout, c.Stderr = logFile, logFile
+		logOffset, _ = logFile.Seek(0, io.SeekEnd)
 	}
 	if err := c.Start(); err != nil {
 		return fmt.Errorf("spawn daemon: %w", err)
 	}
-	// Poll briefly for the daemon to come up, then print its socket
-	// path so the caller knows it worked.
-	deadline := time.Now().Add(5 * time.Second)
 	rpcClient := rpc.New("")
+	if !daemonReady(rpcClient, daemonStartTimeout) {
+		return fmt.Errorf("daemon did not become ready within %s%s", daemonStartTimeout, daemonFailureDetail(logErr, logOffset))
+	}
+	fmt.Printf("a-novel daemon started on %s (pid %d)\n", rpcClient.SocketPath(), c.Process.Pid)
+	// Release so the child outlives us.
+	_ = c.Process.Release()
+	return nil
+}
+
+// daemonStartTimeout bounds how long a detached daemon may take to answer.
+const daemonStartTimeout = 5 * time.Second
+
+// daemonReady polls the daemon until it answers a ping or timeout elapses.
+func daemonReady(c *rpc.Client, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		_, err := rpcClient.Ping(ctx)
+		_, err := c.Ping(ctx)
 		cancel()
 		if err == nil {
-			fmt.Printf("a-novel daemon started on %s (pid %d)\n", rpcClient.SocketPath(), c.Process.Pid)
-			// Release so the child outlives us.
-			_ = c.Process.Release()
-			return nil
+			return true
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	return fmt.Errorf("daemon did not become ready within 5s%s", daemonFailureDetail(logErr, logOffset))
+	return false
 }
 
 // openDaemonLog opens the detached daemon's log for appending, creating its

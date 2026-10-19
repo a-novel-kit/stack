@@ -7,11 +7,11 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// The adoption labels are how a restarted daemon finds its containers, so the
-// flag that sets them and the filters that read them must spell them alike.
-
+// TestContainerLabelArgs pins that the flag setting the adoption labels and the
+// filters reading them spell them alike: a restarted daemon finds its
+// containers through them.
 func TestContainerLabelArgs(t *testing.T) {
-	cases := []struct {
+	testCases := []struct {
 		values []string
 		want   string
 	}{
@@ -22,9 +22,9 @@ func TestContainerLabelArgs(t *testing.T) {
 		// Infra containers carry no target label.
 		{[]string{"default", "service-x"}, "--podman-run-args=--label anovel.stack=default --label anovel.service=service-x"},
 	}
-	for _, c := range cases {
-		if got := containerLabelArgs(c.values...); got != c.want {
-			t.Errorf("containerLabelArgs(%q):\n got %q\nwant %q", c.values, got, c.want)
+	for _, testCase := range testCases {
+		if got := containerLabelArgs(testCase.values...); got != testCase.want {
+			t.Errorf("containerLabelArgs(%q):\n got %q\nwant %q", testCase.values, got, testCase.want)
 		}
 	}
 }
@@ -38,7 +38,7 @@ func TestLabelFilters(t *testing.T) {
 }
 
 func TestPodmanPhase(t *testing.T) {
-	cases := []struct {
+	testCases := []struct {
 		state string
 		want  anovelv1.Phase
 	}{
@@ -51,9 +51,9 @@ func TestPodmanPhase(t *testing.T) {
 		{"stopped", anovelv1.Phase_PHASE_TERMINATED},
 		{"removing", anovelv1.Phase_PHASE_UNSPECIFIED},
 	}
-	for _, c := range cases {
-		if got := podmanPhase(c.state); got != c.want {
-			t.Errorf("podmanPhase(%q): got %v, want %v", c.state, got, c.want)
+	for _, testCase := range testCases {
+		if got := podmanPhase(testCase.state); got != testCase.want {
+			t.Errorf("podmanPhase(%q): got %v, want %v", testCase.state, got, testCase.want)
 		}
 	}
 }

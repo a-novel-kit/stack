@@ -3,6 +3,7 @@ package ui
 import (
 	"cmp"
 	"image/color"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -19,8 +20,13 @@ import (
 // pushed them out of view, then gives the headline and outcome counts.
 func Report(title string, b Batch, show func(jobs.Result) bool) string {
 	w := termWidth()
-	var s strings.Builder
+	return reportDetail(b, show, w) + reportSummary(title, b, w)
+}
 
+// reportDetail renders the output of every job show selects and the coverage,
+// then the job status lines again when either section printed.
+func reportDetail(b Batch, show func(jobs.Result) bool, w int) string {
+	var s strings.Builder
 	var shown []jobs.Result
 	for _, r := range b.Results {
 		if show(r) {
@@ -29,10 +35,8 @@ func Report(title string, b Batch, show func(jobs.Result) bool) string {
 	}
 	if len(shown) > 0 {
 		heading := "failures"
-		for _, r := range shown {
-			if r.Err == nil {
-				heading = "output"
-			}
+		if slices.ContainsFunc(shown, func(r jobs.Result) bool { return r.Err == nil }) {
+			heading = "output"
 		}
 		s.WriteString("\n" + section(heading, colGold, w) + "\n")
 		for _, r := range shown {
@@ -48,7 +52,11 @@ func Report(title string, b Batch, show func(jobs.Result) bool) string {
 			s.WriteString(statusLine(r) + "\n")
 		}
 	}
+	return s.String()
+}
 
+// reportSummary renders the batch's headline and its outcome counts.
+func reportSummary(title string, b Batch, w int) string {
 	var failed int
 	counts := map[string]int{}
 	var outcomes []string
@@ -71,7 +79,6 @@ func Report(title string, b Batch, show func(jobs.Result) bool) string {
 	case failed > 0:
 		headline, lead = Crit.Render(glyphFail+" "+title+" FAILED"), "One or more jobs failed; their full output is above."
 	}
-	s.WriteString("\n" + headline + "\n" + para(lead, w) + "\n\n")
 
 	var failColor color.Color = colMuted
 	if failed > 0 {
@@ -89,8 +96,7 @@ func Report(title string, b Batch, show func(jobs.Result) bool) string {
 		pill("total", strconv.Itoa(len(b.Results)), colGold),
 		pill("took", b.Elapsed.Round(10*time.Millisecond).String(), colAccent),
 	)
-	s.WriteString(pillRow(pills...) + "\n")
-	return s.String()
+	return "\n" + headline + "\n" + para(lead, w) + "\n\n" + pillRow(pills...) + "\n"
 }
 
 // Failed selects the failed jobs, the usual [Report] filter.

@@ -1,21 +1,3 @@
-// Package logs owns the daemon-side log storage and streaming hub.
-//
-// Storage shape:
-//
-//	$XDG_STATE_HOME/a-novel/logs/<stack>/<service>/<target>/
-//	├── current.log              ← currently-streaming run
-//	├── run-<timestamp>.log      ← archived previous runs (max 5)
-//	└── ...
-//
-// Format: one JSON object per line — {ts, stream, line} — preserving
-// ANSI escapes in `line` so the CLI/TUI can render colored output and
-// `jq` can filter by stream.
-//
-// The Store also acts as the streaming hub, owning subscriber channels per
-// (stack, service, target). Every line the runner appends reaches every
-// subscriber, and the hub closes the channels when the process terminates. The
-// StreamLogs RPC handler attaches a subscriber and forwards lines over
-// connect-rpc until the channel closes or the client disconnects.
 package logs
 
 import (
@@ -41,7 +23,7 @@ const (
 	StreamStderr Stream = "stderr"
 )
 
-// Line is one log entry as we serialize it to disk and forward to
+// Line is one log entry, as the store writes it to disk and forwards it to
 // subscribers.
 type Line struct {
 	Ts     time.Time `json:"ts"`
@@ -138,25 +120,18 @@ func (s *Store) Subscribe(targetID string) (<-chan Line, func(), bool) {
 	}
 	ch := make(chan Line, 32)
 	ts.subscribers = append(ts.subscribers, ch)
-	unsub := func() {
-		ts.mu.Lock()
-		defer ts.mu.Unlock()
-		if ts.closed {
-			// close() already drained the slice and closed every
-			// channel; nothing to do.
-			return
-		}
-		for i, c := range ts.subscribers {
-			if c == ch {
-				ts.subscribers = append(ts.subscribers[:i], ts.subscribers[i+1:]...)
-				break
-			}
-		}
-		// ch stays open: the reader stops because no further send
-		// arrives, and GC reclaims the channel once its goroutine
-		// exits. Only close() closes a subscriber channel.
+	return ch, func() { ts.unsubscribe(ch) }, true
+}
+
+// unsubscribe drops ch from the fanout. ch stays open: its reader stops
+// because no further send arrives, and only close() closes a subscriber
+// channel. After close() the fanout is already empty.
+func (ts *targetStream) unsubscribe(ch chan Line) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	if i := slices.Index(ts.subscribers, ch); i >= 0 {
+		ts.subscribers = slices.Delete(ts.subscribers, i, i+1)
 	}
-	return ch, unsub, true
 }
 
 // CloseTarget ends the target's stream: it closes the file handle and every

@@ -16,7 +16,7 @@ func TestWithCoverage(t *testing.T) {
 	t.Parallel()
 
 	goTarget := func(args ...string) detect.Target { return detect.Target{Kind: detect.KindGo, Args: args} }
-	cases := []struct {
+	testCases := []struct {
 		name string
 		in   detect.Target
 		want []string
@@ -32,13 +32,13 @@ func TestWithCoverage(t *testing.T) {
 		},
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := withCoverage([]detect.Target{c.in})
-			if !slices.Equal(got[0].Args, c.want) {
-				t.Errorf("args = %v, want %v", got[0].Args, c.want)
+			got := withCoverage([]detect.Target{testCase.in})
+			if !slices.Equal(got[0].Args, testCase.want) {
+				t.Errorf("args = %v, want %v", got[0].Args, testCase.want)
 			}
 		})
 	}
@@ -47,7 +47,7 @@ func TestWithCoverage(t *testing.T) {
 func TestParseKinds(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
+	testCases := []struct {
 		in      string
 		want    []detect.Kind
 		wantErr bool
@@ -58,16 +58,16 @@ func TestParseKinds(t *testing.T) {
 		{in: "bogus", wantErr: true},
 	}
 
-	for _, c := range cases {
-		t.Run(c.in, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.in, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := parseKinds(c.in)
-			if (err != nil) != c.wantErr {
-				t.Fatalf("parseKinds(%q) error = %v, wantErr %v", c.in, err, c.wantErr)
+			got, err := parseKinds(testCase.in)
+			if (err != nil) != testCase.wantErr {
+				t.Fatalf("parseKinds(%q) error = %v, wantErr %v", testCase.in, err, testCase.wantErr)
 			}
-			if !slices.Equal(got, c.want) {
-				t.Errorf("parseKinds(%q) = %v, want %v", c.in, got, c.want)
+			if !slices.Equal(got, testCase.want) {
+				t.Errorf("parseKinds(%q) = %v, want %v", testCase.in, got, testCase.want)
 			}
 		})
 	}
@@ -79,7 +79,7 @@ func TestParseKinds(t *testing.T) {
 func TestCapabilityFlags(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
+	testCases := []struct {
 		name    string
 		args    []string
 		wantMsg string
@@ -93,17 +93,17 @@ func TestCapabilityFlags(t *testing.T) {
 		{name: "Error/BuildHasNoKeep", args: []string{"build", "--keep"}, wantMsg: "unknown flag"},
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			var exitErr *ExitError
-			_, err := runCmd(t, NewRoot(), c.args...)
+			_, err := runCmd(t, NewRoot(), testCase.args...)
 			if !errors.As(err, &exitErr) || exitErr.Code != exitUsage {
-				t.Fatalf("Execute(%v) = %v, want exit status %d", c.args, err, exitUsage)
+				t.Fatalf("Execute(%v) = %v, want exit status %d", testCase.args, err, exitUsage)
 			}
-			if !strings.Contains(err.Error(), c.wantMsg) {
-				t.Errorf("error %q does not mention %q", err, c.wantMsg)
+			if !strings.Contains(err.Error(), testCase.wantMsg) {
+				t.Errorf("error %q does not mention %q", err, testCase.wantMsg)
 			}
 		})
 	}

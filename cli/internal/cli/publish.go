@@ -1,11 +1,3 @@
-// `a-novel publish stamp` refreshes the vX.Y.Z references inside doc and
-// config files (READMEs, openapi specs, pinned action refs) so they match the
-// repo's current package version. It is what a repo's prepublish:doc pnpm
-// script calls during a release, so those references always track the released
-// version.
-//
-// Releases themselves are cut in CI by the release-core GitHub Action.
-
 package cli
 
 import (
@@ -32,6 +24,10 @@ Action, not from a local working tree.
 	return cmd
 }
 
+// newPublishStampCmd refreshes the vX.Y.Z references inside doc and config
+// files, such as READMEs, OpenAPI specs and pinned action refs, to the repo's
+// package version. A repo's prepublish:doc script calls it while the release
+// workflow cuts a release, so those references track the released version.
 func newPublishStampCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "stamp <prefix> <file-or-glob>...",
@@ -76,10 +72,10 @@ inside docs/config always match the released version:
 //
 // The whole set matching nothing is an error, the command-level counterpart to
 // resolveStampTargets refusing an empty file set. A prepublish:doc script exists
-// to keep a doc reference in step with the release; a pattern that matches zero
-// references has stopped tracking what it names — a README rewrite that changed
-// the reference shape, a renamed field — and stamping nothing is the silent way
-// that surfaces, one release too late.
+// to keep a doc reference in step with the release. A pattern that matches zero
+// references has stopped tracking what it names, after a README rewrite changed
+// the reference shape or a field was renamed, and stamping nothing would hide
+// that until a release ships the stale reference.
 func stampTargets(patterns []string, prefix, version string) (int, int, error) {
 	re, err := stampPattern(prefix)
 	if err != nil {
@@ -132,33 +128,24 @@ func readPackageVersion(root string) (string, error) {
 // paths (relative to the working directory), preserving order and de-duping
 // overlapping matches. An existing literal path is taken verbatim (so a real
 // filename with glob metacharacters is never reinterpreted); otherwise the
-// argument is globbed. It is an error for the whole set to resolve to no files
-// — that catches a typo'd path or glob in a prepublish:doc script before it
-// silently stamps nothing.
+// argument is globbed. The whole set resolving to no files is an error, which
+// catches a mistyped path or glob in a prepublish:doc script before it stamps
+// nothing.
 func resolveStampTargets(patterns []string) ([]string, error) {
 	seen := map[string]bool{}
 	var files []string
-	add := func(p string) {
-		if !seen[p] {
-			seen[p] = true
-			files = append(files, p)
-		}
-	}
 	for _, p := range patterns {
-		// A path that exists as-is is a literal target: take it verbatim so a
-		// real filename containing glob metacharacters (e.g. weird[1].yaml) is
-		// never reinterpreted as a pattern. Fall back to globbing only when the
-		// literal path does not exist.
-		if _, err := os.Stat(p); err == nil {
-			add(p)
-			continue
-		}
-		matches, err := filepath.Glob(p)
-		if err != nil {
-			return nil, fmt.Errorf("publish: bad glob %q: %w", p, err)
+		matches := []string{p}
+		if _, err := os.Stat(p); err != nil {
+			if matches, err = filepath.Glob(p); err != nil {
+				return nil, fmt.Errorf("publish: bad glob %q: %w", p, err)
+			}
 		}
 		for _, m := range matches {
-			add(m)
+			if !seen[m] {
+				seen[m] = true
+				files = append(files, m)
+			}
 		}
 	}
 	if len(files) == 0 {

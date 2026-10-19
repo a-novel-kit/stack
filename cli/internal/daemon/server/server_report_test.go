@@ -100,7 +100,7 @@ func TestStreamLines(t *testing.T) {
 	record := func(stream, line string) string {
 		return `{"ts":"2026-07-22T10:00:00Z","stream":"` + stream + `","line":"` + line + `"}` + "\n"
 	}
-	cases := []struct {
+	testCases := []struct {
 		name      string
 		in        io.Reader
 		filter    anovelv1.LogStream
@@ -140,25 +140,25 @@ func TestStreamLines(t *testing.T) {
 		// A client that went away is not a failure.
 		{name: "StopsOnACancelledContext", in: strings.NewReader("{ broken\n"), cancelled: true},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			if c.cancelled {
+			if testCase.cancelled {
 				cancel()
 			}
 			var got []string
-			err := streamLines(ctx, c.in, func(ln *anovelv1.LogLine) error {
+			err := streamLines(ctx, testCase.in, func(ln *anovelv1.LogLine) error {
 				got = append(got, ln.GetLine())
 				return nil
-			}, c.filter, "current.log")
-			if !errors.Is(err, c.wantErr) {
-				t.Fatalf("streamLines: got %v, want %v", err, c.wantErr)
+			}, testCase.filter, "current.log")
+			if !errors.Is(err, testCase.wantErr) {
+				t.Fatalf("streamLines: got %v, want %v", err, testCase.wantErr)
 			}
-			if len(got) != len(c.want) {
-				t.Fatalf("got lines %q, want %d matching %q", got, len(c.want), c.want)
+			if len(got) != len(testCase.want) {
+				t.Fatalf("got lines %q, want %d matching %q", got, len(testCase.want), testCase.want)
 			}
-			for i, want := range c.want {
+			for i, want := range testCase.want {
 				if !strings.Contains(got[i], want) {
 					t.Errorf("line %d: got %q, want it to contain %q", i+1, got[i], want)
 				}
@@ -170,7 +170,7 @@ func TestStreamLines(t *testing.T) {
 var errKill = errors.New("container stop timed out")
 
 func TestTearDown(t *testing.T) {
-	cases := []struct {
+	testCases := []struct {
 		name             string
 		targets          []string
 		sessions         []runner.InfraSessionRef
@@ -193,10 +193,10 @@ func TestTearDown(t *testing.T) {
 		// Nothing running is a clean shutdown, not a failed one.
 		{name: "OnAnEmptyEnvironment"},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			var infraCalls atomic.Int32
-			out := tearDown(c.targets, c.sessions,
+			out := tearDown(testCase.targets, testCase.sessions,
 				func(id string) error {
 					if id == "b" {
 						return errKill
@@ -210,14 +210,14 @@ func TestTearDown(t *testing.T) {
 					}
 					return nil
 				})
-			if out.goExecKilled != c.killed || out.infraTornDown != c.tornDown || int(infraCalls.Load()) != len(c.sessions) {
+			if out.goExecKilled != testCase.killed || out.infraTornDown != testCase.tornDown || int(infraCalls.Load()) != len(testCase.sessions) {
 				t.Errorf("killed=%d torn=%d infra calls=%d, want %d, %d, %d",
-					out.goExecKilled, out.infraTornDown, infraCalls.Load(), c.killed, c.tornDown, len(c.sessions))
+					out.goExecKilled, out.infraTornDown, infraCalls.Load(), testCase.killed, testCase.tornDown, len(testCase.sessions))
 			}
-			if len(out.failures) != len(c.failures) {
-				t.Fatalf("failures = %q, want %d", out.failures, len(c.failures))
+			if len(out.failures) != len(testCase.failures) {
+				t.Fatalf("failures = %q, want %d", out.failures, len(testCase.failures))
 			}
-			for i, want := range c.failures {
+			for i, want := range testCase.failures {
 				if !strings.Contains(out.failures[i], want) {
 					t.Errorf("failures[%d]: got %q, want it to name %q", i, out.failures[i], want)
 				}

@@ -1,6 +1,7 @@
 package repocfg
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,8 +13,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// integrationActions is the checks.yaml key for the GitHub Actions app — the
-// poster of every job-emitted check.
+// integrationActions is the checks.yaml key for the GitHub Actions app, which
+// posts every check a job emits.
 const integrationActions = "actions"
 
 // CheckRef is a required status check resolved to its posting app.
@@ -22,7 +23,7 @@ type CheckRef struct {
 	IntegrationID int64
 }
 
-// Discovered is what probing a repo tells us: the required checks for the
+// Discovered is what a repo's working tree shows: the required checks for the
 // master ruleset, and the secrets and environments its workflows use.
 type Discovered struct {
 	Checks []CheckRef
@@ -36,9 +37,9 @@ type Discovered struct {
 // its workflows use.
 //
 // Required checks are the `always` set plus every job declared in the repo's
-// .github/workflows/main.yaml, minus cc.Exclude — the job id is the check
-// context, so there is no class- or file-based derivation to drift. A missing
-// main.yaml (e.g. a docs/meta repo) simply contributes no jobs.
+// .github/workflows/main.yaml, minus cc.Exclude. The job's name, or its id, is
+// the check context, so no class-based list can drift from the workflow. A
+// missing main.yaml contributes no jobs.
 func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 	d := &Discovered{}
 	seen := map[string]bool{}
@@ -99,28 +100,40 @@ func workflowUses(dir string) ([]string, []string, error) {
 		for _, match := range secretRef.FindAllSubmatch(raw, -1) {
 			secrets = append(secrets, string(match[1]))
 		}
-		var wf struct {
-			Jobs map[string]struct {
-				Environment any `yaml:"environment"`
-			} `yaml:"jobs"`
-		}
-		if err := yaml.Unmarshal(raw, &wf); err != nil {
+		named, err := jobEnvironments(raw)
+		if err != nil {
 			return nil, nil, fmt.Errorf("%s: %w", entry.Name(), err)
 		}
-		for _, job := range wf.Jobs {
-			switch environment := job.Environment.(type) {
-			case string:
-				environments = append(environments, environment)
-			case map[string]any:
-				if name, ok := environment["name"].(string); ok {
-					environments = append(environments, name)
-				}
-			}
-		}
+		environments = append(environments, named...)
 	}
 	slices.Sort(secrets)
 	slices.Sort(environments)
 	return slices.Compact(secrets), slices.Compact(environments), nil
+}
+
+// jobEnvironments lists the environments the jobs of a workflow file name,
+// directly or as the name of an environment map.
+func jobEnvironments(raw []byte) ([]string, error) {
+	var wf struct {
+		Jobs map[string]struct {
+			Environment any `yaml:"environment"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(raw, &wf); err != nil {
+		return nil, err
+	}
+	var environments []string
+	for _, job := range wf.Jobs {
+		switch environment := job.Environment.(type) {
+		case string:
+			environments = append(environments, environment)
+		case map[string]any:
+			if name, ok := environment["name"].(string); ok {
+				environments = append(environments, name)
+			}
+		}
+	}
+	return environments, nil
 }
 
 // workflowJob is one job parsed from a workflow file: its check context (the
@@ -132,8 +145,8 @@ type workflowJob struct {
 }
 
 // workflowJobs parses the `jobs:` of a workflow file, returning each job's
-// context and `if:`. A missing file yields no jobs (not an error) — not every
-// repo has a main.yaml. Jobs are returned sorted by id for determinism.
+// context and `if:`, sorted by id. A missing file yields no jobs, since not
+// every repo has a main.yaml.
 func workflowJobs(path string) ([]workflowJob, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -153,11 +166,7 @@ func workflowJobs(path string) ([]workflowJob, error) {
 	}
 	out := make([]workflowJob, 0, len(wf.Jobs))
 	for id, j := range wf.Jobs {
-		ctx := id
-		if j.Name != "" {
-			ctx = j.Name
-		}
-		out = append(out, workflowJob{ID: id, Context: ctx, If: j.If})
+		out = append(out, workflowJob{ID: id, Context: cmp.Or(j.Name, id), If: j.If})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
@@ -167,15 +176,6 @@ func workflowJobs(path string) ([]workflowJob, error) {
 // checks, because its id matches an excluded prefix or its `if:` contains an
 // excluded string.
 func (e ExcludeRules) excludes(j workflowJob) bool {
-	for _, p := range e.Prefixes {
-		if strings.HasPrefix(j.ID, p) {
-			return true
-		}
-	}
-	for _, s := range e.IfContains {
-		if s != "" && strings.Contains(j.If, s) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(e.Prefixes, func(prefix string) bool { return strings.HasPrefix(j.ID, prefix) }) ||
+		slices.ContainsFunc(e.IfContains, func(s string) bool { return s != "" && strings.Contains(j.If, s) })
 }

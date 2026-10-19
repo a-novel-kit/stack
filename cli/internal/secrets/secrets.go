@@ -1,24 +1,3 @@
-// Package secrets is a local, encrypted secrets manager for the a-novel CLI.
-//
-// Threat model. A developer (or an AI agent) runs `a-novel test`/`run`/`ui`
-// with API secrets (e.g. OPENAI_API_KEY) injected into the child process env
-// only. The secret is never printed, logged, committed, or passed as a CLI
-// argument. The goal is to prevent accidental exposure, not to defend against a
-// local attacker who already has read access to the user's home directory.
-//
-// Design.
-//
-//   - A 32-byte local key (crypto/rand) lives at SecretsRoot()/key, file mode
-//     0600 inside a 0700 directory. It is generated once and never overwritten.
-//   - The store at SecretsRoot()/store.enc holds a flat JSON map
-//     {secretID: value} encrypted as a whole with AES-256-GCM. Each write uses
-//     a fresh random 12-byte nonce, stored as `nonce || ciphertext`. Writes are
-//     atomic (temp file + rename) at mode 0600.
-//   - No value is ever logged or printed. Errors never embed a secret value,
-//     and the Store is never formatted with %v.
-//
-// Only the Go standard library is used for crypto (crypto/aes, crypto/cipher,
-// crypto/rand) — no third-party crypto.
 package secrets
 
 import (
@@ -61,8 +40,8 @@ type Store struct {
 }
 
 // Open loads (and, if missing, initializes) the local key and the encrypted
-// store under paths.SecretsRoot(). A first call materializes the key but not
-// the store file — an empty store has no file on disk until the first Save.
+// store under paths.SecretsRoot(). A first call creates the key but not the
+// store file: an empty store has no file on disk until the first Save.
 func Open() (*Store, error) {
 	return openAt(paths.SecretsRoot())
 }
@@ -118,7 +97,7 @@ func openAt(root string) (*Store, error) {
 }
 
 // load reads and decrypts the store file into st.values. An absent store file
-// is not an error — it means an empty store (nothing set yet).
+// is an empty store.
 func (st *Store) load() error {
 	raw, err := os.ReadFile(filepath.Join(st.root, storeFile))
 	if errors.Is(err, os.ErrNotExist) {
@@ -157,7 +136,7 @@ func (st *Store) Remove(id string) {
 	delete(st.values, id)
 }
 
-// List returns the sorted secret IDs only — never the values.
+// List returns the sorted secret IDs, never the values.
 func (st *Store) List() []string {
 	return slices.Sorted(maps.Keys(st.values))
 }

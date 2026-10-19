@@ -18,14 +18,16 @@ func init() { rateLimitWait = 0 }
 // TestMain runs every git command under a fixed identity and no global or
 // system config, so a developer's commit.gpgsign cannot stall fixture commits.
 func TestMain(m *testing.M) {
-	for key, value := range map[string]string{
+	gitEnv := map[string]string{
 		"GIT_CONFIG_GLOBAL":   os.DevNull,
 		"GIT_CONFIG_NOSYSTEM": "1",
 		"GIT_AUTHOR_NAME":     "test",
 		"GIT_AUTHOR_EMAIL":    "test@a-novel.dev",
 		"GIT_COMMITTER_NAME":  "test",
 		"GIT_COMMITTER_EMAIL": "test@a-novel.dev",
-	} {
+	}
+
+	for key, value := range gitEnv {
 		if err := os.Setenv(key, value); err != nil {
 			panic(err)
 		}

@@ -100,12 +100,12 @@ func TestBackupOneLeavesNoPartialFile(t *testing.T) {
 	}
 }
 
-// TestResolveBackup: resolveBackup used to return the first prefix match in name
-// order, so a bare timestamp restored .auto-pre-clear ahead of the manual archive
-// at the same timestamp — something other than what the operator named.
+// TestResolveBackup pins that a timestamp matching several archives, such as a
+// manual backup and its .auto-pre-clear sibling, is refused rather than resolved
+// to the first by name, which would restore something the operator did not name.
 func TestResolveBackup(t *testing.T) {
 	const tagged, plain = "20260722-1200.auto-pre-clear.tar.zst", "20260722-1200.tar.zst"
-	cases := []struct {
+	testCases := []struct {
 		name    string
 		files   []string // oldest first
 		from    string
@@ -124,12 +124,12 @@ func TestResolveBackup(t *testing.T) {
 		// An empty from picks the newest by mtime, regardless of name order.
 		{name: "Success/EmptyFromPicksNewest", files: []string{"old.tar.zst", "new.tar.zst"}, want: "new.tar.zst"},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			dir := t.TempDir()
-			for i, name := range c.files {
+			for i, name := range testCase.files {
 				path := filepath.Join(dir, name)
-				mtime := time.Now().Add(time.Duration(i-len(c.files)) * time.Hour)
+				mtime := time.Now().Add(time.Duration(i-len(testCase.files)) * time.Hour)
 				if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
 					t.Fatal(err)
 				}
@@ -137,17 +137,17 @@ func TestResolveBackup(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			got, err := resolveBackup(dir, c.from)
-			if (err != nil) != c.wantErr {
-				t.Fatalf("resolveBackup(%q): got (%q, %v), want error %v", c.from, got, err, c.wantErr)
+			got, err := resolveBackup(dir, testCase.from)
+			if (err != nil) != testCase.wantErr {
+				t.Fatalf("resolveBackup(%q): got (%q, %v), want error %v", testCase.from, got, err, testCase.wantErr)
 			}
-			for _, want := range c.errHas {
+			for _, want := range testCase.errHas {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("error = %q, want it to name %q", err, want)
 				}
 			}
-			if !c.wantErr && filepath.Base(got) != c.want {
-				t.Errorf("got %s, want %s", filepath.Base(got), c.want)
+			if !testCase.wantErr && filepath.Base(got) != testCase.want {
+				t.Errorf("got %s, want %s", filepath.Base(got), testCase.want)
 			}
 		})
 	}

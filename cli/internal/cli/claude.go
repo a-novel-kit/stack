@@ -1,11 +1,3 @@
-// `a-novel claude` — launch Claude Code from the stack root.
-//
-// The stack root is the one directory from which `app/`, `kit/` and `cli/` are
-// all reachable, and the `a-novel` verbs an agent reaches for (`test`, `build`,
-// `run …`) resolve their targets relative to the working tree. Starting a
-// session anywhere else silently loses half the workspace, so this verb makes
-// the correct working directory the only possible one.
-
 package cli
 
 import (
@@ -22,6 +14,10 @@ import (
 // claudeBin is the Claude Code executable, resolved through $PATH.
 const claudeBin = "claude"
 
+// newClaudeCmd launches Claude Code from the stack root, the one directory from
+// which app/, kit/ and cli/ are all reachable. The a-novel verbs an agent
+// reaches for resolve their targets relative to the working tree, so a session
+// started anywhere else loses half the workspace.
 func newClaudeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "claude [args...]",
@@ -63,10 +59,9 @@ its own with nothing in between.`,
 				return fmt.Errorf("enter stack root %s: %w", stack.Path, err)
 			}
 
-			// Point of no return: on success Exec never returns, so nothing
-			// after this line runs — including main's update-notice and exit-
-			// code handling, which now belong to claude. argv[0] is the
-			// resolved path by convention.
+			// On success Exec never returns, so nothing after this line runs,
+			// main's update notice and exit-code handling included: they belong
+			// to claude. argv[0] is the resolved path by convention.
 			return syscall.Exec(bin, append([]string{bin}, args...), os.Environ())
 		},
 	}

@@ -11,15 +11,15 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/shared/compose"
 )
 
-// DetectTests is the test-suite counterpart of [Detect]. It discovers:
+// DetectTests is the test-suite counterpart of [Detect].
 //
-//   - Go test targets — one per Go module. When the module ships
-//     builds/podman-compose.go[.<path>].test.yaml files, one target per file
-//     scoped to that path (`go test ./<path>/...`) with the compose env
-//     attached; otherwise a single env-less `go test ./...`.
-//   - pnpm test targets — every package.json script named "test" or "test:*".
-//     A builds/podman-compose.pnpm[.<path>].test.yaml whose path matches the
-//     script is attached as that script's env.
+//   - A Go module gets one target per builds/podman-compose.go[.<path>].test.yaml
+//     file, scoped to that path (`go test ./<path>/...`) with the compose env
+//     attached, plus one env-less target for the test packages no file covers.
+//     A module without such a file gets a single env-less `go test ./...`.
+//   - Each package.json script named "test" or "test:*" is a target. A
+//     builds/podman-compose.pnpm[.<path>].test.yaml whose path matches the
+//     script is attached as its env.
 //
 // The env filename convention is `podman-compose.<id>.test.yaml` where <id>
 // is the environment ("go"/"pnpm") followed by the dotted test path it covers
@@ -185,8 +185,8 @@ func goTests(dir, rel string, envs []envFile) []Target {
 	//
 	// It carries no env: a package that needs external state declares its own
 	// env file, so an uncovered one is either cache-safe or fails loudly on the
-	// missing state — which surfaces the absent env rather than hiding it. That
-	// is also why it omits -count=1.
+	// missing state, which surfaces the absent env. That is also why it omits
+	// -count=1.
 	if uncovered := uncoveredGoSelectors(goTestPackageDirs(dir), scoped); len(uncovered) > 0 {
 		args := append([]string{testArg}, uncovered...)
 		targets = append(targets, Target{
@@ -206,9 +206,9 @@ func goTests(dir, rel string, envs []envFile) []Target {
 // goTestPackageDirs returns the module-relative segment paths of every directory
 // under dir holding a *_test.go file. It prunes the same trees the main scan does
 // and stops at any nested go.mod: those packages belong to that module, which is
-// discovered on its own, and this is also what keeps a sibling checkout dropped
-// under tmp/ — a worktree git does not report as ignored — out of the count. The
-// module root itself is the empty path.
+// discovered on its own. That stop also keeps out a sibling checkout dropped
+// under tmp/, a worktree git does not report as ignored. The module root itself
+// is the empty path.
 func goTestPackageDirs(dir string) [][]string {
 	absRoot, err := filepath.Abs(dir)
 	if err != nil {
@@ -216,54 +216,40 @@ func goTestPackageDirs(dir string) [][]string {
 	}
 
 	ignored := gitIgnoredDirs(absRoot)
-	seen := map[string]struct{}{}
-
+	seen := map[string]bool{}
 	var pkgs [][]string
-
 	_ = filepath.WalkDir(absRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil //nolint:nilerr // an unreadable subtree is skipped, not fatal to detection
 		}
-
 		if entry.IsDir() {
-			if skipDir(absRoot, path, entry.Name(), ignored) {
-				return filepath.SkipDir
-			}
-
-			if path != absRoot && IsFile(filepath.Join(path, "go.mod")) {
-				return filepath.SkipDir
-			}
-
-			return nil
+			return moduleDirStep(absRoot, path, entry.Name(), ignored)
 		}
-
-		if !strings.HasSuffix(entry.Name(), "_test.go") {
-			return nil
-		}
-
 		rel, relErr := filepath.Rel(absRoot, filepath.Dir(path))
-		if relErr != nil {
-			return nil //nolint:nilerr // a path outside the root is not a package of this module
+		if strings.HasSuffix(entry.Name(), "_test.go") && relErr == nil && !seen[rel] {
+			seen[rel] = true
+			pkgs = append(pkgs, pathSegments(rel))
 		}
-
-		if _, dup := seen[rel]; dup {
-			return nil
-		}
-
-		seen[rel] = struct{}{}
-
-		if rel == "." {
-			pkgs = append(pkgs, []string{})
-
-			return nil
-		}
-
-		pkgs = append(pkgs, strings.Split(rel, string(filepath.Separator)))
-
 		return nil
 	})
-
 	return pkgs
+}
+
+// moduleDirStep is the walk's decision on a directory of the module at
+// absRoot: it skips the trees the main scan prunes and any nested module.
+func moduleDirStep(absRoot, path, name string, ignored map[string]struct{}) error {
+	if skipDir(absRoot, path, name, ignored) || path != absRoot && IsFile(filepath.Join(path, "go.mod")) {
+		return filepath.SkipDir
+	}
+	return nil
+}
+
+// pathSegments splits a relative path into its segments, "." being none.
+func pathSegments(rel string) []string {
+	if rel == "." {
+		return []string{}
+	}
+	return strings.Split(rel, string(filepath.Separator))
 }
 
 // uncoveredGoSelectors returns a `go test` selector for each test package no

@@ -162,12 +162,14 @@ func TestInfraPlanIsExactAndDeploymentOnly(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 	dryRun := rendered.String()
-	for _, want := range []string{
+	wantDryRun := []string{
 		"### PUT " + base + "/vulnerability-alerts",
 		"### DELETE " + base + "/pages",
 		"### DELETE " + base + "/contents/.github/workflows/release-train.yaml",
 		"### PRUNE rulesets",
-	} {
+	}
+
+	for _, want := range wantDryRun {
 		if !strings.Contains(dryRun, want) {
 			t.Errorf("dry-run missing %q\n%s", want, dryRun)
 		}

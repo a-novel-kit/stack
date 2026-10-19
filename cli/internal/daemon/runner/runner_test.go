@@ -31,7 +31,7 @@ func newRunnerForLaunch() (*Runner, *env.Allocator, *discovery.Target) {
 // start of that target claims for, so a refused start that released them
 // handed a running process's ports back to the allocator.
 func TestLaunchKeepsALiveInstancesPorts(t *testing.T) {
-	cases := []struct {
+	testCases := []struct {
 		name    string
 		phase   anovelv1.Phase
 		mode    anovelv1.Mode
@@ -41,19 +41,19 @@ func TestLaunchKeepsALiveInstancesPorts(t *testing.T) {
 		{"stopping is refused", anovelv1.Phase_PHASE_STOPPING, anovelv1.Mode_MODE_GO_EXEC, true},
 		{"running in the same mode is a no-op", anovelv1.Phase_PHASE_RUNNING, anovelv1.Mode_MODE_GO_EXEC, false},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			r, alloc, tgt := newRunnerForLaunch()
 			port, err := alloc.Acquire("svc", "REST_PORT", tgt.ID())
 			if err != nil {
 				t.Fatal(err)
 			}
-			r.instances[tgt.ID()] = &Instance{ID: tgt.ID(), Target: tgt.Name, Service: "svc", Stack: "default", Phase: c.phase, Mode: c.mode}
+			r.instances[tgt.ID()] = &Instance{ID: tgt.ID(), Target: tgt.Name, Service: "svc", Stack: "default", Phase: testCase.phase, Mode: testCase.mode}
 
 			_, err = r.launch(t.Context(), tgt, anovelv1.Mode_MODE_GO_EXEC)
 
-			if (err != nil) != c.wantErr {
-				t.Fatalf("launch: got err %v, want error %v", err, c.wantErr)
+			if (err != nil) != testCase.wantErr {
+				t.Fatalf("launch: got err %v, want error %v", err, testCase.wantErr)
 			}
 			if got, ok := alloc.Lookup("svc", "REST_PORT"); !ok || got != port {
 				t.Errorf("live instance's port: lookup = (%d, %v), want (%d, true)", got, ok, port)

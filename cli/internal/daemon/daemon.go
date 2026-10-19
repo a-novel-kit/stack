@@ -1,6 +1,3 @@
-// Package daemon owns the daemon's process lifecycle: socket listener,
-// graceful shutdown, signal handling, and recovery of orphan containers.
-// The RPC handlers live in internal/daemon/server.
 package daemon
 
 import (
@@ -43,37 +40,9 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("parse %s: %w", stacks.EnvVar, err)
 	}
-
-	// A responsive listener means another daemon already owns this socket.
-	// Reporting it here names the socket and the command that frees it.
-	if isLive(socketPath) {
-		return fmt.Errorf("daemon already running on %s — use `a-novel core kill` to stop it first", socketPath)
-	}
-
-	// A path with no listener is a stale socket file, removed here so the bind
-	// can proceed — the recovery path after `kill -9`.
-	if _, err := os.Stat(socketPath); err == nil {
-		if err := os.Remove(socketPath); err != nil {
-			return fmt.Errorf("remove stale socket %s: %w", socketPath, err)
-		}
-	}
-
-	// The parent is normally an existing /run/user/<uid> or the /tmp fallback;
-	// this only creates one when XDG_RUNTIME_DIR points somewhere unusual.
-	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
-		return fmt.Errorf("mkdir socket parent: %w", err)
-	}
-
-	ln, err := net.Listen("unix", socketPath)
+	ln, err := listen(socketPath)
 	if err != nil {
-		return fmt.Errorf("listen on %s: %w", socketPath, err)
-	}
-	// Only the owning user may connect. XDG_RUNTIME_DIR is already 0700, and
-	// pinning the socket itself keeps a permissive parent directory from
-	// exposing the daemon.
-	if err := os.Chmod(socketPath, 0o600); err != nil {
-		_ = ln.Close()
-		return fmt.Errorf("chmod socket: %w", err)
+		return err
 	}
 
 	// Discover every service in every registered stack before serving.
@@ -123,19 +92,63 @@ func Run(ctx context.Context, opts Options) error {
 		fmt.Fprintf(os.Stderr, "recovery: adopted %d orphan container(s), %d target(s)\n", cN, tN)
 	}
 
-	// Replay the go-exec targets a prior PrepareReinstall checkpointed, then
-	// drop the checkpoint. A relaunch that fails is reported and skipped, so it
-	// never blocks startup.
-	if cp, err := reinstall.Read(); err == nil && cp != nil {
-		fmt.Fprintf(os.Stderr, "reinstall: replaying %d go-exec target(s) from %s\n",
-			len(cp.GoExec), reinstall.Path())
-		for _, gx := range cp.GoExec {
-			if err := run.Relaunch(ctx, gx.TargetID, gx.Env); err != nil {
-				fmt.Fprintf(os.Stderr, "reinstall: relaunch %s failed: %v\n", gx.TargetID, err)
-			}
-		}
-		_ = reinstall.Delete()
+	replayCheckpoint(ctx, run)
+	return serve(ctx, ln, srv, socketPath)
+}
+
+// listen binds the daemon's unix socket at socketPath, refusing when another
+// daemon answers there and removing a stale socket file, the recovery path
+// after `kill -9`.
+func listen(socketPath string) (net.Listener, error) {
+	// A responsive listener means another daemon already owns this socket.
+	// Reporting it here names the socket and the command that frees it.
+	if isLive(socketPath) {
+		return nil, fmt.Errorf("daemon already running on %s — use `a-novel core kill` to stop it first", socketPath)
 	}
+	if _, err := os.Stat(socketPath); err == nil {
+		if err := os.Remove(socketPath); err != nil {
+			return nil, fmt.Errorf("remove stale socket %s: %w", socketPath, err)
+		}
+	}
+	// The parent is normally an existing /run/user/<uid> or the /tmp fallback;
+	// this only creates one when XDG_RUNTIME_DIR points somewhere unusual.
+	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
+		return nil, fmt.Errorf("mkdir socket parent: %w", err)
+	}
+	ln, err := net.Listen("unix", socketPath)
+	if err != nil {
+		return nil, fmt.Errorf("listen on %s: %w", socketPath, err)
+	}
+	// Only the owning user may connect. XDG_RUNTIME_DIR is already 0700, and
+	// pinning the socket itself keeps a permissive parent directory from
+	// exposing the daemon.
+	if err := os.Chmod(socketPath, 0o600); err != nil {
+		_ = ln.Close()
+		return nil, fmt.Errorf("chmod socket: %w", err)
+	}
+	return ln, nil
+}
+
+// replayCheckpoint relaunches the go-exec targets a prior PrepareReinstall
+// checkpointed, then drops the checkpoint. A relaunch that fails is reported
+// and skipped, so it never blocks startup.
+func replayCheckpoint(ctx context.Context, run *runner.Runner) {
+	cp, err := reinstall.Read()
+	if err != nil || cp == nil {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "reinstall: replaying %d go-exec target(s) from %s\n", len(cp.GoExec), reinstall.Path())
+	for _, gx := range cp.GoExec {
+		if err := run.Relaunch(ctx, gx.TargetID, gx.Env); err != nil {
+			fmt.Fprintf(os.Stderr, "reinstall: relaunch %s failed: %v\n", gx.TargetID, err)
+		}
+	}
+	_ = reinstall.Delete()
+}
+
+// serve answers connect-rpc on ln until ctx ends, then shuts down gracefully
+// and removes the socket file.
+func serve(ctx context.Context, ln net.Listener, srv *server.Server, socketPath string) error {
 	rpcServer := connect.NewServer()
 	anovelv1connect.RegisterCoreServiceHandler(rpcServer, srv)
 	mux := http.NewServeMux()
@@ -146,7 +159,7 @@ func Run(ctx context.Context, opts Options) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	// Serve in a goroutine so we can intercept shutdown signals here. Serve
+	// Serve runs in a goroutine, so the shutdown signal is handled here. Serve
 	// returns before Shutdown only on a failure.
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- httpServer.Serve(ln) }()

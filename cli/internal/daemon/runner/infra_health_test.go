@@ -2,12 +2,10 @@ package runner
 
 import "testing"
 
-// waitInfraHealthy used to read an empty container query as "ready", so a service whose
-// labels were swallowed by the compose version — or whose containers had not appeared
-// yet — was declared healthy and its dependents ran against a database still starting.
-// The discriminator is whether the service DECLARES infra, which infraHealthy takes as
-// declaredInfra.
-
+// TestInfraHealthy pins that an empty container query is ready only for a
+// service that declares no infra. A compose version that swallows the labels,
+// or containers that have not appeared yet, also yield an empty query, and the
+// dependents must not run against a database still starting.
 func TestInfraHealthy(t *testing.T) {
 	running := infraContainerState{phase: pmPhaseRunning, health: pmHealthHealthy}
 	// A container with no healthcheck reports health "-", which is healthy enough to run.
@@ -17,7 +15,7 @@ func TestInfraHealthy(t *testing.T) {
 	oneShotFailed := infraContainerState{phase: pmPhaseExited, exitCode: 1}
 	inspectFailed := infraContainerState{inspectErr: true}
 
-	cases := []struct {
+	testCases := []struct {
 		name          string
 		declaredInfra int
 		states        []infraContainerState
@@ -40,11 +38,11 @@ func TestInfraHealthy(t *testing.T) {
 		{"an inspect failure is not ready", 1, []infraContainerState{inspectFailed}, false},
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got := infraHealthy(c.declaredInfra, c.states)
-			if got != c.want {
-				t.Errorf("infraHealthy(%d, %v) = %v, want %v", c.declaredInfra, c.states, got, c.want)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got := infraHealthy(testCase.declaredInfra, testCase.states)
+			if got != testCase.want {
+				t.Errorf("infraHealthy(%d, %v) = %v, want %v", testCase.declaredInfra, testCase.states, got, testCase.want)
 			}
 		})
 	}

@@ -1,11 +1,6 @@
-// `a-novel test` and `a-novel build`: discover the targets under a directory,
-// let the user pick them or run them all, then report. Both share one flow and
-// differ only in wording and discovery.
-
 package cli
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -25,7 +20,9 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/ui"
 )
 
-// capability is `test` or `build`.
+// capability is `test` or `build`. Both discover the targets under a
+// directory, let the user pick them or run them all, then report, and differ
+// only in wording and discovery.
 type capability struct {
 	name    string
 	looks   string // what discovery scans for, quoted when nothing is found
@@ -120,37 +117,11 @@ func newCapabilityCmd(c capability) *cobra.Command {
 	return cmd
 }
 
+// runCapability detects, picks and runs c's targets, then reports.
 func runCapability(ctx context.Context, c capability, o capabilityOpts) error {
-	kinds, err := parseKinds(o.types)
+	targets, err := detectTargets(c, o)
 	if err != nil {
-		return usageError(err)
-	}
-	// A missing directory or one outside an a-novel repository fails before any
-	// walk, so a wrong path never looks like an empty scan.
-	absDir, _ := filepath.Abs(o.dir)
-	if info, statErr := os.Stat(o.dir); statErr != nil || !info.IsDir() {
-		return usageError(fmt.Errorf("cannot scan %q: not an accessible directory", absDir))
-	}
-	if err := detect.RepoGuard(o.dir); err != nil {
-		return usageError(err)
-	}
-	targets, err := c.detect(o.dir)
-	if err != nil {
-		return fmt.Errorf("scan failed: %w", err)
-	}
-	if kinds != nil {
-		targets = slices.DeleteFunc(targets, func(t detect.Target) bool { return !slices.Contains(kinds, t.Kind) })
-	}
-	if c.name == testCapability.name && !o.noCover {
-		targets = withCoverage(targets)
-	}
-	if len(targets) == 0 {
-		scope := ""
-		if kinds != nil {
-			scope = " matching --type"
-		}
-		return usageError(fmt.Errorf("no %s targets%s found under %s\n  Looked for %s.\n"+
-			"  Run from a project root, or pass --dir <path>", c.name, scope, absDir, c.looks))
+		return err
 	}
 	if o.dryRun {
 		fmt.Print(ui.DryRunView(c.name, targets))
@@ -178,14 +149,7 @@ func runCapability(ctx context.Context, c capability, o capabilityOpts) error {
 		targets = chosen
 	}
 
-	limit := o.jobs
-	switch {
-	case limit > 0:
-	case interactive:
-		limit = max(2, runtime.NumCPU()/4)
-	default:
-		limit = 1
-	}
+	limit := jobLimit(o.jobs, interactive)
 	// Concurrent go-test targets split the cores between them; a lone target
 	// keeps the whole machine.
 	procs := 0
@@ -202,6 +166,55 @@ func runCapability(ctx context.Context, c capability, o capabilityOpts) error {
 	batch := ui.RunJobs(ctx, list, limit, interactive)
 	fmt.Print(ui.Report(strings.ToUpper(c.name), batch, ui.Failed))
 	return batchError(batch)
+}
+
+// detectTargets scans o.dir for c's targets of the kinds --type keeps. A
+// missing directory or one outside an a-novel repository fails before any
+// walk, so a wrong path never looks like an empty scan.
+func detectTargets(c capability, o capabilityOpts) ([]detect.Target, error) {
+	kinds, err := parseKinds(o.types)
+	if err != nil {
+		return nil, usageError(err)
+	}
+	absDir, _ := filepath.Abs(o.dir)
+	if info, statErr := os.Stat(o.dir); statErr != nil || !info.IsDir() {
+		return nil, usageError(fmt.Errorf("cannot scan %q: not an accessible directory", absDir))
+	}
+	if err := detect.RepoGuard(o.dir); err != nil {
+		return nil, usageError(err)
+	}
+	targets, err := c.detect(o.dir)
+	if err != nil {
+		return nil, fmt.Errorf("scan failed: %w", err)
+	}
+	if kinds != nil {
+		targets = slices.DeleteFunc(targets, func(t detect.Target) bool { return !slices.Contains(kinds, t.Kind) })
+	}
+	if c.name == testCapability.name && !o.noCover {
+		targets = withCoverage(targets)
+	}
+	if len(targets) == 0 {
+		scope := ""
+		if kinds != nil {
+			scope = " matching --type"
+		}
+		return nil, usageError(fmt.Errorf("no %s targets%s found under %s\n  Looked for %s.\n"+
+			"  Run from a project root, or pass --dir <path>", c.name, scope, absDir, c.looks))
+	}
+	return targets, nil
+}
+
+// jobLimit is how many targets run at once: --jobs when set, a quarter of the
+// CPUs (at least two) behind the picker, otherwise one.
+func jobLimit(jobs int, interactive bool) int {
+	switch {
+	case jobs > 0:
+		return jobs
+	case interactive:
+		return max(2, runtime.NumCPU()/4)
+	default:
+		return 1
+	}
 }
 
 // parseKinds turns "go,podman" into a kind list, nil meaning every kind.
@@ -262,8 +275,7 @@ func preflight(ctx context.Context, verb string, targets []detect.Target, canPro
 	proceed := true
 	if canPrompt {
 		fmt.Fprint(os.Stderr, ui.Gold.Render("Clean it and continue, or abort? [c]lean / [a]bort: "))
-		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		answer := strings.ToLower(strings.TrimSpace(line))
+		answer := readAnswer(os.Stdin)
 		proceed = answer == "c" || answer == "clean"
 	} else {
 		fmt.Fprintln(os.Stderr, ui.Warn.Render("No prompt available — cleaning the stale environment "+

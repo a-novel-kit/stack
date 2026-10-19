@@ -49,12 +49,12 @@ a-novel core setup
 a-novel core sync
 ```
 
-Open your AI agent with the stack root as its workspace, and run `a-novel run ui` to see every service.
+Open your AI agent with the stack root as its workspace, and run `a-novel run ui` to see every service. The [developer guide](https://a-novel-kit.github.io/stack/) walks through each tool and the everyday work.
 
 ## Documentation
 
-New to A-Novel? Start with the [developer guide](https://a-novel-kit.github.io/stack/). [`cli/README.md`](cli/README.md) is the CLI reference.
+[`cli/README.md`](cli/README.md) is the CLI reference.
 
 ## Contributing
 
-To work on this repository, [CONTRIBUTING.md](CONTRIBUTING.md) covers its layout and how the CLI works.
+Set up your machine with the [developer guide](https://a-novel-kit.github.io/stack/), then read [CONTRIBUTING.md](./CONTRIBUTING.md).
