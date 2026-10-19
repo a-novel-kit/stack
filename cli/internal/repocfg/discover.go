@@ -1,6 +1,7 @@
 package repocfg
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -99,28 +100,40 @@ func workflowUses(dir string) ([]string, []string, error) {
 		for _, match := range secretRef.FindAllSubmatch(raw, -1) {
 			secrets = append(secrets, string(match[1]))
 		}
-		var wf struct {
-			Jobs map[string]struct {
-				Environment any `yaml:"environment"`
-			} `yaml:"jobs"`
-		}
-		if err := yaml.Unmarshal(raw, &wf); err != nil {
+		named, err := jobEnvironments(raw)
+		if err != nil {
 			return nil, nil, fmt.Errorf("%s: %w", entry.Name(), err)
 		}
-		for _, job := range wf.Jobs {
-			switch environment := job.Environment.(type) {
-			case string:
-				environments = append(environments, environment)
-			case map[string]any:
-				if name, ok := environment["name"].(string); ok {
-					environments = append(environments, name)
-				}
-			}
-		}
+		environments = append(environments, named...)
 	}
 	slices.Sort(secrets)
 	slices.Sort(environments)
 	return slices.Compact(secrets), slices.Compact(environments), nil
+}
+
+// jobEnvironments lists the environments the jobs of a workflow file name,
+// directly or as the name of an environment map.
+func jobEnvironments(raw []byte) ([]string, error) {
+	var wf struct {
+		Jobs map[string]struct {
+			Environment any `yaml:"environment"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(raw, &wf); err != nil {
+		return nil, err
+	}
+	var environments []string
+	for _, job := range wf.Jobs {
+		switch environment := job.Environment.(type) {
+		case string:
+			environments = append(environments, environment)
+		case map[string]any:
+			if name, ok := environment["name"].(string); ok {
+				environments = append(environments, name)
+			}
+		}
+	}
+	return environments, nil
 }
 
 // workflowJob is one job parsed from a workflow file: its check context (the
@@ -153,11 +166,7 @@ func workflowJobs(path string) ([]workflowJob, error) {
 	}
 	out := make([]workflowJob, 0, len(wf.Jobs))
 	for id, j := range wf.Jobs {
-		ctx := id
-		if j.Name != "" {
-			ctx = j.Name
-		}
-		out = append(out, workflowJob{ID: id, Context: ctx, If: j.If})
+		out = append(out, workflowJob{ID: id, Context: cmp.Or(j.Name, id), If: j.If})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
@@ -167,15 +176,6 @@ func workflowJobs(path string) ([]workflowJob, error) {
 // checks, because its id matches an excluded prefix or its `if:` contains an
 // excluded string.
 func (e ExcludeRules) excludes(j workflowJob) bool {
-	for _, p := range e.Prefixes {
-		if strings.HasPrefix(j.ID, p) {
-			return true
-		}
-	}
-	for _, s := range e.IfContains {
-		if s != "" && strings.Contains(j.If, s) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(e.Prefixes, func(prefix string) bool { return strings.HasPrefix(j.ID, prefix) }) ||
+		slices.ContainsFunc(e.IfContains, func(s string) bool { return s != "" && strings.Contains(j.If, s) })
 }

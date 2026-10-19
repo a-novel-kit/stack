@@ -152,15 +152,38 @@ type Plan struct {
 	Ops []Op
 }
 
-// BuildPlan assembles the desired-state operations for a repo.
+// BuildPlan assembles the desired-state operations for a repo. Managed files
+// come before the rulesets that require their checks, and the prune comes last.
 func BuildPlan(t *RepoTarget) (*Plan, error) {
-	p := &Plan{}
-	c := t.Class
-
 	repoPath := fmt.Sprintf("repos/%s/%s", t.Org, t.Repo)
+	uniform, err := uniformOps(t.Class, repoPath)
+	if err != nil {
+		return nil, err
+	}
+	workflows, err := workflowOps(t.Class, repoPath)
+	if err != nil {
+		return nil, err
+	}
+	rulesets, err := rulesetOps(t, repoPath)
+	if err != nil {
+		return nil, err
+	}
+	return &Plan{Ops: slices.Concat(
+		settingsOps(t.Class, repoPath),
+		uniform,
+		securityOps(t.Class, repoPath),
+		environmentOps(t, repoPath),
+		scopedSecretOps(t),
+		workflows,
+		[]Op{pagesOp(t.Class, repoPath)},
+		rulesets,
+	)}, nil
+}
 
-	p.Ops = append(p.Ops, Op{Method: http.MethodPatch, Path: repoPath, Body: SettingsBody(c)})
-
+// settingsOps sets the repository settings and, when the class names it, the
+// Dependabot alerts toggle.
+func settingsOps(c *ClassPreset, repoPath string) []Op {
+	ops := []Op{{Method: http.MethodPatch, Path: repoPath, Body: SettingsBody(c)}}
 	// Dependabot alerts use their own endpoint rather than the repository
 	// security_and_analysis block. Older presets omit the field and leave the
 	// live setting untouched; presets that name it get explicit desired state.
@@ -169,35 +192,27 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		if *c.Security.DependabotAlerts {
 			method = http.MethodPut
 		}
-		p.Ops = append(p.Ops, Op{Method: method, Path: repoPath + "/vulnerability-alerts"})
+		ops = append(ops, Op{Method: method, Path: repoPath + "/vulnerability-alerts"})
 	}
+	return ops
+}
 
-	// CODEOWNERS is provisioned to every repo regardless of class, so review
-	// requests route automatically. Written to .github/ (GitHub honours that
-	// over a root copy); apply removes any stray root file so a repo never
-	// carries two.
+// uniformOps provisions what every repo carries whatever its class:
+// CODEOWNERS, the label vocabulary, and the tier teams' grants.
+func uniformOps(c *ClassPreset, repoPath string) ([]Op, error) {
+	// CODEOWNERS routes review requests automatically. It is written to
+	// .github/, which GitHub honors over a root copy, and apply removes any
+	// stray root file so a repo never carries two.
 	codeowners, err := CODEOWNERS()
 	if err != nil {
 		return nil, err
 	}
-	p.Ops = append(p.Ops, Op{
-		Method:  http.MethodPut,
-		Path:    repoPath + "/contents/.github/CODEOWNERS",
-		Content: codeowners,
-	})
-
-	// Labels: the uniform label vocabulary, provisioned to every repo like
-	// CODEOWNERS. Reconciled (ensure upserted, retire deleted) at apply time.
+	// Labels are reconciled at apply time: ensured labels upserted, retired
+	// ones deleted.
 	labels, err := LoadLabels()
 	if err != nil {
 		return nil, err
 	}
-	p.Ops = append(p.Ops, Op{
-		Method: http.MethodPut,
-		Path:   repoPath + "/labels",
-		Body:   labels,
-	})
-
 	// Each contributor tier holds its role here through the area team of this
 	// repo's class.
 	teams, err := LoadTeams()
@@ -208,20 +223,16 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	for _, tier := range teams.Tiers {
 		grants = append(grants, TeamGrant{Team: tier.Name + "-" + string(c.Class), Parent: tier.Name, Permission: tier.Permission})
 	}
-	p.Ops = append(p.Ops, Op{Method: http.MethodPut, Path: repoPath + "/teams", Teams: grants})
+	return []Op{
+		{Method: http.MethodPut, Path: repoPath + "/contents/.github/CODEOWNERS", Content: codeowners},
+		{Method: http.MethodPut, Path: repoPath + "/labels", Body: labels},
+		{Method: http.MethodPut, Path: repoPath + "/teams", Teams: grants},
+	}, nil
+}
 
-	// Code scanning stays off, asserted on every update rather than assumed.
-	// Static analysis is the lint-semgrep and scan-secrets jobs in main.yaml,
-	// which report as ordinary required checks. Default setup used to be held
-	// off as a side effect of committing the advanced-setup workflow; with that
-	// workflow gone, an org-level "enable for all repositories" toggle would
-	// otherwise switch scanning back on here unnoticed. The call is idempotent.
-	p.Ops = append(p.Ops, Op{
-		Method: http.MethodPatch,
-		Path:   repoPath + "/code-scanning/default-setup",
-		Body:   map[string]any{"state": "not-configured"},
-	})
-
+// securityOps asserts the code analysis products and the workflow token's
+// limits.
+func securityOps(c *ClassPreset, repoPath string) []Op {
 	// GitHub Code Quality bills per active committer and per AI credit on every
 	// default-branch push, so the product follows the same class flag as the
 	// master ruleset's code_quality rule.
@@ -229,48 +240,50 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	if c.CodeQuality {
 		codeQuality = "configured"
 	}
-	p.Ops = append(p.Ops, Op{
-		Method: http.MethodPatch,
-		Path:   repoPath + "/code-quality/setup",
-		Body:   map[string]any{"state": codeQuality},
-	})
+	workflowPermissions := map[string]any{"default_workflow_permissions": "read", "can_approve_pull_request_reviews": false}
+	forkApproval := map[string]any{"approval_policy": "all_external_contributors"}
+	return []Op{
+		// Code scanning stays off, asserted on every update rather than assumed.
+		// Static analysis is the lint-semgrep and scan-secrets jobs in
+		// main.yaml, which report as ordinary required checks, and an org-level
+		// "enable for all repositories" toggle would otherwise switch scanning
+		// back on here unnoticed. The call is idempotent.
+		{Method: http.MethodPatch, Path: repoPath + "/code-scanning/default-setup", Body: map[string]any{"state": "not-configured"}},
+		{Method: http.MethodPatch, Path: repoPath + "/code-quality/setup", Body: map[string]any{"state": codeQuality}},
+		// A workflow token is read-only unless its job asks for more, and it
+		// never approves a pull request. An outside contributor's fork runs
+		// nothing until a maintainer approves it.
+		{Method: http.MethodPut, Path: repoPath + "/actions/permissions/workflow", Body: workflowPermissions},
+		{Method: http.MethodPut, Path: repoPath + "/actions/permissions/fork-pr-contributor-approval", Body: forkApproval},
+		// A published release keeps its tag and assets: no key that bypasses
+		// the tags ruleset can move a released tag to other code.
+		{Method: http.MethodPut, Path: repoPath + "/immutable-releases"},
+	}
+}
 
-	// A workflow token is read-only unless its job asks for more, and it never
-	// approves a pull request. An outside contributor's fork runs nothing until
-	// a maintainer approves it.
-	p.Ops = append(p.Ops,
-		Op{Method: http.MethodPut, Path: repoPath + "/actions/permissions/workflow", Body: map[string]any{
-			"default_workflow_permissions": "read", "can_approve_pull_request_reviews": false,
-		}},
-		Op{Method: http.MethodPut, Path: repoPath + "/actions/permissions/fork-pr-contributor-approval", Body: map[string]any{
-			"approval_policy": "all_external_contributors",
-		}},
-		// A published release keeps its tag and assets: no key that bypasses the
-		// tags ruleset can move a released tag to other code.
-		Op{Method: http.MethodPut, Path: repoPath + "/immutable-releases"},
-	)
-
-	// The release and governance environments open only on refs a ruleset
-	// guards: the default branch, and release lines and version tags where the
-	// tags rulesets limit who creates them. A feature branch's workflow never
-	// unlocks them.
+// environmentOps writes the release and governance environments the repo's
+// workflows use. They open only on refs a ruleset guards: the default branch,
+// and release lines and version tags where the tags rulesets limit who creates
+// them. A feature branch's workflow never unlocks them.
+func environmentOps(t *RepoTarget, repoPath string) []Op {
 	policies := []DeploymentPolicy{{Name: t.DefaultBranch, Type: "branch"}}
 	if t.Class.Rulesets.Tags {
 		policies = append(policies, DeploymentPolicy{Name: "release/v*", Type: "branch"}, DeploymentPolicy{Name: "v*", Type: "tag"})
 	}
-	environment := func(name string, reviewers ...string) {
-		p.Ops = append(p.Ops,
-			Op{Method: http.MethodPut, Path: repoPath + "/environments/" + name, Reviewers: reviewers, Body: map[string]any{
-				"deployment_branch_policy": map[string]any{"protected_branches": false, "custom_branch_policies": true},
-			}},
-			Op{Method: http.MethodPut, Path: repoPath + "/environments/" + name + "/deployment-branch-policies", Body: policies},
-		)
+	environment := func(name string, reviewers ...string) []Op {
+		body := map[string]any{"deployment_branch_policy": map[string]any{"protected_branches": false, "custom_branch_policies": true}}
+		return []Op{
+			{Method: http.MethodPut, Path: repoPath + "/environments/" + name, Reviewers: reviewers, Body: body},
+			{Method: http.MethodPut, Path: repoPath + "/environments/" + name + "/deployment-branch-policies", Body: policies},
+		}
 	}
+
+	var ops []Op
 	// The release App's key is a secret of the release environment, and every
 	// cut waits there for core or the repo's owners, who may approve a run they
 	// dispatched. No bot can approve, so no bot can release.
 	if releases(t) {
-		environment("release", "core", "owners-"+string(c.Class))
+		ops = append(ops, environment("release", "core", "owners-"+string(t.Class.Class))...)
 	}
 	// The privileged keys are secrets of the governance environment alone, so
 	// a branch's copy of a workflow cannot read them. It holds the ones the
@@ -280,40 +293,55 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		return !slices.Contains(t.OrgProfile.Governance.Secrets, name)
 	})
 	if len(governance.Secrets) > 0 {
-		environment("governance")
-		p.Ops = append(p.Ops, Op{Path: repoPath + "/environments/governance/secrets", Governance: &governance})
+		ops = append(ops, environment("governance")...)
+		ops = append(ops, Op{Path: repoPath + "/environments/governance/secrets", Governance: &governance})
 	}
+	return ops
+}
 
-	// A scoped org secret reaches exactly the repos whose workflows name it.
+// scopedSecretOps grants each scoped org secret to the repo exactly when its
+// workflows name it, and revokes it otherwise.
+func scopedSecretOps(t *RepoTarget) []Op {
+	ops := make([]Op, 0, len(t.OrgProfile.ScopedSecrets))
 	for _, name := range t.OrgProfile.ScopedSecrets {
 		method := http.MethodDelete
 		if slices.Contains(t.Discovered.Secrets, name) {
 			method = http.MethodPut
 		}
-		p.Ops = append(p.Ops, Op{
-			Method: method,
-			Path:   fmt.Sprintf("orgs/%s/actions/secrets/%s/repositories", t.Org, name),
-			Secret: name,
-		})
+		ops = append(ops, Op{Method: method, Path: fmt.Sprintf("orgs/%s/actions/secrets/%s/repositories", t.Org, name), Secret: name})
 	}
+	return ops
+}
 
-	// Governance workflows are written from their templates, or deleted where
-	// an earlier reconcile left one the class no longer ships.
-	workflows := repoPath + "/contents/.github/workflows/"
-	var readErr error
-	put := func(names ...string) {
-		for _, name := range names {
-			content, err := ReadTemplate("governance/" + name)
-			readErr = errors.Join(readErr, err)
-			p.Ops = append(p.Ops, Op{Method: http.MethodPut, Path: workflows + name, Content: string(content)})
-		}
-	}
-	drop := func(names ...string) {
-		for _, name := range names {
-			p.Ops = append(p.Ops, Op{Method: http.MethodDelete, Path: workflows + name})
-		}
-	}
+// workflowFiles collects the governance workflow writes and deletions of a
+// plan, in order.
+type workflowFiles struct {
+	dir string
+	ops []Op
+	err error
+}
 
+// put writes each named workflow from its template.
+func (w *workflowFiles) put(names ...string) {
+	for _, name := range names {
+		content, err := ReadTemplate("governance/" + name)
+		w.err = errors.Join(w.err, err)
+		w.ops = append(w.ops, Op{Method: http.MethodPut, Path: w.dir + name, Content: string(content)})
+	}
+}
+
+// drop deletes each named workflow, one an earlier reconcile left that the
+// class no longer ships.
+func (w *workflowFiles) drop(names ...string) {
+	for _, name := range names {
+		w.ops = append(w.ops, Op{Method: http.MethodDelete, Path: w.dir + name})
+	}
+}
+
+// workflowOps writes the governance workflows the class ships and deletes the
+// ones it does not.
+func workflowOps(c *ClassPreset, repoPath string) ([]Op, error) {
+	w := &workflowFiles{dir: repoPath + "/contents/.github/workflows/"}
 	// Merge governance ships wherever the master ruleset gates merges;
 	// recover-prs re-arms PRs the queue drops on a timeout, so it follows the
 	// queue, and check-dependencies and review-gate post checks that ruleset
@@ -323,52 +351,55 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 	// callers are narrower: a class without the tags ruleset removes them, so
 	// changing a repo's class leaves no release mechanics behind.
 	if c.Rulesets.Master {
-		put("merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml",
+		w.put("merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml",
 			"recover-prs.yaml", "check-dependencies.yaml", "feature-env.yaml", "review-gate.yaml", "pr-relay.yaml")
 	}
 	if c.Rulesets.Master && c.Rulesets.Tags {
-		put("release-train.yaml", "hotfix.yaml")
+		w.put("release-train.yaml", "hotfix.yaml")
 	} else {
-		drop("release-train.yaml", "hotfix.yaml")
+		w.drop("release-train.yaml", "hotfix.yaml")
 	}
 	// Every repo locks a conversation once its issue or pull request closes.
 	// lock-closed replaces lock-pr, which locked pull requests as they opened
 	// and so blocked the approval bot.
-	put("lock-closed.yaml")
-	drop("lock-pr.yaml")
+	w.put("lock-closed.yaml")
+	w.drop("lock-pr.yaml")
 	// Every repo reports its default-branch failures and its releases to Discord.
-	put("notify.yaml")
+	w.put("notify.yaml")
 	// Reviews run a pull request's own workflow copy, so they post from pr-relay's runs.
-	put("notify-reviews.yaml")
+	w.put("notify-reviews.yaml")
 	// Only classes whose images no deployment pins by digest delete the images nothing names.
 	if c.CleanImages {
-		put("clean-images.yaml")
+		w.put("clean-images.yaml")
 	} else {
-		drop("clean-images.yaml")
+		w.drop("clean-images.yaml")
 	}
 	// Every repo assigns a person's pull request to its author.
-	put("auto-assign-author.yaml")
+	w.put("auto-assign-author.yaml")
 	// The trusted dependency bots' PRs are auto-approved wherever
 	// require-approval would otherwise hold their version bumps for a human.
 	if c.Rulesets.RequireApproval {
-		put("auto-approve-dependabot.yaml")
+		w.put("auto-approve-dependabot.yaml")
 	}
-	if readErr != nil {
-		return nil, readErr
-	}
+	return w.ops, w.err
+}
 
-	pages := Op{Method: http.MethodDelete, Path: repoPath + "/pages"}
+// pagesOp enables the Pages site, built by a workflow, or deletes it.
+func pagesOp(c *ClassPreset, repoPath string) Op {
 	if c.Pages {
-		pages.Method = http.MethodPost
-		pages.Body = map[string]any{"build_type": "workflow"}
+		return Op{Method: http.MethodPost, Path: repoPath + "/pages", Body: map[string]any{"build_type": "workflow"}}
 	}
-	p.Ops = append(p.Ops, pages)
+	return Op{Method: http.MethodDelete, Path: repoPath + "/pages"}
+}
 
-	// Rulesets, reconciled by name (POST when absent, PUT .../{id} when present).
-	// The master ruleset gates exactly the discovered checks (always + the
-	// repo's main.yaml jobs, minus exclusions) — set wholesale, no reconcile.
-	// commit-messages governs the same branch, so it ships alongside master.
-	// Release lines take master's checks, and exist wherever releases are tagged.
+// rulesetOps writes the rulesets the class turns on, reconciled by name, then
+// prunes every other one.
+//
+// The master ruleset gates exactly the discovered checks, set wholesale.
+// commit-messages governs the same branch, so it ships alongside master.
+// Release lines take master's checks, and exist wherever releases are tagged.
+func rulesetOps(t *RepoTarget, repoPath string) ([]Op, error) {
+	c := t.Class
 	wanted := []struct {
 		name   string
 		on     bool
@@ -380,6 +411,7 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		{rulesetTags, c.Rulesets.Tags, nil},
 		{rulesetReleaseLines, c.Rulesets.Tags, t.Discovered.Checks},
 	}
+	var ops []Op
 	keep := make([]string, 0, len(wanted))
 	for _, w := range wanted {
 		if !w.on {
@@ -389,24 +421,18 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 		if err != nil {
 			return nil, err
 		}
-		p.Ops = append(p.Ops, op)
+		ops = append(ops, op)
 		keep = append(keep, w.name)
 	}
 
 	// A repo's ruleset set is derived. Everything above follows from the class
 	// preset, the org profile and code-driven discovery, so any ruleset this
-	// plan does not name is drift — dropped from the templates, or added by
-	// hand in the UI — and apply deletes it.
+	// plan does not name is drift, dropped from the templates or added by hand
+	// in the UI, and apply deletes it.
 	//
 	// Pruning runs last, once every desired ruleset has been written, so a repo
 	// is never momentarily left ungoverned.
-	p.Ops = append(p.Ops, Op{
-		PruneRulesets: true,
-		KeepRulesets:  keep,
-		Path:          repoPath + "/rulesets",
-	})
-
-	return p, nil
+	return append(ops, Op{PruneRulesets: true, KeepRulesets: keep, Path: repoPath + "/rulesets"}), nil
 }
 
 func rulesetOp(name string, t *RepoTarget, checks []CheckRef) (Op, error) {
@@ -534,7 +560,6 @@ func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor
 		return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}, nil
 	default:
 		if id, ok := org.Bots[entry]; ok {
-			id := id
 			return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}, nil
 		}
 	}
@@ -569,17 +594,20 @@ func SettingsBody(c *ClassPreset) map[string]any {
 
 // SecurityBlock is the security_and_analysis sub-object.
 func SecurityBlock(c *ClassPreset) map[string]any {
-	st := func(b bool) map[string]string {
-		if b {
-			return map[string]string{"status": "enabled"}
-		}
-		return map[string]string{"status": "disabled"}
-	}
 	return map[string]any{
-		"secret_scanning":                 st(c.Security.SecretScanning),
-		"secret_scanning_push_protection": st(c.Security.PushProtection),
-		"dependabot_security_updates":     st(c.Security.Dependabot),
+		"secret_scanning":                 securityStatus(c.Security.SecretScanning),
+		"secret_scanning_push_protection": securityStatus(c.Security.PushProtection),
+		"dependabot_security_updates":     securityStatus(c.Security.Dependabot),
 	}
+}
+
+// securityStatus is the {"status": ...} object a security_and_analysis feature
+// takes.
+func securityStatus(enabled bool) map[string]string {
+	if enabled {
+		return map[string]string{"status": "enabled"}
+	}
+	return map[string]string{"status": "disabled"}
 }
 
 // CODEOWNERS returns the uniform CODEOWNERS file provisioned to every repo. It
