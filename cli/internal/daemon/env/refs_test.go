@@ -5,10 +5,8 @@ import (
 	"testing"
 )
 
-// Tests for the substitution-rule primitives the env builder hangs off. They
-// are pure functions, and the daemon's cross-service env wiring reads through
-// each of them on every Acquire.
-
+// TestServicePrefix pins the prefix a cross-service reference names a service
+// by, which the env builder resolves on every Acquire.
 func TestServicePrefix(t *testing.T) {
 	testCases := []struct{ in, want string }{
 		{"service-json-keys", "SERVICE_JSON_KEYS"},

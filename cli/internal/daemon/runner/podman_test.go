@@ -7,9 +7,9 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// The adoption labels are how a restarted daemon finds its containers, so the
-// flag that sets them and the filters that read them must spell them alike.
-
+// TestContainerLabelArgs pins that the flag setting the adoption labels and the
+// filters reading them spell them alike: a restarted daemon finds its
+// containers through them.
 func TestContainerLabelArgs(t *testing.T) {
 	testCases := []struct {
 		values []string

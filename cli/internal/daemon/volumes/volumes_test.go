@@ -100,9 +100,9 @@ func TestBackupOneLeavesNoPartialFile(t *testing.T) {
 	}
 }
 
-// TestResolveBackup: resolveBackup used to return the first prefix match in name
-// order, so a bare timestamp restored .auto-pre-clear ahead of the manual archive
-// at the same timestamp — something other than what the operator named.
+// TestResolveBackup pins that a timestamp matching several archives, such as a
+// manual backup and its .auto-pre-clear sibling, is refused rather than resolved
+// to the first by name, which would restore something the operator did not name.
 func TestResolveBackup(t *testing.T) {
 	const tagged, plain = "20260722-1200.auto-pre-clear.tar.zst", "20260722-1200.tar.zst"
 	testCases := []struct {

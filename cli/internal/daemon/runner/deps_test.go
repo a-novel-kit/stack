@@ -7,10 +7,10 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// TestEnsureDepsReadyGatesALongRunnerOnItsOneShots pins the gate a compose file no longer carries:
-// a long-runner depends only on its infra there, so a plain `podman compose` up runs no one-shot
-// twice, and the daemon still refuses it while a one-shot of its service has failed. The session is
-// Up and the results recorded, so nothing reaches podman.
+// TestEnsureDepsReadyGatesALongRunnerOnItsOneShots pins the gate the compose file leaves to the
+// daemon: a long-runner depends only on its infra there, so a plain `podman compose` up runs no
+// one-shot twice, and the daemon refuses it while a one-shot of its service has failed. The session
+// is Up and the results recorded, so nothing reaches podman.
 func TestEnsureDepsReadyGatesALongRunnerOnItsOneShots(t *testing.T) {
 	migrations := &discovery.Target{
 		Name: "migrations", ComposeName: "service-x-migrations", Service: "service-x", Stack: "default",

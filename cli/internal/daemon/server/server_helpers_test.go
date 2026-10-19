@@ -11,10 +11,6 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Tests for the pure helpers in server.go. Their output is wire-visible, in
-// StateEvent.Description and in log-streaming routing, so a regression here
-// reaches the user.
-
 func TestParseInfraLogID(t *testing.T) {
 	testCases := []struct {
 		in             string

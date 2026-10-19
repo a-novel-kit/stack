@@ -126,9 +126,8 @@ func TestRenderSummary(t *testing.T) {
 	}
 }
 
-// TestRenderSummaryOmitsRetiredRulesets guards the summary against announcing a
-// ruleset repocfg no longer applies. An operator reads the summary before
-// confirming a reconcile, so it names only the protection the plan keeps.
+// TestRenderSummaryOmitsRetiredRulesets pins that the summary names only the
+// rulesets the plan keeps. An operator reads it before confirming a reconcile.
 func TestRenderSummaryOmitsRetiredRulesets(t *testing.T) {
 	t.Parallel()
 	target := &repocfg.RepoTarget{

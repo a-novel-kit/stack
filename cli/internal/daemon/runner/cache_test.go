@@ -5,10 +5,8 @@ import (
 	"time"
 )
 
-// Tests for the infra-state cache and its generation-counter invalidation.
-// InfraStatesOf needs podman, but the cache primitives it relies on are pure
-// in-memory state and stand on their own here.
-
+// TestCache_InvalidateBumpsGenerationAndClearsEntries covers the in-memory
+// cache InfraStatesOf relies on, which needs no podman.
 func TestCache_InvalidateBumpsGenerationAndClearsEntries(t *testing.T) {
 	r := &Runner{infraStateCache: map[string]infraStateCacheEntry{
 		"default": {at: time.Now(), states: map[string]InfraState{"x/y": {ContainerID: "abc"}}},

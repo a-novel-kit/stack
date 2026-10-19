@@ -6,12 +6,10 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Adoption scans `podman ps -a`, which lists stopped containers alongside running ones, and marks a
-// service's infra session Up from what it finds. An Up session short-circuits EnsureDepsReady, so
-// the phase this returns decides whether a target starts against a database that is serving.
-//
-// The strings are what podman prints in the Status column.
-
+// TestTranslatePodmanStatus pins the phase adoption reads from the Status column
+// `podman ps -a` prints, stopped containers included. A running container marks
+// its service's infra session Up, which short-circuits EnsureDepsReady, so the
+// phase decides whether a target starts against a database that is serving.
 func TestTranslatePodmanStatus(t *testing.T) {
 	testCases := []struct {
 		status string
