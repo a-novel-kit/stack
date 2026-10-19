@@ -117,8 +117,8 @@ func needsExport(stk []stacks.Stack) bool {
 	if len(stk) != 1 {
 		return true
 	}
-	// Single stack — emit only if its path differs from the implicit
-	// default (~/git-projects/a-novel).
+	// A single stack is emitted only when its path differs from the implicit
+	// default, ~/git-projects/a-novel.
 	home, _ := os.UserHomeDir()
 	defaultPath := filepath.Join(home, "git-projects", "a-novel")
 	return stk[0].Path != defaultPath
@@ -135,8 +135,8 @@ func serializeStacks(stk []stacks.Stack) string {
 }
 
 // upsertRCBlock writes a backup-then-update of the rc file. Returns
-// (backupPath, changed, err). `changed` is false when the file already
-// contains the exact desired block — no write happens in that case.
+// (backupPath, changed, err). `changed` is false, and nothing is written,
+// when the file already contains the exact desired block.
 //
 // Idempotency rules:
 //   - block present + content identical → no write
@@ -229,8 +229,8 @@ func writeWithBackup(rcPath string, newContent []byte) (string, error) {
 		}
 		pruneOldRCBackups(rcPath)
 	}
-	// Write atomically — write to temp + rename — so a partial write
-	// doesn't leave the rc in a broken state.
+	// A temp file and a rename make the write atomic, so a partial write never
+	// leaves the rc broken.
 	tmp := rcPath + ".a-novel-tmp"
 	if err := os.WriteFile(tmp, newContent, 0o600); err != nil {
 		return backupPath, fmt.Errorf("write tmp: %w", err)

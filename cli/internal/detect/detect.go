@@ -1,18 +1,3 @@
-// Package detect discovers buildable targets under a directory tree.
-//
-// It recognizes three kinds of build, matching the conventions used across the
-// a-novel / a-novel-kit repositories:
-//
-//   - [KindGo]     — any directory containing a go.mod (one target per module,
-//     including nested modules).
-//   - [KindPnpm]   — any package.json whose "scripts" map has one or more keys
-//     starting with "build" (one target per matching script).
-//   - [KindPodman] — a root Dockerfile or builds/*.Dockerfile file, with an
-//     image tag derived from its repository and filename.
-//
-// Discovery recurses from the scan root so nested modules and workspace
-// sub-packages are found; vendored and generated trees (node_modules, .git, …)
-// are pruned.
 package detect
 
 import (
@@ -75,8 +60,7 @@ type Target struct {
 
 	// Name is the unit's short identity within its directory, e.g. the module
 	// name (go), the script name "build:rest" (pnpm), or "Dockerfile" /
-	// "rest.Dockerfile" (podman). It is not unique on its own — pair it with
-	// RelDir.
+	// "rest.Dockerfile" (podman). It is unique only paired with RelDir.
 	Name string
 
 	// RelDir is the target's directory relative to the scan root ("." for the

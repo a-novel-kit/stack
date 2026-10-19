@@ -1,7 +1,3 @@
-// `a-novel test` and `a-novel build`: discover the targets under a directory,
-// let the user pick them or run them all, then report. Both share one flow and
-// differ only in wording and discovery.
-
 package cli
 
 import (
@@ -24,7 +20,9 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/ui"
 )
 
-// capability is `test` or `build`.
+// capability is `test` or `build`. Both discover the targets under a
+// directory, let the user pick them or run them all, then report, and differ
+// only in wording and discovery.
 type capability struct {
 	name    string
 	looks   string // what discovery scans for, quoted when nothing is found

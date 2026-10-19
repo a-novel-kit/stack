@@ -1,6 +1,3 @@
-// Package daemon owns the daemon's process lifecycle: socket listener,
-// graceful shutdown, signal handling, and recovery of orphan containers.
-// The RPC handlers live in internal/daemon/server.
 package daemon
 
 import (
@@ -162,7 +159,7 @@ func serve(ctx context.Context, ln net.Listener, srv *server.Server, socketPath 
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	// Serve in a goroutine so we can intercept shutdown signals here. Serve
+	// Serve runs in a goroutine, so the shutdown signal is handled here. Serve
 	// returns before Shutdown only on a failure.
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- httpServer.Serve(ln) }()

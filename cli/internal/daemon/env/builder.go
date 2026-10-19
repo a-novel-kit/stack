@@ -313,8 +313,8 @@ func (b *Builder) resolveContext(env map[string]string, owner string, services [
 //   - a `*_PORT` localVar allocates against `owner`.
 //   - a localVar ending in `_HOST` or `_URL` is synthesized once the matching
 //     `*_PORT` resolves.
-//   - anything else is a constant from the same env block, already in ctx or
-//     empty — the value compose gives an unset variable.
+//   - anything else is a constant from the same env block, already in ctx, or
+//     empty, the value compose gives an unset variable.
 func (b *Builder) resolveOne(varName, owner string, services []string, allocate bool, consumer string, ctx map[string]string) (string, error) {
 	resOwner, localVar := resolveOwner(varName, services)
 	if resOwner == "" {

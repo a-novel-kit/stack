@@ -1,8 +1,3 @@
-// Package server implements the daemon-side handler for the
-// anovel.v1.CoreService connect-rpc API. The Server type holds the
-// long-lived daemon state — discovered stacks, the target supervisor,
-// the env builder, and the log hub — and exposes each RPC as a method
-// that reads or mutates that state.
 package server
 
 import (
@@ -631,7 +626,7 @@ func streamLines(ctx context.Context, r io.Reader, send func(*anovelv1.LogLine) 
 // parse. The marker is sent whatever the stream filter is: a record that cannot
 // be decoded has no stream to match on, and a viewer that filters it away is
 // back to a log that looks complete. Its timestamp is the read time, since the
-// record carries none — clients render these in receive order.
+// record carries none, and clients render it in receive order.
 func emitLogLine(send func(*anovelv1.LogLine) error, filter anovelv1.LogStream, raw string, lineNo int) error {
 	trimmed := strings.TrimRight(raw, "\r\n")
 	if trimmed == "" {
@@ -892,9 +887,9 @@ func (s *Server) ensureServiceDown(ctx context.Context, svc *discovery.Service, 
 
 // Exec runs an arbitrary command "as if it were a sibling of the target":
 //
-//   - Container mode: `podman exec <container_id> <cmd...>` — runs inside
-//     the live container, so `a-novel exec rest sh` drops you into a
-//     shell next to the rest binary. Requires the target to be RUNNING.
+//   - Container mode runs `podman exec <container_id> <cmd...>` inside the
+//     live container, so `a-novel run exec <service>/rest -- sh` opens a shell
+//     next to the rest binary. The target must be RUNNING.
 //   - Go-exec mode: spawns the command in the target's working directory with
 //     the target's resolved env, so `a-novel exec migrations psql` gets the
 //     right DSN out of the box. The target need only be discoverable, since the

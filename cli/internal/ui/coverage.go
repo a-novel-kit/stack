@@ -20,8 +20,8 @@ var coverRe = regexp.MustCompile(`coverage:\s+([0-9.]+)%\s+of statements`)
 
 // covExclude matches the package paths kept out of the coverage mean: generated
 // mocks, test-support trees, and generated protobuf code. It filters what is
-// reported, not what runs — a test in one of these paths still executes, it just
-// does not drag the mean toward the zero coverage generated code always has.
+// reported: a test in one of these paths still runs, and only stays out of a
+// mean that the zero coverage of generated code would drag down.
 var covExclude = regexp.MustCompile(`/(mocks|test|protogen)(/|$)`)
 
 // vitestHeader matches the header row of vitest's v8 text coverage table. Its
@@ -68,7 +68,7 @@ func goCoverage(results []jobs.Result) []covEntry {
 				}
 			}
 			// Generated and test-support packages ran, but their coverage is
-			// noise — kept out of the mean here rather than out of the run.
+			// noise, so it stays out of the mean.
 			if covExclude.MatchString(pkg) {
 				continue
 			}
@@ -153,8 +153,8 @@ func CoverageView(results []jobs.Result, width int) string {
 	return b.String()
 }
 
-// covHeading is a sub-section title within the COVERAGE block — the same
-// "▌ title" idiom as panel titles, so Go and pnpm are each clearly announced.
+// covHeading is a sub-section title within the COVERAGE block, in the "▌ title"
+// idiom of panel titles, so the Go and pnpm parts each get a heading.
 func covHeading(s string) string {
 	return Gold.Render("▌ " + s)
 }

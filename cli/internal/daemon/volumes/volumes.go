@@ -1,14 +1,3 @@
-// Package volumes owns the daemon-side volume operations: list, backup,
-// restore, clear — all service-scoped.
-//
-// Backup format: `podman volume export` produces a tar stream; we pipe
-// it through zstd into $XDG_DATA_HOME/a-novel/backups/<stack>/<service>/<volume>/<ts>.tar.zst.
-// Restore reverses: zstd-decompress + `podman volume import`. Clear is
-// auto-backup (unless --no-backup) + `podman volume rm -f`.
-//
-// A destructive operation runs only against a service whose infra and targets
-// are down, since working on a live volume produces inconsistent state. The
-// daemon's handlers enforce that, and --force cascade-kills the service first.
 package volumes
 
 import (

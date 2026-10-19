@@ -27,10 +27,9 @@ func checkGit() error {
 	return nil
 }
 
-// checkGitHubSSH does a non-destructive `ssh -T git@github.com`. GitHub
-// returns exit 1 with the string "successfully authenticated, but
-// GitHub does not provide shell access" — that's our success
-// indicator. Any other response means SSH access isn't working.
+// checkGitHubSSH runs a non-destructive `ssh -T git@github.com`. GitHub exits 1
+// with "successfully authenticated, but GitHub does not provide shell access",
+// which is the success signal. Any other response means SSH access is broken.
 func checkGitHubSSH() error {
 	cmd := exec.Command("ssh", "-T", "-o", "StrictHostKeyChecking=accept-new",
 		"-o", "ConnectTimeout=5", "-o", "BatchMode=yes", "git@github.com")

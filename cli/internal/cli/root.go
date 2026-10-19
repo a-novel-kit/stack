@@ -1,4 +1,3 @@
-// Package cli wires every subcommand the a-novel binary exposes.
 package cli
 
 import (
@@ -110,7 +109,9 @@ everyday workflows.`,
 	return root
 }
 
-// newRunCmd is the parent of every daemon-backed verb.
+// newRunCmd is the parent of every daemon-backed verb. Each verb is a thin
+// client of the daemon's RPC holding no supervision state: the daemon owns the
+// running targets, their phases and their logs.
 func newRunCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   commandRun,

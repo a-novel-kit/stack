@@ -42,7 +42,7 @@ func NewAllocator() *Allocator {
 
 // SetServices registers the service names the allocator recognizes as
 // cross-service prefixes. It sorts them longest-first, so a name that shadows a
-// shorter one — `service-template-extra` over `service-template` — wins.
+// shorter one wins, as `service-template-extra` does over `service-template`.
 func (a *Allocator) SetServices(names []string) {
 	sorted := slices.Clone(names)
 	slices.SortFunc(sorted, func(x, y string) int {

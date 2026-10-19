@@ -13,8 +13,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// integrationActions is the checks.yaml key for the GitHub Actions app — the
-// poster of every job-emitted check.
+// integrationActions is the checks.yaml key for the GitHub Actions app, which
+// posts every check a job emits.
 const integrationActions = "actions"
 
 // CheckRef is a required status check resolved to its posting app.
@@ -23,7 +23,7 @@ type CheckRef struct {
 	IntegrationID int64
 }
 
-// Discovered is what probing a repo tells us: the required checks for the
+// Discovered is what a repo's working tree shows: the required checks for the
 // master ruleset, and the secrets and environments its workflows use.
 type Discovered struct {
 	Checks []CheckRef
@@ -37,9 +37,9 @@ type Discovered struct {
 // its workflows use.
 //
 // Required checks are the `always` set plus every job declared in the repo's
-// .github/workflows/main.yaml, minus cc.Exclude — the job id is the check
-// context, so there is no class- or file-based derivation to drift. A missing
-// main.yaml (e.g. a docs/meta repo) simply contributes no jobs.
+// .github/workflows/main.yaml, minus cc.Exclude. The job's name, or its id, is
+// the check context, so no class-based list can drift from the workflow. A
+// missing main.yaml contributes no jobs.
 func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 	d := &Discovered{}
 	seen := map[string]bool{}
@@ -145,8 +145,8 @@ type workflowJob struct {
 }
 
 // workflowJobs parses the `jobs:` of a workflow file, returning each job's
-// context and `if:`. A missing file yields no jobs (not an error) — not every
-// repo has a main.yaml. Jobs are returned sorted by id for determinism.
+// context and `if:`, sorted by id. A missing file yields no jobs, since not
+// every repo has a main.yaml.
 func workflowJobs(path string) ([]workflowJob, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {

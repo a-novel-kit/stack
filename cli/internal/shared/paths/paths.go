@@ -1,6 +1,3 @@
-// Package paths centralizes filesystem locations the daemon and clients agree
-// on. Single source of truth so a change to (e.g.) the socket path only needs
-// to be made here.
 package paths
 
 import (

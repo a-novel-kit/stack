@@ -419,7 +419,7 @@ func commitSync(org, repo, branch string, changes []contentChange) (string, erro
 
 	// One retry when the branch tip moves between the oid read and the commit
 	// (STALE_DATA). repocfg is the only writer of the staged files, so a moved
-	// tip means unrelated commits landed — the staged content stays valid.
+	// tip means unrelated commits landed, and the staged content stays valid.
 	for attempt := 0; ; attempt++ {
 		oid, err := branchHeadOid(org, repo, branch)
 		if err != nil {
@@ -460,13 +460,12 @@ func commitSync(org, repo, branch string, changes []contentChange) (string, erro
 
 // bootstrapEmpty seeds a repository that has no commits yet. Both
 // createCommitOnBranch and the Git Data API (blobs/trees/commits) build on an
-// existing object store and 409 on an empty repo, so the initial commit has to
-// come from the Contents API — the one endpoint that creates a repo's first
-// commit and its default branch. It seeds the first managed file that way (a
-// GitHub-verified commit, so required_signatures is satisfied), then lands any
-// remaining files through the normal createCommitOnBranch path now that the
-// branch exists. Deletions are dropped: an empty repo has nothing to remove,
-// and the staging pass never produces one against a repo with no files.
+// existing object store and answer 409 on an empty repo. The Contents API is
+// the one endpoint that creates a repo's first commit and its default branch,
+// so the first managed file lands through it, as a GitHub-verified commit that
+// satisfies required_signatures. The remaining files then take the normal
+// createCommitOnBranch path. An empty repo has nothing to delete, so deletions
+// are dropped.
 func bootstrapEmpty(org, repo, branch string, changes []contentChange) (string, error) {
 	adds := slices.DeleteFunc(slices.Clone(changes), func(change contentChange) bool { return change.outcome == opDeleted })
 	if len(adds) == 0 {
@@ -794,7 +793,7 @@ func (t *orgTeams) ensure(name, parentID string) (string, error) {
 	return t.ids[name], nil
 }
 
-// ghLabel is the subset of a GitHub label object we reconcile against.
+// ghLabel is the subset of a GitHub label object applyLabels reconciles.
 type ghLabel struct {
 	Name        string `json:"name"`
 	Color       string `json:"color"`
@@ -802,7 +801,7 @@ type ghLabel struct {
 }
 
 // listLabels returns a repo's current labels keyed by name. Repos carry far
-// fewer than 100 labels, so a single page is enough — no pagination.
+// fewer than 100 labels, so it reads a single page.
 func listLabels(org, repo string) (map[string]ghLabel, error) {
 	out, err := gh("api", fmt.Sprintf("repos/%s/%s/labels?per_page=100", org, repo))
 	if err != nil {
@@ -845,8 +844,8 @@ func tabPairs(out string) map[string]string {
 //
 // This is what keeps repo config derived. The desired set follows entirely
 // from the class preset, the org profile and code-driven discovery, so
-// anything else on the repo is drift — a ruleset this version no longer ships,
-// or one added by hand in the UI — and a reconcile removes it.
+// anything else on the repo is drift, such as a ruleset this version no longer
+// ships or one added by hand in the UI, and a reconcile removes it.
 func pruneRulesets(org, repo string, rulesets func() (map[string]string, error), op repocfg.Op) (string, error) {
 	live, err := rulesets()
 	if err != nil {
@@ -911,9 +910,8 @@ const (
 )
 
 // contentSHA returns the blob sha of an existing file at path, or "" when the
-// file does not exist yet (a 404, the create case). Only a 404 reads as the
-// create case. Any other error — auth, network, rate limit — is returned to
-// the caller.
+// file does not exist yet. Only a 404 reads as the create case, and any other
+// error, such as an auth, network or rate-limit failure, is returned.
 func contentSHA(path string) (string, error) {
 	out, err := gh("api", path, "--jq", ".sha")
 	if err != nil {
@@ -925,8 +923,8 @@ func contentSHA(path string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// ghContent is the subset of the contents API's file object we read: the blob
-// sha and the base64-encoded content.
+// ghContent is the subset of the contents API's file object contentText reads:
+// the blob sha and the base64-encoded content.
 type ghContent struct {
 	SHA      string `json:"sha"`
 	Content  string `json:"content"`
@@ -935,9 +933,9 @@ type ghContent struct {
 
 // contentText returns the decoded text and blob sha of an existing file at
 // path, or ("", "", nil) when it does not exist yet (a 404). Like contentSHA,
-// any other error is propagated. An encoding the contents API does not base64
-// — files over 1MB use a separate blob endpoint — yields ("", sha, nil); the
-// managed files are a few KB, so that is a safe no-splice fallback.
+// any other error is propagated. A file the contents API does not base64,
+// which happens over 1MB, yields ("", sha, nil). The managed files are a few
+// KB, so that is a safe fallback that keeps the template's pins.
 func contentText(path string) (string, string, error) {
 	out, err := gh("api", path)
 	if err != nil {

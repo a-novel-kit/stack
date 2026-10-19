@@ -1,21 +1,3 @@
-// Package reinstall implements the daemon's reinstall-handoff
-// checkpoint.
-//
-// Lifecycle:
-//
-//  1. PrepareReinstall RPC writes a JSON checkpoint listing every running
-//     go-exec target. Containers survive the daemon's death on their own, so
-//     they stay out of it.
-//  2. The daemon stops those targets through the normal Kill path, freeing
-//     their ports, and exits cleanly.
-//  3. `a-novel install` rebuilds the binary; `a-novel core restart
-//     --preserve-targets` goes straight to the next step.
-//  4. New daemon starts, observes the checkpoint at well-known path,
-//     re-launches the listed go-exec targets on their recorded ports, deletes
-//     the checkpoint.
-//
-// The checkpoint is handoff state only: losing it degrades behavior without
-// breaking it, which keeps the daemon's recovery stateless.
 package reinstall
 
 import (
@@ -129,7 +111,7 @@ func Exists() bool {
 
 // EnsureSinglePending guards against a double checkpoint. A checkpoint already
 // present when PrepareReinstall arrives yields an error and leaves the file
-// untouched, so the caller resolves it — usually by aborting the second
+// untouched, and the caller resolves it, usually by aborting the second
 // install.
 func EnsureSinglePending() error {
 	if Exists() {

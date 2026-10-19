@@ -10,8 +10,7 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 )
 
-// stackRemoteURL is the canonical SSH clone URL we expect every stack
-// to point at.
+// stackRemoteURL is the SSH clone URL every stack's origin points at.
 const stackRemoteURL = "git@github.com:a-novel-kit/stack.git"
 
 // bootstrapStack runs the three-way check for one stack and returns its status
@@ -49,10 +48,8 @@ func bootstrapStack(s stacks.Stack, prompter Prompter) (string, string) {
 	}
 }
 
-// isValidStackRepo reports whether path contains a git checkout with our
-// remote URL set. Defensive — the remote may legitimately differ for
-// agents forking from upstream; for now we hard-match. Loosen later if
-// fork workflows become common.
+// isValidStackRepo reports whether path contains a git checkout whose origin is
+// stackRemoteURL. A fork's checkout fails the match.
 func isValidStackRepo(path string) bool {
 	gitDir := filepath.Join(path, ".git")
 	if _, err := os.Stat(gitDir); err != nil {

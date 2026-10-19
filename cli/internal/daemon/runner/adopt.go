@@ -230,7 +230,7 @@ func (r *Runner) markInfraSessionUp(stack, service string) {
 }
 
 // translatePodmanStatus maps podman's status text, such as "Up 5 seconds
-// (healthy)", "Exited (0) 2 minutes ago", or "Created", into our Phase and
+// (healthy)", "Exited (0) 2 minutes ago", or "Created", into the Phase and
 // Health enums. Its first word is the state, "up" standing for running, and
 // the parenthesized word after it the health.
 func translatePodmanStatus(status string) (anovelv1.Phase, anovelv1.Health) {

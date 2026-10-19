@@ -1,12 +1,3 @@
-// `a-novel repo update --all` — reconcile every pulled workspace repo in one
-// pass. The candidates are the workspace checkouts `core sync` manages, so the
-// operator never lists repos by hand.
-//
-// The sweep leaves ongoing work alone. Config is discovered from each working
-// tree, so a repo off its default branch or with uncommitted changes is skipped
-// untouched and only committed config reaches GitHub. Planning runs for every
-// repo at once; one confirm gates the batch, then --jobs repos apply at a time.
-
 package cli
 
 import (
@@ -34,6 +25,13 @@ type plannedUpdate struct {
 	prune  string // the dry-run's prune impact, resolved while planning
 }
 
+// runRepoUpdateAll reconciles every pulled workspace repo in one pass, so the
+// operator never lists repos by hand. It plans every repo at once, asks once,
+// then applies limit repos at a time.
+//
+// The sweep leaves ongoing work alone. Config is discovered from each working
+// tree, so a repo off its default branch or with uncommitted changes is skipped
+// untouched, and only committed config reaches GitHub.
 func runRepoUpdateAll(cmd *cobra.Command, rootDir, class string, exclude []string, dryRun, jsonOut bool, limit int) error {
 	root, err := workspaceRoot(rootDir)
 	if err != nil {

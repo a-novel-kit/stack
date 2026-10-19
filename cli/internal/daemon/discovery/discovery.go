@@ -26,8 +26,8 @@ type Stack struct {
 	Errors []DiscoveryError
 }
 
-// Service is one app/service-* directory, with everything we discovered
-// about its compose file.
+// Service is one app/service-* directory, with everything discovery read from
+// its compose file.
 type Service struct {
 	Name        string // e.g., "service-json-keys"
 	Stack       string // owning stack name

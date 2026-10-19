@@ -1,6 +1,3 @@
-// Package rpc wraps the generated connect-rpc client with the daemon's
-// unix-socket transport. CLI and TUI both consume Client; neither speaks
-// connect-rpc primitives directly.
 package rpc
 
 import (
@@ -290,8 +287,8 @@ func call[Req, Resp any](ctx context.Context, c *Client, rpc func(context.Contex
 // mapErr turns a transport failure into a typed error the CLI can report in
 // its own words.
 func (c *Client) mapErr(err error) error {
-	// Connect errors carry a code; the transport-level failures we care
-	// about (socket missing, refused) come through as Unavailable.
+	// Connect errors carry a code, and a missing or refusing socket comes
+	// through as Unavailable.
 	var ce *connect.Error
 	if errors.As(err, &ce) && ce.Code() == connect.CodeUnavailable {
 		return &NotRunningError{SocketPath: c.path, Cause: err}

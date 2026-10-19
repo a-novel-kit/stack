@@ -14,11 +14,10 @@ import (
 )
 
 // MappingFile is the per-repo, value-free secrets manifest, committed at the
-// service repo root. It declares which secrets the service needs — each entry
-// pairs a target environment-variable name with a secret ID in the local store
-// (never a value) and an optional human description — so `a-novel test`/`run`/
-// `ui` know which secrets to decrypt, under which env-var name to inject them,
-// and what to say when one isn't set yet:
+// service repo root. Each entry pairs an environment-variable name with the ID
+// of a secret in the local store, never a value, and an optional description.
+// `a-novel test`, `run` and `ui` read it to know which secrets to decrypt,
+// under which name to inject them, and what to say when one is not set yet:
 //
 //	# .a-novel/secrets.yaml
 //	secrets:
@@ -53,8 +52,9 @@ type Resolution struct {
 	// Env maps env-var name → decrypted secret value. This is secret material:
 	// inject it into a child process's environment only; never print or log it.
 	Env map[string]string
-	// Missing lists declarations whose secret is absent from the store (or whose
-	// store/key isn't set up yet). Carries env/id/description — never a value.
+	// Missing lists the declarations whose secret is absent from the store, or
+	// whose store or key is not set up yet. It carries the env, id and
+	// description, never a value.
 	Missing []Declaration
 }
 

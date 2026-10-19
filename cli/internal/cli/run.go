@@ -1,8 +1,3 @@
-// Daemon-backed verbs: the CLI surface that connects to the daemon over its
-// unix-socket RPC and renders the responses. Each command is a thin client
-// holding no supervision state; the daemon owns the running targets, their
-// phases, and their logs.
-
 package cli
 
 import (
@@ -1080,7 +1075,7 @@ the underlying command's success.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			c := rpc.New("")
-			// Cobra strips "--" — args[0] is the target, args[1:] is the command.
+			// Cobra strips "--", so args[0] is the target and args[1:] the command.
 			targetSpec := args[0]
 			cmdv := args[1:]
 			ref := parseEntityID(targetSpec, ss.stack)

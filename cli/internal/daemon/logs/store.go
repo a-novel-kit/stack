@@ -1,21 +1,3 @@
-// Package logs owns the daemon-side log storage and streaming hub.
-//
-// Storage shape:
-//
-//	$XDG_STATE_HOME/a-novel/logs/<stack>/<service>/<target>/
-//	├── current.log              ← currently-streaming run
-//	├── run-<timestamp>.log      ← archived previous runs (max 5)
-//	└── ...
-//
-// Format: one JSON object per line — {ts, stream, line} — preserving
-// ANSI escapes in `line` so the CLI/TUI can render colored output and
-// `jq` can filter by stream.
-//
-// The Store also acts as the streaming hub, owning subscriber channels per
-// (stack, service, target). Every line the runner appends reaches every
-// subscriber, and the hub closes the channels when the process terminates. The
-// StreamLogs RPC handler attaches a subscriber and forwards lines over
-// connect-rpc until the channel closes or the client disconnects.
 package logs
 
 import (
@@ -41,7 +23,7 @@ const (
 	StreamStderr Stream = "stderr"
 )
 
-// Line is one log entry as we serialize it to disk and forward to
+// Line is one log entry, as the store writes it to disk and forwards it to
 // subscribers.
 type Line struct {
 	Ts     time.Time `json:"ts"`

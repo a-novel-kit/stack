@@ -1,10 +1,3 @@
-// Daemon-control subcommands (`a-novel core ...`): the lifecycle of the
-// long-lived background daemon. `core start` is the .zshrc-friendly
-// entrypoint — silent when the daemon is already running, detaches it into
-// the background, and refuses with a hint when setup is missing. The sibling
-// verbs stop it, report status, and drive the checkpoint flow that restarts
-// the daemon without losing its running targets.
-
 package cli
 
 import (
@@ -48,6 +41,10 @@ func IsDaemonReexec(args []string) bool {
 	return len(args) >= 3 && args[1] == commandCore && args[2] == daemonInternalCmd
 }
 
+// newCoreCmd groups the verbs that manage the daemon's lifecycle and the
+// workspace it serves. `core start` is the .zshrc-friendly entrypoint: silent
+// when a daemon already runs, it detaches one into the background, and it
+// refuses with a hint when setup is missing.
 func newCoreCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   commandCore,

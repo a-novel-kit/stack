@@ -1,13 +1,5 @@
 package cli
 
-// Stack lifecycle: allocate, list and prune workspace stacks.
-//
-// A stack allocates three things and only one of them is a file. Deleting the
-// root reclaims the checkout and leaves the rest: containers keep running and
-// holding host ports, and podman volumes sit under the container store until
-// something names them. Both are the daemon's to release, so prune is a CLI
-// verb.
-
 import (
 	"context"
 	"errors"
@@ -31,6 +23,10 @@ import (
 // escalates. It matches the `run kill` default.
 const killGrace = 10 * time.Second
 
+// newCoreStacksCmd allocates, lists and prunes workspace stacks. A stack holds
+// a checkout, containers holding host ports, and podman volumes. Deleting the
+// root reclaims only the checkout, and the other two are the daemon's to
+// release, so pruning is a verb of its own.
 func newCoreStacksCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stacks",
@@ -55,9 +51,8 @@ space is given back.`,
 
 // defaultStackRoot is where an extra workspace lands when the caller does not
 // choose. os.TempDir() honors $TMPDIR, resolving to the per-user
-// /var/folders/…/T on macOS and /tmp on Linux — directories the OS already
-// reclaims, so a stack that outlives its session is a disk leak with an expiry
-// date.
+// /var/folders/…/T on macOS and /tmp on Linux. The OS reclaims both, so a
+// stack that outlives its session is a disk leak with an expiry date.
 //
 // The default stack lives elsewhere: it is the workspace, and a workspace under
 // a directory the OS empties is a trap.
@@ -417,7 +412,7 @@ func reclaimStack(
 	return nil
 }
 
-// stackBackupDir is where every volume backup for a stack lives — the parent of
+// stackBackupDir is where every volume backup for a stack lives, the parent of
 // the per-service, per-volume directories `volumes.BackupDir` writes into.
 func stackBackupDir(stack string) string {
 	return filepath.Join(paths.BackupsRoot(), stack)

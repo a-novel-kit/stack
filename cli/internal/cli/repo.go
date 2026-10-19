@@ -1,7 +1,3 @@
-// `a-novel repo` — create and configure GitHub repositories from the editable
-// templates in internal/repocfg. Writes are interactive and human-only;
-// `--dry-run` prints the API operations that would run and is safe anywhere.
-
 package cli
 
 import (
@@ -39,6 +35,9 @@ func readAnswer(in io.Reader) string {
 	return strings.ToLower(strings.TrimSpace(line))
 }
 
+// newRepoCmd creates and configures GitHub repositories from the templates in
+// internal/repocfg. Writes are interactive and human-only, while --dry-run
+// prints the API operations and is safe anywhere.
 func newRepoCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "repo",

@@ -86,8 +86,8 @@ func (r *Runner) ensureDepReady(ctx context.Context, svc *discovery.Service, dep
 	return nil
 }
 
-// ensureInfraReady triggers StartInfra if the service's session isn't Up.
-// Idempotent — StartInfra is itself a no-op when already running.
+// ensureInfraReady triggers StartInfra if the service's session isn't Up. It
+// is idempotent, as StartInfra is.
 func (r *Runner) ensureInfraReady(ctx context.Context, svc *discovery.Service, oneShotsMode anovelv1.Mode) error {
 	if sess, ok := r.InfraSession(svc.Stack, svc.Name); ok && sess.Up {
 		return nil
@@ -111,7 +111,7 @@ func (r *Runner) ensureOneShotSatisfied(ctx context.Context, svc *discovery.Serv
 		return fmt.Errorf("one-shot dep %s/%s last exited %s — restart infra to retry (`a-novel run service infra kill %s && a-novel run service infra start %s`)",
 			svc.Name, t.Name, prev, svc.Name, svc.Name)
 	}
-	// Not yet run in this session — run it now.
+	// A one-shot not yet run in this session runs now.
 	if err := r.runOneShot(ctx, t, mode); err != nil {
 		return fmt.Errorf("one-shot %s/%s: %w", svc.Name, t.Name, err)
 	}

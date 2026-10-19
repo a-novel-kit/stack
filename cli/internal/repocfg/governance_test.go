@@ -21,10 +21,6 @@ import (
 // and records web-flow as its committer.
 const botCommit = `{"author":{"login":"dependabot[bot]"},"committer":{"login":"web-flow"},"commit":{"verification":{"verified":true}}}`
 
-// TestDependabotGovernance runs the auto-approval scripts against a stubbed gh.
-// The engine must also hold Renovate's release age: it triggers on the status
-// event that reports it and reads the statuses the App lacks, since a nested
-// job asking for more than its caller grants fails.
 // TestGovernanceEnvironment pins where the privileged keys are read: a template
 // job that runs steps with one names the governance environment, which no
 // feature branch opens, without recording a deployment. A job calling a
@@ -73,6 +69,10 @@ func TestGovernanceEnvironment(t *testing.T) {
 	}
 }
 
+// TestDependabotGovernance runs the auto-approval scripts against a stubbed gh.
+// The engine must also hold Renovate's release age: it triggers on the status
+// event that reports it and reads the statuses the App lacks, since a nested
+// job asking for more than its caller grants fails.
 func TestDependabotGovernance(t *testing.T) {
 	t.Parallel()
 	var workflow struct {

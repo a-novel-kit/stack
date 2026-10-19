@@ -1,11 +1,3 @@
-// `a-novel install` — the safe re-install path.
-//
-// A bare `go install ./cmd/a-novel` leaves the previous daemon running on the
-// old binary, so a new CLI talks to an old daemon. This verb replaces both: it
-// checkpoints the running daemon, rebuilds the binary, and starts a daemon that
-// relaunches the checkpointed go-exec targets, so the same containers and
-// targets end up running on the new binary.
-
 package cli
 
 import (
@@ -21,6 +13,10 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 )
 
+// newInstallCmd rebuilds the CLI and restarts the daemon on the new binary. A
+// bare `go install` leaves the old daemon running, so a new CLI talks to an old
+// daemon. This verb checkpoints the daemon first, so the same containers and
+// go-exec targets end up running on the new binary.
 func newInstallCmd() *cobra.Command {
 	var source string
 	cmd := &cobra.Command{

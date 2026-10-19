@@ -1,6 +1,3 @@
-// Package build turns a detected target into a [jobs.Job]: it assembles the
-// target's environment, brings its compose env up and down around the command,
-// and enforces the per-target deadline.
 package build
 
 import (
@@ -430,8 +427,8 @@ func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
 //     already be gone or may never have come up.
 //
 // The names follow podman-compose's conventions: the pod is "pod_<project>",
-// and the network "<project>_api" — matching every service compose file's
-// `networks: { api: }` declaration.
+// and the network "<project>_api", after the `networks: { api: }` every service
+// compose file declares.
 func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	var buf bytes.Buffer
 	err := compose(ctx, &buf, os.Environ(), &e, nil,

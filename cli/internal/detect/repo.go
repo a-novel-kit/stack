@@ -40,8 +40,8 @@ func RepoGuard(dir string) error {
 // absRoot (e.g. the stack repo's gitignored app/ and kit/ checkouts, plus
 // node_modules and friends). `ls-files --directory` collapses an ignored tree
 // to its top dir, so a single set membership check prunes the whole subtree.
-// On any git error it returns an empty set — the depth/name guards still
-// bound the walk.
+// On any git error it returns an empty set, and the depth and name guards
+// still bound the walk.
 func gitIgnoredDirs(absRoot string) map[string]struct{} {
 	set := map[string]struct{}{}
 	out, err := git(absRoot, "ls-files", "-z", "--others", "--ignored",

@@ -50,9 +50,9 @@ func (r *Runner) InfraSession(stack, service string) (infraSession, bool) {
 	return *s, true
 }
 
-// InfraSessionRef identifies one tracked infra session (its stack + service
-// pair). Used by callers that need to iterate every active session — e.g.,
-// Shutdown(force=true) which tears down every service's infra in one go.
+// InfraSessionRef identifies one tracked infra session by its stack and
+// service, for a caller that walks every active session, such as a forced
+// Shutdown tearing down every service's infra.
 type InfraSessionRef struct {
 	Stack   string
 	Service string
@@ -118,7 +118,7 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 		return fmt.Errorf("infra up for %s/%s: %w", stack, service, err)
 	}
 
-	// 2. Wait for healthchecks (where declared). Bounded — 60s default.
+	// 2. Wait up to 60s for the declared healthchecks.
 	if err := r.waitInfraHealthy(ctx, svc, 60*time.Second); err != nil {
 		// A health-wait failure leaves the containers up for debugging, and
 		// the session stays un-Up so later target starts surface the issue.

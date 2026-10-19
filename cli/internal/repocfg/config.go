@@ -1,17 +1,3 @@
-// Package repocfg models and applies a repository's GitHub configuration —
-// general settings, security, Pages and the per-repo rulesets —
-// from editable YAML templates under templates/.
-//
-// The desired state for a repo is composed from three inputs:
-//
-//   - a class preset (classes/<class>.yaml) — the per-kind toggles,
-//   - an org profile (orgs/<org>.yaml) — bypass actors and signing,
-//   - discovered checks (checks.yaml + the detect package),
-//
-// then overridden by CLI flags / the interactive form. The templates are
-// plain YAML so they can be edited without touching Go; an on-disk copy
-// (under the stack checkout, or $REPO_CONFIG_DIR) wins over the embedded
-// copy so edits don't need a rebuild.
 package repocfg
 
 import (
@@ -71,8 +57,8 @@ func DetectClass(repo string) Class {
 	}
 }
 
-// OrgProfile is orgs/<org>.yaml — per-org bot ids and signing policy. A
-// ruleset's generic bot name (bots key) resolves to the app id here.
+// OrgProfile is orgs/<org>.yaml, an org's bot ids and signing policy. A
+// ruleset's generic bot name, a key of Bots, resolves to its App id here.
 type OrgProfile struct {
 	Org             string           `yaml:"org"`
 	SigningRequired bool             `yaml:"signing_required"`
@@ -114,7 +100,7 @@ type Merge struct {
 	SignoffRequired     bool `yaml:"signoff_required"`
 }
 
-// SecurityToggles mirrors the repository security settings we manage.
+// SecurityToggles mirrors the repository security settings repocfg manages.
 // DependabotAlerts is optional because GitHub exposes alerts through a
 // dedicated endpoint; nil leaves that setting unmanaged for older presets.
 type SecurityToggles struct {
@@ -188,8 +174,9 @@ func LoadChecks() (*ChecksConfig, error) {
 // ResolveBotIntegrations fills the integration ids that belong to a per-org
 // bot. checks.yaml cannot hardcode these: each org runs its own [Agent] App
 // with a distinct id, and the same checks.yaml is loaded for both. Call it with
-// the target repo's org profile before discovery, so a check posted by that
-// org's App — the merge-gate — is required against an App that can satisfy it.
+// the target repo's org profile before discovery, so a check that org's App
+// posts, such as the merge-gate, is required against an App that can satisfy
+// it.
 func (c *ChecksConfig) ResolveBotIntegrations(org *OrgProfile) {
 	if c.Integrations == nil {
 		c.Integrations = map[string]int64{}
@@ -208,9 +195,9 @@ type LabelDef struct {
 }
 
 // LabelsConfig is governance/labels.yaml: the uniform label vocabulary every
-// repo carries, provisioned like CODEOWNERS. Ensure labels are upserted —
-// created when absent, recolored or re-described when they drift — and Retire
-// labels are deleted. A label in neither list is left untouched, so apply never
+// repo carries, provisioned like CODEOWNERS. An Ensure label is created when
+// absent and updated when its color or description drifts, and a Retire label
+// is deleted. A label in neither list is left untouched, so apply never
 // removes a label it was not told about.
 type LabelsConfig struct {
 	Ensure []LabelDef `yaml:"ensure"`

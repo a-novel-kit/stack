@@ -1,12 +1,3 @@
-// `a-novel secrets` — a local, encrypted secrets manager. Secrets are stored
-// AES-256-GCM-encrypted at rest under a 0600 local key, set interactively with
-// no echo, and never printed by any command. They are injected into a child
-// process's environment only — by `secrets exec`, and automatically by
-// `test`/`run`/`ui` via the value-free per-repo manifest (.a-novel/secrets.yaml).
-//
-// The goal is to prevent accidental exposure of API secrets (e.g.
-// OPENAI_API_KEY) when a developer — or an AI agent — runs the toolchain: the
-// value is never seen on a terminal, in a log, in git, or as a CLI argument.
 package cli
 
 import (
@@ -27,6 +18,9 @@ import (
 // secret never appears on screen.
 var readPassword = func() ([]byte, error) { return term.ReadPassword(int(os.Stdin.Fd())) }
 
+// newSecretsCmd manages the local encrypted secrets the secrets package stores.
+// A secret reaches a child process through its environment only, so it never
+// shows on a terminal, in a log, in git or as a CLI argument.
 func newSecretsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "secrets",

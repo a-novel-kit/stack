@@ -645,8 +645,8 @@ func (p *Plan) Render(w io.Writer) error {
 	return nil
 }
 
-// RenderJSON writes the plan as a JSON array of ops — machine-readable, so
-// the exact operations can be inspected or applied verbatim.
+// RenderJSON writes the plan as a JSON array of ops, so the exact operations
+// can be inspected or applied verbatim.
 func (p *Plan) RenderJSON(w io.Writer) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

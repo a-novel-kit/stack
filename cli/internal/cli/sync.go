@@ -1,6 +1,3 @@
-// `a-novel core sync` — clone or fast-forward the workspace repositories listed
-// in workspace-repos.yaml, all at once.
-
 package cli
 
 import (
@@ -26,6 +23,8 @@ const (
 	syncSkipped  = "skipped"
 )
 
+// newCoreSyncCmd clones or fast-forwards the workspace repositories
+// workspace-repos.yaml lists, all at once.
 func newCoreSyncCmd() *cobra.Command {
 	var (
 		rootDir       string

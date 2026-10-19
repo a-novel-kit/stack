@@ -8,15 +8,11 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Tests for the kill path's two reporting duties: a stop that fails reaches the caller, and a
-// terminated instance stops the goroutines watching it.
-//
-// A container-mode instance runs a watch loop and a log stream on one context. The watcher polls
-// `podman inspect` every 2s and returns once it sees the container exited, so a container that
-// outlives its instance keeps both goroutines going for the life of the daemon.
-
-// TestMarkTerminatedClosesTheInstanceContext also covers a go-exec instance
-// that never started, which carries no cancel.
+// TestMarkTerminatedClosesTheInstanceContext pins that a terminated instance
+// stops the goroutines watching it. A container-mode instance runs a watch loop
+// and a log stream on one context, and a container that outlives its instance
+// would otherwise keep both going for the life of the daemon. It also covers a
+// go-exec instance that never started, which carries no cancel.
 func TestMarkTerminatedClosesTheInstanceContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	for _, instanceCancel := range []context.CancelFunc{cancel, nil} {
@@ -38,6 +34,8 @@ func TestMarkTerminatedClosesTheInstanceContext(t *testing.T) {
 	}
 }
 
+// TestKillContainerReportsAFailedStop pins that a stop that fails reaches the
+// caller.
 func TestKillContainerReportsAFailedStop(t *testing.T) {
 	r := &Runner{instances: map[string]*Instance{}}
 
