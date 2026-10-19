@@ -57,9 +57,12 @@ the rule for every reader.
    against the implementation before choosing wording.
 2. If the file exists, use update mode below and preserve unrelated content. If it is missing,
    scaffold from [templates](references/templates.md).
-3. For every edit, read the applicable rules in [fleet structure](references/structure.md) and
-   [editorial principles](references/editorial.md). Fleet structure wins where older templates
-   disagree. Read sections for the document and concern being changed.
+3. For every edit, read the applicable rules in [fleet structure](references/structure.md),
+   [editorial principles](references/editorial.md), and the developer guide's
+   [Prose](references/developer-guide.md#prose) and [Commands](references/developer-guide.md#commands)
+   sections. Those two bind every README, CONTRIBUTING, SECURITY and docs page, not only the guide.
+   Fleet structure wins where older templates disagree. Read sections for the document and concern
+   being changed.
 4. Before collecting or substituting metadata, read [inputs and missing values](references/inputs.md).
    Reuse verified inputs and session decisions; ask only for required information still missing.
 5. For badges or coverage graphs, read [badge patterns](references/badges.md). Load templates only
