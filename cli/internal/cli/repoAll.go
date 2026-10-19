@@ -73,16 +73,28 @@ func runRepoUpdateAll(cmd *cobra.Command, rootDir, class string, exclude []strin
 		_, _ = fmt.Fprintln(progress, "\nnothing to reconcile — every repo was skipped or excluded.")
 		return nil
 	case dryRun:
-		for _, p := range planned {
-			_, _ = fmt.Fprintf(progress, "\n# dry-run %s — class %s\n%s\n", p.FullName(), p.target.Class.Class, p.prune)
-			if err := p.plan.Render(out); err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintln(out)
-		}
-		return nil
+		return renderAllDryRun(out, progress, planned)
 	}
+	return applyAll(cmd, planned, limit)
+}
 
+// renderAllDryRun prints each planned repo's operations to out, under a header
+// written to progress.
+func renderAllDryRun(out, progress io.Writer, planned []plannedUpdate) error {
+	for _, p := range planned {
+		_, _ = fmt.Fprintf(progress, "\n# dry-run %s — class %s\n%s\n", p.FullName(), p.target.Class.Class, p.prune)
+		if err := p.plan.Render(out); err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintln(out)
+	}
+	return nil
+}
+
+// applyAll shows the planned repos, asks once, then applies limit repos at a
+// time.
+func applyAll(cmd *cobra.Command, planned []plannedUpdate, limit int) error {
+	out := cmd.OutOrStdout()
 	_, _ = fmt.Fprintf(out, "\nReconcile %d repo(s):\n", len(planned))
 	for _, p := range planned {
 		renderCompactSummary(out, p.target)

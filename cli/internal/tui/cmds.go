@@ -138,7 +138,6 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 		return nil
 	}
 	verb, args := parts[0], parts[1:]
-	svc, t, in := m.activeService(), m.activeTarget(), m.activeInfra()
 	switch verb {
 	case "quit", "q":
 		return tea.Quit
@@ -146,108 +145,147 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 		m.followSelectedLogs()
 		return refreshServicesCmd(m.c)
 	case "start":
-		// :start addresses targets only: a single infra container cannot
-		// be cold-started in isolation, since it may depend on other
-		// infra.
-		if in != nil {
-			return setStatusCmd(statusError,
-				":start only works on targets. For infra: use :infra-start (whole service) or :restart (this container)")
-		}
-		if t == nil {
-			return setStatusCmd(statusError, "no active target — select one with ←/→ first")
-		}
-		mode, modeLabel := anovelv1.Mode_MODE_GO_EXEC, modeGoExec
-		if len(args) > 0 && args[0] == modeContainer {
-			mode, modeLabel = anovelv1.Mode_MODE_CONTAINER, modeContainer
-		}
-		return runAction("Starting "+t.GetName()+" ("+modeLabel+")... infra + one-shots will run first",
-			"Started "+t.GetName(), "start "+t.GetName(), time.Minute,
-			func(ctx context.Context) error {
-				_, err := m.c.StartTarget(ctx, t.GetId(), mode)
-				return err
-			})
+		return m.startCmd(args)
 	case "kill":
-		// An infra entry stops that one container and leaves the rest of
-		// the service's infra and targets alone.
-		switch {
-		case t != nil:
-			return runAction("Killing "+t.GetName()+"...", "Killed "+t.GetName(), "kill "+t.GetName(),
-				30*time.Second, func(ctx context.Context) error {
-					_, err := m.c.KillTarget(ctx, t.GetId(), 10*time.Second)
-					return err
-				})
-		case in != nil:
-			return runAction("Stopping infra container "+in.GetName()+"...", "Stopped infra "+in.GetName(),
-				"kill infra "+in.GetName(), 30*time.Second, func(ctx context.Context) error {
-					_, err := m.c.KillInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName())
-					return err
-				})
-		}
-		return setStatusCmd(statusError, noTabText)
+		return m.killCmd()
 	case "restart":
-		switch {
-		case t != nil:
-			return runAction("Restarting "+t.GetName()+"...", "Restarted "+t.GetName(), "restart "+t.GetName(),
-				time.Minute, func(ctx context.Context) error {
-					_, err := m.c.RestartTarget(ctx, t.GetId(), anovelv1.Mode_MODE_UNSPECIFIED)
-					return err
-				})
-		case in != nil:
-			return runAction("Restarting infra container "+in.GetName()+"...", "Restarted infra "+in.GetName(),
-				"restart infra "+in.GetName(), time.Minute, func(ctx context.Context) error {
-					_, err := m.c.RestartInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName())
-					return err
-				})
-		}
-		return setStatusCmd(statusError, noTabText)
+		return m.restartCmd()
 	case "infra-start":
-		if svc == nil {
-			return setStatusCmd(statusError, noServiceText)
-		}
-		return runAction("Bringing up infra + one-shots for "+svc.GetName()+"...", "Infra ready for "+svc.GetName(),
-			"infra-start "+svc.GetName(), 5*time.Minute, func(ctx context.Context) error {
-				_, err := m.c.StartInfra(ctx, "", svc.GetName(), anovelv1.Mode_MODE_GO_EXEC)
-				return err
-			})
+		return m.infraStartCmd()
 	case "infra-kill":
-		if svc == nil {
-			return setStatusCmd(statusError, noServiceText)
-		}
-		force := len(args) > 0 && args[0] == "force"
-		busyText := "Tearing down infra for " + svc.GetName() + "..."
-		if force {
-			busyText = "Force-tearing down infra + targets for " + svc.GetName() + "..."
-		}
-		return runAction(busyText, "Infra down for "+svc.GetName(), "infra-kill "+svc.GetName(),
-			30*time.Second, func(ctx context.Context) error {
-				_, err := m.c.KillInfra(ctx, "", svc.GetName(), force)
-				return err
-			})
+		return m.infraKillCmd(args)
 	case "volume-backup":
-		if svc == nil {
-			return setStatusCmd(statusError, noServiceText)
-		}
-		return runAction("Backing up volumes for "+svc.GetName()+"... (may take a while)",
-			"Backed up volumes for "+svc.GetName(), "volume-backup "+svc.GetName(),
-			5*time.Minute, func(ctx context.Context) error {
-				_, err := m.c.BackupVolume(ctx, "", svc.GetName(), "", false)
-				return err
-			})
+		return m.volumeBackupCmd()
 	case "topology":
-		// GetName is nil-safe, so with no service selected the empty name
-		// asks for the whole stack.
-		svcName := svc.GetName()
-		return func() tea.Msg {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			resp, err := m.c.GetTopology(ctx, "", svcName)
-			if err != nil {
-				return statusMsg{entry: statusEntry{level: statusError, text: "topology: " + err.Error(), at: time.Now()}}
-			}
-			return topologyMsg{rendered: resp.GetRendered()}
-		}
+		return m.topologyCmd()
 	default:
 		return setStatusCmd(statusError, "unknown command: :"+verb+"  (press ? for the full list)")
+	}
+}
+
+// startCmd starts the active target, in container mode with a `container`
+// argument. It addresses targets only: a single infra container cannot be
+// cold-started in isolation, since it may depend on other infra.
+func (m *model) startCmd(args []string) tea.Cmd {
+	t := m.activeTarget()
+	if m.activeInfra() != nil {
+		return setStatusCmd(statusError,
+			":start only works on targets. For infra: use :infra-start (whole service) or :restart (this container)")
+	}
+	if t == nil {
+		return setStatusCmd(statusError, "no active target — select one with ←/→ first")
+	}
+	mode, modeLabel := anovelv1.Mode_MODE_GO_EXEC, modeGoExec
+	if len(args) > 0 && args[0] == modeContainer {
+		mode, modeLabel = anovelv1.Mode_MODE_CONTAINER, modeContainer
+	}
+	return runAction("Starting "+t.GetName()+" ("+modeLabel+")... infra + one-shots will run first",
+		"Started "+t.GetName(), "start "+t.GetName(), time.Minute,
+		func(ctx context.Context) error {
+			_, err := m.c.StartTarget(ctx, t.GetId(), mode)
+			return err
+		})
+}
+
+// killCmd stops the active target, or the active infra container alone,
+// leaving the rest of the service's infra and targets up.
+func (m *model) killCmd() tea.Cmd {
+	if t := m.activeTarget(); t != nil {
+		return runAction("Killing "+t.GetName()+"...", "Killed "+t.GetName(), "kill "+t.GetName(),
+			30*time.Second, func(ctx context.Context) error {
+				_, err := m.c.KillTarget(ctx, t.GetId(), 10*time.Second)
+				return err
+			})
+	}
+	if in := m.activeInfra(); in != nil {
+		return runAction("Stopping infra container "+in.GetName()+"...", "Stopped infra "+in.GetName(),
+			"kill infra "+in.GetName(), 30*time.Second, func(ctx context.Context) error {
+				_, err := m.c.KillInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName())
+				return err
+			})
+	}
+	return setStatusCmd(statusError, noTabText)
+}
+
+// restartCmd restarts the active target, or the active infra container in
+// place.
+func (m *model) restartCmd() tea.Cmd {
+	if t := m.activeTarget(); t != nil {
+		return runAction("Restarting "+t.GetName()+"...", "Restarted "+t.GetName(), "restart "+t.GetName(),
+			time.Minute, func(ctx context.Context) error {
+				_, err := m.c.RestartTarget(ctx, t.GetId(), anovelv1.Mode_MODE_UNSPECIFIED)
+				return err
+			})
+	}
+	if in := m.activeInfra(); in != nil {
+		return runAction("Restarting infra container "+in.GetName()+"...", "Restarted infra "+in.GetName(),
+			"restart infra "+in.GetName(), time.Minute, func(ctx context.Context) error {
+				_, err := m.c.RestartInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName())
+				return err
+			})
+	}
+	return setStatusCmd(statusError, noTabText)
+}
+
+// infraStartCmd brings up the active service's infra and runs its one-shots.
+func (m *model) infraStartCmd() tea.Cmd {
+	svc := m.activeService()
+	if svc == nil {
+		return setStatusCmd(statusError, noServiceText)
+	}
+	return runAction("Bringing up infra + one-shots for "+svc.GetName()+"...", "Infra ready for "+svc.GetName(),
+		"infra-start "+svc.GetName(), 5*time.Minute, func(ctx context.Context) error {
+			_, err := m.c.StartInfra(ctx, "", svc.GetName(), anovelv1.Mode_MODE_GO_EXEC)
+			return err
+		})
+}
+
+// infraKillCmd tears down the active service's infra, cascading to its
+// targets with a `force` argument.
+func (m *model) infraKillCmd(args []string) tea.Cmd {
+	svc := m.activeService()
+	if svc == nil {
+		return setStatusCmd(statusError, noServiceText)
+	}
+	force := len(args) > 0 && args[0] == "force"
+	busyText := "Tearing down infra for " + svc.GetName() + "..."
+	if force {
+		busyText = "Force-tearing down infra + targets for " + svc.GetName() + "..."
+	}
+	return runAction(busyText, "Infra down for "+svc.GetName(), "infra-kill "+svc.GetName(),
+		30*time.Second, func(ctx context.Context) error {
+			_, err := m.c.KillInfra(ctx, "", svc.GetName(), force)
+			return err
+		})
+}
+
+// volumeBackupCmd backs up the active service's volumes.
+func (m *model) volumeBackupCmd() tea.Cmd {
+	svc := m.activeService()
+	if svc == nil {
+		return setStatusCmd(statusError, noServiceText)
+	}
+	return runAction("Backing up volumes for "+svc.GetName()+"... (may take a while)",
+		"Backed up volumes for "+svc.GetName(), "volume-backup "+svc.GetName(),
+		5*time.Minute, func(ctx context.Context) error {
+			_, err := m.c.BackupVolume(ctx, "", svc.GetName(), "", false)
+			return err
+		})
+}
+
+// topologyCmd fetches the dependency graph of the active service, or of the
+// whole stack when none is selected: GetName is nil-safe, and an empty name
+// asks for every service.
+func (m *model) topologyCmd() tea.Cmd {
+	svcName := m.activeService().GetName()
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		resp, err := m.c.GetTopology(ctx, "", svcName)
+		if err != nil {
+			return statusMsg{entry: statusEntry{level: statusError, text: "topology: " + err.Error(), at: time.Now()}}
+		}
+		return topologyMsg{rendered: resp.GetRendered()}
 	}
 }
 

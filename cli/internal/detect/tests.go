@@ -216,54 +216,40 @@ func goTestPackageDirs(dir string) [][]string {
 	}
 
 	ignored := gitIgnoredDirs(absRoot)
-	seen := map[string]struct{}{}
-
+	seen := map[string]bool{}
 	var pkgs [][]string
-
 	_ = filepath.WalkDir(absRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil //nolint:nilerr // an unreadable subtree is skipped, not fatal to detection
 		}
-
 		if entry.IsDir() {
-			if skipDir(absRoot, path, entry.Name(), ignored) {
-				return filepath.SkipDir
-			}
-
-			if path != absRoot && IsFile(filepath.Join(path, "go.mod")) {
-				return filepath.SkipDir
-			}
-
-			return nil
+			return moduleDirStep(absRoot, path, entry.Name(), ignored)
 		}
-
-		if !strings.HasSuffix(entry.Name(), "_test.go") {
-			return nil
-		}
-
 		rel, relErr := filepath.Rel(absRoot, filepath.Dir(path))
-		if relErr != nil {
-			return nil //nolint:nilerr // a path outside the root is not a package of this module
+		if strings.HasSuffix(entry.Name(), "_test.go") && relErr == nil && !seen[rel] {
+			seen[rel] = true
+			pkgs = append(pkgs, pathSegments(rel))
 		}
-
-		if _, dup := seen[rel]; dup {
-			return nil
-		}
-
-		seen[rel] = struct{}{}
-
-		if rel == "." {
-			pkgs = append(pkgs, []string{})
-
-			return nil
-		}
-
-		pkgs = append(pkgs, strings.Split(rel, string(filepath.Separator)))
-
 		return nil
 	})
-
 	return pkgs
+}
+
+// moduleDirStep is the walk's decision on a directory of the module at
+// absRoot: it skips the trees the main scan prunes and any nested module.
+func moduleDirStep(absRoot, path, name string, ignored map[string]struct{}) error {
+	if skipDir(absRoot, path, name, ignored) || path != absRoot && IsFile(filepath.Join(path, "go.mod")) {
+		return filepath.SkipDir
+	}
+	return nil
+}
+
+// pathSegments splits a relative path into its segments, "." being none.
+func pathSegments(rel string) []string {
+	if rel == "." {
+		return []string{}
+	}
+	return strings.Split(rel, string(filepath.Separator))
 }
 
 // uncoveredGoSelectors returns a `go test` selector for each test package no

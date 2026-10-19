@@ -34,36 +34,12 @@ type Options struct {
 // stack. A nil prompter makes the run non-interactive, and that stack is then
 // skipped.
 func Run(opts Options, w io.Writer, prompter Prompter) error {
-	// 1. Environment checks.
-	_, _ = fmt.Fprintln(w, "▸ Checking environment...")
-	if err := checkPodman(); err != nil {
-		return fmt.Errorf("podman check: %w", err)
-	}
-	_, _ = fmt.Fprintln(w, "  ✓ podman")
-	if err := checkGit(); err != nil {
-		return fmt.Errorf("git check: %w", err)
-	}
-	_, _ = fmt.Fprintln(w, "  ✓ git")
-	// GitHub SSH only matters when a stack needs cloning, so a failure is a
-	// warning.
-	if err := checkGitHubSSH(); err != nil {
-		_, _ = fmt.Fprintln(w, "  ⚠ GitHub SSH ("+err.Error()+")")
-	} else {
-		_, _ = fmt.Fprintln(w, "  ✓ GitHub SSH")
-	}
-
-	// 2. State directories.
-	_, _ = fmt.Fprintln(w, "▸ Verifying state directories...")
-	stateDir, dataDir := paths.State(), paths.Data()
-	if err := ensureDir(stateDir); err != nil {
+	if err := checkEnvironment(w); err != nil {
 		return err
 	}
-	if err := ensureDir(dataDir); err != nil {
+	if err := ensureStateDirs(w); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(w, "  ✓ %s\n  ✓ %s\n", stateDir, dataDir)
-
-	// 3. Stack bootstrap.
 	stk, err := stacks.ParseEnv()
 	if err != nil {
 		return fmt.Errorf("parse %s: %w", stacks.EnvVar, err)
@@ -73,46 +49,90 @@ func Run(opts Options, w io.Writer, prompter Prompter) error {
 		status, detail := bootstrapStack(s, prompter)
 		_, _ = fmt.Fprintf(w, "  %s %s (%s)\n", statusGlyph(status), s.Name, detail)
 	}
+	rcPath, rcEdited, err := manageShellRC(w, opts, stk)
+	if err != nil {
+		return err
+	}
+	printNextStep(w, startDaemon(w, opts), rcEdited, rcPath)
+	return nil
+}
 
-	// 4. Shell rc integration.
-	var rcPath string
-	var rcEdited bool
-	if !opts.NoShellRC {
-		_, _ = fmt.Fprintln(w, "▸ Managing shell rc block...")
-		var shell string
-		rcPath, shell = resolveRC(opts.RCPath)
-		backupPath, changed, err := upsertRCBlock(rcPath, renderRCBlock(stk, shell))
-		if err != nil {
-			return fmt.Errorf("update %s: %w", rcPath, err)
-		}
-		rcEdited = changed
-		if changed {
-			_, _ = fmt.Fprintf(w, "  ✓ updated %s (backup: %s)\n", rcPath, backupPath)
-		} else {
-			_, _ = fmt.Fprintf(w, "  ✓ %s already up-to-date\n", rcPath)
-		}
+// checkEnvironment checks the host tools. GitHub SSH only matters when a stack
+// needs cloning, so its failure is a warning.
+func checkEnvironment(w io.Writer) error {
+	_, _ = fmt.Fprintln(w, "▸ Checking environment...")
+	if err := checkPodman(); err != nil {
+		return fmt.Errorf("podman check: %w", err)
+	}
+	_, _ = fmt.Fprintln(w, "  ✓ podman")
+	if err := checkGit(); err != nil {
+		return fmt.Errorf("git check: %w", err)
+	}
+	_, _ = fmt.Fprintln(w, "  ✓ git")
+	if err := checkGitHubSSH(); err != nil {
+		_, _ = fmt.Fprintln(w, "  ⚠ GitHub SSH ("+err.Error()+")")
 	} else {
+		_, _ = fmt.Fprintln(w, "  ✓ GitHub SSH")
+	}
+	return nil
+}
+
+// ensureStateDirs creates the CLI's state and data directories.
+func ensureStateDirs(w io.Writer) error {
+	_, _ = fmt.Fprintln(w, "▸ Verifying state directories...")
+	stateDir, dataDir := paths.State(), paths.Data()
+	if err := ensureDir(stateDir); err != nil {
+		return err
+	}
+	if err := ensureDir(dataDir); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(w, "  ✓ %s\n  ✓ %s\n", stateDir, dataDir)
+	return nil
+}
+
+// manageShellRC writes the setup block into the shell rc, unless opts skips
+// it, and reports the rc path and whether the file changed.
+func manageShellRC(w io.Writer, opts Options, stk []stacks.Stack) (string, bool, error) {
+	if opts.NoShellRC {
 		_, _ = fmt.Fprintln(w, "▸ Shell rc step skipped (--no-shell-rc)")
+		return "", false, nil
 	}
-
-	// 5. Start the daemon now so the CLI is usable without a new shell or a
-	// manual `a-novel core start`. A nil callback skips it, as in a test
-	// harness that calls Run without the CLI bridge.
-	var daemonStarted bool
-	if !opts.NoStartDaemon && opts.StartDaemon != nil {
-		_, _ = fmt.Fprintln(w, "▸ Starting the a-novel daemon...")
-		if err := opts.StartDaemon(); err != nil {
-			_, _ = fmt.Fprintf(w, "  ⚠ daemon start failed: %v\n", err)
-		} else {
-			daemonStarted = true
-			_, _ = fmt.Fprintln(w, "  ✓ daemon running")
-		}
+	_, _ = fmt.Fprintln(w, "▸ Managing shell rc block...")
+	rcPath, shell := resolveRC(opts.RCPath)
+	backupPath, changed, err := upsertRCBlock(rcPath, renderRCBlock(stk, shell))
+	if err != nil {
+		return "", false, fmt.Errorf("update %s: %w", rcPath, err)
 	}
+	if changed {
+		_, _ = fmt.Fprintf(w, "  ✓ updated %s (backup: %s)\n", rcPath, backupPath)
+	} else {
+		_, _ = fmt.Fprintf(w, "  ✓ %s already up-to-date\n", rcPath)
+	}
+	return rcPath, changed, nil
+}
 
-	// 6. Summary and next step. With the daemon up, `a-novel run ui` works
-	// right away; otherwise the hint points at the manual start. An edited
-	// rc only loads in future shells, so the hint also suggests sourcing it
-	// for completion in the current one.
+// startDaemon starts the daemon so the CLI is usable without a new shell or a
+// manual `a-novel core start`, and reports whether it runs. A nil callback
+// skips it, as in a test harness that calls Run without the CLI bridge.
+func startDaemon(w io.Writer, opts Options) bool {
+	if opts.NoStartDaemon || opts.StartDaemon == nil {
+		return false
+	}
+	_, _ = fmt.Fprintln(w, "▸ Starting the a-novel daemon...")
+	if err := opts.StartDaemon(); err != nil {
+		_, _ = fmt.Fprintf(w, "  ⚠ daemon start failed: %v\n", err)
+		return false
+	}
+	_, _ = fmt.Fprintln(w, "  ✓ daemon running")
+	return true
+}
+
+// printNextStep closes the run with the next step. With the daemon up, `a-novel
+// run ui` works right away; otherwise the hint points at the manual start. An
+// edited rc only loads in future shells, so the hint also suggests sourcing it
+// for completion in the current one.
+func printNextStep(w io.Writer, daemonStarted, rcEdited bool, rcPath string) {
 	_, _ = fmt.Fprintln(w, "")
 	_, _ = fmt.Fprintln(w, "Setup complete.")
 	switch {
@@ -127,7 +147,6 @@ func Run(opts Options, w io.Writer, prompter Prompter) error {
 	default:
 		_, _ = fmt.Fprintln(w, "  → Run `a-novel core start` to bring the daemon up.")
 	}
-	return nil
 }
 
 // ensureDir creates dir with 0700 perms. An existing dir is tightened to 0700

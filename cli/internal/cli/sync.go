@@ -79,24 +79,7 @@ and app/.`,
 				return nil
 			}
 
-			allowed, ignored := normaliseFilter(allow), normaliseFilter(ignore)
-			self, _ := repoFromGitRemote(root)
-			var list []jobs.Job
-			var skipped []string
-			for _, r := range repos {
-				switch {
-				case len(allowed) > 0 && !allowed[r.FullName()]:
-				case ignored[r.FullName()] || r == self:
-					skipped = append(skipped, r.FullName())
-				default:
-					list = append(list, jobs.Job{
-						Name: r.FullName(),
-						Run: func(_ context.Context, out io.Writer) (string, error) {
-							return syncRepo(root, r, out)
-						},
-					})
-				}
-			}
+			list, skipped := syncJobs(root, repos, normaliseFilter(allow), normaliseFilter(ignore))
 			_, _ = fmt.Fprintf(out, "▸ Syncing %d repo(s) at %s\n", len(list), root)
 			if len(skipped) > 0 {
 				_, _ = fmt.Fprintf(out, "  left out: %s\n", strings.Join(skipped, ", "))
@@ -119,6 +102,28 @@ and app/.`,
 	cmd.Flags().StringSliceVar(&ignore, "ignore", nil, "skip these repos; wins over --allow")
 	cmd.Flags().IntVarP(&limit, "jobs", "j", runtime.NumCPU(), "max repos synced at once")
 	return cmd
+}
+
+// syncJobs returns a sync job for each of repos the filters keep, and the
+// names of the ones --ignore leaves out. The stack repo checked out at root is
+// never synced into itself.
+func syncJobs(root string, repos []repoEntry, allowed, ignored map[string]bool) ([]jobs.Job, []string) {
+	self, _ := repoFromGitRemote(root)
+	var list []jobs.Job
+	var skipped []string
+	for _, r := range repos {
+		switch {
+		case len(allowed) > 0 && !allowed[r.FullName()]:
+		case ignored[r.FullName()] || r == self:
+			skipped = append(skipped, r.FullName())
+		default:
+			list = append(list, jobs.Job{
+				Name: r.FullName(),
+				Run:  func(_ context.Context, out io.Writer) (string, error) { return syncRepo(root, r, out) },
+			})
+		}
+	}
+	return list, skipped
 }
 
 // syncRepo clones r under root, or updates the checkout already there.
