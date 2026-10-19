@@ -38,10 +38,7 @@ func (r *Runner) adoptEntries(ctx context.Context, entries []psEntry) (int, int)
 	var containers, targets int
 
 	for _, e := range entries {
-		cid := e.ID
-		stack := e.Labels[labelStack]
-		service := e.Labels[labelService]
-		target := e.Labels[labelTarget]
+		stack, service := e.Labels[labelStack], e.Labels[labelService]
 		if stack == "" || service == "" {
 			continue
 		}
@@ -55,59 +52,66 @@ func (r *Runner) adoptEntries(ctx context.Context, entries []psEntry) (int, int)
 			r.markInfraSessionUp(stack, service)
 		}
 
-		if target == "" {
+		if e.Labels[labelTarget] == "" {
 			// An infra container carries no target label and needs no
 			// Instance record, but the env allocator must be re-seeded with
 			// the host ports it is bound to. Otherwise the next Acquire,
 			// say for the migrations one-shot's POSTGRES_PORT, picks a
 			// fresh port and the one-shot connects to the wrong one.
-			r.reseedAllocator(ctx, stack, service, cid)
+			r.reseedAllocator(ctx, stack, service, e.ID)
 			continue
 		}
 
-		// Target container — find it in discovery and reconstitute.
-		tgt, _ := r.stacks.Target(stack + "/" + service + "/" + target)
-		if tgt == nil {
-			// Discovery does not know this target, so the compose file
-			// changed since the container was created. Leave it orphaned
-			// for a manual `podman rm`.
-			continue
+		if r.adoptTarget(e, phase, health) {
+			targets++
 		}
-		inst := &Instance{
-			ID:          tgt.ID(),
-			Target:      tgt.Name,
-			Service:     tgt.Service,
-			Stack:       tgt.Stack,
-			Phase:       phase,
-			Mode:        anovelv1.Mode_MODE_CONTAINER,
-			Health:      health,
-			ContainerID: cid,
-			StartedAt:   time.Unix(e.Created, 0),
-		}
-		r.mu.Lock()
-		// Skip a target that already holds a live record.
-		if _, exists := r.instances[inst.ID]; exists {
-			r.mu.Unlock()
-			continue
-		}
-		r.instances[inst.ID] = inst
-		r.mu.Unlock()
-
-		// Resume watching and log streaming on the adopted container. A log
-		// writer that fails to open costs this adoption only its streaming.
-		if phase != anovelv1.Phase_PHASE_TERMINATED && r.logs != nil {
-			ctxAdopt, cancel := context.WithCancel(context.Background())
-			r.mu.Lock()
-			inst.cancel = cancel
-			r.mu.Unlock()
-			if w, err := r.logs.OpenForWrite(inst.ID, stack, service, target); err == nil {
-				go r.streamContainerLogs(ctxAdopt, cid, w)
-			}
-			go r.watchContainer(ctxAdopt, inst.ID, cid)
-		}
-		targets++
 	}
 	return containers, targets
+}
+
+// adoptTarget reconstitutes the Instance of a target container and resumes
+// watching it, and reports whether it did. A target discovery no longer knows,
+// because the compose file changed since the container was created, stays
+// orphaned for a manual `podman rm`; one that already holds a record is left
+// as it is.
+func (r *Runner) adoptTarget(e psEntry, phase anovelv1.Phase, health anovelv1.Health) bool {
+	stack, service, target := e.Labels[labelStack], e.Labels[labelService], e.Labels[labelTarget]
+	tgt, _ := r.stacks.Target(stack + "/" + service + "/" + target)
+	if tgt == nil {
+		return false
+	}
+	inst := &Instance{
+		ID:          tgt.ID(),
+		Target:      tgt.Name,
+		Service:     tgt.Service,
+		Stack:       tgt.Stack,
+		Phase:       phase,
+		Mode:        anovelv1.Mode_MODE_CONTAINER,
+		Health:      health,
+		ContainerID: e.ID,
+		StartedAt:   time.Unix(e.Created, 0),
+	}
+	r.mu.Lock()
+	if _, exists := r.instances[inst.ID]; exists {
+		r.mu.Unlock()
+		return false
+	}
+	r.instances[inst.ID] = inst
+	r.mu.Unlock()
+
+	// Resume watching and log streaming on the adopted container. A log
+	// writer that fails to open costs this adoption only its streaming.
+	if phase != anovelv1.Phase_PHASE_TERMINATED && r.logs != nil {
+		ctxAdopt, cancel := context.WithCancel(context.Background())
+		r.mu.Lock()
+		inst.cancel = cancel
+		r.mu.Unlock()
+		if w, err := r.logs.OpenForWrite(inst.ID, stack, service, target); err == nil {
+			go r.streamContainerLogs(ctxAdopt, e.ID, w)
+		}
+		go r.watchContainer(ctxAdopt, inst.ID, e.ID)
+	}
+	return true
 }
 
 // reseedAllocator re-records every host-port → `${VAR}` mapping for an adopted
@@ -151,29 +155,10 @@ func (r *Runner) reseedAllocator(ctx context.Context, stack, service, cid string
 	if infra == nil {
 		return
 	}
-	// Parse podman's port map: { "5432/tcp": [{HostIp:"0.0.0.0", HostPort:"38631"}] }.
-	var portMap map[string][]struct {
-		HostIP   string `json:"HostIp"`
-		HostPort string `json:"HostPort"`
-	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(portsJSON)), &portMap); err != nil {
+	containerToHost, err := hostPorts(portsJSON)
+	if err != nil {
 		return
 	}
-	// Build container-side port → host port lookup.
-	containerToHost := make(map[string]int)
-	for cport, bindings := range portMap {
-		if len(bindings) == 0 {
-			continue
-		}
-		// cport is "5432/tcp"; trim the proto.
-		port, _, _ := strings.Cut(cport, "/")
-		host, err := strconv.Atoi(bindings[0].HostPort)
-		if err != nil {
-			continue
-		}
-		containerToHost[port] = host
-	}
-	// Walk Infra.Ports and re-seed.
 	consumer := infraConsumer(stack, service)
 	for _, raw := range infra.Ports {
 		varName, containerPort, ok := compose.HostPort(raw)
@@ -186,6 +171,29 @@ func (r *Runner) reseedAllocator(ctx context.Context, stack, service, cid string
 		}
 		r.alloc.Reserve(service, varName, hostPort, consumer)
 	}
+}
+
+// hostPorts maps each container-side port of podman's port map, such as
+// { "5432/tcp": [{"HostIp": "0.0.0.0", "HostPort": "38631"}] }, to the host port
+// its first binding uses. A port without a numeric binding is left out.
+func hostPorts(portsJSON string) (map[string]int, error) {
+	var portMap map[string][]struct {
+		HostPort string `json:"HostPort"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(portsJSON)), &portMap); err != nil {
+		return nil, err
+	}
+	containerToHost := make(map[string]int)
+	for containerPort, bindings := range portMap {
+		if len(bindings) == 0 {
+			continue
+		}
+		port, _, _ := strings.Cut(containerPort, "/") // "5432/tcp"
+		if host, err := strconv.Atoi(bindings[0].HostPort); err == nil {
+			containerToHost[port] = host
+		}
+	}
+	return containerToHost, nil
 }
 
 // containerInfraNameRe matches the trailing infra name in compose's

@@ -31,43 +31,9 @@ import (
 // `podman compose` up waits on no one-shot, which podman would run again.
 func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *discovery.Service, oneShotsMode anovelv1.Mode) error {
 	for _, depName := range t.DependsOn {
-		// Classify the dep against the service's discovered targets and
-		// infra.
-		if svc.FindInfra(depName) != nil {
-			if err := r.ensureInfraReady(ctx, svc, oneShotsMode); err != nil {
-				return fmt.Errorf("infra dep %s: %w", depName, err)
-			}
-			continue
+		if err := r.ensureDepReady(ctx, svc, depName, oneShotsMode); err != nil {
+			return err
 		}
-		if depTarget := svc.FindTargetByComposeName(depName); depTarget != nil {
-			if depTarget.Kind == discovery.TargetKindOneShot {
-				if err := r.ensureOneShotSatisfied(ctx, svc, depTarget, oneShotsMode); err != nil {
-					return err
-				}
-				continue
-			}
-			// Long-runner — refuse-with-hint if not already running.
-			inst, ok := r.Instance(depTarget.ID())
-			if !ok || inst.Phase != anovelv1.Phase_PHASE_RUNNING {
-				return fmt.Errorf(
-					"long-runner dep %s/%s is not running — start it explicitly first (`a-novel run start %s/%s`)",
-					svc.Name, depTarget.Name, svc.Name, depTarget.Name)
-			}
-			// For container long-runners with a healthcheck, require
-			// healthy. go-exec or no-healthcheck containers count as
-			// ready when running.
-			if inst.Mode == anovelv1.Mode_MODE_CONTAINER && depTarget.Kind == discovery.TargetKindLongRunner {
-				if inst.Health == anovelv1.Health_HEALTH_UNHEALTHY || inst.Health == anovelv1.Health_HEALTH_STARTING {
-					return fmt.Errorf(
-						"long-runner dep %s/%s is %s — wait for it to become healthy",
-						svc.Name, depTarget.Name, strings.ToLower(strings.TrimPrefix(inst.Health.String(), "HEALTH_")))
-				}
-			}
-			continue
-		}
-		// An unknown dep is most likely a cross-service reference, so skip
-		// it.
-		// TODO: resolve cross-service dependencies here.
 	}
 
 	oneShots := topoSortOneShots(svc)
@@ -81,6 +47,41 @@ func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *
 		if err := r.ensureOneShotSatisfied(ctx, svc, oneShot, oneShotsMode); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// ensureDepReady readies one compose dependency of a target of svc, classified
+// against the service's discovered infra and targets.
+func (r *Runner) ensureDepReady(ctx context.Context, svc *discovery.Service, depName string, oneShotsMode anovelv1.Mode) error {
+	if svc.FindInfra(depName) != nil {
+		if err := r.ensureInfraReady(ctx, svc, oneShotsMode); err != nil {
+			return fmt.Errorf("infra dep %s: %w", depName, err)
+		}
+		return nil
+	}
+	dep := svc.FindTargetByComposeName(depName)
+	switch {
+	case dep == nil:
+		// An unknown dep is most likely a cross-service reference, so skip it.
+		// TODO: resolve cross-service dependencies here.
+		return nil
+	case dep.Kind == discovery.TargetKindOneShot:
+		return r.ensureOneShotSatisfied(ctx, svc, dep, oneShotsMode)
+	}
+	inst, ok := r.Instance(dep.ID())
+	if !ok || inst.Phase != anovelv1.Phase_PHASE_RUNNING {
+		return fmt.Errorf(
+			"long-runner dep %s/%s is not running — start it explicitly first (`a-novel run start %s/%s`)",
+			svc.Name, dep.Name, svc.Name, dep.Name)
+	}
+	// A container long-runner with a healthcheck must be healthy. go-exec or
+	// no-healthcheck containers count as ready when running.
+	if inst.Mode == anovelv1.Mode_MODE_CONTAINER && dep.Kind == discovery.TargetKindLongRunner &&
+		(inst.Health == anovelv1.Health_HEALTH_UNHEALTHY || inst.Health == anovelv1.Health_HEALTH_STARTING) {
+		return fmt.Errorf(
+			"long-runner dep %s/%s is %s — wait for it to become healthy",
+			svc.Name, dep.Name, strings.ToLower(strings.TrimPrefix(inst.Health.String(), "HEALTH_")))
 	}
 	return nil
 }

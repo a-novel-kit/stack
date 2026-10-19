@@ -138,25 +138,18 @@ func (s *Store) Subscribe(targetID string) (<-chan Line, func(), bool) {
 	}
 	ch := make(chan Line, 32)
 	ts.subscribers = append(ts.subscribers, ch)
-	unsub := func() {
-		ts.mu.Lock()
-		defer ts.mu.Unlock()
-		if ts.closed {
-			// close() already drained the slice and closed every
-			// channel; nothing to do.
-			return
-		}
-		for i, c := range ts.subscribers {
-			if c == ch {
-				ts.subscribers = append(ts.subscribers[:i], ts.subscribers[i+1:]...)
-				break
-			}
-		}
-		// ch stays open: the reader stops because no further send
-		// arrives, and GC reclaims the channel once its goroutine
-		// exits. Only close() closes a subscriber channel.
+	return ch, func() { ts.unsubscribe(ch) }, true
+}
+
+// unsubscribe drops ch from the fanout. ch stays open: its reader stops
+// because no further send arrives, and only close() closes a subscriber
+// channel. After close() the fanout is already empty.
+func (ts *targetStream) unsubscribe(ch chan Line) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	if i := slices.Index(ts.subscribers, ch); i >= 0 {
+		ts.subscribers = slices.Delete(ts.subscribers, i, i+1)
 	}
-	return ch, unsub, true
 }
 
 // CloseTarget ends the target's stream: it closes the file handle and every

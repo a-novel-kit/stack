@@ -277,21 +277,7 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 		return nil, []DiscoveryError{{Service: name, Path: composePath, Reason: err.Error()}}
 	}
 	svc := &Service{Name: name, Stack: stack, ComposePath: composePath}
-
-	// Walk cmd/ to find the Go targets the service exposes.
-	cmdEntries, _ := os.ReadDir(filepath.Join(dir, "cmd"))
-	cmdNames := make(map[string]string) // name → absolute path to cmd/<name>/
-	for _, e := range cmdEntries {
-		if !e.IsDir() {
-			continue
-		}
-		// Require cmd/<name>/main.go, so a stray empty directory never counts
-		// as a target.
-		cmdDir := filepath.Join(dir, "cmd", e.Name())
-		if _, err := os.Stat(filepath.Join(cmdDir, "main.go")); err == nil {
-			cmdNames[e.Name()] = cmdDir
-		}
-	}
+	cmdNames := cmdDirs(dir)
 
 	var errs []DiscoveryError
 
@@ -336,20 +322,12 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 			})
 			continue
 		}
-		// Classify by healthcheck presence, compose first. Compose resolves
-		// the build context against the compose file's directory, and the
-		// Dockerfile against that context.
-		kind := TargetKindOneShot
-		if cs.Healthcheck != nil || cs.Build != nil && cs.Build.Dockerfile != "" &&
-			dockerfileHasHealthcheck(filepath.Join(filepath.Dir(composePath), cs.Build.Context, cs.Build.Dockerfile)) {
-			kind = TargetKindLongRunner
-		}
 		svc.Targets = append(svc.Targets, &Target{
 			Name:        profile,
 			ComposeName: csName,
 			Service:     name,
 			Stack:       stack,
-			Kind:        kind,
+			Kind:        targetKind(composePath, cs),
 			CmdDir:      cmdDir,
 			DependsOn:   deps,
 			Ports:       cs.Ports,
@@ -379,4 +357,30 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 	slices.SortFunc(svc.Infra, func(a, b *Infra) int { return cmp.Compare(a.Name, b.Name) })
 
 	return svc, errs
+}
+
+// cmdDirs maps the name of each Go target under dir/cmd/ to its directory. A
+// target needs cmd/<name>/main.go, so a stray empty directory never counts.
+func cmdDirs(dir string) map[string]string {
+	entries, _ := os.ReadDir(filepath.Join(dir, "cmd"))
+	dirs := make(map[string]string)
+	for _, e := range entries {
+		cmdDir := filepath.Join(dir, "cmd", e.Name())
+		if _, err := os.Stat(filepath.Join(cmdDir, "main.go")); e.IsDir() && err == nil {
+			dirs[e.Name()] = cmdDir
+		}
+	}
+	return dirs
+}
+
+// targetKind classifies a compose service by healthcheck presence: a
+// healthcheck in the compose file or in the Dockerfile it builds makes a
+// long-runner. Compose resolves the build context against the compose file's
+// directory, and the Dockerfile against that context.
+func targetKind(composePath string, cs compose.Service) TargetKind {
+	if cs.Healthcheck != nil || cs.Build != nil && cs.Build.Dockerfile != "" &&
+		dockerfileHasHealthcheck(filepath.Join(filepath.Dir(composePath), cs.Build.Context, cs.Build.Dockerfile)) {
+		return TargetKindLongRunner
+	}
+	return TargetKindOneShot
 }

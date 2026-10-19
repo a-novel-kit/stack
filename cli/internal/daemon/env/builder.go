@@ -158,9 +158,7 @@ func (b *Builder) ForService(svc *discovery.Service, consumer string) ([]Entry, 
 			return nil, err
 		}
 		for k, v := range vars {
-			if _, exists := merged[k]; !exists {
-				merged[k] = v
-			}
+			setDefault(merged, k, v)
 		}
 	}
 	return entriesOf(merged), nil
@@ -192,66 +190,69 @@ func (b *Builder) buildEnv(t *discovery.Target, services []string, allocate bool
 	// The synthetic __port_N keys exist only for reference collection, so drop
 	// them from the user view.
 	maps.DeleteFunc(out, func(k, _ string) bool { return strings.HasPrefix(k, "__port_") })
-	// Pull in service-level allocations the target's compose never references.
-	// A one-shot like `migrations` declares POSTGRES_DSN as a literal while the
-	// service itself holds the POSTGRES_PORT allocation for its postgres infra.
-	// Exposing every `*_PORT` this service owns, with its derived HOST and URL,
-	// lets the synthesis below build a DSN pointing at localhost for go-exec
-	// mode, in place of the compose file's in-container hostname.
+	b.addOwnedPorts(out, owner)
+	setPostgresDSN(out)
+	addOwnPrefixForms(out, owner, services)
+	return out, nil
+}
+
+// addOwnedPorts adds every `*_PORT` owner holds that out lacks, with its
+// derived HOST and URL. A one-shot like `migrations` declares POSTGRES_DSN as a
+// literal while the service itself holds the POSTGRES_PORT allocation for its
+// postgres infra, and this is what lets setPostgresDSN point it at localhost.
+func (b *Builder) addOwnedPorts(out map[string]string, owner string) {
 	for _, slot := range b.alloc.Snapshot() {
-		if slot.Owner != owner {
-			continue
-		}
-		if _, present := out[slot.LocalVar]; present {
+		if _, present := out[slot.LocalVar]; slot.Owner != owner || present {
 			continue
 		}
 		for k, v := range derivedFor(slot.LocalVar, slot.Port) {
-			if _, exists := out[k]; !exists {
-				out[k] = v
-			}
+			setDefault(out, k, v)
 		}
 	}
+}
 
-	// With an allocated POSTGRES_PORT the daemon owns POSTGRES_DSN and
-	// overwrites whatever the compose file declared, that being the
-	// in-container `postgres-<svc>:5432` form, wrong for go-exec. Unset
-	// credentials fall back to postgres, so the DSN stays well-formed.
-	if portStr := out["POSTGRES_PORT"]; portStr != "" {
-		user := cmp.Or(out["POSTGRES_USER"], "postgres")
-		pass := cmp.Or(out["POSTGRES_PASSWORD"], "postgres")
-		db := cmp.Or(out["POSTGRES_DB"], "postgres")
-		out["POSTGRES_DSN"] = "postgres://" + user + ":" + pass + "@" + hostLocalhost + ":" + portStr + "/" + db + "?sslmode=disable"
+// setPostgresDSN points POSTGRES_DSN at localhost when out holds an allocated
+// POSTGRES_PORT. It overwrites the compose file's in-container
+// `postgres-<svc>:5432` form, wrong for go-exec. Unset credentials fall back to
+// postgres, so the DSN stays well-formed.
+func setPostgresDSN(out map[string]string) {
+	portStr := out["POSTGRES_PORT"]
+	if portStr == "" {
+		return
 	}
+	user := cmp.Or(out["POSTGRES_USER"], "postgres")
+	pass := cmp.Or(out["POSTGRES_PASSWORD"], "postgres")
+	db := cmp.Or(out["POSTGRES_DB"], "postgres")
+	out["POSTGRES_DSN"] = "postgres://" + user + ":" + pass + "@" + hostLocalhost + ":" + portStr + "/" + db + "?sslmode=disable"
+}
 
-	// Strip the target's own service prefix for its process env, so
-	// service-json-keys-grpc sees both `GRPC_PORT=44447` and, for symmetry,
-	// `SERVICE_JSON_KEYS_GRPC_PORT=44447`.
+// addOwnPrefixForms gives owner's ports both forms, so service-json-keys-grpc
+// sees `GRPC_PORT=44447` and `SERVICE_JSON_KEYS_GRPC_PORT=44447`. The
+// un-prefixed form serves the target's own process, and the prefixed form
+// matches what cross-service consumers see. A key that already carries a known
+// service prefix gains no second one.
+func addOwnPrefixForms(out map[string]string, owner string, services []string) {
 	ownerPrefix := ServicePrefix(owner) + "_"
 	for k, v := range out {
-		// A prefixed view of one of our own ports also gets the un-prefixed
-		// form.
 		if base, isPrefixed := strings.CutPrefix(k, ownerPrefix); isPrefixed && base != "" {
-			if _, exists := out[base]; !exists {
-				out[base] = v
-			}
+			setDefault(out, base, v)
 		}
 	}
-	// Add the prefixed form of our own ports so cross-service consumers see the
-	// same shape. A key that already carries a known service prefix is skipped,
-	// so every key ends up with exactly one prefix.
 	for k, v := range out {
 		if !isAllocatedKind(k) && !isSynthesizedKind(k) {
 			continue
 		}
-		if keyOwner, _ := resolveOwner(k, services); keyOwner != "" {
-			continue // already prefixed
-		}
-		prefixed := ownerPrefix + k
-		if _, exists := out[prefixed]; !exists {
-			out[prefixed] = v
+		if keyOwner, _ := resolveOwner(k, services); keyOwner == "" {
+			setDefault(out, ownerPrefix+k, v)
 		}
 	}
-	return out, nil
+}
+
+// setDefault sets m[k] to v unless m already holds k.
+func setDefault(m map[string]string, k, v string) {
+	if _, exists := m[k]; !exists {
+		m[k] = v
+	}
 }
 
 // buildInfraEnv is buildEnv for an infra service, which has no profile and no
@@ -343,9 +344,7 @@ func (b *Builder) resolveOne(varName, owner string, services []string, allocate 
 			prefix = ServicePrefix(resOwner) + "_"
 		}
 		for k, v := range derivedFor(localVar, port) {
-			if _, exists := ctx[prefix+k]; !exists {
-				ctx[prefix+k] = v
-			}
+			setDefault(ctx, prefix+k, v)
 		}
 		return strconv.Itoa(port), nil
 	case isHostKind(localVar):

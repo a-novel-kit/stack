@@ -41,6 +41,9 @@ var _ anovelv1connect.CoreServiceHandler = (*Server)(nil)
 // allStacks is the stack name that addresses every discovered stack at once.
 const allStacks = "*"
 
+// killGrace is the SIGTERM grace a kill gets unless the request sets one.
+const killGrace = 10 * time.Second
+
 // shutdownDelay is how long Shutdown and PrepareReinstall wait before stopping
 // the daemon, so their response reaches the client before the socket closes.
 const shutdownDelay = 50 * time.Millisecond
@@ -197,7 +200,7 @@ func (s *Server) Shutdown(_ context.Context, req *anovelv1.ShutdownRequest) (*an
 	if req.GetForce() {
 		sessions = s.runner.ActiveInfraSessions()
 	}
-	outcome := s.stopAll(s.liveGoExecIDs(), sessions, 10*time.Second)
+	outcome := s.stopAll(s.liveGoExecIDs(), sessions, killGrace)
 	time.AfterFunc(shutdownDelay, s.stop)
 	return &anovelv1.ShutdownResponse{
 		GoExecKilled:          int32(outcome.goExecKilled),
@@ -381,7 +384,7 @@ func (s *Server) StartTarget(ctx context.Context, req *anovelv1.StartTargetReque
 // defaulting to 10s, where 0 means an immediate SIGKILL. It is idempotent, and
 // the response carries no target when the runner never held an instance.
 func (s *Server) KillTarget(ctx context.Context, req *anovelv1.KillTargetRequest) (*anovelv1.KillTargetResponse, error) {
-	grace := 10 * time.Second
+	grace := killGrace
 	if req.GetTimeout() != nil {
 		grace = req.GetTimeout().AsDuration()
 	}
@@ -400,8 +403,7 @@ func (s *Server) KillTarget(ctx context.Context, req *anovelv1.KillTargetRequest
 // start claims the slot, so mutual exclusion holds.
 func (s *Server) RestartTarget(ctx context.Context, req *anovelv1.RestartTargetRequest) (*anovelv1.RestartTargetResponse, error) {
 	id := req.GetTargetId()
-	// A 10s grace, matching KillTarget.
-	if err := s.runner.Kill(ctx, id, 10*time.Second); err != nil {
+	if err := s.runner.Kill(ctx, id, killGrace); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	mode := req.GetMode()
@@ -546,10 +548,15 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 				"read log %s: %v", path, err).WithCause(err)
 		}
 	}
+	return forwardLines(ctx, sub, stream.Send, req.GetStream())
+}
+
+// forwardLines sends every line of sub until the subscription closes or the
+// client disconnects. A nil sub sends nothing.
+func forwardLines(ctx context.Context, sub <-chan logs.Line, send func(*anovelv1.LogLine) error, filter anovelv1.LogStream) error {
 	if sub == nil {
 		return nil
 	}
-	// Forward new lines until subscription closes or client disconnects.
 	for {
 		select {
 		case <-ctx.Done():
@@ -558,7 +565,7 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 			if !ok {
 				return nil
 			}
-			if err := sendLogLine(stream.Send, req.GetStream(), ln); err != nil {
+			if err := sendLogLine(send, filter, ln); err != nil {
 				return err
 			}
 		}
@@ -686,15 +693,13 @@ func parseInfraLogID(id string) (string, string, string, bool) {
 // Each line is stamped at read time, which is accurate enough for the log
 // viewer and skips parsing podman's optional --timestamps prefix.
 func streamPodmanLogs(ctx context.Context, cid string, follow bool, stream anovelv1connect.CoreServiceStreamLogsServerStream) error {
-	args := []string{"logs"}
+	args := []string{"logs", cid}
 	if follow {
-		args = append(args, "-f")
+		args = []string{"logs", "-f", cid}
 	}
-	args = append(args, cid)
 	cmd := exec.CommandContext(ctx, "podman", args...)
 	pipeR, pipeW := io.Pipe()
-	cmd.Stdout = pipeW
-	cmd.Stderr = pipeW
+	cmd.Stdout, cmd.Stderr = pipeW, pipeW
 	if err := cmd.Start(); err != nil {
 		return connect.Errorf(connect.CodeInternal,
 			"start podman logs %s: %v", cid, err).WithCause(err)
@@ -709,18 +714,9 @@ func streamPodmanLogs(ctx context.Context, cid string, follow bool, stream anove
 			_ = cmd.Process.Kill()
 		}
 	}()
-	scanner := lineScanner(pipeR)
-	for scanner.Scan() {
-		select {
-		case <-ctx.Done():
-			return nil
-		default:
-		}
-		if err := stream.Send(&anovelv1.LogLine{
-			Ts:     timestamppb.Now(),
-			Stream: anovelv1.LogStream_LOG_STREAM_STDOUT,
-			Line:   scanner.Text(),
-		}); err != nil {
+	for scanner := lineScanner(pipeR); scanner.Scan() && ctx.Err() == nil; {
+		ln := &anovelv1.LogLine{Ts: timestamppb.Now(), Stream: anovelv1.LogStream_LOG_STREAM_STDOUT, Line: scanner.Text()}
+		if err := stream.Send(ln); err != nil {
 			return err
 		}
 	}
@@ -745,21 +741,9 @@ func lineScanner(r io.Reader) *bufio.Scanner {
 // so a variable whose slot is unallocated appears with an empty value and the
 // user still sees the shape.
 func (s *Server) GetEnv(_ context.Context, req *anovelv1.GetEnvRequest) (*anovelv1.GetEnvResponse, error) {
-	var services []*discovery.Service
-	if req.GetService() != "" && req.GetStack() != allStacks {
-		svc, err := s.findService(req.GetStack(), req.GetService())
-		if err != nil {
-			return nil, err
-		}
-		services = append(services, svc)
-	} else {
-		scope, err := s.scope(req.GetStack())
-		if err != nil {
-			return nil, err
-		}
-		for _, st := range scope {
-			services = append(services, st.Services...)
-		}
+	services, err := s.envServices(req.GetStack(), req.GetService())
+	if err != nil {
+		return nil, err
 	}
 	out := &anovelv1.GetEnvResponse{}
 	for _, svc := range services {
@@ -777,6 +761,27 @@ func (s *Server) GetEnv(_ context.Context, req *anovelv1.GetEnvRequest) (*anovel
 		}
 	}
 	return out, nil
+}
+
+// envServices returns the services a GetEnv request covers: the named one, or
+// every service of the stacks in scope.
+func (s *Server) envServices(stack, service string) ([]*discovery.Service, error) {
+	if service != "" && stack != allStacks {
+		svc, err := s.findService(stack, service)
+		if err != nil {
+			return nil, err
+		}
+		return []*discovery.Service{svc}, nil
+	}
+	scope, err := s.scope(stack)
+	if err != nil {
+		return nil, err
+	}
+	var services []*discovery.Service
+	for _, st := range scope {
+		services = append(services, st.Services...)
+	}
+	return services, nil
 }
 
 // =============================================================================
@@ -911,29 +916,9 @@ func (s *Server) Exec(ctx context.Context, req *anovelv1.ExecRequest, stream ano
 	if err != nil {
 		return err
 	}
-	// A running instance decides the mode. Without one, go-exec is the only
-	// mode that works, there being no live container to attach to.
-	var execCmd *exec.Cmd
-	if inst, ok := s.runner.Instance(id); ok && inst.Phase == anovelv1.Phase_PHASE_RUNNING &&
-		inst.Mode == anovelv1.Mode_MODE_CONTAINER {
-		if inst.ContainerID == "" {
-			return connect.NewError(connect.CodeFailedPrecondition,
-				"exec: target running in container mode but containerId is empty")
-		}
-		execCmd = exec.CommandContext(ctx, "podman", append([]string{"exec", inst.ContainerID}, cmdv...)...)
-	} else {
-		// A go-exec sibling gets the same directory and env as the target.
-		// The builder allocates when needed under the target's own consumer
-		// ID, which the usual refcounting releases.
-		envEntries, _, err := s.envBuilder.ForTarget(tgt)
-		if err != nil {
-			return connect.Errorf(connect.CodeInternal, "exec: env: %v", err).WithCause(err)
-		}
-		execCmd = exec.CommandContext(ctx, cmdv[0], cmdv[1:]...)
-		// Run in the service directory so relative paths match what the
-		// target sees.
-		execCmd.Dir = tgt.ServiceDir()
-		execCmd.Env = env.Environ(envEntries)
+	execCmd, err := s.siblingCommand(ctx, tgt, cmdv)
+	if err != nil {
+		return err
 	}
 	stdoutR, err := execCmd.StdoutPipe()
 	if err != nil {
@@ -946,23 +931,11 @@ func (s *Server) Exec(ctx context.Context, req *anovelv1.ExecRequest, stream ano
 	if err := execCmd.Start(); err != nil {
 		return connect.Errorf(connect.CodeInternal, "exec: start: %v", err).WithCause(err)
 	}
-	// Two readers, one stream: a pair of goroutines line-scan stdout and
-	// stderr and forward to the connect stream under a mutex, since
-	// Stream.Send is unsafe for concurrent calls.
-	var sendMu sync.Mutex
-	send := func(msg *anovelv1.ExecOutput) {
-		sendMu.Lock()
-		defer sendMu.Unlock()
-		_ = stream.Send(msg)
-	}
-	pump := func(r io.Reader, tag anovelv1.LogStream) {
-		for sc := lineScanner(r); sc.Scan(); {
-			send(&anovelv1.ExecOutput{Stream: tag, Line: sc.Text()})
-		}
-	}
+	// Two readers, one stream: a goroutine per pipe forwards its lines.
+	output := &execOutput{stream: stream}
 	var wg sync.WaitGroup
-	wg.Go(func() { pump(stdoutR, anovelv1.LogStream_LOG_STREAM_STDOUT) })
-	wg.Go(func() { pump(stderrR, anovelv1.LogStream_LOG_STREAM_STDERR) })
+	wg.Go(func() { output.pump(stdoutR, anovelv1.LogStream_LOG_STREAM_STDOUT) })
+	wg.Go(func() { output.pump(stderrR, anovelv1.LogStream_LOG_STREAM_STDERR) })
 	wg.Wait()
 
 	waitErr := execCmd.Wait()
@@ -976,13 +949,59 @@ func (s *Server) Exec(ctx context.Context, req *anovelv1.ExecRequest, stream ano
 		// The human-readable line survives being piped to a file, where the
 		// process exit status does not. It rides the same stream as the
 		// output, after everything the child wrote.
-		send(&anovelv1.ExecOutput{Stream: anovelv1.LogStream_LOG_STREAM_STDERR, Line: "[exec exited: " + waitErr.Error() + "]"})
+		output.send(&anovelv1.ExecOutput{Stream: anovelv1.LogStream_LOG_STREAM_STDERR, Line: "[exec exited: " + waitErr.Error() + "]"})
 	}
 	// The terminal message carries the exit code and no line, so the client can
 	// propagate the child's status as its own.
-	send(&anovelv1.ExecOutput{ExitCode: &code})
+	output.send(&anovelv1.ExecOutput{ExitCode: &code})
 
 	return nil
+}
+
+// siblingCommand builds the command Exec runs beside tgt. A running container
+// instance decides the mode. Without one, go-exec is the only mode that works,
+// there being no live container to attach to.
+func (s *Server) siblingCommand(ctx context.Context, tgt *discovery.Target, cmdv []string) (*exec.Cmd, error) {
+	if inst, ok := s.runner.Instance(tgt.ID()); ok && inst.Phase == anovelv1.Phase_PHASE_RUNNING &&
+		inst.Mode == anovelv1.Mode_MODE_CONTAINER {
+		if inst.ContainerID == "" {
+			return nil, connect.NewError(connect.CodeFailedPrecondition,
+				"exec: target running in container mode but containerId is empty")
+		}
+		return exec.CommandContext(ctx, "podman", append([]string{"exec", inst.ContainerID}, cmdv...)...), nil
+	}
+	// A go-exec sibling gets the same directory and env as the target, so
+	// relative paths match what the target sees. The builder allocates when
+	// needed under the target's own consumer ID, which the usual refcounting
+	// releases.
+	envEntries, _, err := s.envBuilder.ForTarget(tgt)
+	if err != nil {
+		return nil, connect.Errorf(connect.CodeInternal, "exec: env: %v", err).WithCause(err)
+	}
+	cmd := exec.CommandContext(ctx, cmdv[0], cmdv[1:]...)
+	cmd.Dir = tgt.ServiceDir()
+	cmd.Env = env.Environ(envEntries)
+	return cmd, nil
+}
+
+// execOutput sends a child's output on an Exec stream. Stream.Send is unsafe
+// for concurrent calls, so every send holds mu.
+type execOutput struct {
+	mu     sync.Mutex
+	stream anovelv1connect.CoreServiceExecServerStream
+}
+
+func (o *execOutput) send(msg *anovelv1.ExecOutput) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	_ = o.stream.Send(msg)
+}
+
+// pump sends each line of r tagged with stream.
+func (o *execOutput) pump(r io.Reader, stream anovelv1.LogStream) {
+	for sc := lineScanner(r); sc.Scan(); {
+		o.send(&anovelv1.ExecOutput{Stream: stream, Line: sc.Text()})
+	}
 }
 
 // execExitCode maps a [exec.Cmd.Wait] error onto the child's exit status.
@@ -1050,22 +1069,7 @@ func (s *Server) Debug(_ context.Context, req *anovelv1.DebugRequest) (*anovelv1
 // down and the runner's fanout stops. Nothing is emitted up front, so a caller
 // needing the initial state pairs Watch with a ListServices snapshot.
 func (s *Server) Watch(ctx context.Context, req *anovelv1.WatchRequest, stream anovelv1connect.CoreServiceWatchServerStream) error {
-	wantStack := req.GetStack()
-	wantService := req.GetService()
-	wantTargetID := req.GetTargetId()
-	filter := func(ev runner.PhaseEvent) bool {
-		if wantStack != "" && wantStack != allStacks && ev.Stack != wantStack {
-			return false
-		}
-		if wantService != "" && ev.Service != wantService {
-			return false
-		}
-		if wantTargetID != "" && ev.TargetID != wantTargetID {
-			return false
-		}
-		return true
-	}
-	ch, unsub := s.runner.SubscribePhases(filter)
+	ch, unsub := s.runner.SubscribePhases(func(ev runner.PhaseEvent) bool { return watches(req, ev) })
 	defer unsub()
 	for {
 		select {
@@ -1075,20 +1079,20 @@ func (s *Server) Watch(ctx context.Context, req *anovelv1.WatchRequest, stream a
 			if !ok {
 				return nil // runner closed our subscription
 			}
-			out := &anovelv1.StateEvent{
-				Ts:          timestamppb.New(ev.Ts),
-				TargetId:    ev.TargetID,
-				Service:     ev.Service,
-				Stack:       ev.Stack,
-				OldPhase:    ev.OldPhase,
-				NewPhase:    ev.NewPhase,
-				Description: describePhaseEvent(ev),
-			}
-			if err := stream.Send(out); err != nil {
+			if err := stream.Send(stateEventToProto(ev)); err != nil {
 				return err
 			}
 		}
 	}
+}
+
+// watches reports whether a Watch request covers ev: every field the request
+// sets must match, and the stack "*" matches any stack.
+func watches(req *anovelv1.WatchRequest, ev runner.PhaseEvent) bool {
+	stack, service, targetID := req.GetStack(), req.GetService(), req.GetTargetId()
+	return (stack == "" || stack == allStacks || ev.Stack == stack) &&
+		(service == "" || ev.Service == service) &&
+		(targetID == "" || ev.TargetID == targetID)
 }
 
 // describePhaseEvent produces the one-line human summary that lands in
