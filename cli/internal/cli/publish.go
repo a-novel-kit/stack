@@ -138,27 +138,18 @@ func readPackageVersion(root string) (string, error) {
 func resolveStampTargets(patterns []string) ([]string, error) {
 	seen := map[string]bool{}
 	var files []string
-	add := func(p string) {
-		if !seen[p] {
-			seen[p] = true
-			files = append(files, p)
-		}
-	}
 	for _, p := range patterns {
-		// A path that exists as-is is a literal target: take it verbatim so a
-		// real filename containing glob metacharacters (e.g. weird[1].yaml) is
-		// never reinterpreted as a pattern. Fall back to globbing only when the
-		// literal path does not exist.
-		if _, err := os.Stat(p); err == nil {
-			add(p)
-			continue
-		}
-		matches, err := filepath.Glob(p)
-		if err != nil {
-			return nil, fmt.Errorf("publish: bad glob %q: %w", p, err)
+		matches := []string{p}
+		if _, err := os.Stat(p); err != nil {
+			if matches, err = filepath.Glob(p); err != nil {
+				return nil, fmt.Errorf("publish: bad glob %q: %w", p, err)
+			}
 		}
 		for _, m := range matches {
-			add(m)
+			if !seen[m] {
+				seen[m] = true
+				files = append(files, m)
+			}
 		}
 	}
 	if len(files) == 0 {

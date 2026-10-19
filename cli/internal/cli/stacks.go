@@ -206,11 +206,10 @@ to drop rather than editing the file underneath you.`,
 				return nil
 			}
 
+			opts := pruneOpts{force: force, yes: yes, dryRun: dryRun, purgeBackups: purgeBackups}
 			failed := 0
 			for _, st := range targets {
-				if err := pruneOne(ctx, c, cmd, st, pruneOpts{
-					force: force, yes: yes, dryRun: dryRun, purgeBackups: purgeBackups,
-				}); err != nil {
+				if err := pruneOne(ctx, c, cmd, st, opts); err != nil {
 					_, _ = fmt.Fprintf(out, "  ✗ %s: %v\n", st.GetName(), err)
 					failed++
 				}
@@ -308,14 +307,12 @@ func holdingsOf(services []*anovelv1.Service) stackHoldings {
 	for _, svc := range services {
 		h.services = append(h.services, svc.GetName())
 		for _, t := range svc.GetTargets() {
-			if t.GetPhase() != anovelv1.Phase_PHASE_TERMINATED &&
-				t.GetPhase() != anovelv1.Phase_PHASE_UNSPECIFIED {
+			if isLive(t.GetPhase()) {
 				h.liveTargets = append(h.liveTargets, t.GetId())
 			}
 		}
 		for _, in := range svc.GetInfra() {
-			if in.GetPhase() != anovelv1.Phase_PHASE_TERMINATED &&
-				in.GetPhase() != anovelv1.Phase_PHASE_UNSPECIFIED {
+			if isLive(in.GetPhase()) {
 				h.liveInfra++
 			}
 		}
@@ -326,6 +323,14 @@ func holdingsOf(services []*anovelv1.Service) stackHoldings {
 	return h
 }
 
+// isLive reports whether an entity in phase has, or is about to have, a
+// process or container behind it.
+func isLive(phase anovelv1.Phase) bool {
+	return phase != anovelv1.Phase_PHASE_TERMINATED && phase != anovelv1.Phase_PHASE_UNSPECIFIED
+}
+
+// pruneOne prints what a stack holds, then reclaims it unless the run is a dry
+// run, the stack holds unsaved work, or the operator declines.
 func pruneOne(
 	ctx context.Context, c *rpc.Client, cmd *cobra.Command, st *anovelv1.Stack, opts pruneOpts,
 ) error {
@@ -337,20 +342,7 @@ func pruneOne(
 		return err
 	}
 	blockers := pruneBlockers(root)
-
-	_, _ = fmt.Fprintf(out, "▸ %s (%s)\n", name, root)
-	_, _ = fmt.Fprintf(out, "  %d target(s) up, %d infra container(s), %d volume(s), %d service(s)\n",
-		len(held.liveTargets), held.liveInfra, len(held.volumes), len(held.services))
-	if opts.purgeBackups {
-		_, _ = fmt.Fprintf(out, "  purging backups at %s\n", stackBackupDir(name))
-	}
-	for _, b := range blockers {
-		verb := "holds"
-		if opts.force {
-			verb = "discarding"
-		}
-		_, _ = fmt.Fprintf(out, "  ! %s: %s\n", verb, b)
-	}
+	printPrunePlan(out, st, held, blockers, opts)
 
 	if opts.dryRun {
 		_, _ = fmt.Fprintf(out, "  %s\n", dryRunVerdict(blockers, opts.force))
@@ -364,7 +356,32 @@ func pruneOne(
 		_, _ = fmt.Fprintln(out, "  skipped")
 		return nil
 	}
+	return reclaimStack(ctx, c, out, st, held, opts.purgeBackups)
+}
 
+// printPrunePlan prints what pruning st reclaims, and the work it would lose.
+func printPrunePlan(out io.Writer, st *anovelv1.Stack, held stackHoldings, blockers []string, opts pruneOpts) {
+	_, _ = fmt.Fprintf(out, "▸ %s (%s)\n", st.GetName(), st.GetPath())
+	_, _ = fmt.Fprintf(out, "  %d target(s) up, %d infra container(s), %d volume(s), %d service(s)\n",
+		len(held.liveTargets), held.liveInfra, len(held.volumes), len(held.services))
+	if opts.purgeBackups {
+		_, _ = fmt.Fprintf(out, "  purging backups at %s\n", stackBackupDir(st.GetName()))
+	}
+	verb := "holds"
+	if opts.force {
+		verb = "discarding"
+	}
+	for _, b := range blockers {
+		_, _ = fmt.Fprintf(out, "  ! %s: %s\n", verb, b)
+	}
+}
+
+// reclaimStack kills what st runs, clears its volumes and removes its checkout,
+// in that order, so nothing is left holding a port or a mount.
+func reclaimStack(
+	ctx context.Context, c *rpc.Client, out io.Writer, st *anovelv1.Stack, held stackHoldings, purgeBackups bool,
+) error {
+	name, root := st.GetName(), st.GetPath()
 	for _, id := range held.liveTargets {
 		if _, err := c.KillTarget(ctx, id, killGrace); err != nil {
 			return fmt.Errorf("kill target %s: %w", id, err)
@@ -385,7 +402,7 @@ func pruneOne(
 	if err := os.RemoveAll(root); err != nil {
 		return fmt.Errorf("remove %s: %w", root, err)
 	}
-	if opts.purgeBackups {
+	if purgeBackups {
 		// Opt-in, because ClearVolume just took a backup on the way past: the
 		// default keeps the one artifact that can undo this command, and this
 		// flag is how the operator says the data really was disposable.

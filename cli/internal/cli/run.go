@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -52,6 +53,14 @@ func (s *stackScope) bind(cmd *cobra.Command) {
 func (s *stackScope) bindAll(cmd *cobra.Command) {
 	s.bind(cmd)
 	cmd.Flags().BoolVar(&s.allStacks, "all-stacks", false, "operate across every registered stack")
+}
+
+// selector is the stack argument of a listing call: "*" with --all-stacks.
+func (s *stackScope) selector() string {
+	if s.allStacks {
+		return "*"
+	}
+	return s.stack
 }
 
 // =============================================================================
@@ -111,10 +120,7 @@ With --json, emits one JSON object per service for machine consumption
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			c := rpc.New("")
-			stack := ss.stack
-			if ss.allStacks {
-				stack = "*"
-			}
+			stack := ss.selector()
 			if kind != "" && kind != "all" && kind != kindTarget && kind != kindInfra {
 				return usageError(fmt.Errorf("--kind=%q: must be 'target', 'infra', or 'all'", kind))
 			}
@@ -706,46 +712,11 @@ current/latest session.`,
 				}
 				runID = runs.GetRunIds()[0]
 			}
-			sf := anovelv1.LogStream_LOG_STREAM_UNSPECIFIED
-			switch streamFilter {
-			case "stdout":
-				sf = anovelv1.LogStream_LOG_STREAM_STDOUT
-			case "stderr":
-				sf = anovelv1.LogStream_LOG_STREAM_STDERR
-			}
-			stream, err := c.StreamLogs(ctx, id, runID, follow, sf)
+			stream, err := c.StreamLogs(ctx, id, runID, follow, logStreams[streamFilter])
 			if err != nil {
 				return err
 			}
-			// --since: filter client-side by line timestamp.
-			var cutoff time.Time
-			if since > 0 {
-				cutoff = time.Now().Add(-since)
-			}
-			// --tail: ring buffer client-side.
-			var ring []*anovelv1.LogLine
-			for ln, err := range stream {
-				if err != nil {
-					return err
-				}
-
-				if !cutoff.IsZero() && ln.GetTs().AsTime().Before(cutoff) {
-					continue
-				}
-				if tail > 0 {
-					if len(ring) == tail {
-						ring = append(ring[:0], ring[1:]...)
-					}
-					ring = append(ring, ln)
-					continue
-				}
-				printLogLine(cmd.OutOrStdout(), ln)
-			}
-			// Drain the ring for --tail mode.
-			for _, ln := range ring {
-				printLogLine(cmd.OutOrStdout(), ln)
-			}
-			return nil
+			return printLogs(cmd.OutOrStdout(), stream, since, tail)
 		},
 	}
 	ss.bind(cmd)
@@ -756,6 +727,42 @@ current/latest session.`,
 	cmd.Flags().BoolVar(&previous, "previous", false, "read the most recent archived run instead of the current")
 	cmd.Flags().StringVar(&runID, "run-id", "", "read a specific archived run by timestamp")
 	return cmd
+}
+
+// logStreams maps a --stream value to the stream it keeps; any other value
+// keeps both.
+var logStreams = map[string]anovelv1.LogStream{
+	"stdout": anovelv1.LogStream_LOG_STREAM_STDOUT,
+	"stderr": anovelv1.LogStream_LOG_STREAM_STDERR,
+}
+
+// printLogs prints the lines of stream newer than since (when set), keeping
+// only the last tail lines (when set). Both filters run client-side.
+func printLogs(w io.Writer, stream iter.Seq2[*anovelv1.LogLine, error], since time.Duration, tail int) error {
+	var cutoff time.Time
+	if since > 0 {
+		cutoff = time.Now().Add(-since)
+	}
+	var last []*anovelv1.LogLine
+	for ln, err := range stream {
+		if err != nil {
+			return err
+		}
+		switch {
+		case !cutoff.IsZero() && ln.GetTs().AsTime().Before(cutoff):
+		case tail > 0:
+			last = append(last, ln)
+			if len(last) > tail {
+				last = last[1:]
+			}
+		default:
+			printLogLine(w, ln)
+		}
+	}
+	for _, ln := range last {
+		printLogLine(w, ln)
+	}
+	return nil
 }
 
 // printLogLine renders one log entry as a short timestamp, a stream tag and
@@ -813,19 +820,8 @@ to 'json' for agent consumption or 'dotenv' for .env-style key=value.
 			if err != nil {
 				return err
 			}
-			// --only filters client-side: the server returns everything,
-			// and filtering before render keeps the daemon simple while
-			// applying to --json output too.
-			entries := resp.GetEntries()
-			if only != "" {
-				filtered := entries[:0]
-				for _, e := range entries {
-					if matchGlob(only, e.GetKey()) {
-						filtered = append(filtered, e)
-					}
-				}
-				entries = filtered
-			}
+			// --only filters client-side, so it applies to every format.
+			entries := slices.DeleteFunc(resp.GetEntries(), func(e *anovelv1.EnvEntry) bool { return !matchGlob(only, e.GetKey()) })
 			renderEnv(cmd.OutOrStdout(), entries, format)
 			return nil
 		},
@@ -1195,14 +1191,8 @@ Designed for agentic workflows: polling 'ps' is wasteful; watch tells
 you the moment a state changes. Filter by --service or --target to
 narrow the stream.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			stack := ss.stack
-			if ss.allStacks {
-				stack = "*"
-			}
 			out := cmd.OutOrStdout()
-			return watchEvents(ctx, c, stack, service, target, func(ev *anovelv1.StateEvent) {
+			return watchEvents(cmd.Context(), rpc.New(""), ss.selector(), service, target, func(ev *anovelv1.StateEvent) {
 				if jsonOut {
 					encodeEvent(out, ev)
 				} else {

@@ -118,26 +118,7 @@ func planAll(checkouts []checkout, class string, excluded map[string]bool, previ
 	notes := make([]string, len(checkouts))
 	var wg sync.WaitGroup
 	for i, c := range checkouts {
-		wg.Go(func() {
-			if c.listed(excluded) {
-				notes[i] = ui.Muted.Render("○") + " " + c.FullName() + " — excluded"
-				return
-			}
-			if reason := ongoingWork(c.dir); reason != "" {
-				notes[i] = ui.Muted.Render("⏸") + " " + c.FullName() + " — " + reason + ", skipped"
-				return
-			}
-			target, plan, err := planRepo(c.repoEntry, c.dir, class)
-			if err != nil {
-				notes[i] = ui.Muted.Render("✗") + " " + c.FullName() + " — " + firstLine(err.Error())
-				return
-			}
-			p := &plannedUpdate{checkout: c, target: target, plan: plan}
-			if preview {
-				p.prune = pruneImpact(target, plan)
-			}
-			plans[i] = p
-		})
+		wg.Go(func() { plans[i], notes[i] = planCheckout(c, class, excluded, preview) })
 	}
 	wg.Wait()
 
@@ -148,6 +129,26 @@ func planAll(checkouts []checkout, class string, excluded map[string]bool, previ
 		}
 	}
 	return planned, notes
+}
+
+// planCheckout plans one checkout, or returns the note saying why it is left
+// out.
+func planCheckout(c checkout, class string, excluded map[string]bool, preview bool) (*plannedUpdate, string) {
+	if c.listed(excluded) {
+		return nil, ui.Muted.Render("○") + " " + c.FullName() + " — excluded"
+	}
+	if reason := ongoingWork(c.dir); reason != "" {
+		return nil, ui.Muted.Render("⏸") + " " + c.FullName() + " — " + reason + ", skipped"
+	}
+	target, plan, err := planRepo(c.repoEntry, c.dir, class)
+	if err != nil {
+		return nil, ui.Muted.Render("✗") + " " + c.FullName() + " — " + firstLine(err.Error())
+	}
+	p := &plannedUpdate{checkout: c, target: target, plan: plan}
+	if preview {
+		p.prune = pruneImpact(target, plan)
+	}
+	return p, ""
 }
 
 // renderCompactSummary prints the batch confirm's two-line overview of a repo:

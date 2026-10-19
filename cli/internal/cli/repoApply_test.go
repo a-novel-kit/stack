@@ -988,12 +988,12 @@ func TestStageContentDeletionIsIdempotent(t *testing.T) {
 	})
 	op := repocfg.Op{Method: http.MethodDelete, Path: "repos/o/infra/contents/.github/workflows/release-train.yaml"}
 
-	change, unchanged, err := stageContentDeletion(op)
-	if err != nil || unchanged || change.outcome != opDeleted {
-		t.Fatalf("existing deletion = (%+v, %v, %v), want one staged deletion", change, unchanged, err)
+	changes, unchanged, err := stageContentDeletion(op)
+	if err != nil || unchanged || len(changes) != 1 || changes[0].outcome != opDeleted {
+		t.Fatalf("existing deletion = (%+v, %v, %v), want one staged deletion", changes, unchanged, err)
 	}
-	change, unchanged, err = stageContentDeletion(op)
-	if err != nil || !unchanged || change != (contentChange{}) {
-		t.Fatalf("missing deletion = (%+v, %v, %v), want unchanged", change, unchanged, err)
+	changes, unchanged, err = stageContentDeletion(op)
+	if err != nil || !unchanged || len(changes) != 0 {
+		t.Fatalf("missing deletion = (%+v, %v, %v), want unchanged", changes, unchanged, err)
 	}
 }

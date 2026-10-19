@@ -375,18 +375,8 @@ func waitForDispatchedRun(dispatchRepo, nonce string) (int64, error) {
 			"--event", "workflow_dispatch",
 			"--limit", "30",
 			"--json", "databaseId,displayTitle")
-		if err == nil {
-			var runs []struct {
-				DatabaseID   int64  `json:"databaseId"`
-				DisplayTitle string `json:"displayTitle"`
-			}
-			if jsonErr := json.Unmarshal([]byte(out), &runs); jsonErr == nil {
-				for _, r := range runs {
-					if strings.Contains(r.DisplayTitle, "("+nonce+")") {
-						return r.DatabaseID, nil
-					}
-				}
-			}
+		if id := runWithNonce(out, nonce); err == nil && id != 0 {
+			return id, nil
 		}
 		if time.Now().After(deadline) {
 			return 0, fmt.Errorf("dispatched run did not appear within %s "+
@@ -394,6 +384,22 @@ func waitForDispatchedRun(dispatchRepo, nonce string) (int64, error) {
 		}
 		time.Sleep(2 * time.Second)
 	}
+}
+
+// runWithNonce returns the id of the run in a `gh run list` JSON listing whose
+// name carries nonce, or 0 when none does.
+func runWithNonce(listing, nonce string) int64 {
+	var runs []struct {
+		DatabaseID   int64  `json:"databaseId"`
+		DisplayTitle string `json:"displayTitle"`
+	}
+	_ = json.Unmarshal([]byte(listing), &runs) // An unreadable listing names no run.
+	for _, r := range runs {
+		if strings.Contains(r.DisplayTitle, "("+nonce+")") {
+			return r.DatabaseID
+		}
+	}
+	return 0
 }
 
 // newNonce returns a short random hex token used to correlate a dispatch
