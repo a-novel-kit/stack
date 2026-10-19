@@ -2,14 +2,18 @@ package cli
 
 import (
 	"errors"
+	"iter"
+	"strings"
 	"testing"
+	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Tests for execResult, the mapping `a-novel run exec` relies on to propagate a child's
-// exit status. Before the stream carried a terminal exit code, this command always exited
-// 0 no matter what the child did, so a failing exec chained straight into the next step of
-// a `&&` list — while the help text promised exit-code fidelity.
-
+// TestExecResult pins how `a-novel run exec` propagates a child's exit status,
+// so a failing exec stops a `&&` chain.
 func TestExecResult(t *testing.T) {
 	code := func(v int32) *int32 { return &v }
 
@@ -66,5 +70,55 @@ func TestParseEntityID(t *testing.T) {
 		if got := parseEntityID(testCase.arg, testCase.stack); got != testCase.want {
 			t.Errorf("parseEntityID(%q, %q) = %+v, want %+v", testCase.arg, testCase.stack, got, testCase.want)
 		}
+	}
+}
+
+// TestPrintLogs pins the client-side --since and --tail filters of `run logs`.
+func TestPrintLogs(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	lines := []*anovelv1.LogLine{
+		{Ts: timestamppb.New(now.Add(-time.Hour)), Line: "old"},
+		{Ts: timestamppb.New(now.Add(-time.Minute)), Line: "first"},
+		{Ts: timestamppb.New(now.Add(-time.Second)), Line: "second"},
+		{Ts: timestamppb.New(now), Line: "third"},
+	}
+	var stream iter.Seq2[*anovelv1.LogLine, error] = func(yield func(*anovelv1.LogLine, error) bool) {
+		for _, ln := range lines {
+			if !yield(ln, nil) {
+				return
+			}
+		}
+	}
+
+	testCases := []struct {
+		name  string
+		since time.Duration
+		tail  int
+		want  []string
+	}{
+		{name: "Success/Everything", want: []string{"old", "first", "second", "third"}},
+		{name: "Success/Since", since: 10 * time.Minute, want: []string{"first", "second", "third"}},
+		{name: "Success/Tail", tail: 2, want: []string{"second", "third"}},
+		{name: "Success/SinceAndTail", since: 10 * time.Minute, tail: 5, want: []string{"first", "second", "third"}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			var out strings.Builder
+			if err := printLogs(&out, stream, testCase.since, testCase.tail); err != nil {
+				t.Fatalf("printLogs: %v", err)
+			}
+			printed := strings.Split(strings.TrimSpace(out.String()), "\n")
+			got := make([]string, len(printed))
+			for i, line := range printed {
+				got[i] = line[strings.LastIndexByte(line, ' ')+1:]
+			}
+			if strings.Join(got, ",") != strings.Join(testCase.want, ",") {
+				t.Errorf("printed %q, want %q", got, testCase.want)
+			}
+		})
 	}
 }
