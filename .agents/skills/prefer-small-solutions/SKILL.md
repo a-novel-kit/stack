@@ -9,8 +9,11 @@ description: >
 
 Choose the shortest clear, idiomatic implementation that fully meets the required behavior and
 project constraints. Judge the whole affected solution: callers, adapters, state, configuration,
-tests, dependency glue, and operations. Count after normal formatting. Moving complexity to another
-file, compressing layout, or omitting a requirement is not a reduction.
+tests, dependency glue, and operations. Measure size in the distinct instructions a reader holds at
+once, not in lines. A repetitive structure, a table read at a glance, or an established pattern costs
+little even when long. A short function chaining many different operations costs much. A
+simplification wins by removing instructions. Moving complexity to another file, compressing layout,
+merging unrelated logic, or omitting a requirement is not a reduction.
 
 For development, load [develop-feature](../develop-feature/SKILL.md) for stage timing. This skill
 chooses among solutions allowed by the applicable architecture, language, dependency, documentation,
@@ -86,7 +89,7 @@ this change. Keep cleanup in scope, run the affected checks, and stop when furth
 obscure intent, violate a constraint, or expand the task.
 
 Explain retained complexity only when the tradeoff matters to review. Do not score success by lines
-alone or infer savings against an implementation that was never built.
+or infer savings against an implementation that was never built.
 
 ## Maintaining this guidance
 
