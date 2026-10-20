@@ -405,6 +405,14 @@ feed too, pinging its reviewers. A person's manifest change (`go.mod`, a tool's 
 ruleset cannot exempt the merge queue's actorless merges, so the check itself passes merge-queue groups
 and a PR whose author and every commit are bots.
 
+CI warnings reach the CI channel once a day. `notify-warnings-run` reads the warning annotations of
+each org's default-branch runs and posts one line per distinct warning, whatever the number of
+repositories raising it, and nothing on a clean day. A pull request run's warnings stay on the pull
+request. An expected warning gets an ignore rule in the org's `.github` `notify-warnings.yaml`: a
+reason, plus regular expressions for `repo`, `job` or `message`. The run's step summary counts what
+each rule hid; delete a rule that keeps matching nothing. A test that runs code printing
+`::warning::` leaves a real annotation on its job, as the workflows repo's `test-actions` does.
+
 ---
 
 ## Verifying a change
