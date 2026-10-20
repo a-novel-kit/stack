@@ -188,6 +188,8 @@ func TestUncoveredGoSelectors(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
 			got := uncoveredGoSelectors(testCase.testPkg, testCase.scoped)
 			if !reflect.DeepEqual(got, testCase.want) {
 				t.Errorf("uncoveredGoSelectors = %v, want %v", got, testCase.want)
