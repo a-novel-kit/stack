@@ -883,171 +883,6 @@ func (x *Volume) GetBackupCount() int32 {
 	return 0
 }
 
-// LogLine is one entry of a target's or infra container's log.
-type LogLine struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// When the line was written. An infra line, or a record the daemon cannot
-	// read, carries the time the daemon read it.
-	Ts *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=ts,proto3" json:"ts,omitempty"`
-	// Stream the line came from. An infra line is always STDOUT.
-	Stream LogStream `protobuf:"varint,2,opt,name=stream,proto3,enum=anovel.v1.LogStream" json:"stream,omitempty"`
-	// The raw line, ANSI escapes included.
-	Line          string `protobuf:"bytes,3,opt,name=line,proto3" json:"line,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *LogLine) Reset() {
-	*x = LogLine{}
-	mi := &file_anovel_v1_core_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *LogLine) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*LogLine) ProtoMessage() {}
-
-func (x *LogLine) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use LogLine.ProtoReflect.Descriptor instead.
-func (*LogLine) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *LogLine) GetTs() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Ts
-	}
-	return nil
-}
-
-func (x *LogLine) GetStream() LogStream {
-	if x != nil {
-		return x.Stream
-	}
-	return LogStream_LOG_STREAM_UNSPECIFIED
-}
-
-func (x *LogLine) GetLine() string {
-	if x != nil {
-		return x.Line
-	}
-	return ""
-}
-
-// StateEvent is one target phase transition Watch streams.
-type StateEvent struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// When the transition happened.
-	Ts *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=ts,proto3" json:"ts,omitempty"`
-	// ID of the target, "<stack>/<service>/<target>".
-	TargetId string `protobuf:"bytes,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
-	// Name of the target's service.
-	Service string `protobuf:"bytes,3,opt,name=service,proto3" json:"service,omitempty"`
-	// Name of the target's stack.
-	Stack string `protobuf:"bytes,4,opt,name=stack,proto3" json:"stack,omitempty"`
-	// One-line summary, such as "<id> terminated (killed)".
-	Description string `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
-	// Phase before the transition.
-	OldPhase Phase `protobuf:"varint,6,opt,name=old_phase,json=oldPhase,proto3,enum=anovel.v1.Phase" json:"old_phase,omitempty"`
-	// Phase after the transition.
-	NewPhase      Phase `protobuf:"varint,7,opt,name=new_phase,json=newPhase,proto3,enum=anovel.v1.Phase" json:"new_phase,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *StateEvent) Reset() {
-	*x = StateEvent{}
-	mi := &file_anovel_v1_core_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *StateEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*StateEvent) ProtoMessage() {}
-
-func (x *StateEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use StateEvent.ProtoReflect.Descriptor instead.
-func (*StateEvent) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *StateEvent) GetTs() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Ts
-	}
-	return nil
-}
-
-func (x *StateEvent) GetTargetId() string {
-	if x != nil {
-		return x.TargetId
-	}
-	return ""
-}
-
-func (x *StateEvent) GetService() string {
-	if x != nil {
-		return x.Service
-	}
-	return ""
-}
-
-func (x *StateEvent) GetStack() string {
-	if x != nil {
-		return x.Stack
-	}
-	return ""
-}
-
-func (x *StateEvent) GetDescription() string {
-	if x != nil {
-		return x.Description
-	}
-	return ""
-}
-
-func (x *StateEvent) GetOldPhase() Phase {
-	if x != nil {
-		return x.OldPhase
-	}
-	return Phase_PHASE_UNSPECIFIED
-}
-
-func (x *StateEvent) GetNewPhase() Phase {
-	if x != nil {
-		return x.NewPhase
-	}
-	return Phase_PHASE_UNSPECIFIED
-}
-
 // PingRequest asks whether the daemon is alive.
 type PingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1057,7 +892,7 @@ type PingRequest struct {
 
 func (x *PingRequest) Reset() {
 	*x = PingRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[7]
+	mi := &file_anovel_v1_core_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1069,7 +904,7 @@ func (x *PingRequest) String() string {
 func (*PingRequest) ProtoMessage() {}
 
 func (x *PingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[7]
+	mi := &file_anovel_v1_core_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1082,7 +917,7 @@ func (x *PingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingRequest.ProtoReflect.Descriptor instead.
 func (*PingRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{7}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{5}
 }
 
 // PingResponse identifies the daemon that answered.
@@ -1096,7 +931,7 @@ type PingResponse struct {
 
 func (x *PingResponse) Reset() {
 	*x = PingResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[8]
+	mi := &file_anovel_v1_core_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1108,7 +943,7 @@ func (x *PingResponse) String() string {
 func (*PingResponse) ProtoMessage() {}
 
 func (x *PingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[8]
+	mi := &file_anovel_v1_core_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1121,7 +956,7 @@ func (x *PingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingResponse.ProtoReflect.Descriptor instead.
 func (*PingResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{8}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *PingResponse) GetDaemonVersion() string {
@@ -1140,7 +975,7 @@ type StatusRequest struct {
 
 func (x *StatusRequest) Reset() {
 	*x = StatusRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[9]
+	mi := &file_anovel_v1_core_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1152,7 +987,7 @@ func (x *StatusRequest) String() string {
 func (*StatusRequest) ProtoMessage() {}
 
 func (x *StatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[9]
+	mi := &file_anovel_v1_core_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1165,7 +1000,7 @@ func (x *StatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatusRequest.ProtoReflect.Descriptor instead.
 func (*StatusRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{9}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{7}
 }
 
 // StatusResponse is what `a-novel core status` prints.
@@ -1189,7 +1024,7 @@ type StatusResponse struct {
 
 func (x *StatusResponse) Reset() {
 	*x = StatusResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[10]
+	mi := &file_anovel_v1_core_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1201,7 +1036,7 @@ func (x *StatusResponse) String() string {
 func (*StatusResponse) ProtoMessage() {}
 
 func (x *StatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[10]
+	mi := &file_anovel_v1_core_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1214,7 +1049,7 @@ func (x *StatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatusResponse.ProtoReflect.Descriptor instead.
 func (*StatusResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{10}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *StatusResponse) GetDaemonVersion() string {
@@ -1269,7 +1104,7 @@ type PrepareReinstallRequest struct {
 
 func (x *PrepareReinstallRequest) Reset() {
 	*x = PrepareReinstallRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[11]
+	mi := &file_anovel_v1_core_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1281,7 +1116,7 @@ func (x *PrepareReinstallRequest) String() string {
 func (*PrepareReinstallRequest) ProtoMessage() {}
 
 func (x *PrepareReinstallRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[11]
+	mi := &file_anovel_v1_core_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1294,7 +1129,7 @@ func (x *PrepareReinstallRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrepareReinstallRequest.ProtoReflect.Descriptor instead.
 func (*PrepareReinstallRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{11}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{9}
 }
 
 // PrepareReinstallResponse names the checkpoint the next daemon replays.
@@ -1310,7 +1145,7 @@ type PrepareReinstallResponse struct {
 
 func (x *PrepareReinstallResponse) Reset() {
 	*x = PrepareReinstallResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[12]
+	mi := &file_anovel_v1_core_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1322,7 +1157,7 @@ func (x *PrepareReinstallResponse) String() string {
 func (*PrepareReinstallResponse) ProtoMessage() {}
 
 func (x *PrepareReinstallResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[12]
+	mi := &file_anovel_v1_core_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1335,7 +1170,7 @@ func (x *PrepareReinstallResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrepareReinstallResponse.ProtoReflect.Descriptor instead.
 func (*PrepareReinstallResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{12}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *PrepareReinstallResponse) GetCheckpointPath() string {
@@ -1367,7 +1202,7 @@ type ShutdownRequest struct {
 
 func (x *ShutdownRequest) Reset() {
 	*x = ShutdownRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[13]
+	mi := &file_anovel_v1_core_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1379,7 +1214,7 @@ func (x *ShutdownRequest) String() string {
 func (*ShutdownRequest) ProtoMessage() {}
 
 func (x *ShutdownRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[13]
+	mi := &file_anovel_v1_core_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1392,7 +1227,7 @@ func (x *ShutdownRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShutdownRequest.ProtoReflect.Descriptor instead.
 func (*ShutdownRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{13}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ShutdownRequest) GetForce() bool {
@@ -1419,7 +1254,7 @@ type ShutdownResponse struct {
 
 func (x *ShutdownResponse) Reset() {
 	*x = ShutdownResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[14]
+	mi := &file_anovel_v1_core_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1431,7 +1266,7 @@ func (x *ShutdownResponse) String() string {
 func (*ShutdownResponse) ProtoMessage() {}
 
 func (x *ShutdownResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[14]
+	mi := &file_anovel_v1_core_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1444,7 +1279,7 @@ func (x *ShutdownResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShutdownResponse.ProtoReflect.Descriptor instead.
 func (*ShutdownResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{14}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ShutdownResponse) GetGoExecKilled() int32 {
@@ -1477,7 +1312,7 @@ type ListStacksRequest struct {
 
 func (x *ListStacksRequest) Reset() {
 	*x = ListStacksRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[15]
+	mi := &file_anovel_v1_core_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1489,7 +1324,7 @@ func (x *ListStacksRequest) String() string {
 func (*ListStacksRequest) ProtoMessage() {}
 
 func (x *ListStacksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[15]
+	mi := &file_anovel_v1_core_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1502,7 +1337,7 @@ func (x *ListStacksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListStacksRequest.ProtoReflect.Descriptor instead.
 func (*ListStacksRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{15}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{13}
 }
 
 // ListStacksResponse lists the managed stacks in registration order.
@@ -1516,7 +1351,7 @@ type ListStacksResponse struct {
 
 func (x *ListStacksResponse) Reset() {
 	*x = ListStacksResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[16]
+	mi := &file_anovel_v1_core_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1528,7 +1363,7 @@ func (x *ListStacksResponse) String() string {
 func (*ListStacksResponse) ProtoMessage() {}
 
 func (x *ListStacksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[16]
+	mi := &file_anovel_v1_core_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1541,7 +1376,7 @@ func (x *ListStacksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListStacksResponse.ProtoReflect.Descriptor instead.
 func (*ListStacksResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{16}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListStacksResponse) GetStacks() []*Stack {
@@ -1562,7 +1397,7 @@ type ListServicesRequest struct {
 
 func (x *ListServicesRequest) Reset() {
 	*x = ListServicesRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[17]
+	mi := &file_anovel_v1_core_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1574,7 +1409,7 @@ func (x *ListServicesRequest) String() string {
 func (*ListServicesRequest) ProtoMessage() {}
 
 func (x *ListServicesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[17]
+	mi := &file_anovel_v1_core_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1587,7 +1422,7 @@ func (x *ListServicesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListServicesRequest.ProtoReflect.Descriptor instead.
 func (*ListServicesRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{17}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListServicesRequest) GetStack() string {
@@ -1608,7 +1443,7 @@ type ListServicesResponse struct {
 
 func (x *ListServicesResponse) Reset() {
 	*x = ListServicesResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[18]
+	mi := &file_anovel_v1_core_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1620,7 +1455,7 @@ func (x *ListServicesResponse) String() string {
 func (*ListServicesResponse) ProtoMessage() {}
 
 func (x *ListServicesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[18]
+	mi := &file_anovel_v1_core_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1633,7 +1468,7 @@ func (x *ListServicesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListServicesResponse.ProtoReflect.Descriptor instead.
 func (*ListServicesResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{18}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListServicesResponse) GetServices() []*Service {
@@ -1656,7 +1491,7 @@ type DescribeServiceRequest struct {
 
 func (x *DescribeServiceRequest) Reset() {
 	*x = DescribeServiceRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[19]
+	mi := &file_anovel_v1_core_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1668,7 +1503,7 @@ func (x *DescribeServiceRequest) String() string {
 func (*DescribeServiceRequest) ProtoMessage() {}
 
 func (x *DescribeServiceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[19]
+	mi := &file_anovel_v1_core_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1681,7 +1516,7 @@ func (x *DescribeServiceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeServiceRequest.ProtoReflect.Descriptor instead.
 func (*DescribeServiceRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{19}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DescribeServiceRequest) GetService() string {
@@ -1709,7 +1544,7 @@ type DescribeServiceResponse struct {
 
 func (x *DescribeServiceResponse) Reset() {
 	*x = DescribeServiceResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[20]
+	mi := &file_anovel_v1_core_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1721,7 +1556,7 @@ func (x *DescribeServiceResponse) String() string {
 func (*DescribeServiceResponse) ProtoMessage() {}
 
 func (x *DescribeServiceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[20]
+	mi := &file_anovel_v1_core_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1734,7 +1569,7 @@ func (x *DescribeServiceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeServiceResponse.ProtoReflect.Descriptor instead.
 func (*DescribeServiceResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{20}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *DescribeServiceResponse) GetService() *Service {
@@ -1757,7 +1592,7 @@ type GetTopologyRequest struct {
 
 func (x *GetTopologyRequest) Reset() {
 	*x = GetTopologyRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[21]
+	mi := &file_anovel_v1_core_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1769,7 +1604,7 @@ func (x *GetTopologyRequest) String() string {
 func (*GetTopologyRequest) ProtoMessage() {}
 
 func (x *GetTopologyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[21]
+	mi := &file_anovel_v1_core_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1782,7 +1617,7 @@ func (x *GetTopologyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTopologyRequest.ProtoReflect.Descriptor instead.
 func (*GetTopologyRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{21}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetTopologyRequest) GetStack() string {
@@ -1810,7 +1645,7 @@ type GetTopologyResponse struct {
 
 func (x *GetTopologyResponse) Reset() {
 	*x = GetTopologyResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[22]
+	mi := &file_anovel_v1_core_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1822,7 +1657,7 @@ func (x *GetTopologyResponse) String() string {
 func (*GetTopologyResponse) ProtoMessage() {}
 
 func (x *GetTopologyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[22]
+	mi := &file_anovel_v1_core_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1835,7 +1670,7 @@ func (x *GetTopologyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTopologyResponse.ProtoReflect.Descriptor instead.
 func (*GetTopologyResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{22}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetTopologyResponse) GetRendered() string {
@@ -1858,7 +1693,7 @@ type StartTargetRequest struct {
 
 func (x *StartTargetRequest) Reset() {
 	*x = StartTargetRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[23]
+	mi := &file_anovel_v1_core_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1870,7 +1705,7 @@ func (x *StartTargetRequest) String() string {
 func (*StartTargetRequest) ProtoMessage() {}
 
 func (x *StartTargetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[23]
+	mi := &file_anovel_v1_core_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1883,7 +1718,7 @@ func (x *StartTargetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartTargetRequest.ProtoReflect.Descriptor instead.
 func (*StartTargetRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{23}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *StartTargetRequest) GetTargetId() string {
@@ -1911,7 +1746,7 @@ type StartTargetResponse struct {
 
 func (x *StartTargetResponse) Reset() {
 	*x = StartTargetResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[24]
+	mi := &file_anovel_v1_core_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1923,7 +1758,7 @@ func (x *StartTargetResponse) String() string {
 func (*StartTargetResponse) ProtoMessage() {}
 
 func (x *StartTargetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[24]
+	mi := &file_anovel_v1_core_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1936,7 +1771,7 @@ func (x *StartTargetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartTargetResponse.ProtoReflect.Descriptor instead.
 func (*StartTargetResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{24}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *StartTargetResponse) GetTarget() *Target {
@@ -1959,7 +1794,7 @@ type KillTargetRequest struct {
 
 func (x *KillTargetRequest) Reset() {
 	*x = KillTargetRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[25]
+	mi := &file_anovel_v1_core_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1971,7 +1806,7 @@ func (x *KillTargetRequest) String() string {
 func (*KillTargetRequest) ProtoMessage() {}
 
 func (x *KillTargetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[25]
+	mi := &file_anovel_v1_core_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1984,7 +1819,7 @@ func (x *KillTargetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KillTargetRequest.ProtoReflect.Descriptor instead.
 func (*KillTargetRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{25}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *KillTargetRequest) GetTargetId() string {
@@ -2012,7 +1847,7 @@ type KillTargetResponse struct {
 
 func (x *KillTargetResponse) Reset() {
 	*x = KillTargetResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[26]
+	mi := &file_anovel_v1_core_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2024,7 +1859,7 @@ func (x *KillTargetResponse) String() string {
 func (*KillTargetResponse) ProtoMessage() {}
 
 func (x *KillTargetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[26]
+	mi := &file_anovel_v1_core_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2037,7 +1872,7 @@ func (x *KillTargetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KillTargetResponse.ProtoReflect.Descriptor instead.
 func (*KillTargetResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{26}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *KillTargetResponse) GetTarget() *Target {
@@ -2060,7 +1895,7 @@ type RestartTargetRequest struct {
 
 func (x *RestartTargetRequest) Reset() {
 	*x = RestartTargetRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[27]
+	mi := &file_anovel_v1_core_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2072,7 +1907,7 @@ func (x *RestartTargetRequest) String() string {
 func (*RestartTargetRequest) ProtoMessage() {}
 
 func (x *RestartTargetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[27]
+	mi := &file_anovel_v1_core_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2085,7 +1920,7 @@ func (x *RestartTargetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestartTargetRequest.ProtoReflect.Descriptor instead.
 func (*RestartTargetRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{27}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *RestartTargetRequest) GetTargetId() string {
@@ -2113,7 +1948,7 @@ type RestartTargetResponse struct {
 
 func (x *RestartTargetResponse) Reset() {
 	*x = RestartTargetResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[28]
+	mi := &file_anovel_v1_core_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2125,7 +1960,7 @@ func (x *RestartTargetResponse) String() string {
 func (*RestartTargetResponse) ProtoMessage() {}
 
 func (x *RestartTargetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[28]
+	mi := &file_anovel_v1_core_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2138,7 +1973,7 @@ func (x *RestartTargetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestartTargetResponse.ProtoReflect.Descriptor instead.
 func (*RestartTargetResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{28}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *RestartTargetResponse) GetTarget() *Target {
@@ -2163,7 +1998,7 @@ type StartInfraRequest struct {
 
 func (x *StartInfraRequest) Reset() {
 	*x = StartInfraRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[29]
+	mi := &file_anovel_v1_core_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2175,7 +2010,7 @@ func (x *StartInfraRequest) String() string {
 func (*StartInfraRequest) ProtoMessage() {}
 
 func (x *StartInfraRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[29]
+	mi := &file_anovel_v1_core_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2188,7 +2023,7 @@ func (x *StartInfraRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartInfraRequest.ProtoReflect.Descriptor instead.
 func (*StartInfraRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{29}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *StartInfraRequest) GetService() string {
@@ -2223,7 +2058,7 @@ type StartInfraResponse struct {
 
 func (x *StartInfraResponse) Reset() {
 	*x = StartInfraResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[30]
+	mi := &file_anovel_v1_core_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2235,7 +2070,7 @@ func (x *StartInfraResponse) String() string {
 func (*StartInfraResponse) ProtoMessage() {}
 
 func (x *StartInfraResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[30]
+	mi := &file_anovel_v1_core_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2248,7 +2083,7 @@ func (x *StartInfraResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartInfraResponse.ProtoReflect.Descriptor instead.
 func (*StartInfraResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{30}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *StartInfraResponse) GetService() *Service {
@@ -2274,7 +2109,7 @@ type KillInfraRequest struct {
 
 func (x *KillInfraRequest) Reset() {
 	*x = KillInfraRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[31]
+	mi := &file_anovel_v1_core_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2286,7 +2121,7 @@ func (x *KillInfraRequest) String() string {
 func (*KillInfraRequest) ProtoMessage() {}
 
 func (x *KillInfraRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[31]
+	mi := &file_anovel_v1_core_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2299,7 +2134,7 @@ func (x *KillInfraRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KillInfraRequest.ProtoReflect.Descriptor instead.
 func (*KillInfraRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{31}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *KillInfraRequest) GetService() string {
@@ -2334,7 +2169,7 @@ type KillInfraResponse struct {
 
 func (x *KillInfraResponse) Reset() {
 	*x = KillInfraResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[32]
+	mi := &file_anovel_v1_core_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2346,7 +2181,7 @@ func (x *KillInfraResponse) String() string {
 func (*KillInfraResponse) ProtoMessage() {}
 
 func (x *KillInfraResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[32]
+	mi := &file_anovel_v1_core_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2359,7 +2194,7 @@ func (x *KillInfraResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KillInfraResponse.ProtoReflect.Descriptor instead.
 func (*KillInfraResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{32}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *KillInfraResponse) GetService() *Service {
@@ -2385,7 +2220,7 @@ type KillInfraContainerRequest struct {
 
 func (x *KillInfraContainerRequest) Reset() {
 	*x = KillInfraContainerRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[33]
+	mi := &file_anovel_v1_core_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2397,7 +2232,7 @@ func (x *KillInfraContainerRequest) String() string {
 func (*KillInfraContainerRequest) ProtoMessage() {}
 
 func (x *KillInfraContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[33]
+	mi := &file_anovel_v1_core_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2410,7 +2245,7 @@ func (x *KillInfraContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KillInfraContainerRequest.ProtoReflect.Descriptor instead.
 func (*KillInfraContainerRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{33}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *KillInfraContainerRequest) GetStack() string {
@@ -2445,7 +2280,7 @@ type KillInfraContainerResponse struct {
 
 func (x *KillInfraContainerResponse) Reset() {
 	*x = KillInfraContainerResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[34]
+	mi := &file_anovel_v1_core_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2457,7 +2292,7 @@ func (x *KillInfraContainerResponse) String() string {
 func (*KillInfraContainerResponse) ProtoMessage() {}
 
 func (x *KillInfraContainerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[34]
+	mi := &file_anovel_v1_core_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2470,7 +2305,7 @@ func (x *KillInfraContainerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KillInfraContainerResponse.ProtoReflect.Descriptor instead.
 func (*KillInfraContainerResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{34}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *KillInfraContainerResponse) GetInfra() *Infra {
@@ -2495,7 +2330,7 @@ type RestartInfraContainerRequest struct {
 
 func (x *RestartInfraContainerRequest) Reset() {
 	*x = RestartInfraContainerRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[35]
+	mi := &file_anovel_v1_core_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2507,7 +2342,7 @@ func (x *RestartInfraContainerRequest) String() string {
 func (*RestartInfraContainerRequest) ProtoMessage() {}
 
 func (x *RestartInfraContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[35]
+	mi := &file_anovel_v1_core_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2520,7 +2355,7 @@ func (x *RestartInfraContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestartInfraContainerRequest.ProtoReflect.Descriptor instead.
 func (*RestartInfraContainerRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{35}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *RestartInfraContainerRequest) GetStack() string {
@@ -2555,7 +2390,7 @@ type RestartInfraContainerResponse struct {
 
 func (x *RestartInfraContainerResponse) Reset() {
 	*x = RestartInfraContainerResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[36]
+	mi := &file_anovel_v1_core_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2567,7 +2402,7 @@ func (x *RestartInfraContainerResponse) String() string {
 func (*RestartInfraContainerResponse) ProtoMessage() {}
 
 func (x *RestartInfraContainerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[36]
+	mi := &file_anovel_v1_core_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2580,7 +2415,7 @@ func (x *RestartInfraContainerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestartInfraContainerResponse.ProtoReflect.Descriptor instead.
 func (*RestartInfraContainerResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{36}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *RestartInfraContainerResponse) GetInfra() *Infra {
@@ -2610,7 +2445,7 @@ type StreamLogsRequest struct {
 
 func (x *StreamLogsRequest) Reset() {
 	*x = StreamLogsRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[37]
+	mi := &file_anovel_v1_core_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2622,7 +2457,7 @@ func (x *StreamLogsRequest) String() string {
 func (*StreamLogsRequest) ProtoMessage() {}
 
 func (x *StreamLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[37]
+	mi := &file_anovel_v1_core_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2635,7 +2470,7 @@ func (x *StreamLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamLogsRequest.ProtoReflect.Descriptor instead.
 func (*StreamLogsRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{37}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *StreamLogsRequest) GetTargetId() string {
@@ -2666,6 +2501,71 @@ func (x *StreamLogsRequest) GetRunId() string {
 	return ""
 }
 
+// StreamLogsResponse is one entry of a target's or infra container's log.
+type StreamLogsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// When the line was written. An infra line, or a record the daemon cannot
+	// read, carries the time the daemon read it.
+	Ts *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=ts,proto3" json:"ts,omitempty"`
+	// Stream the line came from. An infra line is always STDOUT.
+	Stream LogStream `protobuf:"varint,2,opt,name=stream,proto3,enum=anovel.v1.LogStream" json:"stream,omitempty"`
+	// The raw line, ANSI escapes included.
+	Line          string `protobuf:"bytes,3,opt,name=line,proto3" json:"line,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamLogsResponse) Reset() {
+	*x = StreamLogsResponse{}
+	mi := &file_anovel_v1_core_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamLogsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamLogsResponse) ProtoMessage() {}
+
+func (x *StreamLogsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_anovel_v1_core_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamLogsResponse.ProtoReflect.Descriptor instead.
+func (*StreamLogsResponse) Descriptor() ([]byte, []int) {
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *StreamLogsResponse) GetTs() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Ts
+	}
+	return nil
+}
+
+func (x *StreamLogsResponse) GetStream() LogStream {
+	if x != nil {
+		return x.Stream
+	}
+	return LogStream_LOG_STREAM_UNSPECIFIED
+}
+
+func (x *StreamLogsResponse) GetLine() string {
+	if x != nil {
+		return x.Line
+	}
+	return ""
+}
+
 // ListRunsRequest asks for a target's archived runs.
 type ListRunsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -2677,7 +2577,7 @@ type ListRunsRequest struct {
 
 func (x *ListRunsRequest) Reset() {
 	*x = ListRunsRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[38]
+	mi := &file_anovel_v1_core_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2689,7 +2589,7 @@ func (x *ListRunsRequest) String() string {
 func (*ListRunsRequest) ProtoMessage() {}
 
 func (x *ListRunsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[38]
+	mi := &file_anovel_v1_core_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2702,7 +2602,7 @@ func (x *ListRunsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRunsRequest.ProtoReflect.Descriptor instead.
 func (*ListRunsRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{38}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ListRunsRequest) GetTargetId() string {
@@ -2723,7 +2623,7 @@ type ListRunsResponse struct {
 
 func (x *ListRunsResponse) Reset() {
 	*x = ListRunsResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[39]
+	mi := &file_anovel_v1_core_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2735,7 +2635,7 @@ func (x *ListRunsResponse) String() string {
 func (*ListRunsResponse) ProtoMessage() {}
 
 func (x *ListRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[39]
+	mi := &file_anovel_v1_core_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2748,7 +2648,7 @@ func (x *ListRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRunsResponse.ProtoReflect.Descriptor instead.
 func (*ListRunsResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{39}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ListRunsResponse) GetRunIds() []string {
@@ -2773,7 +2673,7 @@ type GetEnvRequest struct {
 
 func (x *GetEnvRequest) Reset() {
 	*x = GetEnvRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[40]
+	mi := &file_anovel_v1_core_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2785,7 +2685,7 @@ func (x *GetEnvRequest) String() string {
 func (*GetEnvRequest) ProtoMessage() {}
 
 func (x *GetEnvRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[40]
+	mi := &file_anovel_v1_core_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2798,7 +2698,7 @@ func (x *GetEnvRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEnvRequest.ProtoReflect.Descriptor instead.
 func (*GetEnvRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{40}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *GetEnvRequest) GetService() string {
@@ -2826,7 +2726,7 @@ type GetEnvResponse struct {
 
 func (x *GetEnvResponse) Reset() {
 	*x = GetEnvResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[41]
+	mi := &file_anovel_v1_core_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2838,7 +2738,7 @@ func (x *GetEnvResponse) String() string {
 func (*GetEnvResponse) ProtoMessage() {}
 
 func (x *GetEnvResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[41]
+	mi := &file_anovel_v1_core_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2851,7 +2751,7 @@ func (x *GetEnvResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEnvResponse.ProtoReflect.Descriptor instead.
 func (*GetEnvResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{41}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GetEnvResponse) GetEntries() []*EnvEntry {
@@ -2878,7 +2778,7 @@ type EnvEntry struct {
 
 func (x *EnvEntry) Reset() {
 	*x = EnvEntry{}
-	mi := &file_anovel_v1_core_proto_msgTypes[42]
+	mi := &file_anovel_v1_core_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2890,7 +2790,7 @@ func (x *EnvEntry) String() string {
 func (*EnvEntry) ProtoMessage() {}
 
 func (x *EnvEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[42]
+	mi := &file_anovel_v1_core_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2903,7 +2803,7 @@ func (x *EnvEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvEntry.ProtoReflect.Descriptor instead.
 func (*EnvEntry) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{42}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *EnvEntry) GetStack() string {
@@ -2947,7 +2847,7 @@ type ListVolumesRequest struct {
 
 func (x *ListVolumesRequest) Reset() {
 	*x = ListVolumesRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[43]
+	mi := &file_anovel_v1_core_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2959,7 +2859,7 @@ func (x *ListVolumesRequest) String() string {
 func (*ListVolumesRequest) ProtoMessage() {}
 
 func (x *ListVolumesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[43]
+	mi := &file_anovel_v1_core_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2972,7 +2872,7 @@ func (x *ListVolumesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVolumesRequest.ProtoReflect.Descriptor instead.
 func (*ListVolumesRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{43}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ListVolumesRequest) GetService() string {
@@ -3000,7 +2900,7 @@ type ListVolumesResponse struct {
 
 func (x *ListVolumesResponse) Reset() {
 	*x = ListVolumesResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[44]
+	mi := &file_anovel_v1_core_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3012,7 +2912,7 @@ func (x *ListVolumesResponse) String() string {
 func (*ListVolumesResponse) ProtoMessage() {}
 
 func (x *ListVolumesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[44]
+	mi := &file_anovel_v1_core_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3025,7 +2925,7 @@ func (x *ListVolumesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVolumesResponse.ProtoReflect.Descriptor instead.
 func (*ListVolumesResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{44}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ListVolumesResponse) GetVolumes() []*Volume {
@@ -3053,7 +2953,7 @@ type BackupVolumeRequest struct {
 
 func (x *BackupVolumeRequest) Reset() {
 	*x = BackupVolumeRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[45]
+	mi := &file_anovel_v1_core_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3065,7 +2965,7 @@ func (x *BackupVolumeRequest) String() string {
 func (*BackupVolumeRequest) ProtoMessage() {}
 
 func (x *BackupVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[45]
+	mi := &file_anovel_v1_core_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3078,7 +2978,7 @@ func (x *BackupVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeRequest.ProtoReflect.Descriptor instead.
 func (*BackupVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{45}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *BackupVolumeRequest) GetService() string {
@@ -3120,7 +3020,7 @@ type BackupVolumeResponse struct {
 
 func (x *BackupVolumeResponse) Reset() {
 	*x = BackupVolumeResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[46]
+	mi := &file_anovel_v1_core_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3132,7 +3032,7 @@ func (x *BackupVolumeResponse) String() string {
 func (*BackupVolumeResponse) ProtoMessage() {}
 
 func (x *BackupVolumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[46]
+	mi := &file_anovel_v1_core_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3145,7 +3045,7 @@ func (x *BackupVolumeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeResponse.ProtoReflect.Descriptor instead.
 func (*BackupVolumeResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{46}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *BackupVolumeResponse) GetArchivePaths() []string {
@@ -3173,7 +3073,7 @@ type RestoreVolumeRequest struct {
 
 func (x *RestoreVolumeRequest) Reset() {
 	*x = RestoreVolumeRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[47]
+	mi := &file_anovel_v1_core_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3185,7 +3085,7 @@ func (x *RestoreVolumeRequest) String() string {
 func (*RestoreVolumeRequest) ProtoMessage() {}
 
 func (x *RestoreVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[47]
+	mi := &file_anovel_v1_core_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3198,7 +3098,7 @@ func (x *RestoreVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreVolumeRequest.ProtoReflect.Descriptor instead.
 func (*RestoreVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{47}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *RestoreVolumeRequest) GetService() string {
@@ -3240,7 +3140,7 @@ type RestoreVolumeResponse struct {
 
 func (x *RestoreVolumeResponse) Reset() {
 	*x = RestoreVolumeResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[48]
+	mi := &file_anovel_v1_core_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3252,7 +3152,7 @@ func (x *RestoreVolumeResponse) String() string {
 func (*RestoreVolumeResponse) ProtoMessage() {}
 
 func (x *RestoreVolumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[48]
+	mi := &file_anovel_v1_core_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3265,7 +3165,7 @@ func (x *RestoreVolumeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreVolumeResponse.ProtoReflect.Descriptor instead.
 func (*RestoreVolumeResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{48}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *RestoreVolumeResponse) GetRestoredVolumes() []string {
@@ -3294,7 +3194,7 @@ type ClearVolumeRequest struct {
 
 func (x *ClearVolumeRequest) Reset() {
 	*x = ClearVolumeRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[49]
+	mi := &file_anovel_v1_core_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3306,7 +3206,7 @@ func (x *ClearVolumeRequest) String() string {
 func (*ClearVolumeRequest) ProtoMessage() {}
 
 func (x *ClearVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[49]
+	mi := &file_anovel_v1_core_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3319,7 +3219,7 @@ func (x *ClearVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearVolumeRequest.ProtoReflect.Descriptor instead.
 func (*ClearVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{49}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ClearVolumeRequest) GetService() string {
@@ -3361,7 +3261,7 @@ type ClearVolumeResponse struct {
 
 func (x *ClearVolumeResponse) Reset() {
 	*x = ClearVolumeResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[50]
+	mi := &file_anovel_v1_core_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3373,7 +3273,7 @@ func (x *ClearVolumeResponse) String() string {
 func (*ClearVolumeResponse) ProtoMessage() {}
 
 func (x *ClearVolumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[50]
+	mi := &file_anovel_v1_core_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3386,7 +3286,7 @@ func (x *ClearVolumeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearVolumeResponse.ProtoReflect.Descriptor instead.
 func (*ClearVolumeResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{50}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ClearVolumeResponse) GetClearedVolumes() []string {
@@ -3410,7 +3310,7 @@ type ExecRequest struct {
 
 func (x *ExecRequest) Reset() {
 	*x = ExecRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[51]
+	mi := &file_anovel_v1_core_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3422,7 +3322,7 @@ func (x *ExecRequest) String() string {
 func (*ExecRequest) ProtoMessage() {}
 
 func (x *ExecRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[51]
+	mi := &file_anovel_v1_core_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3435,7 +3335,7 @@ func (x *ExecRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecRequest.ProtoReflect.Descriptor instead.
 func (*ExecRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{51}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ExecRequest) GetTargetId() string {
@@ -3452,8 +3352,8 @@ func (x *ExecRequest) GetCmd() []string {
 	return nil
 }
 
-// ExecOutput is one line of the command's output, or its exit code.
-type ExecOutput struct {
+// ExecResponse is one line of the command's output, or its exit code.
+type ExecResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Stream the line came from.
 	Stream LogStream `protobuf:"varint,1,opt,name=stream,proto3,enum=anovel.v1.LogStream" json:"stream,omitempty"`
@@ -3467,21 +3367,21 @@ type ExecOutput struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ExecOutput) Reset() {
-	*x = ExecOutput{}
-	mi := &file_anovel_v1_core_proto_msgTypes[52]
+func (x *ExecResponse) Reset() {
+	*x = ExecResponse{}
+	mi := &file_anovel_v1_core_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ExecOutput) String() string {
+func (x *ExecResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ExecOutput) ProtoMessage() {}
+func (*ExecResponse) ProtoMessage() {}
 
-func (x *ExecOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[52]
+func (x *ExecResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_anovel_v1_core_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3492,26 +3392,26 @@ func (x *ExecOutput) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ExecOutput.ProtoReflect.Descriptor instead.
-func (*ExecOutput) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{52}
+// Deprecated: Use ExecResponse.ProtoReflect.Descriptor instead.
+func (*ExecResponse) Descriptor() ([]byte, []int) {
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{51}
 }
 
-func (x *ExecOutput) GetStream() LogStream {
+func (x *ExecResponse) GetStream() LogStream {
 	if x != nil {
 		return x.Stream
 	}
 	return LogStream_LOG_STREAM_UNSPECIFIED
 }
 
-func (x *ExecOutput) GetLine() string {
+func (x *ExecResponse) GetLine() string {
 	if x != nil {
 		return x.Line
 	}
 	return ""
 }
 
-func (x *ExecOutput) GetExitCode() int32 {
+func (x *ExecResponse) GetExitCode() int32 {
 	if x != nil && x.ExitCode != nil {
 		return *x.ExitCode
 	}
@@ -3529,7 +3429,7 @@ type DebugRequest struct {
 
 func (x *DebugRequest) Reset() {
 	*x = DebugRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[53]
+	mi := &file_anovel_v1_core_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3541,7 +3441,7 @@ func (x *DebugRequest) String() string {
 func (*DebugRequest) ProtoMessage() {}
 
 func (x *DebugRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[53]
+	mi := &file_anovel_v1_core_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3554,7 +3454,7 @@ func (x *DebugRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DebugRequest.ProtoReflect.Descriptor instead.
 func (*DebugRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{53}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *DebugRequest) GetTargetId() string {
@@ -3575,7 +3475,7 @@ type DebugResponse struct {
 
 func (x *DebugResponse) Reset() {
 	*x = DebugResponse{}
-	mi := &file_anovel_v1_core_proto_msgTypes[54]
+	mi := &file_anovel_v1_core_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3587,7 +3487,7 @@ func (x *DebugResponse) String() string {
 func (*DebugResponse) ProtoMessage() {}
 
 func (x *DebugResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[54]
+	mi := &file_anovel_v1_core_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3600,7 +3500,7 @@ func (x *DebugResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DebugResponse.ProtoReflect.Descriptor instead.
 func (*DebugResponse) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{54}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *DebugResponse) GetHint() string {
@@ -3626,7 +3526,7 @@ type WatchRequest struct {
 
 func (x *WatchRequest) Reset() {
 	*x = WatchRequest{}
-	mi := &file_anovel_v1_core_proto_msgTypes[55]
+	mi := &file_anovel_v1_core_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3638,7 +3538,7 @@ func (x *WatchRequest) String() string {
 func (*WatchRequest) ProtoMessage() {}
 
 func (x *WatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_anovel_v1_core_proto_msgTypes[55]
+	mi := &file_anovel_v1_core_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3651,7 +3551,7 @@ func (x *WatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
 func (*WatchRequest) Descriptor() ([]byte, []int) {
-	return file_anovel_v1_core_proto_rawDescGZIP(), []int{55}
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *WatchRequest) GetStack() string {
@@ -3673,6 +3573,106 @@ func (x *WatchRequest) GetTargetId() string {
 		return x.TargetId
 	}
 	return ""
+}
+
+// WatchResponse is one target phase transition Watch streams.
+type WatchResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// When the transition happened.
+	Ts *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=ts,proto3" json:"ts,omitempty"`
+	// ID of the target, "<stack>/<service>/<target>".
+	TargetId string `protobuf:"bytes,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	// Name of the target's service.
+	Service string `protobuf:"bytes,3,opt,name=service,proto3" json:"service,omitempty"`
+	// Name of the target's stack.
+	Stack string `protobuf:"bytes,4,opt,name=stack,proto3" json:"stack,omitempty"`
+	// One-line summary, such as "<id> terminated (killed)".
+	Description string `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
+	// Phase before the transition.
+	OldPhase Phase `protobuf:"varint,6,opt,name=old_phase,json=oldPhase,proto3,enum=anovel.v1.Phase" json:"old_phase,omitempty"`
+	// Phase after the transition.
+	NewPhase      Phase `protobuf:"varint,7,opt,name=new_phase,json=newPhase,proto3,enum=anovel.v1.Phase" json:"new_phase,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchResponse) Reset() {
+	*x = WatchResponse{}
+	mi := &file_anovel_v1_core_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchResponse) ProtoMessage() {}
+
+func (x *WatchResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_anovel_v1_core_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchResponse.ProtoReflect.Descriptor instead.
+func (*WatchResponse) Descriptor() ([]byte, []int) {
+	return file_anovel_v1_core_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *WatchResponse) GetTs() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Ts
+	}
+	return nil
+}
+
+func (x *WatchResponse) GetTargetId() string {
+	if x != nil {
+		return x.TargetId
+	}
+	return ""
+}
+
+func (x *WatchResponse) GetService() string {
+	if x != nil {
+		return x.Service
+	}
+	return ""
+}
+
+func (x *WatchResponse) GetStack() string {
+	if x != nil {
+		return x.Stack
+	}
+	return ""
+}
+
+func (x *WatchResponse) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *WatchResponse) GetOldPhase() Phase {
+	if x != nil {
+		return x.OldPhase
+	}
+	return Phase_PHASE_UNSPECIFIED
+}
+
+func (x *WatchResponse) GetNewPhase() Phase {
+	if x != nil {
+		return x.NewPhase
+	}
+	return Phase_PHASE_UNSPECIFIED
 }
 
 var File_anovel_v1_core_proto protoreflect.FileDescriptor
@@ -3724,20 +3724,7 @@ const file_anovel_v1_core_proto_rawDesc = "" +
 	"\x05stack\x18\x03 \x01(\tR\x05stack\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\x12!\n" +
-	"\fbackup_count\x18\x05 \x01(\x05R\vbackupCount\"w\n" +
-	"\aLogLine\x12*\n" +
-	"\x02ts\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02ts\x12,\n" +
-	"\x06stream\x18\x02 \x01(\x0e2\x14.anovel.v1.LogStreamR\x06stream\x12\x12\n" +
-	"\x04line\x18\x03 \x01(\tR\x04line\"\x85\x02\n" +
-	"\n" +
-	"StateEvent\x12*\n" +
-	"\x02ts\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02ts\x12\x1b\n" +
-	"\ttarget_id\x18\x02 \x01(\tR\btargetId\x12\x18\n" +
-	"\aservice\x18\x03 \x01(\tR\aservice\x12\x14\n" +
-	"\x05stack\x18\x04 \x01(\tR\x05stack\x12 \n" +
-	"\vdescription\x18\x05 \x01(\tR\vdescription\x12-\n" +
-	"\told_phase\x18\x06 \x01(\x0e2\x10.anovel.v1.PhaseR\boldPhase\x12-\n" +
-	"\tnew_phase\x18\a \x01(\x0e2\x10.anovel.v1.PhaseR\bnewPhase\"\r\n" +
+	"\fbackup_count\x18\x05 \x01(\x05R\vbackupCount\"\r\n" +
 	"\vPingRequest\"@\n" +
 	"\fPingResponse\x12%\n" +
 	"\x0edaemon_version\x18\x01 \x01(\tR\rdaemonVersionJ\x04\b\x02\x10\x03R\x03now\"\x0f\n" +
@@ -3821,7 +3808,11 @@ const file_anovel_v1_core_proto_rawDesc = "" +
 	"\ttarget_id\x18\x01 \x01(\tR\btargetId\x12\x16\n" +
 	"\x06follow\x18\x02 \x01(\bR\x06follow\x12,\n" +
 	"\x06stream\x18\x05 \x01(\x0e2\x14.anovel.v1.LogStreamR\x06stream\x12\x15\n" +
-	"\x06run_id\x18\x06 \x01(\tR\x05runIdJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\x04tailR\x05since\".\n" +
+	"\x06run_id\x18\x06 \x01(\tR\x05runIdJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\x04tailR\x05since\"\x82\x01\n" +
+	"\x12StreamLogsResponse\x12*\n" +
+	"\x02ts\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02ts\x12,\n" +
+	"\x06stream\x18\x02 \x01(\x0e2\x14.anovel.v1.LogStreamR\x06stream\x12\x12\n" +
+	"\x04line\x18\x03 \x01(\tR\x04line\".\n" +
 	"\x0fListRunsRequest\x12\x1b\n" +
 	"\ttarget_id\x18\x01 \x01(\tR\btargetId\"+\n" +
 	"\x10ListRunsResponse\x12\x17\n" +
@@ -3865,9 +3856,8 @@ const file_anovel_v1_core_proto_rawDesc = "" +
 	"\x0fcleared_volumes\x18\x01 \x03(\tR\x0eclearedVolumes\"<\n" +
 	"\vExecRequest\x12\x1b\n" +
 	"\ttarget_id\x18\x01 \x01(\tR\btargetId\x12\x10\n" +
-	"\x03cmd\x18\x02 \x03(\tR\x03cmd\"~\n" +
-	"\n" +
-	"ExecOutput\x12,\n" +
+	"\x03cmd\x18\x02 \x03(\tR\x03cmd\"\x80\x01\n" +
+	"\fExecResponse\x12,\n" +
 	"\x06stream\x18\x01 \x01(\x0e2\x14.anovel.v1.LogStreamR\x06stream\x12\x12\n" +
 	"\x04line\x18\x02 \x01(\tR\x04line\x12 \n" +
 	"\texit_code\x18\x03 \x01(\x05H\x00R\bexitCode\x88\x01\x01B\f\n" +
@@ -3881,7 +3871,15 @@ const file_anovel_v1_core_proto_rawDesc = "" +
 	"\fWatchRequest\x12\x14\n" +
 	"\x05stack\x18\x01 \x01(\tR\x05stack\x12\x18\n" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x1b\n" +
-	"\ttarget_id\x18\x03 \x01(\tR\btargetId*\x82\x01\n" +
+	"\ttarget_id\x18\x03 \x01(\tR\btargetId\"\x88\x02\n" +
+	"\rWatchResponse\x12*\n" +
+	"\x02ts\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02ts\x12\x1b\n" +
+	"\ttarget_id\x18\x02 \x01(\tR\btargetId\x12\x18\n" +
+	"\aservice\x18\x03 \x01(\tR\aservice\x12\x14\n" +
+	"\x05stack\x18\x04 \x01(\tR\x05stack\x12 \n" +
+	"\vdescription\x18\x05 \x01(\tR\vdescription\x12-\n" +
+	"\told_phase\x18\x06 \x01(\x0e2\x10.anovel.v1.PhaseR\boldPhase\x12-\n" +
+	"\tnew_phase\x18\a \x01(\x0e2\x10.anovel.v1.PhaseR\bnewPhase*\x82\x01\n" +
 	"\x05Phase\x12\x15\n" +
 	"\x11PHASE_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rPHASE_PENDING\x10\x01\x12\x12\n" +
@@ -3914,7 +3912,7 @@ const file_anovel_v1_core_proto_rawDesc = "" +
 	"\tLogStream\x12\x1a\n" +
 	"\x16LOG_STREAM_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11LOG_STREAM_STDOUT\x10\x01\x12\x15\n" +
-	"\x11LOG_STREAM_STDERR\x10\x022\xf1\x0e\n" +
+	"\x11LOG_STREAM_STDERR\x10\x022\x81\x0f\n" +
 	"\vCoreService\x127\n" +
 	"\x04Ping\x12\x16.anovel.v1.PingRequest\x1a\x17.anovel.v1.PingResponse\x12=\n" +
 	"\x06Status\x12\x18.anovel.v1.StatusRequest\x1a\x19.anovel.v1.StatusResponse\x12[\n" +
@@ -3933,18 +3931,18 @@ const file_anovel_v1_core_proto_rawDesc = "" +
 	"StartInfra\x12\x1c.anovel.v1.StartInfraRequest\x1a\x1d.anovel.v1.StartInfraResponse\x12F\n" +
 	"\tKillInfra\x12\x1b.anovel.v1.KillInfraRequest\x1a\x1c.anovel.v1.KillInfraResponse\x12a\n" +
 	"\x12KillInfraContainer\x12$.anovel.v1.KillInfraContainerRequest\x1a%.anovel.v1.KillInfraContainerResponse\x12j\n" +
-	"\x15RestartInfraContainer\x12'.anovel.v1.RestartInfraContainerRequest\x1a(.anovel.v1.RestartInfraContainerResponse\x12@\n" +
+	"\x15RestartInfraContainer\x12'.anovel.v1.RestartInfraContainerRequest\x1a(.anovel.v1.RestartInfraContainerResponse\x12K\n" +
 	"\n" +
-	"StreamLogs\x12\x1c.anovel.v1.StreamLogsRequest\x1a\x12.anovel.v1.LogLine0\x01\x12C\n" +
+	"StreamLogs\x12\x1c.anovel.v1.StreamLogsRequest\x1a\x1d.anovel.v1.StreamLogsResponse0\x01\x12C\n" +
 	"\bListRuns\x12\x1a.anovel.v1.ListRunsRequest\x1a\x1b.anovel.v1.ListRunsResponse\x12=\n" +
 	"\x06GetEnv\x12\x18.anovel.v1.GetEnvRequest\x1a\x19.anovel.v1.GetEnvResponse\x12L\n" +
 	"\vListVolumes\x12\x1d.anovel.v1.ListVolumesRequest\x1a\x1e.anovel.v1.ListVolumesResponse\x12O\n" +
 	"\fBackupVolume\x12\x1e.anovel.v1.BackupVolumeRequest\x1a\x1f.anovel.v1.BackupVolumeResponse\x12R\n" +
 	"\rRestoreVolume\x12\x1f.anovel.v1.RestoreVolumeRequest\x1a .anovel.v1.RestoreVolumeResponse\x12L\n" +
-	"\vClearVolume\x12\x1d.anovel.v1.ClearVolumeRequest\x1a\x1e.anovel.v1.ClearVolumeResponse\x127\n" +
-	"\x04Exec\x12\x16.anovel.v1.ExecRequest\x1a\x15.anovel.v1.ExecOutput0\x01\x12:\n" +
-	"\x05Debug\x12\x17.anovel.v1.DebugRequest\x1a\x18.anovel.v1.DebugResponse\x129\n" +
-	"\x05Watch\x12\x17.anovel.v1.WatchRequest\x1a\x15.anovel.v1.StateEvent0\x01B\x9e\x01\n" +
+	"\vClearVolume\x12\x1d.anovel.v1.ClearVolumeRequest\x1a\x1e.anovel.v1.ClearVolumeResponse\x129\n" +
+	"\x04Exec\x12\x16.anovel.v1.ExecRequest\x1a\x17.anovel.v1.ExecResponse0\x01\x12:\n" +
+	"\x05Debug\x12\x17.anovel.v1.DebugRequest\x1a\x18.anovel.v1.DebugResponse\x12<\n" +
+	"\x05Watch\x12\x17.anovel.v1.WatchRequest\x1a\x18.anovel.v1.WatchResponse0\x01B\x9e\x01\n" +
 	"\rcom.anovel.v1B\tCoreProtoP\x01Z=github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1;anovelv1\xa2\x02\x03AXX\xaa\x02\tAnovel.V1\xca\x02\tAnovel\\V1\xe2\x02\x15Anovel\\V1\\GPBMetadata\xea\x02\n" +
 	"Anovel::V1b\x06proto3"
 
@@ -3974,57 +3972,57 @@ var file_anovel_v1_core_proto_goTypes = []any{
 	(*Target)(nil),                        // 8: anovel.v1.Target
 	(*Infra)(nil),                         // 9: anovel.v1.Infra
 	(*Volume)(nil),                        // 10: anovel.v1.Volume
-	(*LogLine)(nil),                       // 11: anovel.v1.LogLine
-	(*StateEvent)(nil),                    // 12: anovel.v1.StateEvent
-	(*PingRequest)(nil),                   // 13: anovel.v1.PingRequest
-	(*PingResponse)(nil),                  // 14: anovel.v1.PingResponse
-	(*StatusRequest)(nil),                 // 15: anovel.v1.StatusRequest
-	(*StatusResponse)(nil),                // 16: anovel.v1.StatusResponse
-	(*PrepareReinstallRequest)(nil),       // 17: anovel.v1.PrepareReinstallRequest
-	(*PrepareReinstallResponse)(nil),      // 18: anovel.v1.PrepareReinstallResponse
-	(*ShutdownRequest)(nil),               // 19: anovel.v1.ShutdownRequest
-	(*ShutdownResponse)(nil),              // 20: anovel.v1.ShutdownResponse
-	(*ListStacksRequest)(nil),             // 21: anovel.v1.ListStacksRequest
-	(*ListStacksResponse)(nil),            // 22: anovel.v1.ListStacksResponse
-	(*ListServicesRequest)(nil),           // 23: anovel.v1.ListServicesRequest
-	(*ListServicesResponse)(nil),          // 24: anovel.v1.ListServicesResponse
-	(*DescribeServiceRequest)(nil),        // 25: anovel.v1.DescribeServiceRequest
-	(*DescribeServiceResponse)(nil),       // 26: anovel.v1.DescribeServiceResponse
-	(*GetTopologyRequest)(nil),            // 27: anovel.v1.GetTopologyRequest
-	(*GetTopologyResponse)(nil),           // 28: anovel.v1.GetTopologyResponse
-	(*StartTargetRequest)(nil),            // 29: anovel.v1.StartTargetRequest
-	(*StartTargetResponse)(nil),           // 30: anovel.v1.StartTargetResponse
-	(*KillTargetRequest)(nil),             // 31: anovel.v1.KillTargetRequest
-	(*KillTargetResponse)(nil),            // 32: anovel.v1.KillTargetResponse
-	(*RestartTargetRequest)(nil),          // 33: anovel.v1.RestartTargetRequest
-	(*RestartTargetResponse)(nil),         // 34: anovel.v1.RestartTargetResponse
-	(*StartInfraRequest)(nil),             // 35: anovel.v1.StartInfraRequest
-	(*StartInfraResponse)(nil),            // 36: anovel.v1.StartInfraResponse
-	(*KillInfraRequest)(nil),              // 37: anovel.v1.KillInfraRequest
-	(*KillInfraResponse)(nil),             // 38: anovel.v1.KillInfraResponse
-	(*KillInfraContainerRequest)(nil),     // 39: anovel.v1.KillInfraContainerRequest
-	(*KillInfraContainerResponse)(nil),    // 40: anovel.v1.KillInfraContainerResponse
-	(*RestartInfraContainerRequest)(nil),  // 41: anovel.v1.RestartInfraContainerRequest
-	(*RestartInfraContainerResponse)(nil), // 42: anovel.v1.RestartInfraContainerResponse
-	(*StreamLogsRequest)(nil),             // 43: anovel.v1.StreamLogsRequest
-	(*ListRunsRequest)(nil),               // 44: anovel.v1.ListRunsRequest
-	(*ListRunsResponse)(nil),              // 45: anovel.v1.ListRunsResponse
-	(*GetEnvRequest)(nil),                 // 46: anovel.v1.GetEnvRequest
-	(*GetEnvResponse)(nil),                // 47: anovel.v1.GetEnvResponse
-	(*EnvEntry)(nil),                      // 48: anovel.v1.EnvEntry
-	(*ListVolumesRequest)(nil),            // 49: anovel.v1.ListVolumesRequest
-	(*ListVolumesResponse)(nil),           // 50: anovel.v1.ListVolumesResponse
-	(*BackupVolumeRequest)(nil),           // 51: anovel.v1.BackupVolumeRequest
-	(*BackupVolumeResponse)(nil),          // 52: anovel.v1.BackupVolumeResponse
-	(*RestoreVolumeRequest)(nil),          // 53: anovel.v1.RestoreVolumeRequest
-	(*RestoreVolumeResponse)(nil),         // 54: anovel.v1.RestoreVolumeResponse
-	(*ClearVolumeRequest)(nil),            // 55: anovel.v1.ClearVolumeRequest
-	(*ClearVolumeResponse)(nil),           // 56: anovel.v1.ClearVolumeResponse
-	(*ExecRequest)(nil),                   // 57: anovel.v1.ExecRequest
-	(*ExecOutput)(nil),                    // 58: anovel.v1.ExecOutput
-	(*DebugRequest)(nil),                  // 59: anovel.v1.DebugRequest
-	(*DebugResponse)(nil),                 // 60: anovel.v1.DebugResponse
-	(*WatchRequest)(nil),                  // 61: anovel.v1.WatchRequest
+	(*PingRequest)(nil),                   // 11: anovel.v1.PingRequest
+	(*PingResponse)(nil),                  // 12: anovel.v1.PingResponse
+	(*StatusRequest)(nil),                 // 13: anovel.v1.StatusRequest
+	(*StatusResponse)(nil),                // 14: anovel.v1.StatusResponse
+	(*PrepareReinstallRequest)(nil),       // 15: anovel.v1.PrepareReinstallRequest
+	(*PrepareReinstallResponse)(nil),      // 16: anovel.v1.PrepareReinstallResponse
+	(*ShutdownRequest)(nil),               // 17: anovel.v1.ShutdownRequest
+	(*ShutdownResponse)(nil),              // 18: anovel.v1.ShutdownResponse
+	(*ListStacksRequest)(nil),             // 19: anovel.v1.ListStacksRequest
+	(*ListStacksResponse)(nil),            // 20: anovel.v1.ListStacksResponse
+	(*ListServicesRequest)(nil),           // 21: anovel.v1.ListServicesRequest
+	(*ListServicesResponse)(nil),          // 22: anovel.v1.ListServicesResponse
+	(*DescribeServiceRequest)(nil),        // 23: anovel.v1.DescribeServiceRequest
+	(*DescribeServiceResponse)(nil),       // 24: anovel.v1.DescribeServiceResponse
+	(*GetTopologyRequest)(nil),            // 25: anovel.v1.GetTopologyRequest
+	(*GetTopologyResponse)(nil),           // 26: anovel.v1.GetTopologyResponse
+	(*StartTargetRequest)(nil),            // 27: anovel.v1.StartTargetRequest
+	(*StartTargetResponse)(nil),           // 28: anovel.v1.StartTargetResponse
+	(*KillTargetRequest)(nil),             // 29: anovel.v1.KillTargetRequest
+	(*KillTargetResponse)(nil),            // 30: anovel.v1.KillTargetResponse
+	(*RestartTargetRequest)(nil),          // 31: anovel.v1.RestartTargetRequest
+	(*RestartTargetResponse)(nil),         // 32: anovel.v1.RestartTargetResponse
+	(*StartInfraRequest)(nil),             // 33: anovel.v1.StartInfraRequest
+	(*StartInfraResponse)(nil),            // 34: anovel.v1.StartInfraResponse
+	(*KillInfraRequest)(nil),              // 35: anovel.v1.KillInfraRequest
+	(*KillInfraResponse)(nil),             // 36: anovel.v1.KillInfraResponse
+	(*KillInfraContainerRequest)(nil),     // 37: anovel.v1.KillInfraContainerRequest
+	(*KillInfraContainerResponse)(nil),    // 38: anovel.v1.KillInfraContainerResponse
+	(*RestartInfraContainerRequest)(nil),  // 39: anovel.v1.RestartInfraContainerRequest
+	(*RestartInfraContainerResponse)(nil), // 40: anovel.v1.RestartInfraContainerResponse
+	(*StreamLogsRequest)(nil),             // 41: anovel.v1.StreamLogsRequest
+	(*StreamLogsResponse)(nil),            // 42: anovel.v1.StreamLogsResponse
+	(*ListRunsRequest)(nil),               // 43: anovel.v1.ListRunsRequest
+	(*ListRunsResponse)(nil),              // 44: anovel.v1.ListRunsResponse
+	(*GetEnvRequest)(nil),                 // 45: anovel.v1.GetEnvRequest
+	(*GetEnvResponse)(nil),                // 46: anovel.v1.GetEnvResponse
+	(*EnvEntry)(nil),                      // 47: anovel.v1.EnvEntry
+	(*ListVolumesRequest)(nil),            // 48: anovel.v1.ListVolumesRequest
+	(*ListVolumesResponse)(nil),           // 49: anovel.v1.ListVolumesResponse
+	(*BackupVolumeRequest)(nil),           // 50: anovel.v1.BackupVolumeRequest
+	(*BackupVolumeResponse)(nil),          // 51: anovel.v1.BackupVolumeResponse
+	(*RestoreVolumeRequest)(nil),          // 52: anovel.v1.RestoreVolumeRequest
+	(*RestoreVolumeResponse)(nil),         // 53: anovel.v1.RestoreVolumeResponse
+	(*ClearVolumeRequest)(nil),            // 54: anovel.v1.ClearVolumeRequest
+	(*ClearVolumeResponse)(nil),           // 55: anovel.v1.ClearVolumeResponse
+	(*ExecRequest)(nil),                   // 56: anovel.v1.ExecRequest
+	(*ExecResponse)(nil),                  // 57: anovel.v1.ExecResponse
+	(*DebugRequest)(nil),                  // 58: anovel.v1.DebugRequest
+	(*DebugResponse)(nil),                 // 59: anovel.v1.DebugResponse
+	(*WatchRequest)(nil),                  // 60: anovel.v1.WatchRequest
+	(*WatchResponse)(nil),                 // 61: anovel.v1.WatchResponse
 	(*timestamppb.Timestamp)(nil),         // 62: google.protobuf.Timestamp
 	(*durationpb.Duration)(nil),           // 63: google.protobuf.Duration
 }
@@ -4041,82 +4039,82 @@ var file_anovel_v1_core_proto_depIdxs = []int32{
 	62, // 9: anovel.v1.Target.terminated_at:type_name -> google.protobuf.Timestamp
 	0,  // 10: anovel.v1.Infra.phase:type_name -> anovel.v1.Phase
 	3,  // 11: anovel.v1.Infra.health:type_name -> anovel.v1.Health
-	62, // 12: anovel.v1.LogLine.ts:type_name -> google.protobuf.Timestamp
-	5,  // 13: anovel.v1.LogLine.stream:type_name -> anovel.v1.LogStream
-	62, // 14: anovel.v1.StateEvent.ts:type_name -> google.protobuf.Timestamp
-	0,  // 15: anovel.v1.StateEvent.old_phase:type_name -> anovel.v1.Phase
-	0,  // 16: anovel.v1.StateEvent.new_phase:type_name -> anovel.v1.Phase
-	62, // 17: anovel.v1.StatusResponse.started_at:type_name -> google.protobuf.Timestamp
-	63, // 18: anovel.v1.StatusResponse.uptime:type_name -> google.protobuf.Duration
-	6,  // 19: anovel.v1.StatusResponse.stacks:type_name -> anovel.v1.Stack
-	6,  // 20: anovel.v1.ListStacksResponse.stacks:type_name -> anovel.v1.Stack
-	7,  // 21: anovel.v1.ListServicesResponse.services:type_name -> anovel.v1.Service
-	7,  // 22: anovel.v1.DescribeServiceResponse.service:type_name -> anovel.v1.Service
-	2,  // 23: anovel.v1.StartTargetRequest.mode:type_name -> anovel.v1.Mode
-	8,  // 24: anovel.v1.StartTargetResponse.target:type_name -> anovel.v1.Target
-	63, // 25: anovel.v1.KillTargetRequest.timeout:type_name -> google.protobuf.Duration
-	8,  // 26: anovel.v1.KillTargetResponse.target:type_name -> anovel.v1.Target
-	2,  // 27: anovel.v1.RestartTargetRequest.mode:type_name -> anovel.v1.Mode
-	8,  // 28: anovel.v1.RestartTargetResponse.target:type_name -> anovel.v1.Target
-	2,  // 29: anovel.v1.StartInfraRequest.one_shots_mode:type_name -> anovel.v1.Mode
-	7,  // 30: anovel.v1.StartInfraResponse.service:type_name -> anovel.v1.Service
-	7,  // 31: anovel.v1.KillInfraResponse.service:type_name -> anovel.v1.Service
-	9,  // 32: anovel.v1.KillInfraContainerResponse.infra:type_name -> anovel.v1.Infra
-	9,  // 33: anovel.v1.RestartInfraContainerResponse.infra:type_name -> anovel.v1.Infra
-	5,  // 34: anovel.v1.StreamLogsRequest.stream:type_name -> anovel.v1.LogStream
-	48, // 35: anovel.v1.GetEnvResponse.entries:type_name -> anovel.v1.EnvEntry
-	10, // 36: anovel.v1.ListVolumesResponse.volumes:type_name -> anovel.v1.Volume
-	5,  // 37: anovel.v1.ExecOutput.stream:type_name -> anovel.v1.LogStream
-	13, // 38: anovel.v1.CoreService.Ping:input_type -> anovel.v1.PingRequest
-	15, // 39: anovel.v1.CoreService.Status:input_type -> anovel.v1.StatusRequest
-	17, // 40: anovel.v1.CoreService.PrepareReinstall:input_type -> anovel.v1.PrepareReinstallRequest
-	19, // 41: anovel.v1.CoreService.Shutdown:input_type -> anovel.v1.ShutdownRequest
-	21, // 42: anovel.v1.CoreService.ListStacks:input_type -> anovel.v1.ListStacksRequest
-	23, // 43: anovel.v1.CoreService.ListServices:input_type -> anovel.v1.ListServicesRequest
-	25, // 44: anovel.v1.CoreService.DescribeService:input_type -> anovel.v1.DescribeServiceRequest
-	27, // 45: anovel.v1.CoreService.GetTopology:input_type -> anovel.v1.GetTopologyRequest
-	29, // 46: anovel.v1.CoreService.StartTarget:input_type -> anovel.v1.StartTargetRequest
-	31, // 47: anovel.v1.CoreService.KillTarget:input_type -> anovel.v1.KillTargetRequest
-	33, // 48: anovel.v1.CoreService.RestartTarget:input_type -> anovel.v1.RestartTargetRequest
-	35, // 49: anovel.v1.CoreService.StartInfra:input_type -> anovel.v1.StartInfraRequest
-	37, // 50: anovel.v1.CoreService.KillInfra:input_type -> anovel.v1.KillInfraRequest
-	39, // 51: anovel.v1.CoreService.KillInfraContainer:input_type -> anovel.v1.KillInfraContainerRequest
-	41, // 52: anovel.v1.CoreService.RestartInfraContainer:input_type -> anovel.v1.RestartInfraContainerRequest
-	43, // 53: anovel.v1.CoreService.StreamLogs:input_type -> anovel.v1.StreamLogsRequest
-	44, // 54: anovel.v1.CoreService.ListRuns:input_type -> anovel.v1.ListRunsRequest
-	46, // 55: anovel.v1.CoreService.GetEnv:input_type -> anovel.v1.GetEnvRequest
-	49, // 56: anovel.v1.CoreService.ListVolumes:input_type -> anovel.v1.ListVolumesRequest
-	51, // 57: anovel.v1.CoreService.BackupVolume:input_type -> anovel.v1.BackupVolumeRequest
-	53, // 58: anovel.v1.CoreService.RestoreVolume:input_type -> anovel.v1.RestoreVolumeRequest
-	55, // 59: anovel.v1.CoreService.ClearVolume:input_type -> anovel.v1.ClearVolumeRequest
-	57, // 60: anovel.v1.CoreService.Exec:input_type -> anovel.v1.ExecRequest
-	59, // 61: anovel.v1.CoreService.Debug:input_type -> anovel.v1.DebugRequest
-	61, // 62: anovel.v1.CoreService.Watch:input_type -> anovel.v1.WatchRequest
-	14, // 63: anovel.v1.CoreService.Ping:output_type -> anovel.v1.PingResponse
-	16, // 64: anovel.v1.CoreService.Status:output_type -> anovel.v1.StatusResponse
-	18, // 65: anovel.v1.CoreService.PrepareReinstall:output_type -> anovel.v1.PrepareReinstallResponse
-	20, // 66: anovel.v1.CoreService.Shutdown:output_type -> anovel.v1.ShutdownResponse
-	22, // 67: anovel.v1.CoreService.ListStacks:output_type -> anovel.v1.ListStacksResponse
-	24, // 68: anovel.v1.CoreService.ListServices:output_type -> anovel.v1.ListServicesResponse
-	26, // 69: anovel.v1.CoreService.DescribeService:output_type -> anovel.v1.DescribeServiceResponse
-	28, // 70: anovel.v1.CoreService.GetTopology:output_type -> anovel.v1.GetTopologyResponse
-	30, // 71: anovel.v1.CoreService.StartTarget:output_type -> anovel.v1.StartTargetResponse
-	32, // 72: anovel.v1.CoreService.KillTarget:output_type -> anovel.v1.KillTargetResponse
-	34, // 73: anovel.v1.CoreService.RestartTarget:output_type -> anovel.v1.RestartTargetResponse
-	36, // 74: anovel.v1.CoreService.StartInfra:output_type -> anovel.v1.StartInfraResponse
-	38, // 75: anovel.v1.CoreService.KillInfra:output_type -> anovel.v1.KillInfraResponse
-	40, // 76: anovel.v1.CoreService.KillInfraContainer:output_type -> anovel.v1.KillInfraContainerResponse
-	42, // 77: anovel.v1.CoreService.RestartInfraContainer:output_type -> anovel.v1.RestartInfraContainerResponse
-	11, // 78: anovel.v1.CoreService.StreamLogs:output_type -> anovel.v1.LogLine
-	45, // 79: anovel.v1.CoreService.ListRuns:output_type -> anovel.v1.ListRunsResponse
-	47, // 80: anovel.v1.CoreService.GetEnv:output_type -> anovel.v1.GetEnvResponse
-	50, // 81: anovel.v1.CoreService.ListVolumes:output_type -> anovel.v1.ListVolumesResponse
-	52, // 82: anovel.v1.CoreService.BackupVolume:output_type -> anovel.v1.BackupVolumeResponse
-	54, // 83: anovel.v1.CoreService.RestoreVolume:output_type -> anovel.v1.RestoreVolumeResponse
-	56, // 84: anovel.v1.CoreService.ClearVolume:output_type -> anovel.v1.ClearVolumeResponse
-	58, // 85: anovel.v1.CoreService.Exec:output_type -> anovel.v1.ExecOutput
-	60, // 86: anovel.v1.CoreService.Debug:output_type -> anovel.v1.DebugResponse
-	12, // 87: anovel.v1.CoreService.Watch:output_type -> anovel.v1.StateEvent
+	62, // 12: anovel.v1.StatusResponse.started_at:type_name -> google.protobuf.Timestamp
+	63, // 13: anovel.v1.StatusResponse.uptime:type_name -> google.protobuf.Duration
+	6,  // 14: anovel.v1.StatusResponse.stacks:type_name -> anovel.v1.Stack
+	6,  // 15: anovel.v1.ListStacksResponse.stacks:type_name -> anovel.v1.Stack
+	7,  // 16: anovel.v1.ListServicesResponse.services:type_name -> anovel.v1.Service
+	7,  // 17: anovel.v1.DescribeServiceResponse.service:type_name -> anovel.v1.Service
+	2,  // 18: anovel.v1.StartTargetRequest.mode:type_name -> anovel.v1.Mode
+	8,  // 19: anovel.v1.StartTargetResponse.target:type_name -> anovel.v1.Target
+	63, // 20: anovel.v1.KillTargetRequest.timeout:type_name -> google.protobuf.Duration
+	8,  // 21: anovel.v1.KillTargetResponse.target:type_name -> anovel.v1.Target
+	2,  // 22: anovel.v1.RestartTargetRequest.mode:type_name -> anovel.v1.Mode
+	8,  // 23: anovel.v1.RestartTargetResponse.target:type_name -> anovel.v1.Target
+	2,  // 24: anovel.v1.StartInfraRequest.one_shots_mode:type_name -> anovel.v1.Mode
+	7,  // 25: anovel.v1.StartInfraResponse.service:type_name -> anovel.v1.Service
+	7,  // 26: anovel.v1.KillInfraResponse.service:type_name -> anovel.v1.Service
+	9,  // 27: anovel.v1.KillInfraContainerResponse.infra:type_name -> anovel.v1.Infra
+	9,  // 28: anovel.v1.RestartInfraContainerResponse.infra:type_name -> anovel.v1.Infra
+	5,  // 29: anovel.v1.StreamLogsRequest.stream:type_name -> anovel.v1.LogStream
+	62, // 30: anovel.v1.StreamLogsResponse.ts:type_name -> google.protobuf.Timestamp
+	5,  // 31: anovel.v1.StreamLogsResponse.stream:type_name -> anovel.v1.LogStream
+	47, // 32: anovel.v1.GetEnvResponse.entries:type_name -> anovel.v1.EnvEntry
+	10, // 33: anovel.v1.ListVolumesResponse.volumes:type_name -> anovel.v1.Volume
+	5,  // 34: anovel.v1.ExecResponse.stream:type_name -> anovel.v1.LogStream
+	62, // 35: anovel.v1.WatchResponse.ts:type_name -> google.protobuf.Timestamp
+	0,  // 36: anovel.v1.WatchResponse.old_phase:type_name -> anovel.v1.Phase
+	0,  // 37: anovel.v1.WatchResponse.new_phase:type_name -> anovel.v1.Phase
+	11, // 38: anovel.v1.CoreService.Ping:input_type -> anovel.v1.PingRequest
+	13, // 39: anovel.v1.CoreService.Status:input_type -> anovel.v1.StatusRequest
+	15, // 40: anovel.v1.CoreService.PrepareReinstall:input_type -> anovel.v1.PrepareReinstallRequest
+	17, // 41: anovel.v1.CoreService.Shutdown:input_type -> anovel.v1.ShutdownRequest
+	19, // 42: anovel.v1.CoreService.ListStacks:input_type -> anovel.v1.ListStacksRequest
+	21, // 43: anovel.v1.CoreService.ListServices:input_type -> anovel.v1.ListServicesRequest
+	23, // 44: anovel.v1.CoreService.DescribeService:input_type -> anovel.v1.DescribeServiceRequest
+	25, // 45: anovel.v1.CoreService.GetTopology:input_type -> anovel.v1.GetTopologyRequest
+	27, // 46: anovel.v1.CoreService.StartTarget:input_type -> anovel.v1.StartTargetRequest
+	29, // 47: anovel.v1.CoreService.KillTarget:input_type -> anovel.v1.KillTargetRequest
+	31, // 48: anovel.v1.CoreService.RestartTarget:input_type -> anovel.v1.RestartTargetRequest
+	33, // 49: anovel.v1.CoreService.StartInfra:input_type -> anovel.v1.StartInfraRequest
+	35, // 50: anovel.v1.CoreService.KillInfra:input_type -> anovel.v1.KillInfraRequest
+	37, // 51: anovel.v1.CoreService.KillInfraContainer:input_type -> anovel.v1.KillInfraContainerRequest
+	39, // 52: anovel.v1.CoreService.RestartInfraContainer:input_type -> anovel.v1.RestartInfraContainerRequest
+	41, // 53: anovel.v1.CoreService.StreamLogs:input_type -> anovel.v1.StreamLogsRequest
+	43, // 54: anovel.v1.CoreService.ListRuns:input_type -> anovel.v1.ListRunsRequest
+	45, // 55: anovel.v1.CoreService.GetEnv:input_type -> anovel.v1.GetEnvRequest
+	48, // 56: anovel.v1.CoreService.ListVolumes:input_type -> anovel.v1.ListVolumesRequest
+	50, // 57: anovel.v1.CoreService.BackupVolume:input_type -> anovel.v1.BackupVolumeRequest
+	52, // 58: anovel.v1.CoreService.RestoreVolume:input_type -> anovel.v1.RestoreVolumeRequest
+	54, // 59: anovel.v1.CoreService.ClearVolume:input_type -> anovel.v1.ClearVolumeRequest
+	56, // 60: anovel.v1.CoreService.Exec:input_type -> anovel.v1.ExecRequest
+	58, // 61: anovel.v1.CoreService.Debug:input_type -> anovel.v1.DebugRequest
+	60, // 62: anovel.v1.CoreService.Watch:input_type -> anovel.v1.WatchRequest
+	12, // 63: anovel.v1.CoreService.Ping:output_type -> anovel.v1.PingResponse
+	14, // 64: anovel.v1.CoreService.Status:output_type -> anovel.v1.StatusResponse
+	16, // 65: anovel.v1.CoreService.PrepareReinstall:output_type -> anovel.v1.PrepareReinstallResponse
+	18, // 66: anovel.v1.CoreService.Shutdown:output_type -> anovel.v1.ShutdownResponse
+	20, // 67: anovel.v1.CoreService.ListStacks:output_type -> anovel.v1.ListStacksResponse
+	22, // 68: anovel.v1.CoreService.ListServices:output_type -> anovel.v1.ListServicesResponse
+	24, // 69: anovel.v1.CoreService.DescribeService:output_type -> anovel.v1.DescribeServiceResponse
+	26, // 70: anovel.v1.CoreService.GetTopology:output_type -> anovel.v1.GetTopologyResponse
+	28, // 71: anovel.v1.CoreService.StartTarget:output_type -> anovel.v1.StartTargetResponse
+	30, // 72: anovel.v1.CoreService.KillTarget:output_type -> anovel.v1.KillTargetResponse
+	32, // 73: anovel.v1.CoreService.RestartTarget:output_type -> anovel.v1.RestartTargetResponse
+	34, // 74: anovel.v1.CoreService.StartInfra:output_type -> anovel.v1.StartInfraResponse
+	36, // 75: anovel.v1.CoreService.KillInfra:output_type -> anovel.v1.KillInfraResponse
+	38, // 76: anovel.v1.CoreService.KillInfraContainer:output_type -> anovel.v1.KillInfraContainerResponse
+	40, // 77: anovel.v1.CoreService.RestartInfraContainer:output_type -> anovel.v1.RestartInfraContainerResponse
+	42, // 78: anovel.v1.CoreService.StreamLogs:output_type -> anovel.v1.StreamLogsResponse
+	44, // 79: anovel.v1.CoreService.ListRuns:output_type -> anovel.v1.ListRunsResponse
+	46, // 80: anovel.v1.CoreService.GetEnv:output_type -> anovel.v1.GetEnvResponse
+	49, // 81: anovel.v1.CoreService.ListVolumes:output_type -> anovel.v1.ListVolumesResponse
+	51, // 82: anovel.v1.CoreService.BackupVolume:output_type -> anovel.v1.BackupVolumeResponse
+	53, // 83: anovel.v1.CoreService.RestoreVolume:output_type -> anovel.v1.RestoreVolumeResponse
+	55, // 84: anovel.v1.CoreService.ClearVolume:output_type -> anovel.v1.ClearVolumeResponse
+	57, // 85: anovel.v1.CoreService.Exec:output_type -> anovel.v1.ExecResponse
+	59, // 86: anovel.v1.CoreService.Debug:output_type -> anovel.v1.DebugResponse
+	61, // 87: anovel.v1.CoreService.Watch:output_type -> anovel.v1.WatchResponse
 	63, // [63:88] is the sub-list for method output_type
 	38, // [38:63] is the sub-list for method input_type
 	38, // [38:38] is the sub-list for extension type_name
@@ -4129,7 +4127,7 @@ func file_anovel_v1_core_proto_init() {
 	if File_anovel_v1_core_proto != nil {
 		return
 	}
-	file_anovel_v1_core_proto_msgTypes[52].OneofWrappers = []any{}
+	file_anovel_v1_core_proto_msgTypes[51].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

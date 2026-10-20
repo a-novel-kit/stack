@@ -338,8 +338,8 @@ type CoreServiceStreamLogsClientStream struct {
 }
 
 // Receive returns the next response message from the server.
-func (s CoreServiceStreamLogsClientStream) Receive() (*v1.LogLine, error) {
-	var res v1.LogLine
+func (s CoreServiceStreamLogsClientStream) Receive() (*v1.StreamLogsResponse, error) {
+	var res v1.StreamLogsResponse
 	if err := s.stream.Receive(&res); err != nil {
 		return nil, err
 	}
@@ -358,8 +358,8 @@ type CoreServiceExecClientStream struct {
 }
 
 // Receive returns the next response message from the server.
-func (s CoreServiceExecClientStream) Receive() (*v1.ExecOutput, error) {
-	var res v1.ExecOutput
+func (s CoreServiceExecClientStream) Receive() (*v1.ExecResponse, error) {
+	var res v1.ExecResponse
 	if err := s.stream.Receive(&res); err != nil {
 		return nil, err
 	}
@@ -378,8 +378,8 @@ type CoreServiceWatchClientStream struct {
 }
 
 // Receive returns the next response message from the server.
-func (s CoreServiceWatchClientStream) Receive() (*v1.StateEvent, error) {
-	var res v1.StateEvent
+func (s CoreServiceWatchClientStream) Receive() (*v1.WatchResponse, error) {
+	var res v1.WatchResponse
 	if err := s.stream.Receive(&res); err != nil {
 		return nil, err
 	}
@@ -499,7 +499,7 @@ func (s CoreServiceStreamLogsServerStream) SendHeaders() error {
 }
 
 // Send sends a response message to the client.
-func (s CoreServiceStreamLogsServerStream) Send(res *v1.LogLine) error {
+func (s CoreServiceStreamLogsServerStream) Send(res *v1.StreamLogsResponse) error {
 	return s.stream.Send(res)
 }
 
@@ -514,7 +514,7 @@ func (s CoreServiceExecServerStream) SendHeaders() error {
 }
 
 // Send sends a response message to the client.
-func (s CoreServiceExecServerStream) Send(res *v1.ExecOutput) error {
+func (s CoreServiceExecServerStream) Send(res *v1.ExecResponse) error {
 	return s.stream.Send(res)
 }
 
@@ -529,7 +529,7 @@ func (s CoreServiceWatchServerStream) SendHeaders() error {
 }
 
 // Send sends a response message to the client.
-func (s CoreServiceWatchServerStream) Send(res *v1.StateEvent) error {
+func (s CoreServiceWatchServerStream) Send(res *v1.WatchResponse) error {
 	return s.stream.Send(res)
 }
 
