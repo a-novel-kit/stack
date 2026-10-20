@@ -57,6 +57,8 @@ by height (`banner/{h}h/`), the one dimension every logo shares. Icons are keyed
 File names end in a variant suffix: none for dark on transparent, `-black` for dark on black,
 `-light` for light on transparent, and `-light-white` for light on white. Every uikit tag
 republishes the package, about 10 MB, so each added size or variant ships in every release.
+READMEs in both organizations link `files/` on uikit's `master`, so renaming or removing a published
+file breaks them the moment it merges; update those READMEs with the change.
 
 ## Token architecture
 
