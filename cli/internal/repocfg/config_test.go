@@ -193,9 +193,11 @@ func TestLoadRepoOverride(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("LoadRepoOverride(stack) = ok %v, err %v, want an override", ok, err)
 	}
-	if p.Class != ClassLibrary || p.CodeQuality || p.Features.PullRequests != "collaborators_only" {
-		t.Errorf("stack override = class %q, code_quality %v, pull_requests %q, want library, false, collaborators_only",
-			p.Class, p.CodeQuality, p.Features.PullRequests)
+	// The CLI ships through `go install …@latest` from cli/v* tags, so the
+	// override keeps the tags ruleset the library class it replaces enables.
+	if p.Class != ClassLibrary || p.CodeQuality || p.Features.PullRequests != "collaborators_only" || !p.Rulesets.Tags {
+		t.Errorf("stack override = class %q, code_quality %v, pull_requests %q, tags %v, want library, false, collaborators_only, true",
+			p.Class, p.CodeQuality, p.Features.PullRequests, p.Rulesets.Tags)
 	}
 	if _, ok, err := LoadRepoOverride("a-novel", "service-authentication"); err != nil || ok {
 		t.Fatalf("expected no override for service-authentication; ok=%v err=%v", ok, err)
