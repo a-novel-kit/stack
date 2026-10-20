@@ -104,7 +104,7 @@ jobs:
         with:
           ruleset: none
           # renovate: datasource=docker depName=semgrep/semgrep
-          version: "1.181.0"
+          version: "1.182.0"
 
   # Scans for committed secrets offline, so no hosted service can hold a merge.
   scan-secrets:
