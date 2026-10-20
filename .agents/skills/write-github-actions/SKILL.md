@@ -344,6 +344,13 @@ run only as a wake-up signal: `generic-actions/relay-context` admits a real revi
 reads the pull request's current head through the API. A job on these triggers never checks out or
 runs pull request code.
 
+From November 2, 2026, GitHub blocks `pull_request_target` on a public repository that no Actions
+event policy covers. Each org therefore holds one org-level policy, `allow-all-events`, which targets
+every repository and allows every event the policies API lists. It only lifts that default block.
+An event policy is an allowlist, so never narrow it to the events in use: the next new trigger would
+stay blocked until someone edits the org's settings. `repo update` does not manage it; an org admin
+recreates it with `POST /orgs/{org}/actions/policies`.
+
 The `governance` environment is what makes that hold for any copy of a workflow. It admits the
 default branch, plus `release/v*` lines and `v*` tags where the tags rulesets guard them, and
 `deployment: false` keeps that check: a feature branch's job naming the environment is refused
