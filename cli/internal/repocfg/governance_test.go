@@ -655,8 +655,10 @@ func TestCleanImagesGovernance(t *testing.T) {
 	if !strings.Contains(sweep.If, "github.event_name != 'pull_request'") {
 		t.Errorf("sweep if = %q, want no pull request event to start a sweep", sweep.If)
 	}
-	if !maps.Equal(sweep.Permissions, map[string]string{"packages": "write", "pull-requests": "read", "attestations": "read"}) {
-		t.Errorf("sweep permissions = %v, want packages: write, pull-requests: read and attestations: read", sweep.Permissions)
+	if !maps.Equal(sweep.Permissions, map[string]string{
+		"packages": "write", "contents": "read", "pull-requests": "read", "attestations": "read",
+	}) {
+		t.Errorf("sweep permissions = %v, want packages: write, contents, pull-requests and attestations: read", sweep.Permissions)
 	}
 	if sweep.Concurrency.Group != "clean-images-${{ matrix.package }}" || sweep.Concurrency.CancelInProgress {
 		t.Errorf("sweep concurrency = %+v, want one uncancelled group per package", sweep.Concurrency)

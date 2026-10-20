@@ -309,9 +309,14 @@ images once the branch or pull request that built them is gone.
 - Closing a pull request deletes its `pr-<N>` image at once.
 - A daily sweep, which a-novel/infra's Cloud Scheduler dispatches, takes the rest: untagged builds and tags of closed pull requests, merge-queue builds,
   and old branch tags. It spares anything less than a day old, which a running job may still pull.
+- The sweep also takes `master`'s untagged builds from before the last minor release, the newest
+  `vX.Y.0` tag, whose image supersedes them. A patch release leaves that boundary in place. The
+  boundary is the release commit's date, since a build is pushed after its commit lands: the
+  comparison can keep a build too many, never drop one from after the release. Reading that commit
+  is why the sweep job holds `contents: read`.
 
-Release tags, `master`, every `master` build and open pull requests' images stay, together with the
-manifests and attestations they reference. `build-actions/clean-images` reads a build's origin from its
+Every tag, `master`'s builds since the last minor release and open pull requests' images stay,
+together with the manifests and attestations they reference. `build-actions/clean-images` reads a build's origin from its
 `org.opencontainers.image.version` label. A build pushed without a tag has no version, so its
 provenance attestation supplies the ref instead (`refs/pull/<N>/merge`). Infra does not set the flag,
 since it pins its tool images by digest. A deleted version can be restored for 30 days.
