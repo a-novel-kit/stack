@@ -124,8 +124,9 @@ func TestBuildPlanProvisions(t *testing.T) {
 		{name: "ForkApproval", plan: bare, method: http.MethodPut, path: "/fork-pr-contributor-approval", body: map[string]any{
 			"approval_policy": "all_external_contributors",
 		}},
-		// Published classes enable Pages through a workflow-backed site.
-		{name: "Pages/Library", plan: loadPlan(ClassLibrary), method: http.MethodPost, path: "/pages", body: workflow},
+		// A platform publishes its Storybook through a workflow-backed site. A
+		// library has none unless its repos/ file turns Pages on.
+		{name: "Pages/Library", plan: loadPlan(ClassLibrary), method: http.MethodDelete, path: "/pages"},
 		{name: "Pages/Platform", plan: loadPlan(ClassPlatform), method: http.MethodPost, path: "/pages", body: workflow},
 		// Only the classes whose images no deployment pins by digest delete unnamed images.
 		{name: "CleanImages/Service", plan: loadPlan(ClassService), method: http.MethodPut, path: "/clean-images.yaml", content: "build-actions/clean-images@"},
