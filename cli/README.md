@@ -37,8 +37,8 @@ a-novel
 │   └── exec --env NAME=<id> -- <cmd> run a command with secrets in its environment
 ├── run
 │   ├── ui                            the terminal UI
-│   ├── ps / stacks / topology        what runs, the stacks, the dependency graph
-│   ├── service (status / infra)      one service, its infrastructure
+│   ├── ps / topology                 what runs, the dependency graph
+│   ├── service infra (start / kill)  a service's infrastructure
 │   ├── start / kill / restart        a target's lifecycle (go-exec or container)
 │   ├── logs / env / watch            logs, environment, a stream of state changes
 │   ├── volume (list / backup / restore / clear)   a service's data

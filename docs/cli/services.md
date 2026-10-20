@@ -11,8 +11,8 @@ TARGET=rest
 
 ```bash
 a-novel run ps                              # every service and its state
+a-novel run ps --service="$SERVICE"         # one service and its state
 a-novel run topology --service="$SERVICE"   # what its targets depend on
-a-novel run service status "$SERVICE"       # one service in detail
 ```
 
 ## Start and stop a target
