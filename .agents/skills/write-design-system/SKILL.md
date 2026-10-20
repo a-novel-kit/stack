@@ -9,9 +9,11 @@ description: >
 # Design-System Conventions
 
 Load `write-frontend` first. For Svelte components load `write-svelte`; for every component story or
-test load `write-frontend-tests`. Treat the design system as a public compatibility layer: visual
-choices may evolve, but token names, component APIs, behavior, accessibility, and package exports
-are consumer contracts.
+test load `write-frontend-tests`, which holds the
+[Vitest screenshot rules](../write-frontend-tests/SKILL.md#end-to-end-tests-and-screenshot-comparisons)
+for story comparisons. Treat the design system as a public compatibility layer: visual choices may
+evolve, but token names, component APIs, behavior, accessibility, and package exports are consumer
+contracts.
 
 Load `plan-ui-design` first when deciding what a flow, pattern, component family, or visual foundation
 should be. Keep implementation-only maintenance here; do not reopen settled product design without
