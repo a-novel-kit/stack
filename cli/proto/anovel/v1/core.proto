@@ -17,15 +17,15 @@ enum Phase {
   // PHASE_UNSPECIFIED means the daemon never started the target.
   PHASE_UNSPECIFIED = 0;
   // PHASE_PENDING means a start claimed the target and has not launched it yet.
-  PHASE_PENDING     = 1;
+  PHASE_PENDING = 1;
   // PHASE_STARTING means the launch is issued and the process or container is not up yet.
-  PHASE_STARTING    = 2;
+  PHASE_STARTING = 2;
   // PHASE_RUNNING means the process or container is up.
-  PHASE_RUNNING     = 3;
+  PHASE_RUNNING = 3;
   // PHASE_STOPPING means a requested stop is in progress.
-  PHASE_STOPPING    = 4;
+  PHASE_STOPPING = 4;
   // PHASE_TERMINATED means the process exited or the container stopped.
-  PHASE_TERMINATED  = 5;
+  PHASE_TERMINATED = 5;
 }
 
 // ExitReason is why a TERMINATED instance ended.
@@ -34,15 +34,15 @@ enum ExitReason {
   EXIT_REASON_UNSPECIFIED = 0;
   // EXIT_REASON_SUCCESS means the process exited 0, or a requested stop ended a
   // go-exec process.
-  EXIT_REASON_SUCCESS     = 1;
+  EXIT_REASON_SUCCESS = 1;
   // EXIT_REASON_ERROR means the target exited non-zero on its own, or its launch
   // failed.
-  EXIT_REASON_ERROR       = 2;
+  EXIT_REASON_ERROR = 2;
   // EXIT_REASON_KILLED means a requested stop ended the container.
-  EXIT_REASON_KILLED      = 3;
+  EXIT_REASON_KILLED = 3;
   // EXIT_REASON_CRASHED means a signal nobody requested ended the process, or
   // the container vanished.
-  EXIT_REASON_CRASHED     = 4;
+  EXIT_REASON_CRASHED = 4;
 }
 
 // Mode selects how a target runs.
@@ -51,9 +51,9 @@ enum Mode {
   // restart keeps the current mode.
   MODE_UNSPECIFIED = 0;
   // MODE_GO_EXEC runs `go run ./cmd/<target>` on the host.
-  MODE_GO_EXEC     = 1;
+  MODE_GO_EXEC = 1;
   // MODE_CONTAINER runs the target's compose service, `podman compose --profile <target>`.
-  MODE_CONTAINER   = 2;
+  MODE_CONTAINER = 2;
 }
 
 // Health is a container's healthcheck state.
@@ -63,13 +63,13 @@ enum Health {
   HEALTH_UNSPECIFIED = 0;
   // HEALTH_UNKNOWN means podman reports no known state, as for a container
   // without a healthcheck.
-  HEALTH_UNKNOWN     = 1;
+  HEALTH_UNKNOWN = 1;
   // HEALTH_STARTING means the healthcheck has not passed yet.
-  HEALTH_STARTING    = 2;
+  HEALTH_STARTING = 2;
   // HEALTH_HEALTHY means the healthcheck passes.
-  HEALTH_HEALTHY     = 3;
+  HEALTH_HEALTHY = 3;
   // HEALTH_UNHEALTHY means the healthcheck fails.
-  HEALTH_UNHEALTHY   = 4;
+  HEALTH_UNHEALTHY = 4;
 }
 
 // TargetKind distinguishes one-shots from long-runners. The daemon derives it
@@ -79,7 +79,7 @@ enum TargetKind {
   TARGET_KIND_UNSPECIFIED = 0;
   // TARGET_KIND_ONE_SHOT declares no healthcheck and runs to completion, as a
   // migration does.
-  TARGET_KIND_ONE_SHOT    = 1;
+  TARGET_KIND_ONE_SHOT = 1;
   // TARGET_KIND_LONG_RUNNER declares a healthcheck and runs until stopped, as
   // a server does.
   TARGET_KIND_LONG_RUNNER = 2;
@@ -90,9 +90,9 @@ enum LogStream {
   // LOG_STREAM_UNSPECIFIED, as a filter, keeps both streams.
   LOG_STREAM_UNSPECIFIED = 0;
   // LOG_STREAM_STDOUT is the process's standard output.
-  LOG_STREAM_STDOUT      = 1;
+  LOG_STREAM_STDOUT = 1;
   // LOG_STREAM_STDERR is the process's standard error.
-  LOG_STREAM_STDERR      = 2;
+  LOG_STREAM_STDERR = 2;
 }
 
 // =============================================================================
@@ -102,57 +102,57 @@ enum LogStream {
 // Stack is one workspace checkout the daemon manages.
 message Stack {
   // Name of the stack in $A_NOVEL_STACKS, such as "default".
-  string name      = 1;
+  string name = 1;
   // Absolute path of the checkout.
-  string path      = 2;
+  string path = 2;
   // Whether this is the default stack, the first $A_NOVEL_STACKS entry.
-  bool   is_default = 3;
+  bool is_default = 3;
 }
 
 // Service is one app/service-<name>/ directory of a stack.
 message Service {
   // Directory name, such as "service-json-keys".
-  string name              = 1;
+  string name = 1;
   // Name of the stack holding the service.
-  string stack             = 2;
+  string stack = 2;
   // Absolute path of the service's builds/podman-compose.yaml.
   string compose_file_path = 3;
   // The service's targets, with the live state of each.
-  repeated Target targets  = 4;
+  repeated Target targets = 4;
   // The service's infra containers, with their live state.
-  repeated Infra  infra    = 5;
+  repeated Infra infra = 5;
   // The service's volumes. Their size and backup count come from ListVolumes.
-  repeated Volume volumes  = 6;
+  repeated Volume volumes = 6;
 }
 
 // Target is one cmd/<name>/ entry of a service with its compose mirror.
 message Target {
   // Unique ID, "<stack>/<service>/<target>".
-  string     id                = 1;
+  string id = 1;
   // Name of the cmd/ directory, such as "rest".
-  string     name              = 2;
+  string name = 2;
   // Name of the owning service.
-  string     service           = 3;
+  string service = 3;
   // Name of the owning stack.
-  string     stack             = 4;
+  string stack = 4;
   // Whether the target runs once or until stopped.
-  TargetKind kind              = 5;
+  TargetKind kind = 5;
   // Lifecycle position of its latest instance.
-  Phase      phase             = 6;
+  Phase phase = 6;
   // Why the latest instance ended, set once phase is TERMINATED.
-  ExitReason exit_reason       = 7;
+  ExitReason exit_reason = 7;
   // How the latest instance runs.
-  Mode       mode              = 8;
+  Mode mode = 8;
   // Healthcheck state, read for a container only.
-  Health     health            = 9;
+  Health health = 9;
   // Process ID of a go-exec instance.
-  int32      pid               = 10;
+  int32 pid = 10;
   // Container ID of a container instance.
-  string     container_id      = 11;
+  string container_id = 11;
   // Compose service names the target's depends_on lists.
-  repeated string deps         = 12;
+  repeated string deps = 12;
   // When the latest instance started.
-  google.protobuf.Timestamp started_at  = 13;
+  google.protobuf.Timestamp started_at = 13;
   // When the latest instance terminated.
   google.protobuf.Timestamp terminated_at = 14;
 }
@@ -161,62 +161,62 @@ message Target {
 // the service's database.
 message Infra {
   // ID, "<stack>/<service>/<name>".
-  string id            = 1;
+  string id = 1;
   // Compose service name, such as "postgres-json-keys".
-  string name          = 2;
+  string name = 2;
   // Name of the owning service.
-  string service       = 3;
+  string service = 3;
   // Name of the owning stack.
-  string stack         = 4;
+  string stack = 4;
   // Lifecycle position of the container, from podman's state.
-  Phase  phase         = 5;
+  Phase phase = 5;
   // Left unspecified: the scan that reads the phase reads no healthcheck.
-  Health health        = 6;
+  Health health = 6;
   // ID of the running container, empty when none runs.
-  string container_id  = 7;
+  string container_id = 7;
 }
 
 // Volume is a compose volume a service declares.
 message Volume {
   // Compose volume name, without the stack and service prefix podman adds.
-  string name       = 1;
+  string name = 1;
   // Name of the owning service.
-  string service    = 2;
+  string service = 2;
   // Name of the owning stack.
-  string stack      = 3;
+  string stack = 3;
   // Size on disk, 0 when the volume does not exist yet. ListVolumes fills it.
-  int64  size_bytes = 4;
+  int64 size_bytes = 4;
   // Number of backup archives kept. ListVolumes fills it.
-  int32  backup_count = 5;
+  int32 backup_count = 5;
 }
 
 // LogLine is one entry of a target's or infra container's log.
 message LogLine {
   // When the line was written. An infra line, or a record the daemon cannot
   // read, carries the time the daemon read it.
-  google.protobuf.Timestamp ts     = 1;
+  google.protobuf.Timestamp ts = 1;
   // Stream the line came from. An infra line is always STDOUT.
-  LogStream                 stream = 2;
+  LogStream stream = 2;
   // The raw line, ANSI escapes included.
-  string                    line   = 3;
+  string line = 3;
 }
 
 // StateEvent is one target phase transition Watch streams.
 message StateEvent {
   // When the transition happened.
-  google.protobuf.Timestamp ts          = 1;
+  google.protobuf.Timestamp ts = 1;
   // ID of the target, "<stack>/<service>/<target>".
-  string                    target_id   = 2;
+  string target_id = 2;
   // Name of the target's service.
-  string                    service     = 3;
+  string service = 3;
   // Name of the target's stack.
-  string                    stack       = 4;
+  string stack = 4;
   // One-line summary, such as "<id> terminated (killed)".
-  string                    description = 5;
+  string description = 5;
   // Phase before the transition.
-  Phase                     old_phase   = 6;
+  Phase old_phase = 6;
   // Phase after the transition.
-  Phase                     new_phase   = 7;
+  Phase new_phase = 7;
 }
 
 // =============================================================================
@@ -238,17 +238,17 @@ message StatusRequest {}
 // StatusResponse is what `a-novel core status` prints.
 message StatusResponse {
   // Version of the daemon binary.
-  string daemon_version        = 1;
+  string daemon_version = 1;
   // Path of the unix socket the daemon listens on.
-  string socket_path           = 2;
+  string socket_path = 2;
   // When the daemon started.
   google.protobuf.Timestamp started_at = 3;
   // How long the daemon has run.
-  google.protobuf.Duration  uptime     = 4;
+  google.protobuf.Duration uptime = 4;
   // The stacks the daemon manages, the default first.
-  repeated Stack stacks        = 5;
+  repeated Stack stacks = 5;
   // Whether a reinstall checkpoint waits for the next daemon to replay it.
-  bool   reinstall_checkpoint_pending = 6;
+  bool reinstall_checkpoint_pending = 6;
 }
 
 // PrepareReinstallRequest asks the daemon to hand its go-exec targets to the
@@ -259,7 +259,7 @@ message PrepareReinstallResponse {
   // Path of the checkpoint file.
   string checkpoint_path = 1;
   // Number of go-exec targets the checkpoint records.
-  int32  go_exec_target_count = 2;
+  int32 go_exec_target_count = 2;
 }
 
 // ShutdownRequest stops the daemon without writing a reinstall checkpoint, so
@@ -311,7 +311,7 @@ message DescribeServiceRequest {
   // Name of the service.
   string service = 1;
   // Name of the stack, empty for the default one.
-  string stack   = 2;
+  string stack = 2;
 }
 // DescribeServiceResponse is one service with its live state.
 message DescribeServiceResponse {
@@ -322,7 +322,7 @@ message DescribeServiceResponse {
 // GetTopologyRequest asks for the dependency graph of a stack or a service.
 message GetTopologyRequest {
   // Name of the stack, empty for the default one.
-  string stack   = 1;
+  string stack = 1;
   // Name of the service, empty for every service of the stack.
   string service = 2;
 }
@@ -341,7 +341,7 @@ message StartTargetRequest {
   // ID of the target, "<stack>/<service>/<target>".
   string target_id = 1;
   // Mode to run in, go-exec when unspecified.
-  Mode   mode      = 2;
+  Mode mode = 2;
 }
 // StartTargetResponse is the started target.
 message StartTargetResponse {
@@ -367,7 +367,7 @@ message RestartTargetRequest {
   // ID of the target, "<stack>/<service>/<target>".
   string target_id = 1;
   // Mode to restart in, the current one when unspecified.
-  Mode   mode      = 2;
+  Mode mode = 2;
 }
 // RestartTargetResponse is the restarted target.
 message RestartTargetResponse {
@@ -384,9 +384,9 @@ message StartInfraRequest {
   // Name of the service.
   string service = 1;
   // Name of the stack, empty for the default one.
-  string stack   = 2;
+  string stack = 2;
   // Mode the one-shots run in, go-exec when unspecified.
-  Mode   one_shots_mode = 3;
+  Mode one_shots_mode = 3;
 }
 // StartInfraResponse is the service once its infra is up.
 message StartInfraResponse {
@@ -399,10 +399,10 @@ message KillInfraRequest {
   // Name of the service.
   string service = 1;
   // Name of the stack, empty for the default one.
-  string stack   = 2;
+  string stack = 2;
   // Whether to cascade-kill the service's running targets first. Without it,
   // a running target refuses the teardown.
-  bool   force   = 3;
+  bool force = 3;
 }
 // KillInfraResponse is the service once its infra is down.
 message KillInfraResponse {
@@ -414,11 +414,11 @@ message KillInfraResponse {
 // that fills Service.infra.
 message KillInfraContainerRequest {
   // Name of the stack, empty for the default one.
-  string stack   = 1;
+  string stack = 1;
   // Name of the service.
   string service = 2;
   // Compose service name of the container, such as "postgres-json-keys".
-  string name    = 3;
+  string name = 3;
 }
 // KillInfraContainerResponse is the stopped container.
 message KillInfraContainerResponse {
@@ -429,11 +429,11 @@ message KillInfraContainerResponse {
 // RestartInfraContainerRequest restarts one infra container in place.
 message RestartInfraContainerRequest {
   // Name of the stack, empty for the default one.
-  string stack   = 1;
+  string stack = 1;
   // Name of the service.
   string service = 2;
   // Compose service name of the container.
-  string name    = 3;
+  string name = 3;
 }
 // RestartInfraContainerResponse is the restarted container.
 message RestartInfraContainerResponse {
@@ -451,15 +451,15 @@ message StreamLogsRequest {
   reserved "tail", "since";
   // ID of a target, "<stack>/<service>/<target>", or of an infra container,
   // "<stack>/<service>/infra/<name>".
-  string    target_id = 1;
+  string target_id = 1;
   // Whether to keep streaming new lines after the current ones, until the
   // process terminates or the client leaves. An archived run never follows.
-  bool      follow    = 2;
+  bool follow = 2;
   // Stream to keep, both when unspecified. An infra log ignores it.
-  LogStream stream    = 5;
+  LogStream stream = 5;
   // Archived run to read, from ListRuns, or empty for the current run. An
   // infra container has no archived runs.
-  string    run_id    = 6;
+  string run_id = 6;
 }
 
 // ListRunsRequest asks for a target's archived runs.
@@ -486,7 +486,7 @@ message GetEnvRequest {
   // stack "*".
   string service = 1;
   // Name of the stack, empty for the default one, "*" for every stack.
-  string stack   = 2;
+  string stack = 2;
 }
 // GetEnvResponse is the env, one entry per variable of each service.
 message GetEnvResponse {
@@ -496,13 +496,13 @@ message GetEnvResponse {
 // EnvEntry is one variable of a service's env.
 message EnvEntry {
   // Name of the service's stack.
-  string stack   = 1;
+  string stack = 1;
   // Name of the service.
   string service = 2;
   // Variable name.
-  string key     = 3;
+  string key = 3;
   // Variable value.
-  string value   = 4;
+  string value = 4;
 }
 
 // =============================================================================
@@ -514,7 +514,7 @@ message ListVolumesRequest {
   // Name of the service.
   string service = 1;
   // Name of the stack, empty for the default one.
-  string stack   = 2;
+  string stack = 2;
 }
 // ListVolumesResponse lists a service's volumes with their size and backups.
 message ListVolumesResponse {
@@ -528,11 +528,11 @@ message BackupVolumeRequest {
   // Name of the service.
   string service = 1;
   // Name of the stack, empty for the default one.
-  string stack   = 2;
+  string stack = 2;
   // Label added to each archive's file name, empty for none.
-  string tag     = 3;
+  string tag = 3;
   // Whether to stop the service's targets and infra first.
-  bool   force   = 4;
+  bool force = 4;
 }
 // BackupVolumeResponse names the archives written.
 message BackupVolumeResponse {
@@ -546,11 +546,11 @@ message RestoreVolumeRequest {
   // Name of the service.
   string service = 1;
   // Name of the stack, empty for the default one.
-  string stack   = 2;
+  string stack = 2;
   // Timestamp prefix of the archive to restore, empty for the latest.
-  string from    = 3;
+  string from = 3;
   // Whether to stop the service's targets and infra first.
-  bool   force   = 4;
+  bool force = 4;
 }
 // RestoreVolumeResponse names the volumes restored.
 message RestoreVolumeResponse {
@@ -563,13 +563,13 @@ message RestoreVolumeResponse {
 // first.
 message ClearVolumeRequest {
   // Name of the service.
-  string service   = 1;
+  string service = 1;
   // Name of the stack, empty for the default one.
-  string stack     = 2;
+  string stack = 2;
   // Whether to skip the backup, which makes the clear irreversible.
-  bool   no_backup = 3;
+  bool no_backup = 3;
   // Whether to stop the service's targets and infra first.
-  bool   force     = 4;
+  bool force = 4;
 }
 // ClearVolumeResponse names the volumes destroyed.
 message ClearVolumeResponse {
@@ -585,7 +585,7 @@ message ClearVolumeResponse {
 // runs, otherwise on the host with the target's env and directory.
 message ExecRequest {
   // ID of the target, "<stack>/<service>/<target>".
-  string target_id   = 1;
+  string target_id = 1;
   // The command and its arguments.
   repeated string cmd = 2;
 }
@@ -594,7 +594,7 @@ message ExecOutput {
   // Stream the line came from.
   LogStream stream = 1;
   // The output line.
-  string    line   = 2;
+  string line = 2;
   // Set only on the stream's final message, which carries no line. It is
   // presence-tracked because a plain int32 defaults to 0, which a client could
   // not tell apart from a successful exit.
@@ -622,9 +622,9 @@ message DebugResponse {
 // matches every value.
 message WatchRequest {
   // Name of the stack, "*" also matching every stack.
-  string stack     = 1;
+  string stack = 1;
   // Name of the service.
-  string service   = 2;
+  string service = 2;
   // ID of the target, "<stack>/<service>/<target>".
   string target_id = 3;
 }
