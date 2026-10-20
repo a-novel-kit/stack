@@ -21,9 +21,10 @@ jobs:
           failure_message: cli/ go generate definitions are not up-to-date, please run 'go generate ./...' inside cli/ and commit the changes
 
   lint-proto-cli:
-    # buf build over the cli/proto contract, which fails on a contract that does
-    # not compile. buf-action lints, checks formatting and checks for breaking
-    # changes only on pull_request events, which this workflow never runs on.
+    # buf build, lint and format check over the cli/proto contract. buf-action
+    # runs lint and format by default only on pull_request events, which this
+    # workflow never runs on. The CLI and its daemon ship in one binary, so the
+    # breaking check stays off.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -34,6 +35,8 @@ jobs:
       - uses: bufbuild/buf-action@v1
         with:
           input: cli
+          lint: true
+          format: true
 
   lint-go-cli:
     runs-on: ubuntu-latest

@@ -19,8 +19,9 @@ security:
   secret_scanning: true
   push_protection: true
   dependabot: true
-# Pages hosts each library's generated documentation.
-pages: true
+# A library with a site, such as uikit's Storybook, turns Pages on in its
+# repos/ file.
+pages: false
 code_quality: false
 clean_images: false
 rulesets:

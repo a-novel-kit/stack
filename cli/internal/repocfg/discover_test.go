@@ -57,6 +57,21 @@ jobs:
 			wantSecrets:      []string{"CODECOV_TOKEN", "GITHUB_TOKEN"},
 			wantEnvironments: []string{"github-pages", "release"},
 		},
+		{
+			name: "Success/SecretNamedInComment",
+			mainYAML: `
+# secrets.HEAD_TOKEN once signed the release.
+name: main
+jobs:
+  test-go:
+    runs-on: ubuntu-latest
+    steps:
+      # The step reads secrets.STEP_TOKEN from the governance environment.
+      - run: echo "${{ secrets.CODECOV_TOKEN }}" # secrets.LINE_TOKEN
+`,
+			want:        []string{"check-dependencies", "epic-freeze", "merge-gate", "review-gate", "test-go"},
+			wantSecrets: []string{"CODECOV_TOKEN"},
+		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {

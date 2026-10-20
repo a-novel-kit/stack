@@ -229,15 +229,19 @@ COPY --chmod=755 ./builds/database.entrypoint.sh /usr/local/bin/database.entrypo
 
 ## Compose Files
 
-Compose files live in `builds/` alongside the Dockerfiles they reference. One compose file per
-deployment scenario:
+Compose files live in `builds/`, one per scenario:
 
-| File                                        | Purpose                 |
-| ------------------------------------------- | ----------------------- |
-| `podman-compose.yaml`                       | Local development stack |
-| `podman-compose.test.yaml`                  | Unit test database      |
-| `podman-compose.integration-test.grpc.yaml` | gRPC integration tests  |
-| `podman-compose.integration-test.rest.yaml` | REST integration tests  |
+| File                                   | Scenario                                                                            |
+| -------------------------------------- | ----------------------------------------------------------------------------------- |
+| `podman-compose.yaml`                  | Local development stack, which `a-novel run` drives                                 |
+| `podman-compose.go.internal.test.yaml` | Database the `internal/` tests reach directly                                       |
+| `podman-compose.go.pkg.test.yaml`      | Standalone gRPC stack for the Go client tests in `pkg/go`                           |
+| `podman-compose.pnpm.test.yaml`        | Standalone REST stack for the JS client tests in `pkg/js`                           |
+| `compose.ci.yaml`                      | Service CI stack, which the repo's `start-ci-services` action starts                |
+| `compose.e2e.yaml`                     | A platform's Playwright stack from published images, which `test-playwright` starts |
+
+`a-novel test` attaches each `podman-compose.<go|pnpm>[.<path>].test.yaml` file, a test env, to the
+suite it names. A repository ships only the test envs its suites need.
 
 ### General rules
 
@@ -249,9 +253,7 @@ deployment scenario:
 - In `podman-compose.yaml` and the test envs, publish each host port as `${<NAME>_PORT}`, never as
   a fixed number. The daemon allocates the ports of `podman-compose.yaml` when `a-novel run` starts
   the service, and `a-novel test` allocates those of each test env; both derive the URLs and the
-  Postgres DSN from them. A test env reads its Postgres credentials as `${POSTGRES_USER}`,
-  `${POSTGRES_PASSWORD}` and `${POSTGRES_DB}`, which `a-novel test` fills with local-only defaults.
-  A compose file never holds a real secret.
+  Postgres DSN from them. A compose file never holds a real secret.
 - Use `depends_on` with `condition: service_healthy` so the dependent service waits for the
   dependency's `HEALTHCHECK` to pass, not just for the container to start. Without it, a standalone
   image that runs migrations at startup may connect to postgres before it accepts connections and
@@ -314,12 +316,13 @@ volumes:
 Use standalone images too — tests need a clean, self-contained stack. Never mount persistent volumes
 in test compose files: the test stack must start from scratch every run.
 
-Integration test compose files expose only the service port, not the postgres port: the test process
-talks to the service, not directly to the database.
+The client test envs (`go.pkg`, `pnpm`) publish no postgres port: their test process talks to the
+services, never to a database.
 
 ### Postgres environment variables
 
-All postgres services require exactly these five environment variables:
+All postgres services require exactly these five environment variables. A test env's own database
+reads its credentials as shown, and `a-novel test` fills them with local-only defaults:
 
 ```yaml
 environment:
@@ -332,6 +335,14 @@ environment:
 
 The last two configure password authentication. Never use `trust` authentication, even locally — it
 accepts any connection without a password.
+
+Every other database spells its local credentials out:
+
+- `podman-compose.yaml`, where the daemon fills only the `*_PORT` variables and what derives from
+  them.
+- A sibling service's database in a test env, since the three variables name one database.
+- `compose.ci.yaml` and `compose.e2e.yaml`, which run in CI without the CLI. `start-ci-services`
+  passes `compose.ci.yaml` its database password.
 
 ---
 
@@ -374,10 +385,11 @@ Always exclude:
   container to start, so a standalone image running migrations at startup fails with a connection
   error while postgres is still initializing. Always use `condition: service_healthy`, and declare
   the dependency's healthcheck in compose: podman drops a Dockerfile `HEALTHCHECK` from OCI images.
-- **Hardcoded credentials or ports in `POSTGRES_DSN`.** The DSN must use environment variable
-  substitution: `postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host:5432/${POSTGRES_DB}`.
-  Never hardcode usernames, passwords, or database names. Use port `5432` (the internal container
-  port), not `${POSTGRES_PORT}` (the host-mapped port) — services communicate over the compose
-  network, not through the host.
+- **Hardcoded credentials in a test env's `POSTGRES_DSN`.** A test env's DSN to its own database
+  reads the same three variables as that database:
+  `postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host:5432/${POSTGRES_DB}`.
+- **`${POSTGRES_PORT}` in a `POSTGRES_DSN`.** Every DSN uses port `5432`, the container port, never
+  the host-mapped `${POSTGRES_PORT}`: services communicate over the compose network, not through
+  the host.
 - **`RUN chmod +x` after COPY.** Use `COPY --chmod=755 <src> <dst>` instead — a single instruction,
   one fewer layer.

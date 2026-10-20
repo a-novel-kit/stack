@@ -1,6 +1,7 @@
 package repocfg
 
 import (
+	"reflect"
 	"regexp"
 	"slices"
 	"testing"
@@ -201,6 +202,20 @@ func TestLoadRepoOverride(t *testing.T) {
 	}
 	if _, ok, err := LoadRepoOverride("a-novel", "service-authentication"); err != nil || ok {
 		t.Fatalf("expected no override for service-authentication; ok=%v err=%v", ok, err)
+	}
+
+	// uikit deploys its Storybook to Pages, which the library class leaves off.
+	uikit, ok, err := LoadRepoOverride("a-novel-kit", "uikit")
+	if err != nil || !ok {
+		t.Fatalf("LoadRepoOverride(uikit) = ok %v, err %v, want an override", ok, err)
+	}
+	library, err := LoadClass(ClassLibrary)
+	if err != nil {
+		t.Fatalf("LoadClass(library): %v", err)
+	}
+	library.Pages = true
+	if !reflect.DeepEqual(uikit, library) {
+		t.Errorf("uikit override = %+v, want the library class with pages on", uikit)
 	}
 }
 

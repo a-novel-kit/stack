@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 )
 
@@ -126,12 +127,18 @@ func workspaceCheckouts(root string) ([]checkout, error) {
 // stack's path, else the working directory.
 func workspaceRoot(override string) (string, error) {
 	if override != "" {
-		return filepath.Abs(override)
+		return absRoot(override)
 	}
 	if stack, err := stacks.Default(); err == nil {
 		return stack.Path, nil
 	}
 	return os.Getwd()
+}
+
+// absRoot resolves a --root value to an absolute path. A leading ~ expands to
+// the home directory, since zsh leaves it as typed in --root=~/x.
+func absRoot(root string) (string, error) {
+	return filepath.Abs(paths.ExpandHome(root))
 }
 
 // normalizeFilter turns repeatable, comma-splittable flag values into a set.

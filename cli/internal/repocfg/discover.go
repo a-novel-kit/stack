@@ -78,8 +78,10 @@ func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 var secretRef = regexp.MustCompile(`\bsecrets\.([A-Za-z_][A-Za-z0-9_]*)`)
 
 // workflowUses lists the secrets that the workflow files in dir reference and
-// the environments their jobs name, each sorted and unique. A job names its
-// environment either directly or as the name of an environment map.
+// the environments their jobs name, each sorted and unique. A secret counts
+// only when a YAML scalar references it, so a comment naming one adds nothing.
+// A job names its environment either directly or as the name of an environment
+// map.
 func workflowUses(dir string) ([]string, []string, error) {
 	var secrets, environments []string
 	entries, err := os.ReadDir(dir)
@@ -97,10 +99,12 @@ func workflowUses(dir string) ([]string, []string, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		for _, match := range secretRef.FindAllSubmatch(raw, -1) {
-			secrets = append(secrets, string(match[1]))
+		var doc yaml.Node
+		if err := yaml.Unmarshal(raw, &doc); err != nil {
+			return nil, nil, fmt.Errorf("%s: %w", entry.Name(), err)
 		}
-		named, err := jobEnvironments(raw)
+		secrets = secretRefs(secrets, &doc)
+		named, err := jobEnvironments(&doc)
 		if err != nil {
 			return nil, nil, fmt.Errorf("%s: %w", entry.Name(), err)
 		}
@@ -111,15 +115,29 @@ func workflowUses(dir string) ([]string, []string, error) {
 	return slices.Compact(secrets), slices.Compact(environments), nil
 }
 
-// jobEnvironments lists the environments the jobs of a workflow file name,
+// secretRefs appends to secrets the name of every secret the scalars under
+// node reference.
+func secretRefs(secrets []string, node *yaml.Node) []string {
+	if node.Kind == yaml.ScalarNode {
+		for _, match := range secretRef.FindAllStringSubmatch(node.Value, -1) {
+			secrets = append(secrets, match[1])
+		}
+	}
+	for _, child := range node.Content {
+		secrets = secretRefs(secrets, child)
+	}
+	return secrets
+}
+
+// jobEnvironments lists the environments the jobs of a workflow document name,
 // directly or as the name of an environment map.
-func jobEnvironments(raw []byte) ([]string, error) {
+func jobEnvironments(doc *yaml.Node) ([]string, error) {
 	var wf struct {
 		Jobs map[string]struct {
 			Environment any `yaml:"environment"`
 		} `yaml:"jobs"`
 	}
-	if err := yaml.Unmarshal(raw, &wf); err != nil {
+	if err := doc.Decode(&wf); err != nil {
 		return nil, err
 	}
 	var environments []string

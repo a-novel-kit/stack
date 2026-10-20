@@ -72,7 +72,7 @@ func runAction(busyText, successText, actionLabel string, timeout time.Duration,
 // whose gen does not match m.followGen, so only the current follower's
 // lines reach the view across the cancel-then-start race.
 type logLineMsg struct {
-	line *anovelv1.LogLine
+	line *anovelv1.StreamLogsResponse
 	gen  int
 }
 

@@ -49,6 +49,38 @@ func TestWorkspaceCheckouts(t *testing.T) {
 	}
 }
 
+// TestWorkspaceRoot pins the --root resolution. zsh leaves ~ unexpanded in
+// --root=~/x, so the CLI expands it, and a relative root resolves against the
+// working directory.
+func TestWorkspaceRoot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+
+	testCases := []struct {
+		name string
+		root string
+		want string
+	}{
+		{name: "Success/Tilde", root: "~/stacks/review", want: filepath.Join(home, "stacks", "review")},
+		{name: "Success/Relative", root: "stacks/review", want: filepath.Join(wd, "stacks", "review")},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, err := workspaceRoot(testCase.root)
+			if err != nil {
+				t.Fatalf("workspaceRoot: %v", err)
+			}
+			if got != testCase.want {
+				t.Errorf("workspaceRoot(%q) = %q, want %q", testCase.root, got, testCase.want)
+			}
+		})
+	}
+}
+
 func TestLoadRepoWhitelist(t *testing.T) {
 	t.Parallel()
 

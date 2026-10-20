@@ -92,6 +92,10 @@ func createStack(out io.Writer, name, root string) error {
 	if root == "" {
 		root = defaultStackRoot(name)
 	}
+	root, err := absRoot(root)
+	if err != nil {
+		return err
+	}
 	if entries, err := os.ReadDir(root); err == nil && len(entries) > 0 {
 		return fmt.Errorf("%s already exists and is not empty", root)
 	}
