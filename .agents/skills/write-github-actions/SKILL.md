@@ -166,12 +166,27 @@ Each job declares its own `permissions` block. Read-only is the floor (`contents
 publishing adds `packages: write`, `attestations: write`, `id-token: write`; a job whose action mints
 its own App token declares `permissions: {}`, because the default token is never used.
 
-Pin every `uses:` to a release tag. Renovate groups the whole workflows repo under one
-`a-novel-kit workflows` update, so a repo's references move together and must sit at one version.
-Third-party actions are pinned by tag too (`actions/checkout@v7`), which keeps every reference
-readable. `a-novel/infra` is the one exception: its jobs hold the production identity, so it pins
-third-party actions to their release commit, as `write-infra` describes. No other repository pins
-by commit.
+Pin every `a-novel-kit/workflows` reference to a release tag. Renovate groups the whole workflows
+repo under one `a-novel-kit workflows` update, so a repo's references move together and must sit at
+one version. Each release is immutable, so GitHub never lets its tag move, and a release stamps its
+actions' references to their siblings with its own tag, which no commit can name.
+
+Pin every third-party action to its release commit, with the version beside it:
+`actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`. Many run beside an App's
+private key. `release-core` hands the release App's key, which bypasses every ruleset, to
+`create-github-app-token`, and its checkout keeps the minted token for every later step, so a moved
+upstream tag would run new code there on the next release.
+
+- Resolve a new action's commit with `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`, and
+  check that it is an immutable release or lies on the project's default branch.
+- The base Renovate preset keeps the pins current. It moves the commit and the version together three
+  days after a release, and holds a digest update, the same version on another commit, for review:
+  that is a moved tag.
+- The workflows repo's `pnpm lint` rejects any other form in an action manifest. zizmor's
+  `unpinned-uses` audit rejects it in workflows, with `"a-novel-kit/*": ref-pin` and
+  `"*": hash-pin`.
+- The org setting `sha_pinning_required` stays off: it also checks the nested
+  `a-novel-kit/workflows` references, which stay on tags.
 
 `vars.*` and `secrets.*` belong here. The bot client ids are org variables: `AGENT_BOT_CLIENT_ID`
 for governance work, `DEPENDENCY_BOT_CLIENT_ID` for the node lane and the audit fix. Their private

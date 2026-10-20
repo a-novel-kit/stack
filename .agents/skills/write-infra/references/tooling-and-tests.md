@@ -73,17 +73,9 @@ Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub
   - Renaming or removing a job needs an admin-bypass merge, then `a-novel repo update` on `master`.
 - **Local actions use GitHub's `$/.github/actions/<name>` self-repository syntax.** The repository's
   actionlint config ignores its false positive; zizmor prefers it.
-- **Third-party actions are pinned to their release commit,** as `owner/repo@<sha> # vX.Y.Z`. The
-  rest of the fleet pins by tag; infra is the exception because its jobs mint the production
-  identity, and a moved tag would run whatever it points to.
-  - Before adding one, resolve the tag's commit with
-    `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`, and check that it is an immutable
-    release or lies on the project's default branch.
-  - Renovate keeps the pins current by semver (`helpers:pinGitHubActionDigestsToSemver`). A digest
-    update, the same version on another commit, means the tag moved, so it waits for review. New
-    third-party releases wait three days.
-  - The `a-novel-kit/workflows` actions and the managed governance workflows stay on release tags.
-    `sha_pinning_required` stays off, since the shared actions reference each other by tag.
+- **Third-party actions are pinned to their release commit,** as `owner/repo@<sha> # vX.Y.Z`, like
+  everywhere in the fleet (`write-github-actions`). Here a moved tag would run whatever it points to
+  with the production identity.
 - **Only jobs that ship nothing may reuse state from other runs.** Lint and test jobs may restore
   the caches `master` runs save: `lint-repository` lints through the shared `go-actions/lint-go`. A
   job that builds, publishes or deploys what reaches production restores nothing, so its build
