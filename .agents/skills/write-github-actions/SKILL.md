@@ -361,6 +361,8 @@ before its first step, so a branch that brings back an old workflow reads no key
 The enterprise subscription is the only spend. Standard runners on public repos and the free security
 features cost nothing; GitHub Code Quality bills per active committer and per AI credit on every
 default-branch push, so every class sets `code_quality: false` and `repo update` keeps it off.
+`repo update` also keeps CodeQL's default setup off and provisions no CodeQL workflow. The
+`lint-semgrep`, `scan-secrets` and `lint-workflows` jobs do the static analysis.
 
 The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.yaml`,
 `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`, `recover-prs.yaml`,
@@ -479,6 +481,10 @@ There is no local runner, so verification is reading plus CI.
   `GIT_CONFIG_COUNT: 1`, `GIT_CONFIG_KEY_0: lfs.fetchinclude`, and `GIT_CONFIG_VALUE_0: <pattern>`.
   A second checkout over an existing tree leaves its pointer files in place; run `git lfs checkout`
   after it. uikit's `main.yaml` `lint-js` does both.
+- **An artifact another job downloads, uploaded without `overwrite: true`.** A re-run uploads it
+  again under the same name. `download-artifact` keeps the highest-ID artifact of each name, and a
+  re-run's upload can carry a lower ID than an earlier attempt's, so the download misses the re-run's
+  copy. The coverage uploads in `test-go`, `test-node` and `test-playwright` set it.
 - **Interpolating an input straight into a `run:` script.** Bind it through `env:` so the value cannot
   be read as shell syntax.
 - **A `pnpm <script>` step in an action without reconciling the lockfile first.** pnpm 11's
