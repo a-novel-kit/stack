@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -50,19 +51,23 @@ func newSecretsInitCmd() *cobra.Command {
 alone. An existing key stays as it is.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			created, err := secrets.Init()
-			if err != nil {
-				return err
-			}
-			out := cmd.OutOrStdout()
-			if created {
-				_, _ = fmt.Fprintln(out, "✓ initialized secrets store (new local key generated)")
-			} else {
-				_, _ = fmt.Fprintln(out, "✓ secrets store already initialized")
-			}
-			return nil
+			return initSecrets(cmd.OutOrStdout())
 		},
 	}
+}
+
+// initSecrets creates the secrets store and says whether it generated a key.
+func initSecrets(out io.Writer) error {
+	created, err := secrets.Init()
+	if err != nil {
+		return err
+	}
+	if created {
+		_, _ = fmt.Fprintln(out, "✓ initialized secrets store (new local key generated)")
+	} else {
+		_, _ = fmt.Fprintln(out, "✓ secrets store already initialized")
+	}
+	return nil
 }
 
 func newSecretsSetCmd() *cobra.Command {
@@ -74,41 +79,43 @@ encrypted. The command refuses to run without a terminal, so a value never
 passes through a pipe, a log or a shell history.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id := args[0]
-			if strings.TrimSpace(id) == "" {
-				return errors.New("secrets set: <id> must not be empty")
-			}
-			// A secret must never reach a terminal, a log or a shell history.
-			// Reading it with echo disabled takes a real terminal, so a
-			// non-interactive stdin is refused.
-			if !stdinIsTTY() {
-				return errors.New("secrets set: refusing to run non-interactively — a secret " +
-					"is read with no echo from a terminal, so it must be set by a human. Run it yourself")
-			}
-			out := cmd.OutOrStdout()
-			_, _ = fmt.Fprintf(out, "Enter value for %q (input hidden): ", id)
-			value, err := readPassword()
-			// term.ReadPassword leaves the cursor on the same line; advance it so
-			// the confirmation isn't glued to the prompt.
-			_, _ = fmt.Fprintln(out)
-			if err != nil {
-				return fmt.Errorf("secrets set: read value: %w", err)
-			}
-			if len(value) == 0 {
-				return errors.New("secrets set: empty value — nothing stored")
-			}
-			st, err := secrets.Open()
-			if err != nil {
-				return err
-			}
-			st.Set(id, string(value))
-			if err := st.Save(); err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintf(out, "✓ set %s\n", id)
-			return nil
+			return setSecret(cmd.OutOrStdout(), args[0])
 		},
 	}
+}
+
+// setSecret reads the value of id from the terminal, with echo off, and stores
+// it. Reading with echo off takes a real terminal, so a non-interactive stdin
+// is refused: a secret must never reach a pipe, a log or a shell history.
+func setSecret(out io.Writer, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return errors.New("secrets set: <id> must not be empty")
+	}
+	if !stdinIsTTY() {
+		return errors.New("secrets set: refusing to run non-interactively — a secret " +
+			"is read with no echo from a terminal, so it must be set by a human. Run it yourself")
+	}
+	_, _ = fmt.Fprintf(out, "Enter value for %q (input hidden): ", id)
+	value, err := readPassword()
+	// term.ReadPassword leaves the cursor on the same line; advance it so
+	// the confirmation isn't glued to the prompt.
+	_, _ = fmt.Fprintln(out)
+	if err != nil {
+		return fmt.Errorf("secrets set: read value: %w", err)
+	}
+	if len(value) == 0 {
+		return errors.New("secrets set: empty value — nothing stored")
+	}
+	st, err := secrets.Open()
+	if err != nil {
+		return err
+	}
+	st.Set(id, string(value))
+	if err := st.Save(); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(out, "✓ set %s\n", id)
+	return nil
 }
 
 func newSecretsListCmd() *cobra.Command {
@@ -118,22 +125,26 @@ func newSecretsListCmd() *cobra.Command {
 		Short:   "List secret ids (never values)",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			st, err := secrets.Open()
-			if err != nil {
-				return err
-			}
-			ids := st.List()
-			out := cmd.OutOrStdout()
-			if len(ids) == 0 {
-				_, _ = fmt.Fprintln(out, "no secrets set — use `a-novel secrets set <id>`")
-				return nil
-			}
-			for _, id := range ids {
-				_, _ = fmt.Fprintln(out, id)
-			}
-			return nil
+			return listSecrets(cmd.OutOrStdout())
 		},
 	}
+}
+
+// listSecrets prints the stored secret IDs, one per line, and never a value.
+func listSecrets(out io.Writer) error {
+	st, err := secrets.Open()
+	if err != nil {
+		return err
+	}
+	ids := st.List()
+	if len(ids) == 0 {
+		_, _ = fmt.Fprintln(out, "no secrets set — use `a-novel secrets set <id>`")
+		return nil
+	}
+	for _, id := range ids {
+		_, _ = fmt.Fprintln(out, id)
+	}
+	return nil
 }
 
 func newSecretsRemoveCmd() *cobra.Command {
@@ -143,22 +154,26 @@ func newSecretsRemoveCmd() *cobra.Command {
 		Short:   "Delete a secret",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id := args[0]
-			st, err := secrets.Open()
-			if err != nil {
-				return err
-			}
-			if _, ok := st.Get(id); !ok {
-				return fmt.Errorf("secrets rm: no secret named %q", id)
-			}
-			st.Remove(id)
-			if err := st.Save(); err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ removed %s\n", id)
-			return nil
+			return removeSecret(cmd.OutOrStdout(), args[0])
 		},
 	}
+}
+
+// removeSecret deletes the secret id; an unknown id is an error.
+func removeSecret(out io.Writer, id string) error {
+	st, err := secrets.Open()
+	if err != nil {
+		return err
+	}
+	if _, ok := st.Get(id); !ok {
+		return fmt.Errorf("secrets rm: no secret named %q", id)
+	}
+	st.Remove(id)
+	if err := st.Save(); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(out, "✓ removed %s\n", id)
+	return nil
 }
 
 func newSecretsExecCmd() *cobra.Command {
@@ -172,33 +187,39 @@ environment alone.`,
 		Example: `  a-novel secrets exec --env OPENAI_API_KEY=openai-key -- python main.py`,
 		Args:    cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(envPairs) == 0 {
-				return errors.New("secrets exec: at least one --env NAME=<secret-id> is required")
-			}
-			extra, err := secretEnv(envPairs)
-			if err != nil {
-				return err
-			}
-			child := exec.CommandContext(cmd.Context(), args[0], args[1:]...)
-			child.Env = append(os.Environ(), extra...)
-			child.Stdin = cmd.InOrStdin()
-			child.Stdout = cmd.OutOrStdout()
-			child.Stderr = cmd.ErrOrStderr()
-			if err := child.Run(); err != nil {
-				// Surface the child's exit code without echoing any secret.
-				var exitErr *exec.ExitError
-				if errors.As(err, &exitErr) {
-					return &ExitError{Code: exitErr.ExitCode()}
-				}
-				return fmt.Errorf("secrets exec: %w", err)
-			}
-			return nil
+			return execWithSecrets(cmd, envPairs, args)
 		},
 	}
 	cmd.Flags().StringArrayVar(&envPairs, "env", nil, "NAME=<secret-id> to inject into the child env (repeatable)")
 	// Stop flag parsing after `--` so the child command's own flags pass through.
 	cmd.Flags().SetInterspersed(false)
 	return cmd
+}
+
+// execWithSecrets runs argv with each NAME=<secret-id> pair added to its
+// environment, wired to the command's stdio. The child's exit code becomes
+// the CLI's, and no error message carries a secret.
+func execWithSecrets(cmd *cobra.Command, envPairs, argv []string) error {
+	if len(envPairs) == 0 {
+		return errors.New("secrets exec: at least one --env NAME=<secret-id> is required")
+	}
+	extra, err := secretEnv(envPairs)
+	if err != nil {
+		return err
+	}
+	child := exec.CommandContext(cmd.Context(), argv[0], argv[1:]...)
+	child.Env = append(os.Environ(), extra...)
+	child.Stdin = cmd.InOrStdin()
+	child.Stdout = cmd.OutOrStdout()
+	child.Stderr = cmd.ErrOrStderr()
+	if err := child.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return &ExitError{Code: exitErr.ExitCode()}
+		}
+		return fmt.Errorf("secrets exec: %w", err)
+	}
+	return nil
 }
 
 // secretEnv resolves each NAME=<secret-id> pair into a NAME=value child-env

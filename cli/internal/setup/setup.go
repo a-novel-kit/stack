@@ -18,8 +18,8 @@ type Options struct {
 	NoStartDaemon bool   // skip the auto-start-daemon step at the end
 	// StartDaemon, if non-nil, is invoked as the final step of Run after
 	// rc edits succeed. It should start the daemon, and do nothing when one
-	// is already running. The cli package wires it from its own
-	// startDetached, which keeps setup free of an import cycle.
+	// is already running. The cli package wires it to the start
+	// `a-novel core start` runs, which keeps setup free of an import cycle.
 	StartDaemon func() error
 }
 

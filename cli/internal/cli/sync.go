@@ -23,14 +23,17 @@ const (
 	syncSkipped  = "skipped"
 )
 
+// syncOpts holds the flags of `core sync`.
+type syncOpts struct {
+	rootDir       string
+	allow, ignore []string
+	limit         int
+}
+
 // newCoreSyncCmd clones or fast-forwards the workspace repositories
 // workspace-repos.yaml lists, all at once.
 func newCoreSyncCmd() *cobra.Command {
-	var (
-		rootDir       string
-		allow, ignore []string
-		limit         int
-	)
+	var o syncOpts
 	cmd := &cobra.Command{
 		Use:   commandSync,
 		Short: "Clone or fast-forward the workspace repositories",
@@ -48,44 +51,54 @@ branch that diverged. LFS files stay unfetched.`,
   a-novel core sync --root=/tmp/agent-stack -j 4`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			root, err := workspaceRoot(rootDir)
-			if err != nil {
-				return err
-			}
-			repos, err := loadRepoWhitelist(root)
-			if err != nil {
-				return err
-			}
-			out := cmd.OutOrStdout()
-			if len(repos) == 0 {
-				_, _ = fmt.Fprintf(out, "no %s at %s — nothing to sync.\n"+
-					"Create it with a `repos:` list of <org>/<name> entries.\n", repoWhitelistFile, root)
-				return nil
-			}
-
-			list, skipped := syncJobs(root, repos, normaliseFilter(allow), normaliseFilter(ignore))
-			_, _ = fmt.Fprintf(out, "▸ Syncing %d repo(s) at %s\n", len(list), root)
-			if len(skipped) > 0 {
-				_, _ = fmt.Fprintf(out, "  left out: %s\n", strings.Join(skipped, ", "))
-			}
-			if len(list) == 0 {
-				return nil
-			}
-			githubMux.open()
-			batch := ui.RunJobs(cmd.Context(), list, limit, stdoutIsTTY())
-			_, _ = fmt.Fprint(out, ui.Report("SYNC", batch, func(r jobs.Result) bool {
-				return r.Err != nil || r.Status == syncSkipped
-			}))
-			return batchError(batch)
+			return syncWorkspace(cmd, o)
 		},
 	}
-	cmd.Flags().StringVar(&rootDir, "root", "",
+	cmd.Flags().StringVar(&o.rootDir, "root", "",
 		"workspace root containing kit/ and app/ (default: the default stack, else the working directory)")
-	cmd.Flags().StringSliceVar(&allow, "allow", nil,
+	cmd.Flags().StringSliceVar(&o.allow, "allow", nil,
 		"only sync these repos (e.g. --allow=a-novel-kit/golib); may be repeated")
-	cmd.Flags().StringSliceVar(&ignore, "ignore", nil, "skip these repos; wins over --allow")
-	cmd.Flags().IntVarP(&limit, "jobs", "j", runtime.NumCPU(), "max repos synced at once")
+	cmd.Flags().StringSliceVar(&o.ignore, "ignore", nil, "skip these repos; wins over --allow")
+	cmd.Flags().IntVarP(&o.limit, "jobs", "j", runtime.NumCPU(), "max repos synced at once")
 	return cmd
+}
+
+// syncWorkspace syncs the whitelisted repositories the filters keep, in
+// parallel over one SSH connection, then reports each failed or skipped one.
+func syncWorkspace(cmd *cobra.Command, o syncOpts) error {
+	root, err := workspaceRoot(o.rootDir)
+	if err != nil {
+		return err
+	}
+	repos, err := loadRepoWhitelist(root)
+	if err != nil {
+		return err
+	}
+	out := cmd.OutOrStdout()
+	if len(repos) == 0 {
+		_, _ = fmt.Fprintf(out, "no %s at %s — nothing to sync.\n"+
+			"Create it with a `repos:` list of <org>/<name> entries.\n", repoWhitelistFile, root)
+		return nil
+	}
+
+	list, skipped := syncJobs(root, repos, normalizeFilter(o.allow), normalizeFilter(o.ignore))
+	_, _ = fmt.Fprintf(out, "▸ Syncing %d repo(s) at %s\n", len(list), root)
+	if len(skipped) > 0 {
+		_, _ = fmt.Fprintf(out, "  left out: %s\n", strings.Join(skipped, ", "))
+	}
+	if len(list) == 0 {
+		return nil
+	}
+	githubMux.open()
+	batch := ui.RunJobs(cmd.Context(), list, o.limit, stdoutIsTTY())
+	_, _ = fmt.Fprint(out, ui.Report("SYNC", batch, syncNeedsAttention))
+	return batchError(batch)
+}
+
+// syncNeedsAttention selects the sync results the report details: the failed
+// repositories and the skipped ones.
+func syncNeedsAttention(r jobs.Result) bool {
+	return r.Err != nil || r.Status == syncSkipped
 }
 
 // syncJobs returns a sync job for each of repos the filters keep, and the

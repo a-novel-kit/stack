@@ -9,10 +9,13 @@ import (
 	"time"
 )
 
-// ghStdin runs `gh` with optional stdin and returns stdout; on failure it folds
-// gh's output into the error (see ghError). A package var so tests intercept
-// every GitHub call without a live `gh`.
-var ghStdin = func(stdin string, args ...string) (string, error) {
+// ghStdin is runGH, a package var so tests intercept every GitHub call without
+// a live `gh`.
+var ghStdin = runGH
+
+// runGH runs `gh` with optional stdin and returns stdout; on failure it folds
+// gh's output into the error (see ghError).
+func runGH(stdin string, args ...string) (string, error) {
 	c := exec.Command("gh", args...)
 	if stdin != "" {
 		c.Stdin = strings.NewReader(stdin)

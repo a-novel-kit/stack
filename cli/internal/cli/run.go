@@ -82,12 +82,17 @@ daemon start. Same as 'a-novel core stacks list'.`,
 // Discovery
 // =============================================================================
 
+// psOpts holds the flags of `run ps`.
+type psOpts struct {
+	scope   stackScope
+	service string
+	kind    string
+	jsonOut bool
+	watch   bool
+}
+
 func newPsCmd() *cobra.Command {
-	var ss stackScope
-	var service string
-	var kind string
-	var jsonOut bool
-	var watch bool
+	var o psOpts
 	cmd := &cobra.Command{
 		Use:   "ps",
 		Short: "List services with their targets and infra containers",
@@ -103,30 +108,53 @@ object per service, one per line, and with --watch one more per state change.`,
   a-novel run ps --kind=infra
   a-novel run ps --watch`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			stack := ss.selector()
-			if kind != "" && kind != "all" && kind != kindTarget && kind != kindInfra {
-				return usageError(fmt.Errorf("--kind=%q: must be 'target', 'infra', or 'all'", kind))
-			}
-			resp, err := c.ListServices(ctx, stack)
-			if err != nil {
-				return err
-			}
-			services := filterServices(resp.GetServices(), service, kind)
-			if watch {
-				return runPsWatch(ctx, c, cmd.OutOrStdout(), services, stack, service, kind, jsonOut)
-			}
-			renderPs(cmd.OutOrStdout(), services, jsonOut)
-			return nil
+			return listServices(cmd, o)
 		},
 	}
-	ss.bindAll(cmd)
-	cmd.Flags().StringVar(&service, "service", "", "filter to one service")
-	cmd.Flags().StringVar(&kind, "kind", "", "filter by entity kind (target|infra|all; default all)")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON (machine-readable)")
-	cmd.Flags().BoolVar(&watch, "watch", false, "stream state changes instead of a snapshot")
+	o.scope.bindAll(cmd)
+	cmd.Flags().StringVar(&o.service, "service", "", "filter to one service")
+	cmd.Flags().StringVar(&o.kind, "kind", "", "filter by entity kind (target|infra|all; default all)")
+	cmd.Flags().BoolVar(&o.jsonOut, "json", false, "emit JSON (machine-readable)")
+	cmd.Flags().BoolVar(&o.watch, "watch", false, "stream state changes instead of a snapshot")
 	return cmd
+}
+
+// listServices prints the services ps selects and, with --watch, keeps
+// printing on every state change: the table again, or the event as JSON.
+func listServices(cmd *cobra.Command, o psOpts) error {
+	if o.kind != "" && o.kind != "all" && o.kind != kindTarget && o.kind != kindInfra {
+		return usageError(fmt.Errorf("--kind=%q: must be 'target', 'infra', or 'all'", o.kind))
+	}
+	ctx, out, c := cmd.Context(), cmd.OutOrStdout(), rpc.New("")
+	resp, err := c.ListServices(ctx, o.scope.selector())
+	if err != nil {
+		return err
+	}
+	renderPs(out, filterServices(resp.GetServices(), o.service, o.kind), o.jsonOut)
+	if !o.watch {
+		return nil
+	}
+	handle := func(ev *anovelv1.StateEvent) { repaintPs(ctx, c, out, o, ev) }
+	if o.jsonOut {
+		handle = func(ev *anovelv1.StateEvent) { encodeEvent(out, ev) }
+	}
+	return watchEvents(ctx, c, o.scope.selector(), o.service, "", handle)
+}
+
+// repaintPs redraws the ps table in place after ev, so it reads like `top`
+// and the frames stay out of the scrollback. One ListServices call per event
+// keeps the table current.
+func repaintPs(ctx context.Context, c *rpc.Client, out io.Writer, o psOpts, ev *anovelv1.StateEvent) {
+	resp, err := c.ListServices(ctx, o.scope.selector())
+	if err != nil {
+		_, _ = fmt.Fprintf(out, "watch: refresh failed: %v\n", err)
+		return
+	}
+	// Move the cursor home and clear the screen; on a pipe the escape
+	// sequences are harmless filler.
+	_, _ = fmt.Fprint(out, "\x1b[H\x1b[2J")
+	renderPs(out, filterServices(resp.GetServices(), o.service, o.kind), false)
+	_, _ = fmt.Fprintf(out, "\n%s  %s\n", ev.GetTs().AsTime().Format("15:04:05"), ev.GetDescription())
 }
 
 // filterServices keeps the named service (all when empty) and drops the entity
@@ -262,19 +290,23 @@ func newTopologyCmd() *cobra.Command {
 depends_on entries: the infra first, then the one-shots, then the
 long-runners, each with its kind and what it depends on.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			resp, err := c.GetTopology(ctx, ss.stack, service)
-			if err != nil {
-				return err
-			}
-			_, _ = fmt.Fprint(cmd.OutOrStdout(), resp.GetRendered())
-			return nil
+			return printTopology(cmd, ss.stack, service)
 		},
 	}
 	ss.bind(cmd)
 	cmd.Flags().StringVar(&service, "service", "", "limit to one service")
 	return cmd
+}
+
+// printTopology prints the dependency graph of one service, or of every
+// service of the stack when service is empty.
+func printTopology(cmd *cobra.Command, stack, service string) error {
+	resp, err := rpc.New("").GetTopology(cmd.Context(), stack, service)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprint(cmd.OutOrStdout(), resp.GetRendered())
+	return nil
 }
 
 func newServiceCmd() *cobra.Command {
@@ -294,18 +326,21 @@ func newServiceStatusCmd() *cobra.Command {
 		Short: "Show one service's infrastructure and targets",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			resp, err := c.DescribeService(ctx, ss.stack, args[0])
-			if err != nil {
-				return err
-			}
-			renderPs(cmd.OutOrStdout(), []*anovelv1.Service{resp.GetService()}, false)
-			return nil
+			return printService(cmd, ss.stack, args[0])
 		},
 	}
 	ss.bind(cmd)
 	return cmd
+}
+
+// printService prints one service as `run ps` does.
+func printService(cmd *cobra.Command, stack, service string) error {
+	resp, err := rpc.New("").DescribeService(cmd.Context(), stack, service)
+	if err != nil {
+		return err
+	}
+	renderPs(cmd.OutOrStdout(), []*anovelv1.Service{resp.GetService()}, false)
+	return nil
 }
 
 func newServiceInfraCmd() *cobra.Command {
@@ -330,22 +365,26 @@ func newServiceInfraStartCmd() *cobra.Command {
 		Short: "Bring up a service's infrastructure and run its one-shots",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			m := parseMode(oneShotsMode, anovelv1.Mode_MODE_GO_EXEC)
-			resp, err := c.StartInfra(ctx, ss.stack, args[0], m)
-			if err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "infra-up for %s (one-shots ran in %s mode)\n",
-				resp.GetService().GetName(), modeLabel(m))
-			return nil
+			return startInfra(cmd, ss.stack, args[0], oneShotsMode)
 		},
 	}
 	ss.bind(cmd)
 	cmd.Flags().StringVar(&oneShotsMode, "one-shots", modeGoExec,
 		"mode for one-shot targets auto-run with infra (go-exec | container)")
 	return cmd
+}
+
+// startInfra brings up a service's infra and runs its one-shots in the mode
+// the --one-shots token names.
+func startInfra(cmd *cobra.Command, stack, service, oneShotsMode string) error {
+	mode := parseMode(oneShotsMode, anovelv1.Mode_MODE_GO_EXEC)
+	resp, err := rpc.New("").StartInfra(cmd.Context(), stack, service, mode)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "infra-up for %s (one-shots ran in %s mode)\n",
+		resp.GetService().GetName(), modeLabel(mode))
+	return nil
 }
 
 func newServiceInfraKillCmd() *cobra.Command {
@@ -358,19 +397,23 @@ func newServiceInfraKillCmd() *cobra.Command {
 'a-novel run kill', or pass --force to stop the targets with the infra.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			resp, err := c.KillInfra(ctx, ss.stack, args[0], force)
-			if err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "infra-down for %s\n", resp.GetService().GetName())
-			return nil
+			return killInfra(cmd, ss.stack, args[0], force)
 		},
 	}
 	ss.bind(cmd)
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "cascade-kill all running targets first")
 	return cmd
+}
+
+// killInfra tears down a service's infra, stopping its targets first with
+// force.
+func killInfra(cmd *cobra.Command, stack, service string, force bool) error {
+	resp, err := rpc.New("").KillInfra(cmd.Context(), stack, service, force)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "infra-down for %s\n", resp.GetService().GetName())
+	return nil
 }
 
 // =============================================================================
@@ -396,23 +439,24 @@ mode is left as it is.`,
   a-novel run start service-template/rest --stack=branch-foo`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			resp, err := c.StartTarget(ctx, parseEntityID(args[0], ss.stack).ID, parseMode(mode, anovelv1.Mode_MODE_GO_EXEC))
-			if err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "started %s (mode=%s, phase=%s, %s)\n",
-				resp.GetTarget().GetId(),
-				modeLabel(resp.GetTarget().GetMode()),
-				phaseLabel(resp.GetTarget().GetPhase()),
-				runtimeIdentLabel(resp.GetTarget()))
-			return nil
+			return startTarget(cmd, parseEntityID(args[0], ss.stack), mode)
 		},
 	}
 	ss.bind(cmd)
 	cmd.Flags().StringVar(&mode, "mode", modeGoExec, "execution mode (go-exec | container)")
 	return cmd
+}
+
+// startTarget starts the target ref names, in the mode the --mode token names.
+func startTarget(cmd *cobra.Command, ref entityRef, mode string) error {
+	resp, err := rpc.New("").StartTarget(cmd.Context(), ref.ID, parseMode(mode, anovelv1.Mode_MODE_GO_EXEC))
+	if err != nil {
+		return err
+	}
+	t := resp.GetTarget()
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "started %s (mode=%s, phase=%s, %s)\n",
+		t.GetId(), modeLabel(t.GetMode()), phaseLabel(t.GetPhase()), runtimeIdentLabel(t))
+	return nil
 }
 
 // runtimeIdentLabel renders the right-side identifier for `start`/`restart`
@@ -445,34 +489,37 @@ passes, and an infra container gets 'podman stop'. Stopping what already
 stopped succeeds.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			ref := parseEntityID(args[0], ss.stack)
-			if ref.IsInfra {
-				_, err := c.KillInfraContainer(ctx, ref.Stack, ref.Service, ref.Infra)
-				if err != nil {
-					return err
-				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "stopped infra %s\n", ref.ID)
-				return nil
-			}
-			resp, err := c.KillTarget(ctx, ref.ID, timeout)
-			if err != nil {
-				return err
-			}
-			t := resp.GetTarget()
-			if t == nil || t.GetId() == "" {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: not running (no-op)\n", ref.ID)
-				return nil
-			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "killed %s (phase=%s, exit=%s)\n",
-				t.GetId(), phaseLabel(t.GetPhase()), exitLabel(t.GetExitReason()))
-			return nil
+			return killEntity(cmd, parseEntityID(args[0], ss.stack), timeout)
 		},
 	}
 	ss.bind(cmd)
 	cmd.Flags().DurationVar(&timeout, "timeout", killGrace, "SIGTERM-to-SIGKILL grace")
 	return cmd
+}
+
+// killEntity stops the target or the infra container ref names. A target gets
+// timeout between SIGTERM and SIGKILL.
+func killEntity(cmd *cobra.Command, ref entityRef, timeout time.Duration) error {
+	ctx, out, c := cmd.Context(), cmd.OutOrStdout(), rpc.New("")
+	if ref.IsInfra {
+		if _, err := c.KillInfraContainer(ctx, ref.Stack, ref.Service, ref.Infra); err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(out, "stopped infra %s\n", ref.ID)
+		return nil
+	}
+	resp, err := c.KillTarget(ctx, ref.ID, timeout)
+	if err != nil {
+		return err
+	}
+	t := resp.GetTarget()
+	if t == nil || t.GetId() == "" {
+		_, _ = fmt.Fprintf(out, "%s: not running (no-op)\n", ref.ID)
+		return nil
+	}
+	_, _ = fmt.Fprintf(out, "killed %s (phase=%s, exit=%s)\n",
+		t.GetId(), phaseLabel(t.GetPhase()), exitLabel(t.GetExitReason()))
+	return nil
 }
 
 func newRestartCmd() *cobra.Command {
@@ -486,30 +533,33 @@ one. An infra container gets 'podman restart', which keeps the container and
 its data.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			ref := parseEntityID(args[0], ss.stack)
-			if ref.IsInfra {
-				_, err := c.RestartInfraContainer(ctx, ref.Stack, ref.Service, ref.Infra)
-				if err != nil {
-					return err
-				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "restarted infra %s\n", ref.ID)
-				return nil
-			}
-			resp, err := c.RestartTarget(ctx, ref.ID, parseMode(mode, anovelv1.Mode_MODE_UNSPECIFIED))
-			if err != nil {
-				return err
-			}
-			t := resp.GetTarget()
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "restarted %s (mode=%s, phase=%s, %s)\n",
-				t.GetId(), modeLabel(t.GetMode()), phaseLabel(t.GetPhase()), runtimeIdentLabel(t))
-			return nil
+			return restartEntity(cmd, parseEntityID(args[0], ss.stack), mode)
 		},
 	}
 	ss.bind(cmd)
 	cmd.Flags().StringVar(&mode, "mode", "", "switch to this mode (go-exec | container); empty keeps current")
 	return cmd
+}
+
+// restartEntity restarts the target ref names, in the mode the --mode token
+// names or its current one, or restarts the infra container in place.
+func restartEntity(cmd *cobra.Command, ref entityRef, mode string) error {
+	ctx, out, c := cmd.Context(), cmd.OutOrStdout(), rpc.New("")
+	if ref.IsInfra {
+		if _, err := c.RestartInfraContainer(ctx, ref.Stack, ref.Service, ref.Infra); err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(out, "restarted infra %s\n", ref.ID)
+		return nil
+	}
+	resp, err := c.RestartTarget(ctx, ref.ID, parseMode(mode, anovelv1.Mode_MODE_UNSPECIFIED))
+	if err != nil {
+		return err
+	}
+	t := resp.GetTarget()
+	_, _ = fmt.Fprintf(out, "restarted %s (mode=%s, phase=%s, %s)\n",
+		t.GetId(), modeLabel(t.GetMode()), phaseLabel(t.GetPhase()), runtimeIdentLabel(t))
+	return nil
 }
 
 // entityRef is a parsed CLI argument identifying either a target or an infra
@@ -625,14 +675,19 @@ func exitLabel(r anovelv1.ExitReason) string {
 // Logs
 // =============================================================================
 
+// logsOpts holds the flags of `run logs`.
+type logsOpts struct {
+	scope    stackScope
+	follow   bool
+	tail     int
+	since    time.Duration
+	stream   string
+	previous bool
+	runID    string
+}
+
 func newLogsCmd() *cobra.Command {
-	var ss stackScope
-	var follow bool
-	var tail int
-	var since time.Duration
-	var streamFilter string
-	var previous bool
-	var runID string
+	var o logsOpts
 	cmd := &cobra.Command{
 		Use:   "logs <target-or-infra>",
 		Short: "Print or stream logs for a target or infra container",
@@ -649,42 +704,42 @@ with stdout and stderr merged. It keeps no archived runs, so --previous and
   a-novel run logs service-json-keys/rest --previous`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			ref := parseEntityID(args[0], ss.stack)
-			id := ref.ID
-			// Podman owns infra log files, so infra entries have no run
-			// archives. --previous / --run-id are refused here, with a
-			// message that names the reason.
-			if ref.IsInfra && (previous || runID != "") {
-				return errors.New("--previous / --run-id are not supported for infra (podman owns its log file)")
-			}
-			// Resolve --previous to the most-recent archived run id.
-			if previous && runID == "" {
-				runs, err := c.ListRuns(ctx, id)
-				if err != nil {
-					return err
-				}
-				if len(runs.GetRunIds()) == 0 {
-					return fmt.Errorf("%s: no archived runs yet", id)
-				}
-				runID = runs.GetRunIds()[0]
-			}
-			stream, err := c.StreamLogs(ctx, id, runID, follow, logStreams[streamFilter])
-			if err != nil {
-				return err
-			}
-			return printLogs(cmd.OutOrStdout(), stream, since, tail)
+			return streamLogs(cmd, parseEntityID(args[0], o.scope.stack), o)
 		},
 	}
-	ss.bind(cmd)
-	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "stream new lines as they arrive")
-	cmd.Flags().IntVar(&tail, "tail", 0, "last N lines (0 = all)")
-	cmd.Flags().DurationVar(&since, "since", 0, "only lines newer than this duration")
-	cmd.Flags().StringVar(&streamFilter, "stream", "", "filter to stdout or stderr only")
-	cmd.Flags().BoolVar(&previous, "previous", false, "read the most recent archived run instead of the current")
-	cmd.Flags().StringVar(&runID, "run-id", "", "read a specific archived run by timestamp")
+	o.scope.bind(cmd)
+	cmd.Flags().BoolVarP(&o.follow, "follow", "f", false, "stream new lines as they arrive")
+	cmd.Flags().IntVar(&o.tail, "tail", 0, "last N lines (0 = all)")
+	cmd.Flags().DurationVar(&o.since, "since", 0, "only lines newer than this duration")
+	cmd.Flags().StringVar(&o.stream, "stream", "", "filter to stdout or stderr only")
+	cmd.Flags().BoolVar(&o.previous, "previous", false, "read the most recent archived run instead of the current")
+	cmd.Flags().StringVar(&o.runID, "run-id", "", "read a specific archived run by timestamp")
 	return cmd
+}
+
+// streamLogs prints the log of the run o selects, of the entity ref names.
+func streamLogs(cmd *cobra.Command, ref entityRef, o logsOpts) error {
+	// Podman owns infra log files, so infra entries have no run archives.
+	if ref.IsInfra && (o.previous || o.runID != "") {
+		return errors.New("--previous / --run-id are not supported for infra (podman owns its log file)")
+	}
+	ctx, c := cmd.Context(), rpc.New("")
+	runID := o.runID
+	if o.previous && runID == "" {
+		runs, err := c.ListRuns(ctx, ref.ID)
+		if err != nil {
+			return err
+		}
+		if len(runs.GetRunIds()) == 0 {
+			return fmt.Errorf("%s: no archived runs yet", ref.ID)
+		}
+		runID = runs.GetRunIds()[0]
+	}
+	stream, err := c.StreamLogs(ctx, ref.ID, runID, o.follow, logStreams[o.stream])
+	if err != nil {
+		return err
+	}
+	return printLogs(cmd.OutOrStdout(), stream, o.since, o.tail)
 }
 
 // logStreams maps a --stream value to the stream it keeps; any other value
@@ -740,10 +795,15 @@ func printLogLine(w io.Writer, ln *anovelv1.LogLine) {
 // Environment
 // =============================================================================
 
+// envOpts holds the flags of `run env`.
+type envOpts struct {
+	scope  stackScope
+	only   string
+	format string
+}
+
 func newEnvCmd() *cobra.Command {
-	var ss stackScope
-	var only string
-	var format string
+	var o envOpts
 	cmd := &cobra.Command{
 		Use:   "env [<service>]",
 		Short: "Print a service's env vars in shell / JSON / dotenv form",
@@ -763,26 +823,26 @@ suit scripts and .env files.`,
   a-novel run env --all-stacks`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			var service string
-			if len(args) == 1 {
-				service = args[0]
-			}
-			resp, err := c.GetEnv(ctx, ss.stack, service, ss.allStacks)
-			if err != nil {
-				return err
-			}
-			// --only filters client-side, so it applies to every format.
-			entries := slices.DeleteFunc(resp.GetEntries(), func(e *anovelv1.EnvEntry) bool { return !matchGlob(only, e.GetKey()) })
-			renderEnv(cmd.OutOrStdout(), entries, format)
-			return nil
+			return printEnv(cmd, strings.Join(args, ""), o)
 		},
 	}
-	ss.bindAll(cmd)
-	cmd.Flags().StringVar(&only, "only", "", "glob filter on key names (e.g. 'REST*')")
-	cmd.Flags().StringVar(&format, "format", "shell", "output format (shell | json | dotenv)")
+	o.scope.bindAll(cmd)
+	cmd.Flags().StringVar(&o.only, "only", "", "glob filter on key names (e.g. 'REST*')")
+	cmd.Flags().StringVar(&o.format, "format", "shell", "output format (shell | json | dotenv)")
 	return cmd
+}
+
+// printEnv prints the env of service, or of every service in scope when it is
+// empty, keeping the keys --only matches.
+func printEnv(cmd *cobra.Command, service string, o envOpts) error {
+	resp, err := rpc.New("").GetEnv(cmd.Context(), o.scope.stack, service, o.scope.allStacks)
+	if err != nil {
+		return err
+	}
+	// --only filters client-side, so it applies to every format.
+	unmatched := func(e *anovelv1.EnvEntry) bool { return !matchGlob(o.only, e.GetKey()) }
+	renderEnv(cmd.OutOrStdout(), slices.DeleteFunc(resp.GetEntries(), unmatched), o.format)
+	return nil
 }
 
 // renderEnv writes the env entries in the requested format. shell is
@@ -850,26 +910,30 @@ func newVolumeListCmd() *cobra.Command {
 		Short: "List a service's volumes with sizes and backup counts",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			resp, err := c.ListVolumes(ctx, ss.stack, args[0])
-			if err != nil {
-				return err
-			}
-			if len(resp.GetVolumes()) == 0 {
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "(no volumes declared)")
-				return nil
-			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s %12s %8s\n", "VOLUME", "SIZE", "BACKUPS")
-			for _, v := range resp.GetVolumes() {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s %12s %8d\n",
-					v.GetName(), humanBytes(v.GetSizeBytes()), v.GetBackupCount())
-			}
-			return nil
+			return listVolumes(cmd, ss.stack, args[0])
 		},
 	}
 	ss.bind(cmd)
 	return cmd
+}
+
+// listVolumes prints one row per volume of a service: its name, size and
+// backup count.
+func listVolumes(cmd *cobra.Command, stack, service string) error {
+	resp, err := rpc.New("").ListVolumes(cmd.Context(), stack, service)
+	if err != nil {
+		return err
+	}
+	out := cmd.OutOrStdout()
+	if len(resp.GetVolumes()) == 0 {
+		_, _ = fmt.Fprintln(out, "(no volumes declared)")
+		return nil
+	}
+	_, _ = fmt.Fprintf(out, "%-40s %12s %8s\n", "VOLUME", "SIZE", "BACKUPS")
+	for _, v := range resp.GetVolumes() {
+		_, _ = fmt.Fprintf(out, "%-40s %12s %8d\n", v.GetName(), humanBytes(v.GetSizeBytes()), v.GetBackupCount())
+	}
+	return nil
 }
 
 func newVolumeBackupCmd() *cobra.Command {
@@ -884,22 +948,26 @@ each archive's path. An archive of a volume in use can be corrupt, so the
 command refuses while the service runs; --force stops it first.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			resp, err := c.BackupVolume(ctx, ss.stack, args[0], tag, force)
-			if err != nil {
-				return err
-			}
-			for _, p := range resp.GetArchivePaths() {
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), p)
-			}
-			return nil
+			return backupVolumes(cmd, ss.stack, args[0], tag, force)
 		},
 	}
 	ss.bind(cmd)
 	cmd.Flags().StringVar(&tag, "tag", "", "user-supplied label included in the archive filename")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "cascade-stop the service before backing up")
 	return cmd
+}
+
+// backupVolumes archives a service's volumes, tag in the file names, and prints
+// each archive's path.
+func backupVolumes(cmd *cobra.Command, stack, service, tag string, force bool) error {
+	resp, err := rpc.New("").BackupVolume(cmd.Context(), stack, service, tag, force)
+	if err != nil {
+		return err
+	}
+	for _, p := range resp.GetArchivePaths() {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), p)
+	}
+	return nil
 }
 
 func newVolumeRestoreCmd() *cobra.Command {
@@ -915,20 +983,24 @@ printed. Every archive is checked before any volume changes. Refuses while
 the service runs; --force stops it first.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			resp, err := c.RestoreVolume(ctx, ss.stack, args[0], from, force)
-			if err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "restored: %v\n", resp.GetRestoredVolumes())
-			return nil
+			return restoreVolumes(cmd, ss.stack, args[0], from, force)
 		},
 	}
 	ss.bind(cmd)
 	cmd.Flags().StringVar(&from, "from", "", "specific backup timestamp (default: latest)")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "cascade-stop the service before restoring")
 	return cmd
+}
+
+// restoreVolumes restores a service's volumes from the backup from selects,
+// the latest when empty, and prints the volumes it restored.
+func restoreVolumes(cmd *cobra.Command, stack, service, from string, force bool) error {
+	resp, err := rpc.New("").RestoreVolume(cmd.Context(), stack, service, from, force)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "restored: %v\n", resp.GetRestoredVolumes())
+	return nil
 }
 
 func newVolumeClearCmd() *cobra.Command {
@@ -943,20 +1015,24 @@ back. --no-backup skips the backup, and nothing can undo the deletion then.
 Refuses while the service runs; --force stops it first.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			resp, err := c.ClearVolume(ctx, ss.stack, args[0], noBackup, force)
-			if err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "cleared: %v\n", resp.GetClearedVolumes())
-			return nil
+			return clearVolumes(cmd, ss.stack, args[0], noBackup, force)
 		},
 	}
 	ss.bind(cmd)
 	cmd.Flags().BoolVar(&noBackup, "no-backup", false, "skip the auto-backup (irreversible)")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "cascade-stop the service before clearing")
 	return cmd
+}
+
+// clearVolumes empties a service's volumes, after a backup unless noBackup is
+// set, and prints the volumes it cleared.
+func clearVolumes(cmd *cobra.Command, stack, service string, noBackup, force bool) error {
+	resp, err := rpc.New("").ClearVolume(cmd.Context(), stack, service, noBackup, force)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "cleared: %v\n", resp.GetClearedVolumes())
+	return nil
 }
 
 // matchGlob reports whether an env key matches the --only pattern, a
@@ -1013,48 +1089,47 @@ The command's exit status becomes the CLI's.`,
   a-novel run exec default/service-json-keys/rest -- curl -s localhost:8080`,
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
 			// Cobra strips "--", so args[0] is the target and args[1:] the command.
-			targetSpec := args[0]
-			cmdv := args[1:]
-			ref := parseEntityID(targetSpec, ss.stack)
-			if ref.IsInfra {
-				return fmt.Errorf("exec: %s is an infra container; use 'podman exec %s_%s_%s_1 …' directly",
-					ref.ID, ref.Stack, ref.Service, ref.Infra)
-			}
-			stream, err := c.Exec(ctx, ref.ID, cmdv)
-			if err != nil {
-				return err
-			}
-			// A pointer, so an unreported exit status stays distinct
-			// from a reported 0.
-			var exitCode *int32
-			for ev, err := range stream {
-				if err != nil {
-					if ctx.Err() == nil {
-						return err
-					}
-
-					break
-				}
-
-				if ev.ExitCode != nil {
-					exitCode = ev.ExitCode
-
-					continue
-				}
-				w := cmd.OutOrStdout()
-				if ev.GetStream() == anovelv1.LogStream_LOG_STREAM_STDERR {
-					w = cmd.ErrOrStderr()
-				}
-				_, _ = fmt.Fprintln(w, ev.GetLine())
-			}
-			return execResult(exitCode)
+			return execBeside(cmd, parseEntityID(args[0], ss.stack), args[1:])
 		},
 	}
 	ss.bind(cmd)
 	return cmd
+}
+
+// execBeside runs argv beside the target ref names and prints its output,
+// stderr lines on stderr. An infra container is refused: podman reaches it
+// directly.
+func execBeside(cmd *cobra.Command, ref entityRef, argv []string) error {
+	if ref.IsInfra {
+		return fmt.Errorf("exec: %s is an infra container; use 'podman exec %s_%s_%s_1 …' directly",
+			ref.ID, ref.Stack, ref.Service, ref.Infra)
+	}
+	ctx := cmd.Context()
+	stream, err := rpc.New("").Exec(ctx, ref.ID, argv)
+	if err != nil {
+		return err
+	}
+	// A pointer, so an unreported exit status stays distinct from a reported 0.
+	var exitCode *int32
+	for ev, err := range stream {
+		if err != nil {
+			if ctx.Err() == nil {
+				return err
+			}
+			break
+		}
+		if ev.ExitCode != nil {
+			exitCode = ev.ExitCode
+			continue
+		}
+		w := cmd.OutOrStdout()
+		if ev.GetStream() == anovelv1.LogStream_LOG_STREAM_STDERR {
+			w = cmd.ErrOrStderr()
+		}
+		_, _ = fmt.Fprintln(w, ev.GetLine())
+	}
+	return execResult(exitCode)
 }
 
 // execResult turns the exec stream's terminal exit code into the CLI's own
@@ -1085,33 +1160,41 @@ port. Container targets are refused.`,
   a-novel run debug default/service-json-keys/grpc`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			ref := parseEntityID(args[0], ss.stack)
-			if ref.IsInfra {
-				return fmt.Errorf("debug: %s is an infra container; dlv attach is only meaningful on go-exec targets", ref.ID)
-			}
-			resp, err := c.Debug(ctx, ref.ID)
-			if err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), resp.GetHint())
-			return nil
+			return printDebugHint(cmd, parseEntityID(args[0], ss.stack))
 		},
 	}
 	ss.bind(cmd)
 	return cmd
 }
 
+// printDebugHint prints the daemon's dlv attach command for the target ref
+// names.
+func printDebugHint(cmd *cobra.Command, ref entityRef) error {
+	if ref.IsInfra {
+		return fmt.Errorf("debug: %s is an infra container; dlv attach is only meaningful on go-exec targets", ref.ID)
+	}
+	resp, err := rpc.New("").Debug(cmd.Context(), ref.ID)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), resp.GetHint())
+	return nil
+}
+
 // =============================================================================
 // Watch
 // =============================================================================
 
+// watchOpts holds the flags of `run watch`.
+type watchOpts struct {
+	scope   stackScope
+	service string
+	target  string
+	jsonOut bool
+}
+
 func newWatchCmd() *cobra.Command {
-	var ss stackScope
-	var service string
-	var target string
-	var jsonOut bool
+	var o watchOpts
 	cmd := &cobra.Command{
 		Use:   "watch",
 		Short: "Stream the targets' phase changes",
@@ -1119,53 +1202,26 @@ func newWatchCmd() *cobra.Command {
 per line, or one line of text with --json=false. --service and --target narrow
 the stream.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			out := cmd.OutOrStdout()
-			return watchEvents(cmd.Context(), rpc.New(""), ss.selector(), service, target, func(ev *anovelv1.StateEvent) {
-				if jsonOut {
-					encodeEvent(out, ev)
-				} else {
-					_, _ = fmt.Fprintf(out, "%s  %s\n", ev.GetTs().AsTime().Format("15:04:05.000"), ev.GetDescription())
-				}
-			})
+			return watchPhases(cmd, o)
 		},
 	}
-	ss.bindAll(cmd)
-	cmd.Flags().StringVar(&service, "service", "", "filter to one service")
-	cmd.Flags().StringVar(&target, "target", "", "filter to one target")
-	cmd.Flags().BoolVar(&jsonOut, "json", true, "print JSON lines (--json=false prints text)")
+	o.scope.bindAll(cmd)
+	cmd.Flags().StringVar(&o.service, "service", "", "filter to one service")
+	cmd.Flags().StringVar(&o.target, "target", "", "filter to one target")
+	cmd.Flags().BoolVar(&o.jsonOut, "json", true, "print JSON lines (--json=false prints text)")
 	return cmd
 }
 
-// runPsWatch is the ps-style streaming variant: render the current snapshot
-// once, then re-render after every StateEvent, using ANSI cursor control to
-// overwrite the previous frame so it reads like `top`.
-//
-// In --json mode it emits one newline-delimited JSON object per state event on
-// top of the initial snapshot, keeping machine parsing to "read a line, parse
-// it".
-func runPsWatch(
-	ctx context.Context, c *rpc.Client, out io.Writer,
-	services []*anovelv1.Service, stack, service, kind string, jsonOut bool,
-) error {
-	renderPs(out, services, jsonOut)
-	return watchEvents(ctx, c, stack, service, "", func(ev *anovelv1.StateEvent) {
-		if jsonOut {
-			encodeEvent(out, ev)
-			return
-		}
-		// One ListServices call per event is cheap and keeps the table
-		// current. Repainting in place keeps frames out of the scrollback.
-		resp, err := c.ListServices(ctx, stack)
-		if err != nil {
-			_, _ = fmt.Fprintf(out, "watch: refresh failed: %v\n", err)
-			return
-		}
-		// Move the cursor home and clear the screen; on a pipe the escape
-		// sequences are harmless filler.
-		_, _ = fmt.Fprint(out, "\x1b[H\x1b[2J")
-		renderPs(out, filterServices(resp.GetServices(), service, kind), false)
-		_, _ = fmt.Fprintf(out, "\n%s  %s\n", ev.GetTs().AsTime().Format("15:04:05"), ev.GetDescription())
-	})
+// watchPhases prints each state event of the targets the flags select, as a
+// JSON line or as text, until the command's context ends.
+func watchPhases(cmd *cobra.Command, o watchOpts) error {
+	out := cmd.OutOrStdout()
+	write := printEvent
+	if o.jsonOut {
+		write = encodeEvent
+	}
+	handle := func(ev *anovelv1.StateEvent) { write(out, ev) }
+	return watchEvents(cmd.Context(), rpc.New(""), o.scope.selector(), o.service, o.target, handle)
 }
 
 // watchEvents streams the daemon's state events to handle until ctx ends.
@@ -1186,9 +1242,15 @@ func watchEvents(ctx context.Context, c *rpc.Client, stack, service, target stri
 	return nil
 }
 
+// printEvent writes a state event as one line of text: its time and its
+// description.
+func printEvent(w io.Writer, ev *anovelv1.StateEvent) {
+	_, _ = fmt.Fprintf(w, "%s  %s\n", ev.GetTs().AsTime().Format("15:04:05.000"), ev.GetDescription())
+}
+
 // encodeEvent writes a state event as one JSON line.
 func encodeEvent(w io.Writer, ev *anovelv1.StateEvent) {
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	event := map[string]any{
 		"ts":          ev.GetTs().AsTime().Format(time.RFC3339Nano),
 		stackLabel:    ev.GetStack(),
 		"service":     ev.GetService(),
@@ -1196,7 +1258,8 @@ func encodeEvent(w io.Writer, ev *anovelv1.StateEvent) {
 		"old_phase":   ev.GetOldPhase().String(),
 		"new_phase":   ev.GetNewPhase().String(),
 		"description": ev.GetDescription(),
-	})
+	}
+	_ = json.NewEncoder(w).Encode(event)
 }
 
 // =============================================================================

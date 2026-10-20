@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -40,22 +41,28 @@ shows before the release.`,
   a-novel publish stamp 'a-novel-kit/workflows/[^@]+@' '*/*/action.yaml'`,
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			root, err := gitToplevel(".")
-			if err != nil {
-				return fmt.Errorf("publish: %w", err)
-			}
-			version, err := readPackageVersion(root)
-			if err != nil {
-				return err
-			}
-			total, fileCount, err := stampTargets(args[1:], args[0], version)
-			if err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ stamped %d reference(s) across %d file(s) to v%s\n", total, fileCount, version)
-			return nil
+			return stampVersion(cmd.OutOrStdout(), args[0], args[1:])
 		},
 	}
+}
+
+// stampVersion stamps the repository's package version into every
+// <prefix>vX.Y.Z reference of the files patterns resolve to.
+func stampVersion(out io.Writer, prefix string, patterns []string) error {
+	root, err := gitToplevel(".")
+	if err != nil {
+		return fmt.Errorf("publish: %w", err)
+	}
+	version, err := readPackageVersion(root)
+	if err != nil {
+		return err
+	}
+	total, fileCount, err := stampTargets(patterns, prefix, version)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(out, "✓ stamped %d reference(s) across %d file(s) to v%s\n", total, fileCount, version)
+	return nil
 }
 
 // stampTargets stamps version into every reference matching prefix across the

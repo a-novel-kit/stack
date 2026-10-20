@@ -33,25 +33,31 @@ terminal, its signals and the exit status are claude's own.`,
 		// handling travels with them, as Long explains.
 		DisableFlagParsing: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			stack, err := stacks.Default()
-			if err != nil {
-				return fmt.Errorf("resolve stack root: %w", err)
-			}
-			// Resolve before chdir, so a missing binary is reported from the
-			// PATH lookup and no directory change is left half-applied.
-			bin, err := exec.LookPath(claudeBin)
-			if err != nil {
-				return fmt.Errorf(
-					"claude not found in $PATH — install Claude Code (https://claude.com/claude-code): %w", err)
-			}
-			if err := os.Chdir(stack.Path); err != nil {
-				return fmt.Errorf("enter stack root %s: %w", stack.Path, err)
-			}
-
-			// On success Exec never returns, so nothing after this line runs,
-			// main's update notice and exit-code handling included: they belong
-			// to claude. argv[0] is the resolved path by convention.
-			return syscall.Exec(bin, append([]string{bin}, args...), os.Environ())
+			return launchClaude(args)
 		},
 	}
+}
+
+// launchClaude replaces this process with claude, run with args from the
+// default stack's root.
+func launchClaude(args []string) error {
+	stack, err := stacks.Default()
+	if err != nil {
+		return fmt.Errorf("resolve stack root: %w", err)
+	}
+	// Resolve before chdir, so a missing binary is reported from the
+	// PATH lookup and no directory change is left half-applied.
+	bin, err := exec.LookPath(claudeBin)
+	if err != nil {
+		return fmt.Errorf(
+			"claude not found in $PATH — install Claude Code (https://claude.com/claude-code): %w", err)
+	}
+	if err := os.Chdir(stack.Path); err != nil {
+		return fmt.Errorf("enter stack root %s: %w", stack.Path, err)
+	}
+
+	// On success Exec never returns, so nothing after this line runs,
+	// main's update notice and exit-code handling included: they belong
+	// to claude. argv[0] is the resolved path by convention.
+	return syscall.Exec(bin, append([]string{bin}, args...), os.Environ())
 }

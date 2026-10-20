@@ -74,31 +74,35 @@ The daemon reads $A_NOVEL_STACKS when it starts. Add the entry, run
   a-novel core stacks new review-291 --root ~/scratch/review-291`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
-			if name == stacks.DefaultName {
-				return fmt.Errorf("%q is reserved for the workspace stack", stacks.DefaultName)
-			}
-			path := root
-			if path == "" {
-				path = defaultStackRoot(name)
-			}
-			if entries, err := os.ReadDir(path); err == nil && len(entries) > 0 {
-				return fmt.Errorf("%s already exists and is not empty", path)
-			}
-			out := cmd.OutOrStdout()
-			_, _ = fmt.Fprintf(out, "▸ cloning the workspace into %s\n", path)
-			if err := setup.CloneStack(path); err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintf(out, "  ✓ %s\n", path)
-			_, _ = fmt.Fprintf(out, "  add to %s: %s:%s\n", stacks.EnvVar, name, path)
-			_, _ = fmt.Fprintf(out, "  then: a-novel core sync --root=%s && a-novel core restart --preserve-targets\n", path)
-			return nil
+			return createStack(cmd.OutOrStdout(), args[0], root)
 		},
 	}
 	cmd.Flags().StringVar(&root, "root", "",
 		"where to put the stack (default: <os temp dir>/a-novel-stacks/<name>)")
 	return cmd
+}
+
+// createStack clones the workspace into root, or the default root for name,
+// and prints the $A_NOVEL_STACKS entry that registers it. A root holding files
+// is refused.
+func createStack(out io.Writer, name, root string) error {
+	if name == stacks.DefaultName {
+		return fmt.Errorf("%q is reserved for the workspace stack", stacks.DefaultName)
+	}
+	if root == "" {
+		root = defaultStackRoot(name)
+	}
+	if entries, err := os.ReadDir(root); err == nil && len(entries) > 0 {
+		return fmt.Errorf("%s already exists and is not empty", root)
+	}
+	_, _ = fmt.Fprintf(out, "▸ cloning the workspace into %s\n", root)
+	if err := setup.CloneStack(root); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(out, "  ✓ %s\n", root)
+	_, _ = fmt.Fprintf(out, "  add to %s: %s:%s\n", stacks.EnvVar, name, root)
+	_, _ = fmt.Fprintf(out, "  then: a-novel core sync --root=%s && a-novel core restart --preserve-targets\n", root)
+	return nil
 }
 
 // =============================================================================
@@ -157,7 +161,8 @@ func listStacks(ctx context.Context, out io.Writer) error {
 // =============================================================================
 
 func newStacksPruneCmd() *cobra.Command {
-	var all, force, yes, dryRun, purgeBackups bool
+	var all bool
+	var opts pruneOpts
 	cmd := &cobra.Command{
 		Use:   "prune [<name>]",
 		Short: "Tear down a stack: kill its targets, clear its volumes, remove its files",
@@ -175,42 +180,45 @@ $A_NOVEL_STACKS entry to drop from your shell profile.`,
   a-novel core stacks prune --all -y`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			out := cmd.OutOrStdout()
-			c := rpc.New("")
-
-			targets, err := resolvePruneTargets(ctx, c, args, all)
-			if err != nil {
-				return err
-			}
-			if len(targets) == 0 {
-				_, _ = fmt.Fprintln(out, "no prunable stacks (the default stack is never pruned)")
-				return nil
-			}
-
-			opts := pruneOpts{force: force, yes: yes, dryRun: dryRun, purgeBackups: purgeBackups}
-			failed := 0
-			for _, st := range targets {
-				if err := pruneOne(ctx, c, cmd, st, opts); err != nil {
-					_, _ = fmt.Fprintf(out, "  ✗ %s: %v\n", st.GetName(), err)
-					failed++
-				}
-			}
-			if failed > 0 {
-				return fmt.Errorf("%d stack(s) failed to prune", failed)
-			}
-			return nil
+			return pruneStacks(cmd, args, all, opts)
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "prune every registered stack except the default")
-	cmd.Flags().BoolVar(&force, "force", false, "prune even when a checkout holds unsaved or unpushed work")
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what would be reclaimed, change nothing")
-	cmd.Flags().BoolVar(&purgeBackups, "purge-backups", false,
+	cmd.Flags().BoolVar(&opts.force, "force", false, "prune even when a checkout holds unsaved or unpushed work")
+	cmd.Flags().BoolVarP(&opts.yes, "yes", "y", false, "skip the confirmation prompt")
+	cmd.Flags().BoolVar(&opts.dryRun, "dry-run", false, "report what would be reclaimed, change nothing")
+	cmd.Flags().BoolVar(&opts.purgeBackups, "purge-backups", false,
 		"also delete the stack's volume backups (otherwise they outlive it)")
 	return cmd
 }
 
+// pruneStacks prunes the stack args names, or every stack but the default
+// with all. A stack that fails is reported and the others still run.
+func pruneStacks(cmd *cobra.Command, args []string, all bool, opts pruneOpts) error {
+	ctx, out := cmd.Context(), cmd.OutOrStdout()
+	c := rpc.New("")
+	targets, err := resolvePruneTargets(ctx, c, args, all)
+	if err != nil {
+		return err
+	}
+	if len(targets) == 0 {
+		_, _ = fmt.Fprintln(out, "no prunable stacks (the default stack is never pruned)")
+		return nil
+	}
+	failed := 0
+	for _, st := range targets {
+		if err := pruneOne(ctx, c, cmd, st, opts); err != nil {
+			_, _ = fmt.Fprintf(out, "  ✗ %s: %v\n", st.GetName(), err)
+			failed++
+		}
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d stack(s) failed to prune", failed)
+	}
+	return nil
+}
+
+// pruneOpts holds the flags that shape each stack's prune.
 type pruneOpts struct {
 	force        bool
 	yes          bool

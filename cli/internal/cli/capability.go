@@ -73,6 +73,8 @@ sequentially unless --jobs says otherwise.`,
 	}
 )
 
+// capabilityOpts holds the flags `test` and `build` share, and the test-only
+// --no-cover and --keep.
 type capabilityOpts struct {
 	dir     string
 	types   string
@@ -93,13 +95,7 @@ func newCapabilityCmd(c capability) *cobra.Command {
 		Example: c.example,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if cmd.Flags().Changed("jobs") && o.jobs < 1 {
-				return usageError(fmt.Errorf("--jobs: want a positive integer, got %d", o.jobs))
-			}
-			if o.timeout < 0 {
-				return usageError(fmt.Errorf("--timeout: want a duration like 10m / 30s / 0, got %s", o.timeout))
-			}
-			return runCapability(cmd.Context(), c, o)
+			return runCapability(cmd, c, o)
 		},
 	}
 	f := cmd.Flags()
@@ -117,8 +113,15 @@ func newCapabilityCmd(c capability) *cobra.Command {
 	return cmd
 }
 
-// runCapability detects, picks and runs c's targets, then reports.
-func runCapability(ctx context.Context, c capability, o capabilityOpts) error {
+// runCapability detects, picks and runs c's targets, then reports. An explicit
+// --jobs must be positive, while its default lets jobLimit decide.
+func runCapability(cmd *cobra.Command, c capability, o capabilityOpts) error {
+	if cmd.Flags().Changed("jobs") && o.jobs < 1 {
+		return usageError(fmt.Errorf("--jobs: want a positive integer, got %d", o.jobs))
+	}
+	if o.timeout < 0 {
+		return usageError(fmt.Errorf("--timeout: want a duration like 10m / 30s / 0, got %s", o.timeout))
+	}
 	targets, err := detectTargets(c, o)
 	if err != nil {
 		return err
@@ -130,7 +133,7 @@ func runCapability(ctx context.Context, c capability, o capabilityOpts) error {
 
 	// SIGINT cancels in-flight subprocesses cleanly; once cancelled, a second
 	// one falls through to the default handler and exits.
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	context.AfterFunc(ctx, stop)
 

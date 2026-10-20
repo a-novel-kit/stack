@@ -55,6 +55,13 @@ type botBatchItem struct {
 	ReplyTo int64  `json:"reply_to,omitempty"`
 }
 
+// botCommentOpts holds the flags of `core bot-comment`.
+type botCommentOpts struct {
+	body      string
+	replyTo   string
+	batchPath string
+}
+
 // newCoreBotCommentCmd posts PR, issue and review comments as the org's GitHub
 // App bot. It dispatches the org's bot-comment workflow with the operator's own
 // gh token and waits for each run to finish.
@@ -64,11 +71,7 @@ type botBatchItem struct {
 // user, and the workflow can only post comments, so a compromised trigger
 // cannot push, merge or author a pull request.
 func newCoreBotCommentCmd() *cobra.Command {
-	var (
-		body      string
-		replyTo   string
-		batchPath string
-	)
+	var o botCommentOpts
 	cmd := &cobra.Command{
 		Use:   "bot-comment <org> <repo> [<number>]",
 		Short: "Post pull request, issue and review comments as the organization's bot",
@@ -88,43 +91,49 @@ It needs actions:write on the dispatcher repository.`,
   echo '[{"number":549,"body":"Fixed."}]' | a-novel core bot-comment a-novel service-authentication --batch -`,
 		Args: cobra.RangeArgs(2, 3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			org, repo := args[0], args[1]
-			if err := validateBotOrgRepo(org, repo); err != nil {
-				return err
-			}
-
-			if batchPath != "" {
-				if len(args) != 2 {
-					return errors.New("bot-comment: with --batch, pass <org> <repo> only — each comment carries its own number")
-				}
-				if body != "" || replyTo != "" {
-					return errors.New("bot-comment: --batch cannot be combined with --body or --reply-to")
-				}
-				return runBotCommentBatch(cmd, org, repo, batchPath)
-			}
-
-			if len(args) != 3 {
-				return errors.New("bot-comment: <number> is required (or use --batch to post many comments)")
-			}
-			number := args[2]
-			if err := validateBotCommentArgs(org, repo, number); err != nil {
-				return err
-			}
-			if strings.TrimSpace(body) == "" {
-				return errors.New("bot-comment: --body is required and must be non-empty")
-			}
-			if replyTo != "" {
-				if n, err := strconv.Atoi(replyTo); err != nil || n <= 0 {
-					return fmt.Errorf("bot-comment: --reply-to %q must be a positive integer (a REST review-comment id)", replyTo)
-				}
-			}
-			return runBotComment(cmd, org, repo, number, body, replyTo)
+			return postBotComments(cmd, args, o)
 		},
 	}
-	cmd.Flags().StringVar(&body, "body", "", "markdown comment body (required in single mode)")
-	cmd.Flags().StringVar(&replyTo, "reply-to", "", "inline review-comment id to reply to (omit for a top-level comment)")
-	cmd.Flags().StringVar(&batchPath, "batch", "", "path to a JSON array of {number, body, reply_to?} (or - for stdin); posts all in one run")
+	cmd.Flags().StringVar(&o.body, "body", "", "markdown comment body (required in single mode)")
+	cmd.Flags().StringVar(&o.replyTo, "reply-to", "", "inline review-comment id to reply to (omit for a top-level comment)")
+	cmd.Flags().StringVar(&o.batchPath, "batch", "", "path to a JSON array of {number, body, reply_to?} (or - for stdin); posts all in one run")
 	return cmd
+}
+
+// postBotComments checks the arguments of the mode the flags select, one
+// comment or a --batch file, before any dispatch is spent, then posts.
+func postBotComments(cmd *cobra.Command, args []string, o botCommentOpts) error {
+	org, repo := args[0], args[1]
+	if err := validateBotOrgRepo(org, repo); err != nil {
+		return err
+	}
+
+	if o.batchPath != "" {
+		if len(args) != 2 {
+			return errors.New("bot-comment: with --batch, pass <org> <repo> only — each comment carries its own number")
+		}
+		if o.body != "" || o.replyTo != "" {
+			return errors.New("bot-comment: --batch cannot be combined with --body or --reply-to")
+		}
+		return runBotCommentBatch(cmd, org, repo, o.batchPath)
+	}
+
+	if len(args) != 3 {
+		return errors.New("bot-comment: <number> is required (or use --batch to post many comments)")
+	}
+	number := args[2]
+	if err := validateBotCommentArgs(org, repo, number); err != nil {
+		return err
+	}
+	if strings.TrimSpace(o.body) == "" {
+		return errors.New("bot-comment: --body is required and must be non-empty")
+	}
+	if o.replyTo != "" {
+		if n, err := strconv.Atoi(o.replyTo); err != nil || n <= 0 {
+			return fmt.Errorf("bot-comment: --reply-to %q must be a positive integer (a REST review-comment id)", o.replyTo)
+		}
+	}
+	return runBotComment(cmd, org, repo, number, o.body, o.replyTo)
 }
 
 // validateBotOrgRepo checks the org is a configured dispatcher target and
@@ -276,12 +285,8 @@ func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs
 		return fmt.Errorf("bot-comment: generate nonce: %w", err)
 	}
 
-	dispatchArgs := append([]string{
-		"workflow", commandRun, botWorkflowFile,
-		"--repo", dispatchRepo,
-		"-f", "nonce=" + nonce,
-	}, formArgs...)
-	if _, err := gh(dispatchArgs...); err != nil {
+	dispatchArgs := []string{"workflow", commandRun, botWorkflowFile, "--repo", dispatchRepo, "-f", "nonce=" + nonce}
+	if _, err := gh(append(dispatchArgs, formArgs...)...); err != nil {
 		return fmt.Errorf("bot-comment: dispatch to %s failed: %w", dispatchRepo, err)
 	}
 	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dispatched bot-comment %s; waiting for the run...\n", label)

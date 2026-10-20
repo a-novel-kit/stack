@@ -60,15 +60,10 @@ manage the daemon and the workspace.
 
 See https://a-novel-kit.github.io/stack/ for the everyday workflows.`,
 		// main prints errors itself, so a status-only ExitError stays silent.
-		SilenceErrors: true,
-		SilenceUsage:  true,
-		Version:       version.String(),
-		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			if sandbox, _ := cmd.Flags().GetBool("sandbox"); sandbox {
-				return usageError(fmt.Errorf("%s must be the first argument", sandboxFlag))
-			}
-			return nil
-		},
+		SilenceErrors:     true,
+		SilenceUsage:      true,
+		Version:           version.String(),
+		PersistentPreRunE: rejectLateSandbox,
 	}
 	root.PersistentFlags().Bool("sandbox", false,
 		"run one standalone command in a fresh temporary stack (must be first)")
@@ -81,16 +76,29 @@ See https://a-novel-kit.github.io/stack/ for the everyday workflows.`,
 		newRepoCmd(),
 		newSecretsCmd(),
 		newClaudeCmd(),
-		&cobra.Command{
-			Use:   "version",
-			Short: "Print the a-novel CLI version",
-			Run:   func(cmd *cobra.Command, _ []string) { cmd.Println(version.String()) },
-		},
+		newVersionCmd(),
 		newCoreCmd(),
 		newInstallCmd(),
 		newRunCmd(),
 	)
 	return root
+}
+
+// rejectLateSandbox refuses a --sandbox that reached a subcommand. main acts on
+// the flag only as the first argument, so anywhere else it would do nothing.
+func rejectLateSandbox(cmd *cobra.Command, _ []string) error {
+	if sandbox, _ := cmd.Flags().GetBool("sandbox"); sandbox {
+		return usageError(fmt.Errorf("%s must be the first argument", sandboxFlag))
+	}
+	return nil
+}
+
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print the a-novel CLI version",
+		Run:   func(cmd *cobra.Command, _ []string) { cmd.Println(version.String()) },
+	}
 }
 
 // newRunCmd is the parent of every daemon-backed verb. Each verb is a thin

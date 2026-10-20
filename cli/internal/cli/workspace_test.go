@@ -103,7 +103,7 @@ func TestRepoEntryListed(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			if got := c.listed(normaliseFilter(testCase.set)); got != testCase.want {
+			if got := c.listed(normalizeFilter(testCase.set)); got != testCase.want {
 				t.Errorf("listed(%v) = %v, want %v", testCase.set, got, testCase.want)
 			}
 		})

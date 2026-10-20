@@ -51,9 +51,14 @@ nothing.`,
 	return cmd
 }
 
+// repoCreateOpts holds the flags of `repo create`.
+type repoCreateOpts struct {
+	description, class, template string
+	private                      bool
+}
+
 func newRepoCreateCmd() *cobra.Command {
-	var description, class, template string
-	var private bool
+	var o repoCreateOpts
 	cmd := &cobra.Command{
 		Use:   "create <org> <name>",
 		Short: "Create a repository and apply its class config",
@@ -63,47 +68,52 @@ asks for confirmation in a terminal.`,
 		Example: `  a-novel repo create a-novel infra --class infra`,
 		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			repo := repoEntry{Org: args[0], Name: args[1]}
-			if !stdinIsTTY() {
-				return errors.New("repo create is interactive (human-only); run it in a terminal")
-			}
-			preset, err := resolvePreset(repo, class)
-			if err != nil {
-				return err
-			}
-
-			out := cmd.OutOrStdout()
-			visibility, from := "public", ""
-			if private {
-				visibility = "private"
-			}
-			if template != "" {
-				from = " from template " + repo.Org + "/" + template
-			}
-			if !confirm(cmd, fmt.Sprintf("Create %s %s%s (class %s)?", visibility, repo.FullName(), from, preset.Class)) {
-				_, _ = fmt.Fprintln(out, "aborted.")
-				return nil
-			}
-
-			createArgs := []string{"repo", "create", repo.FullName(), "--" + visibility}
-			if description != "" {
-				createArgs = append(createArgs, "--description", description)
-			}
-			if template != "" {
-				createArgs = append(createArgs, "--template", repo.Org+"/"+template)
-			}
-			if ghOut, err := gh(createArgs...); err != nil {
-				return fmt.Errorf("repo create: %w\n%s", err, ghOut)
-			}
-			_, _ = fmt.Fprintf(out, "✓ created %s\n", repo.FullName())
-			return configureNewRepo(out, repo, class)
+			return createRepo(cmd, repoEntry{Org: args[0], Name: args[1]}, o)
 		},
 	}
-	cmd.Flags().StringVar(&class, "class", "", classFlagUsage())
-	cmd.Flags().StringVar(&description, "description", "", "repository description")
-	cmd.Flags().StringVar(&template, "template", "", "create from this org template repo (e.g. service-template)")
-	cmd.Flags().BoolVar(&private, "private", false, "create a private repository (default public)")
+	cmd.Flags().StringVar(&o.class, "class", "", classFlagUsage())
+	cmd.Flags().StringVar(&o.description, "description", "", "repository description")
+	cmd.Flags().StringVar(&o.template, "template", "", "create from this org template repo (e.g. service-template)")
+	cmd.Flags().BoolVar(&o.private, "private", false, "create a private repository (default public)")
 	return cmd
+}
+
+// createRepo creates repo with gh after a confirmation in a terminal, then
+// applies its class configuration.
+func createRepo(cmd *cobra.Command, repo repoEntry, o repoCreateOpts) error {
+	if !stdinIsTTY() {
+		return errors.New("repo create is interactive (human-only); run it in a terminal")
+	}
+	preset, err := resolvePreset(repo, o.class)
+	if err != nil {
+		return err
+	}
+
+	out := cmd.OutOrStdout()
+	visibility, from := "public", ""
+	if o.private {
+		visibility = "private"
+	}
+	if o.template != "" {
+		from = " from template " + repo.Org + "/" + o.template
+	}
+	if !confirm(cmd, fmt.Sprintf("Create %s %s%s (class %s)?", visibility, repo.FullName(), from, preset.Class)) {
+		_, _ = fmt.Fprintln(out, "aborted.")
+		return nil
+	}
+
+	createArgs := []string{"repo", "create", repo.FullName(), "--" + visibility}
+	if o.description != "" {
+		createArgs = append(createArgs, "--description", o.description)
+	}
+	if o.template != "" {
+		createArgs = append(createArgs, "--template", repo.Org+"/"+o.template)
+	}
+	if ghOut, err := gh(createArgs...); err != nil {
+		return fmt.Errorf("repo create: %w\n%s", err, ghOut)
+	}
+	_, _ = fmt.Fprintf(out, "✓ created %s\n", repo.FullName())
+	return configureNewRepo(out, repo, o.class)
 }
 
 // configureNewRepo applies a freshly created repo's class config. The repo has
@@ -143,13 +153,16 @@ func classFlagUsage() string {
 	return "class (" + strings.Join(classes, "|") + "); a repos/<org>_<repo>.yaml override wins"
 }
 
+// repoUpdateOpts holds the flags of `repo update`.
+type repoUpdateOpts struct {
+	dryRun, jsonOut, all bool
+	class, rootDir       string
+	exclude              []string
+	limit                int
+}
+
 func newRepoUpdateCmd() *cobra.Command {
-	var (
-		dryRun, jsonOut, all bool
-		class, rootDir       string
-		exclude              []string
-		limit                int
-	)
+	var o repoUpdateOpts
 	cmd := &cobra.Command{
 		Use:   "update",
 		Short: "Reconcile a repository's config to its class template",
@@ -167,59 +180,66 @@ branch or with uncommitted changes is skipped.`,
   a-novel repo update --all --dry-run       # preview the whole batch`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if all {
-				return runRepoUpdateAll(cmd, rootDir, class, exclude, dryRun, jsonOut, limit)
+			if o.all {
+				return reconcileAll(cmd, o)
 			}
-			root, err := gitToplevel(".")
-			if err != nil {
-				return err
-			}
-			repo, err := repoFromGitRemote(root)
-			if err != nil {
-				return err
-			}
-			target, plan, err := planRepo(repo, root, class)
-			if err != nil {
-				return err
-			}
-			if jsonOut {
-				return plan.RenderJSON(cmd.OutOrStdout())
-			}
-			if dryRun {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "# dry-run %s/%s — class %s\n# required checks: %s\n%s\n\n",
-					target.Org, target.Repo, target.Class.Class, strings.Join(checkContexts(target), ", "),
-					pruneImpact(target, plan))
-				return plan.Render(cmd.OutOrStdout())
-			}
-			if !stdinIsTTY() {
-				return errors.New("repo update is interactive (human-only); run it in a terminal, or use --dry-run")
-			}
-
-			out := cmd.OutOrStdout()
-			renderSummary(out, target)
-			if !confirm(cmd, fmt.Sprintf("\nApply this configuration to %s/%s?", target.Org, target.Repo)) {
-				_, _ = fmt.Fprintln(out, "aborted.")
-				return nil
-			}
-			_, _ = fmt.Fprintln(out, "\n▸ Applying...")
-			if err := applyPlan(out, target, plan); err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintf(out, "\n✓ %s/%s reconciled.\n", target.Org, target.Repo)
-			return nil
+			return reconcileRepo(cmd, o)
 		},
 	}
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the API operations that would run, without applying")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the plan(s) as JSON instead of applying (implies --dry-run)")
-	cmd.Flags().StringVar(&class, "class", "", classFlagUsage())
-	cmd.Flags().BoolVar(&all, "all", false, "reconcile every pulled workspace repo (stack + app/ + kit/) in one run")
-	cmd.Flags().StringSliceVar(&exclude, "exclude", nil,
+	cmd.Flags().BoolVar(&o.dryRun, "dry-run", false, "print the API operations that would run, without applying")
+	cmd.Flags().BoolVar(&o.jsonOut, "json", false, "print the plan(s) as JSON instead of applying (implies --dry-run)")
+	cmd.Flags().StringVar(&o.class, "class", "", classFlagUsage())
+	cmd.Flags().BoolVar(&o.all, "all", false, "reconcile every pulled workspace repo (stack + app/ + kit/) in one run")
+	cmd.Flags().StringSliceVar(&o.exclude, "exclude", nil,
 		"with --all, skip these repos (<org>/<name> or bare <name>); may be repeated")
-	cmd.Flags().StringVar(&rootDir, "root", "",
+	cmd.Flags().StringVar(&o.rootDir, "root", "",
 		"with --all, the workspace root containing kit/ and app/ (defaults like `core sync`)")
-	cmd.Flags().IntVarP(&limit, "jobs", "j", repoJobs,
+	cmd.Flags().IntVarP(&o.limit, "jobs", "j", repoJobs,
 		"with --all, max repos applied at once (GitHub rate-limits concurrent writes)")
 	return cmd
+}
+
+// reconcileRepo reconciles the repository the working directory belongs to.
+// --json and --dry-run print its plan; otherwise it applies the plan after a
+// confirmation in a terminal.
+func reconcileRepo(cmd *cobra.Command, o repoUpdateOpts) error {
+	root, err := gitToplevel(".")
+	if err != nil {
+		return err
+	}
+	repo, err := repoFromGitRemote(root)
+	if err != nil {
+		return err
+	}
+	target, plan, err := planRepo(repo, root, o.class)
+	if err != nil {
+		return err
+	}
+	out := cmd.OutOrStdout()
+	if o.jsonOut {
+		return plan.RenderJSON(out)
+	}
+	if o.dryRun {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "# dry-run %s/%s — class %s\n# required checks: %s\n%s\n\n",
+			target.Org, target.Repo, target.Class.Class, strings.Join(checkContexts(target), ", "),
+			pruneImpact(target, plan))
+		return plan.Render(out)
+	}
+	if !stdinIsTTY() {
+		return errors.New("repo update is interactive (human-only); run it in a terminal, or use --dry-run")
+	}
+
+	renderSummary(out, target)
+	if !confirm(cmd, fmt.Sprintf("\nApply this configuration to %s/%s?", target.Org, target.Repo)) {
+		_, _ = fmt.Fprintln(out, "aborted.")
+		return nil
+	}
+	_, _ = fmt.Fprintln(out, "\n▸ Applying...")
+	if err := applyPlan(out, target, plan); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(out, "\n✓ %s/%s reconciled.\n", target.Org, target.Repo)
+	return nil
 }
 
 // planRepo discovers repo's config from its working tree at root and computes
