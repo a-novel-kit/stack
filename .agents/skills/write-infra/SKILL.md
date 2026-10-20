@@ -79,6 +79,9 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 - Adding a service, or changing resources, state layout, releases, database hosts or recovery:
   read [Change safety](references/change-safety.md).
 - Workflows, tests, linting or tooling: read [Tooling and tests](references/tooling-and-tests.md).
+- Admitting a repository to the Drive visual-test identities: follow
+  [Subscribe a repository to Drive visual tests](../write-frontend-tests/references/drive-subscription.md),
+  whose later steps run after the merge.
 
 ## Deliver
 
