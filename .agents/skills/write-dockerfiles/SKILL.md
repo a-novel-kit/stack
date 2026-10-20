@@ -246,8 +246,12 @@ deployment scenario:
 - Use named networks with descriptive, scenario-scoped names (e.g.,
   `json-keys-integration-grpc-test`) to prevent cross-compose network leakage when scenarios run
   concurrently.
-- All ports and credentials come from environment variables (sourced from `setup-env.sh`). Never
-  hardcode port numbers or passwords in compose files.
+- In `podman-compose.yaml` and the test envs, publish each host port as `${<NAME>_PORT}`, never as
+  a fixed number. The daemon allocates the ports of `podman-compose.yaml` when `a-novel run` starts
+  the service, and `a-novel test` allocates those of each test env; both derive the URLs and the
+  Postgres DSN from them. A test env reads its Postgres credentials as `${POSTGRES_USER}`,
+  `${POSTGRES_PASSWORD}` and `${POSTGRES_DB}`, which `a-novel test` fills with local-only defaults.
+  A compose file never holds a real secret.
 - Use `depends_on` with `condition: service_healthy` so the dependent service waits for the
   dependency's `HEALTHCHECK` to pass, not just for the container to start. Without it, a standalone
   image that runs migrations at startup may connect to postgres before it accepts connections and
