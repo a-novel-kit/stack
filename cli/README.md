@@ -15,7 +15,7 @@ a-novel core setup    # once: checks your tools, clones the stack, starts the ba
 a-novel core sync     # clone every repository; run it again to bring them all up to date
 ```
 
-The [developer guide](https://a-novel-kit.github.io/stack/) covers the tools the CLI needs, and its [runbooks](https://a-novel-kit.github.io/stack/cli/ui) walk through the everyday work by hand: running services, testing and building, secrets, backups and parallel stacks. An AI agent started at the stack root does that work for you.
+The [developer guide](https://a-novel-kit.github.io/stack/) covers the tools the CLI needs, and its [runbooks](https://a-novel-kit.github.io/stack/cli/ui) walk through the everyday work by hand: running services, testing and building, secrets, backups and parallel stacks. An AI agent started at the stack root can run that work for you too.
 
 ## Usage
 

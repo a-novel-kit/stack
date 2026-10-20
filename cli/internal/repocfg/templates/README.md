@@ -14,32 +14,27 @@ A repo's desired config is composed from three inputs:
 2. the **org** profile (`orgs/<org>.yaml`) — bot IDs + signing policy;
 3. **discovered** checks/languages (`checks.yaml` + the repo's contents).
 
-Those three are the _only_ inputs. A repo's config is **derived**, never
-accumulated: what they do not produce, `repo update` removes — see
-[Derived, not accumulated](#derived-not-accumulated).
-
-CLI flags and the interactive form override any field.
+Those three are the only inputs. A repo's config is **derived** from them, so
+`repo update` removes what they do not produce; see
+[Derived, not accumulated](#derived-not-accumulated). The `--class` flag picks
+the class preset of a repo that has no override.
 
 ## Org-level prerequisite: `AGENT_KILL_SWITCH`
 
-The governance workflows read one org-level Actions variable that the operator
-provisions **by hand** — repocfg threads it into every caller
-(`kill_switch: ${{ vars.AGENT_KILL_SWITCH }}`) but never creates or writes it.
+`AGENT_KILL_SWITCH` is the org-wide emergency halt of every [Agent] automation.
+It is an org Actions variable an operator creates by hand. repocfg threads it
+into every caller (`kill_switch: ${{ vars.AGENT_KILL_SWITCH }}`) and never
+writes it.
 
-`AGENT_KILL_SWITCH` is the org-wide emergency halt for all [Agent] automation,
-and it is **fail-safe**: a run is RUNNING only when the value (lowercased,
-whitespace-stripped) is an explicit off-token — `off`, `false`, `no`,
-`disabled`, `0`, or the variable **absent** (an unset `vars.*` resolves to the
-empty string); **any other value halts**. A fat-fingered or garbage value
-therefore halts, by design (a kill-switch must fail toward halting).
+The halt fails safe. Automation runs only while the value, lowercased and
+stripped of whitespace, is an explicit off value: `off`, `false`, `no`,
+`disabled`, `0`, or empty, as an unset variable reads. Any other value halts,
+a mistyped one included.
 
-Create it in **both** orgs (`a-novel` and `a-novel-kit`) with the value **`off`**.
-A GitHub Actions variable cannot hold an empty string, so `off` — not empty — is
-the canonical resting token: equivalent to leaving the variable unset, but
-discoverable in the org settings and flippable in place. To **engage** the halt,
-set the value to `on` (or anything else the fail-safe does not treat as off); the
-next event or reconcile sweep then holds every PR org-wide. **Lift** it by setting
-the value back to `off`.
+Create the variable in both orgs with the value `off`. An Actions variable
+cannot be empty, and `off` shows in the org settings, ready to flip. Set it to
+`on` to engage the halt, and the next event or reconcile sweep holds every pull
+request of the org. Set it back to `off` to lift it.
 
 ## Always-provisioned files
 
@@ -57,11 +52,11 @@ request whose `main` fails. It reads org-level values the operator provisions by
 hand: the `CI_WEBHOOK`, `RELEASES_WEBHOOK`, `REVIEWS_WEBHOOK` and
 `DEPENDENCIES_WEBHOOK` secrets; `REVIEWS_WEBHOOKS`, a JSON map from
 `<org>/<repo>` to that repository's own reviews channel, which wins over
-`REVIEWS_WEBHOOK`; `BWS_READ_TOKEN` and `BWS_SERVER_URL`, which resolve a
-GitHub account to the Discord user it pings; and the
-`DISCORD_REPO_ROLES` variable mapping each `<org>/<repo>` to its role id. A
-missing webhook skips the post; a person or repository missing from its map
-posts without that ping. Reviews post from `notify-reviews.yaml`, which follows
+`REVIEWS_WEBHOOK`; and the `DISCORD_REPO_ROLES` variable mapping each
+`<org>/<repo>` to its role id. The `BWS_READ_TOKEN` governance secret and the
+`BWS_SERVER_URL` variable resolve a GitHub account to the Discord user it
+pings. A missing webhook skips the post; a person or repository missing from
+its map posts without that ping. Reviews post from `notify-reviews.yaml`, which follows
 `pr-relay.yaml`'s runs: a review runs a pull request's own copy of a workflow, so
 the Agent key cannot be read on that event.
 
@@ -182,14 +177,14 @@ are required unless noted.
 | `clean_images`                                                  | bool   | Provision `governance/clean-images.yaml`, which deletes container images once their branch or pull request is gone (on close, and in a daily sweep that a-novel/infra's Cloud Scheduler dispatches), or remove it. Only classes whose images no deployment pins by digest set it: infra pins its tool images by digest. |
 | `code_quality`                                                  | bool   | Turn GitHub Code Quality on and add the `code_quality` rule to the `master` ruleset; `false` keeps both off. Code Quality bills per active committer, and per AI credit on every default-branch push.                                                                                                                   |
 | `rulesets.master` / `.require_approval` / `.tags`               | bool   | Apply those rulesets. `tags` locks tag (and release) creation to the release bot + admins, and adds `release-lines`, which governs `release/vX.Y` branches like the default branch. `master` also applies `commit-messages`, which checks the subject of every commit on every branch against Conventional Commits.     |
-| `rulesets.admins_only`                                          | bool   | Drop the bots from every bypass list, leaving admins only. For a class whose merges deploy production and whose bots reach the default branch through pull requests, since a bot key is an org secret any repository's workflows can read.                                                                              |
+| `rulesets.admins_only`                                          | bool   | Drop the bots from every bypass list, leaving admins only. For a class whose merges deploy production and whose bots reach the default branch through pull requests alone.                                                                                                                                              |
 
 The `infra` class is public-by-default and deployment-only. It keeps Pages,
 wiki, discussions, release workflow callers, and the tag ruleset off, and only
 admins bypass its rulesets. When a repo changes to this class, reconciliation
 also deletes managed `release-train` and `hotfix` callers left by a
 release-bearing class. Create it interactively
-with `a-novel repo create a-novel infra --class infra` after releasing the CLI.
+with `a-novel repo create a-novel infra --class infra`.
 
 ## `orgs/<org>.yaml`
 
@@ -234,7 +229,7 @@ ruleset wholesale.
 
 A class with `rulesets.admins_only: true` drops every entry but `admins`.
 
-The core team is intentionally **not** a bypass actor.
+No team is a bypass actor: core and the owners bypass through their admin role.
 
 ## `checks.yaml`
 
@@ -259,13 +254,11 @@ this map only decides which of their jobs are required, and the set is applied
 | `exclude.prefixes`    | []string | Job ids starting with one of these are not required (e.g. `report-`: reporting / post-merge jobs). |
 | `exclude.if_contains` | []string | Jobs whose `if:` contains one of these are not required (master-only jobs never run on a PR).      |
 
-Coverage is deliberately **not** among them. Codecov posts its own commit
-statuses rather than running as a `main.yaml` job, and a required status check
-applies to the merge **group** as well as the pull request — where no bypass can
-reach it, because a merge group has no author. A provider that accepted an upload
-and then never posted its status therefore stalled the queue behind an otherwise
-green build. Coverage is still uploaded, reported and visible; it is advisory, and
-the old gate is listed in `retired.yaml`.
+Coverage gates nothing. Codecov posts commit statuses of its own, and a required
+status check applies to the merge group as well as the pull request, where no
+bypass reaches, since a merge group has no author. A provider that accepts an
+upload and never posts its status stalls the queue behind a green build, so
+coverage is uploaded and reported as advice.
 
 ## Derived, not accumulated
 
@@ -274,16 +267,10 @@ from the class preset, the org profile and code-driven discovery, so anything el
 live on the repo is drift — whether it was dropped from these templates or added
 by hand in the UI — and `repo update` **deletes it**.
 
-That is a deliberate constraint, not a convenience. The alternative is an
-ever-growing list of things to un-apply, and a live configuration that is the
-templates plus an unreviewable history of whatever each repo happened to be given.
-With the set derived, these files are the whole truth: what you can read here is
-what governs the repos, and a reconcile is enough to prove it.
+With the set derived, these files are the whole truth: what you read here governs
+the repos, and a reconcile proves it.
 
-Two consequences worth stating plainly:
-
-- **Removing a template removes the ruleset.** Nothing further is needed, and no
-  migration list records that it once existed.
+- **Removing a template removes the ruleset.** Nothing further is needed.
 - **The UI is not a place to configure a governed repo.** A ruleset added there
   survives until the next reconcile and no longer. Anything genuinely wanted
   belongs in `rulesets/` and a class preset, where every repo gets it and a

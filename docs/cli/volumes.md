@@ -20,7 +20,7 @@ a-novel run volume backup "$SERVICE" --tag="$BACKUP_TAG"
 a-novel run volume restore "$SERVICE"
 ```
 
-`--from` restores an older backup, by the timestamp `volume list` shows.
+`--from` restores an older backup instead, by the timestamp in its file name, which `volume backup` prints.
 
 ## Reset to empty
 

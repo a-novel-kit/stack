@@ -33,7 +33,6 @@ The CLI runs on Linux, macOS, or WSL2 on Windows, and needs:
 - [Go](https://go.dev)
 - [Node.js](https://nodejs.org) and [pnpm](https://pnpm.io)
 - [Podman](https://podman.io) and [podman-compose](https://github.com/containers/podman-compose) 1.6.0 or newer
-- An AI agent that reads `AGENTS.md`, such as [Claude Code](https://code.claude.com/docs/en/overview) or [Codex](https://learn.chatgpt.com/docs)
 - For sysadmins: [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), [OpenTofu](https://opentofu.org/docs/intro/install/) and [Bitwarden Secrets Manager CLI](https://bitwarden.com/help/secrets-manager-cli/)
 
 Install the CLI:
@@ -49,7 +48,7 @@ a-novel core setup
 a-novel core sync
 ```
 
-Open your AI agent with the stack root as its workspace, and run `a-novel run ui` to see every service. The [developer guide](https://a-novel-kit.github.io/stack/) walks through each tool and the everyday work.
+Run `a-novel run ui` to see every service. An AI agent that reads `AGENTS.md`, such as [Claude Code](https://code.claude.com/docs/en/overview) or [Codex](https://learn.chatgpt.com/docs), follows the team's conventions when you open it at the stack root. The [developer guide](https://a-novel-kit.github.io/stack/) walks through each tool and the everyday work.
 
 ## Documentation
 

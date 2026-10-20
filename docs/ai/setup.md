@@ -107,7 +107,7 @@ copilot
 
 ## Antigravity CLI
 
-Google's terminal agent, which replaced Gemini CLI for individual accounts.
+Google's terminal agent.
 
 :::tabs key:shell
 == Linux / macOS

@@ -140,9 +140,18 @@ When you work with a backup, point `user.signingkey` at its signing key instead.
 
 ### Set up the bot for an organization
 
-Each organization has its own GitHub App, which posts the [bot comments](/cli/bot-comments). These steps serve a new organization or a re-created App.
+Each organization has its own Agent App. It posts the [bot comments](/cli/bot-comments) and runs the governance workflows, such as the merge gate. These steps serve a new organization or a re-created App.
 
-1. [Register a GitHub App](https://docs.github.com/apps/creating-github-apps/registering-a-github-app/registering-a-github-app) on the organization, with only the repository permissions **Issues: read and write**, **Pull requests: read and write** and **Metadata: read-only**. Disable the webhook, then install the App on every repository.
+1. [Register a GitHub App](https://docs.github.com/apps/creating-github-apps/registering-a-github-app/registering-a-github-app) on the organization, with the permissions of an existing Agent App, which this prints. Disable the webhook, then install the App on every repository.
+
+   ```bash
+   ORG=a-novel
+   APP=anovelbot-agent
+   gh api "orgs/$ORG/installations" \
+     --jq ".installations[] | select(.app_slug == \"$APP\") | .permissions"
+   ```
+
 2. Store the App's client ID as the organization Actions variable `AGENT_BOT_CLIENT_ID`.
-3. Generate a private key and store it as the organization Actions secret `AGENT_BOT_PRIVATE_KEY`, visible to the dispatcher repository. The key never goes to a developer machine.
-4. Comment on a scratch pull request to check.
+3. Generate a private key, and store it as `AGENT_BOT_PRIVATE_KEY` in the organization's project of [Bitwarden](./bitwarden), `a-novel` or `a-novel-kit`. Delete the downloaded file.
+4. [Apply the settings](./repositories#apply) with `--all`, which copies the key into each repository's governance environment.
+5. Comment on a scratch pull request to check.
