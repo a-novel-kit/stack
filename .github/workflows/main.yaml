@@ -15,19 +15,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: a-novel-kit/workflows/go-actions/generate-go@v1.65.1
         with:
-          persist-credentials: false
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: "cli/go.mod"
-      - name: go generate
-        shell: bash
-        working-directory: cli
-        run: go generate ./...
-      - uses: a-novel-kit/workflows/generic-actions/check-changes@v1.65.1
-        with:
-          fail_message: cli/ go generate definitions are not up-to-date, please run 'go generate ./...' inside cli/ and commit the changes
+          working_directory: cli
+          failure_message: cli/ go generate definitions are not up-to-date, please run 'go generate ./...' inside cli/ and commit the changes
 
   lint-proto-cli:
     # buf build over the cli/proto contract, which fails on a contract that does
@@ -164,6 +155,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: "cli/go.mod"
+          cache-dependency-path: "cli/*.sum"
       - name: download go packages
         run: go mod download
       # Compose the same incantation as a-novel-kit/workflows/go-actions/test-go,
