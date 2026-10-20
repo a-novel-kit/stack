@@ -60,9 +60,12 @@ maximum supported`. A tool's indirect `golang.org/x/tools` cannot read the new c
   reached 5.0.5 beside `@vitest/browser-playwright` 5.0.3, and the browser jobs failed on
   `closeBrowserProvider is not a function`. Fix it on master: give the whole family one specifier
   form, all exact or the same range (see `write-github-actions` Renovate presets).
-- **`build-*` fails with `go.mod requires go >= X (running go Y; GOTOOLCHAIN=local)`.** A dependency
-  raised the `go` directive before the go-toolchain PR moved the images. Land the toolchain PR first;
-  the other heals on rebase.
+- **`build-*` fails with `go.mod requires go >= X (running go Y; GOTOOLCHAIN=local)`.** The `go`
+  directive passed the golang image. On a dependency's PR, a dependency raised it before the
+  go-toolchain PR moved the images: land the toolchain PR first, and the other heals on rebase. On a
+  `go toolchain` PR that moves the directive without the image, the repo's preset predates
+  a-novel-kit/workflows#616 and took the version from go.dev before Docker Hub published the image.
+  Bump the preset; Renovate then closes the PR, or adds the image once it exists.
 - **Docker Hub `429` or `504`, or a Sigstore `tlog` 404.** External and transient: rerun within the
   flake budget.
 - **infra `scan-infrastructure` (Trivy) reports a CVE in an indirect Go module.** Renovate's
