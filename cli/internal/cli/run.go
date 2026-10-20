@@ -134,9 +134,9 @@ func listServices(cmd *cobra.Command, o psOpts) error {
 	if !o.watch {
 		return nil
 	}
-	handle := func(ev *anovelv1.StateEvent) { repaintPs(ctx, c, out, o, ev) }
+	handle := func(ev *anovelv1.WatchResponse) { repaintPs(ctx, c, out, o, ev) }
 	if o.jsonOut {
-		handle = func(ev *anovelv1.StateEvent) { encodeEvent(out, ev) }
+		handle = func(ev *anovelv1.WatchResponse) { encodeEvent(out, ev) }
 	}
 	return watchEvents(ctx, c, o.scope.selector(), o.service, "", handle)
 }
@@ -144,7 +144,7 @@ func listServices(cmd *cobra.Command, o psOpts) error {
 // repaintPs redraws the ps table in place after ev, so it reads like `top`
 // and the frames stay out of the scrollback. One ListServices call per event
 // keeps the table current.
-func repaintPs(ctx context.Context, c *rpc.Client, out io.Writer, o psOpts, ev *anovelv1.StateEvent) {
+func repaintPs(ctx context.Context, c *rpc.Client, out io.Writer, o psOpts, ev *anovelv1.WatchResponse) {
 	resp, err := c.ListServices(ctx, o.scope.selector())
 	if err != nil {
 		_, _ = fmt.Fprintf(out, "watch: refresh failed: %v\n", err)
@@ -751,12 +751,12 @@ var logStreams = map[string]anovelv1.LogStream{
 
 // printLogs prints the lines of stream newer than since (when set), keeping
 // only the last tail lines (when set). Both filters run client-side.
-func printLogs(w io.Writer, stream iter.Seq2[*anovelv1.LogLine, error], since time.Duration, tail int) error {
+func printLogs(w io.Writer, stream iter.Seq2[*anovelv1.StreamLogsResponse, error], since time.Duration, tail int) error {
 	var cutoff time.Time
 	if since > 0 {
 		cutoff = time.Now().Add(-since)
 	}
-	var last []*anovelv1.LogLine
+	var last []*anovelv1.StreamLogsResponse
 	for ln, err := range stream {
 		if err != nil {
 			return err
@@ -780,7 +780,7 @@ func printLogs(w io.Writer, stream iter.Seq2[*anovelv1.LogLine, error], since ti
 
 // printLogLine renders one log entry as a short timestamp, a stream tag and
 // the raw line, whose ANSI escapes survive so the target's own colors show.
-func printLogLine(w io.Writer, ln *anovelv1.LogLine) {
+func printLogLine(w io.Writer, ln *anovelv1.StreamLogsResponse) {
 	tag := "out"
 	if ln.GetStream() == anovelv1.LogStream_LOG_STREAM_STDERR {
 		tag = "err"
@@ -1220,12 +1220,12 @@ func watchPhases(cmd *cobra.Command, o watchOpts) error {
 	if o.jsonOut {
 		write = encodeEvent
 	}
-	handle := func(ev *anovelv1.StateEvent) { write(out, ev) }
+	handle := func(ev *anovelv1.WatchResponse) { write(out, ev) }
 	return watchEvents(cmd.Context(), rpc.New(""), o.scope.selector(), o.service, o.target, handle)
 }
 
 // watchEvents streams the daemon's state events to handle until ctx ends.
-func watchEvents(ctx context.Context, c *rpc.Client, stack, service, target string, handle func(*anovelv1.StateEvent)) error {
+func watchEvents(ctx context.Context, c *rpc.Client, stack, service, target string, handle func(*anovelv1.WatchResponse)) error {
 	stream, err := c.Watch(ctx, stack, service, target)
 	if err != nil {
 		return err
@@ -1244,12 +1244,12 @@ func watchEvents(ctx context.Context, c *rpc.Client, stack, service, target stri
 
 // printEvent writes a state event as one line of text: its time and its
 // description.
-func printEvent(w io.Writer, ev *anovelv1.StateEvent) {
+func printEvent(w io.Writer, ev *anovelv1.WatchResponse) {
 	_, _ = fmt.Fprintf(w, "%s  %s\n", ev.GetTs().AsTime().Format("15:04:05.000"), ev.GetDescription())
 }
 
 // encodeEvent writes a state event as one JSON line.
-func encodeEvent(w io.Writer, ev *anovelv1.StateEvent) {
+func encodeEvent(w io.Writer, ev *anovelv1.WatchResponse) {
 	event := map[string]any{
 		"ts":          ev.GetTs().AsTime().Format(time.RFC3339Nano),
 		stackLabel:    ev.GetStack(),

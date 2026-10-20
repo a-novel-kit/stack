@@ -78,13 +78,13 @@ func TestPrintLogs(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
-	lines := []*anovelv1.LogLine{
+	lines := []*anovelv1.StreamLogsResponse{
 		{Ts: timestamppb.New(now.Add(-time.Hour)), Line: "old"},
 		{Ts: timestamppb.New(now.Add(-time.Minute)), Line: "first"},
 		{Ts: timestamppb.New(now.Add(-time.Second)), Line: "second"},
 		{Ts: timestamppb.New(now), Line: "third"},
 	}
-	var stream iter.Seq2[*anovelv1.LogLine, error] = func(yield func(*anovelv1.LogLine, error) bool) {
+	var stream iter.Seq2[*anovelv1.StreamLogsResponse, error] = func(yield func(*anovelv1.StreamLogsResponse, error) bool) {
 		for _, ln := range lines {
 			if !yield(ln, nil) {
 				return

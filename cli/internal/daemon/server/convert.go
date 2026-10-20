@@ -131,9 +131,9 @@ func volumeToProto(v volumes.Volume) *anovelv1.Volume {
 	}
 }
 
-// stateEventToProto renders a phase event as the StateEvent Watch streams.
-func stateEventToProto(ev runner.PhaseEvent) *anovelv1.StateEvent {
-	return &anovelv1.StateEvent{
+// stateEventToProto renders a phase event as the WatchResponse Watch streams.
+func stateEventToProto(ev runner.PhaseEvent) *anovelv1.WatchResponse {
+	return &anovelv1.WatchResponse{
 		Ts:          timestamppb.New(ev.Ts),
 		TargetId:    ev.TargetID,
 		Service:     ev.Service,

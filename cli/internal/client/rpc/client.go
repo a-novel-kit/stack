@@ -151,7 +151,7 @@ func (c *Client) RestartInfraContainer(ctx context.Context, stack, service, name
 // and then closes the stream. `runID` of "" means
 // current.log; non-empty selects an archived run. `follow` keeps the
 // stream open for new lines past EOF (snapshot + subscribe).
-func (c *Client) StreamLogs(ctx context.Context, targetID, runID string, follow bool, streamFilter anovelv1.LogStream) (iter.Seq2[*anovelv1.LogLine, error], error) {
+func (c *Client) StreamLogs(ctx context.Context, targetID, runID string, follow bool, streamFilter anovelv1.LogStream) (iter.Seq2[*anovelv1.StreamLogsResponse, error], error) {
 	req := &anovelv1.StreamLogsRequest{TargetId: targetID, Follow: follow, RunId: runID, Stream: streamFilter}
 	stream, err := call(ctx, c, c.core.StreamLogs, req)
 	if err != nil {
@@ -210,7 +210,7 @@ func (c *Client) Shutdown(ctx context.Context, force bool) (*anovelv1.ShutdownRe
 // empty stack means "any stack"; empty service means "any service in the
 // stack"; empty targetID means "every target". The events end when the
 // caller's context is canceled or the daemon exits.
-func (c *Client) Watch(ctx context.Context, stack, service, targetID string) (iter.Seq2[*anovelv1.StateEvent, error], error) {
+func (c *Client) Watch(ctx context.Context, stack, service, targetID string) (iter.Seq2[*anovelv1.WatchResponse, error], error) {
 	req := &anovelv1.WatchRequest{Stack: stack, Service: service, TargetId: targetID}
 	stream, err := call(ctx, c, c.core.Watch, req)
 	if err != nil {
@@ -220,9 +220,9 @@ func (c *Client) Watch(ctx context.Context, stack, service, targetID string) (it
 }
 
 // Exec runs cmd inside the target's runtime (container exec, or a sibling
-// process in the target's env for go-exec). It yields one ExecOutput per
+// process in the target's env for go-exec). It yields one ExecResponse per
 // stdout/stderr line until the command ends.
-func (c *Client) Exec(ctx context.Context, targetID string, cmdv []string) (iter.Seq2[*anovelv1.ExecOutput, error], error) {
+func (c *Client) Exec(ctx context.Context, targetID string, cmdv []string) (iter.Seq2[*anovelv1.ExecResponse, error], error) {
 	stream, err := call(ctx, c, c.core.Exec, &anovelv1.ExecRequest{TargetId: targetID, Cmd: cmdv})
 	if err != nil {
 		return nil, err

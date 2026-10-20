@@ -19,7 +19,7 @@ func TestRunPaletteCommand(t *testing.T) {
 				Name:    "svc",
 				Targets: []*anovelv1.Target{{Id: "default/svc/grpc", Name: "grpc"}},
 			}},
-			logLines:  []*anovelv1.LogLine{{Line: "one"}, {Line: "two"}},
+			logLines:  []*anovelv1.StreamLogsResponse{{Line: "one"}, {Line: "two"}},
 			logScroll: 1,
 		}
 		gen := m.followGen

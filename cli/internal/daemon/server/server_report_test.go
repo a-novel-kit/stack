@@ -148,7 +148,7 @@ func TestStreamLines(t *testing.T) {
 				cancel()
 			}
 			var got []string
-			err := streamLines(ctx, testCase.in, func(ln *anovelv1.LogLine) error {
+			err := streamLines(ctx, testCase.in, func(ln *anovelv1.StreamLogsResponse) error {
 				got = append(got, ln.GetLine())
 				return nil
 			}, testCase.filter, "current.log")

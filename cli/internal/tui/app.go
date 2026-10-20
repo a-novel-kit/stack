@@ -76,7 +76,7 @@ type model struct {
 	// activeTarget.
 	selectedTab int
 	// Log streaming.
-	logLines     []*anovelv1.LogLine
+	logLines     []*anovelv1.StreamLogsResponse
 	followCancel context.CancelFunc // cancels the current follow goroutine on target switch
 	// followGen tags each follower-goroutine generation; messages
 	// from previous followers are dropped on arrival so the

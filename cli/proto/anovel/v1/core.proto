@@ -190,35 +190,6 @@ message Volume {
   int32 backup_count = 5;
 }
 
-// LogLine is one entry of a target's or infra container's log.
-message LogLine {
-  // When the line was written. An infra line, or a record the daemon cannot
-  // read, carries the time the daemon read it.
-  google.protobuf.Timestamp ts = 1;
-  // Stream the line came from. An infra line is always STDOUT.
-  LogStream stream = 2;
-  // The raw line, ANSI escapes included.
-  string line = 3;
-}
-
-// StateEvent is one target phase transition Watch streams.
-message StateEvent {
-  // When the transition happened.
-  google.protobuf.Timestamp ts = 1;
-  // ID of the target, "<stack>/<service>/<target>".
-  string target_id = 2;
-  // Name of the target's service.
-  string service = 3;
-  // Name of the target's stack.
-  string stack = 4;
-  // One-line summary, such as "<id> terminated (killed)".
-  string description = 5;
-  // Phase before the transition.
-  Phase old_phase = 6;
-  // Phase after the transition.
-  Phase new_phase = 7;
-}
-
 // =============================================================================
 // Daemon control
 // =============================================================================
@@ -461,6 +432,16 @@ message StreamLogsRequest {
   // infra container has no archived runs.
   string run_id = 6;
 }
+// StreamLogsResponse is one entry of a target's or infra container's log.
+message StreamLogsResponse {
+  // When the line was written. An infra line, or a record the daemon cannot
+  // read, carries the time the daemon read it.
+  google.protobuf.Timestamp ts = 1;
+  // Stream the line came from. An infra line is always STDOUT.
+  LogStream stream = 2;
+  // The raw line, ANSI escapes included.
+  string line = 3;
+}
 
 // ListRunsRequest asks for a target's archived runs.
 message ListRunsRequest {
@@ -589,8 +570,8 @@ message ExecRequest {
   // The command and its arguments.
   repeated string cmd = 2;
 }
-// ExecOutput is one line of the command's output, or its exit code.
-message ExecOutput {
+// ExecResponse is one line of the command's output, or its exit code.
+message ExecResponse {
   // Stream the line came from.
   LogStream stream = 1;
   // The output line.
@@ -627,6 +608,23 @@ message WatchRequest {
   string service = 2;
   // ID of the target, "<stack>/<service>/<target>".
   string target_id = 3;
+}
+// WatchResponse is one target phase transition Watch streams.
+message WatchResponse {
+  // When the transition happened.
+  google.protobuf.Timestamp ts = 1;
+  // ID of the target, "<stack>/<service>/<target>".
+  string target_id = 2;
+  // Name of the target's service.
+  string service = 3;
+  // Name of the target's stack.
+  string stack = 4;
+  // One-line summary, such as "<id> terminated (killed)".
+  string description = 5;
+  // Phase before the transition.
+  Phase old_phase = 6;
+  // Phase after the transition.
+  Phase new_phase = 7;
 }
 
 // =============================================================================
@@ -679,7 +677,7 @@ service CoreService {
 
   // StreamLogs streams a log: the current lines in file order, then, when
   // following, each new line.
-  rpc StreamLogs(StreamLogsRequest) returns (stream LogLine);
+  rpc StreamLogs(StreamLogsRequest) returns (stream StreamLogsResponse);
   // ListRuns lists a target's archived runs.
   rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
 
@@ -698,11 +696,11 @@ service CoreService {
 
   // Exec runs a command beside a target and streams its output, ending with
   // its exit code.
-  rpc Exec(ExecRequest) returns (stream ExecOutput);
+  rpc Exec(ExecRequest) returns (stream ExecResponse);
   // Debug returns the command that attaches Delve to a running go-exec target.
   rpc Debug(DebugRequest) returns (DebugResponse);
 
   // Watch streams target phase transitions until the client leaves. It sends
   // no initial state, so a client pairs it with ListServices.
-  rpc Watch(WatchRequest) returns (stream StateEvent);
+  rpc Watch(WatchRequest) returns (stream WatchResponse);
 }

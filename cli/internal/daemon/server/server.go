@@ -498,7 +498,7 @@ func (s *Server) infraContainer(ctx context.Context, stack, service, name, verb 
 //   - with --run-id, an archived run, never followed
 //
 // Snapshot lines come first in file order, and followed lines after. Each
-// LogLine carries its original timestamp and stream tag.
+// StreamLogsResponse carries its original timestamp and stream tag.
 func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest, stream anovelv1connect.CoreServiceStreamLogsServerStream) error {
 	tid := req.GetTargetId()
 	// An infra log ID, "<stack>/<service>/infra/<name>", streams an infra
@@ -548,7 +548,7 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 
 // forwardLines sends every line of sub until the subscription closes or the
 // client disconnects. A nil sub sends nothing.
-func forwardLines(ctx context.Context, sub <-chan logs.Line, send func(*anovelv1.LogLine) error, filter anovelv1.LogStream) error {
+func forwardLines(ctx context.Context, sub <-chan logs.Line, send func(*anovelv1.StreamLogsResponse) error, filter anovelv1.LogStream) error {
 	if sub == nil {
 		return nil
 	}
@@ -598,7 +598,7 @@ func streamFileToClient(ctx context.Context, path string, stream anovelv1connect
 // stopping hands the viewer a short log that looks whole. The writer flushes
 // per line, but a process killed mid-write leaves a partial final one, and that
 // is the common case.
-func streamLines(ctx context.Context, r io.Reader, send func(*anovelv1.LogLine) error, filter anovelv1.LogStream, path string) error {
+func streamLines(ctx context.Context, r io.Reader, send func(*anovelv1.StreamLogsResponse) error, filter anovelv1.LogStream, path string) error {
 	reader := bufio.NewReader(r)
 	lineNo := 0
 	for {
@@ -627,14 +627,14 @@ func streamLines(ctx context.Context, r io.Reader, send func(*anovelv1.LogLine) 
 // be decoded has no stream to match on, and a viewer that filters it away is
 // back to a log that looks complete. Its timestamp is the read time, since the
 // record carries none, and clients render it in receive order.
-func emitLogLine(send func(*anovelv1.LogLine) error, filter anovelv1.LogStream, raw string, lineNo int) error {
+func emitLogLine(send func(*anovelv1.StreamLogsResponse) error, filter anovelv1.LogStream, raw string, lineNo int) error {
 	trimmed := strings.TrimRight(raw, "\r\n")
 	if trimmed == "" {
 		return nil
 	}
 	var ln logs.Line
 	if err := json.Unmarshal([]byte(trimmed), &ln); err != nil {
-		marker := &anovelv1.LogLine{
+		marker := &anovelv1.StreamLogsResponse{
 			Ts:     timestamppb.Now(),
 			Stream: anovelv1.LogStream_LOG_STREAM_STDERR,
 			Line:   fmt.Sprintf("a-novel: log line %d is unreadable and was skipped (%v)", lineNo, err),
@@ -645,12 +645,12 @@ func emitLogLine(send func(*anovelv1.LogLine) error, filter anovelv1.LogStream, 
 }
 
 // sendLogLine forwards ln unless filter selects the other stream.
-func sendLogLine(send func(*anovelv1.LogLine) error, filter anovelv1.LogStream, ln logs.Line) error {
+func sendLogLine(send func(*anovelv1.StreamLogsResponse) error, filter anovelv1.LogStream, ln logs.Line) error {
 	ps := lineStreamToProto(ln.Stream)
 	if filter != anovelv1.LogStream_LOG_STREAM_UNSPECIFIED && ps != filter {
 		return nil
 	}
-	return send(&anovelv1.LogLine{Ts: timestamppb.New(ln.Ts), Stream: ps, Line: ln.Line})
+	return send(&anovelv1.StreamLogsResponse{Ts: timestamppb.New(ln.Ts), Stream: ps, Line: ln.Line})
 }
 
 func lineStreamToProto(s logs.Stream) anovelv1.LogStream {
@@ -707,7 +707,7 @@ func streamPodmanLogs(ctx context.Context, cid string, follow bool, stream anove
 		}
 	}()
 	for scanner := lineScanner(pipeR); scanner.Scan() && ctx.Err() == nil; {
-		ln := &anovelv1.LogLine{Ts: timestamppb.Now(), Stream: anovelv1.LogStream_LOG_STREAM_STDOUT, Line: scanner.Text()}
+		ln := &anovelv1.StreamLogsResponse{Ts: timestamppb.Now(), Stream: anovelv1.LogStream_LOG_STREAM_STDOUT, Line: scanner.Text()}
 		if err := stream.Send(ln); err != nil {
 			return err
 		}
@@ -929,11 +929,11 @@ func (s *Server) Exec(ctx context.Context, req *anovelv1.ExecRequest, stream ano
 		// The human-readable line survives being piped to a file, where the
 		// process exit status does not. It rides the same stream as the
 		// output, after everything the child wrote.
-		output.send(&anovelv1.ExecOutput{Stream: anovelv1.LogStream_LOG_STREAM_STDERR, Line: "[exec exited: " + waitErr.Error() + "]"})
+		output.send(&anovelv1.ExecResponse{Stream: anovelv1.LogStream_LOG_STREAM_STDERR, Line: "[exec exited: " + waitErr.Error() + "]"})
 	}
 	// The terminal message carries the exit code and no line, so the client can
 	// propagate the child's status as its own.
-	output.send(&anovelv1.ExecOutput{ExitCode: &code})
+	output.send(&anovelv1.ExecResponse{ExitCode: &code})
 
 	return nil
 }
@@ -971,7 +971,7 @@ type execOutput struct {
 	stream anovelv1connect.CoreServiceExecServerStream
 }
 
-func (o *execOutput) send(msg *anovelv1.ExecOutput) {
+func (o *execOutput) send(msg *anovelv1.ExecResponse) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	_ = o.stream.Send(msg)
@@ -980,7 +980,7 @@ func (o *execOutput) send(msg *anovelv1.ExecOutput) {
 // pump sends each line of r tagged with stream.
 func (o *execOutput) pump(r io.Reader, stream anovelv1.LogStream) {
 	for sc := lineScanner(r); sc.Scan(); {
-		o.send(&anovelv1.ExecOutput{Stream: stream, Line: sc.Text()})
+		o.send(&anovelv1.ExecResponse{Stream: stream, Line: sc.Text()})
 	}
 }
 
@@ -1076,7 +1076,7 @@ func watches(req *anovelv1.WatchRequest, ev runner.PhaseEvent) bool {
 }
 
 // describePhaseEvent produces the one-line human summary that lands in
-// StateEvent.description, such as "<id> running" or "<id> terminated
+// WatchResponse.description, such as "<id> running" or "<id> terminated
 // (killed)". The field is opaque to the daemon, and a client may re-render
 // from (old_phase, new_phase, exit_reason) instead, but the pre-baked summary
 // is the cheap default for `ps --watch`. A phase without a summary, such as
