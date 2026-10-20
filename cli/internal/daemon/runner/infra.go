@@ -146,9 +146,9 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 	return nil
 }
 
-// KillInfra refuses if any long-runner target of the service is still
-// running (unless force). Otherwise tears down all infra containers and
-// resets the session.
+// KillInfra tears down the service's infra containers and resets its session.
+// It refuses while a target of the service is live, unless force stops those
+// targets first.
 func (r *Runner) KillInfra(ctx context.Context, stack, service string, force bool) error {
 	defer r.InvalidateInfraStateCache()
 	svc, err := r.findService(stack, service)
@@ -340,35 +340,40 @@ func inspectInfra(ctx context.Context, ids []string) []infraContainerState {
 // first, so migrations runs before a rotate-keys that depends on it.
 // Independent one-shots keep discovery's name order.
 func topoSortOneShots(svc *discovery.Service) []*discovery.Target {
-	// Build a name → Target map of one-shots.
-	byName := make(map[string]*discovery.Target)
+	order := oneShotOrder{byName: make(map[string]*discovery.Target), visited: make(map[string]bool)}
 	for _, t := range svc.Targets {
 		if t.Kind == discovery.TargetKindOneShot {
-			byName[t.ComposeName] = t
+			order.byName[t.ComposeName] = t
 		}
-	}
-	// A target joins the result only after all of its one-shot deps.
-	visited := make(map[string]bool)
-	var out []*discovery.Target
-	var visit func(t *discovery.Target)
-	visit = func(t *discovery.Target) {
-		if visited[t.ComposeName] {
-			return
-		}
-		visited[t.ComposeName] = true
-		for _, depName := range t.DependsOn {
-			if dep, ok := byName[depName]; ok {
-				visit(dep)
-			}
-		}
-		out = append(out, t)
 	}
 	for _, t := range svc.Targets {
-		if byName[t.ComposeName] == t {
-			visit(t)
+		if order.byName[t.ComposeName] == t {
+			order.visit(t)
 		}
 	}
-	return out
+	return order.out
+}
+
+// oneShotOrder is the depth-first walk topoSortOneShots runs over a service's
+// one-shots, keyed by compose name.
+type oneShotOrder struct {
+	byName  map[string]*discovery.Target
+	visited map[string]bool
+	out     []*discovery.Target
+}
+
+// visit adds t to the order after every one-shot it depends on.
+func (o *oneShotOrder) visit(t *discovery.Target) {
+	if o.visited[t.ComposeName] {
+		return
+	}
+	o.visited[t.ComposeName] = true
+	for _, depName := range t.DependsOn {
+		if dep, ok := o.byName[depName]; ok {
+			o.visit(dep)
+		}
+	}
+	o.out = append(o.out, t)
 }
 
 // findService resolves (stack, service) against the runner's discovery

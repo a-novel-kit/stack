@@ -433,8 +433,8 @@ func (s *Server) StartInfra(ctx context.Context, req *anovelv1.StartInfraRequest
 	}, nil
 }
 
-// KillInfra refuses while any long-runner of the service is still running.
-// --force cascade-kills those targets first.
+// KillInfra tears down a service's infra. It refuses while a target of the
+// service is live, unless force stops those targets first.
 func (s *Server) KillInfra(ctx context.Context, req *anovelv1.KillInfraRequest) (*anovelv1.KillInfraResponse, error) {
 	svc, err := s.findService(req.GetStack(), req.GetService())
 	if err != nil {
@@ -634,11 +634,12 @@ func emitLogLine(send func(*anovelv1.LogLine) error, filter anovelv1.LogStream, 
 	}
 	var ln logs.Line
 	if err := json.Unmarshal([]byte(trimmed), &ln); err != nil {
-		return send(&anovelv1.LogLine{
-			Ts:     timestamppb.New(time.Now()),
+		marker := &anovelv1.LogLine{
+			Ts:     timestamppb.Now(),
 			Stream: anovelv1.LogStream_LOG_STREAM_STDERR,
 			Line:   fmt.Sprintf("a-novel: log line %d is unreadable and was skipped (%v)", lineNo, err),
-		})
+		}
+		return send(marker)
 	}
 	return sendLogLine(send, filter, ln)
 }
@@ -649,11 +650,7 @@ func sendLogLine(send func(*anovelv1.LogLine) error, filter anovelv1.LogStream, 
 	if filter != anovelv1.LogStream_LOG_STREAM_UNSPECIFIED && ps != filter {
 		return nil
 	}
-	return send(&anovelv1.LogLine{
-		Ts:     timestamppb.New(ln.Ts),
-		Stream: ps,
-		Line:   ln.Line,
-	})
+	return send(&anovelv1.LogLine{Ts: timestamppb.New(ln.Ts), Stream: ps, Line: ln.Line})
 }
 
 func lineStreamToProto(s logs.Stream) anovelv1.LogStream {
@@ -671,8 +668,8 @@ func lineStreamToProto(s logs.Stream) anovelv1.LogStream {
 // StreamLogs uses to address an infra container's log stream. It returns
 // (stack, service, name, true) on a match and ("", "", "", false) otherwise.
 //
-// The "infra" sentinel segment cannot collide with a target, since target IDs
-// come from compose service names.
+// A target ID has three segments, so the four-segment infra form never matches
+// one.
 func parseInfraLogID(id string) (string, string, string, bool) {
 	parts := strings.Split(id, "/")
 	if len(parts) != 4 || parts[2] != "infra" {
@@ -747,12 +744,7 @@ func (s *Server) GetEnv(_ context.Context, req *anovelv1.GetEnvRequest) (*anovel
 			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		for _, e := range entries {
-			out.Entries = append(out.Entries, &anovelv1.EnvEntry{
-				Stack:   svc.Stack,
-				Service: svc.Name,
-				Key:     e.Key,
-				Value:   e.Value,
-			})
+			out.Entries = append(out.Entries, envEntryToProto(svc, e))
 		}
 	}
 	return out, nil
@@ -792,13 +784,7 @@ func (s *Server) ListVolumes(_ context.Context, req *anovelv1.ListVolumesRequest
 	}
 	out := &anovelv1.ListVolumesResponse{}
 	for _, v := range volumes.List(svc) {
-		out.Volumes = append(out.Volumes, &anovelv1.Volume{
-			Name:        v.Name,
-			Service:     v.Service,
-			Stack:       v.Stack,
-			SizeBytes:   v.SizeBytes,
-			BackupCount: v.BackupCount,
-		})
+		out.Volumes = append(out.Volumes, volumeToProto(v))
 	}
 	return out, nil
 }
@@ -885,19 +871,18 @@ func (s *Server) ensureServiceDown(ctx context.Context, svc *discovery.Service, 
 // Exec / debug
 // =============================================================================
 
-// Exec runs an arbitrary command "as if it were a sibling of the target":
+// Exec runs a command beside a target:
 //
-//   - Container mode runs `podman exec <container_id> <cmd...>` inside the
-//     live container, so `a-novel run exec <service>/rest -- sh` opens a shell
-//     next to the rest binary. The target must be RUNNING.
-//   - Go-exec mode: spawns the command in the target's working directory with
-//     the target's resolved env, so `a-novel exec migrations psql` gets the
-//     right DSN out of the box. The target need only be discoverable, since the
-//     env builder synthesizes a fresh allocation when none is current, and the
-//     command works on a cold stack with infra up.
+//   - A running container target runs it inside its container through
+//     `podman exec`, so `run exec <service>/rest -- sh` opens a shell next to
+//     the rest binary.
+//   - Any other target runs it on the host, in the target's directory with
+//     the target's env, so `run exec <service>/migrations -- psql` gets the
+//     right DSN. The target need only be discovered: the env builder allocates
+//     what is not allocated yet, so the command works with only the infra up.
 //
-// Stdout / stderr are forwarded as LOG_STREAM_STDOUT / _STDERR; the proto
-// reuses LogStream so clients render with the same code path as logs.
+// The output streams as LOG_STREAM_STDOUT and LOG_STREAM_STDERR lines, the
+// LogStream values logs use, so a client renders both the same way.
 func (s *Server) Exec(ctx context.Context, req *anovelv1.ExecRequest, stream anovelv1connect.CoreServiceExecServerStream) error {
 	id := req.GetTargetId()
 	cmdv := req.GetCmd()

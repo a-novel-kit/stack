@@ -30,16 +30,14 @@ import (
 // Independent operations continue after failures, but rulesets are skipped
 // when managed-file staging or sync fails.
 func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
-	org, repo := t.Org, t.Repo
-	run := &planRun{out: out, target: t}
-	// The live rulesets are read once: a reconcile only adds kept rulesets, so
-	// the prune's candidates are fixed before the first write.
-	rulesets := sync.OnceValues(func() (map[string]string, error) { return liveRulesets(org, repo) })
-	repoID := sync.OnceValues(func() (string, error) {
-		out, err := gh("api", fmt.Sprintf("repos/%s/%s", org, repo), "--jq", ".id")
-		return strings.TrimSpace(out), err
-	})
-
+	run := &planRun{
+		out:    out,
+		target: t,
+		// The live rulesets are read once: a reconcile only adds kept rulesets,
+		// so the prune's candidates are fixed before the first write.
+		rulesets: sync.OnceValues(func() (map[string]string, error) { return liveRulesets(t.Org, t.Repo) }),
+		repoID:   sync.OnceValues(func() (string, error) { return githubRepoID(t.Org, t.Repo) }),
+	}
 	for _, op := range plan.Ops {
 		if op.RulesetName != "" || op.PruneRulesets {
 			run.flushStaged()
@@ -48,50 +46,12 @@ func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
 				continue
 			}
 		}
-		switch {
-		case op.PruneRulesets:
-			detail, err := pruneRulesets(org, repo, rulesets, op)
-			run.note("rulesets (prune)", detail, err)
-		case op.RulesetName != "":
-			detail, err := applyRuleset(op, rulesets)
-			run.note("ruleset "+op.RulesetName, detail, err)
-		case op.Content != "" || (op.Method == http.MethodDelete && strings.Contains(op.Path, "/contents/")):
+		if isManagedFile(op) {
 			run.stage(op)
-		case strings.HasSuffix(op.Path, "/vulnerability-alerts"):
-			detail, err := applyToggle(op)
-			run.note("Dependabot alerts", detail, err)
-		case strings.HasSuffix(op.Path, "/immutable-releases"):
-			detail, err := applyToggle(op)
-			run.note("immutable releases", detail, err)
-		case strings.HasSuffix(op.Path, "/pages"):
-			detail, err := applyPages(op)
-			run.note("pages", detail, err)
-		case strings.HasSuffix(op.Path, "/code-scanning/default-setup"):
-			detail, err := applyCodeScanning(op)
-			run.note("code scanning", detail, err)
-		case strings.HasSuffix(op.Path, "/code-quality/setup"):
-			detail, err := applyCodeQuality(op)
-			run.note("code quality", detail, err)
-		case strings.HasSuffix(op.Path, "/labels"):
-			detail, err := applyLabels(org, repo, op)
-			run.note("labels", detail, err)
-		case strings.HasSuffix(op.Path, "/deployment-branch-policies"):
-			detail, err := applyDeploymentPolicies(op)
-			run.note(path.Base(path.Dir(op.Path))+" environment policies", detail, err)
-		case op.Governance != nil:
-			detail, err := applyEnvSecrets(org, repo, op)
-			run.note("governance secrets", detail, err)
-		case len(op.Reviewers) > 0:
-			run.note(path.Base(op.Path)+" environment", "", applyEnvironment(org, op))
-		case len(op.Teams) > 0:
-			detail, err := applyTeams(org, repo, op)
-			run.note("tier teams", detail, err)
-		case op.Secret != "":
-			detail, err := applySecretAccess(op, repoID)
-			run.note("secret "+op.Secret, detail, err)
-		default: // settings
-			run.note("settings ("+op.Method+" "+shortPath(op.Path)+")", "", applySettings(op))
+			continue
 		}
+		label, detail, err := run.apply(op)
+		run.note(label, detail, err)
 	}
 
 	// Plans without rulesets still flush their managed files at the end.
@@ -103,16 +63,73 @@ func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
 	return nil
 }
 
+// isManagedFile reports whether op writes or deletes a managed file, which the
+// next sync commit carries.
+func isManagedFile(op repocfg.Op) bool {
+	return op.Content != "" || (op.Method == http.MethodDelete && strings.Contains(op.Path, "/contents/"))
+}
+
 // planRun is one applyPlan pass: the outcome log it prints, the failures it
 // returns, and the managed-file changes staged for the next sync commit.
 type planRun struct {
-	out      io.Writer
-	target   *repocfg.RepoTarget
+	out    io.Writer
+	target *repocfg.RepoTarget
+	// rulesets and repoID read the repository's live state on first use.
+	rulesets func() (map[string]string, error)
+	repoID   func() (string, error)
 	failures []string
 	staged   []contentChange
 	// managedFilesFailed reports that a managed file failed to stage or sync,
 	// which skips every ruleset after it.
 	managedFilesFailed bool
+}
+
+// apply runs an operation other than a managed file, and returns the label of
+// its outcome line with the detail and the error.
+func (r *planRun) apply(op repocfg.Op) (string, string, error) {
+	org, repo := r.target.Org, r.target.Repo
+	switch {
+	case op.PruneRulesets:
+		detail, err := pruneRulesets(org, repo, r.rulesets, op)
+		return "rulesets (prune)", detail, err
+	case op.RulesetName != "":
+		detail, err := applyRuleset(op, r.rulesets)
+		return "ruleset " + op.RulesetName, detail, err
+	case strings.HasSuffix(op.Path, "/vulnerability-alerts"):
+		detail, err := applyToggle(op)
+		return "Dependabot alerts", detail, err
+	case strings.HasSuffix(op.Path, "/immutable-releases"):
+		detail, err := applyToggle(op)
+		return "immutable releases", detail, err
+	case strings.HasSuffix(op.Path, "/pages"):
+		detail, err := applyPages(op)
+		return "pages", detail, err
+	case strings.HasSuffix(op.Path, "/code-scanning/default-setup"):
+		detail, err := applyCodeScanning(op)
+		return "code scanning", detail, err
+	case strings.HasSuffix(op.Path, "/code-quality/setup"):
+		detail, err := applyCodeQuality(op)
+		return "code quality", detail, err
+	case strings.HasSuffix(op.Path, "/labels"):
+		detail, err := applyLabels(org, repo, op)
+		return "labels", detail, err
+	case strings.HasSuffix(op.Path, "/deployment-branch-policies"):
+		detail, err := applyDeploymentPolicies(op)
+		return path.Base(path.Dir(op.Path)) + " environment policies", detail, err
+	case op.Governance != nil:
+		detail, err := applyEnvSecrets(org, repo, op)
+		return "governance secrets", detail, err
+	case len(op.Reviewers) > 0:
+		return path.Base(op.Path) + " environment", "", applyEnvironment(org, op)
+	case len(op.Teams) > 0:
+		detail, err := applyTeams(org, repo, op)
+		return "tier teams", detail, err
+	case op.Secret != "":
+		detail, err := applySecretAccess(op, r.repoID)
+		return "secret " + op.Secret, detail, err
+	default: // settings
+		return "settings (" + op.Method + " " + shortPath(op.Path) + ")", "", applySettings(op)
+	}
 }
 
 // note prints one outcome line and records a failure. A failure without a
@@ -166,6 +183,12 @@ func (r *planRun) flushStaged() {
 	}
 	r.note("sync commit", detail, err)
 	r.staged = nil
+}
+
+// githubRepoID returns the numeric id GitHub gives the repository.
+func githubRepoID(org, repo string) (string, error) {
+	out, err := gh("api", fmt.Sprintf("repos/%s/%s", org, repo), "--jq", ".id")
+	return strings.TrimSpace(out), err
 }
 
 // errSkipped marks an operation applyPlan did not attempt.
@@ -222,13 +245,9 @@ func applyEnvironment(org string, op repocfg.Op) error {
 // access token the named secrets stay as they are, and one the environment
 // lacks fails the op. Values travel on stdin only.
 func applyEnvSecrets(org, repo string, op repocfg.Op) (string, error) {
-	out, err := gh("api", "--paginate", op.Path+"?per_page=100", "--jq", `.secrets[] | "\(.name)\t\(.updated_at)"`)
+	live, err := envSecretDates(op.Path)
 	if err != nil {
 		return "", err
-	}
-	live := map[string]time.Time{}
-	for name, at := range tabPairs(out) {
-		live[name], _ = time.Parse(time.RFC3339, at)
 	}
 	env, target := path.Base(path.Dir(op.Path)), org+"/"+repo
 	var set, deleted int
@@ -244,26 +263,8 @@ func applyEnvSecrets(org, repo string, op repocfg.Op) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// A token whose machine account cannot read the project lists no secret at all.
-	if source != nil && len(source) == 0 {
-		return "", fmt.Errorf("the Bitwarden access token reads no secret in project %s; store the token of a machine account "+
-			"that reads it with `a-novel secrets set %s`", op.Governance.BWSProject, bwsTokenID)
-	}
-	// Every named secret must be available before the first write.
-	var missing []string
-	for _, name := range op.Governance.Secrets {
-		_, found := live[name]
-		secret, ok := source[name]
-		switch {
-		case source == nil && !found:
-			missing = append(missing, name)
-		case source != nil && (!ok || secret.Value == ""):
-			return "", fmt.Errorf("the Bitwarden project %s holds no %s", op.Governance.BWSProject, name)
-		}
-	}
-	if len(missing) > 0 {
-		return "", fmt.Errorf("%s missing; store a Bitwarden access token with `a-novel secrets set %s`",
-			strings.Join(missing, ", "), bwsTokenID)
+	if err := checkSecretSources(op.Governance, live, source); err != nil {
+		return "", err
 	}
 	if source == nil {
 		return fmt.Sprintf("%d deleted, none compared with Bitwarden (no access token)", deleted), nil
@@ -278,6 +279,47 @@ func applyEnvSecrets(org, repo string, op repocfg.Op) (string, error) {
 		set++
 	}
 	return fmt.Sprintf("%d set, %d deleted", set, deleted), nil
+}
+
+// envSecretDates lists the secrets at secretsPath, an environment's secrets
+// endpoint, with the time each was last written.
+func envSecretDates(secretsPath string) (map[string]time.Time, error) {
+	out, err := gh("api", "--paginate", secretsPath+"?per_page=100", "--jq", `.secrets[] | "\(.name)\t\(.updated_at)"`)
+	if err != nil {
+		return nil, err
+	}
+	live := map[string]time.Time{}
+	for name, at := range tabPairs(out) {
+		live[name], _ = time.Parse(time.RFC3339, at)
+	}
+	return live, nil
+}
+
+// checkSecretSources fails before the first write unless every secret
+// governance names has a value: in Bitwarden when source holds the project's
+// secrets, or already in the environment when no access token is stored.
+func checkSecretSources(governance *repocfg.Governance, live map[string]time.Time, source map[string]bwsSecret) error {
+	// A token whose machine account cannot read the project lists no secret at all.
+	if source != nil && len(source) == 0 {
+		return fmt.Errorf("the Bitwarden access token reads no secret in project %s; store the token of a machine account "+
+			"that reads it with `a-novel secrets set %s`", governance.BWSProject, bwsTokenID)
+	}
+	var missing []string
+	for _, name := range governance.Secrets {
+		_, found := live[name]
+		secret, ok := source[name]
+		switch {
+		case source == nil && !found:
+			missing = append(missing, name)
+		case source != nil && (!ok || secret.Value == ""):
+			return fmt.Errorf("the Bitwarden project %s holds no %s", governance.BWSProject, name)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("%s missing; store a Bitwarden access token with `a-novel secrets set %s`",
+			strings.Join(missing, ", "), bwsTokenID)
+	}
+	return nil
 }
 
 // applySecretAccess grants or revokes the repo's access to a scoped org secret.
@@ -411,10 +453,16 @@ func commitSync(org, repo, branch string, changes []contentChange) (string, erro
 			deletions = append(deletions, map[string]string{"path": change.path})
 			continue
 		}
-		additions = append(additions, map[string]string{
+		addition := map[string]string{
 			"path":     change.path,
 			"contents": base64.StdEncoding.EncodeToString([]byte(change.content)),
-		})
+		}
+		additions = append(additions, addition)
+	}
+	input := map[string]any{
+		"branch":      map[string]string{"repositoryNameWithOwner": org + "/" + repo, "branchName": branch},
+		"message":     map[string]string{"headline": headline, "body": body},
+		"fileChanges": map[string]any{"additions": additions, "deletions": deletions},
 	}
 
 	// One retry when the branch tip moves between the oid read and the commit
@@ -431,15 +479,9 @@ func commitSync(org, repo, branch string, changes []contentChange) (string, erro
 			}
 			return "", err
 		}
-		payload, err := json.Marshal(map[string]any{
-			"query": syncCommitQuery,
-			"variables": map[string]any{"input": map[string]any{
-				"branch":          map[string]string{"repositoryNameWithOwner": org + "/" + repo, "branchName": branch},
-				"expectedHeadOid": oid,
-				"message":         map[string]string{"headline": headline, "body": body},
-				"fileChanges":     map[string]any{"additions": additions, "deletions": deletions},
-			}},
-		})
+		input["expectedHeadOid"] = oid
+		request := map[string]any{"query": syncCommitQuery, "variables": map[string]any{"input": input}}
+		payload, err := json.Marshal(request)
 		if err != nil {
 			return "", err
 		}
@@ -488,11 +530,12 @@ func bootstrapEmpty(org, repo, branch string, changes []contentChange) (string, 
 // resulting commit is GitHub-verified.
 func putContent(org, repo, branch string, change contentChange) (string, error) {
 	headline, body := syncCommitMessage([]contentChange{change})
-	payload, err := json.Marshal(map[string]string{
+	request := map[string]string{
 		"message": headline + "\n\n" + body,
 		"content": base64.StdEncoding.EncodeToString([]byte(change.content)),
 		"branch":  branch,
-	})
+	}
+	payload, err := json.Marshal(request)
 	if err != nil {
 		return "", err
 	}
@@ -701,10 +744,7 @@ func applyTeams(org, repo string, op repocfg.Op) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	teams := &orgTeams{org: org, ids: tabPairs(out), operator: sync.OnceValues(func() (string, error) {
-		out, err := gh("api", "user", "--jq", ".login")
-		return strings.TrimSpace(out), err
-	})}
+	teams := &orgTeams{org: org, ids: tabPairs(out), operator: sync.OnceValues(ghLogin)}
 
 	granted := make([]string, 0, len(op.Teams))
 	tiers := make([]string, 0, len(op.Teams))
@@ -740,6 +780,12 @@ func applyTeams(org, repo string, op repocfg.Op) (string, error) {
 		removed++
 	}
 	return fmt.Sprintf("%d granted, %d created, %d removed", len(granted), teams.created, removed), nil
+}
+
+// ghLogin returns the login of the account gh is authenticated as.
+func ghLogin() (string, error) {
+	out, err := gh("api", "user", "--jq", ".login")
+	return strings.TrimSpace(out), err
 }
 
 // orgTeams is an org's teams by slug, as applyTeams creates the missing ones.
@@ -843,9 +889,9 @@ func tabPairs(out string) map[string]string {
 // did not name is deleted.
 //
 // This is what keeps repo config derived. The desired set follows entirely
-// from the class preset, the org profile and code-driven discovery, so
-// anything else on the repo is drift, such as a ruleset this version no longer
-// ships or one added by hand in the UI, and a reconcile removes it.
+// from the class preset, the org profile and code-driven discovery, so any
+// other ruleset on the repo is drift, dropped from the templates or added by
+// hand in the UI, and a reconcile removes it.
 func pruneRulesets(org, repo string, rulesets func() (map[string]string, error), op repocfg.Op) (string, error) {
 	live, err := rulesets()
 	if err != nil {
@@ -974,24 +1020,37 @@ var workflowsPinRe = regexp.MustCompile(`a-novel-kit/workflows/([^@\s"']+)@(v\d+
 // other byte of the template is left intact so a genuine template edit still
 // lands.
 func preserveNewerPins(desired, deployed string) string {
-	deployedVers := map[string]string{}
-	for _, m := range workflowsPinRe.FindAllStringSubmatch(deployed, -1) {
-		subpath, ver := m[1], m[2]
-		if cur, ok := deployedVers[subpath]; !ok || semver.Compare(ver, cur) > 0 {
-			deployedVers[subpath] = ver
-		}
-	}
-	if len(deployedVers) == 0 {
+	pins := highestPins(deployed)
+	if len(pins) == 0 {
 		return desired
 	}
-	return workflowsPinRe.ReplaceAllStringFunc(desired, func(pin string) string {
-		m := workflowsPinRe.FindStringSubmatch(pin)
+	return workflowsPinRe.ReplaceAllStringFunc(desired, pins.raise)
+}
+
+// pinVersions maps an a-novel-kit/workflows action sub-path to a version.
+type pinVersions map[string]string
+
+// highestPins returns the highest version text pins each action at.
+func highestPins(text string) pinVersions {
+	pins := pinVersions{}
+	for _, m := range workflowsPinRe.FindAllStringSubmatch(text, -1) {
 		subpath, ver := m[1], m[2]
-		if dv, ok := deployedVers[subpath]; ok && semver.Compare(dv, ver) > 0 {
-			return "a-novel-kit/workflows/" + subpath + "@" + dv
+		if cur, ok := pins[subpath]; !ok || semver.Compare(ver, cur) > 0 {
+			pins[subpath] = ver
 		}
-		return pin
-	})
+	}
+	return pins
+}
+
+// raise returns pin at the version p holds for its action when that version is
+// higher, and pin itself otherwise.
+func (p pinVersions) raise(pin string) string {
+	m := workflowsPinRe.FindStringSubmatch(pin)
+	subpath, ver := m[1], m[2]
+	if higher, ok := p[subpath]; ok && semver.Compare(higher, ver) > 0 {
+		return "a-novel-kit/workflows/" + subpath + "@" + higher
+	}
+	return pin
 }
 
 // blobSHA returns the git blob object id of content: SHA-1 over the

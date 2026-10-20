@@ -37,6 +37,9 @@ resolves against the **caller's** checkout, so its nested actions must be remote
 
 A **repo-local composite action** (`.github/actions/<name>/action.yml`) holds a step sequence used by
 several jobs in one repo and by no other repo — `service-json-keys`' `run-migrations` is the model.
+A job calls it as `uses: $/.github/actions/<name>`, the self-repository form, which resolves at the
+running commit without `actions/checkout`, on github.com with runner 2.336.0 or newer. A job still
+checks out when a later step reads repository files.
 
 ---
 

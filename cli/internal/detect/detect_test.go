@@ -21,10 +21,11 @@ func mustWrite(t *testing.T, path, content string) {
 	}
 }
 
-// TestEnvFileToEnv guards the classifier that drives build.composeUpPhased:
-// a service is a "dependent" (second wave) iff it declares a depends_on block,
-// in either form. The host ports to allocate are the ${VAR} host sides of port
-// mappings, and a file that does not parse comes up in one piece.
+// TestEnvFileToEnv guards the classifier the phased env start relies on: a
+// service is a dependent, started in the second wave, when it declares a
+// depends_on block in either form. The host ports to allocate are the ${VAR}
+// host sides of port mappings, and a file that does not parse comes up in one
+// piece.
 func TestEnvFileToEnv(t *testing.T) {
 	t.Parallel()
 
@@ -76,14 +77,12 @@ func TestEnvFileToEnv(t *testing.T) {
 	}
 }
 
-// TestGoTests locks in the -count=1 policy and the catch-all. Env-less kit-lib
-// targets omit -count=1 so Go's test cache serves the tight loop, while
-// env-backed targets keep it, since their Postgres state is invisible to that
-// cache. A test package no scoped env names gets an env-less, cacheable
-// catch-all; before it, that package ran nowhere and the suite reported success.
-// A bare go env (podman-compose.go.test.yaml, no path) runs ./... and covers the
-// whole module: a spurious catch-all in service-authentication's layout would
-// re-run its DB-backed tests with no env and fail.
+// TestGoTests locks in the -count=1 policy and the catch-all. Env-less targets
+// omit -count=1 so Go's test cache serves the tight loop, while env-backed
+// targets keep it, since their Postgres state is invisible to that cache. A test
+// package no scoped env names runs in an env-less, cacheable catch-all. A bare
+// go env (podman-compose.go.test.yaml, no path) runs ./... and covers the whole
+// module, so it leaves no catch-all.
 func TestGoTests(t *testing.T) {
 	t.Parallel()
 
@@ -189,6 +188,8 @@ func TestUncoveredGoSelectors(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
 			got := uncoveredGoSelectors(testCase.testPkg, testCase.scoped)
 			if !reflect.DeepEqual(got, testCase.want) {
 				t.Errorf("uncoveredGoSelectors = %v, want %v", got, testCase.want)

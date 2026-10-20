@@ -40,11 +40,10 @@ func Job(t detect.Target, timeout time.Duration, maxProcs int, keep bool) jobs.J
 }
 
 // PrepareEnv builds the process environment for a target: os.Environ() plus,
-// when the target has a compose env, allocated host ports, the URLs derived
-// from them, standard local test credentials, and whatever
-// scripts/setup-env.sh defines, then the repo's declared secrets. It streams
-// its progress to out.
-func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, error) {
+// when the target has a compose env, the allocated host ports, the URLs derived
+// from them and standard local test credentials, then the repo's declared
+// secrets. It streams its progress to out.
+func PrepareEnv(t detect.Target, out io.Writer) ([]string, error) {
 	runEnv := os.Environ()
 	if t.Env != nil {
 		added, err := composeEnv(t.Env, runEnv)
@@ -59,18 +58,6 @@ func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, 
 	root := repoRoot(t)
 	if root == "" {
 		return runEnv, nil
-	}
-
-	// Source scripts/setup-env.sh for the service constants it defines, such as
-	// APP_MASTER_KEY. It already sees the ports and URLs set above, so its
-	// `${VAR:=…}` defaults stay inert and cannot override them.
-	if se := filepath.Join(root, "scripts", "setup-env.sh"); detect.IsFile(se) {
-		_, _ = fmt.Fprintf(out, "── setup-env: %s ──\n", rel(root, se))
-		env, err := sourceEnv(ctx, se, root, runEnv, out)
-		if err != nil {
-			return nil, fmt.Errorf("setup-env.sh failed: %w", err)
-		}
-		runEnv = env
 	}
 
 	// Secrets come last so a provisioned value wins over any default. Values
@@ -147,7 +134,7 @@ func run(ctx context.Context, t detect.Target, timeout time.Duration, maxProcs i
 	}
 
 	_, _ = fmt.Fprintf(out, "$ %s %s\n", t.Cmd, strings.Join(t.Args, " "))
-	runEnv, err := PrepareEnv(ctx, t, out)
+	runEnv, err := PrepareEnv(t, out)
 	if err != nil {
 		return err
 	}
@@ -207,21 +194,14 @@ func runInEnv(ctx context.Context, t detect.Target, keep bool, runEnv []string, 
 	return cmd.Wait()
 }
 
-// repoRoot is the directory holding scripts/ and builds/ for a target: the
-// compose file's grandparent (builds/<file> → repo) when there is an env, else
-// the target's own directory (kit libs, root pnpm).
+// repoRoot is the repository root of a target, which holds its secrets
+// manifest: the compose file's grandparent (builds/<file> → repo) when there is
+// an env, else the target's own directory (kit libs, root pnpm).
 func repoRoot(t detect.Target) string {
 	if t.Env != nil {
 		return filepath.Dir(filepath.Dir(t.Env.File))
 	}
 	return t.Dir
-}
-
-func rel(base, p string) string {
-	if r, err := filepath.Rel(base, p); err == nil {
-		return r
-	}
-	return p
 }
 
 // allocPorts binds an ephemeral TCP port for each var name, closes it, and
@@ -317,24 +297,6 @@ func derivedURLs(names []string, env []string) []string {
 	return out
 }
 
-// sourceEnv runs setup-env.sh in bash and returns the resulting environment.
-// `set -a` exports every assignment; setup-env's own prints are redirected to
-// stderr (captured into log) so only the NUL-delimited `env` reaches stdout.
-// baseEnv (including the pre-allocated ports) is the script's starting env, so
-// its `${PORT:=$(node …)}` assignments are already satisfied.
-func sourceEnv(ctx context.Context, script, dir string, baseEnv []string, log io.Writer) ([]string, error) {
-	cmd := exec.CommandContext(ctx, "bash", "-c", `set -a; . "$1" 1>&2; env -0`, "bash", script)
-	cmd.Dir = dir
-	cmd.Env = baseEnv
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = log
-	if err := cmd.Run(); err != nil {
-		return nil, err
-	}
-	return strings.FieldsFunc(out.String(), func(r rune) bool { return r == 0 }), nil
-}
-
 // compose runs `podman compose [global...] -p <project> -f <file> <args...>`
 // with the given environment, streaming combined output into buf.
 func compose(ctx context.Context, buf io.Writer, env []string, e *detect.ComposeEnv, global []string, args ...string) error {
@@ -408,27 +370,19 @@ func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
 	return conflicts
 }
 
-// TearDown removes one compose project's containers, volumes, and orphans,
-// scoped to that env via `-p <project> -f <file>`. --remove-orphans clears
-// containers the current compose no longer declares, such as after a profile
-// change, which otherwise trigger `container name … already in use`.
+// TearDown removes one compose project's containers, volumes and orphans,
+// scoped to that env through `-p <project> -f <file>`. --remove-orphans clears
+// the containers the compose file no longer declares, such as after a profile
+// change, which a later `up` would collide with.
 //
-// Teardown runs in two passes:
-//
-//  1. `compose down -t 10`. 10s covers postgres' shutdown checkpoint, which can
-//     stretch past 2s once migrations and key rotation have dirtied its
-//     buffers, and still quits promptly.
-//  2. On an error from the first pass, `podman pod rm -f` then `network rm -f`
-//     for this env. podman-compose 1.5.0 sometimes reports success while
-//     leaving a container running; that container holds its pod, which holds
-//     the network, and the next run cannot claim the project name. Removing the
-//     pod first frees its containers and de-references the network, so the
-//     network rm succeeds. Errors here are swallowed, since the resources may
-//     already be gone or may never have come up.
-//
-// The names follow podman-compose's conventions: the pod is "pod_<project>",
-// and the network "<project>_api", after the `networks: { api: }` every service
-// compose file declares.
+// `compose down -t 10` gives postgres 10s for its shutdown checkpoint, which
+// can pass 2s once migrations and key rotation dirtied its buffers. When it
+// fails, a container it left still holds the env's pod, the pod holds the
+// network, and the next run cannot claim the project name. TearDown then
+// removes the pod, which frees its containers, and the network, ignoring
+// errors, since either may be gone already. The names follow podman-compose:
+// the pod is "pod_<project>", and the network "<project>_api", after the
+// `networks: { api: }` every service compose file declares.
 func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	var buf bytes.Buffer
 	err := compose(ctx, &buf, os.Environ(), &e, nil,

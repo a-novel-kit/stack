@@ -18,9 +18,11 @@ type Writer struct {
 	ts *targetStream
 }
 
-// Stdout / Stderr return a new Writer view bound to this stream tag.
-// The two views share the underlying targetStream's file + subscribers.
+// Stdout returns a view of the Writer that tags its lines stdout. Both views
+// share the target's file and subscribers.
 func (w *Writer) Stdout() io.Writer { return &streamWriter{w: w, stream: StreamStdout} }
+
+// Stderr returns a view of the Writer that tags its lines stderr.
 func (w *Writer) Stderr() io.Writer { return &streamWriter{w: w, stream: StreamStderr} }
 
 // Close finalizes the underlying stream (closes file + subscribers).

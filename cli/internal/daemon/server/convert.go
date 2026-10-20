@@ -7,7 +7,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
+	"github.com/a-novel-kit/stack/cli/internal/daemon/env"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/runner"
+	"github.com/a-novel-kit/stack/cli/internal/daemon/volumes"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -110,6 +112,22 @@ func kindToProto(k discovery.TargetKind) anovelv1.TargetKind {
 		return anovelv1.TargetKind_TARGET_KIND_LONG_RUNNER
 	default:
 		return anovelv1.TargetKind_TARGET_KIND_UNSPECIFIED
+	}
+}
+
+// envEntryToProto renders one env entry of svc as GetEnv lists it.
+func envEntryToProto(svc *discovery.Service, e env.Entry) *anovelv1.EnvEntry {
+	return &anovelv1.EnvEntry{Stack: svc.Stack, Service: svc.Name, Key: e.Key, Value: e.Value}
+}
+
+// volumeToProto renders a volume row as ListVolumes lists it.
+func volumeToProto(v volumes.Volume) *anovelv1.Volume {
+	return &anovelv1.Volume{
+		Name:        v.Name,
+		Service:     v.Service,
+		Stack:       v.Stack,
+		SizeBytes:   v.SizeBytes,
+		BackupCount: v.BackupCount,
 	}
 }
 

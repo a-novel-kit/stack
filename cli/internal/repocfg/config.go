@@ -23,12 +23,18 @@ var templatesFS embed.FS
 type Class string
 
 const (
-	ClassService   Class = "service"
-	ClassPlatform  Class = "platform"
-	ClassInfra     Class = "infra"
-	ClassLibrary   Class = "library"
+	// ClassService is a backend service, a service-* repository.
+	ClassService Class = "service"
+	// ClassPlatform is a frontend platform, a platform-* repository.
+	ClassPlatform Class = "platform"
+	// ClassInfra is the infra repository, whose merges deploy production.
+	ClassInfra Class = "infra"
+	// ClassLibrary is a library or a tool, the class of any other name.
+	ClassLibrary Class = "library"
+	// ClassWorkflows is the repository of the shared CI actions.
 	ClassWorkflows Class = "workflows"
-	ClassMeta      Class = "meta"
+	// ClassMeta is an organization's .github repository.
+	ClassMeta Class = "meta"
 )
 
 // AllClasses is the ordered set of known classes (for the UI picker and
@@ -101,8 +107,8 @@ type Merge struct {
 }
 
 // SecurityToggles mirrors the repository security settings repocfg manages.
-// DependabotAlerts is optional because GitHub exposes alerts through a
-// dedicated endpoint; nil leaves that setting unmanaged for older presets.
+// DependabotAlerts has an endpoint of its own, and a nil value leaves the
+// live setting as it is.
 type SecurityToggles struct {
 	SecretScanning   bool  `yaml:"secret_scanning"`
 	PushProtection   bool  `yaml:"push_protection"`
@@ -194,11 +200,10 @@ type LabelDef struct {
 	Description string `yaml:"description"`
 }
 
-// LabelsConfig is governance/labels.yaml: the uniform label vocabulary every
-// repo carries, provisioned like CODEOWNERS. An Ensure label is created when
-// absent and updated when its color or description drifts, and a Retire label
-// is deleted. A label in neither list is left untouched, so apply never
-// removes a label it was not told about.
+// LabelsConfig is governance/labels.yaml, the label set every repo carries. An
+// Ensure label is created when absent and updated when its color or
+// description drifts, a Retire label is deleted, and any other label is left
+// untouched.
 type LabelsConfig struct {
 	Ensure []LabelDef `yaml:"ensure"`
 	Retire []string   `yaml:"retire"`

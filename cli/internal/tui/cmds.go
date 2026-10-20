@@ -49,6 +49,10 @@ func setStatusCmd(level statusLevel, text string) tea.Cmd {
 	}
 }
 
+// errOf drops an RPC's response and keeps its error, so an action returns the
+// call directly.
+func errOf[T any](_ T, err error) error { return err }
+
 // runAction runs a daemon-backed palette action. It shows busyText while
 // do runs under timeout, then emits an actionResultMsg that Update renders
 // as successText, or as the error prefixed by actionLabel.
@@ -112,22 +116,25 @@ func (m *model) followSelectedLogs() {
 	if id == "" || m.program == nil {
 		return
 	}
-	gen := m.followGen
 	ctx, cancel := context.WithCancel(context.Background())
 	m.followCancel = cancel
-	go func() {
-		stream, err := m.c.StreamLogs(ctx, id, "", true /* follow */, anovelv1.LogStream_LOG_STREAM_UNSPECIFIED)
-		if err != nil {
-			m.program.Send(errMsg{err: err})
+	go m.forwardLogs(ctx, id, m.followGen)
+}
+
+// forwardLogs sends the followed log of id to the program, each line tagged
+// with the follower generation gen, until ctx ends or the stream does.
+func (m *model) forwardLogs(ctx context.Context, id string, gen int) {
+	stream, err := m.c.StreamLogs(ctx, id, "", true /* follow */, anovelv1.LogStream_LOG_STREAM_UNSPECIFIED)
+	if err != nil {
+		m.program.Send(errMsg{err: err})
+		return
+	}
+	for ln, err := range stream {
+		if err != nil || ctx.Err() != nil {
 			return
 		}
-		for ln, err := range stream {
-			if err != nil || ctx.Err() != nil {
-				return
-			}
-			m.program.Send(logLineMsg{line: ln, gen: gen})
-		}
-	}()
+		m.program.Send(logLineMsg{line: ln, gen: gen})
+	}
 }
 
 // runPaletteCommand dispatches a `:command` from the palette. The returned
@@ -179,30 +186,24 @@ func (m *model) startCmd(args []string) tea.Cmd {
 	if len(args) > 0 && args[0] == modeContainer {
 		mode, modeLabel = anovelv1.Mode_MODE_CONTAINER, modeContainer
 	}
+	start := func(ctx context.Context) error { return errOf(m.c.StartTarget(ctx, t.GetId(), mode)) }
 	return runAction("Starting "+t.GetName()+" ("+modeLabel+")... infra + one-shots will run first",
-		"Started "+t.GetName(), "start "+t.GetName(), time.Minute,
-		func(ctx context.Context) error {
-			_, err := m.c.StartTarget(ctx, t.GetId(), mode)
-			return err
-		})
+		"Started "+t.GetName(), "start "+t.GetName(), time.Minute, start)
 }
 
 // killCmd stops the active target, or the active infra container alone,
 // leaving the rest of the service's infra and targets up.
 func (m *model) killCmd() tea.Cmd {
 	if t := m.activeTarget(); t != nil {
-		return runAction("Killing "+t.GetName()+"...", "Killed "+t.GetName(), "kill "+t.GetName(),
-			30*time.Second, func(ctx context.Context) error {
-				_, err := m.c.KillTarget(ctx, t.GetId(), 10*time.Second)
-				return err
-			})
+		kill := func(ctx context.Context) error { return errOf(m.c.KillTarget(ctx, t.GetId(), 10*time.Second)) }
+		return runAction("Killing "+t.GetName()+"...", "Killed "+t.GetName(), "kill "+t.GetName(), 30*time.Second, kill)
 	}
 	if in := m.activeInfra(); in != nil {
+		stop := func(ctx context.Context) error {
+			return errOf(m.c.KillInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName()))
+		}
 		return runAction("Stopping infra container "+in.GetName()+"...", "Stopped infra "+in.GetName(),
-			"kill infra "+in.GetName(), 30*time.Second, func(ctx context.Context) error {
-				_, err := m.c.KillInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName())
-				return err
-			})
+			"kill infra "+in.GetName(), 30*time.Second, stop)
 	}
 	return setStatusCmd(statusError, noTabText)
 }
@@ -211,18 +212,18 @@ func (m *model) killCmd() tea.Cmd {
 // place.
 func (m *model) restartCmd() tea.Cmd {
 	if t := m.activeTarget(); t != nil {
+		restart := func(ctx context.Context) error {
+			return errOf(m.c.RestartTarget(ctx, t.GetId(), anovelv1.Mode_MODE_UNSPECIFIED))
+		}
 		return runAction("Restarting "+t.GetName()+"...", "Restarted "+t.GetName(), "restart "+t.GetName(),
-			time.Minute, func(ctx context.Context) error {
-				_, err := m.c.RestartTarget(ctx, t.GetId(), anovelv1.Mode_MODE_UNSPECIFIED)
-				return err
-			})
+			time.Minute, restart)
 	}
 	if in := m.activeInfra(); in != nil {
+		restart := func(ctx context.Context) error {
+			return errOf(m.c.RestartInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName()))
+		}
 		return runAction("Restarting infra container "+in.GetName()+"...", "Restarted infra "+in.GetName(),
-			"restart infra "+in.GetName(), time.Minute, func(ctx context.Context) error {
-				_, err := m.c.RestartInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName())
-				return err
-			})
+			"restart infra "+in.GetName(), time.Minute, restart)
 	}
 	return setStatusCmd(statusError, noTabText)
 }
@@ -233,11 +234,11 @@ func (m *model) infraStartCmd() tea.Cmd {
 	if svc == nil {
 		return setStatusCmd(statusError, noServiceText)
 	}
+	start := func(ctx context.Context) error {
+		return errOf(m.c.StartInfra(ctx, "", svc.GetName(), anovelv1.Mode_MODE_GO_EXEC))
+	}
 	return runAction("Bringing up infra + one-shots for "+svc.GetName()+"...", "Infra ready for "+svc.GetName(),
-		"infra-start "+svc.GetName(), 5*time.Minute, func(ctx context.Context) error {
-			_, err := m.c.StartInfra(ctx, "", svc.GetName(), anovelv1.Mode_MODE_GO_EXEC)
-			return err
-		})
+		"infra-start "+svc.GetName(), 5*time.Minute, start)
 }
 
 // infraKillCmd tears down the active service's infra, cascading to its
@@ -252,11 +253,8 @@ func (m *model) infraKillCmd(args []string) tea.Cmd {
 	if force {
 		busyText = "Force-tearing down infra + targets for " + svc.GetName() + "..."
 	}
-	return runAction(busyText, "Infra down for "+svc.GetName(), "infra-kill "+svc.GetName(),
-		30*time.Second, func(ctx context.Context) error {
-			_, err := m.c.KillInfra(ctx, "", svc.GetName(), force)
-			return err
-		})
+	kill := func(ctx context.Context) error { return errOf(m.c.KillInfra(ctx, "", svc.GetName(), force)) }
+	return runAction(busyText, "Infra down for "+svc.GetName(), "infra-kill "+svc.GetName(), 30*time.Second, kill)
 }
 
 // volumeBackupCmd backs up the active service's volumes.
@@ -265,12 +263,9 @@ func (m *model) volumeBackupCmd() tea.Cmd {
 	if svc == nil {
 		return setStatusCmd(statusError, noServiceText)
 	}
+	backup := func(ctx context.Context) error { return errOf(m.c.BackupVolume(ctx, "", svc.GetName(), "", false)) }
 	return runAction("Backing up volumes for "+svc.GetName()+"... (may take a while)",
-		"Backed up volumes for "+svc.GetName(), "volume-backup "+svc.GetName(),
-		5*time.Minute, func(ctx context.Context) error {
-			_, err := m.c.BackupVolume(ctx, "", svc.GetName(), "", false)
-			return err
-		})
+		"Backed up volumes for "+svc.GetName(), "volume-backup "+svc.GetName(), 5*time.Minute, backup)
 }
 
 // topologyCmd fetches the dependency graph of the active service, or of the

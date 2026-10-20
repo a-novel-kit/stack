@@ -68,9 +68,7 @@ func RunSandbox(
 		return fmt.Errorf("resolve working directory: %w", err)
 	}
 	system := sandboxSystem{
-		tempDir: func() (string, error) {
-			return os.MkdirTemp("", "a-novel-sandbox-*")
-		},
+		tempDir:   func() (string, error) { return os.MkdirTemp("", "a-novel-sandbox-*") },
 		clone:     setup.CloneStack,
 		removeAll: os.RemoveAll,
 		run: func(ctx context.Context, dir string, env, args []string, commandOut, commandErr io.Writer) error {
@@ -133,14 +131,8 @@ func runSandbox(
 	}
 
 	env := replaceEnv(system.environ, stacks.EnvVar, "sandbox:"+root)
-	if err := system.run(
-		ctx,
-		root,
-		env,
-		[]string{commandCore, commandSync, "--root", root},
-		stderr,
-		stderr,
-	); err != nil {
+	syncArgs := []string{commandCore, commandSync, "--root", root}
+	if err := system.run(ctx, root, env, syncArgs, stderr, stderr); err != nil {
 		var exitErr *ExitError
 		if errors.As(err, &exitErr) {
 			return err

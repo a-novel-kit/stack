@@ -167,8 +167,14 @@ git hides ssh-keygen's "Confirm user presence" prompt until it fails. Commits no
 must not reach the key: scratch repositories and test suites that commit inherit `commit.gpgsign`,
 so run them with `-c commit.gpgsign=false` or `GIT_CONFIG_GLOBAL=/dev/null`.
 
-The stack checkout carries Git LFS's pre-push hook, which opens an SSH master of its own. A plain
-push there asks for a second touch. Turn LFS's multiplexing off, so LFS rides the shared connection:
+Git LFS's pre-push hook opens an SSH master of its own, so a plain push from a checkout that carries
+it asks for a second touch. The stack and uikit carry it, as does any checkout where this succeeds:
+
+```bash
+grep -q lfs "$(git rev-parse --git-common-dir)/hooks/pre-push"
+```
+
+Turn LFS's multiplexing off in every such checkout, so LFS rides the shared connection:
 
 ```bash
 git -c lfs.ssh.automultiplex=false push

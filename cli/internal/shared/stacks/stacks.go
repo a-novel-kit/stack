@@ -12,7 +12,7 @@ import (
 // DefaultName is the stack name used when A_NOVEL_STACKS is unset.
 const DefaultName = "default"
 
-// EnvVar is the env var name read at daemon start.
+// EnvVar names the environment variable that registers the stacks.
 const EnvVar = "A_NOVEL_STACKS"
 
 // Stack is one registered git-checkout the daemon manages.
@@ -22,10 +22,9 @@ type Stack struct {
 	IsDefault bool
 }
 
-// Parse reads $A_NOVEL_STACKS (or the provided raw string for testing) and
-// returns the ordered list of stacks. The first entry is marked default.
-// It returns at least one stack on success, falling back to the implicit
-// default at ~/git-projects/a-novel when the variable is unset or empty.
+// Parse parses a $A_NOVEL_STACKS value into the ordered list of stacks, the
+// first one marked default. An empty value yields the implicit default stack
+// at ~/git-projects/a-novel, so a successful parse returns at least one stack.
 func Parse(raw string) ([]Stack, error) {
 	if raw == "" {
 		return []Stack{implicitDefault()}, nil
@@ -49,7 +48,7 @@ func Parse(raw string) ([]Stack, error) {
 		seen[name] = true
 		out = append(out, Stack{
 			Name:      name,
-			Path:      expandHome(path),
+			Path:      paths.ExpandHome(path),
 			IsDefault: len(out) == 0,
 		})
 	}
@@ -70,19 +69,6 @@ func implicitDefault() Stack {
 		Path:      filepath.Join(paths.Home(), "git-projects", "a-novel"),
 		IsDefault: true,
 	}
-}
-
-// expandHome turns a leading ~ into $HOME. Only that prefix expands, and
-// everything else is returned unchanged, so a shell-expansion mistake surfaces
-// as a broken path.
-func expandHome(p string) string {
-	if rest, ok := strings.CutPrefix(p, "~/"); ok {
-		return filepath.Join(paths.Home(), rest)
-	}
-	if p == "~" {
-		return paths.Home()
-	}
-	return p
 }
 
 // Default is the default stack, the first entry of $A_NOVEL_STACKS.

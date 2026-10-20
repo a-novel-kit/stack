@@ -40,8 +40,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      # Go module lives under cli/, not the repo root — working-directory is
-      # honoured by the shared action (a-novel-kit/workflows#140).
       - uses: a-novel-kit/workflows/go-actions/lint-go@v1.66.0
         with:
           working-directory: cli
@@ -105,8 +103,7 @@ jobs:
           # renovate: datasource=docker depName=semgrep/semgrep
           version: "1.181.0"
 
-  # Replaces GitGuardian, which gated on a hosted service: when it saturated,
-  # every PR in the fleet became unmergeable. This runs offline.
+  # Scans for committed secrets offline, so no hosted service can hold a merge.
   scan-secrets:
     runs-on: ubuntu-latest
     permissions:
@@ -121,8 +118,7 @@ jobs:
           # renovate: datasource=github-releases depName=gitleaks/gitleaks
           version: "8.30.1"
 
-  # Replaces CodeQL's actions analysis: excessive-permissions is the class it
-  # reported as actions/missing-workflow-permissions.
+  # Audits the workflows, the permissions each job holds included.
   lint-workflows:
     runs-on: ubuntu-latest
     permissions:

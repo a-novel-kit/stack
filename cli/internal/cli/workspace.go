@@ -134,8 +134,8 @@ func workspaceRoot(override string) (string, error) {
 	return os.Getwd()
 }
 
-// normaliseFilter turns repeatable, comma-splittable flag values into a set.
-func normaliseFilter(values []string) map[string]bool {
+// normalizeFilter turns repeatable, comma-splittable flag values into a set.
+func normalizeFilter(values []string) map[string]bool {
 	out := map[string]bool{}
 	for _, v := range values {
 		for _, part := range strings.Split(v, ",") {

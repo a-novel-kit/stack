@@ -1,11 +1,10 @@
-# Canonical issue/PR label set, provisioned uniformly to every repo like
-# governance/CODEOWNERS. `ensure` labels are upserted — created, or recolored and
-# re-described to match — and `retire` labels are deleted. A label listed in
-# neither is left untouched, so apply never removes an unlisted label.
+# The issue and pull request labels every repo gets, as it gets governance/CODEOWNERS.
+# `ensure` labels are created, or recolored and re-described to match, and `retire`
+# labels are deleted. A label listed in neither is left untouched.
 #
-# Labels here are cross-cutting signals that sort work within a board status. The
-# kind of an issue (Epic / Feature / Task / Bug / Initiative) is its issue type,
-# and Priority and Size are project fields.
+# Labels are cross-cutting signals that sort work within a board status. The kind of
+# an issue (Epic, Feature, Task, Bug, Initiative) is its issue type, and Priority and
+# Size are project fields.
 ensure:
   - name: documentation
     color: "0075ca"
@@ -58,30 +57,29 @@ ensure:
   - name: with-feature-env
     color: "0e8a16"
     description: Tags this pull request's images for its current head; a push removes it
-  # automation:paused — on an Epic issue, holds that one epic's [Agent] automation:
+  # automation:paused, on an Epic issue, holds that Epic's [Agent] automation:
   # merge-gate holds its members, and the partial-landing detector and rollback skip
-  # it, while other epics keep moving. It is best-effort: a label-read blip fails
-  # open and the pause is skipped that pass, so the org kill-switch
-  # (vars.AGENT_KILL_SWITCH) is the hard, read-free halt. GitHub caps a label
-  # `description` at 100 chars, so the field below is the short form and this comment
-  # carries the rest; a longer description 422s the label reconcile for every repo.
+  # it, while other Epics keep moving. The pause is best-effort: a failed label read
+  # skips it for that pass, so the org kill switch (vars.AGENT_KILL_SWITCH) is the
+  # hard halt. GitHub rejects a label description over 100 characters, which would
+  # fail the label reconcile on every repo, so the description holds the short form.
   - name: "automation:paused"
     color: "d93f0b"
     description: "Pauses this Epic's [Agent] automation (best-effort; org kill-switch is the hard halt)"
-  # escalation — the umbrella label the escalate action puts on every escalation
-  # ticket, so humans get one board filter for all open escalations. The color and
-  # description match the escalate action's own `gh label create --force`
+  # escalation is the umbrella label the escalate action puts on every escalation
+  # ticket, so one board filter shows every open escalation. The color and the
+  # description match the action's own `gh label create --force`
   # (generic-actions/escalate), so the two never recolor each other.
   - name: escalation
     color: "b60205"
     description: "Automated governance escalation (escalate action)."
 retire:
-  # Replaced by the `Triage` board status: a status is the action a task needs;
-  # labels only sort within a status.
+  # The `Triage` board status holds this signal: a status is the action a task
+  # needs, and labels only sort within a status.
   - triage
-  # Marked a hotfix's forward-port Task. Hotfixes now land on the default branch
-  # first and are backported, so nothing forward-ports.
+  # Marked a hotfix's forward-port Task. A hotfix lands on the default branch first
+  # and is backported, so nothing forward-ports.
   - hotfix-reconcile
-  # Marked Renovate's pull requests. Renovate no longer labels them: each label
-  # started another main run, and a cancelled one stranded a-novel/infra#857.
+  # Marked Renovate's pull requests. Each label change starts another main run, and
+  # a cancelled run can strand a pull request's required checks.
   - renovate

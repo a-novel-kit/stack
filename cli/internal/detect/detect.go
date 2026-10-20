@@ -106,10 +106,9 @@ type ComposeEnv struct {
 	// Services lists every compose service the file declares, sorted.
 	Services []string
 	// Dependents lists the services that declare a `depends_on:` block. The
-	// test env-up path starts dependency-free services first and dependents
-	// second, so ordering never relies on the compose provider's
-	// `depends_on` wait, which is broken on podman-compose ≤1.5.x and on
-	// setups without systemd. See build.composeUpPhased.
+	// env comes up with the other services first and the dependents second, so
+	// the order never relies on the compose provider's `depends_on` wait,
+	// which podman-compose 1.5 and setups without systemd do not honor.
 	Dependents []string
 }
 
@@ -197,14 +196,18 @@ func walk(root string, visit func(dir, rel string) []Target) ([]Target, error) {
 	if err != nil {
 		return nil, err
 	}
-	slices.SortStableFunc(targets, func(a, b Target) int {
-		return cmp.Or(
-			cmp.Compare(slices.Index(Kinds, a.Kind), slices.Index(Kinds, b.Kind)),
-			cmp.Compare(a.RelDir, b.RelDir),
-			cmp.Compare(a.Name, b.Name),
-		)
-	})
+	slices.SortStableFunc(targets, compareTargets)
 	return targets, nil
+}
+
+// compareTargets orders targets by kind, in Kinds order, then by directory,
+// then by name.
+func compareTargets(a, b Target) int {
+	return cmp.Or(
+		cmp.Compare(slices.Index(Kinds, a.Kind), slices.Index(Kinds, b.Kind)),
+		cmp.Compare(a.RelDir, b.RelDir),
+		cmp.Compare(a.Name, b.Name),
+	)
 }
 
 // detectGo emits a single `go build ./...` target when dir holds a go.mod.
@@ -212,15 +215,12 @@ func detectGo(dir, rel string) []Target {
 	if !IsFile(filepath.Join(dir, "go.mod")) {
 		return nil
 	}
-	return []Target{{
-		Kind:   KindGo,
-		Name:   goModuleName(dir),
-		RelDir: rel,
-		Dir:    dir,
-		Detail: "go build " + pkgAll,
-		Cmd:    string(KindGo),
-		Args:   []string{buildArg, pkgAll},
-	}}
+	return []Target{goTarget(dir, rel, goModuleName(dir), "go build "+pkgAll, buildArg, pkgAll)}
+}
+
+// goTarget runs `go <args>` in the module at dir, as name, shown with detail.
+func goTarget(dir, rel, name, detail string, args ...string) Target {
+	return Target{Kind: KindGo, Name: name, RelDir: rel, Dir: dir, Detail: detail, Cmd: string(KindGo), Args: args}
 }
 
 // detectPnpm emits one target per "build"-prefixed script in dir's

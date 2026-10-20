@@ -25,6 +25,7 @@ func runGitRemote(dir string, args ...string) (string, error) {
 	return runGitEnv(dir, env, args...)
 }
 
+// runGitEnv is runGit with env added to the process environment.
 func runGitEnv(dir string, env []string, args ...string) (string, error) {
 	c := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	c.Env = append(os.Environ(), append(env, "GIT_LFS_SKIP_SMUDGE=1")...)

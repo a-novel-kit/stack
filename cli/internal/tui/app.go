@@ -131,18 +131,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case servicesMsg:
-		m.services = msg.services
-		m.loaded = true
-		// A successful refresh clears a transient error such as a
-		// daemon-restart blip, so the nav stops showing it after recovery.
-		m.err = nil
-		// Clamp selection.
-		if m.selectedSvc >= len(m.services) {
-			m.selectedSvc = 0
-		}
-		if m.selectedTab >= m.tabCount() {
-			m.selectedTab = 0
-		}
+		m.onServices(msg.services)
 		return m, nil
 
 	case errMsg:
@@ -157,21 +146,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case actionResultMsg:
-		if msg.err != nil {
-			m.status = statusEntry{level: statusError, text: msg.actionLabel + ": " + msg.err.Error(), at: time.Now()}
-			// Errors persist until the next command. Refresh anyway to
-			// pick up partial state.
-			return m, refreshServicesCmd(m.c)
-		}
-		m.status = statusEntry{level: statusInfo, text: msg.successText, at: time.Now()}
-		// A successful action may have replaced the log file: kill+restart
-		// truncates via O_TRUNC, and even a plain start opens a fresh one.
-		// Reattaching the follower restarts the buffer from that file.
-		m.followSelectedLogs()
-		return m, tea.Batch(
-			refreshServicesCmd(m.c),
-			tea.Tick(statusInfoTTL, func(time.Time) tea.Msg { return statusFadeMsg{} }),
-		)
+		return m, m.onActionResult(msg)
 
 	case statusFadeMsg:
 		// Only info fades: busy is still in-flight, and an error is sticky
@@ -182,22 +157,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case logLineMsg:
-		// Drop messages from a stale follower generation. They arrive
-		// during the cancel-then-start race window on a tab or service
-		// switch, so only the current generation reaches the view.
-		if msg.gen != m.followGen {
-			return m, nil
-		}
-		m.logLines = append(m.logLines, msg.line)
-		if len(m.logLines) > maxLogLines {
-			m.logLines = m.logLines[len(m.logLines)-maxLogLines:]
-		}
-		// While paused, the offset moves past the new line so the window
-		// keeps showing the same lines. Clamping snaps it back when trimming
-		// pushed that window past the buffer.
-		if m.logScroll > 0 {
-			m.logScroll = m.clampLogScroll(m.logScroll + 1)
-		}
+		m.onLogLine(msg)
 		return m, nil
 
 	case tickMsg:
@@ -214,6 +174,56 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// onServices takes a fresh service list. It clears a transient error, such as
+// a daemon-restart blip, so the nav stops showing it after recovery, and
+// clamps the selection to the new list.
+func (m *model) onServices(services []*anovelv1.Service) {
+	m.services = services
+	m.loaded = true
+	m.err = nil
+	if m.selectedSvc >= len(m.services) {
+		m.selectedSvc = 0
+	}
+	if m.selectedTab >= m.tabCount() {
+		m.selectedTab = 0
+	}
+}
+
+// onActionResult shows an action's outcome in the status bar and refreshes
+// the services, to pick up even a failed action's partial state. An error
+// stays until the next command. A success fades, and reattaches the log
+// follower, since the action may have replaced the log file: a restart
+// truncates it, and even a plain start opens a fresh one.
+func (m *model) onActionResult(msg actionResultMsg) tea.Cmd {
+	if msg.err != nil {
+		m.status = statusEntry{level: statusError, text: msg.actionLabel + ": " + msg.err.Error(), at: time.Now()}
+		return refreshServicesCmd(m.c)
+	}
+	m.status = statusEntry{level: statusInfo, text: msg.successText, at: time.Now()}
+	m.followSelectedLogs()
+	fade := tea.Tick(statusInfoTTL, func(time.Time) tea.Msg { return statusFadeMsg{} })
+	return tea.Batch(refreshServicesCmd(m.c), fade)
+}
+
+// onLogLine appends a followed log line. A line from a stale follower
+// generation, which arrives during the cancel-then-start window of a tab or
+// service switch, is dropped. While the pane is scrolled back, the offset moves
+// past the new line, so the window keeps showing the same lines; clamping
+// snaps it back when trimming pushed that window past the buffer.
+func (m *model) onLogLine(msg logLineMsg) {
+	if msg.gen != m.followGen {
+		return
+	}
+	m.logLines = append(m.logLines, msg.line)
+	if len(m.logLines) > maxLogLines {
+		m.logLines = m.logLines[len(m.logLines)-maxLogLines:]
+	}
+	if m.logScroll > 0 {
+		m.logScroll = m.clampLogScroll(m.logScroll + 1)
+	}
+}
+
+// handleKey routes a key press to the active view.
 func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.view {
 	case viewHelp, viewTopology:

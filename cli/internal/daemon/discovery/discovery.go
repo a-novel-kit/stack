@@ -241,10 +241,7 @@ func discoverStack(st *Stack) {
 	if err != nil {
 		// No app/ directory means no services. A freshly cloned stack looks
 		// like this, so record it without failing.
-		st.Errors = append(st.Errors, DiscoveryError{
-			Path:   appDir,
-			Reason: "no app/ directory under stack root",
-		})
+		st.Errors = append(st.Errors, DiscoveryError{Path: appDir, Reason: "no app/ directory under stack root"})
 		return
 	}
 	// Skip the *-template scaffolds: they are design-time references with
@@ -291,22 +288,21 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 		// naturally.
 		if len(cs.Profiles) == 0 {
 			if _, hasCmd := cmdNames[csName]; hasCmd {
-				errs = append(errs, DiscoveryError{
-					Service: name,
-					Path:    composePath,
-					Reason:  fmt.Sprintf("compose service %q has no profile but a matching cmd/%s/ exists — declare profiles:[%q] to make it a target, or rename the cmd dir", csName, csName, csName),
-				})
+				reason := fmt.Sprintf("compose service %q has no profile but a matching cmd/%s/ exists — "+
+					"declare profiles:[%q] to make it a target, or rename the cmd dir", csName, csName, csName)
+				errs = append(errs, DiscoveryError{Service: name, Path: composePath, Reason: reason})
 				delete(cmdNames, csName)
 				continue
 			}
-			svc.Infra = append(svc.Infra, &Infra{
+			infra := &Infra{
 				Name:        csName,
 				Service:     name,
 				Stack:       stack,
 				DependsOn:   deps,
 				Ports:       cs.Ports,
 				Environment: cs.Environment,
-			})
+			}
+			svc.Infra = append(svc.Infra, infra)
 			continue
 		}
 
@@ -315,14 +311,11 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 		profile := cs.Profiles[0]
 		cmdDir, hasCmd := cmdNames[profile]
 		if !hasCmd {
-			errs = append(errs, DiscoveryError{
-				Service: name,
-				Path:    composePath,
-				Reason:  fmt.Sprintf("compose service %q has profiles:[%q] but no matching cmd/%s/", csName, profile, profile),
-			})
+			reason := fmt.Sprintf("compose service %q has profiles:[%q] but no matching cmd/%s/", csName, profile, profile)
+			errs = append(errs, DiscoveryError{Service: name, Path: composePath, Reason: reason})
 			continue
 		}
-		svc.Targets = append(svc.Targets, &Target{
+		target := &Target{
 			Name:        profile,
 			ComposeName: csName,
 			Service:     name,
@@ -332,7 +325,8 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 			DependsOn:   deps,
 			Ports:       cs.Ports,
 			Environment: cs.Environment,
-		})
+		}
+		svc.Targets = append(svc.Targets, target)
 		// Mark this cmd as matched, leaving only orphans behind for the check
 		// below.
 		delete(cmdNames, profile)
@@ -340,12 +334,9 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 
 	// A cmd/ entry left unmatched is an orphan: without a compose mirror it
 	// cannot run.
-	for unmatchedCmd := range cmdNames {
-		errs = append(errs, DiscoveryError{
-			Service: name,
-			Path:    filepath.Join(dir, "cmd", unmatchedCmd),
-			Reason:  fmt.Sprintf("cmd/%s/ has no matching compose service with profiles:[%q]", unmatchedCmd, unmatchedCmd),
-		})
+	for unmatchedCmd, cmdDir := range cmdNames {
+		reason := fmt.Sprintf("cmd/%s/ has no matching compose service with profiles:[%q]", unmatchedCmd, unmatchedCmd)
+		errs = append(errs, DiscoveryError{Service: name, Path: cmdDir, Reason: reason})
 	}
 
 	for _, vName := range slices.Sorted(maps.Keys(cf.Volumes)) {

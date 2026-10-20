@@ -24,11 +24,14 @@ type bwsSecret struct {
 	RevisionDate time.Time `json:"revisionDate"`
 }
 
-// bwsSecrets reads the governance project's secrets by key, or nil when the
+// bwsSecrets is listBWSSecrets, a package var so tests read a fixture instead
+// of Bitwarden.
+var bwsSecrets = listBWSSecrets
+
+// listBWSSecrets reads the governance project's secrets by key, or nil when the
 // local store holds no access token. The token reaches `bws` through its
-// environment, and neither a value nor the token is ever printed. A package var
-// so tests read a fixture instead of Bitwarden.
-var bwsSecrets = func(governance *repocfg.Governance) (map[string]bwsSecret, error) {
+// environment, and neither a value nor the token is ever printed.
+func listBWSSecrets(governance *repocfg.Governance) (map[string]bwsSecret, error) {
 	store, err := secrets.Open()
 	if err != nil {
 		return nil, err

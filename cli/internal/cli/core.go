@@ -48,13 +48,11 @@ func IsDaemonReexec(args []string) bool {
 func newCoreCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   commandCore,
-		Short: "Manage the a-novel daemon (long-lived background process)",
-		Long: `The a-novel daemon is a long-lived background process that supervises
-running targets and serves the CLI / TUI / future web UI over a unix socket.
-
-A single daemon instance per user manages every registered stack (see
-'a-novel core stacks'). Designed to live in your .zshrc as 'a-novel core start',
-which is silent on already-running and idempotent.`,
+		Short: "Manage the daemon and the workspace",
+		Long: `The daemon is the background process that runs your services: one per user,
+for every registered stack. The CLI and the UI reach it over a unix socket.
+'core setup' makes each new shell run 'core start', which does nothing while
+the daemon runs.`,
 	}
 	cmd.AddCommand(newCoreStartCmd())
 	cmd.AddCommand(newCoreSetupCmd())
@@ -74,32 +72,31 @@ func newCoreStartCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "start",
 		Short: "Start the a-novel daemon (silent if already running)",
-		Long: `Start the long-lived a-novel daemon. Idempotent + silent if a healthy
-daemon is already running — designed to be safe in .zshrc / shell init.
-
-By default, detaches the daemon into the background and returns immediately.
-With --foreground, blocks and serves in the current terminal (useful for
-systemd units or debugging).
-
-Refuses with a clear message (not an interactive prompt) if the default
-stack isn't set up; run 'a-novel core setup' to bootstrap.`,
-		Example: `  # In ~/.zshrc — silent no-op if already running
-  a-novel core start
-
-  # Foreground (systemd / debugging)
+		Long: `Start the daemon in the background, and wait until it answers. A running
+daemon is left as it is, so a shell profile can run this on every start.
+--foreground serves in this terminal instead, as for a debugging session or
+a systemd unit. A missing default stack stops the start; 'core setup' creates
+it.`,
+		Example: `  a-novel core start
   a-novel core start --foreground`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if up, _ := daemonUp(cmd.Context(), rpc.New("")); up {
-				return nil
-			}
-			if foreground {
-				return daemon.Run(cmd.Context(), daemon.Options{Version: version.String()})
-			}
-			return startDetached()
+			return startDaemon(cmd.Context(), foreground)
 		},
 	}
 	cmd.Flags().BoolVar(&foreground, "foreground", false, "run daemon in foreground (don't detach)")
 	return cmd
+}
+
+// startDaemon starts the daemon unless one already answers: detached, or
+// serving in this process when foreground is set.
+func startDaemon(ctx context.Context, foreground bool) error {
+	if up, _ := daemonUp(ctx, rpc.New("")); up {
+		return nil
+	}
+	if foreground {
+		return daemon.Run(ctx, daemon.Options{Version: version.String()})
+	}
+	return startDetached()
 }
 
 func newCoreKillCmd() *cobra.Command {
@@ -107,49 +104,46 @@ func newCoreKillCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "kill",
 		Short: "Stop the a-novel daemon",
-		Long: `Stop the running a-novel daemon WITHOUT writing a reinstall checkpoint —
-on next 'core start' nothing is auto-relaunched.
-
-Without --force, SIGTERMs every running go-exec target (10s grace each)
-and leaves containers alone — those have their own podman lifecycle.
-
-With --force, ALSO tears down every service's infra (cascade-kills any
-remaining targets first). Use when you want a clean local environment;
-loses any go-exec target state without a checkpoint.
-
-For graceful 'restart-the-daemon-and-relaunch-my-targets', prefer
-'a-novel core prepare-reinstall' followed by 'core start', or use the
-'core restart' convenience.`,
+		Long: `Stop the daemon and the go-exec targets it runs, each with a 10s grace.
+Containers keep running. --force also tears down every service's infra,
+stopping the targets left first. The next 'core start' relaunches nothing;
+'core restart --preserve-targets' brings the go-exec targets back.`,
 		Example: `  a-novel core kill
   a-novel core kill --force`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			if up, err := daemonUp(ctx, c); !up {
-				if err == nil {
-					_, _ = fmt.Fprintln(os.Stderr, "a-novel: daemon not running")
-				}
-				return err
-			}
-			resp, err := shutdown(ctx, c, force, cmd.OutOrStdout())
-			if err != nil {
-				return err
-			}
-			// The daemon still exits, so it is waited on either way. The
-			// failures decide the exit code: whoever ran this to get a clean
-			// environment has to learn from the shell that they did not.
-			waitErr := waitDaemonGone(ctx, c, cmd.OutOrStdout())
-			if fails := resp.GetFailures(); len(fails) > 0 {
-				for _, f := range fails {
-					_, _ = fmt.Fprintf(os.Stderr, "a-novel: shutdown could not stop %s\n", f)
-				}
-				return fmt.Errorf("shutdown left %d target(s) running", len(fails))
-			}
-			return waitErr
+			return killDaemon(cmd, force)
 		},
 	}
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "also tear down all infra (cascade-kill remaining targets)")
 	return cmd
+}
+
+// killDaemon stops a running daemon and waits for it to exit. force also tears
+// down every service's infra. A target the shutdown could not stop fails the
+// command: whoever ran it to get a clean environment learns from the shell
+// that they did not.
+func killDaemon(cmd *cobra.Command, force bool) error {
+	ctx, out := cmd.Context(), cmd.OutOrStdout()
+	c := rpc.New("")
+	if up, err := daemonUp(ctx, c); !up {
+		if err == nil {
+			_, _ = fmt.Fprintln(os.Stderr, "a-novel: daemon not running")
+		}
+		return err
+	}
+	resp, err := shutdown(ctx, c, force, out)
+	if err != nil {
+		return err
+	}
+	// The daemon exits even after a failure, so it is waited on either way.
+	waitErr := waitDaemonGone(ctx, c, out)
+	if fails := resp.GetFailures(); len(fails) > 0 {
+		for _, f := range fails {
+			_, _ = fmt.Fprintf(os.Stderr, "a-novel: shutdown could not stop %s\n", f)
+		}
+		return fmt.Errorf("shutdown left %d target(s) running", len(fails))
+	}
+	return waitErr
 }
 
 // daemonUp pings the daemon briefly. A daemon that is not listening is down,
@@ -219,51 +213,16 @@ func newCoreRestartCmd() *cobra.Command {
 	var preserve bool
 	cmd := &cobra.Command{
 		Use:   "restart",
-		Short: "Stop and start the daemon (optionally preserving running go-exec targets)",
-		Long: `Convenience wrapper for the common "stop the daemon, start it back up"
-loop. Honors the same flags as 'core kill':
-
-  --force            tear down all infra alongside the daemon
-  --preserve-targets write a reinstall checkpoint first, so go-exec
-                     targets relaunch on next start (the same path
-                     'a-novel install' uses)
-
-Without flags, the daemon stops cleanly (containers survive, go-exec
-targets are SIGTERMed and NOT relaunched) and then starts fresh. With
---preserve-targets the new daemon comes back with the same go-exec
-target list it had before.
-
-If the daemon is already down, this is just 'core start'.`,
+		Short: "Stop and start the daemon, optionally keeping its go-exec targets",
+		Long: `Stop the daemon as 'core kill' does, then start it again.
+--preserve-targets checkpoints the go-exec targets first, and the new daemon
+relaunches them on their ports, as 'a-novel install' does. A daemon already
+down just starts.`,
 		Example: `  a-novel core restart
   a-novel core restart --preserve-targets
   a-novel core restart --force`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if preserve && force {
-				return usageError(errors.New("--preserve-targets and --force are mutually exclusive " +
-					"(force tears down everything; preserve assumes the targets continue)"))
-			}
-			ctx, out := cmd.Context(), cmd.OutOrStdout()
-			c := rpc.New("")
-			up, err := daemonUp(ctx, c)
-			if err != nil {
-				return err
-			}
-			if up {
-				if preserve {
-					// The prepare-reinstall path: the daemon checkpoints and
-					// exits, and the next start replays the checkpoint.
-					err = prepareReinstall(ctx, c, out)
-				} else {
-					_, err = shutdown(ctx, c, force, out)
-				}
-				if err != nil {
-					return err
-				}
-				if err := waitDaemonGone(ctx, c, out); err != nil {
-					return err
-				}
-			}
-			return startDetached()
+			return restartDaemon(cmd, force, preserve)
 		},
 	}
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "also tear down all infra during the stop step")
@@ -271,142 +230,161 @@ If the daemon is already down, this is just 'core start'.`,
 	return cmd
 }
 
+// restartDaemon stops a running daemon, then starts a detached one. preserve
+// checkpoints the go-exec targets for the new daemon to relaunch, the way
+// prepare-reinstall does; force also tears down every service's infra.
+func restartDaemon(cmd *cobra.Command, force, preserve bool) error {
+	if preserve && force {
+		return usageError(errors.New("--preserve-targets and --force are mutually exclusive " +
+			"(force tears down everything; preserve assumes the targets continue)"))
+	}
+	ctx, out := cmd.Context(), cmd.OutOrStdout()
+	c := rpc.New("")
+	up, err := daemonUp(ctx, c)
+	if err != nil {
+		return err
+	}
+	if up {
+		if preserve {
+			err = prepareReinstall(ctx, c, out)
+		} else {
+			_, err = shutdown(ctx, c, force, out)
+		}
+		if err != nil {
+			return err
+		}
+		if err := waitDaemonGone(ctx, c, out); err != nil {
+			return err
+		}
+	}
+	return startDetached()
+}
+
 func newCoreStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show daemon status (running? socket? stacks? uptime?)",
-		Long: `Reports whether the daemon is currently running, the socket it's listening
-on, the registered stacks (with paths and default marker), uptime, and
-whether a reinstall checkpoint is pending.
-
-Exits 0 always — "daemon down" is a normal observable state, not an error.`,
+		Short: "Show whether the daemon runs, with its socket, stacks and uptime",
+		Long: `Print whether the daemon runs, with its version, socket, uptime and stacks,
+and whether a reinstall checkpoint waits. A stopped daemon is a normal state,
+and the command exits 0 for it.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			s, err := c.Status(ctx)
-			if err != nil {
-				if rpc.IsNotRunning(err) {
-					fmt.Println("a-novel daemon: not running")
-					fmt.Println("  socket: " + c.SocketPath() + " (no listener)")
-					return nil
-				}
-				return err
-			}
-			fmt.Printf("a-novel daemon: running\n")
-			fmt.Printf("  version: %s\n", s.GetDaemonVersion())
-			fmt.Printf("  socket : %s\n", s.GetSocketPath())
-			fmt.Printf("  started: %s (%.0fs ago)\n",
-				s.GetStartedAt().AsTime().Format(time.RFC3339),
-				s.GetUptime().AsDuration().Seconds())
-			fmt.Printf("  stacks : %d\n", len(s.GetStacks()))
-			for _, st := range s.GetStacks() {
-				marker := " "
-				if st.GetIsDefault() {
-					marker = "*"
-				}
-				fmt.Printf("    %s %s\t%s\n", marker, st.GetName(), st.GetPath())
-			}
-			if s.GetReinstallCheckpointPending() {
-				fmt.Println("  reinstall checkpoint: pending")
-			}
-			return nil
+			return printDaemonStatus(cmd.Context(), cmd.OutOrStdout())
 		},
 	}
+}
+
+// printDaemonStatus prints whether the daemon runs and, when it does, its
+// version, socket, uptime and stacks, the default one starred.
+func printDaemonStatus(ctx context.Context, out io.Writer) error {
+	c := rpc.New("")
+	s, err := c.Status(ctx)
+	if rpc.IsNotRunning(err) {
+		_, _ = fmt.Fprintln(out, "a-novel daemon: not running")
+		_, _ = fmt.Fprintf(out, "  socket: %s (no listener)\n", c.SocketPath())
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(out, "a-novel daemon: running")
+	_, _ = fmt.Fprintf(out, "  version: %s\n", s.GetDaemonVersion())
+	_, _ = fmt.Fprintf(out, "  socket : %s\n", s.GetSocketPath())
+	_, _ = fmt.Fprintf(out, "  started: %s (%.0fs ago)\n",
+		s.GetStartedAt().AsTime().Format(time.RFC3339), s.GetUptime().AsDuration().Seconds())
+	_, _ = fmt.Fprintf(out, "  stacks : %d\n", len(s.GetStacks()))
+	for _, st := range s.GetStacks() {
+		marker := " "
+		if st.GetIsDefault() {
+			marker = "*"
+		}
+		_, _ = fmt.Fprintf(out, "    %s %s\t%s\n", marker, st.GetName(), st.GetPath())
+	}
+	if s.GetReinstallCheckpointPending() {
+		_, _ = fmt.Fprintln(out, "  reinstall checkpoint: pending")
+	}
+	return nil
 }
 
 func newCorePrepareReinstallCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "prepare-reinstall",
-		Short: "Write reinstall checkpoint + shut down for a graceful upgrade",
-		Long: `Asks the running daemon to checkpoint its in-flight go-exec targets to
-reinstall.json and exit cleanly. Containers survive the shutdown unchanged.
-
-The next 'a-novel core start' reads the checkpoint and relaunches the
-recorded go-exec targets, then deletes the checkpoint — yielding a steady
-state identical to pre-restart.
-
-Used by 'a-novel install' to make a rebuild non-disruptive. Not for direct
-manual use — for an immediate stop use 'core kill' instead.`,
+		Short: "Checkpoint the go-exec targets and stop the daemon",
+		Long: `Checkpoint the running go-exec targets and stop the daemon. Containers keep
+running. The next 'core start' relaunches the checkpointed targets on their
+ports, then deletes the checkpoint. 'a-novel install' and
+'core restart --preserve-targets' run this step for you.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			c := rpc.New("")
-			if up, err := daemonUp(ctx, c); !up {
-				if err == nil {
-					_, _ = fmt.Fprintln(cmd.OutOrStderr(), "a-novel: daemon not running (nothing to checkpoint)")
-				}
-				return err
-			}
-			if err := prepareReinstall(ctx, c, cmd.OutOrStdout()); err != nil {
-				return err
-			}
-			return waitDaemonGone(ctx, c, cmd.OutOrStdout())
+			return stopWithCheckpoint(cmd)
 		},
 	}
 }
 
+// stopWithCheckpoint has a running daemon checkpoint its go-exec targets and
+// exit, and waits until it is gone.
+func stopWithCheckpoint(cmd *cobra.Command) error {
+	ctx, out := cmd.Context(), cmd.OutOrStdout()
+	c := rpc.New("")
+	if up, err := daemonUp(ctx, c); !up {
+		if err == nil {
+			_, _ = fmt.Fprintln(cmd.OutOrStderr(), "a-novel: daemon not running (nothing to checkpoint)")
+		}
+		return err
+	}
+	if err := prepareReinstall(ctx, c, out); err != nil {
+		return err
+	}
+	return waitDaemonGone(ctx, c, out)
+}
+
 func newCoreSetupCmd() *cobra.Command {
-	var rcPath string
-	var noShellRC bool
-	var noStartDaemon bool
+	var opts setup.Options
 	var nonInteractive bool
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Interactive first-time bootstrap (stacks, dirs, .zshrc edits)",
-		Long: `One-time interactive bootstrap. Run after installing the CLI; idempotent
-on re-run (every step checks current state first, performs zero filesystem
-writes on a fully-set-up system).
+		Short: "Set up this machine: tools, directories, stacks and shell profile",
+		Long: `Set up this machine for the workspace. Each step checks first, so a second
+run changes nothing:
 
-What it does:
+  1. Check that podman, git and SSH access to GitHub work.
+  2. Create the state and data directories.
+  3. Clone each registered stack that is missing, after asking for the
+     default one.
+  4. Write a marked block into your shell profile, after a backup. It exports
+     $A_NOVEL_STACKS when needed, loads completion and runs
+     'a-novel core start'.
+  5. Start the daemon.
 
-  1. Checks podman, git, and GitHub SSH access are available.
-  2. Creates $XDG_STATE_HOME/a-novel and $XDG_DATA_HOME/a-novel (mode 0700).
-  3. For each registered stack (A_NOVEL_STACKS, or implicit default at
-     ~/git-projects/a-novel): verifies the path exists and contains the
-     right git repo; prompts to clone if the default stack is missing;
-     unconditionally clones non-default stacks if missing.
-  4. Edits your shell rc (detected via --rc, $ZDOTDIR, $SHELL, then
-     ~/.zshrc fallback) — manages a single block delimited by
-     '# >>> a-novel setup >>>' / '# <<< a-novel setup <<<' markers, with
-     a timestamped backup before any change.
-  5. Prints a summary with the "next step" hint.
-
-Use --no-shell-rc to skip step 4 entirely (for dotfile-manager users).`,
+--rc picks the profile, and --no-shell-rc skips step 4, as a dotfile manager
+wants.`,
 		Example: `  a-novel core setup
   a-novel core setup --rc ~/.bashrc
   a-novel core setup --no-shell-rc`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			opts := setup.Options{
-				RCPath:        rcPath,
-				NoShellRC:     noShellRC,
-				NoStartDaemon: noStartDaemon,
-				// A daemon that is already running counts as success without
-				// a re-spawn, matching `a-novel core start` and keeping
-				// re-runs of `core setup` a no-op.
-				StartDaemon: func() error {
-					if up, _ := daemonUp(cmd.Context(), rpc.New("")); up {
-						return nil
-					}
-					return startDetached()
-				},
-			}
-			var prompter setup.Prompter
-			if !nonInteractive {
-				prompter = &setup.StdinPrompter{Out: cmd.OutOrStderr()}
-			}
-			return setup.Run(opts, cmd.OutOrStdout(), prompter)
+			return setupMachine(cmd, opts, nonInteractive)
 		},
 	}
-	cmd.Flags().StringVar(&rcPath, "rc", "", "explicit shell rc path (overrides $SHELL detection)")
-	cmd.Flags().BoolVar(&noShellRC, "no-shell-rc", false, "skip the shell rc integration step")
-	cmd.Flags().BoolVar(&noStartDaemon, "no-start-daemon", false, "skip the auto-start-daemon step at the end")
+	cmd.Flags().StringVar(&opts.RCPath, "rc", "", "explicit shell rc path (overrides $SHELL detection)")
+	cmd.Flags().BoolVar(&opts.NoShellRC, "no-shell-rc", false, "skip the shell rc integration step")
+	cmd.Flags().BoolVar(&opts.NoStartDaemon, "no-start-daemon", false, "skip the auto-start-daemon step at the end")
 	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "never prompt (missing default stack becomes 'skipped')")
 	return cmd
 }
 
+// setupMachine runs the setup steps opts selects, prompting on stdin unless
+// nonInteractive is set. Its last step starts the daemon as `core start` does,
+// so a re-run beside a running daemon changes nothing.
+func setupMachine(cmd *cobra.Command, opts setup.Options, nonInteractive bool) error {
+	opts.StartDaemon = func() error { return startDaemon(cmd.Context(), false) }
+	var prompter setup.Prompter
+	if !nonInteractive {
+		prompter = &setup.StdinPrompter{Out: cmd.OutOrStderr()}
+	}
+	return setup.Run(opts, cmd.OutOrStdout(), prompter)
+}
+
+// newCoreDaemonInternalCmd is the hidden subcommand 'core start' re-execs the
+// binary with, to run the daemon in a detached child.
 func newCoreDaemonInternalCmd() *cobra.Command {
-	// Internal subcommand: re-exec target for 'core start' to switch into
-	// daemon mode in a detached child. Hidden from --help so users don't
-	// invoke it directly.
 	return &cobra.Command{
 		Use:    daemonInternalCmd,
 		Hidden: true,

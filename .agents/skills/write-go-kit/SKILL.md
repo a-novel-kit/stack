@@ -130,9 +130,8 @@ Once graduated, the package is a **public, community-facing library**, and the r
 - **Design the API broadly, not for our needs.** A graduated package covers its _domain_, not just
   the slice a-novel happens to use: `jwt` implements JWA / JWE / JWK / JWS / JWP, not only the two
   token flows the auth service needs. Design the exported surface as if strangers will build on it.
-- **A real documentation site, not just godoc.** `jwt` has a `docs/` directory published to GitHub
-  Pages. The README carries badges (Go version, CI status, codecov), a `go get`
-  line, and a link to the docs site.
+- **Documentation beyond godoc.** `jwt`'s README is its user guide, with badges (Go version, CI
+  status, codecov) and a `go get` line, and `docs/migrations/` holds its migration guides.
 - **Thorough tests + coverage gates.** A `codecov.yml`, high coverage, and `Example_xxx` /
   `ExampleType_method` functions for the public API — those render on pkg.go.dev _and_ run as
   tests, so they keep the docs honest.

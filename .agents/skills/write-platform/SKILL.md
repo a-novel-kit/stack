@@ -170,7 +170,9 @@ service:
   plan a backend capability when revocation is required.
 - A short-code `GET` only parses a sanitized display model; it never verifies or consumes the code.
   Completion uses `POST` to the current URL so no hidden field duplicates the credential. Return
-  `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, and `X-Robots-Tag: noindex`.
+  `Cache-Control: no-store`, `Referrer-Policy: strict-origin`, and `X-Robots-Tag: noindex`. With
+  `no-referrer`, a browser sends `Origin: null` on a native form post, which SvelteKit's CSRF check
+  rejects.
 - Never serialize the raw code, raw target, password, or token through load/action data, rendered
   HTML, stories, logs, or error copy. After completion, use POST/redirect/GET to a clean status-only
   URL; collapse rejected, expired, consumed, or unknown targets when the service cannot safely

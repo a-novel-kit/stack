@@ -33,7 +33,7 @@ func TestPgJwkSelect(t *testing.T) {
 
     testCases := []struct{ /* name, fixtures, request, expect, expectErr */ }{ /* … */ }
 
-    dao := dao.NewPgJwkSelect() // constructed once, outside the loop
+    daoJwkSelect := dao.NewPgJwkSelect() // constructed once, outside the loop
 
     for _, testCase := range testCases {
         t.Run(testCase.name, func(t *testing.T) {
@@ -56,7 +56,7 @@ func TestPgJwkSelect(t *testing.T) {
                     _, err = db.NewRaw("REFRESH MATERIALIZED VIEW active_keys;").Exec(ctx)
                     require.NoError(t, err)
 
-                    key, err := dao.Exec(ctx, testCase.request)
+                    key, err := daoJwkSelect.Exec(ctx, testCase.request)
                     require.ErrorIs(t, err, testCase.expectErr)
                     require.Equal(t, testCase.expect, key)
                 },

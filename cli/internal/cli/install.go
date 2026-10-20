@@ -21,55 +21,52 @@ func newInstallCmd() *cobra.Command {
 	var source string
 	cmd := &cobra.Command{
 		Use:   commandInstall,
-		Short: "Rebuild + reinstall the CLI and restart the daemon (state-preserving)",
-		Long: `One command for the dev-loop reinstall cycle. Equivalent to running:
-
-  1. a-novel core prepare-reinstall   (checkpoint daemon state)
-  2. cd <cli-source>; go install ./cmd/a-novel
-  3. a-novel core start               (replays checkpoint, deletes it)
-
-The source dir defaults to '<default-stack>/cli' (typically
-~/git-projects/a-novel/cli). Pass --source to override.
-
-After this command exits, 'a-novel core status' shows the freshly-built
-binary's version and the same containers / go-exec targets that were
-running before.`,
+		Short: "Rebuild and reinstall the CLI, keeping your services up",
+		Long: `Build and install the CLI from the default stack's cli/, or from --source, then
+restart the daemon on the new binary. The go-exec targets are checkpointed
+first and relaunched after, and containers keep running, so your services
+stay up.`,
 		Example: `  a-novel install
   a-novel install --source ~/forks/stack/cli`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx, out := cmd.Context(), cmd.OutOrStdout()
-			sourceDir, err := cliSourceDir(source)
-			if err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintf(out, "▸ source: %s\n", sourceDir)
-			if err := checkpointDaemon(ctx, out); err != nil {
-				return err
-			}
-
-			_, _ = fmt.Fprintln(out, "▸ go install ./cmd/a-novel ...")
-			install := exec.CommandContext(ctx, "go", commandInstall, "./cmd/a-novel")
-			install.Dir = sourceDir
-			install.Stdout = out
-			install.Stderr = cmd.ErrOrStderr()
-			if err := install.Run(); err != nil {
-				return fmt.Errorf("go install: %w", err)
-			}
-			_, _ = fmt.Fprintln(out, "  ✓ binary built")
-
-			// The new daemon reads the reinstall checkpoint and relaunches the
-			// go-exec targets.
-			_, _ = fmt.Fprintln(out, "▸ starting fresh daemon...")
-			if err := startDetached(); err != nil {
-				return fmt.Errorf("daemon start: %w", err)
-			}
-			_, _ = fmt.Fprintln(out, "\n✓ install complete.")
-			return nil
+			return installCLI(cmd, source)
 		},
 	}
 	cmd.Flags().StringVar(&source, "source", "", "path to the cli source dir (defaults to <default-stack>/cli)")
 	return cmd
+}
+
+// installCLI checkpoints the daemon, runs `go install` in the CLI source dir,
+// and starts a daemon on the new binary, which relaunches the checkpointed
+// go-exec targets.
+func installCLI(cmd *cobra.Command, source string) error {
+	ctx, out := cmd.Context(), cmd.OutOrStdout()
+	sourceDir, err := cliSourceDir(source)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(out, "▸ source: %s\n", sourceDir)
+	if err := checkpointDaemon(ctx, out); err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintln(out, "▸ go install ./cmd/a-novel ...")
+	install := exec.CommandContext(ctx, "go", commandInstall, "./cmd/a-novel")
+	install.Dir = sourceDir
+	install.Stdout = out
+	install.Stderr = cmd.ErrOrStderr()
+	if err := install.Run(); err != nil {
+		return fmt.Errorf("go install: %w", err)
+	}
+	_, _ = fmt.Fprintln(out, "  ✓ binary built")
+
+	_, _ = fmt.Fprintln(out, "▸ starting fresh daemon...")
+	if err := startDetached(); err != nil {
+		return fmt.Errorf("daemon start: %w", err)
+	}
+	_, _ = fmt.Fprintln(out, "\n✓ install complete.")
+	return nil
 }
 
 // cliSourceDir resolves the CLI source to build: override when set, else the

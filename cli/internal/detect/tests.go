@@ -59,12 +59,13 @@ func composeEnvs(dir string) []envFile {
 			continue
 		}
 		segs := strings.Split(m[1], ".")
-		out = append(out, envFile{
+		parsed := envFile{
 			env:  segs[0],
 			path: segs[1:],
 			file: filepath.Join(dir, "builds", e.Name()),
 			id:   m[1],
-		})
+		}
+		out = append(out, parsed)
 	}
 	return out
 }
@@ -85,10 +86,8 @@ func composeProject(rel, id string) string {
 
 // toEnv describes the env file f as the runner needs it: its services, split
 // into dependency-free ones and dependents, the host ports to allocate, and every
-// variable it references. build.composeUpPhased starts dependency-free services
-// first and dependents second, so ordering never relies on the provider's
-// `depends_on` wait. A file that does not parse lists nothing, and its env comes
-// up in one piece.
+// variable it references. A file that does not parse lists nothing, and its env
+// comes up in one piece.
 func (f envFile) toEnv(rel string) *ComposeEnv {
 	env := &ComposeEnv{File: f.file, Project: composeProject(rel, f.id), ID: f.id}
 	raw, err := os.ReadFile(f.file)
@@ -135,15 +134,7 @@ func goTests(dir, rel string, envs []envFile) []Target {
 	// any of those change. Omitting -count=1 lets the tight edit-test loop hit
 	// that cache.
 	if len(goEnvs) == 0 {
-		return []Target{{
-			Kind:   KindGo,
-			Name:   module,
-			RelDir: rel,
-			Dir:    dir,
-			Detail: "go test " + pkgAll,
-			Cmd:    string(KindGo),
-			Args:   []string{testArg, pkgAll},
-		}}
+		return []Target{goTarget(dir, rel, module, "go test "+pkgAll, testArg, pkgAll)}
 	}
 
 	// One target per env file, scoped to the path it covers. These keep
@@ -166,16 +157,11 @@ func goTests(dir, rel string, envs []envFile) []Target {
 		// that fall out.
 		scoped = append(scoped, e.path)
 
-		targets = append(targets, Target{
-			Kind:   KindGo,
-			Name:   e.id, // "go.internal" / "go.pkg" — unique within the dir
-			RelDir: rel,
-			Dir:    dir,
-			Detail: "go test " + sel + "  ·  env " + filepath.Base(e.file),
-			Cmd:    string(KindGo),
-			Args:   []string{testArg, "-count=1", sel},
-			Env:    e.toEnv(rel),
-		})
+		// The env id, such as "go.internal", is unique within the directory.
+		detail := "go test " + sel + "  ·  env " + filepath.Base(e.file)
+		target := goTarget(dir, rel, e.id, detail, testArg, "-count=1", sel)
+		target.Env = e.toEnv(rel)
+		targets = append(targets, target)
 	}
 
 	// Every scoped env narrows the run to its own subtree, so a test package
@@ -188,16 +174,9 @@ func goTests(dir, rel string, envs []envFile) []Target {
 	// missing state, which surfaces the absent env. That is also why it omits
 	// -count=1.
 	if uncovered := uncoveredGoSelectors(goTestPackageDirs(dir), scoped); len(uncovered) > 0 {
+		detail := "go test " + strings.Join(uncovered, " ") + "  ·  no env"
 		args := append([]string{testArg}, uncovered...)
-		targets = append(targets, Target{
-			Kind:   KindGo,
-			Name:   uncoveredTargetName,
-			RelDir: rel,
-			Dir:    dir,
-			Detail: "go test " + strings.Join(uncovered, " ") + "  ·  no env",
-			Cmd:    string(KindGo),
-			Args:   args,
-		})
+		targets = append(targets, goTarget(dir, rel, uncoveredTargetName, detail, args...))
 	}
 
 	return targets

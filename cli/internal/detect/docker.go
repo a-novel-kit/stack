@@ -3,6 +3,7 @@ package detect
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -50,8 +51,9 @@ func detectPodman(dir, rel string) []Target {
 	return targets
 }
 
-// podmanTarget forwards required Dockerfile secrets from uppercase environment
-// variables derived from their IDs.
+// podmanTarget builds the image of the Dockerfile at dockerfileRel as tag. Each
+// secret the Dockerfile requires comes from the environment variable named
+// after its ID, uppercased with underscores (npm_token → NPM_TOKEN).
 func podmanTarget(dir, rel, name, dockerfileRel, tag string) Target {
 	secretIDs := dockerfileRequiredSecretIDs(filepath.Join(dir, dockerfileRel))
 	args := make([]string, 0, 8+len(secretIDs))
@@ -79,42 +81,43 @@ func dockerfileRequiredSecretIDs(path string) []string {
 		return nil
 	}
 
-	seen := make(map[string]struct{})
 	var ids []string
 	for _, line := range strings.Split(string(raw), "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "#") {
 			continue
 		}
 		for _, token := range strings.Fields(line) {
-			mount, ok := strings.CutPrefix(token, "--mount=")
-			if !ok {
+			mount, isMount := strings.CutPrefix(token, "--mount=")
+			if !isMount {
 				continue
 			}
-
-			var id string
-			secret := false
-			required := false
-			for _, option := range strings.Split(mount, ",") {
-				switch {
-				case option == "type=secret":
-					secret = true
-				case option == "required=true":
-					required = true
-				case strings.HasPrefix(option, "id="):
-					id = strings.TrimPrefix(option, "id=")
-				}
+			if id := requiredSecretID(mount); id != "" && !slices.Contains(ids, id) {
+				ids = append(ids, id)
 			}
-			if !secret || !required || id == "" {
-				continue
-			}
-			if _, exists := seen[id]; exists {
-				continue
-			}
-			seen[id] = struct{}{}
-			ids = append(ids, id)
 		}
 	}
 	return ids
+}
+
+// requiredSecretID returns the ID of the secret a `--mount=` value mounts as
+// required, or "" for any other mount.
+func requiredSecretID(mount string) string {
+	var id string
+	secret, required := false, false
+	for _, option := range strings.Split(mount, ",") {
+		switch {
+		case option == "type=secret":
+			secret = true
+		case option == "required=true":
+			required = true
+		case strings.HasPrefix(option, "id="):
+			id = strings.TrimPrefix(option, "id=")
+		}
+	}
+	if !secret || !required {
+		return ""
+	}
+	return id
 }
 
 // dockerfileSecretEnv maps a Dockerfile secret ID to its host environment name.

@@ -22,21 +22,10 @@ func newClaudeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "claude [args...]",
 		Short: "Launch Claude Code from the stack root",
-		Long: `Starts Claude Code with the stack root as its working directory, so a
-session always opens on the whole workspace (app/, kit/, cli/) instead of
-whichever checkout you happened to be standing in.
-
-The stack root is the default stack — the first entry of $A_NOVEL_STACKS,
-falling back to ~/git-projects/a-novel when that variable is unset. This is
-the same resolution 'a-novel install' uses to find the CLI source.
-
-Every argument is forwarded verbatim, so the full Claude Code flag set works
-unchanged. That includes '--help', which reaches claude rather than this
-command: use 'a-novel help claude' for this text.
-
-The a-novel process is REPLACED by claude (execve), not left wrapping it —
-claude owns the terminal directly, so resize, signals and the exit code are
-its own with nothing in between.`,
+		Long: `Start Claude Code in the default stack's root, so a session opens on the whole
+workspace wherever you run it. Every argument goes to claude, --help included;
+'a-novel help claude' prints this text. claude replaces this process, so the
+terminal, its signals and the exit status are claude's own.`,
 		Example: `  a-novel claude
   a-novel claude --continue
   a-novel claude -p "summarize what changed on this branch"`,
@@ -44,25 +33,31 @@ its own with nothing in between.`,
 		// handling travels with them, as Long explains.
 		DisableFlagParsing: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			stack, err := stacks.Default()
-			if err != nil {
-				return fmt.Errorf("resolve stack root: %w", err)
-			}
-			// Resolve before chdir, so a missing binary is reported from the
-			// PATH lookup and no directory change is left half-applied.
-			bin, err := exec.LookPath(claudeBin)
-			if err != nil {
-				return fmt.Errorf(
-					"claude not found in $PATH — install Claude Code (https://claude.com/claude-code): %w", err)
-			}
-			if err := os.Chdir(stack.Path); err != nil {
-				return fmt.Errorf("enter stack root %s: %w", stack.Path, err)
-			}
-
-			// On success Exec never returns, so nothing after this line runs,
-			// main's update notice and exit-code handling included: they belong
-			// to claude. argv[0] is the resolved path by convention.
-			return syscall.Exec(bin, append([]string{bin}, args...), os.Environ())
+			return launchClaude(args)
 		},
 	}
+}
+
+// launchClaude replaces this process with claude, run with args from the
+// default stack's root.
+func launchClaude(args []string) error {
+	stack, err := stacks.Default()
+	if err != nil {
+		return fmt.Errorf("resolve stack root: %w", err)
+	}
+	// Resolve before chdir, so a missing binary is reported from the
+	// PATH lookup and no directory change is left half-applied.
+	bin, err := exec.LookPath(claudeBin)
+	if err != nil {
+		return fmt.Errorf(
+			"claude not found in $PATH — install Claude Code (https://claude.com/claude-code): %w", err)
+	}
+	if err := os.Chdir(stack.Path); err != nil {
+		return fmt.Errorf("enter stack root %s: %w", stack.Path, err)
+	}
+
+	// On success Exec never returns, so nothing after this line runs,
+	// main's update notice and exit-code handling included: they belong
+	// to claude. argv[0] is the resolved path by convention.
+	return syscall.Exec(bin, append([]string{bin}, args...), os.Environ())
 }

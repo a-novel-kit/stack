@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"fmt"
+	"iter"
 	"strings"
 
 	"github.com/a-novel-kit/stack/cli/internal/shared/compose"
@@ -17,7 +18,7 @@ import (
 //   - `*_HOST` or `*_URL`, synthesized from the same service's `*_PORT`
 //   - `POSTGRES_DSN`, synthesized once POSTGRES_PORT is allocated
 //   - `<SERVICE>_<VAR>`, naming a known service in this stack
-//   - a key declared as a literal in the same env block, a sibling constant
+//   - a key one of the service's env blocks declares, a sibling constant
 //
 // Anything else warns. Compose still substitutes an empty string at runtime,
 // and the warning surfaces the gap.
@@ -30,44 +31,55 @@ func ValidateEnvRefs(stacks Stacks) {
 	}
 }
 
+// validateService warns about every reference of svc's env blocks the daemon
+// cannot fill.
 func validateService(svc *Service, allServices []string) []DiscoveryError {
-	var errs []DiscoveryError
-	// The keys declared as constants across this service's target and infra env
-	// blocks, used to recognize sibling-constant references.
+	// Any block's keys are constants a sibling reference may name.
 	declared := make(map[string]bool)
-	collect := func(env map[string]string) {
-		for k := range env {
-			declared[k] = true
+	for _, env := range envBlocks(svc) {
+		for key := range env {
+			declared[key] = true
 		}
 	}
-	for _, t := range svc.Targets {
-		collect(t.Environment)
+	var errs []DiscoveryError
+	for where, env := range envBlocks(svc) {
+		errs = append(errs, unresolvedRefs(svc, where, env, allServices, declared)...)
 	}
-	for _, in := range svc.Infra {
-		collect(in.Environment)
-	}
+	return errs
+}
 
-	check := func(where, key, value string) {
+// envBlocks yields each env block of svc, targets first, with the target or
+// infra that declares it.
+func envBlocks(svc *Service) iter.Seq2[string, map[string]string] {
+	return func(yield func(string, map[string]string) bool) {
+		for _, t := range svc.Targets {
+			if !yield("target "+t.Name, t.Environment) {
+				return
+			}
+		}
+		for _, in := range svc.Infra {
+			if !yield("infra "+in.Name, in.Environment) {
+				return
+			}
+		}
+	}
+}
+
+// unresolvedRefs warns about each reference in env, the env block of where,
+// that the daemon cannot fill.
+func unresolvedRefs(
+	svc *Service, where string, env map[string]string, allServices []string, declared map[string]bool,
+) []DiscoveryError {
+	var errs []DiscoveryError
+	for key, value := range env {
 		for _, ref := range compose.Refs(value) {
 			if isResolvable(ref, allServices, declared) {
 				continue
 			}
-			errs = append(errs, DiscoveryError{
-				Service: svc.Name,
-				Path:    svc.ComposePath,
-				Reason: fmt.Sprintf("%s declares %s=%q referencing ${%s} — daemon doesn't synthesize this var (set as constant in compose, or use a recognized form: *_PORT / *_HOST / *_URL / POSTGRES_DSN / <SERVICE>_<VAR>)",
-					where, key, value, ref),
-			})
-		}
-	}
-	for _, t := range svc.Targets {
-		for k, v := range t.Environment {
-			check("target "+t.Name, k, v)
-		}
-	}
-	for _, in := range svc.Infra {
-		for k, v := range in.Environment {
-			check("infra "+in.Name, k, v)
+			reason := fmt.Sprintf("%s declares %s=%q referencing ${%s} — daemon doesn't synthesize this var "+
+				"(set as constant in compose, or use a recognized form: *_PORT / *_HOST / *_URL / POSTGRES_DSN / <SERVICE>_<VAR>)",
+				where, key, value, ref)
+			errs = append(errs, DiscoveryError{Service: svc.Name, Path: svc.ComposePath, Reason: reason})
 		}
 	}
 	return errs
@@ -77,7 +89,7 @@ func validateService(svc *Service, allServices []string) []DiscoveryError {
 // can synthesize the reference.
 func isResolvable(varName string, allServices []string, declared map[string]bool) bool {
 	if declared[varName] {
-		return true // sibling constant in the same service's env block
+		return true // a constant of one of the service's env blocks
 	}
 	if strings.HasSuffix(varName, "_PORT") ||
 		strings.HasSuffix(varName, "_HOST") ||

@@ -52,38 +52,18 @@ func (e *ExitError) Unwrap() error { return e.Err }
 func NewRoot() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "a-novel",
-		Short: "the A-Novel storyverse build tool",
-		Long: `a-novel is the storyverse build tool: a single CLI that replaces the per-repo
-bash scripts and Makefiles.
-
-Commands fall into three groups:
-
-  Standalone capabilities — operate on the local working tree, no daemon
-  required:
-    test, build, publish, repo, secrets, claude, version
-
-  Daemon control — manage the long-lived a-novel daemon (one per user) and the
-  workspace it serves:
-    core start|setup|kill|restart|status|sync|stacks|bot-comment|prepare-reinstall,
-    install (rebuild + reinstall, state-preserving)
-
-  Daemon-backed verbs — talk to the daemon over its unix socket, under 'run':
-    run ui|ps|stacks|topology|service|start|kill|restart|logs|env|watch|volume|exec|debug
-
-Run 'a-novel help <command>' or 'a-novel <command> --help' for any command's
-flags and examples.
+		Short: "The command-line tool for developing A-Novel",
+		Long: `a-novel works on every repository of the A-Novel workspace the same way. Most
+commands run on their own in the working tree. The commands under 'run' talk to
+the background daemon, which runs your services, and the commands under 'core'
+manage the daemon and the workspace.
 
 See https://a-novel-kit.github.io/stack/ for the everyday workflows.`,
 		// main prints errors itself, so a status-only ExitError stays silent.
-		SilenceErrors: true,
-		SilenceUsage:  true,
-		Version:       version.String(),
-		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			if sandbox, _ := cmd.Flags().GetBool("sandbox"); sandbox {
-				return usageError(fmt.Errorf("%s must be the first argument", sandboxFlag))
-			}
-			return nil
-		},
+		SilenceErrors:     true,
+		SilenceUsage:      true,
+		Version:           version.String(),
+		PersistentPreRunE: rejectLateSandbox,
 	}
 	root.PersistentFlags().Bool("sandbox", false,
 		"run one standalone command in a fresh temporary stack (must be first)")
@@ -96,16 +76,29 @@ See https://a-novel-kit.github.io/stack/ for the everyday workflows.`,
 		newRepoCmd(),
 		newSecretsCmd(),
 		newClaudeCmd(),
-		&cobra.Command{
-			Use:   "version",
-			Short: "Print the a-novel CLI version",
-			Run:   func(cmd *cobra.Command, _ []string) { cmd.Println(version.String()) },
-		},
+		newVersionCmd(),
 		newCoreCmd(),
 		newInstallCmd(),
 		newRunCmd(),
 	)
 	return root
+}
+
+// rejectLateSandbox refuses a --sandbox that reached a subcommand. main acts on
+// the flag only as the first argument, so anywhere else it would do nothing.
+func rejectLateSandbox(cmd *cobra.Command, _ []string) error {
+	if sandbox, _ := cmd.Flags().GetBool("sandbox"); sandbox {
+		return usageError(fmt.Errorf("%s must be the first argument", sandboxFlag))
+	}
+	return nil
+}
+
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print the a-novel CLI version",
+		Run:   func(cmd *cobra.Command, _ []string) { cmd.Println(version.String()) },
+	}
 }
 
 // newRunCmd is the parent of every daemon-backed verb. Each verb is a thin

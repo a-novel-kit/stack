@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,10 +16,7 @@ func newPublishCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "publish",
 		Short: "Release helpers",
-		Long: `Release helpers. Releases are cut in CI by the release-core GitHub
-Action, not from a local working tree.
-
-  publish stamp <prefix> <file>   refresh vX.Y.Z references inside a doc file`,
+		Long:  `Helpers for the release workflow, which cuts every release in CI.`,
 	}
 	cmd.AddCommand(newPublishStampCmd())
 	return cmd
@@ -32,39 +30,39 @@ func newPublishStampCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "stamp <prefix> <file-or-glob>...",
 		Short: "Refresh vX.Y.Z references in doc/config files to the current package version",
-		Long: `Replaces every occurrence of <prefix>vX.Y.Z in each target with
-<prefix>v<current-version>, where the current version is read from the repo
-root's package.json. <prefix> is a regular expression.
-
-Each target is a file path or a shell-style glob (expanded by the command,
-relative to the working directory), so one invocation can stamp many files —
-e.g. every composite action that pins a sibling action to a version.
-
-This is what 'prepublish:doc' pnpm scripts call between the version bump and
-the release commit, so module paths, spec versions and pinned action refs
-inside docs/config always match the released version:
-
-  a-novel publish stamp 'version: ' openapi.yaml
+		Long: `Replace each <prefix>vX.Y.Z in the files with <prefix>v<version>, where
+<version> is the version in the repository root's package.json. <prefix> is a
+regular expression, and a file argument may be a glob, which the command
+expands. A repository's prepublish:doc script runs it between the version bump
+and the release commit. Matching no reference at all fails, so a stale pattern
+shows before the release.`,
+		Example: `  a-novel publish stamp 'version: ' openapi.yaml
   a-novel publish stamp 'a-novel/service-json-keys/[^/]+' README.md
   a-novel publish stamp 'a-novel-kit/workflows/[^@]+@' '*/*/action.yaml'`,
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			root, err := gitToplevel(".")
-			if err != nil {
-				return fmt.Errorf("publish: %w", err)
-			}
-			version, err := readPackageVersion(root)
-			if err != nil {
-				return err
-			}
-			total, fileCount, err := stampTargets(args[1:], args[0], version)
-			if err != nil {
-				return err
-			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ stamped %d reference(s) across %d file(s) to v%s\n", total, fileCount, version)
-			return nil
+			return stampVersion(cmd.OutOrStdout(), args[0], args[1:])
 		},
 	}
+}
+
+// stampVersion stamps the repository's package version into every
+// <prefix>vX.Y.Z reference of the files patterns resolve to.
+func stampVersion(out io.Writer, prefix string, patterns []string) error {
+	root, err := gitToplevel(".")
+	if err != nil {
+		return fmt.Errorf("publish: %w", err)
+	}
+	version, err := readPackageVersion(root)
+	if err != nil {
+		return err
+	}
+	total, fileCount, err := stampTargets(patterns, prefix, version)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(out, "✓ stamped %d reference(s) across %d file(s) to v%s\n", total, fileCount, version)
+	return nil
 }
 
 // stampTargets stamps version into every reference matching prefix across the
@@ -105,8 +103,8 @@ func stampTargets(patterns []string, prefix, version string) (int, int, error) {
 	return total, len(files), nil
 }
 
-// readPackageVersion returns the "version" field of root/package.json —
-// the post-bump source of truth for the commit message and tag name.
+// readPackageVersion returns the "version" field of root/package.json, the
+// version a release has just bumped to.
 func readPackageVersion(root string) (string, error) {
 	raw, err := os.ReadFile(filepath.Join(root, "package.json"))
 	if err != nil {

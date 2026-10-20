@@ -7,7 +7,9 @@ Read this reference when routed here by [write-go-service](../SKILL.md). Its rul
 Every DAO and service operation is wrapped in a span. A failure path returns through
 `otel.ReportError(span, err)`, which marks the span failed and returns the error so it inlines in a
 `return`; a success path returns directly and leaves the status unset. Neither ends the span; a
-`defer span.End()` does.
+`defer span.End()` does. A closure that takes the context, such as a `WithinTx` body, belongs to its
+operation's span: write-go's [declarations rule](../../write-go/SKILL.md#declarations-outside-control-flow)
+keeps it a closure.
 
 ```go
 ctx, span := otel.Tracer().Start(ctx, "dao.PgUserSelect")
@@ -30,10 +32,6 @@ own, such as `"core.GenerationStream(events)"`, and reports there the error that
 - **Core** — nothing to strip: `"core.JwkSearch"` for `JwkSearch`.
 - **Sub-spans** (private methods) — append in parentheses: `"rest.JwkGet(parseID)"`,
   `"grpc.Status(reportPostgres)"`.
-
-> Some existing services (and `service-template`) currently use a bare `"handler.X"` prefix on
-> handler spans instead of `"rest.X"` / `"grpc.X"`. That is tech debt — bring a handler span name
-> in line with the rule above when the file is already in scope for a change.
 
 **Reporting follows `write-go`**: every failed operation reports on its own span, and the detail is
 recorded once. Here is how it lands on the service layers:

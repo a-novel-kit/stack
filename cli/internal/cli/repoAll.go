@@ -25,22 +25,22 @@ type plannedUpdate struct {
 	prune  string // the dry-run's prune impact, resolved while planning
 }
 
-// runRepoUpdateAll reconciles every pulled workspace repo in one pass, so the
+// reconcileAll reconciles every pulled workspace repo in one pass, so the
 // operator never lists repos by hand. It plans every repo at once, asks once,
-// then applies limit repos at a time.
+// then applies --jobs repos at a time.
 //
 // The sweep leaves ongoing work alone. Config is discovered from each working
 // tree, so a repo off its default branch or with uncommitted changes is skipped
 // untouched, and only committed config reaches GitHub.
-func runRepoUpdateAll(cmd *cobra.Command, rootDir, class string, exclude []string, dryRun, jsonOut bool, limit int) error {
-	root, err := workspaceRoot(rootDir)
+func reconcileAll(cmd *cobra.Command, o repoUpdateOpts) error {
+	root, err := workspaceRoot(o.rootDir)
 	if err != nil {
 		return err
 	}
 	out := cmd.OutOrStdout()
 	// Previews keep stdout for the plans, so a --json document stays pipeable.
 	progress := out
-	if jsonOut || dryRun {
+	if o.jsonOut || o.dryRun {
 		progress = cmd.ErrOrStderr()
 	}
 
@@ -50,14 +50,14 @@ func runRepoUpdateAll(cmd *cobra.Command, rootDir, class string, exclude []strin
 	}
 	if len(checkouts) == 0 {
 		_, _ = fmt.Fprintf(progress, "no pulled workspace repos found at %s — run `a-novel core sync` first.\n", root)
-		if jsonOut {
+		if o.jsonOut {
 			return renderAllJSON(out, nil)
 		}
 		return nil
 	}
 
 	_, _ = fmt.Fprintf(progress, "▸ Planning %d workspace repo(s) at %s\n", len(checkouts), root)
-	planned, notes := planAll(checkouts, class, normaliseFilter(exclude), dryRun)
+	planned, notes := planAll(checkouts, o.class, normalizeFilter(o.exclude), o.dryRun)
 	for _, note := range notes {
 		if note != "" {
 			_, _ = fmt.Fprintln(progress, "  "+note)
@@ -65,15 +65,15 @@ func runRepoUpdateAll(cmd *cobra.Command, rootDir, class string, exclude []strin
 	}
 
 	switch {
-	case jsonOut:
+	case o.jsonOut:
 		return renderAllJSON(out, planned)
 	case len(planned) == 0:
 		_, _ = fmt.Fprintln(progress, "\nnothing to reconcile — every repo was skipped or excluded.")
 		return nil
-	case dryRun:
+	case o.dryRun:
 		return renderAllDryRun(out, progress, planned)
 	}
-	return applyAll(cmd, planned, limit)
+	return applyAll(cmd, planned, o.limit)
 }
 
 // renderAllDryRun prints each planned repo's operations to out, under a header

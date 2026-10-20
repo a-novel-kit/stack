@@ -70,7 +70,7 @@ func Banner() string {
 		lipgloss.Left,
 		"",
 		Brand.Render("A-NOVEL"),
-		Accent.Render("the storyverse build tool"),
+		Accent.Render("the development CLI"),
 		"",
 		styleVersion.Render("a-novel "+version.String()),
 	)
