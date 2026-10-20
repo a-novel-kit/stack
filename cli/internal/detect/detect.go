@@ -106,10 +106,9 @@ type ComposeEnv struct {
 	// Services lists every compose service the file declares, sorted.
 	Services []string
 	// Dependents lists the services that declare a `depends_on:` block. The
-	// test env-up path starts dependency-free services first and dependents
-	// second, so ordering never relies on the compose provider's
-	// `depends_on` wait, which is broken on podman-compose ≤1.5.x and on
-	// setups without systemd. See build.composeUpPhased.
+	// env comes up with the other services first and the dependents second, so
+	// the order never relies on the compose provider's `depends_on` wait,
+	// which podman-compose 1.5 and setups without systemd do not honor.
 	Dependents []string
 }
 

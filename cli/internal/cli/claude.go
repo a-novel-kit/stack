@@ -22,21 +22,10 @@ func newClaudeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "claude [args...]",
 		Short: "Launch Claude Code from the stack root",
-		Long: `Starts Claude Code with the stack root as its working directory, so a
-session always opens on the whole workspace (app/, kit/, cli/) instead of
-whichever checkout you happened to be standing in.
-
-The stack root is the default stack — the first entry of $A_NOVEL_STACKS,
-falling back to ~/git-projects/a-novel when that variable is unset. This is
-the same resolution 'a-novel install' uses to find the CLI source.
-
-Every argument is forwarded verbatim, so the full Claude Code flag set works
-unchanged. That includes '--help', which reaches claude rather than this
-command: use 'a-novel help claude' for this text.
-
-The a-novel process is REPLACED by claude (execve), not left wrapping it —
-claude owns the terminal directly, so resize, signals and the exit code are
-its own with nothing in between.`,
+		Long: `Start Claude Code in the default stack's root, so a session opens on the whole
+workspace wherever you run it. Every argument goes to claude, --help included;
+'a-novel help claude' prints this text. claude replaces this process, so the
+terminal, its signals and the exit status are claude's own.`,
 		Example: `  a-novel claude
   a-novel claude --continue
   a-novel claude -p "summarize what changed on this branch"`,

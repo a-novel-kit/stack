@@ -38,9 +38,8 @@ const (
 )
 
 // botDispatchRepos maps each org to the repo hosting its bot-comment dispatcher
-// workflow. The dispatcher must live inside the target org: it reads that org's
-// App private-key secret, and org secrets do not cross org boundaries, so each
-// org gets its own dispatcher and routing entry.
+// workflow. Each org has its own Agent App, whose key is a secret of the
+// dispatcher's governance environment, so each org has its own dispatcher.
 var botDispatchRepos = map[string]string{
 	orgAnovelKit: orgAnovelKit + "/stack",
 	orgAnovel:    orgAnovel + "/.github",
@@ -72,44 +71,21 @@ func newCoreBotCommentCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "bot-comment <org> <repo> [<number>]",
-		Short: "Post one or more PR/issue/review comments as the org App bot",
-		Long: `Posts comments that attribute to <app-slug>[bot] instead of your
-user account, by triggering the bot-comment workflow in the target org's
-dispatcher repo with your own gh token. The App signing key never touches
-your machine.
+		Short: "Post pull request, issue and review comments as the organization's bot",
+		Long: `Post comments as the organization's bot, through the bot-comment workflow of its
+dispatcher repository, which you dispatch with your own gh token. The bot's key
+stays in CI, and the workflow only posts comments.
 
-This is the ONLY supported way to comment as the bot. PR/issue authoring,
-edits, ready/merge/close stay on your operator gh token (the bot cannot
-do them — the workflow only posts comments).
+<number> is a pull request or an issue. --reply-to answers an inline review
+thread, which only a pull request has. --batch posts a JSON array of
+{number, body, reply_to?} from a file, or from stdin with '-', in as many runs
+as its size needs.
 
-Works against both PRs and issues, for both new comments and replies:
-
-  # comment on a PR (top-level "Conversation" comment)
-  a-novel core bot-comment a-novel service-authentication 549 \
-      --body "automated review note"
-
-  # reply inside a PR's inline review thread. <id> is a REST
-  # review-comment id from repos/<org>/<repo>/pulls/<n>/comments.
-  a-novel core bot-comment a-novel service-authentication 549 \
-      --reply-to 2103847559 --body "Fixed in abc1234."
-
-  # post MANY comments in a single run — a JSON array of
-  # {number, body, reply_to?}, all targeting the one <repo>:
-  a-novel core bot-comment a-novel service-authentication --batch replies.json
-  # ... or from stdin:
-  echo '[{"number":549,"reply_to":2103847559,"body":"Fixed in abc1234."}]' \
-      | a-novel core bot-comment a-novel service-authentication --batch -
-
---reply-to targets a PR inline review thread only; issues have no review
-threads, so to answer an issue comment just post a new comment (the body
-can quote it with a leading '>').
-
-The command blocks until each workflow run finishes and exits non-zero if
-one failed, printing the failed step's logs. A --batch larger than one
-dispatch is split into several runs.
-
-Requires: gh authenticated as yourself, with actions:write on the target
-org's dispatcher repo.`,
+The command waits for each run, and fails when a run fails, printing its logs.
+It needs actions:write on the dispatcher repository.`,
+		Example: `  a-novel core bot-comment a-novel service-authentication 549 --body "Automated review note."
+  a-novel core bot-comment a-novel service-authentication 549 --reply-to 2103847559 --body "Fixed in abc1234."
+  echo '[{"number":549,"body":"Fixed."}]' | a-novel core bot-comment a-novel service-authentication --batch -`,
 		Args: cobra.RangeArgs(2, 3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			org, repo := args[0], args[1]

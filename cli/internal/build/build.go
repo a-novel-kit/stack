@@ -408,27 +408,19 @@ func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
 	return conflicts
 }
 
-// TearDown removes one compose project's containers, volumes, and orphans,
-// scoped to that env via `-p <project> -f <file>`. --remove-orphans clears
-// containers the current compose no longer declares, such as after a profile
-// change, which otherwise trigger `container name … already in use`.
+// TearDown removes one compose project's containers, volumes and orphans,
+// scoped to that env through `-p <project> -f <file>`. --remove-orphans clears
+// the containers the compose file no longer declares, such as after a profile
+// change, which a later `up` would collide with.
 //
-// Teardown runs in two passes:
-//
-//  1. `compose down -t 10`. 10s covers postgres' shutdown checkpoint, which can
-//     stretch past 2s once migrations and key rotation have dirtied its
-//     buffers, and still quits promptly.
-//  2. On an error from the first pass, `podman pod rm -f` then `network rm -f`
-//     for this env. podman-compose 1.5.0 sometimes reports success while
-//     leaving a container running; that container holds its pod, which holds
-//     the network, and the next run cannot claim the project name. Removing the
-//     pod first frees its containers and de-references the network, so the
-//     network rm succeeds. Errors here are swallowed, since the resources may
-//     already be gone or may never have come up.
-//
-// The names follow podman-compose's conventions: the pod is "pod_<project>",
-// and the network "<project>_api", after the `networks: { api: }` every service
-// compose file declares.
+// `compose down -t 10` gives postgres 10s for its shutdown checkpoint, which
+// can pass 2s once migrations and key rotation dirtied its buffers. When it
+// fails, a container it left still holds the env's pod, the pod holds the
+// network, and the next run cannot claim the project name. TearDown then
+// removes the pod, which frees its containers, and the network, ignoring
+// errors, since either may be gone already. The names follow podman-compose:
+// the pod is "pod_<project>", and the network "<project>_api", after the
+// `networks: { api: }` every service compose file declares.
 func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	var buf bytes.Buffer
 	err := compose(ctx, &buf, os.Environ(), &e, nil,

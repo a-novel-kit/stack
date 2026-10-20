@@ -67,36 +67,36 @@ type RepoTarget struct {
 	Discovered               *Discovered
 }
 
-// Op is one API operation the plan performs, a small tagged union. Most ops
-// carry a Method, Path, and Body (or Content, for a file write). A ruleset op
-// instead sets RulesetName and is reconciled by name at apply time: POST when
-// the ruleset is absent, PUT .../{id} when it already exists.
-//
-// PruneRulesets marks the one op that reconciles the whole ruleset set:
-// KeepRulesets is the complete desired list, and apply deletes every live
-// ruleset outside it.
-//
-// A secret op sets Secret: Method grants (PUT) or revokes (DELETE) the repo's
-// access to that org secret, and apply appends the repo's numeric ID to Path.
-//
-// A team op sets Teams, the complete set of tier-team grants the repo holds:
-// apply creates a missing team, grants each one, and removes the grant of any
-// other tier team.
-//
-// An environment op may set Reviewers, the slugs of the teams whose approval
-// its jobs wait for; apply resolves them to the team ids GitHub expects.
+// Op is one API operation the plan performs. Most ops carry a Method, a Path
+// and a Body; the other fields mark the ops apply reconciles in a way of their
+// own.
 type Op struct {
-	Method        string      `json:"method,omitempty"`
-	Path          string      `json:"path,omitempty"`
-	Body          any         `json:"body,omitempty"`
-	Content       string      `json:"content,omitempty"`
-	RulesetName   string      `json:"ruleset,omitempty"`
-	PruneRulesets bool        `json:"prune_rulesets,omitempty"`
-	KeepRulesets  []string    `json:"keep_rulesets,omitempty"`
-	Secret        string      `json:"secret,omitempty"`
-	Teams         []TeamGrant `json:"teams,omitempty"`
-	Governance    *Governance `json:"governance,omitempty"`
-	Reviewers     []string    `json:"reviewers,omitempty"`
+	Method string `json:"method,omitempty"`
+	Path   string `json:"path,omitempty"`
+	Body   any    `json:"body,omitempty"`
+	// Content is the text of a managed file the op writes.
+	Content string `json:"content,omitempty"`
+	// RulesetName marks a ruleset op, reconciled by name: apply POSTs a
+	// ruleset the repo lacks and PUTs .../{id} over one it has.
+	RulesetName string `json:"ruleset,omitempty"`
+	// PruneRulesets marks the op that reconciles the whole ruleset set: apply
+	// deletes every live ruleset KeepRulesets does not name.
+	PruneRulesets bool     `json:"prune_rulesets,omitempty"`
+	KeepRulesets  []string `json:"keep_rulesets,omitempty"`
+	// Secret names the scoped org secret the op grants (PUT) or revokes
+	// (DELETE) the repo's access to. Apply appends the repo's numeric ID to
+	// Path.
+	Secret string `json:"secret,omitempty"`
+	// Teams is the complete set of tier-team grants the repo holds. Apply
+	// creates a missing team, grants each one, and removes the grant of any
+	// other tier team.
+	Teams []TeamGrant `json:"teams,omitempty"`
+	// Governance names the privileged secrets the repo's governance
+	// environment holds, and the Bitwarden project apply copies them from.
+	Governance *Governance `json:"governance,omitempty"`
+	// Reviewers lists the slugs of the teams whose approval an environment's
+	// jobs wait for. Apply resolves them to the team IDs GitHub expects.
+	Reviewers []string `json:"reviewers,omitempty"`
 }
 
 // TeamGrant is one area team's role on a repository. Team is the area team,
@@ -184,9 +184,9 @@ func BuildPlan(t *RepoTarget) (*Plan, error) {
 // Dependabot alerts toggle.
 func settingsOps(c *ClassPreset, repoPath string) []Op {
 	ops := []Op{{Method: http.MethodPatch, Path: repoPath, Body: SettingsBody(c)}}
-	// Dependabot alerts use their own endpoint rather than the repository
-	// security_and_analysis block. Older presets omit the field and leave the
-	// live setting untouched; presets that name it get explicit desired state.
+	// Dependabot alerts have an endpoint of their own, outside the repository's
+	// security_and_analysis block. A preset that omits the field leaves the
+	// live setting as it is.
 	if c.Security.DependabotAlerts != nil {
 		method := http.MethodDelete
 		if *c.Security.DependabotAlerts {
@@ -360,7 +360,7 @@ func workflowOps(c *ClassPreset, repoPath string) ([]Op, error) {
 		w.drop("release-train.yaml", "hotfix.yaml")
 	}
 	// Every repo locks a conversation once its issue or pull request closes.
-	// lock-closed replaces lock-pr, which locked pull requests as they opened
+	// The plan deletes lock-pr.yaml, which locked pull requests as they opened
 	// and so blocked the approval bot.
 	w.put("lock-closed.yaml")
 	w.drop("lock-pr.yaml")
@@ -435,6 +435,8 @@ func rulesetOps(t *RepoTarget, repoPath string) ([]Op, error) {
 	return append(ops, Op{PruneRulesets: true, KeepRulesets: keep, Path: repoPath + "/rulesets"}), nil
 }
 
+// rulesetOp writes the named ruleset from its template, with the bypass actors
+// the repo's class and workflows allow and checks as its required checks.
 func rulesetOp(name string, t *RepoTarget, checks []CheckRef) (Op, error) {
 	spec, err := LoadRuleset(name)
 	if err != nil {

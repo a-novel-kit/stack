@@ -18,7 +18,6 @@
 //	│              │ <footer hint>                          [Esc] cmd │
 //	└──────────────┴──────────────────────────────────────────────────┘
 //
-// Commands reach the daemon through three surfaces: the always-visible
-// footer hint, an Esc-triggered command input with autocomplete, and a
-// dedicated help screen.
+// The footer lists the common keys, Esc opens a command palette with
+// autocomplete, and ? opens the help screen.
 package tui

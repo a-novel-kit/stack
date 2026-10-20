@@ -105,6 +105,8 @@ func abortedResults(list []jobs.Job, results []*jobs.Result) []jobs.Result {
 	return out
 }
 
+// liveModel is the Bubble Tea model of the live view: the running jobs, each
+// with its latest output line, under the status lines of the finished ones.
 type liveModel struct {
 	list     []jobs.Job
 	progress *jobs.Progress

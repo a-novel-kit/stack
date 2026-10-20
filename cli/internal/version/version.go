@@ -4,10 +4,8 @@ import (
 	"runtime/debug"
 )
 
-// Version is a plain var so release pipelines can override it at link time
-// without touching source. It stays empty here, which means "fall back to
-// build info" and keeps local `go run` and `go install @latest` honest about
-// what they are.
+// Version is the version a release build injects at link time. Left empty, it
+// makes String fall back to the build info.
 var Version = ""
 
 // fallback is returned when neither ldflags nor build metadata yield anything

@@ -7,10 +7,9 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/detect"
 )
 
-// DryRunView answers "what would `a-novel <verb>` do here?" without running
-// anything: a short explanation, a per-kind count strip, then a table of every
-// detected target with its exact command. Sections are separated by titled
-// rules so the structure is obvious at a glance.
+// DryRunView shows what `a-novel <verb>` would run here, running nothing: a
+// short explanation, a count per kind, then a table of every detected target
+// with its exact command.
 func DryRunView(verb string, targets []detect.Target) string {
 	w := termWidth()
 

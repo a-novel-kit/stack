@@ -30,8 +30,8 @@ type Checkpoint struct {
 type GoExecCheckpoint struct {
 	TargetID string `json:"target_id"`
 	// Env holds the host ports the target's env references, as KEY=port
-	// entries. An older daemon wrote the whole env here; a relaunch reads the
-	// same entries out of it.
+	// entries. A relaunch reads only those entries, so a checkpoint holding the
+	// whole env relaunches the same way.
 	Env []string `json:"env"`
 }
 

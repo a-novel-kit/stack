@@ -55,14 +55,12 @@ func BackupsRoot() string { return filepath.Join(Data(), "backups") }
 // directory.
 func SecretsRoot() string { return filepath.Join(Data(), "secrets") }
 
-// ReinstallCheckpoint is the path of the one-shot reinstall handoff file.
-// Single fixed location; presence == "new daemon should replay".
+// ReinstallCheckpoint is the path of the reinstall handoff file. Its presence
+// tells the next daemon to relaunch the targets it lists.
 func ReinstallCheckpoint() string { return filepath.Join(State(), "reinstall.json") }
 
-// DaemonLog is where a detached daemon's own stdout/stderr goes (State()/daemon.log).
-// A backgrounded process has nowhere else to put them, and discarding them makes
-// every startup failure look identical: "did not become ready". Distinct from
-// LogsRoot(), which holds the output of the targets the daemon supervises.
+// DaemonLog is where a detached daemon writes its own output (State()/daemon.log),
+// apart from the output of the targets it supervises, under LogsRoot().
 func DaemonLog() string { return filepath.Join(State(), "daemon.log") }
 
 // Home returns $HOME, or "/" when it is unset, so path computation always

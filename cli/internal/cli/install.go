@@ -21,19 +21,11 @@ func newInstallCmd() *cobra.Command {
 	var source string
 	cmd := &cobra.Command{
 		Use:   commandInstall,
-		Short: "Rebuild + reinstall the CLI and restart the daemon (state-preserving)",
-		Long: `One command for the dev-loop reinstall cycle. Equivalent to running:
-
-  1. a-novel core prepare-reinstall   (checkpoint daemon state)
-  2. cd <cli-source>; go install ./cmd/a-novel
-  3. a-novel core start               (replays checkpoint, deletes it)
-
-The source dir defaults to '<default-stack>/cli' (typically
-~/git-projects/a-novel/cli). Pass --source to override.
-
-After this command exits, 'a-novel core status' shows the freshly-built
-binary's version and the same containers / go-exec targets that were
-running before.`,
+		Short: "Rebuild and reinstall the CLI, keeping your services up",
+		Long: `Build and install the CLI from the default stack's cli/, or from --source, then
+restart the daemon on the new binary. The go-exec targets are checkpointed
+first and relaunched after, and containers keep running, so your services
+stay up.`,
 		Example: `  a-novel install
   a-novel install --source ~/forks/stack/cli`,
 		Args: cobra.NoArgs,

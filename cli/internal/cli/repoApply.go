@@ -843,9 +843,9 @@ func tabPairs(out string) map[string]string {
 // did not name is deleted.
 //
 // This is what keeps repo config derived. The desired set follows entirely
-// from the class preset, the org profile and code-driven discovery, so
-// anything else on the repo is drift, such as a ruleset this version no longer
-// ships or one added by hand in the UI, and a reconcile removes it.
+// from the class preset, the org profile and code-driven discovery, so any
+// other ruleset on the repo is drift, dropped from the templates or added by
+// hand in the UI, and a reconcile removes it.
 func pruneRulesets(org, repo string, rulesets func() (map[string]string, error), op repocfg.Op) (string, error) {
 	live, err := rulesets()
 	if err != nil {

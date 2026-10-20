@@ -56,8 +56,8 @@ func TestInjectForRepo(t *testing.T) {
 		},
 		{name: "EmptySecretsBlockReturnsEmpty", manifest: "secrets: []\n"},
 		{name: "Error/MalformedManifest", manifest: "secrets: [this is not: valid: yaml\n", wantErr: true},
-		// The legacy top-level `env:` map shape (pre-list) is an unknown field under
-		// strict decoding — it must error loudly, not silently inject nothing.
+		// A top-level `env:` map is an unknown field under strict decoding, so it
+		// fails rather than injecting nothing.
 		{name: "Error/LegacyEnvShape", manifest: "env:\n  OPENAI_API_KEY: openai-key\n", wantErr: true},
 		// A declaration without an id (or env) is malformed — it must error, not be
 		// silently skipped.

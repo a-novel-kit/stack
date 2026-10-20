@@ -33,30 +33,15 @@ func newCoreSyncCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   commandSync,
-		Short: "Clone or fast-forward-pull the curated workspace repos",
-		Long: `Clone or update every repo listed in workspace-repos.yaml at the workspace
-root, the single source of truth (no built-in default; an absent file means
-nothing to sync). Each "<org>/<repo>" entry lands in:
+		Short: "Clone or fast-forward the workspace repositories",
+		Long: `Clone each repository workspace-repos.yaml lists, or fast-forward the checkout
+already there: an a-novel-kit repository lands under kit/, an a-novel one under
+app/.
 
-  a-novel-kit/<repo> → kit/<repo>
-  a-novel/<repo>     → app/<repo>
-
-Repos sync in parallel, up to --jobs at once (default: one per CPU). They share
-one SSH connection to GitHub, kept open 10 minutes for the next run, so a
-hardware security key asks for a single touch; GitHub serves 10 repos at a
-time on it.
-
-Existing repos are fast-forward pulled on the default branch (or have their
-default-branch ref updated when you are on a feature branch). sync never
-switches branches and never stashes: unstaged changes are preserved — git
-refuses (and sync skips) rather than overwrite them, and diverged defaults are
-left untouched. The stack repo itself is never cloned into kit/.
-GIT_LFS_SKIP_SMUDGE=1 keeps LFS blobs unfetched.
-
---allow / --ignore subset the list; both may be repeated, and --ignore wins.
-
-Sub-agents working out of a fresh stack should run this first to populate kit/
-and app/.`,
+Repositories sync in parallel over one shared SSH connection to GitHub, so a
+security key asks for a single touch. A checkout's default branch only moves
+forward: sync never switches branches, never overwrites a change, and skips a
+branch that diverged. LFS files stay unfetched.`,
 		Example: `  a-novel core sync
   a-novel core sync --allow=a-novel-kit/golib
   a-novel core sync --ignore=a-novel/service-template

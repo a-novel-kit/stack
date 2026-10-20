@@ -80,7 +80,7 @@ func (r Resolution) Warnings() []string {
 // decrypts each declared secret from the local store, and returns the env pairs
 // to inject plus the declarations still missing.
 //
-// It is deliberately forgiving so secrets setup never blocks test/run:
+// It is forgiving, so a missing secret never blocks a test or a run:
 //   - no manifest → empty Resolution, no error;
 //   - no local key / store (secrets never initialized) → every declared secret
 //     is reported Missing so the developer is told what to set, but no error is

@@ -27,6 +27,7 @@ type pickRow struct {
 	target int
 }
 
+// picker is the Bubble Tea model of the target picker.
 type picker struct {
 	verb     string
 	targets  []detect.Target

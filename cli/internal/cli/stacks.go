@@ -30,14 +30,11 @@ const killGrace = 10 * time.Second
 func newCoreStacksCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stacks",
-		Short: "List and prune the registered workspace stacks",
-		Long: `Inspect what each registered stack is holding, and reclaim the ones that
-have served their purpose.
-
-A stack is a whole checkout of the workspace ($A_NOVEL_STACKS entry +
-its kit/ and app/ repos). Extra stacks let a session work without
-disturbing a checkout someone else is mid-task in; pruning is how that
-space is given back.`,
+		Short: "Create, list and prune workspace stacks",
+		Long: `A stack is a whole workspace: a checkout of the stack repository with its app/
+and kit/ repositories, registered in $A_NOVEL_STACKS. An extra stack lets a
+session work without touching another one's checkouts, and pruning it gives
+back its files, containers and volumes.`,
 	}
 	cmd.AddCommand(newStacksNewCmd())
 	cmd.AddCommand(newStacksListCmd())
@@ -65,16 +62,14 @@ func newStacksNewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "new <name>",
 		Short: "Allocate an extra workspace stack",
-		Long: `Clone the workspace into a fresh root and report the $A_NOVEL_STACKS entry
-that registers it.
+		Long: `Clone the stack repository into a new root, and print the $A_NOVEL_STACKS
+entry that registers it. The root defaults to the temporary directory,
+$TMPDIR included, which the system empties in time; --root puts the stack
+somewhere lasting.
 
-Without --root the stack lands under the OS temp directory (honouring
-$TMPDIR), so a stack that outlives its session is reclaimed eventually
-even if nobody prunes it. Pass --root to put it somewhere durable.
-
-Registration is yours: $A_NOVEL_STACKS lives in your shell config, and
-the daemon reads it at start, so the new stack becomes visible after you
-add the printed entry and run 'a-novel core restart'.`,
+The daemon reads $A_NOVEL_STACKS when it starts. Add the entry, run
+'a-novel core sync --root=<root>', then
+'a-novel core restart --preserve-targets'.`,
 		Example: `  a-novel core stacks new agent-7b46
   a-novel core stacks new review-291 --root=~/scratch/review-291`,
 		Args: cobra.ExactArgs(1),
@@ -97,7 +92,7 @@ add the printed entry and run 'a-novel core restart'.`,
 			}
 			_, _ = fmt.Fprintf(out, "  ✓ %s\n", path)
 			_, _ = fmt.Fprintf(out, "  add to %s: %s:%s\n", stacks.EnvVar, name, path)
-			_, _ = fmt.Fprintf(out, "  then: a-novel core sync --root=%s && a-novel core restart\n", path)
+			_, _ = fmt.Fprintf(out, "  then: a-novel core sync --root=%s && a-novel core restart --preserve-targets\n", path)
 			return nil
 		},
 	}
@@ -114,11 +109,9 @@ func newStacksListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List every registered stack and what it is holding",
-		Long: `Print one row per stack: its name, path, running targets, and volumes.
-
-The default stack is marked '*' and is never prunable. Use this before a
-prune sweep to see which stacks are still doing something and which are
-leftovers from a finished session.`,
+		Long: `Print one row per stack: its name and path, and the targets, infra containers
+and volumes it holds. A '*' marks the default stack, which is never pruned. A
+registration the daemon does not manage follows, with the reason.`,
 		Example: `  a-novel core stacks list`,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -168,20 +161,14 @@ func newStacksPruneCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "prune [<name>]",
 		Short: "Tear down a stack: kill its targets, clear its volumes, remove its files",
-		Long: `Reclaim everything a stack holds, in the order that leaves nothing behind:
-kill its running targets, stop its infra containers, clear its volumes
-(auto-backed up first), then remove the checkout.
+		Long: `Reclaim what a stack holds: stop its targets and infra, clear its volumes after
+a backup, then delete its files. --all prunes every stack but the default,
+which is never pruned.
 
-The default stack is never pruned — it is the workspace, not scratch
-space. With --all, every OTHER registered stack is pruned, which is the
-sweep to run after a batch of agent sessions.
-
-Refuses a stack whose checkouts hold work that exists nowhere else: a
-dirty tree, a branch other than the default, or commits not yet pushed.
---force overrides that refusal and throws the work away.
-
-$A_NOVEL_STACKS lives in your shell config, so prune reports the entry
-to drop rather than editing the file underneath you.`,
+A stack whose checkouts hold work that exists nowhere else is refused:
+uncommitted changes, a branch other than the default, or commits not pushed.
+--force prunes it anyway, and that work is lost. Prune prints the
+$A_NOVEL_STACKS entry to drop from your shell profile.`,
 		Example: `  a-novel core stacks list
   a-novel core stacks prune agent-7b46
   a-novel core stacks prune agent-7b46 --dry-run

@@ -41,10 +41,12 @@ type stackScope struct {
 	allStacks bool
 }
 
+// bind adds the --stack flag to cmd.
 func (s *stackScope) bind(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&s.stack, stackLabel, "", "stack name (default: first in $A_NOVEL_STACKS)")
 }
 
+// bindAll adds --stack and --all-stacks to cmd.
 func (s *stackScope) bindAll(cmd *cobra.Command) {
 	s.bind(cmd)
 	cmd.Flags().BoolVar(&s.allStacks, "all-stacks", false, "operate across every registered stack")
@@ -88,25 +90,13 @@ func newPsCmd() *cobra.Command {
 	var watch bool
 	cmd := &cobra.Command{
 		Use:   "ps",
-		Short: "List services with their targets AND infra containers",
-		Long: `Show every service in the active stack with its targets' current phase,
-exit reason (if terminated), and mode (go-exec vs container). Infrastructure
-containers are listed alongside their owning service — distinguished by
-the leading 'infra' kind column (vs '1shot' / 'longr' for targets).
+		Short: "List services with their targets and infra containers",
+		Long: `Show every service of the stack with its targets and infra containers, one
+row each: the kind (1shot, longr or infra), the name, the state, and the
+fully-qualified ID that kill, restart and logs take.
 
-Filters:
-  --service=NAME    only this service
-  --kind=infra      only infra containers (suppress targets)
-  --kind=target     only targets (suppress infra)
-
-The canonical fully-qualified IDs for each row are emitted in --json
-mode so machine consumers don't have to reconstruct them:
-  target:  <stack>/<service>/<name>
-  infra:   <stack>/<service>/infra/<name>
-
-With --watch, streams state changes as they happen instead of a snapshot.
-With --json, emits one JSON object per service for machine consumption
-(newline-delimited when combined with --watch).`,
+--watch prints the table again on every state change. --json prints one JSON
+object per service, one per line, and with --watch one more per state change.`,
 		Example: `  a-novel run ps
   a-novel run ps --stack=branch-foo
   a-novel run ps --service=service-json-keys --json
@@ -268,10 +258,9 @@ func newTopologyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "topology",
 		Short: "Show the dependency graph as ASCII",
-		Long: `Render the per-service dependency graph as a text tree, derived from each
-service's compose 'depends_on' chain. Long-runners show their (mode, phase,
-health); one-shots show their last exit status; infrastructure shows
-container health.`,
+		Long: `Print each service's dependency graph as a text tree, read from its compose
+depends_on entries: the infra first, then the one-shots, then the
+long-runners, each with its kind and what it depends on.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			c := rpc.New("")
@@ -302,7 +291,7 @@ func newServiceStatusCmd() *cobra.Command {
 	var ss stackScope
 	cmd := &cobra.Command{
 		Use:   "status <service>",
-		Short: "Show one service's infrastructure + per-target state",
+		Short: "Show one service's infrastructure and targets",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -323,13 +312,10 @@ func newServiceInfraCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   kindInfra,
 		Short: "Manage a service's infrastructure (containers without Go counterparts)",
-		Long: `Bring up or tear down the compose services that aren't tied to a 'cmd/'
-target — typically the database (postgres-<service>). 'infra start' also
-runs every one-shot target (migrations, rotate-keys, ...) that depends on
-the infra, blocking long-runners until the one-shots succeed.
-
-Useful explicitly when you want the database up so you can psql / pgcli
-into it without starting any application targets.`,
+		Long: `Start or stop a service's infrastructure: the compose services with no cmd/
+target, such as its database. 'infra start' also runs every one-shot target of
+the service, such as migrations, so the database is ready to query without
+starting a server.`,
 	}
 	cmd.AddCommand(newServiceInfraStartCmd())
 	cmd.AddCommand(newServiceInfraKillCmd())
@@ -341,7 +327,7 @@ func newServiceInfraStartCmd() *cobra.Command {
 	var oneShotsMode string
 	cmd := &cobra.Command{
 		Use:   "start <service>",
-		Short: "Bring up a service's infrastructure + run its one-shots",
+		Short: "Bring up a service's infrastructure and run its one-shots",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -368,9 +354,8 @@ func newServiceInfraKillCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "kill <service>",
 		Short: "Tear down a service's infrastructure",
-		Long: `Refuses if any target of the service is still running — use 'a-novel run kill'
-to stop them first, or pass --force to cascade-kill targets and infra
-together.`,
+		Long: `Refuses while a target of the service runs. Stop it first with
+'a-novel run kill', or pass --force to stop the targets with the infra.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -398,18 +383,13 @@ func newStartCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "start <target>",
 		Short: "Start a target in go-exec (default) or container mode",
-		Long: `Start the named target. <target> is the canonical target ID —
-'<stack>/<service>/<name>' — or the bare '<service>/<name>' shorthand
-which resolves against the default stack.
+		Long: `Start a target, named '<stack>/<service>/<name>', or '<service>/<name>' in the
+--stack or default stack. Its dependencies come up first: the infra waits for
+health, and one-shots such as migrations run to success.
 
-Mode defaults to go-exec — faster feedback, no container build. Pass
---mode=container to bring up the containerized variant via compose.
-
-Mutual exclusion is enforced: if the target is already running in the
-other mode, the command refuses with a hint to 'kill' or 'restart'.
-Idempotent: starting an already-running target in the same mode is a
-no-op (returns 0). Dependencies come up first: infra is health-gated and
-one-shots such as migrations run to success before the target starts.`,
+The target runs from source (go-exec), or from its image with --mode=container.
+A target running in the other mode is refused, and one running in the same
+mode is left as it is.`,
 		Example: `  a-novel run start default/service-json-keys/rest
   a-novel run start service-json-keys/rest                     # default stack inferred
   a-novel run start service-json-keys/rest --mode=container
@@ -459,14 +439,10 @@ func newKillCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "kill <target-or-infra>",
 		Short: "Stop a running target or infra container",
-		Long: `Send SIGTERM to the entity and wait up to --timeout (default 10s) for it
-to exit before SIGKILL. Idempotent: killing an already-stopped entity
-returns 0.
-
-The argument can be a target ID ('service-X/grpc') or an infra ID
-('service-X/infra/postgres-X'). The 'infra' segment is the
-sentinel — target names colliding with that word would be
-disambiguated by the stack-prefixed form.`,
+		Long: `Stop a target, named as 'run start' takes it, or an infra container, named
+'<service>/infra/<name>'. A target gets SIGTERM, then SIGKILL once --timeout
+passes, and an infra container gets 'podman stop'. Stopping what already
+stopped succeeds.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -505,14 +481,9 @@ func newRestartCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "restart <target-or-infra>",
 		Short: "Kill then start (optionally swapping mode for targets)",
-		Long: `Atomic kill-then-start. With --mode, swaps the target into the new mode
-in one step — useful for go-exec → container migration (or back) without
-the mutual-exclusion refusal you'd hit with a separate 'kill' + 'start'
-race.
-
-For an infra ID ('service-X/infra/postgres-X'), runs 'podman restart'
-on the container — faster than kill+infra-start because the container
-is reused. --mode is ignored for infra (infra is always containerized).`,
+		Long: `Stop then start a target in one step, in the mode --mode names, or its current
+one. An infra container gets 'podman restart', which keeps the container and
+its data.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -665,20 +636,12 @@ func newLogsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "logs <target-or-infra>",
 		Short: "Print or stream logs for a target or infra container",
-		Long: `Read the entity's current log file (or an archived previous run with
---previous / --run-id=<ts>). With --follow, streams new lines through
-the daemon as they arrive (multiple followers see the same stream).
+		Long: `Print the log of a target's current run, or of an archived run with
+--previous or --run-id. --follow keeps printing new lines as they arrive.
 
-For an infra ID ('service-X/infra/postgres-X') the daemon streams
-'podman logs -f' for that container — both stdout and stderr are
-merged into the stream. --previous / --run-id and the --stream
-stdout/stderr filter are NOT supported for infra (podman owns the
-log files, not us); the daemon will surface an error if combined.
-
---tail limits to the last N lines (client-side; daemon streams full).
---since accepts Go-style durations ('5m', '1h30m'). Past-run access
-(--previous / --run-id) is CLI-only — the TUI always shows the
-current/latest session.`,
+An infra container's log, named '<service>/infra/<name>', comes from podman,
+with stdout and stderr merged. It keeps no archived runs, so --previous and
+--run-id refuse it, and --stream does not filter it.`,
 		Example: `  a-novel run logs service-json-keys/rest
   a-novel run logs service-json-keys/rest --follow
   a-novel run logs service-json-keys/infra/postgres-json-keys --follow
@@ -784,18 +747,13 @@ func newEnvCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "env [<service>]",
 		Short: "Print a service's env vars in shell / JSON / dotenv form",
-		Long: `Emit the env vars the daemon would inject into a service's targets — a
-mix of constants from the compose file (POSTGRES_USER/PASSWORD/DB,
-APP_MASTER_KEY, ...), allocated values (random ports), derived values
-(POSTGRES_DSN, REST_URL, GRPC_URL), and any cross-service references the
-service consumes.
+		Long: `Print the environment the daemon gives a service's targets: the compose
+constants, the ports it allocates, and the URLs and DSNs it derives from them.
+A port not allocated yet prints empty. Without <service>, print every service
+of the stack, or of every stack with --all-stacks.
 
-With a positional <service>, scopes to that service. Without one, prints
-every service in the active stack. --all-stacks unions across all stacks.
-
---format defaults to 'shell' (eval-able 'export VAR=...' lines). Switch
-to 'json' for agent consumption or 'dotenv' for .env-style key=value.
---only=PATTERN filters keys by glob.`,
+The default shell format is ready for eval; --format=json and --format=dotenv
+suit scripts and .env files.`,
 		Example: `  a-novel run env service-json-keys
   eval "$(a-novel run env service-json-keys)"
   curl "$REST_URL/ping"
@@ -870,18 +828,13 @@ func newVolumeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "volume",
 		Short: "Manage service volumes (backup, restore, clear, list)",
-		Long: `Volumes are service-level (not target-level) — e.g., the postgres data
-volume of service-json-keys is shared by every target of that service.
+		Long: `A service's volumes hold its data, such as its database, for all its targets.
+Backup, restore and clear refuse while a target or the infra of the service
+runs; --force stops them first.
 
-All destructive operations (clear, restore, backup) refuse while ANY
-target or infrastructure of the service is up, to prevent inconsistent
-snapshots and orphaned mounts. Pass --force to cascade-stop everything
-first; the user owns the consistency implications of that override.
-
-Backups land in $XDG_DATA_HOME/a-novel/backups/<stack>/<service>/<volume>/
-as tar.zst archives; max 5 per volume, oldest pruned automatically.
-Routine 'core kill' does NOT clear volumes — only an explicit 'volume
-clear' destroys data.`,
+Backups are tar.zst archives under
+$XDG_DATA_HOME/a-novel/backups/<stack>/<service>/<volume>/, the latest five
+per volume. Stopping a service or the daemon keeps its volumes.`,
 	}
 	cmd.AddCommand(newVolumeListCmd())
 	cmd.AddCommand(newVolumeBackupCmd())
@@ -925,11 +878,10 @@ func newVolumeBackupCmd() *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "backup <service>",
-		Short: "Snapshot a service's volumes (refuses while service is up)",
-		Long: `Tar-zstd archive each of the service's volumes into the backups dir.
-Refuses while infra/targets are up (a live postgres tar is silently
-corrupt). Pass --force to cascade-stop the service first — the resulting
-archive's consistency is then your responsibility.`,
+		Short: "Snapshot a service's volumes (refuses while the service runs)",
+		Long: `Archive each of the service's volumes into the backups directory, and print
+each archive's path. An archive of a volume in use can be corrupt, so the
+command refuses while the service runs; --force stops it first.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -957,12 +909,10 @@ func newVolumeRestoreCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "restore <service>",
 		Short: "Restore volumes from a backup (latest by default)",
-		Long: `Decompress a backup archive over the service's volumes. Without --from,
-uses the latest backup. With --from=<ts>, uses that specific archive
-(timestamps come from 'a-novel run volume list').
-
-Refuses while the service is up. --force cascade-stops first. Backup
-file is validated (decompresses cleanly) before any volume is touched.`,
+		Long: `Restore each of the service's volumes from its latest backup, or from the one
+whose file name starts with --from, such as the timestamp 'volume backup'
+printed. Every archive is checked before any volume changes. Refuses while
+the service runs; --force stops it first.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -987,12 +937,10 @@ func newVolumeClearCmd() *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "clear <service>",
-		Short: "Destroy a service's volumes (auto-backups first)",
-		Long: `Delete every volume of the service. By default, takes an auto-backup
-first, so 'volume restore' undoes it (it takes the latest backup). Pass --no-backup to
-skip the auto-backup — the destruction is then irreversible.
-
-Refuses while the service is up. --force cascade-stops first.`,
+		Short: "Destroy a service's volumes (backs them up first)",
+		Long: `Delete every volume of the service, after a backup that 'volume restore' takes
+back. --no-backup skips the backup, and nothing can undo the deletion then.
+Refuses while the service runs; --force stops it first.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -1055,19 +1003,11 @@ func newExecCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "exec <target> -- <cmd> [args...]",
 		Short: "Run a command alongside a target (container exec, or sibling process)",
-		Long: `Runs <cmd> "as if it were a sibling of the target":
-
-  - Container-mode targets (currently RUNNING): the command runs INSIDE
-    the target's container via 'podman exec'. Useful for sh/psql/curl
-    in the container's network namespace.
-
-  - Go-exec targets (or anything not currently running): the command
-    runs on the host with the target's resolved env (POSTGRES_DSN,
-    *_PORT, etc.) and the service directory as CWD. Useful for
-    'exec migrations psql' to get psql with the right DSN.
-
-Output is forwarded line-by-line from the daemon. Exit code reflects
-the underlying command's success.`,
+		Long: `Run a command beside a target. In a running container target, the command
+runs inside the container through 'podman exec'. Otherwise it runs on the host,
+in the service's directory with the target's environment, so
+'run exec <service>/migrations -- psql' opens psql on the service's database.
+The command's exit status becomes the CLI's.`,
 		Example: `  a-novel run exec service-json-keys/rest -- sh
   a-novel run exec service-json-keys/migrations -- psql
   a-novel run exec default/service-json-keys/rest -- curl -s localhost:8080`,
@@ -1137,14 +1077,9 @@ func newDebugCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "debug <target>",
 		Short: "Print the dlv attach command for a running go-exec target",
-		Long: `For go-exec targets currently in PHASE_RUNNING: returns a ready-to-paste
-'dlv attach' command pinned to the target's PID + a suggested headless
-port. Run the command in your own terminal so the dlv REPL is interactive;
-your IDE then connects to dlv's headless listener.
-
-Container-mode targets are rejected — attaching dlv inside a container
-requires an in-image dlv install + a port-forward the daemon doesn't
-manage.`,
+		Long: `Print the 'dlv attach' command for a running go-exec target, with its PID and a
+headless port. Run it in your own terminal, then connect your IDE to that
+port. Container targets are refused.`,
 		Example: `  a-novel run debug service-json-keys/grpc
   a-novel run debug default/service-json-keys/grpc`,
 		Args: cobra.ExactArgs(1),
@@ -1178,13 +1113,10 @@ func newWatchCmd() *cobra.Command {
 	var jsonOut bool
 	cmd := &cobra.Command{
 		Use:   "watch",
-		Short: "Stream state-change events (for agents)",
-		Long: `Subscribe to the daemon's state-event stream — every phase transition,
-exit, health flip, etc. is emitted as a newline-delimited JSON object.
-
-Designed for agentic workflows: polling 'ps' is wasteful; watch tells
-you the moment a state changes. Filter by --service or --target to
-narrow the stream.`,
+		Short: "Stream the targets' phase changes",
+		Long: `Print each phase change of the daemon's targets as it happens, one JSON object
+per line, or one line of text with --json=false. --service and --target narrow
+the stream.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			out := cmd.OutOrStdout()
 			return watchEvents(cmd.Context(), rpc.New(""), ss.selector(), service, target, func(ev *anovelv1.StateEvent) {
@@ -1199,7 +1131,7 @@ narrow the stream.`,
 	ss.bindAll(cmd)
 	cmd.Flags().StringVar(&service, "service", "", "filter to one service")
 	cmd.Flags().StringVar(&target, "target", "", "filter to one target")
-	cmd.Flags().BoolVar(&jsonOut, "json", true, "emit JSON (default: true — this command is agent-oriented)")
+	cmd.Flags().BoolVar(&jsonOut, "json", true, "print JSON lines (--json=false prints text)")
 	return cmd
 }
 
@@ -1273,17 +1205,12 @@ func encodeEvent(w io.Writer, ev *anovelv1.StateEvent) {
 func newUICmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "ui",
-		Short: "Open the terminal UI (Bubble Tea)",
-		Long: `Full-screen TUI with a services nav (left), a tabbed target detail and
-log viewer (right), a footer hint with the most-used commands, an
-Esc-opened command palette covering the full CLI surface, and a
-dedicated :help screen with searchable command reference.
-
-The UI is a thin client over the same RPC as the CLI — every action you
-take in the UI is observable from 'a-novel run watch' and vice-versa.
-
-Press ? for the full key/command reference. Press Esc for the command
-palette (':start', ':kill', ':infra-start', etc.). q or Ctrl-C quits.`,
+		Short: "Open the terminal UI",
+		Long: `Open the full-screen view of every service: the service list, each service's
+targets and infra as tabs, and the selected tab's live log. Esc opens the
+command palette, ? lists every key, and q quits without stopping anything.
+The UI talks to the same daemon as the CLI, so each sees what the other
+starts.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return tui.Run()
 		},

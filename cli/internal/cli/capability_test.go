@@ -9,9 +9,9 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/detect"
 )
 
-// withCoverage leaves a Go target's selectors alone and only adds -cover, so every
-// test package runs and the exclusion happens when the mean is computed. Filtering the run
-// list is what dropped a package's tests the moment its path held mocks/test/protogen.
+// TestWithCoverage pins that withCoverage leaves a Go target's selectors alone
+// and only adds -cover, so every test package runs, one under mocks/, test/ or
+// protogen/ included, and the exclusion applies to the reported mean only.
 func TestWithCoverage(t *testing.T) {
 	t.Parallel()
 

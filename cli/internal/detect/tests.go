@@ -85,10 +85,8 @@ func composeProject(rel, id string) string {
 
 // toEnv describes the env file f as the runner needs it: its services, split
 // into dependency-free ones and dependents, the host ports to allocate, and every
-// variable it references. build.composeUpPhased starts dependency-free services
-// first and dependents second, so ordering never relies on the provider's
-// `depends_on` wait. A file that does not parse lists nothing, and its env comes
-// up in one piece.
+// variable it references. A file that does not parse lists nothing, and its env
+// comes up in one piece.
 func (f envFile) toEnv(rel string) *ComposeEnv {
 	env := &ComposeEnv{File: f.file, Project: composeProject(rel, f.id), ID: f.id}
 	raw, err := os.ReadFile(f.file)

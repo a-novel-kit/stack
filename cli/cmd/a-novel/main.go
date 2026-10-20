@@ -1,6 +1,6 @@
-// Command a-novel is the A-Novel storyverse build tool: a single CLI for local
-// development. It runs standalone capabilities such as test and build, and
-// fronts a long-lived background daemon that supervises run targets.
+// Command a-novel is the command-line tool for developing A-Novel. It runs
+// standalone commands such as test and build, and fronts the background daemon
+// that supervises the run targets.
 package main
 
 import (

@@ -146,9 +146,9 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 	return nil
 }
 
-// KillInfra refuses if any long-runner target of the service is still
-// running (unless force). Otherwise tears down all infra containers and
-// resets the session.
+// KillInfra tears down the service's infra containers and resets its session.
+// It refuses while a target of the service is live, unless force stops those
+// targets first.
 func (r *Runner) KillInfra(ctx context.Context, stack, service string, force bool) error {
 	defer r.InvalidateInfraStateCache()
 	svc, err := r.findService(stack, service)

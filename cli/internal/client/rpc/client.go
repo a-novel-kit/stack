@@ -130,8 +130,8 @@ func (c *Client) StartInfra(ctx context.Context, stack, service string, oneShots
 	})
 }
 
-// KillInfra tears down the service's infrastructure (refuses if any
-// long-runner is still up unless force=true).
+// KillInfra tears down the service's infrastructure. The daemon refuses while
+// a target of the service is live, unless force stops it first.
 func (c *Client) KillInfra(ctx context.Context, stack, service string, force bool) (*anovelv1.KillInfraResponse, error) {
 	return call(ctx, c, c.core.KillInfra, &anovelv1.KillInfraRequest{Stack: stack, Service: service, Force: force})
 }
@@ -261,8 +261,8 @@ func IsNotRunning(err error) bool {
 	return errors.As(err, &nrErr)
 }
 
-// NotRunningError wraps a transport-level failure. Carries the socket path
-// for actionable error messages.
+// NotRunningError is a transport failure to reach the daemon. It carries the
+// socket path, which its message names.
 type NotRunningError struct {
 	SocketPath string
 	Cause      error

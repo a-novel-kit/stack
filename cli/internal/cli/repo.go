@@ -42,11 +42,10 @@ func newRepoCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "repo",
 		Short: "Create and configure GitHub repositories (interactive, human-only)",
-		Long: `Apply the standard repository configuration (settings, security,
-rulesets, Pages) from the templates in cli/internal/repocfg/templates.
-
-Writes are interactive and human-only. '--dry-run' computes the desired
-state and prints the raw API operations without applying anything.`,
+		Long: `Apply a repository's configuration, from its settings to its rulesets, as the
+templates in cli/internal/repocfg/templates define it. A write asks for
+confirmation in a terminal; --dry-run prints the API operations and applies
+nothing.`,
 	}
 	cmd.AddCommand(newRepoCreateCmd(), newRepoUpdateCmd())
 	return cmd
@@ -58,9 +57,9 @@ func newRepoCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create <org> <name>",
 		Short: "Create a repository and apply its class config",
-		Long: `Creates <org>/<name> (optionally from a template), then discovers its
-checks and applies the class configuration — settings, security,
-rulesets and Pages. Interactive (human-only); repositories are public unless --private is set.`,
+		Long: `Create <org>/<name>, from --template when given, then apply its class
+configuration. The repository is public unless --private is set. The command
+asks for confirmation in a terminal.`,
 		Example: `  a-novel repo create a-novel infra --class infra`,
 		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -154,18 +153,14 @@ func newRepoUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update",
 		Short: "Reconcile a repository's config to its class template",
-		Long: `Run from inside a checked-out repo. Resolves the repo from its 'origin'
-remote, picks the repos/<org>_<repo>.yaml override or the --class preset, and
-reconciles config. The master ruleset's required checks are the jobs declared in
-.github/workflows/main.yaml (minus reporting / master-only jobs) plus the
-always-required set — set wholesale.
+		Long: `Reconcile the configuration of the repository you stand in, found from its
+origin remote, with its class template or its repos/<org>_<repo>.yaml override.
+The master ruleset requires every job of .github/workflows/main.yaml but the
+reporting and master-only ones, plus the checks every repository requires.
 
---all reconciles every pulled workspace repo instead: the stack repo plus each
-whitelisted checkout present under app/ or kit/ (the same set 'core sync'
-manages, from workspace-repos.yaml). Config is discovered from each working
-tree, so a repo carrying ongoing work — off its default branch or with
-uncommitted changes — is skipped untouched. --exclude drops named repos; a
-single confirm gates the whole batch, which applies --jobs repos at once.`,
+--all reconciles every checkout of the workspace, after one confirmation. The
+configuration is read from each working tree, so a checkout off its default
+branch or with uncommitted changes is skipped.`,
 		Example: `  a-novel repo update                       # current repo
   a-novel repo update --all                 # every pulled workspace repo
   a-novel repo update --all --exclude=service-template

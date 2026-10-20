@@ -48,13 +48,11 @@ func IsDaemonReexec(args []string) bool {
 func newCoreCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   commandCore,
-		Short: "Manage the a-novel daemon (long-lived background process)",
-		Long: `The a-novel daemon is a long-lived background process that supervises
-running targets and serves the CLI / TUI / future web UI over a unix socket.
-
-A single daemon instance per user manages every registered stack (see
-'a-novel core stacks'). Designed to live in your .zshrc as 'a-novel core start',
-which is silent on already-running and idempotent.`,
+		Short: "Manage the daemon and the workspace",
+		Long: `The daemon is the background process that runs your services: one per user,
+for every registered stack. The CLI and the UI reach it over a unix socket.
+'core setup' makes each new shell run 'core start', which does nothing while
+the daemon runs.`,
 	}
 	cmd.AddCommand(newCoreStartCmd())
 	cmd.AddCommand(newCoreSetupCmd())
@@ -74,19 +72,12 @@ func newCoreStartCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "start",
 		Short: "Start the a-novel daemon (silent if already running)",
-		Long: `Start the long-lived a-novel daemon. Idempotent + silent if a healthy
-daemon is already running — designed to be safe in .zshrc / shell init.
-
-By default, detaches the daemon into the background and returns immediately.
-With --foreground, blocks and serves in the current terminal (useful for
-systemd units or debugging).
-
-Refuses with a clear message (not an interactive prompt) if the default
-stack isn't set up; run 'a-novel core setup' to bootstrap.`,
-		Example: `  # In ~/.zshrc — silent no-op if already running
-  a-novel core start
-
-  # Foreground (systemd / debugging)
+		Long: `Start the daemon in the background, and wait until it answers. A running
+daemon is left as it is, so a shell profile can run this on every start.
+--foreground serves in this terminal instead, as for a debugging session or
+a systemd unit. A missing default stack stops the start; 'core setup' creates
+it.`,
+		Example: `  a-novel core start
   a-novel core start --foreground`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if up, _ := daemonUp(cmd.Context(), rpc.New("")); up {
@@ -107,19 +98,10 @@ func newCoreKillCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "kill",
 		Short: "Stop the a-novel daemon",
-		Long: `Stop the running a-novel daemon WITHOUT writing a reinstall checkpoint —
-on next 'core start' nothing is auto-relaunched.
-
-Without --force, SIGTERMs every running go-exec target (10s grace each)
-and leaves containers alone — those have their own podman lifecycle.
-
-With --force, ALSO tears down every service's infra (cascade-kills any
-remaining targets first). Use when you want a clean local environment;
-loses any go-exec target state without a checkpoint.
-
-For graceful 'restart-the-daemon-and-relaunch-my-targets', prefer
-'a-novel core prepare-reinstall' followed by 'core start', or use the
-'core restart' convenience.`,
+		Long: `Stop the daemon and the go-exec targets it runs, each with a 10s grace.
+Containers keep running. --force also tears down every service's infra,
+stopping the targets left first. The next 'core start' relaunches nothing;
+'core restart --preserve-targets' brings the go-exec targets back.`,
 		Example: `  a-novel core kill
   a-novel core kill --force`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -219,21 +201,11 @@ func newCoreRestartCmd() *cobra.Command {
 	var preserve bool
 	cmd := &cobra.Command{
 		Use:   "restart",
-		Short: "Stop and start the daemon (optionally preserving running go-exec targets)",
-		Long: `Convenience wrapper for the common "stop the daemon, start it back up"
-loop. Honors the same flags as 'core kill':
-
-  --force            tear down all infra alongside the daemon
-  --preserve-targets write a reinstall checkpoint first, so go-exec
-                     targets relaunch on next start (the same path
-                     'a-novel install' uses)
-
-Without flags, the daemon stops cleanly (containers survive, go-exec
-targets are SIGTERMed and NOT relaunched) and then starts fresh. With
---preserve-targets the new daemon comes back with the same go-exec
-target list it had before.
-
-If the daemon is already down, this is just 'core start'.`,
+		Short: "Stop and start the daemon, optionally keeping its go-exec targets",
+		Long: `Stop the daemon as 'core kill' does, then start it again.
+--preserve-targets checkpoints the go-exec targets first, and the new daemon
+relaunches them on their ports, as 'a-novel install' does. A daemon already
+down just starts.`,
 		Example: `  a-novel core restart
   a-novel core restart --preserve-targets
   a-novel core restart --force`,
@@ -274,12 +246,10 @@ If the daemon is already down, this is just 'core start'.`,
 func newCoreStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show daemon status (running? socket? stacks? uptime?)",
-		Long: `Reports whether the daemon is currently running, the socket it's listening
-on, the registered stacks (with paths and default marker), uptime, and
-whether a reinstall checkpoint is pending.
-
-Exits 0 always — "daemon down" is a normal observable state, not an error.`,
+		Short: "Show whether the daemon runs, with its socket, stacks and uptime",
+		Long: `Print whether the daemon runs, with its version, socket, uptime and stacks,
+and whether a reinstall checkpoint waits. A stopped daemon is a normal state,
+and the command exits 0 for it.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			c := rpc.New("")
@@ -317,16 +287,11 @@ Exits 0 always — "daemon down" is a normal observable state, not an error.`,
 func newCorePrepareReinstallCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "prepare-reinstall",
-		Short: "Write reinstall checkpoint + shut down for a graceful upgrade",
-		Long: `Asks the running daemon to checkpoint its in-flight go-exec targets to
-reinstall.json and exit cleanly. Containers survive the shutdown unchanged.
-
-The next 'a-novel core start' reads the checkpoint and relaunches the
-recorded go-exec targets, then deletes the checkpoint — yielding a steady
-state identical to pre-restart.
-
-Used by 'a-novel install' to make a rebuild non-disruptive. Not for direct
-manual use — for an immediate stop use 'core kill' instead.`,
+		Short: "Checkpoint the go-exec targets and stop the daemon",
+		Long: `Checkpoint the running go-exec targets and stop the daemon. Containers keep
+running. The next 'core start' relaunches the checkpointed targets on their
+ports, then deletes the checkpoint. 'a-novel install' and
+'core restart --preserve-targets' run this step for you.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			c := rpc.New("")
@@ -351,26 +316,21 @@ func newCoreSetupCmd() *cobra.Command {
 	var nonInteractive bool
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Interactive first-time bootstrap (stacks, dirs, .zshrc edits)",
-		Long: `One-time interactive bootstrap. Run after installing the CLI; idempotent
-on re-run (every step checks current state first, performs zero filesystem
-writes on a fully-set-up system).
+		Short: "Set up this machine: tools, directories, stacks and shell profile",
+		Long: `Set up this machine for the workspace. Each step checks first, so a second
+run changes nothing:
 
-What it does:
+  1. Check that podman, git and SSH access to GitHub work.
+  2. Create the state and data directories.
+  3. Clone each registered stack that is missing, after asking for the
+     default one.
+  4. Write a marked block into your shell profile, after a backup. It exports
+     $A_NOVEL_STACKS when needed, loads completion and runs
+     'a-novel core start'.
+  5. Start the daemon.
 
-  1. Checks podman, git, and GitHub SSH access are available.
-  2. Creates $XDG_STATE_HOME/a-novel and $XDG_DATA_HOME/a-novel (mode 0700).
-  3. For each registered stack (A_NOVEL_STACKS, or implicit default at
-     ~/git-projects/a-novel): verifies the path exists and contains the
-     right git repo; prompts to clone if the default stack is missing;
-     unconditionally clones non-default stacks if missing.
-  4. Edits your shell rc (detected via --rc, $ZDOTDIR, $SHELL, then
-     ~/.zshrc fallback) — manages a single block delimited by
-     '# >>> a-novel setup >>>' / '# <<< a-novel setup <<<' markers, with
-     a timestamped backup before any change.
-  5. Prints a summary with the "next step" hint.
-
-Use --no-shell-rc to skip step 4 entirely (for dotfile-manager users).`,
+--rc picks the profile, and --no-shell-rc skips step 4, as a dotfile manager
+wants.`,
 		Example: `  a-novel core setup
   a-novel core setup --rc ~/.bashrc
   a-novel core setup --no-shell-rc`,
@@ -403,10 +363,9 @@ Use --no-shell-rc to skip step 4 entirely (for dotfile-manager users).`,
 	return cmd
 }
 
+// newCoreDaemonInternalCmd is the hidden subcommand 'core start' re-execs the
+// binary with, to run the daemon in a detached child.
 func newCoreDaemonInternalCmd() *cobra.Command {
-	// Internal subcommand: re-exec target for 'core start' to switch into
-	// daemon mode in a detached child. Hidden from --help so users don't
-	// invoke it directly.
 	return &cobra.Command{
 		Use:    daemonInternalCmd,
 		Hidden: true,

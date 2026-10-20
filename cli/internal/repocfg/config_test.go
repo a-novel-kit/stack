@@ -132,8 +132,8 @@ func TestLoadLabels(t *testing.T) {
 			t.Errorf("ensure set lacks the `%s` label", name)
 		}
 	}
-	// triage gave way to the Triage board status, hotfix-reconcile to backports,
-	// and renovate to unlabeled Renovate pull requests.
+	// The Triage board status, backports and unlabeled Renovate pull requests
+	// carry what these labels marked.
 	retired := []string{"triage", "hotfix-reconcile", "renovate"}
 	for _, name := range retired {
 		if !slices.Contains(l.Retire, name) {

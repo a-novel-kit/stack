@@ -50,8 +50,9 @@ func detectPodman(dir, rel string) []Target {
 	return targets
 }
 
-// podmanTarget forwards required Dockerfile secrets from uppercase environment
-// variables derived from their IDs.
+// podmanTarget builds the image of the Dockerfile at dockerfileRel as tag. Each
+// secret the Dockerfile requires comes from the environment variable named
+// after its ID, uppercased with underscores (npm_token → NPM_TOKEN).
 func podmanTarget(dir, rel, name, dockerfileRel, tag string) Target {
 	secretIDs := dockerfileRequiredSecretIDs(filepath.Join(dir, dockerfileRel))
 	args := make([]string, 0, 8+len(secretIDs))
