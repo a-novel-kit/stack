@@ -137,95 +137,15 @@ jobs:
           version: "1.31.1"
 
   test-go-cli:
-    # Go unit tests for the cli/ module. Uses the same shared
-    # gotestsum-based action every service runs so test reports and
-    # coverage artifacts land in one consistent place.
+    # Go unit tests for the cli/ module. The race detector stays on for the
+    # daemon's concurrent code.
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    defaults:
-      run:
-        # The module lives under cli/; the shared action's default
-        # checkout-and-setup steps assume the workdir contains go.mod.
-        working-directory: cli
     steps:
-      - uses: actions/checkout@v7
+      - uses: a-novel-kit/workflows/go-actions/test-go@v1.66.0
         with:
-          persist-credentials: false
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: "cli/go.mod"
-          cache-dependency-path: "cli/*.sum"
-      - name: download go packages
-        run: go mod download
-      # Compose the same incantation as a-novel-kit/workflows/go-actions/test-go,
-      # but inlined here because that action assumes the module sits at the
-      # repo root (the shared action runs from the checked-out workdir, not
-      # the workflow's defaults). gotestsum is installed via the tool
-      # directive in cli/gotestsum.mod.
-      - name: discover modules
-        id: discover
-        run: |
-          # Every read is checked, and the discovered set has to name at least one package. An
-          # empty MODULES reaches gotestsum as no package arguments at all, so it falls back to
-          # `.` — which in cli/ holds no test files. It reports `DONE 0 tests` and exits 0,
-          # coverage comes out as the bare `mode: set` header, and this job is the only source of
-          # the CLI's test signal.
-          discover_modules() {
-            local root modules mod packages
-
-            if ! root=$(go list .); then
-              echo "::error::go list . failed — cannot derive the module path prefix"
-              return 1
-            fi
-
-            if ! modules=$(go list -m); then
-              echo "::error::go list -m failed — cannot enumerate the modules"
-              return 1
-            fi
-
-            : >modules.txt
-
-            for mod in $modules; do
-              if ! packages=$(go list "${mod//$root/.}/..."); then
-                echo "::error::go list failed for module ${mod}"
-                return 1
-              fi
-
-              # A module contributing nothing is legitimate — every one of its packages may be
-              # filtered out, and then the last grep exits 1. Only the emptiness of the whole set
-              # is a failure, so it is checked once, below.
-              [ -n "$packages" ] || continue
-
-              printf '%s\n' "$packages" | grep -v /mocks | grep -v /test | grep -v /proto >>modules.txt
-            done
-
-            if [ ! -s modules.txt ]; then
-              echo "::error::discovery produced no packages — the test run would report success having run nothing"
-              return 1
-            fi
-          }
-
-          discover_modules || exit 1
-
-          echo "MODULES=$(tr '\n' ' ' <modules.txt)" >>"$GITHUB_ENV"
-      - name: run tests
-        # MODULES arrives through env rather than ${{ }}: an expression is
-        # substituted into the script before bash sees it, so its contents are
-        # code; as a variable it is data.
-        env:
-          MODULES: ${{ env.MODULES }}
-        run: |
-          go tool -modfile=gotestsum.mod gotestsum --jsonfile tests.json --format pkgname \
-            -- -count=1 -race -cover -coverprofile=coverage.txt -json $MODULES
-          go tool cover -func coverage.txt
-      - name: archive coverage
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage
-          path: cli/coverage.txt
-      - name: archive test results
-        uses: actions/upload-artifact@v7
-        with:
-          name: gotest
-          path: cli/tests.json
+          working_directory: cli
+          modfile: gotestsum.mod
+          test_artifact: gotest
+          race: "true"
