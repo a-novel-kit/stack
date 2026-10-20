@@ -19,6 +19,10 @@ description: >
 Services deploy independently. When one needs a change from another, that change merges first, in
 its own pull request.
 
+Infrastructure only moves forward, and no procedure or workflow undoes a change. A faulty change is
+fixed by a new pull request, which may revert it, and a bad release by a hotfix. Damaged data goes
+back through recovery. Where a fix is slow, speed up the hotfix path rather than adding an undo.
+
 Keep it that way. Prefer OpenTofu, provider features and native GitHub Actions over custom code.
 Custom code exists only for software that runs **on the VMs**, the TLS loader and the restore worker,
 and for the workflow rules that can stop or misdeploy production, in tested `.github/scripts`.
