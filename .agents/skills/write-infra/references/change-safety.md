@@ -152,9 +152,10 @@ pins in the same change.
   - a backup repository VM restarts when its `config` label differs from `running-config`, after
     its database host;
   - `roll-database.yaml` forces both, whatever the downtime.
-- **Each rollout's snapshot is kept 14 days,** labelled `role=pre-rollout`. Undo is a revert, plus a
-  same-name disk swap from the snapshot when the data is damaged (`docs/runbooks/database.md`). The
-  data disk ignores its source snapshot, so the swapped disk needs no state change.
+- **Each rollout's snapshot is kept 14 days,** labelled `role=pre-rollout`. It is recovery data,
+  never an undo: a faulty host change is fixed forward by a new pull request
+  (`docs/runbooks/database.md`). The data disk still ignores its source snapshot, so a disk ever
+  recreated from one plans no replacement.
 - **Database images are pinned** by `tag@digest` in foundation and in the service root. Both
   Artifact Registry copies (`agora-production`, `agora-<service>-private-production`) derive from
   that one pin. The hosts use the digest alone, so the pin rides with the service's release pull
