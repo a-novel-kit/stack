@@ -183,8 +183,8 @@ upstream tag would run new code there on the next release.
   days after a release, and holds a digest update, the same version on another commit, for review:
   that is a moved tag.
 - The workflows repo's `pnpm lint` rejects any other form in an action manifest. zizmor's
-  `unpinned-uses` audit rejects it in workflows, with `"a-novel-kit/*": ref-pin` and
-  `"*": hash-pin`.
+  `unpinned-uses` audit rejects it in workflows with `"a-novel-kit/*": ref-pin` and `"*": hash-pin`,
+  which the shipped baseline adopts once every repository is pinned (a-novel-kit/workflows#626).
 - The org setting `sha_pinning_required` stays off: it also checks the nested
   `a-novel-kit/workflows` references, which stay on tags.
 
@@ -474,8 +474,9 @@ There is no local runner, so verification is reading plus CI.
   it needs. Declare the block on every job, `{}` included.
 - **A gate that can be skipped.** Gating on a `report-*`, master-only, or `if:`-guarded job skips
   every job behind it whenever the gate skips, and each skipped job passes its required check.
-- **`@master` or a floating ref in `uses:`.** CI stops being reproducible and a workflows release
-  reaches consumers unannounced.
+- **`@master`, a floating ref, or a tag-pinned third-party action in `uses:`.** CI stops being
+  reproducible, a workflows release reaches consumers unannounced, and a moved upstream tag runs new
+  code beside an App key.
 - **Mixed workflows-repo tags in one repo.** The actions ship as a unit; move every reference in the
   repo to the same tag.
 - **A `run:` step in a composite action without `shell: bash`.** The step fails to load; composite
