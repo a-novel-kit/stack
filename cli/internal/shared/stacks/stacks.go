@@ -48,7 +48,7 @@ func Parse(raw string) ([]Stack, error) {
 		seen[name] = true
 		out = append(out, Stack{
 			Name:      name,
-			Path:      expandHome(path),
+			Path:      paths.ExpandHome(path),
 			IsDefault: len(out) == 0,
 		})
 	}
@@ -69,19 +69,6 @@ func implicitDefault() Stack {
 		Path:      filepath.Join(paths.Home(), "git-projects", "a-novel"),
 		IsDefault: true,
 	}
-}
-
-// expandHome turns a leading ~ into $HOME. Only that prefix expands, and
-// everything else is returned unchanged, so a shell-expansion mistake surfaces
-// as a broken path.
-func expandHome(p string) string {
-	if rest, ok := strings.CutPrefix(p, "~/"); ok {
-		return filepath.Join(paths.Home(), rest)
-	}
-	if p == "~" {
-		return paths.Home()
-	}
-	return p
 }
 
 // Default is the default stack, the first entry of $A_NOVEL_STACKS.

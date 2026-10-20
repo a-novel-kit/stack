@@ -634,11 +634,12 @@ func emitLogLine(send func(*anovelv1.LogLine) error, filter anovelv1.LogStream, 
 	}
 	var ln logs.Line
 	if err := json.Unmarshal([]byte(trimmed), &ln); err != nil {
-		return send(&anovelv1.LogLine{
-			Ts:     timestamppb.New(time.Now()),
+		marker := &anovelv1.LogLine{
+			Ts:     timestamppb.Now(),
 			Stream: anovelv1.LogStream_LOG_STREAM_STDERR,
 			Line:   fmt.Sprintf("a-novel: log line %d is unreadable and was skipped (%v)", lineNo, err),
-		})
+		}
+		return send(marker)
 	}
 	return sendLogLine(send, filter, ln)
 }
@@ -649,11 +650,7 @@ func sendLogLine(send func(*anovelv1.LogLine) error, filter anovelv1.LogStream, 
 	if filter != anovelv1.LogStream_LOG_STREAM_UNSPECIFIED && ps != filter {
 		return nil
 	}
-	return send(&anovelv1.LogLine{
-		Ts:     timestamppb.New(ln.Ts),
-		Stream: ps,
-		Line:   ln.Line,
-	})
+	return send(&anovelv1.LogLine{Ts: timestamppb.New(ln.Ts), Stream: ps, Line: ln.Line})
 }
 
 func lineStreamToProto(s logs.Stream) anovelv1.LogStream {
@@ -747,12 +744,7 @@ func (s *Server) GetEnv(_ context.Context, req *anovelv1.GetEnvRequest) (*anovel
 			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		for _, e := range entries {
-			out.Entries = append(out.Entries, &anovelv1.EnvEntry{
-				Stack:   svc.Stack,
-				Service: svc.Name,
-				Key:     e.Key,
-				Value:   e.Value,
-			})
+			out.Entries = append(out.Entries, envEntryToProto(svc, e))
 		}
 	}
 	return out, nil
@@ -792,13 +784,7 @@ func (s *Server) ListVolumes(_ context.Context, req *anovelv1.ListVolumesRequest
 	}
 	out := &anovelv1.ListVolumesResponse{}
 	for _, v := range volumes.List(svc) {
-		out.Volumes = append(out.Volumes, &anovelv1.Volume{
-			Name:        v.Name,
-			Service:     v.Service,
-			Stack:       v.Stack,
-			SizeBytes:   v.SizeBytes,
-			BackupCount: v.BackupCount,
-		})
+		out.Volumes = append(out.Volumes, volumeToProto(v))
 	}
 	return out, nil
 }

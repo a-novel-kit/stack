@@ -196,14 +196,18 @@ func walk(root string, visit func(dir, rel string) []Target) ([]Target, error) {
 	if err != nil {
 		return nil, err
 	}
-	slices.SortStableFunc(targets, func(a, b Target) int {
-		return cmp.Or(
-			cmp.Compare(slices.Index(Kinds, a.Kind), slices.Index(Kinds, b.Kind)),
-			cmp.Compare(a.RelDir, b.RelDir),
-			cmp.Compare(a.Name, b.Name),
-		)
-	})
+	slices.SortStableFunc(targets, compareTargets)
 	return targets, nil
+}
+
+// compareTargets orders targets by kind, in Kinds order, then by directory,
+// then by name.
+func compareTargets(a, b Target) int {
+	return cmp.Or(
+		cmp.Compare(slices.Index(Kinds, a.Kind), slices.Index(Kinds, b.Kind)),
+		cmp.Compare(a.RelDir, b.RelDir),
+		cmp.Compare(a.Name, b.Name),
+	)
 }
 
 // detectGo emits a single `go build ./...` target when dir holds a go.mod.
@@ -211,15 +215,12 @@ func detectGo(dir, rel string) []Target {
 	if !IsFile(filepath.Join(dir, "go.mod")) {
 		return nil
 	}
-	return []Target{{
-		Kind:   KindGo,
-		Name:   goModuleName(dir),
-		RelDir: rel,
-		Dir:    dir,
-		Detail: "go build " + pkgAll,
-		Cmd:    string(KindGo),
-		Args:   []string{buildArg, pkgAll},
-	}}
+	return []Target{goTarget(dir, rel, goModuleName(dir), "go build "+pkgAll, buildArg, pkgAll)}
+}
+
+// goTarget runs `go <args>` in the module at dir, as name, shown with detail.
+func goTarget(dir, rel, name, detail string, args ...string) Target {
+	return Target{Kind: KindGo, Name: name, RelDir: rel, Dir: dir, Detail: detail, Cmd: string(KindGo), Args: args}
 }
 
 // detectPnpm emits one target per "build"-prefixed script in dir's

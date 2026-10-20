@@ -123,11 +123,8 @@ func (c *Client) GetEnv(ctx context.Context, stack, service string, allStacks bo
 // StartInfra brings up the service's infrastructure containers and
 // auto-runs its one-shots.
 func (c *Client) StartInfra(ctx context.Context, stack, service string, oneShotsMode anovelv1.Mode) (*anovelv1.StartInfraResponse, error) {
-	return call(ctx, c, c.core.StartInfra, &anovelv1.StartInfraRequest{
-		Stack:        stack,
-		Service:      service,
-		OneShotsMode: oneShotsMode,
-	})
+	req := &anovelv1.StartInfraRequest{Stack: stack, Service: service, OneShotsMode: oneShotsMode}
+	return call(ctx, c, c.core.StartInfra, req)
 }
 
 // KillInfra tears down the service's infrastructure. The daemon refuses while
@@ -139,21 +136,15 @@ func (c *Client) KillInfra(ctx context.Context, stack, service string, force boo
 // KillInfraContainer stops one infra container by name, leaving the rest
 // of the service up. The TUI uses it for tab-level infra lifecycle.
 func (c *Client) KillInfraContainer(ctx context.Context, stack, service, name string) (*anovelv1.KillInfraContainerResponse, error) {
-	return call(ctx, c, c.core.KillInfraContainer, &anovelv1.KillInfraContainerRequest{
-		Stack:   stack,
-		Service: service,
-		Name:    name,
-	})
+	req := &anovelv1.KillInfraContainerRequest{Stack: stack, Service: service, Name: name}
+	return call(ctx, c, c.core.KillInfraContainer, req)
 }
 
 // RestartInfraContainer issues `podman restart` for one infra container,
 // which preserves the volume bindings and so beats kill+infra-start.
 func (c *Client) RestartInfraContainer(ctx context.Context, stack, service, name string) (*anovelv1.RestartInfraContainerResponse, error) {
-	return call(ctx, c, c.core.RestartInfraContainer, &anovelv1.RestartInfraContainerRequest{
-		Stack:   stack,
-		Service: service,
-		Name:    name,
-	})
+	req := &anovelv1.RestartInfraContainerRequest{Stack: stack, Service: service, Name: name}
+	return call(ctx, c, c.core.RestartInfraContainer, req)
 }
 
 // StreamLogs returns the log lines of a target; ranging over them drains
@@ -161,12 +152,8 @@ func (c *Client) RestartInfraContainer(ctx context.Context, stack, service, name
 // current.log; non-empty selects an archived run. `follow` keeps the
 // stream open for new lines past EOF (snapshot + subscribe).
 func (c *Client) StreamLogs(ctx context.Context, targetID, runID string, follow bool, streamFilter anovelv1.LogStream) (iter.Seq2[*anovelv1.LogLine, error], error) {
-	stream, err := call(ctx, c, c.core.StreamLogs, &anovelv1.StreamLogsRequest{
-		TargetId: targetID,
-		Follow:   follow,
-		RunId:    runID,
-		Stream:   streamFilter,
-	})
+	req := &anovelv1.StreamLogsRequest{TargetId: targetID, Follow: follow, RunId: runID, Stream: streamFilter}
+	stream, err := call(ctx, c, c.core.StreamLogs, req)
 	if err != nil {
 		return nil, err
 	}
@@ -189,24 +176,21 @@ func (c *Client) ListVolumes(ctx context.Context, stack, service string) (*anove
 // `tag` is optional, embedded in the filename when non-empty. `force`
 // cascade-kills the service before backing up.
 func (c *Client) BackupVolume(ctx context.Context, stack, service, tag string, force bool) (*anovelv1.BackupVolumeResponse, error) {
-	return call(ctx, c, c.core.BackupVolume, &anovelv1.BackupVolumeRequest{
-		Stack: stack, Service: service, Tag: tag, Force: force,
-	})
+	req := &anovelv1.BackupVolumeRequest{Stack: stack, Service: service, Tag: tag, Force: force}
+	return call(ctx, c, c.core.BackupVolume, req)
 }
 
 // RestoreVolume replaces volumes from a backup. `from` is a timestamp
 // prefix; empty means "latest".
 func (c *Client) RestoreVolume(ctx context.Context, stack, service, from string, force bool) (*anovelv1.RestoreVolumeResponse, error) {
-	return call(ctx, c, c.core.RestoreVolume, &anovelv1.RestoreVolumeRequest{
-		Stack: stack, Service: service, From: from, Force: force,
-	})
+	req := &anovelv1.RestoreVolumeRequest{Stack: stack, Service: service, From: from, Force: force}
+	return call(ctx, c, c.core.RestoreVolume, req)
 }
 
 // ClearVolume destroys volumes (auto-backups first unless noBackup).
 func (c *Client) ClearVolume(ctx context.Context, stack, service string, noBackup, force bool) (*anovelv1.ClearVolumeResponse, error) {
-	return call(ctx, c, c.core.ClearVolume, &anovelv1.ClearVolumeRequest{
-		Stack: stack, Service: service, NoBackup: noBackup, Force: force,
-	})
+	req := &anovelv1.ClearVolumeRequest{Stack: stack, Service: service, NoBackup: noBackup, Force: force}
+	return call(ctx, c, c.core.ClearVolume, req)
 }
 
 // PrepareReinstall asks the daemon to checkpoint + shut down.
@@ -227,11 +211,8 @@ func (c *Client) Shutdown(ctx context.Context, force bool) (*anovelv1.ShutdownRe
 // stack"; empty targetID means "every target". The events end when the
 // caller's context is canceled or the daemon exits.
 func (c *Client) Watch(ctx context.Context, stack, service, targetID string) (iter.Seq2[*anovelv1.StateEvent, error], error) {
-	stream, err := call(ctx, c, c.core.Watch, &anovelv1.WatchRequest{
-		Stack:    stack,
-		Service:  service,
-		TargetId: targetID,
-	})
+	req := &anovelv1.WatchRequest{Stack: stack, Service: service, TargetId: targetID}
+	stream, err := call(ctx, c, c.core.Watch, req)
 	if err != nil {
 		return nil, err
 	}

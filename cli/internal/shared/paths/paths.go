@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Socket returns the absolute path of the daemon's Unix domain socket. It
@@ -70,4 +71,16 @@ func Home() string {
 		return v
 	}
 	return "/"
+}
+
+// ExpandHome turns a leading ~ of p into Home(). Only that prefix expands, so a
+// shell-expansion mistake elsewhere in p surfaces as a broken path.
+func ExpandHome(p string) string {
+	if rest, ok := strings.CutPrefix(p, "~/"); ok {
+		return filepath.Join(Home(), rest)
+	}
+	if p == "~" {
+		return Home()
+	}
+	return p
 }

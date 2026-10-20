@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
+	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
+	"github.com/a-novel-kit/stack/cli/internal/shared/retention"
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 )
 
@@ -50,7 +51,7 @@ func resolveRC(override string) (string, string) {
 	home, _ := os.UserHomeDir()
 	if override != "" {
 		// User-supplied path always wins. Infer shell from filename.
-		p := expandHome(override)
+		p := paths.ExpandHome(override)
 		return p, shellFromPath(p)
 	}
 	if zdot := os.Getenv("ZDOTDIR"); zdot != "" {
@@ -244,41 +245,7 @@ func writeWithBackup(rcPath string, newContent []byte) (string, error) {
 // pruneOldRCBackups keeps the maxRCBackups newest backup siblings of
 // rcPath.
 func pruneOldRCBackups(rcPath string) {
-	dir := filepath.Dir(rcPath)
-	base := filepath.Base(rcPath) + ".a-novel-backup-"
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	type entry struct {
-		path string
-		mt   time.Time
-	}
-	var backups []entry
-	for _, e := range entries {
-		if !strings.HasPrefix(e.Name(), base) {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		backups = append(backups, entry{path: filepath.Join(dir, e.Name()), mt: info.ModTime()})
-	}
-	if len(backups) <= maxRCBackups {
-		return
-	}
-	slices.SortFunc(backups, func(a, b entry) int { return a.mt.Compare(b.mt) })
-	for _, b := range backups[:len(backups)-maxRCBackups] {
-		_ = os.Remove(b.path)
-	}
-}
-
-// expandHome turns a leading "~" into $HOME.
-func expandHome(p string) string {
-	if strings.HasPrefix(p, "~/") {
-		home, _ := os.UserHomeDir()
-		return filepath.Join(home, p[2:])
-	}
-	return p
+	prefix := filepath.Base(rcPath) + ".a-novel-backup-"
+	isBackup := func(name string) bool { return strings.HasPrefix(name, prefix) }
+	retention.Prune(filepath.Dir(rcPath), isBackup, maxRCBackups)
 }

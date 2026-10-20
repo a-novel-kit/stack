@@ -132,19 +132,20 @@ func (a *Allocator) Release(consumer string) {
 	}
 }
 
-// Snapshot returns every current allocation. Stable order keyed by
-// (owner, localVar) so output is deterministic.
+// Snapshot returns every current allocation, sorted by owner, then by
+// variable.
 func (a *Allocator) Snapshot() []Allocation {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	out := make([]Allocation, 0, len(a.slots))
 	for _, s := range a.slots {
-		out = append(out, Allocation{
+		allocation := Allocation{
 			Owner:    s.owner,
 			LocalVar: s.localVar,
 			Port:     s.port,
 			Refs:     slices.Sorted(maps.Keys(s.refs)),
-		})
+		}
+		out = append(out, allocation)
 	}
 	slices.SortFunc(out, func(x, y Allocation) int {
 		return cmp.Or(strings.Compare(x.Owner, y.Owner), strings.Compare(x.LocalVar, y.LocalVar))

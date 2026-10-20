@@ -270,20 +270,13 @@ func environmentOps(t *RepoTarget, repoPath string) []Op {
 	if t.Class.Rulesets.Tags {
 		policies = append(policies, DeploymentPolicy{Name: "release/v*", Type: "branch"}, DeploymentPolicy{Name: "v*", Type: "tag"})
 	}
-	environment := func(name string, reviewers ...string) []Op {
-		body := map[string]any{"deployment_branch_policy": map[string]any{"protected_branches": false, "custom_branch_policies": true}}
-		return []Op{
-			{Method: http.MethodPut, Path: repoPath + "/environments/" + name, Reviewers: reviewers, Body: body},
-			{Method: http.MethodPut, Path: repoPath + "/environments/" + name + "/deployment-branch-policies", Body: policies},
-		}
-	}
 
 	var ops []Op
 	// The release App's key is a secret of the release environment, and every
 	// cut waits there for core or the repo's owners, who may approve a run they
 	// dispatched. No bot can approve, so no bot can release.
 	if releases(t) {
-		ops = append(ops, environment("release", "core", "owners-"+string(t.Class.Class))...)
+		ops = append(ops, environmentWrites(repoPath, "release", policies, "core", "owners-"+string(t.Class.Class))...)
 	}
 	// The privileged keys are secrets of the governance environment alone, so
 	// a branch's copy of a workflow cannot read them. It holds the ones the
@@ -293,10 +286,20 @@ func environmentOps(t *RepoTarget, repoPath string) []Op {
 		return !slices.Contains(t.OrgProfile.Governance.Secrets, name)
 	})
 	if len(governance.Secrets) > 0 {
-		ops = append(ops, environment("governance")...)
+		ops = append(ops, environmentWrites(repoPath, "governance", policies)...)
 		ops = append(ops, Op{Path: repoPath + "/environments/governance/secrets", Governance: &governance})
 	}
 	return ops
+}
+
+// environmentWrites writes the environment name, reviewed by the reviewers
+// teams and open only on the refs policies admit.
+func environmentWrites(repoPath, name string, policies []DeploymentPolicy, reviewers ...string) []Op {
+	body := map[string]any{"deployment_branch_policy": map[string]any{"protected_branches": false, "custom_branch_policies": true}}
+	return []Op{
+		{Method: http.MethodPut, Path: repoPath + "/environments/" + name, Reviewers: reviewers, Body: body},
+		{Method: http.MethodPut, Path: repoPath + "/environments/" + name + "/deployment-branch-policies", Body: policies},
+	}
 }
 
 // scopedSecretOps grants each scoped org secret to the repo exactly when its
@@ -510,19 +513,8 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRu
 		rs.Rules = append(rs.Rules, APIRule{Type: "required_signatures"})
 	}
 	if r.RequiredStatusChecks != nil {
-		list := make([]map[string]any, 0, len(checks))
-		for _, c := range checks {
-			m := map[string]any{"context": c.Context}
-			if c.IntegrationID != 0 {
-				m["integration_id"] = c.IntegrationID
-			}
-			list = append(list, m)
-		}
-		rs.Rules = append(rs.Rules, APIRule{Type: "required_status_checks", Parameters: map[string]any{
-			"strict_required_status_checks_policy": r.RequiredStatusChecks.Strict,
-			"do_not_enforce_on_create":             r.RequiredStatusChecks.DoNotEnforceOnCreate,
-			"required_status_checks":               list,
-		}})
+		params := statusCheckParams(r.RequiredStatusChecks, checks)
+		rs.Rules = append(rs.Rules, APIRule{Type: "required_status_checks", Parameters: params})
 	}
 	if r.MergeQueue != nil {
 		rs.Rules = append(rs.Rules, APIRule{Type: "merge_queue", Parameters: r.MergeQueue})
@@ -537,6 +529,24 @@ func BuildRuleset(spec *RulesetSpec, org *OrgProfile, checks []CheckRef) (*APIRu
 		rs.Rules = append(rs.Rules, APIRule{Type: "commit_message_pattern", Parameters: r.CommitMessagePattern})
 	}
 	return rs, nil
+}
+
+// statusCheckParams is the parameters of a required_status_checks rule that
+// requires checks, each bound to the App that posts it when it names one.
+func statusCheckParams(params *RSCParams, checks []CheckRef) map[string]any {
+	required := make([]map[string]any, 0, len(checks))
+	for _, c := range checks {
+		check := map[string]any{"context": c.Context}
+		if c.IntegrationID != 0 {
+			check["integration_id"] = c.IntegrationID
+		}
+		required = append(required, check)
+	}
+	return map[string]any{
+		"strict_required_status_checks_policy": params.Strict,
+		"do_not_enforce_on_create":             params.DoNotEnforceOnCreate,
+		"required_status_checks":               required,
+	}
 }
 
 // resolveBypass maps one generic bypass entry to concrete actors. Admins

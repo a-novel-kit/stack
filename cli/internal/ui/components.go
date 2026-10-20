@@ -110,12 +110,7 @@ func targetsTable(targets []detect.Target, width int) string {
 	t := table.New().
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(Muted).
-		StyleFunc(func(row, _ int) lipgloss.Style {
-			if row == table.HeaderRow {
-				return Gold.Padding(0, 1)
-			}
-			return lipgloss.NewStyle().Padding(0, 1)
-		}).
+		StyleFunc(targetsTableCell).
 		Width(width).
 		Wrap(true).
 		Headers("KIND", "TARGET", "COMMAND")
@@ -130,6 +125,15 @@ func targetsTable(targets []detect.Target, width int) string {
 		t.Row(kind, target, cmd)
 	}
 	return t.Render()
+}
+
+// targetsTableCell styles a targetsTable cell: gold for the header row, plain
+// otherwise, each padded by one space.
+func targetsTableCell(row, _ int) lipgloss.Style {
+	if row == table.HeaderRow {
+		return Gold.Padding(0, 1)
+	}
+	return lipgloss.NewStyle().Padding(0, 1)
 }
 
 // cleanOutput normalizes captured output for a fixed box. Tools such as podman

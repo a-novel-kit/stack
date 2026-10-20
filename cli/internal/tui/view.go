@@ -317,7 +317,7 @@ func (m *model) renderFooter() string {
 // renderHelp draws the full-screen help listing every command, grouped
 // by category.
 func (m *model) renderHelp() string {
-	body := strings.Join([]string{
+	lines := []string{
 		styleHeader.Render("a-novel run ui  —  command reference"),
 		"",
 		styleHeader.Render("Navigation"),
@@ -358,22 +358,22 @@ func (m *model) renderHelp() string {
 		"  " + styleErr.Render("✗") + "  error  — last action failed or invalid; sticks until the next action",
 		"",
 		styleDim.Render("(daemon-backed verbs are implemented via the same RPC as the CLI; what you see in the UI is what `a-novel run ps` would show)"),
-	}, "\n")
-	return styleFrame.Width(m.width - 2).Height(m.height - 2).Render(body)
+	}
+	return styleFrame.Width(m.width - 2).Height(m.height - 2).Render(strings.Join(lines, "\n"))
 }
 
 // renderTopology is the dedicated topology screen, populated by the
 // :topology palette command's response. Any keystroke returns to
 // viewMain.
 func (m *model) renderTopology() string {
-	body := strings.Join([]string{
+	lines := []string{
 		styleHeader.Render("Dependency topology"),
 		"",
 		m.topologyTx,
 		"",
 		styleDim.Render("(press any key to return)"),
-	}, "\n")
-	return styleFrame.Width(m.width - 2).Height(m.height - 2).Render(body)
+	}
+	return styleFrame.Width(m.width - 2).Height(m.height - 2).Render(strings.Join(lines, "\n"))
 }
 
 // overlayCommand draws the command input and autocomplete suggestions

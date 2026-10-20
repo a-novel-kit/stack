@@ -38,10 +38,11 @@ func RunJobs(ctx context.Context, list []jobs.Job, limit int, live bool) Batch {
 			defer mu.Unlock()
 			fmt.Println(s)
 		}
-		b.Results = jobs.Run(ctx, list, limit, &jobs.Progress{
+		progress := &jobs.Progress{
 			OnStart: func(i int) { say(startLine(list[i])) },
 			OnDone:  func(_ int, r jobs.Result) { say(statusLine(r)) },
-		})
+		}
+		b.Results = jobs.Run(ctx, list, limit, progress)
 	}
 	b.Aborted = b.Aborted || ctx.Err() != nil
 	b.Elapsed = time.Since(start)

@@ -52,13 +52,14 @@ func BackupDir(stack, service, volume string) string {
 func List(svc *discovery.Service) []Volume {
 	out := make([]Volume, 0, len(svc.Volumes))
 	for _, v := range svc.Volumes {
-		out = append(out, Volume{
+		volume := Volume{
 			Name:        v.Name,
 			Service:     svc.Name,
 			Stack:       svc.Stack,
 			SizeBytes:   podmanVolumeSize(PodmanVolumeName(svc.Stack, svc.Name, v.Name)),
 			BackupCount: int32(len(retention.Files(BackupDir(svc.Stack, svc.Name, v.Name), isArchive))),
-		})
+		}
+		out = append(out, volume)
 	}
 	return out
 }
@@ -251,11 +252,12 @@ func Restore(svc *discovery.Service, from string) ([]string, error) {
 		if err := validateArchive(archive); err != nil {
 			return nil, fmt.Errorf("validate archive %s: %w", archive, err)
 		}
-		plans = append(plans, restorePlan{
+		plan := restorePlan{
 			volume:  PodmanVolumeName(svc.Stack, svc.Name, v.Name),
 			archive: archive,
 			bare:    v.Name,
-		})
+		}
+		plans = append(plans, plan)
 	}
 	// 2. Every archive is valid, so restore each in turn.
 	var restored []string
@@ -268,6 +270,8 @@ func Restore(svc *discovery.Service, from string) ([]string, error) {
 	return restored, nil
 }
 
+// restorePlan is one volume to restore: its podman name, the archive to restore
+// it from and its bare compose name.
 type restorePlan struct{ volume, archive, bare string }
 
 // resolveBackup returns the path to the timestamped archive named by `from`, or

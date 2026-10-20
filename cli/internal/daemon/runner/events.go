@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"slices"
 	"time"
 
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
@@ -45,25 +46,19 @@ type eventSub struct {
 // The 32-slot buffer absorbs a brief consumer stall, such as rendering a ps
 // table; sustained slowness drops events silently and keeps the runner live.
 func (r *Runner) SubscribePhases(filter func(PhaseEvent) bool) (<-chan PhaseEvent, func()) {
-	sub := &eventSub{
-		ch:     make(chan PhaseEvent, 32),
-		filter: filter,
-	}
+	sub := &eventSub{ch: make(chan PhaseEvent, 32), filter: filter}
 	r.subsMu.Lock()
 	r.subs = append(r.subs, sub)
 	r.subsMu.Unlock()
-	unsub := func() {
-		r.subsMu.Lock()
-		for i, s := range r.subs {
-			if s == sub {
-				r.subs = append(r.subs[:i], r.subs[i+1:]...)
-				break
-			}
-		}
-		r.subsMu.Unlock()
-		close(sub.ch)
-	}
-	return sub.ch, unsub
+	return sub.ch, func() { r.unsubscribe(sub) }
+}
+
+// unsubscribe drops sub from the fanout, then closes its channel.
+func (r *Runner) unsubscribe(sub *eventSub) {
+	r.subsMu.Lock()
+	r.subs = slices.DeleteFunc(r.subs, func(s *eventSub) bool { return s == sub })
+	r.subsMu.Unlock()
+	close(sub.ch)
 }
 
 // emitPhase is the runner-internal fanout, called from transition and
