@@ -41,6 +41,10 @@ tidy`.
   `postUpgradeTasks` and `groupName` take the last matching rule.
 - Exact group rules sit after the npm `javascript dependencies` catch-all, or it takes their npm
   members.
+- A group never waits for a member that is not yet published. When one version must exist in two
+  registries, as the `go` directive must exist as a golang alpine image, have one dependency read the
+  other's releases with `overrideDatasource`, `overridePackageName` and `extractVersion`. A release
+  age only guesses the lag, and the group splits whenever the other member arrives first.
 
 ## Indirect Go requirements
 
