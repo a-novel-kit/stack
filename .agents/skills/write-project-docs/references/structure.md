@@ -146,9 +146,11 @@ Every repo ends with a short `## Contributing` section that points at TWO things
    This is the single canonical onboarding doc for BOTH orgs.
 2. The repo's own `./CONTRIBUTING.md` for repo-specific concepts.
 
-Each org's `.github` repo does carry a `CONTRIBUTING.md` — the **concepts** doc holding what is true
-of every repo of a kind (see `contributing-doc-dedup` in practice: the layer model, service anatomy,
-the libraries/tooling taxonomy). Link it when a repo doc needs a concept rather than restating it.
+Each org's `.github` repo carries a `docs/taxonomy.md`, the **concepts** doc holding what is true of
+every repo of a kind: a-novel's holds the layer model and service anatomy under
+[Inside a service: layers and contracts](https://github.com/a-novel/.github/blob/master/docs/taxonomy.md#inside-a-service-layers-and-contracts),
+and a-novel-kit's the libraries and tooling taxonomy. The org's `CONTRIBUTING.md` is an index of
+those docs. Link the concept when a repo doc needs one rather than restating it.
 Platform **setup** is the onboarding guide above, which is a different document. The legacy
 `a-novel-kit/.github/.../contributing/readme.md` path 404s — never link it.
 
