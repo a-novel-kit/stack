@@ -253,8 +253,10 @@ minus two exclusions: IDs starting with `report-` (reporting and post-merge jobs
 `if:` restricts them to master, since a job that never runs on a PR cannot gate one.
 
 Adding a job to `main.yaml` therefore adds a required check on the next `a-novel repo update`.
-Renaming one silently drops the old context and adds a new one, so rename and reconcile in the same
-landing. Coverage gates nothing: no ruleset requires a Codecov status.
+Renaming or removing one leaves its old context required, and the pull request making that change
+never reports it. An admin merges that pull request past the stale context, then runs
+`a-novel repo update` from up-to-date master. Coverage gates nothing: no ruleset requires a Codecov
+status.
 
 The `release-lines` ruleset requires the same set on `release/vX.Y` branches. A backport runs those
 checks from its line's own workflow files, so a check added after the line's tag never reports there

@@ -182,6 +182,10 @@ affected instead of inventing a screenshot test.
   transient artifacts.
 - Run at least the repository browser baseline for compatibility-sensitive behavior.
 
+Before a repository first compares its screenshots against Drive reference batches, read
+[Subscribe a repository to Drive visual tests](references/drive-subscription.md) for its identities,
+folders, variables and seeding order.
+
 A Vitest browser project, such as uikit's Storybook stories, compares its screenshots against Drive
 reference batches through `node-actions/test-playwright` with `runner: vitest`. The workflows repo's
 `docs/migrations/v1.64.0.md` is the adoption guide. Vitest's browser mode adds these rules:
