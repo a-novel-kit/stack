@@ -71,7 +71,7 @@ The daemon reads $A_NOVEL_STACKS when it starts. Add the entry, run
 'a-novel core sync --root=<root>', then
 'a-novel core restart --preserve-targets'.`,
 		Example: `  a-novel core stacks new agent-7b46
-  a-novel core stacks new review-291 --root=~/scratch/review-291`,
+  a-novel core stacks new review-291 --root ~/scratch/review-291`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]

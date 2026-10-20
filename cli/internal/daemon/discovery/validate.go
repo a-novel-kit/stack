@@ -17,7 +17,7 @@ import (
 //   - `*_HOST` or `*_URL`, synthesized from the same service's `*_PORT`
 //   - `POSTGRES_DSN`, synthesized once POSTGRES_PORT is allocated
 //   - `<SERVICE>_<VAR>`, naming a known service in this stack
-//   - a key declared as a literal in the same env block, a sibling constant
+//   - a key one of the service's env blocks declares, a sibling constant
 //
 // Anything else warns. Compose still substitutes an empty string at runtime,
 // and the warning surfaces the gap.
@@ -77,7 +77,7 @@ func validateService(svc *Service, allServices []string) []DiscoveryError {
 // can synthesize the reference.
 func isResolvable(varName string, allServices []string, declared map[string]bool) bool {
 	if declared[varName] {
-		return true // sibling constant in the same service's env block
+		return true // a constant of one of the service's env blocks
 	}
 	if strings.HasSuffix(varName, "_PORT") ||
 		strings.HasSuffix(varName, "_HOST") ||

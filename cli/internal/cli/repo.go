@@ -210,7 +210,7 @@ branch or with uncommitted changes is skipped.`,
 		},
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the API operations that would run, without applying")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "with --dry-run, emit the plan(s) as JSON")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the plan(s) as JSON instead of applying (implies --dry-run)")
 	cmd.Flags().StringVar(&class, "class", "", classFlagUsage())
 	cmd.Flags().BoolVar(&all, "all", false, "reconcile every pulled workspace repo (stack + app/ + kit/) in one run")
 	cmd.Flags().StringSliceVar(&exclude, "exclude", nil,

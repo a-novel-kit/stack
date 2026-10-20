@@ -758,7 +758,7 @@ suit scripts and .env files.`,
   eval "$(a-novel run env service-json-keys)"
   curl "$REST_URL/ping"
 
-  a-novel run env service-json-keys --only=REST
+  a-novel run env service-json-keys --only='REST*'
   a-novel run env --format=json
   a-novel run env --all-stacks`,
 		Args: cobra.MaximumNArgs(1),
@@ -959,10 +959,10 @@ Refuses while the service runs; --force stops it first.`,
 	return cmd
 }
 
-// matchGlob is a small glob matcher supporting * (any chars), enough for the
-// `--only=PATTERN` filter on env keys ("REST*", "*_PORT", "POSTGRES_*"). A
-// malformed pattern falls back to substring matching, so a typo still does
-// something reasonable.
+// matchGlob reports whether an env key matches the --only pattern, a
+// filepath.Match glob such as "REST*" or "*_PORT"; an empty pattern matches
+// every key. A malformed pattern falls back to substring matching, so a typo
+// still does something reasonable.
 func matchGlob(pattern, name string) bool {
 	if pattern == "" {
 		return true
