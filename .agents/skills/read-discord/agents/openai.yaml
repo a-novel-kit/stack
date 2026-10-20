@@ -1,0 +1,4 @@
+interface:
+  display_name: "Read Discord"
+  short_description: "Read A-Novel Discord messages, channels and threads"
+  default_prompt: "Use $read-discord to read this Discord message or channel."
