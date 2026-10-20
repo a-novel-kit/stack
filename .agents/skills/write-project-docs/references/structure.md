@@ -58,10 +58,10 @@ services + `nodelib` report coverage; `golib`, `workflows`, `stack` do not.
 
 Show a logo with `<picture>`: one `<source>` per `prefers-color-scheme`, and an `<img>` fallback.
 GitHub wraps it in `<themed-picture>`, which follows the viewer's GitHub theme. Link the transparent
-`960h` banners of `@a-novel-kit/uikit-images` at
-`https://raw.githubusercontent.com/a-novel-kit/uikit/{tag}/packages/images/files`, written `{files}`
-below. Pin `{tag}` to a uikit tag or commit, so a later uikit change cannot break the page. Set only
-the `<img>` `width`, scaled from the file's width to the display height: KIT's `960h` file is 1591
+`960h` banners of `@a-novel-kit/uikit-images` on uikit's `master`, at
+`https://raw.githubusercontent.com/a-novel-kit/uikit/master/packages/images/files`, written `{files}`
+below. Never pin a tag or commit: a logo refresh then reaches every README as soon as it merges. Set
+only the `<img>` `width`, scaled from the file's width to the display height: KIT's `960h` file is 1591
 pixels wide, so 240 pixels high is `398`.
 
 ```html
