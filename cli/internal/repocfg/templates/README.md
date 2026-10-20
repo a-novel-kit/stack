@@ -158,7 +158,8 @@ called job, which receives the environment's value.
 ## `classes/<class>.yaml` and `repos/<org>_<repo>.yaml`
 
 Same schema. A `repos/` file is for a one-off repo and **replaces** the
-class entirely (it still names a base `class` for provenance). All fields
+class entirely (it still names a base `class` for provenance). A setting a
+class gains later reaches no override until you add it there too. All fields
 are required unless noted.
 
 | Field                                                           | Type   | Meaning                                                                                                                                                                                                                                                                                                                 |
