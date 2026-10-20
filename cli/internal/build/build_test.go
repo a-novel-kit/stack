@@ -59,7 +59,7 @@ func TestPrepareEnv(t *testing.T) {
 			}
 
 			var out strings.Builder
-			runEnv, err := PrepareEnv(t.Context(), detect.Target{Kind: detect.KindGo, Name: "x", Dir: repoRoot}, &out)
+			runEnv, err := PrepareEnv(detect.Target{Kind: detect.KindGo, Name: "x", Dir: repoRoot}, &out)
 			if err != nil {
 				t.Fatalf("PrepareEnv: %v", err)
 			}
