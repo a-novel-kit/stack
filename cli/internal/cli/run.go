@@ -71,7 +71,8 @@ func newStacksCmd() *cobra.Command {
 		Long: `Print the stacks the daemon manages, one per row: path, a '*' on the
 default, and what each holds. Stacks come from $A_NOVEL_STACKS, parsed at
 daemon start. Same as 'a-novel core stacks list'.`,
-		Args: cobra.NoArgs,
+		Deprecated: "use 'a-novel core stacks list' instead",
+		Args:       cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return listStacks(cmd.Context(), cmd.OutOrStdout())
 		},
@@ -312,7 +313,7 @@ func printTopology(cmd *cobra.Command, stack, service string) error {
 func newServiceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   cmdNameService,
-		Short: "Operate on a service's infrastructure and overall state",
+		Short: "Operate on a service's infrastructure",
 	}
 	cmd.AddCommand(newServiceStatusCmd())
 	cmd.AddCommand(newServiceInfraCmd())
@@ -322,9 +323,10 @@ func newServiceCmd() *cobra.Command {
 func newServiceStatusCmd() *cobra.Command {
 	var ss stackScope
 	cmd := &cobra.Command{
-		Use:   "status <service>",
-		Short: "Show one service's infrastructure and targets",
-		Args:  cobra.ExactArgs(1),
+		Use:        "status <service>",
+		Short:      "Show one service's infrastructure and targets",
+		Deprecated: "use 'a-novel run ps --service=<service>' instead",
+		Args:       cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return printService(cmd, ss.stack, args[0])
 		},
