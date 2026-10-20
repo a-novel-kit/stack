@@ -182,6 +182,26 @@ affected instead of inventing a screenshot test.
   transient artifacts.
 - Run at least the repository browser baseline for compatibility-sensitive behavior.
 
+A Vitest browser project, such as uikit's Storybook stories, compares its screenshots against Drive
+reference batches through `node-actions/test-playwright` with `runner: vitest`. The workflows repo's
+`docs/migrations/v1.64.0.md` is the adoption guide. Vitest's browser mode adds these rules:
+
+- Capture `expect(page).toMatchScreenshot()`. Modal dialogs and popovers render in the top layer,
+  outside every container, so a container capture misses them. In Storybook's Vitest run, the first
+  `body` div is the hidden `sb-preparing-story` wrapper.
+- Declare each screenshot with a `visual-snapshot` annotation in `beforeEach` or before the first
+  assertion. Vitest accepts `annotate()` only while the test state is `run`, and rejects it in
+  `afterEach` or after a failed soft assertion.
+- Name each screenshot flat, from `[A-Za-z0-9_-]` with single hyphens:
+  `` `${task.file.name}-${task.name}`.replace(/\W+/g, "-") ``. Vitest resolves only the base name and
+  strips every other character, so a Storybook story ID or a dotted name stops matching its annotation.
+- Treat the annotations as the inventory. Vitest records a `toMatchScreenshot` artifact only on
+  failure, so the Drive runner lists screenshots from annotations and fails a run that writes an
+  undeclared one.
+- A style assertion in a play function turns a visual change into a functional failure, which
+  `allow-screenshot-change` cannot waive. uikit's Toolbar story asserts that its link keeps the button
+  radius, so a Button radius change fails until the link follows.
+
 ## Coverage and completion
 
 Treat coverage as a map, not a percentage target; 100% is not required. Missing error, keyboard,
