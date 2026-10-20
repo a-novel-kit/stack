@@ -1020,7 +1020,8 @@ The command's exit status becomes the CLI's.`,
 			cmdv := args[1:]
 			ref := parseEntityID(targetSpec, ss.stack)
 			if ref.IsInfra {
-				return fmt.Errorf("exec: %s is an infra container; use 'podman exec %s/%s/...' directly", targetSpec, ref.Stack, ref.Service)
+				return fmt.Errorf("exec: %s is an infra container; use 'podman exec %s_%s_%s_1 …' directly",
+					ref.ID, ref.Stack, ref.Service, ref.Infra)
 			}
 			stream, err := c.Exec(ctx, ref.ID, cmdv)
 			if err != nil {
@@ -1088,7 +1089,7 @@ port. Container targets are refused.`,
 			c := rpc.New("")
 			ref := parseEntityID(args[0], ss.stack)
 			if ref.IsInfra {
-				return fmt.Errorf("debug: %s is an infra container; dlv attach is only meaningful on go-exec targets", args[0])
+				return fmt.Errorf("debug: %s is an infra container; dlv attach is only meaningful on go-exec targets", ref.ID)
 			}
 			resp, err := c.Debug(ctx, ref.ID)
 			if err != nil {
