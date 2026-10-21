@@ -23,13 +23,21 @@ import (
 // StreamLogs server-streams log lines for a target:
 //   - by default, one snapshot of current.log from start to end
 //   - with --follow, that snapshot plus every new line until the process
-//     terminates or the client disconnects
+//     terminates, the client disconnects or the daemon stops
 //   - with --run-id, an archived run, never followed
 //
 // Snapshot lines come first in file order, and followed lines after. A tail
 // keeps only the snapshot's last lines. Each StreamLogsResponse carries its
 // original timestamp and stream tag.
 func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest, stream anovelv1connect.CoreServiceStreamLogsServerStream) error {
+	// A snapshot is a finite read and keeps the shutdown grace. A follow ends
+	// when the daemon stops.
+	follow := req.GetFollow() && req.GetRunId() == ""
+	if follow {
+		var cancel context.CancelFunc
+		ctx, cancel = s.streamContext(ctx)
+		defer cancel()
+	}
 	tid := req.GetTargetId()
 	// An infra log ID, "<stack>/<service>/infra/<name>", streams an infra
 	// container's stdout through this same RPC. Those containers belong to
@@ -51,7 +59,6 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 	if req.GetRunId() != "" {
 		path = s.logs.RunPath(tgt.Stack, tgt.Service, tgt.Name, req.GetRunId())
 	}
-	follow := req.GetFollow() && req.GetRunId() == ""
 
 	// Under --follow, subscribe before reading the file, so no line written in
 	// between is lost.
@@ -74,8 +81,8 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 	return forwardLines(ctx, sub, stream.Send, req.GetStream())
 }
 
-// forwardLines sends every line of sub until the subscription closes or the
-// client disconnects. A nil sub sends nothing.
+// forwardLines sends every line of sub until the subscription closes or ctx
+// ends. A nil sub sends nothing.
 func forwardLines(ctx context.Context, sub <-chan logs.Line, send func(*anovelv1.StreamLogsResponse) error, filter anovelv1.LogStream) error {
 	if sub == nil {
 		return nil
@@ -83,7 +90,7 @@ func forwardLines(ctx context.Context, sub <-chan logs.Line, send func(*anovelv1
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return streamEnd(ctx)
 		case ln, ok := <-sub:
 			if !ok {
 				return nil
@@ -255,7 +262,7 @@ func streamPodmanLogs(ctx context.Context, cid string, follow bool, tail int32, 
 			return err
 		}
 	}
-	return nil
+	return streamEnd(ctx)
 }
 
 // podmanLogsArgs builds the `podman logs` arguments for container cid. A tail

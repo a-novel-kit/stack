@@ -80,7 +80,7 @@ func Run(ctx context.Context, opts Options) error {
 	// `a-novel install` or `core restart` starts the next daemon.
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	srv := server.New(opts.Version, socketPath, disc, run, builder, logStore, stop)
+	srv := server.New(opts.Version, socketPath, disc, run, builder, logStore, stop, ctx.Done())
 
 	// Reconstitute the Instance and InfraSession records of every podman
 	// container carrying the adoption labels, so containers that outlived a
@@ -168,7 +168,8 @@ func serve(ctx context.Context, ln net.Listener, srv *server.Server) error {
 	case <-ctx.Done():
 	}
 
-	// Graceful shutdown waits up to 10s for open RPCs, streams included.
+	// Graceful shutdown gives unary RPCs and Exec streams up to 10s. Log follows
+	// and watches end as soon as ctx does.
 	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(shutCtx); err != nil {

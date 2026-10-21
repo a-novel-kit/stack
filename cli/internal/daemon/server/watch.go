@@ -14,16 +14,18 @@ import (
 // value, so (stack, service, "") watches one service and three empty fields
 // watch everything.
 //
-// The stream stays open until the client cancels its side. Nothing is emitted
-// up front, so a caller needing the initial state pairs Watch with a
-// ListServices snapshot.
+// The stream stays open until the client cancels its side or the daemon stops.
+// Nothing is emitted up front, so a caller needing the initial state pairs
+// Watch with a ListServices snapshot.
 func (s *Server) Watch(ctx context.Context, req *anovelv1.WatchRequest, stream anovelv1connect.CoreServiceWatchServerStream) error {
+	ctx, cancel := s.streamContext(ctx)
+	defer cancel()
 	ch, unsub := s.runner.SubscribePhases(func(ev runner.PhaseEvent) bool { return watches(req, ev) })
 	defer unsub()
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return streamEnd(ctx)
 		case ev, ok := <-ch:
 			if !ok {
 				return nil // runner closed our subscription

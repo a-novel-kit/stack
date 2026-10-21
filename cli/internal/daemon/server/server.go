@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -38,11 +40,14 @@ type Server struct {
 	logs       *logs.Store      // per-target log files + streaming hub
 	// stop tells the daemon's main loop to exit cleanly. It is idempotent.
 	stop func()
+	// stopping closes once the daemon begins to stop, whatever stopped it.
+	stopping <-chan struct{}
 }
 
 // New constructs a Server with every daemon-side subsystem wired up. stop is
-// what Shutdown and PrepareReinstall call to end the daemon.
-func New(version, socketPath string, disc discovery.Stacks, run *runner.Runner, builder *env.Builder, logStore *logs.Store, stop func()) *Server {
+// what Shutdown and PrepareReinstall call to end the daemon, and stopping
+// closes once the daemon begins to stop.
+func New(version, socketPath string, disc discovery.Stacks, run *runner.Runner, builder *env.Builder, logStore *logs.Store, stop func(), stopping <-chan struct{}) *Server {
 	return &Server{
 		version:    version,
 		startedAt:  time.Now(),
@@ -52,7 +57,37 @@ func New(version, socketPath string, disc discovery.Stacks, run *runner.Runner, 
 		envBuilder: builder,
 		logs:       logStore,
 		stop:       stop,
+		stopping:   stopping,
 	}
+}
+
+// errStopping is the cause a stream's context carries when the daemon stopped
+// it.
+var errStopping = errors.New("daemon stopping")
+
+// streamContext returns a child of ctx that also ends once the daemon begins to
+// stop, with errStopping as its cause. A log follow or a watch runs on it, so
+// an open stream never holds the graceful shutdown.
+func (s *Server) streamContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancelCause(ctx)
+	go func() {
+		select {
+		case <-s.stopping:
+			cancel(errStopping)
+		case <-ctx.Done():
+		}
+	}()
+	return ctx, func() { cancel(nil) }
+}
+
+// streamEnd is the result of a stream whose context ended. A daemon stop ends
+// it with CodeUnavailable, so the client reports the stop. A client that went
+// away ends it with nil.
+func streamEnd(ctx context.Context) error {
+	if errors.Is(context.Cause(ctx), errStopping) {
+		return connect.NewError(connect.CodeUnavailable, errStopping.Error())
+	}
+	return nil
 }
 
 // findStack returns the discovered Stack named `name`, or the default stack
