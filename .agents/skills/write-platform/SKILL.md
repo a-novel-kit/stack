@@ -79,6 +79,11 @@ Read secrets and privileged endpoints only from SvelteKit's server-only environm
 an explicitly public value through the framework's `PUBLIC_` contract only when it is safe to ship
 in source. A secret-shaped `VITE_*` variable is a build failure, not runtime configuration.
 
+Under Vitest, SvelteKit fills `$app/env/private` from the committed `.env.local` too, so unit tests
+run with the local-development configuration unless they mock that module. A server default that
+names a production resource, such as `DOWNTIME_URL`, is then live in a unit test, and only the
+offline unit project keeps the test from fetching it.
+
 Trace the server with SvelteKit's own spans and nodelib's setup. Enable
 `sveltekit({ tracing: { server: true } })`, declare `OTEL` and `GCLOUD_PROJECT_ID` in `src/env.ts`,
 and start `@a-novel-kit/nodelib-server/telemetry` from `src/instrumentation.server.ts`, flushing it

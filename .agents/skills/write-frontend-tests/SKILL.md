@@ -74,7 +74,9 @@ Do not manufacture cases that the public contract cannot reach.
   test for the mock graph rather than the product.
 - Control clock, randomness, locale, and network explicitly when they affect output.
 - Use framework-supported request interception for network tests. Never call a live third-party
-  service from unit or component tests.
+  service from unit or component tests. The unit project of nodelib-config's `SvelteKitVitest` runs
+  offline: its global `fetch` rejects every request a test does not stub, and
+  `vi.unstubAllGlobals()` restores that rejection.
 - Make mock failures loud: reject unhandled requests and unexpected calls.
 - Build a fresh `Response` per call (`mockImplementation(async () => Response.json(…))`). A body
   reads once, so `mockResolvedValue(response)` hands every later call a consumed body, and the
