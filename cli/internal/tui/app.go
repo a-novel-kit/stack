@@ -32,6 +32,9 @@ func Run() error {
 	// the model needs the program.
 	m.program = p
 	_, err := p.Run()
+	if m.followCancel != nil {
+		m.followCancel()
+	}
 	return err
 }
 
@@ -156,8 +159,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case logLineMsg:
-		m.onLogLine(msg)
+	case logLinesMsg:
+		m.onLogLines(msg)
 		return m, nil
 
 	case tickMsg:
@@ -205,21 +208,20 @@ func (m *model) onActionResult(msg actionResultMsg) tea.Cmd {
 	return tea.Batch(refreshServicesCmd(m.c), fade)
 }
 
-// onLogLine appends a followed log line. A line from a stale follower
-// generation, which arrives during the cancel-then-start window of a tab or
-// service switch, is dropped. While the pane is scrolled back, the offset moves
-// past the new line, so the window keeps showing the same lines; clamping
-// snaps it back when trimming pushed that window past the buffer.
-func (m *model) onLogLine(msg logLineMsg) {
+// onLogLines appends a follower's batch. While the pane is scrolled back, the
+// offset grows with each line, so the window keeps its lines. Once the buffer
+// is full, trimming drops the oldest lines and the clamp keeps the window
+// inside the buffer.
+func (m *model) onLogLines(msg logLinesMsg) {
 	if msg.gen != m.followGen {
 		return
 	}
-	m.logLines = append(m.logLines, msg.line)
-	if len(m.logLines) > maxLogLines {
-		m.logLines = m.logLines[len(m.logLines)-maxLogLines:]
+	m.logLines = append(m.logLines, msg.lines...)
+	if over := len(m.logLines) - maxLogLines; over > 0 {
+		m.logLines = m.logLines[over:]
 	}
 	if m.logScroll > 0 {
-		m.logScroll = m.clampLogScroll(m.logScroll + 1)
+		m.logScroll = m.clampLogScroll(m.logScroll + len(msg.lines))
 	}
 }
 

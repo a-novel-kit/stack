@@ -7,7 +7,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -454,10 +456,9 @@ func dryRunVerdict(blockers []string, force bool) string {
 	return "(dry run — nothing changed)"
 }
 
-// pruneBlockers lists the reasons a stack's checkouts should outlive the prune,
-// one per checkout: work in progress (see ongoingWork), or unpushed commits,
-// since a clean checkout on its default branch can still hold the only copy of
-// a commit.
+// pruneBlockers lists the reasons a stack's checkouts should outlive the
+// prune, at most one per checkout, in checkout order. It checks every checkout
+// at once: each check runs several local git commands.
 func pruneBlockers(root string) []string {
 	checkouts, err := workspaceCheckouts(root)
 	if err != nil {
@@ -465,13 +466,26 @@ func pruneBlockers(root string) []string {
 		// removing it is the whole point of the command.
 		return nil
 	}
-	var blockers []string
-	for _, c := range checkouts {
-		if reason := ongoingWork(c.dir); reason != "" {
-			blockers = append(blockers, c.Name+": "+reason)
-		} else if n := unpushedCommits(c.dir); n > 0 {
-			blockers = append(blockers, fmt.Sprintf("%s: %d unpushed commit(s)", c.Name, n))
-		}
+
+	reasons := make([]string, len(checkouts))
+	var wg sync.WaitGroup
+	for i, c := range checkouts {
+		wg.Go(func() { reasons[i] = checkoutBlocker(c) })
 	}
-	return blockers
+	wg.Wait()
+
+	return slices.DeleteFunc(reasons, func(r string) bool { return r == "" })
+}
+
+// checkoutBlocker names the work c holds that exists nowhere else, or returns
+// "". A clean checkout on its default branch can still hold the only copy of a
+// commit, so unpushed commits block too.
+func checkoutBlocker(c checkout) string {
+	if reason := ongoingWork(c.dir); reason != "" {
+		return c.Name + ": " + reason
+	}
+	if n := unpushedCommits(c.dir); n > 0 {
+		return fmt.Sprintf("%s: %d unpushed commit(s)", c.Name, n)
+	}
+	return ""
 }

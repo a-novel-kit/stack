@@ -219,6 +219,9 @@ func streamPodmanLogs(ctx context.Context, cid string, follow bool, stream anove
 	}
 	cmd := exec.CommandContext(ctx, "podman", args...)
 	pipeR, pipeW := io.Pipe()
+	// An early return leaves podman's output unread. Closing the reader fails
+	// the blocked copy, so Wait returns and the goroutine below ends.
+	defer func() { _ = pipeR.Close() }()
 	cmd.Stdout, cmd.Stderr = pipeW, pipeW
 	if err := cmd.Start(); err != nil {
 		return connect.Errorf(connect.CodeInternal,

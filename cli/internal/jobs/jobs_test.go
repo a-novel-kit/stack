@@ -150,6 +150,7 @@ func TestProgress(t *testing.T) {
 		{name: "LastCompleteLine", write: []string{"one\ntwo\n"}, want: "two"},
 		{name: "LineInProgress", write: []string{"one\n", "tw"}, want: "tw"},
 		{name: "CarriageReturnRedraw", write: []string{"10%\r50%\r90%"}, want: "90%"},
+		{name: "CarriageReturnAcrossWrites", write: []string{"a\rb", "c\n"}, want: "bc"},
 		{name: "AnsiStripped", write: []string{"\x1b[32mok\x1b[0m\n"}, want: "ok"},
 		{name: "BlankLineKeepsPrevious", write: []string{"real\n", "\n"}, want: "real"},
 	}

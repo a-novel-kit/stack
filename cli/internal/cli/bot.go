@@ -244,31 +244,28 @@ func readBotBatch(path string, stdin io.Reader) ([]botBatchItem, error) {
 // stays within maxBytes, so each chunk fits a single workflow_dispatch. A
 // lone comment larger than maxBytes is an error, since it cannot be split.
 func chunkBotComments(items []botBatchItem, maxBytes int) ([][]botBatchItem, error) {
+	// A chunk's JSON is "[" plus each item followed by "," or the closing "]".
+	const open = 1
 	var (
 		chunks  [][]botBatchItem
 		current []botBatchItem
 	)
+	size := open
 	for _, item := range items {
-		solo, err := json.Marshal([]botBatchItem{item})
+		raw, err := json.Marshal(item)
 		if err != nil {
 			return nil, fmt.Errorf("marshal comment number %d: %w", item.Number, err)
 		}
-		if len(solo) > maxBytes {
-			return nil, fmt.Errorf("comment number %d is %d bytes, over the %d-byte dispatch limit", item.Number, len(solo), maxBytes)
+		cost := len(raw) + 1
+		if open+cost > maxBytes {
+			return nil, fmt.Errorf("comment number %d is %d bytes, over the %d-byte dispatch limit", item.Number, open+cost, maxBytes)
 		}
-		if len(current) > 0 {
-			// The full three-index slice keeps append from writing into
-			// current's backing array while measuring the trial size.
-			trial, err := json.Marshal(append(current[:len(current):len(current)], item))
-			if err != nil {
-				return nil, fmt.Errorf("marshal batch chunk: %w", err)
-			}
-			if len(trial) > maxBytes {
-				chunks = append(chunks, current)
-				current = nil
-			}
+		if size+cost > maxBytes {
+			chunks = append(chunks, current)
+			current, size = nil, open
 		}
 		current = append(current, item)
+		size += cost
 	}
 	if len(current) > 0 {
 		chunks = append(chunks, current)

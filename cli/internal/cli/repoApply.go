@@ -734,13 +734,13 @@ func applyDeploymentPolicies(op repocfg.Op) (string, error) {
 	return fmt.Sprintf("%d created, %d deleted", created, deleted), nil
 }
 
-// applyTeams reconciles a repo's tier-team grants. A missing tier or area team
-// is created, the area team nested under its tier; each area team is granted
-// its role; and a grant any other tier team holds here is removed. Teams
-// outside the tiers are left untouched: core reaches every repo through its org
-// role, which no repository grant can remove.
+// applyTeams reconciles a repo's tier-team grants. It creates a missing tier
+// or area team, the area team under its tier, and grants each area team its
+// role. It then removes the grant of any other team in a tier's namespace.
+// Teams outside the tiers keep their grants. Core reaches every repo through
+// its org role, which no repository grant can remove.
 func applyTeams(org, repo string, op repocfg.Op) (string, error) {
-	out, err := gh("api", "--paginate", "orgs/"+org+"/teams", "--jq", `.[] | "\(.slug)\t\(.id)"`)
+	out, err := gh("api", "--paginate", "orgs/"+org+"/teams?per_page=100", "--jq", `.[] | "\(.slug)\t\(.id)"`)
 	if err != nil {
 		return "", err
 	}

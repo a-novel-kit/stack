@@ -204,8 +204,10 @@ func goTestPackageDirs(dir string) [][]string {
 		if entry.IsDir() {
 			return moduleDirStep(absRoot, path, entry.Name(), ignored)
 		}
-		rel, relErr := filepath.Rel(absRoot, filepath.Dir(path))
-		if strings.HasSuffix(entry.Name(), "_test.go") && relErr == nil && !seen[rel] {
+		if !strings.HasSuffix(entry.Name(), "_test.go") {
+			return nil
+		}
+		if rel, err := filepath.Rel(absRoot, filepath.Dir(path)); err == nil && !seen[rel] {
 			seen[rel] = true
 			pkgs = append(pkgs, pathSegments(rel))
 		}

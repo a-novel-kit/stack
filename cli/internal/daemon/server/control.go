@@ -132,10 +132,9 @@ type teardownOutcome struct {
 // infra session, and reports what each one did. The kill funcs are parameters
 // so this can be driven without a live runner.
 //
-// go-exec targets go in parallel: killGoExec blocks until its grace expires, so
-// one goroutine per target bounds the total by the longest grace rather than
-// their sum. Infra teardown is serial and runs after them, since a session's
-// containers outlive the targets that were talking to it.
+// go-exec targets stop in parallel, since a kill blocks for up to its grace.
+// The total is then bounded by the longest grace. Infra sessions stop in
+// parallel too, after every target that talked to them is gone.
 func tearDown(
 	goExecIDs []string,
 	sessions []runner.InfraSessionRef,
@@ -161,12 +160,18 @@ func tearDown(
 	}
 	wg.Wait()
 	for _, ref := range sessions {
-		if err := killInfra(ref); err != nil {
-			out.failures = append(out.failures, fmt.Sprintf("infra %s/%s: %v", ref.Stack, ref.Service, err))
-			continue
-		}
-		out.infraTornDown++
+		wg.Go(func() {
+			err := killInfra(ref)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				out.failures = append(out.failures, fmt.Sprintf("infra %s/%s: %v", ref.Stack, ref.Service, err))
+				return
+			}
+			out.infraTornDown++
+		})
 	}
+	wg.Wait()
 	// Goroutine completion order is not stable, so the same failures would
 	// otherwise come back in a different order run to run.
 	slices.Sort(out.failures)

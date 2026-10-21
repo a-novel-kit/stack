@@ -704,7 +704,7 @@ func TestApplyTeams(t *testing.T) {
 		next := 10
 		calls := stubGH(t, func(call string) (string, error) {
 			switch {
-			case strings.Contains(call, "orgs/o/teams --jq"):
+			case strings.Contains(call, "orgs/o/teams?per_page=100 --jq"):
 				return "developers\t1\ncore\t9\n", nil
 			case strings.Contains(call, "-X POST orgs/o/teams"):
 				next++

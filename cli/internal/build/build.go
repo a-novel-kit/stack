@@ -502,11 +502,10 @@ func pollEnv(ctx context.Context, env []string, prefix string) (envPoll, error) 
 	}
 	idList := strings.Fields(ids)
 	poll := envPoll{ready: len(idList) > 0}
+	inspected := inspectContainers(ctx, env, idList)
 	for _, id := range idList {
-		out, ierr := podmanOut(ctx, env, "inspect", id, "--format",
-			"{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}")
-		parts := strings.Split(out, "|")
-		if ierr != nil || len(parts) < 4 {
+		parts, ok := inspected[id]
+		if !ok {
 			poll.ready = false
 			poll.pending = append(poll.pending, id)
 			continue
@@ -527,6 +526,38 @@ func pollEnv(ctx context.Context, env []string, prefix string) (envPoll, error) 
 		}
 	}
 	return poll, nil
+}
+
+// pollInspectFormat prints a container's full id, name, status, health and exit
+// code on one line.
+const pollInspectFormat = "{{.Id}}|{{.Name}}|{{.State.Status}}|" +
+	"{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}"
+
+// inspectContainers inspects every container of ids in one podman call. It maps
+// each id to its name, status, health and exit code. A failed call maps none,
+// and the poll then counts every container as pending.
+func inspectContainers(ctx context.Context, env, ids []string) map[string][]string {
+	if len(ids) == 0 {
+		return nil
+	}
+	out, err := podmanOut(ctx, env, slices.Concat([]string{"inspect", "--format", pollInspectFormat}, ids)...)
+	if err != nil {
+		return nil
+	}
+	fields := make(map[string][]string, len(ids))
+	for line := range strings.Lines(out) {
+		parts := strings.Split(strings.TrimRight(line, "\n"), "|")
+		if len(parts) < 5 {
+			continue
+		}
+		// podman ps prints short ids, and the inspect line starts with the full one.
+		for _, id := range ids {
+			if strings.HasPrefix(parts[0], id) {
+				fields[id] = parts[1:]
+			}
+		}
+	}
+	return fields
 }
 
 // containerLogTail returns the last `lines` lines of a container's combined

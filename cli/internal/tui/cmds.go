@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"iter"
 	"strings"
 	"time"
 
@@ -67,13 +68,11 @@ func runAction(busyText, successText, actionLabel string, timeout time.Duration,
 	)
 }
 
-// logLineMsg carries one log line from a follower goroutine into the
-// model. gen is the follower-generation tag: Update drops any message
-// whose gen does not match m.followGen, so only the current follower's
-// lines reach the view across the cancel-then-start race.
-type logLineMsg struct {
-	line *anovelv1.StreamLogsResponse
-	gen  int
+// logLinesMsg carries the lines a log follower received since its last
+// message. gen is the generation of that follower.
+type logLinesMsg struct {
+	lines []*anovelv1.StreamLogsResponse
+	gen   int
 }
 
 // tickMsg is the periodic refresh trigger.
@@ -121,19 +120,38 @@ func (m *model) followSelectedLogs() {
 	go m.forwardLogs(ctx, id, m.followGen)
 }
 
-// forwardLogs sends the followed log of id to the program, each line tagged
-// with the follower generation gen, until ctx ends or the stream does.
+// forwardLogs sends the followed log of id to the program, tagged with the
+// follower generation gen, until ctx ends or the stream does. Each message
+// carries every line received since the last one, so the replay of a long log
+// renders once per batch, not once per line.
 func (m *model) forwardLogs(ctx context.Context, id string, gen int) {
 	stream, err := m.c.StreamLogs(ctx, id, "", true /* follow */, anovelv1.LogStream_LOG_STREAM_UNSPECIFIED)
 	if err != nil {
 		m.program.Send(errMsg{err: err})
 		return
 	}
+
+	lines := make(chan *anovelv1.StreamLogsResponse, maxLogLines)
+	go receiveLogs(ctx, stream, lines)
+
+	for ln := range lines {
+		batch := []*anovelv1.StreamLogsResponse{ln}
+		for len(lines) > 0 {
+			batch = append(batch, <-lines)
+		}
+		m.program.Send(logLinesMsg{lines: batch, gen: gen})
+	}
+}
+
+// receiveLogs copies stream into lines until ctx ends or the stream does, then
+// closes lines.
+func receiveLogs(ctx context.Context, stream iter.Seq2[*anovelv1.StreamLogsResponse, error], lines chan<- *anovelv1.StreamLogsResponse) {
+	defer close(lines)
 	for ln, err := range stream {
 		if err != nil || ctx.Err() != nil {
 			return
 		}
-		m.program.Send(logLineMsg{line: ln, gen: gen})
+		lines <- ln
 	}
 }
 
