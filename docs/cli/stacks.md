@@ -4,12 +4,12 @@ A stack is a full workspace. A second one lets you, or an agent, work on another
 
 ## Create a stack
 
-It lives in the temporary directory unless `stacks new --root` puts it elsewhere:
+A stack in the temporary directory is disposable: the system empties it in time. Pick a lasting `STACK_DIR` for a stack you keep.
 
 ```bash
 STACK_NAME=review
 STACK_DIR="${TMPDIR:-/tmp}/a-novel-stacks/$STACK_NAME"
-a-novel core stacks new "$STACK_NAME"
+a-novel core stacks new "$STACK_NAME" --root="$STACK_DIR"
 a-novel core sync --root="$STACK_DIR"
 ```
 
@@ -34,7 +34,7 @@ a-novel core stacks prune "$STACK_NAME" --dry-run
 a-novel core stacks prune "$STACK_NAME"
 ```
 
-`prune` frees the stack's files, containers and volumes. It refuses the default stack and any stack holding unpushed work. Drop its entry from `A_NOVEL_STACKS` afterwards.
+`prune` frees the stack's files, containers and volumes. It refuses the default stack. It also refuses a stack whose checkouts hold uncommitted changes, a branch other than the default, or unpushed commits. `--force` prunes it anyway, and that work is lost. Drop its entry from `A_NOVEL_STACKS` afterwards.
 
 ## Run one command in a throwaway stack
 
@@ -42,4 +42,4 @@ a-novel core stacks prune "$STACK_NAME"
 a-novel --sandbox test -y
 ```
 
-`--sandbox` goes first, and works for commands that need no daemon.
+Put `--sandbox` first. It wraps any command except `core`, `run` and `install`, which drive the daemon.

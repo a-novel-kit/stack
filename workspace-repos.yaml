@@ -1,11 +1,10 @@
-# Curated set of a-novel / a-novel-kit repositories that `a-novel core sync`
-# clones and fast-forwards into app/ and kit/. This file is the single source
-# of truth: the CLI reads it at runtime, so edit it freely — no rebuild needed.
-# If it is absent, `core sync` has nothing to do.
+# The repositories `a-novel core sync` clones and fast-forwards. The CLI reads
+# this file on each run, so an edit needs no rebuild. Without it, `core sync`
+# has nothing to do.
 #
-# Each entry is "<org>/<repo>". The org selects the target sub-directory:
-#   a-novel-kit/<repo> → kit/<repo>   (shared libraries)
-#   a-novel/<repo>     → app/<repo>   (services and platforms)
+# Each entry is "<org>/<repo>", and the org picks the directory:
+#   a-novel-kit/<repo> → kit/<repo>   (libraries and CI actions)
+#   a-novel/<repo>     → app/<repo>   (services, platforms and infra)
 repos:
   - a-novel-kit/.github
   - a-novel-kit/golib

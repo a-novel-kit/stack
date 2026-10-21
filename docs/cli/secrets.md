@@ -1,12 +1,8 @@
 # Manage secrets
 
-Some services need secrets, such as API keys. The CLI stores them encrypted and passes them only to the programs that need them. No command ever prints a value, even for an AI agent.
+Some services need secrets, such as API keys. The CLI stores them encrypted and passes them only to the programs that need them, through their environment. No `a-novel` command prints a value.
 
 ## Store a secret
-
-```bash
-a-novel secrets init
-```
 
 Store each secret under an ID, typing the value yourself:
 
@@ -31,7 +27,7 @@ secrets:
     description: OpenAI API key used by narrative generation.
 ```
 
-`test`, `build`, `run` and the UI pass them along. A missing one only triggers a warning; ask the team on Discord for its value.
+`test`, `build`, `run` and the UI pass them along. A missing secret prints a warning that names it. Ask the team on Discord for its value.
 
 ## The GitHub Packages token
 

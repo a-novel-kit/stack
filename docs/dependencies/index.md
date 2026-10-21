@@ -1,6 +1,6 @@
 # Dependencies
 
-This guide sets up your machine as an A-Novel contributor, one tool per page, in order. Everything is yours to do except enrollment, which the team grants. Ask for it first, on [Discord](./discord).
+This guide sets up your machine as an A-Novel contributor. Everything is yours to do except enrollment, which the team grants. Ask for it first, on [Discord](./discord).
 
 ## Choose your system
 
@@ -59,6 +59,4 @@ Open a new terminal after each install.
 
 Commands that edit your shell profile target zsh and bash. With fish, add the same paths with `fish_add_path`.
 
-## For sysadmins
-
-Sysadmins hold admin rights over the repositories, the cloud and the organizations' credentials, so a compromised machine costs more. After this setup, follow the [sysadmin setup](/sysadmins/).
+**Sysadmins** then follow the [sysadmin setup](/sysadmins/).

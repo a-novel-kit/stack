@@ -4,7 +4,7 @@
 
 ## Install
 
-Skip to [Configure](#configure) if pnpm answers and Node.js meets the floor the third command prints:
+The third command prints the minimum Node.js version. Skip to [Configure](#configure) if pnpm answers and Node.js meets that minimum:
 
 ```bash
 node --version

@@ -84,7 +84,7 @@ go env -w GOTOOLCHAIN=auto
 
 ### Put Go programs on your PATH
 
-The CLI installs into Go's program directory, `~/go/bin` unless you moved it. Skip if `echo $PATH` lists it already.
+The CLI installs into Go's program directory, `~/go/bin` unless you moved it. Skip if `echo "$PATH"` lists it already.
 
 :::tabs key:shell
 == Linux / macOS

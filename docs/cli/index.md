@@ -19,7 +19,7 @@ a-novel core setup
 a-novel core sync
 ```
 
-Setup clones the stack into `~/git-projects/a-novel`, starts the daemon, and makes every new shell start it too. Sync clones the repositories, and brings them up to date whenever you rerun it.
+Setup clones the stack into `~/git-projects/a-novel`, starts the daemon, and makes every new shell start it too. Sync clones the repositories. Rerun it to bring them up to date.
 
 To put the workspace elsewhere, run setup this way instead:
 
@@ -44,10 +44,11 @@ a-novel run ps
 
 ## Update
 
-Pull the stack and rebuild; running services stay up:
+Pull the stack and rebuild. Running services stay up.
 
 ```bash
-git -C ~/git-projects/a-novel pull --ff-only
+STACK_DIR="$HOME/git-projects/a-novel"   # or the path you chose
+git -C "$STACK_DIR" pull --ff-only
 a-novel install
 ```
 
