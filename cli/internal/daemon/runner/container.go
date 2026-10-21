@@ -32,11 +32,12 @@ func (r *Runner) streamContainerLogs(ctx context.Context, cid string, writer *lo
 // substitution resolves. --no-deps sidesteps podman-compose 1.5.0's broken
 // depends_on wait. Naming the compose service starts t alone: a one-shot its
 // profile also enables would otherwise come up with t's labels.
-func (r *Runner) startContainer(ctx context.Context, t *discovery.Target, env, warnings []string) (*Instance, error) {
+func (r *Runner) startContainer(ctx context.Context, inst *Instance, t *discovery.Target, env, warnings []string) (*Instance, error) {
 	id := t.ID()
 	procCtx, cancel := context.WithCancel(context.Background())
-	inst := r.register(t, anovelv1.Mode_MODE_CONTAINER, nil, cancel)
-	r.transition(id, anovelv1.Phase_PHASE_STARTING)
+	if err := r.begin(inst, nil, cancel); err != nil {
+		return nil, err
+	}
 
 	if err := podman(ctx, env, "compose",
 		"-p", composeProjectName(t.Stack, t.Service),

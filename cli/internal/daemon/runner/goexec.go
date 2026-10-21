@@ -16,7 +16,7 @@ import (
 // startGoExec spawns t as a `go run ./cmd/<target>` invocation inside the
 // owning service's directory, with env as the process environment, and moves
 // it through PENDING, STARTING, and RUNNING.
-func (r *Runner) startGoExec(_ context.Context, t *discovery.Target, env, warnings []string) (*Instance, error) {
+func (r *Runner) startGoExec(_ context.Context, inst *Instance, t *discovery.Target, env, warnings []string) (*Instance, error) {
 	id := t.ID()
 	// Running go from the service directory picks up that service's own
 	// go.mod, and each target gets its own context so Kill can cancel cleanly.
@@ -33,6 +33,7 @@ func (r *Runner) startGoExec(_ context.Context, t *discovery.Target, env, warnin
 	logWriter, err := r.logs.OpenForWrite(id, t.Stack, t.Service, t.Name)
 	if err != nil {
 		cancel()
+		r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_ERROR, "open log writer: "+err.Error())
 		return nil, fmt.Errorf("open log writer for %s: %w", id, err)
 	}
 	cmd.Stdout = logWriter.Stdout()
@@ -43,10 +44,10 @@ func (r *Runner) startGoExec(_ context.Context, t *discovery.Target, env, warnin
 		_, _ = fmt.Fprintln(logWriter.Stderr(), w)
 	}
 
-	// Register the instance in PENDING, so a start that checks after this
-	// sees the slot taken.
-	inst := r.register(t, anovelv1.Mode_MODE_GO_EXEC, cmd, cancel)
-	r.transition(id, anovelv1.Phase_PHASE_STARTING)
+	if err := r.begin(inst, cmd, cancel); err != nil {
+		_ = logWriter.Close()
+		return nil, err
+	}
 	if err := cmd.Start(); err != nil {
 		_ = logWriter.Close()
 		r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_ERROR, "spawn: "+err.Error())

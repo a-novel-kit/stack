@@ -77,7 +77,9 @@ func (r *Runner) ActiveInfraSessions() []InfraSessionRef {
 
 // StartInfra brings up a service's infrastructure containers, waits for
 // healthchecks, then auto-runs every one-shot target in compose-dep order. It
-// is idempotent: an already-up service is a no-op.
+// is idempotent: an already-up service is a no-op. Calls for one service run
+// one at a time, so a latecomer waits for the call in flight, then returns at
+// the idempotent check.
 //
 // oneShotsMode selects the mode for the auto-run one-shots, defaulting to
 // go-exec. The runner allocates the infra ports itself through
@@ -92,6 +94,11 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 	if err != nil {
 		return err
 	}
+	unlock, err := r.lockInfra(ctx, stack, service)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	key := sessionKey(stack, service)
 	r.sessMu.Lock()
 	if sess, ok := r.infraSessions[key]; ok && sess.Up {
@@ -153,13 +160,19 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 
 // KillInfra tears down the service's infra containers and resets its session.
 // It refuses while a target of the service is live, unless force stops those
-// targets first.
+// targets first. It waits for a StartInfra of the service in flight, so a
+// teardown never overlaps a bring-up.
 func (r *Runner) KillInfra(ctx context.Context, stack, service string, force bool) error {
 	defer r.InvalidateInfraStateCache()
 	svc, err := r.findService(stack, service)
 	if err != nil {
 		return err
 	}
+	unlock, err := r.lockInfra(ctx, stack, service)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	// Collect the service's live targets: they refuse the teardown, or with
 	// force get cascade-killed first.
 	r.mu.RLock()
@@ -200,6 +213,25 @@ func (r *Runner) KillInfra(ctx context.Context, stack, service string, force boo
 	return nil
 }
 
+// lockInfra takes the infra lock of (stack, service) and returns its unlock. A
+// caller whose ctx ends while it waits gets ctx's error and no lock.
+func (r *Runner) lockInfra(ctx context.Context, stack, service string) (func(), error) {
+	key := sessionKey(stack, service)
+	r.sessMu.Lock()
+	lock, ok := r.infraLocks[key]
+	if !ok {
+		lock = make(chan struct{}, 1)
+		r.infraLocks[key] = lock
+	}
+	r.sessMu.Unlock()
+	select {
+	case lock <- struct{}{}:
+		return func() { <-lock }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
 // dropInfraSession forgets the infra session of (stack, service).
 func (r *Runner) dropInfraSession(stack, service string) {
 	r.sessMu.Lock()
@@ -208,7 +240,8 @@ func (r *Runner) dropInfraSession(stack, service string) {
 }
 
 // runOneShot spawns a one-shot target and blocks until it terminates.
-// Returns nil iff it terminated with EXIT_REASON_SUCCESS.
+// Returns nil iff it terminated with EXIT_REASON_SUCCESS. A start already in
+// flight counts as the run, so two callers wait on one run.
 func (r *Runner) runOneShot(ctx context.Context, t *discovery.Target, mode anovelv1.Mode) error {
 	if _, err := r.launch(ctx, t, mode); err != nil {
 		return err
