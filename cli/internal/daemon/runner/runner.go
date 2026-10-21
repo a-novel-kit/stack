@@ -71,9 +71,12 @@ type Runner struct {
 	// stderr through it, and streams `podman logs` of its containers into it.
 	logs *logs.Store
 
-	// sessMu guards infraSessions.
+	// sessMu guards infraSessions and infraLocks.
 	sessMu        sync.RWMutex
 	infraSessions map[string]*infraSession // keyed by sessionKey(stack, service)
+	// infraLocks holds one single-slot channel per service. StartInfra and
+	// KillInfra hold it for their whole call.
+	infraLocks map[string]chan struct{}
 
 	// subsMu + subs implement the phase-event broadcaster (see events.go).
 	// Kept as its own lock so emitting an event doesn't block on
@@ -112,6 +115,7 @@ func New(disc discovery.Stacks, alloc *env.Allocator, builder *env.Builder, logS
 		builder:         builder,
 		logs:            logStore,
 		infraSessions:   make(map[string]*infraSession),
+		infraLocks:      make(map[string]chan struct{}),
 		infraStateCache: make(map[string]infraStateCacheEntry),
 	}
 }
