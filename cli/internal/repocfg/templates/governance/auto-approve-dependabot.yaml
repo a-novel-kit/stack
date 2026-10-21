@@ -6,6 +6,9 @@
 # pull request. A commit GitHub did not sign for that bot withholds the approval,
 # so a tampered pull request falls back to normal review.
 #
+# A Renovate update merges alone only when Renovate itself put it on auto-merge, so
+# the updates its presets leave to review, such as majors, wait for a person.
+#
 # Any branch of a repository can publish its packages, so a first-party package or
 # image version is approved only with its release proof: an attestation from its
 # producer's release workflow at the version's tag, and an immutable Release from
