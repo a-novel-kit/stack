@@ -22,7 +22,7 @@ a-novel repo update
 gh auth refresh -h github.com --remove-scopes admin:org
 ```
 
-Without the scope, those grants fail with HTTP 403 and the rest applies.
+Without the scope, `a-novel repo update` stops before it changes anything and prints the command that grants it.
 
 `--all` covers the whole workspace, and skips checkouts off their default branch or with uncommitted changes:
 

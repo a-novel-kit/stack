@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -14,6 +15,8 @@ func TestRepoCreateInfraDefaultsPublicAndBootstrapsBeforeRulesets(t *testing.T) 
 	headReads := 0
 	recorded := stubGH(t, func(call string) (string, error) {
 		switch {
+		case strings.Contains(call, "auth status"):
+			return "admin:org, repo, workflow\n", nil
 		case strings.Contains(call, "labels?per_page=100"):
 			return "[]", nil
 		case strings.Contains(call, "git/ref/heads/master"):
@@ -80,6 +83,48 @@ func TestRepoCreateInfraDefaultsPublicAndBootstrapsBeforeRulesets(t *testing.T) 
 	}
 	if seedAt > rulesetAt || syncAt > rulesetAt {
 		t.Errorf("rulesets applied before managed workflow bootstrap (seed=%d sync=%d ruleset=%d)", seedAt, syncAt, rulesetAt)
+	}
+}
+
+// TestRequireAdminOrg pins the preflight of `repo update`: a write passes only
+// with the admin:org scope, and a preview never asks gh for the scopes.
+func TestRequireAdminOrg(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam.
+	const hint = "gh auth refresh -h github.com -s admin:org"
+	testCases := []struct {
+		name      string
+		flags     []string
+		scopes    string
+		ghErr     error
+		wantErr   string // a substring of the error, "" for success
+		wantCalls int
+	}{
+		{name: "Success", scopes: "admin:org, gist, repo, workflow\n", wantCalls: 1},
+		{name: "Success/DryRunSkipsTheCheck", flags: []string{"--dry-run"}},
+		{name: "Success/JSONSkipsTheCheck", flags: []string{"--json"}},
+		{name: "Error/MissingScope", scopes: "gist, repo, workflow\n", wantErr: hint, wantCalls: 1},
+		{name: "Error/LookalikeScope", scopes: "admin:org_hook, repo\n", wantErr: hint, wantCalls: 1},
+		{name: "Error/GHFails", ghErr: errors.New("unknown flag: --json"), wantErr: "unknown flag", wantCalls: 1},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			calls := stubGH(t, func(string) (string, error) { return testCase.scopes, testCase.ghErr })
+			cmd := newRepoUpdateCmd()
+			if err := cmd.ParseFlags(testCase.flags); err != nil {
+				t.Fatal(err)
+			}
+
+			err := cmd.PreRunE(cmd, nil)
+			switch {
+			case testCase.wantErr == "" && err != nil:
+				t.Fatalf("preflight: %v", err)
+			case testCase.wantErr != "" && (err == nil || !strings.Contains(err.Error(), testCase.wantErr)):
+				t.Fatalf("preflight error = %v, want one containing %q", err, testCase.wantErr)
+			}
+			if len(*calls) != testCase.wantCalls {
+				t.Errorf("gh calls = %q, want %d", *calls, testCase.wantCalls)
+			}
+		})
 	}
 }
 

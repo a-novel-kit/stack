@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -51,6 +52,24 @@ nothing.`,
 	return cmd
 }
 
+// requireAdminOrg fails when the active gh account lacks the admin:org scope.
+// A repo write grants org secrets to the repository, which needs that scope,
+// so the check runs before planning and stops the command before its first
+// write.
+func requireAdminOrg(cmd *cobra.Command, _ []string) error {
+	scopes, err := gh("auth", "status", "--active", "--hostname", "github.com",
+		"--json", "hosts", "--jq", `.hosts["github.com"][0].scopes`)
+	if err != nil {
+		return fmt.Errorf("read the gh token scopes: %w", err)
+	}
+	if !slices.Contains(strings.Split(strings.TrimSpace(scopes), ", "), "admin:org") {
+		return fmt.Errorf("%s needs the admin:org scope on your gh token\n"+
+			"  Grant it, then run the command again:\n"+
+			"    gh auth refresh -h github.com -s admin:org", cmd.CommandPath())
+	}
+	return nil
+}
+
 // repoCreateOpts holds the flags of `repo create`.
 type repoCreateOpts struct {
 	description, class, template string
@@ -67,6 +86,7 @@ configuration. The repository is public unless --private is set. The command
 asks for confirmation in a terminal.`,
 		Example: `  a-novel repo create a-novel infra --class infra`,
 		Args:    cobra.ExactArgs(2),
+		PreRunE: requireAdminOrg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return createRepo(cmd, repoEntry{Org: args[0], Name: args[1]}, o)
 		},
@@ -179,6 +199,12 @@ branch or with uncommitted changes is skipped.`,
   a-novel repo update --all --exclude=service-template
   a-novel repo update --all --dry-run       # preview the whole batch`,
 		Args: cobra.NoArgs,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if o.dryRun || o.jsonOut {
+				return nil
+			}
+			return requireAdminOrg(cmd, args)
+		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if o.all {
 				return reconcileAll(cmd, o)
