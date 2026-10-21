@@ -90,7 +90,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	replayCheckpoint(ctx, run)
-	return serve(ctx, ln, srv, socketPath)
+	return serve(ctx, ln, srv)
 }
 
 // listen binds the daemon's unix socket at socketPath, refusing when another
@@ -143,9 +143,10 @@ func replayCheckpoint(ctx context.Context, run *runner.Runner) {
 	_ = reinstall.Delete()
 }
 
-// serve answers connect-rpc on ln until ctx ends, then shuts down gracefully
-// and removes the socket file.
-func serve(ctx context.Context, ln net.Listener, srv *server.Server, socketPath string) error {
+// serve answers connect-rpc on ln until ctx ends, then shuts down gracefully.
+// Closing ln removes the socket file. The next daemon may bind the path while
+// this one still waits on open RPCs, so serve leaves the path alone.
+func serve(ctx context.Context, ln net.Listener, srv *server.Server) error {
 	rpcServer := connect.NewServer()
 	anovelv1connect.RegisterCoreServiceHandler(rpcServer, srv)
 	mux := http.NewServeMux()
@@ -163,7 +164,6 @@ func serve(ctx context.Context, ln net.Listener, srv *server.Server, socketPath 
 
 	select {
 	case err := <-serveErr:
-		_ = os.Remove(socketPath)
 		return err
 	case <-ctx.Done():
 	}
@@ -171,10 +171,8 @@ func serve(ctx context.Context, ln net.Listener, srv *server.Server, socketPath 
 	// Graceful shutdown waits up to 10s for open RPCs, streams included.
 	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	shutErr := httpServer.Shutdown(shutCtx)
-	_ = os.Remove(socketPath)
-	if shutErr != nil {
-		return fmt.Errorf("shutdown: %w", shutErr)
+	if err := httpServer.Shutdown(shutCtx); err != nil {
+		return fmt.Errorf("shutdown: %w", err)
 	}
 	return nil
 }
