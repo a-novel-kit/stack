@@ -497,6 +497,9 @@ There is no local runner, so verification is reading plus CI.
   of that name duplicates the context.
 - **A missing `permissions` block.** The job then inherits the repository default, which is wider than
   it needs. Declare the block on every job, `{}` included.
+- **One `gh api` call per item.** Both organizations share the token's rate limit, and every call
+  adds latency. Read the list once with `--paginate` or one GraphQL query, then filter it with a
+  single `jq`.
 - **A gate that can be skipped.** Gating on a `report-*`, master-only, or `if:`-guarded job skips
   every job behind it whenever the gate skips, and each skipped job passes its required check.
 - **`@master`, a floating ref, or a tag-pinned third-party action in `uses:`.** CI stops being

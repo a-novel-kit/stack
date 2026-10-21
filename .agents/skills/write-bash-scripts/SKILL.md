@@ -300,6 +300,9 @@ Most entries are stated in full in the sections above; this list is the review c
   ```bash
   VERSION="$(node -p "require('./package.json').version")"
   ```
+- **A process per loop iteration.** Each command substitution, `jq`, `grep`, or `gh api` call inside
+  a loop forks a process, and an API call also spends rate limit. Run the tool once over the whole
+  input and loop over its output.
 - **`source` instead of `.`.** Both work in bash, but `.` is POSIX. Use `.` for consistency.
 - **`tr ' ' '─'` for separator lines.** It corrupts the multi-byte UTF-8 character; build the rule
   with a pure-bash loop or `printf -v`.

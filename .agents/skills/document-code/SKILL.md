@@ -160,6 +160,13 @@ matters, in as few words as it takes, and stop.
 - **Let structure carry parallel facts.** Three or more facts of the same kind go in a list or a
   table, one per row, not in one long sentence. A short lead sentence says what they have in common.
   The reader then takes the most information from the least text.
+- **Keep blocks short.** A long block loses the reader the way a long sentence does. A paragraph
+  carries one idea in three or four sentences. A doc comment rarely needs more than two short
+  paragraphs. Move the rest into a list, under a heading, or into a comment beside the code it
+  explains.
+- **Untangle chained words.** A chain of nouns or `of` phrases, such as "the rotation policy of the
+  signing key of the tenant", makes the reader parse backwards. Name the thing, then describe it:
+  "The tenant's signing key rotates on a policy."
 
 This applies to every prose surface we write — doc comments, package docs, README sections, PR
 descriptions (see `open-pull-request`), and planning issues (see `plan-feature`). Load this section

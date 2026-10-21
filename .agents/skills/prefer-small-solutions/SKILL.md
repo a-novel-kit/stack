@@ -59,6 +59,61 @@ constraints; stop when further alternatives would not affect the decision.
 When two paths qualify, prefer the least total maintenance burden. Examine another option only when
 it could change that choice; routine edits need no extra plan, approval, or narrated ladder.
 
+## Shape the code for a scanning reader
+
+The reader holds little context but plans well. They scan blocks and known structures, then dig
+into the one place they came for. Shape every change for that path. These rules are soft: behavior,
+security, and performance win every conflict.
+
+- **Count instructions, not lines.** A plain error check, a short pipe chain, or one call taking an
+  object literal is one instruction, even across several lines. Custom error handling, a flag
+  threaded through branches, or three unrelated statements packed together are several.
+- **Reuse known structures.** A table, a table-driven test, or a layer in the codebase's established
+  shape reads at a glance, even when long. Follow the existing shape before inventing one.
+- **Separate small blocks with blank lines.** Give each block one job. The blank lines let the eye
+  jump between blocks, so a reader scans dozens of lines and stops only where needed.
+- **Keep indentation shallow.** Each level makes the reader track back to the enclosing loop or
+  branch. Use guard clauses, an early `return` or `continue`, and a named function for a long loop
+  body.
+- **Push required complexity down.** An entry point reads as an overview of named steps. The tricky
+  algorithm, the edge cases, and the optimization live in a leaf function the reader opens only when
+  needed. Moving complexity down does not reduce it; it clears the reader's main path.
+
+## Keep simple code fast
+
+Short code can hide a cost that grows with its input. Check these patterns whenever input size is
+not fixed by our own code, in new code and in code you touch. Fix a trap that costs something on
+realistic input. Leave an unmeasured micro-gain alone when it costs readability. The language skills
+add their own traps: [write-go](../write-go/SKILL.md#performance-traps),
+[write-frontend](../write-frontend/SKILL.md#performance-and-compatibility),
+[write-svelte](../write-svelte/SKILL.md#svelte-5-reactivity),
+[write-sql](../write-sql/SKILL.md#bounded-reads), and the pitfall lists of
+[write-bash-scripts](../write-bash-scripts/SKILL.md#common-pitfalls) and
+[write-github-actions](../write-github-actions/SKILL.md#common-pitfalls).
+
+- **Recursion.** Each call adds a stack frame, and neither Go nor JavaScript engines remove tail
+  calls. Depth that comes from input can exhaust the stack: nested JSON, a file tree, a user-built
+  outline, a dependency graph. Recursive closures also keep every enclosing scope alive until the
+  deepest call returns. Write a loop over an explicit stack (depth-first) or queue (breadth-first);
+  it costs one slice and reads as plainly. Keep recursion only when our own code bounds the depth to
+  a small number.
+- **Loop-invariant work inside a loop.** Compiling a regexp or template, building a formatter,
+  client, or schema, and parsing a constant belong before the loop, or at package or module level.
+- **A lookup inside a loop.** `slices.Contains`, `includes`, `find`, or `indexOf` over a second
+  collection makes the loop O(n·m). Build a map or `Set` once, before the loop.
+- **A copy inside a loop.** Spreading an accumulator (`{ ...acc, [key]: value }`) or appending to a
+  Go string with `+=` rebuilds the whole value on every turn, which is O(n²). Mutate a local
+  accumulator or use a builder.
+- **A round trip per item.** One query, API call, or command per element is the N+1 pattern. Batch
+  the call, join the query, or fetch the list once.
+- **Serial waits on independent work.** Awaiting independent calls one by one adds up their
+  latencies. Run them concurrently with a bound when ordering and rate limits allow.
+- **Unbounded growth.** A cache, map, buffer, slice, or queue fed by requests or input needs a size
+  or age bound. A multi-row query needs a `LIMIT`. A read of an untrusted body needs a size limit.
+- **Work that outlives its owner.** A goroutine, timer, ticker, listener, observer, interval, or
+  subscription needs an exit tied to its owner's lifetime. Server module state shared by every
+  request must not grow per request.
+
 ## Prove the simplification
 
 Before deleting or replacing logic, establish which invariant or existing capability makes it

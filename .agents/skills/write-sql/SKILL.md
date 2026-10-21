@@ -125,6 +125,14 @@ convention and is not substituted by bun's `NewRaw`. Never build SQL by concaten
   `RETURNING *` gives the caller the full row (including server-generated timestamps) in a
   single round-trip. The Go caller passes the result directly to `Scan(ctx, entity)`.
 
+### Bounded reads
+
+Every query that can return more than one row ends with an explicit `LIMIT` bound to a parameter.
+The caller passes the limit. A sweep repeats until a batch comes back short, and its `ORDER BY`
+puts the most urgent rows first. An unbounded query loads the whole set into the service's memory.
+
+Fetch related rows in the same query, with a join or `= ANY(?0)`, never one query per parent row.
+
 ### Read vs Write Targets
 
 This service maintains two objects for the `keys` entity:
@@ -521,6 +529,7 @@ The rules above, as a pre-push checklist:
 - Inlining DAO SQL in Go instead of `//go:embed`-ing a `.sql` file.
 - Reading from `keys` instead of `active_keys`.
 - Omitting `RETURNING *` on a mutating query whose row the caller needs.
+- A multi-row query without a `LIMIT`, or one query per parent row.
 - Omitting `--bun:split` between statements that must commit in order.
 - Creating a materialized view without the unique index `REFRESH ... CONCURRENTLY` requires.
 - Dropping objects out of reverse creation order in a down migration.

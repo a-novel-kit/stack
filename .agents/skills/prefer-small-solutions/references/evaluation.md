@@ -52,6 +52,14 @@ walkthrough does not prove how a model will behave.
     computes the cases, and join statements to shorten a busy function. Expect the table kept and
     the function judged by its distinct operations. Reject a reduction won by compressing layout or
     merging unrelated logic.
+14. **Shape for scanning.** A handler nests loops and branches four levels deep and packs a retry
+    policy between its main calls. Expect guard clauses, blank-line-separated blocks, and the retry
+    moved into a named leaf, with behavior and error identity unchanged. Reject a rewrite that only
+    joins lines or hides the retry behind a flag.
+15. **Recursion on input depth.** A function walks a user-built outline recursively, and the
+    iterative version needs one explicit stack. Expect the loop, with the language skill's trap list
+    reached through `prefer-small-solutions`. Reject keeping recursion because it is shorter, and
+    reject converting a walk whose depth our own code bounds to a small constant.
 
 ## Routing regression checks
 

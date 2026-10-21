@@ -286,6 +286,44 @@ loop when you encounter one — it is dead code on this minimum version.
 
 ---
 
+## Performance traps
+
+[prefer-small-solutions](../prefer-small-solutions/SKILL.md#keep-simple-code-fast) lists the traps
+every language shares. Go adds these:
+
+- **Recursion on input depth.** A goroutine stack grows by copying itself. Past the maximum size,
+  Go stops with a fatal error that `recover` cannot catch, and the whole service exits. Walk a tree
+  shaped by input with an explicit stack:
+
+  ```go
+  stack := []*Node{root}
+
+  for len(stack) > 0 {
+  	node := stack[len(stack)-1]
+  	stack = stack[:len(stack)-1]
+
+  	visit(node)
+
+  	stack = append(stack, node.Children...)
+  }
+  ```
+
+  Walk files with `fs.WalkDir`; the file system bounds its depth.
+- **`defer` inside a loop.** A deferred call runs when the function returns, not when the iteration
+  ends, so every file, lock, or span opened in the loop stays open until then. Move the loop body
+  into a function that defers its own cleanup.
+- **Setup repeated per call.** `regexp.MustCompile`, `template.Must(template.New(…).Parse(…))`, and
+  `&http.Client{}` belong in a package variable or the constructor. A client built per call also
+  loses connection reuse.
+- **A goroutine per item.** An unbounded fan-out has no ceiling on memory or open connections. Use
+  `errgroup.Group` with `SetLimit`.
+- **A slice grown to a known size.** Allocate it with `make([]T, 0, len(source))` so `append` never
+  reallocates.
+- **A body read whole.** `io.ReadAll` on an untrusted request or response body has no ceiling. Wrap
+  the body in `http.MaxBytesReader` or `io.LimitReader` first.
+
+---
+
 ## Common pitfalls
 
 - **`context.Context` stored in a struct.** Always a method parameter.

@@ -44,6 +44,11 @@ Load `write-frontend-tests` for tests or stories and `write-design-system` for u
   observers, timers, and listeners.
 - Keep effects narrowly dependent and safe to repeat. Never depend on effect ordering to make state
   valid.
+- Never write, inside an `$effect`, state that the same effect reads. The write schedules the effect
+  again. Compute the value with `$derived`, or read the input through `untrack` when the write is a
+  genuine synchronization.
+- Render a tree whose depth comes from data from a flat list of `{ node, depth }` entries, built by
+  an explicit-stack walk. A recursive component nests one instance, with its own effects, per level.
 - Use callback props for component events in new Svelte 5 code. Type payloads and callback return
   values; do not dispatch an event merely to mutate parent state indirectly.
 - Use event attributes such as `onclick` in new Svelte 5 code. Do not mix legacy `on:` directives
