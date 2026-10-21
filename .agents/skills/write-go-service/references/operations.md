@@ -71,8 +71,11 @@ func (h *RestUserList) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     defer span.End()
 
     var request RestUserListRequest
-    if err := muxDecoder.Decode(&request, r.URL.Query()); err != nil {
+
+    err := muxDecoder.Decode(&request, r.URL.Query())
+    if err != nil {
         httpf.HandleError(ctx, h.logger, w, span, httpf.ErrMap{nil: http.StatusBadRequest}, err)
+
         return
     }
 
