@@ -60,7 +60,7 @@ func Notify(w io.Writer, current string) {
 	if os.Getenv(disableEnv) != "" || !semver.IsValid(current) {
 		return
 	}
-	latest := latestVersion()
+	latest := latestVersion(filepath.Join(paths.State(), cacheFile), fetchLatest)
 	if !shouldNotify(current, latest) {
 		return
 	}
@@ -76,20 +76,20 @@ func shouldNotify(current, latest string) bool {
 }
 
 // latestVersion returns the latest CLI release version, served from the cache
-// while it is fresh and otherwise fetched from the proxy (refreshing the cache).
+// at path while it is fresh and otherwise fetched (refreshing the cache).
 // Returns "" on any failure.
-func latestVersion() string {
-	path := filepath.Join(paths.State(), cacheFile)
-	// The cached version has to be valid as well as fresh, so a corrupt or
+//
+// A failed fetch is cached as "", so an unreachable proxy costs one timeout per
+// checkInterval rather than one per command.
+func latestVersion(path string, fetch func() string) string {
+	// A fresh cached version has to be valid or empty, so a corrupt or
 	// hand-edited entry falls through to a fetch.
-	if entry, err := readCache(path); err == nil &&
-		time.Since(entry.LastCheck) < checkInterval && semver.IsValid(entry.Latest) {
+	if entry, err := readCache(path); err == nil && time.Since(entry.LastCheck) < checkInterval &&
+		(entry.Latest == "" || semver.IsValid(entry.Latest)) {
 		return entry.Latest
 	}
-	latest := fetchLatest()
-	if latest != "" {
-		_ = writeCache(path, cacheEntry{LastCheck: time.Now(), Latest: latest})
-	}
+	latest := fetch()
+	_ = writeCache(path, cacheEntry{LastCheck: time.Now(), Latest: latest})
 	return latest
 }
 

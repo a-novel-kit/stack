@@ -65,3 +65,61 @@ func TestReadCacheMissing(t *testing.T) {
 		t.Error("expected an error reading a missing cache file, got nil")
 	}
 }
+
+// TestLatestVersion pins when the check fetches: once per checkInterval, a
+// failed fetch included, and again for a stale or invalid cache.
+func TestLatestVersion(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	testCases := []struct {
+		name    string
+		cached  *cacheEntry // nil leaves no cache file
+		fetched string      // what each fetch returns; "" is a failed fetch
+		want    string
+		// wantFetches counts the fetches over two consecutive calls.
+		wantFetches int
+	}{
+		{name: "Success/FetchOnce", fetched: "v1.2.0", want: "v1.2.0", wantFetches: 1},
+		{
+			name:   "Success/FreshCache",
+			cached: &cacheEntry{LastCheck: now, Latest: "v1.1.0"}, fetched: "v1.2.0", want: "v1.1.0",
+		},
+		{
+			name:    "Success/StaleCache",
+			cached:  &cacheEntry{LastCheck: now.Add(-checkInterval - time.Minute), Latest: "v1.1.0"},
+			fetched: "v1.2.0", want: "v1.2.0", wantFetches: 1,
+		},
+		{
+			name:   "Success/InvalidCache",
+			cached: &cacheEntry{LastCheck: now, Latest: "garbage"}, fetched: "v1.2.0", want: "v1.2.0", wantFetches: 1,
+		},
+		{name: "Error/FailedFetchCached", want: "", wantFetches: 1},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			path := filepath.Join(t.TempDir(), cacheFile)
+			if testCase.cached != nil {
+				if err := writeCache(path, *testCase.cached); err != nil {
+					t.Fatalf("seed cache: %v", err)
+				}
+			}
+			fetches := 0
+			fetch := func() string {
+				fetches++
+				return testCase.fetched
+			}
+			for call := range 2 {
+				if got := latestVersion(path, fetch); got != testCase.want {
+					t.Fatalf("call %d: latestVersion = %q, want %q", call+1, got, testCase.want)
+				}
+			}
+			if fetches != testCase.wantFetches {
+				t.Errorf("fetched %d times over two calls, want %d", fetches, testCase.wantFetches)
+			}
+		})
+	}
+}
