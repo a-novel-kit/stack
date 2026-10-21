@@ -167,9 +167,11 @@ status, a label approval, a proof. A job that must test exactly the approved com
 by that sha. `pull-bot`'s default, `github.head_ref`, is the branch tip, which a push can move
 mid-run.
 
-Each job declares its own `permissions` block. Read-only is the floor (`contents: read`); image
-publishing adds `packages: write`, `attestations: write`, `id-token: write`; a job whose action mints
-its own App token declares `permissions: {}`, because the default token is never used.
+Each job declares its own `permissions` block. Read-only is the floor (`contents: read`); image and
+npm publishing add `packages: write`, `attestations: write`, `id-token: write`; a job whose action
+mints its own App token declares `permissions: {}`, because the default token is never used. A
+`packages: write` token writes the repository's packages from any ref, so no environment or ruleset
+guards a registry; the attestation is what marks a release's output.
 
 Pin every `a-novel-kit/workflows` reference to a release tag. Renovate groups the whole workflows
 repo under one `a-novel-kit workflows` update, so a repo's references move together and must sit at
@@ -407,15 +409,24 @@ a list that outgrows 80 columns as a block sequence; `pnpm lint:templates` check
 
 Two of them keep dependency PRs moving without a person. `auto-approve-dependabot.yaml` approves the
 bots' PRs, withholding approval while `renovate/stability-days` is pending; its `status` trigger
-approves once Renovate marks the update stable, and its job needs `statuses: read` because the App
-cannot read commit statuses. `recover-prs.yaml` re-arms auto-merge on a PR the merge queue dropped for
-`checks_timed_out`, and dispatches Renovate when a merge leaves a dependency PR conflicting.
+approves once Renovate marks the update stable. `recover-prs.yaml` re-arms auto-merge on a PR the
+merge queue dropped for `checks_timed_out`, and dispatches Renovate when a merge leaves a dependency
+PR conflicting.
+
+The auto-approver also withholds a first-party version without its release proof, in every mode.
+`generic-actions/verify-release-proof` reads each first-party npm package a `pnpm-lock.yaml` adds and
+each first-party image pinned by a release tag. It requires an attestation over the exact bytes from
+the producer's `release.yaml` at the version's tag, on a GitHub-hosted runner, and an immutable Release
+of that tag from the org's release App. Renovate therefore pins first-party images by digest. The
+first-party age exemptions stay, since the proof makes waiting pointless. The job token makes the
+reads the App cannot: `statuses`, `contents`, `attestations` and `packages`, all read. The approval
+and its auto-merge name the commit the job checked, so a later push needs its own.
 
 On `a-novel/infra` the auto-approver runs strict, because a merge there deploys production. A bot's
 PR merges on its own only as a release pin, or as a version update Renovate itself put on
 auto-merge whose every changed line moves only a dependency reference's version, or a digest with its
 version. Anything else, Renovate's `automerge: false` updates included, waits for a maintainer's or
-an admin's review. The bot's approval names the commit it classified, so a later push needs its own.
+an admin's review.
 
 A person's PR posts to the Discord reviews feed alone, through `notify-pr-run`: a review request
 pings its reviewers, a review or a drop from the merge queue pings its owner, and its merge posts
