@@ -46,9 +46,8 @@ inputs from Phase 1 before writing the file; an unresolved `{{…}}` in the outp
 The service runs as published OCI images plus Postgres; both surfaces are stateless and scale to
 multiple replicas.
 
-> **OpenTofu modules are the planned canonical deployment path.** Until they land, deploy the
-> images with any container orchestrator — the composition below is the reference for which
-> images to run, how they wire together, and the environment they expect.
+Deploy the images with any container orchestrator. The composition below shows which images to run,
+how they wire together, and the environment they expect.
 
 | Image | Role |
 | ----- | ---- |
