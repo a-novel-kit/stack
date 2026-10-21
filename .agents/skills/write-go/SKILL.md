@@ -174,7 +174,7 @@ says what the data is:
   `switch` or call argument becomes a named variable declared just before the statement.
 - A closure longer than three lines becomes a named function or method, unless a closure is the
   idiomatic form there, as for a `t.Run` body, an `errgroup.Go` task or an HTTP handler. In a
-  service's `internal/` layers, a closure that takes the context, such as a `WithinTx` body or a
+  service's dao, core and handlers layers, a closure that takes the context, such as a `WithinTx` body or a
   retried write, stays a closure: the `a-novel-must-open-span` semgrep rule requires a span in every
   named function there, and a wrapper's span only repeats the one below it.
 

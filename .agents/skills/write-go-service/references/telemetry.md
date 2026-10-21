@@ -11,6 +11,10 @@ Every DAO and service operation is wrapped in a span. A failure path returns thr
 operation's span: write-go's [declarations rule](../../write-go/SKILL.md#declarations-outside-control-flow)
 keeps it a closure.
 
+The `a-novel-must-open-span` semgrep rule requires that span in every function of the dao, core and
+handlers layers that takes a context. `internal/lib` is tooling rather than a layer, so its functions
+open no span: the layer that calls one reports its errors on its own span.
+
 ```go
 ctx, span := otel.Tracer().Start(ctx, "dao.PgUserSelect")
 defer span.End()
