@@ -110,6 +110,8 @@ human can verify the call.
 - **Tooling dependencies** (generators, linters, test tools) stay isolated in their own
   `<tool>.mod` / `.sum` files, never in the main `go.mod`, and are never `go install`-ed globally —
   see `write-go`'s tools policy.
+- **GitHub Actions** from outside `a-novel-kit/workflows` are pinned to their release commit, checked
+  against the upstream default branch or an immutable release — see `write-github-actions`.
 - **Kit repos hold a stricter bar** than services for taking on any dependency (`write-go-kit`).
 - **A manifest change waits for its reviewer.** The required `check-dependencies` check fails a pull
   request that changes `go.mod`, a tool's `.mod`, `go.work`, `package.json` or `pnpm-workspace.yaml`

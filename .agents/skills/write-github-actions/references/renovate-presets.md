@@ -60,8 +60,10 @@ breaks something:
 ## Release age
 
 `minimumReleaseAge: "3 days"` applies to `matchDatasources: ["npm"]` and stays at or above pnpm's
-own release age. The approval workflow withholds a Renovate PR's approval while
-`renovate/stability-days` is pending, because no ruleset requires that status.
+own release age. Third-party GitHub Actions wait the same three days
+(`matchManagers: ["github-actions"]`), and first-party releases skip both gates. The approval
+workflow withholds a Renovate PR's approval while `renovate/stability-days` is pending, because no
+ruleset requires that status.
 
 A release without a timestamp cannot pass the gate: under the default `minimumReleaseAgeBehaviour:
 timestamp-required` it stays pending forever. MCR images and lockfile maintenance have none.
