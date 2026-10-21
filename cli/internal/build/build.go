@@ -214,10 +214,10 @@ func repoRoot(t detect.Target) string {
 	return t.Dir
 }
 
-// allocPorts binds an ephemeral TCP port for each var name, closes it, and
-// returns "NAME=port" entries. A small race remains between releasing a port
-// and the container claiming it, accepted as unavoidable for local runs. Binds
-// within one call never alias, since each listener holds its port until closed.
+// allocPorts binds an ephemeral TCP port for each var name and returns
+// "NAME=port" entries. Every listener holds its port until allocPorts returns,
+// so binds within one call never alias. A small race remains between releasing
+// a port and the container claiming it, accepted as unavoidable for local runs.
 func allocPorts(names []string) ([]string, error) {
 	out := make([]string, 0, len(names))
 	for _, n := range names {
@@ -225,8 +225,8 @@ func allocPorts(names []string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
+		defer func() { _ = l.Close() }()
 		addr, ok := l.Addr().(*net.TCPAddr)
-		_ = l.Close()
 		if !ok {
 			return nil, fmt.Errorf("unexpected listener address type %T", l.Addr())
 		}

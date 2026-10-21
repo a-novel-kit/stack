@@ -1,6 +1,7 @@
 package build
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,6 +113,31 @@ func TestComposeEnv(t *testing.T) {
 	}
 	if vars["POSTGRES_USER"] != "postgres" {
 		t.Errorf("POSTGRES_USER = %q, want the local default", vars["POSTGRES_USER"])
+	}
+}
+
+// TestAllocPorts pins that one call never hands two vars the same port.
+func TestAllocPorts(t *testing.T) {
+	t.Parallel()
+
+	names := make([]string, 64)
+	for i := range names {
+		names[i] = fmt.Sprintf("PORT_%d", i)
+	}
+	entries, err := allocPorts(names)
+	if err != nil {
+		t.Fatalf("allocPorts: %v", err)
+	}
+	seen := map[string]string{}
+	for i, entry := range entries {
+		name, port, _ := strings.Cut(entry, "=")
+		if name != names[i] {
+			t.Fatalf("entry %d = %q, want var %s", i, entry, names[i])
+		}
+		if other, ok := seen[port]; ok {
+			t.Fatalf("%s and %s share port %s", other, name, port)
+		}
+		seen[port] = name
 	}
 }
 
