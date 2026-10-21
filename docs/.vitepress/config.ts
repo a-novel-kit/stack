@@ -69,6 +69,7 @@ export default defineConfig({
           { text: "Add a member", link: "/sysadmins/add-member" },
           { text: "Promote a member", link: "/sysadmins/promote-member" },
           { text: "Offboard a member", link: "/sysadmins/offboard-member" },
+          { text: "Respond to a compromise", link: "/sysadmins/respond-to-compromise" },
         ],
       },
     ],
