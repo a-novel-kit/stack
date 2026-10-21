@@ -309,6 +309,7 @@ every language shares. Go adds these:
   ```
 
   Walk files with `fs.WalkDir`; the file system bounds its depth.
+
 - **`defer` inside a loop.** A deferred call runs when the function returns, not when the iteration
   ends, so every file, lock, or span opened in the loop stays open until then. Move the loop body
   into a function that defers its own cleanup.
