@@ -133,6 +133,9 @@ puts the most urgent rows first. An unbounded query loads the whole set into the
 
 Fetch related rows in the same query, with a join or `= ANY(?0)`, never one query per parent row.
 
+An existence check needs a single row. It ends with `LIMIT 1`, and its caller tests for any row. A
+test for exactly one row reads two unexpected matches as none.
+
 ### Read vs Write Targets
 
 This service maintains two objects for the `keys` entity:

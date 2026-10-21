@@ -85,6 +85,11 @@ its connection, so consumers trace without wiring of their own and never add a s
 `traceparent` carries its trace ID: without the handler each server starts a new trace, and no
 other check notices.
 
+Every package the client imports joins each consumer's binary and runs its initialization there.
+The client imports no `core` or `dao` package. A type it shares with the service, such as the
+claims of a token, lives in a leaf package under `internal/models`. Check the closure with
+`go list -deps ./pkg/go`.
+
 ---
 
 ## cmd/ (targets)
