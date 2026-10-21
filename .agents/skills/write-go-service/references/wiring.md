@@ -40,7 +40,8 @@ Configuration structs + loading from env vars or YAML. No logic beyond parsing a
 
 Only tools unavailable from dependencies or stdlib. Keep it **as small as possible — ideally
 nonexistent**. Before adding anything: check stdlib/deps first, then ask the developer whether it
-belongs here at all (vs. inside the relevant package). During maintenance, look for `lib/` code a
+belongs here at all (vs. inside the relevant package). Lib functions open no span; the calling
+layer's span reports their errors (see [telemetry](telemetry.md)). During maintenance, look for `lib/` code a
 newer upstream now subsumes, and delete it.
 
 **Accepted exception: genai's provider connectors** (`internal/lib/connectors`). They stay here until

@@ -256,6 +256,7 @@ comment, then remove it in a coordinated release.
 An intended break, such as a package that was never released or a planned major, needs no admin
 override. A reviewer adds the `buf skip breaking` label, and `bufbuild/buf-action` skips the
 breaking check on that pull request. `a-novel repo update` provisions the label in every repository.
+`service-template` skips the check altogether: its contract changes in place, as its migrations do.
 
 ---
 

@@ -16,15 +16,19 @@ var userSelectQuery string
 // ErrUserSelectNotFound is returned when no user matches the requested ID.
 var ErrUserSelectNotFound = errors.New("user not found")
 
-// PgUserSelect retrieves a single active user by their ID.
-type PgUserSelect struct{}
-
 // UserSelectRequest holds the parameters for a [PgUserSelect.Exec] call.
 type UserSelectRequest struct {
     ID uuid.UUID
 }
 
-func (r *PgUserSelect) Exec(ctx context.Context, request *UserSelectRequest) (*User, error) {
+// PgUserSelect retrieves a single active user by their ID.
+type PgUserSelect struct{}
+
+func NewPgUserSelect() *PgUserSelect {
+    return &PgUserSelect{}
+}
+
+func (dao *PgUserSelect) Exec(ctx context.Context, request *UserSelectRequest) (*User, error) {
     ctx, span := otel.Tracer().Start(ctx, "dao.PgUserSelect")
     defer span.End()
 
@@ -34,24 +38,31 @@ func (r *PgUserSelect) Exec(ctx context.Context, request *UserSelectRequest) (*U
     }
 
     var user User
-    if err = db.NewRaw(userSelectQuery, request.ID).Scan(ctx, &user); err != nil {
-        if errors.Is(err, sql.ErrNoRows) {
-            err = errors.Join(err, ErrUserSelectNotFound)
-        }
+
+    err = db.NewRaw(userSelectQuery, request.ID).Scan(ctx, &user)
+    if errors.Is(err, sql.ErrNoRows) {
+        err = errors.Join(err, ErrUserSelectNotFound)
+    }
+
+    if err != nil {
         return nil, otel.ReportError(span, fmt.Errorf("execute query: %w", err))
     }
 
     return &user, nil
 }
-
-func NewPgUserSelect() *PgUserSelect { return &PgUserSelect{} }
 ```
+
+The file reads in one order: the embedded query, the sentinels, the request, the struct, its
+constructor, then `Exec`. `Exec` opens its span, then repeats one shape: a call, then the block that
+handles its error, at one indentation level. The handle from `postgres.GetContext` is `db`, since it
+is a transaction only when a caller opened one.
 
 - **SQL** lives in a companion `.sql` file embedded with `//go:embed` into a package-level variable
   — never an inline string literal. Use **`write-sql`** for all `.sql` work (parameterization,
   return patterns, formatting, the read-vs-write target rules).
 - **Errors:** map a database error onto a domain sentinel by _joining_ it
-  (`err = errors.Join(err, ErrXxxNotFound)`), then `otel.ReportError` it like any other failure —
+  (`err = errors.Join(err, ErrXxxNotFound)`) in its own block right after the query, never inside
+  the `if err != nil` that follows. Then `otel.ReportError` it like any other failure —
   **including the not-found case**. A missing row is a real outcome the DAO encountered; whether
   it's benign is the caller's call (ultimately the handler's, by discarding it).
 - **Telemetry:** `otel.ReportError(span, err)` on every failure path; the happy path returns its
