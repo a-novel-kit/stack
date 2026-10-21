@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 
@@ -39,8 +40,9 @@ func sessionKey(stack, service string) string { return stack + "/" + service }
 // references, released when KillInfra tears the infra down.
 func infraConsumer(stack, service string) string { return sessionKey(stack, service) + "-infra" }
 
-// InfraSession returns a snapshot of the per-service infra session, or
-// (zero, false) if no session is recorded yet.
+// InfraSession returns a copy of the per-service infra session, or
+// (zero, false) if no session is recorded yet. The copy shares no state with
+// the live session, so a caller reads it without holding sessMu.
 func (r *Runner) InfraSession(stack, service string) (infraSession, bool) {
 	r.sessMu.RLock()
 	defer r.sessMu.RUnlock()
@@ -48,7 +50,9 @@ func (r *Runner) InfraSession(stack, service string) (infraSession, bool) {
 	if !ok {
 		return infraSession{}, false
 	}
-	return *s, true
+	snapshot := *s
+	snapshot.OneShotResults = maps.Clone(s.OneShotResults)
+	return snapshot, true
 }
 
 // InfraSessionRef identifies one tracked infra session by its stack and
