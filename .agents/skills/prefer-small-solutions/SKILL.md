@@ -87,6 +87,7 @@ realistic input. Leave an unmeasured micro-gain alone when it costs readability.
 add their own traps: [write-go](../write-go/SKILL.md#performance-traps),
 [write-frontend](../write-frontend/SKILL.md#performance-and-compatibility),
 [write-svelte](../write-svelte/SKILL.md#svelte-5-reactivity),
+[write-platform](../write-platform/SKILL.md#authentication-and-server-policy),
 [write-sql](../write-sql/SKILL.md#bounded-reads), and the pitfall lists of
 [write-bash-scripts](../write-bash-scripts/SKILL.md#common-pitfalls) and
 [write-github-actions](../write-github-actions/SKILL.md#common-pitfalls).
@@ -95,19 +96,28 @@ add their own traps: [write-go](../write-go/SKILL.md#performance-traps),
   calls. Depth that comes from input can exhaust the stack: nested JSON, a file tree, a user-built
   outline, a dependency graph. Recursive closures also keep every enclosing scope alive until the
   deepest call returns. Write a loop over an explicit stack (depth-first) or queue (breadth-first);
-  it costs one slice and reads as plainly. Keep recursion only when our own code bounds the depth to
-  a small number.
+  it costs one slice and reads as plainly. Keep recursion only when the depth comes from data we
+  author and stays small, such as our own package tree or type nesting in a lint script.
 - **Loop-invariant work inside a loop.** Compiling a regexp or template, building a formatter,
   client, or schema, and parsing a constant belong before the loop, or at package or module level.
+- **Work repeated on every read.** A getter or accessor that derives, clones, or formats a value
+  repeats that work for every reader. Derive the value once, when its inputs change.
 - **A lookup inside a loop.** `slices.Contains`, `includes`, `find`, or `indexOf` over a second
   collection makes the loop O(n·m). Build a map or `Set` once, before the loop.
 - **A copy inside a loop.** Spreading an accumulator (`{ ...acc, [key]: value }`) or appending to a
   Go string with `+=` rebuilds the whole value on every turn, which is O(n²). Mutate a local
   accumulator or use a builder.
-- **A round trip per item.** One query, API call, or command per element is the N+1 pattern. Batch
-  the call, join the query, or fetch the list once.
+- **A round trip per item.** One query, API call, or command per element, or per tick of a poll
+  loop, is the N+1 pattern. Batch the call, join the query, or fetch the list once. Two parallel
+  steps of one request that ask a backend the same question are the same trap; share the answer.
 - **Serial waits on independent work.** Awaiting independent calls one by one adds up their
-  latencies. Run them concurrently with a bound when ordering and rate limits allow.
+  latencies. Run them concurrently with a bound when ordering and rate limits allow. Serial work
+  inside one fixed timeout also makes the last calls fail first.
+- **A resource left unread.** An early return that abandons an HTTP body, a pipe, or a stream keeps
+  its connection, file descriptor, or writer goroutine alive. Release it on every path, error paths
+  included.
+- **A lock held across I/O.** Every caller then waits for the slowest network or disk call. Do the
+  I/O outside the lock, then swap its result in under a short one.
 - **Unbounded growth.** A cache, map, buffer, slice, or queue fed by requests or input needs a size
   or age bound. A multi-row query needs a `LIMIT`. A read of an untrusted body needs a size limit.
 - **Work that outlives its owner.** A goroutine, timer, ticker, listener, observer, interval, or

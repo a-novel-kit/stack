@@ -469,8 +469,13 @@ each rule hid; delete a rule that keeps matching nothing. A test that runs code 
 
 There is no local runner, so verification is reading plus CI.
 
-- Run `pnpm lint:stylecheck` — workflow YAML is prettier-formatted like any other file, and an
-  unformatted one fails the node lane.
+- Run the repository's prettier check (`pnpm lint:stylecheck`, or `pnpm lint` in the workflows
+  repo) — workflow YAML is prettier-formatted like any other file, and an unformatted one fails the
+  node lane.
+- Prove a refactor of an untested step against the old one. Extract both `run:` scripts, stub the
+  network CLIs (`gh`, `curl`, `gcloud`) as scripts that log their arguments, and diff stdout, the
+  step summary, the outputs and the call logs across scenarios. For a deadline-bound loop, stub
+  `sleep` and shorten the deadline in both copies.
 - For a composite action, grep the manifest for `${{ vars.`, `${{ secrets.`, `${{ needs.`,
   `${{ matrix.` and `${{ strategy.` before pushing. The workflows repo's `pnpm lint` checks this; a
   repo-local action under `.github/actions/` does not.
@@ -498,8 +503,8 @@ There is no local runner, so verification is reading plus CI.
 - **A missing `permissions` block.** The job then inherits the repository default, which is wider than
   it needs. Declare the block on every job, `{}` included.
 - **One `gh api` call per item.** Both organizations share the token's rate limit, and every call
-  adds latency. Read the list once with `--paginate` or one GraphQL query, then filter it with a
-  single `jq`.
+  adds latency. Read the list once with `--paginate` and `per_page=100`, or one GraphQL query, then
+  filter it with a single `jq`. The REST default page holds 30 items.
 - **A gate that can be skipped.** Gating on a `report-*`, master-only, or `if:`-guarded job skips
   every job behind it whenever the gate skips, and each skipped job passes its required check.
 - **`@master`, a floating ref, or a tag-pinned third-party action in `uses:`.** CI stops being

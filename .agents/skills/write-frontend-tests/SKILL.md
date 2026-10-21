@@ -81,6 +81,10 @@ Do not manufacture cases that the public contract cannot reach.
 - Build a fresh `Response` per call (`mockImplementation(async () => Response.json(…))`). A body
   reads once, so `mockResolvedValue(response)` hands every later call a consumed body, and the
   failure looks like a parsing bug in the code under test.
+- Pin performance contracts with direct assertions. To prove a body is released, keep the stubbed
+  `Response` and assert `response.bodyUsed` after the call. To prove calls run in parallel, return a
+  promise that never resolves and assert synchronously that every independent call has started. A
+  serial loop then fails at once instead of timing out.
 
 ## Vitest and Testing Library
 
@@ -164,6 +168,9 @@ During stage 3 of `develop-feature`, create or update all affected Playwright te
 work. Cover the changed journeys and browser contracts, then run the relevant browser suite. Reuse
 the existing harness; when one is missing, include the smallest suitable Playwright setup in the
 agreed scope, following `choose-dependency`. Do not silently defer required browser validation.
+
+Separate a journey's phases with blank lines. When a loop wraps `test.step`, move the step body into
+a named function, so the loop reads as the list of cases.
 
 For rendered changes, capture deterministic screenshots of the affected states and supported
 viewports and compare them with reviewed baselines. Stabilize data, fonts, locale, theme, and motion.

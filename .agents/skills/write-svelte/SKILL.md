@@ -44,9 +44,13 @@ Load `write-frontend-tests` for tests or stories and `write-design-system` for u
   observers, timers, and listeners.
 - Keep effects narrowly dependent and safe to repeat. Never depend on effect ordering to make state
   valid.
-- Never write, inside an `$effect`, state that the same effect reads. The write schedules the effect
-  again. Compute the value with `$derived`, or read the input through `untrack` when the write is a
-  genuine synchronization.
+- Do not write, inside an `$effect`, state that the same effect reads. The write schedules the
+  effect again. Compute the value with `$derived`, or read the input through `untrack` when the write
+  is a genuine synchronization. One exception holds: an effect may repair owned state that must keep
+  the repair across later prop changes, such as clamping an active index after the options shrink.
+  The repair must converge after one write.
+- Keep a getter on a controller or store cheap. A getter runs on every read, so a clone or a
+  formatter built inside it repeats per read. Compute the value with `$derived` and return it.
 - Render a tree whose depth comes from data from a flat list of `{ node, depth }` entries, built by
   an explicit-stack walk. A recursive component nests one instance, with its own effects, per level.
 - Use callback props for component events in new Svelte 5 code. Type payloads and callback return

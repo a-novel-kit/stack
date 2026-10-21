@@ -157,6 +157,10 @@ service:
   Uikit owns rendered fields and errors, so platforms do not import Formsnap or another component layer.
 - Server loads establish the session and authorization context. UI visibility is convenience;
   privileged routes and actions enforce permissions again on the server.
+- Check the session once per request. SvelteKit runs the layout and page server loads in parallel,
+  so a context built per call asks the authentication service once per load, and once more in an
+  action. Keep one authentication context per request in a `WeakMap` keyed by `event.cookies`, which
+  every hook, action and load of a request shares. A cookie write discards the cached check.
 - Create an anonymous service session lazily, only when an anonymous protected operation needs it.
   An ordinary page load must not mint a token merely to render signed-out UI. Keep its cookie until
   the token expires: a visitor gets only a few anonymous tokens, and a browser restart must not
@@ -213,6 +217,8 @@ names, validation messages, titles, and metadata use message keys; logs and prot
   discoverable keys; they do not receive pretranslated screen-sized dictionaries.
 - Declare each product message only in its static catalog. Do not mirror catalogs into `*Copy`
   interfaces, copy-builder functions, story-only dictionaries, or other programmatic message maps.
+  A table of `(t) => t("key")` selectors is such a map; call `t()` with the static key where the
+  text renders.
   Stable domain and action-result codes remain application state; translate them at the rendering
   boundary instead of returning visible prose from wiring.
 - Install the same product-owned localization provider around the application, Storybook stories,

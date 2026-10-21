@@ -59,7 +59,7 @@ walkthrough does not prove how a model will behave.
 15. **Recursion on input depth.** A function walks a user-built outline recursively, and the
     iterative version needs one explicit stack. Expect the loop, with the language skill's trap list
     reached through `prefer-small-solutions`. Reject keeping recursion because it is shorter, and
-    reject converting a walk whose depth our own code bounds to a small constant.
+    reject converting a lint script's walk over our own package tree, whose depth stays small.
 
 ## Routing regression checks
 

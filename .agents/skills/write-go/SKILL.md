@@ -321,6 +321,19 @@ every language shares. Go adds these:
   reallocates.
 - **A body read whole.** `io.ReadAll` on an untrusted request or response body has no ceiling. Wrap
   the body in `http.MaxBytesReader` or `io.LimitReader` first.
+- **A pipe abandoned by an early return.** The writer of an `io.Pipe` or a `cmd.StdoutPipe` blocks
+  once nobody reads, and `cmd.Wait` blocks with it. `defer` the reader's `Close` right after
+  creating it, or kill the process before `Wait` on a failure path.
+- **A shared fetch under a lock or a request context.** A cache refresh that fetches while holding
+  its write lock stalls every reader for the fetch's latency. One caller's context also cancels the
+  fetch for every waiter. Fetch outside the lock under `context.WithoutCancel(ctx)` with its own
+  timeout, then swap the result in.
+- **`fmt.Sprintf` to join strings on a hot path.** It boxes every argument into an `any`, and each
+  box allocates. Join with `+` or `strings.Builder`. Take one segment with `strings.Cut`, not
+  `strings.SplitN`.
+
+`time.After` inside a loop is not a leak on Go 1.23 and later: the runtime collects an unreferenced
+timer. Do not replace it with a `Ticker` for that reason; a ticker changes the pacing.
 
 ---
 

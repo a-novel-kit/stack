@@ -267,8 +267,8 @@ or instruction to find an earlier link does not replace it.
 - Handle offline, timeout, retry, and partial-response behavior at the owning boundary. Never retry a
   non-idempotent operation invisibly.
 - Apply the shared traps in
-  [prefer-small-solutions](../prefer-small-solutions/SKILL.md#keep-simple-code-fast). Browsers add
-  these:
+  [prefer-small-solutions](../prefer-small-solutions/SKILL.md#keep-simple-code-fast). JavaScript
+  adds these, in the browser and on the server:
   - Deep recursion throws `RangeError` and keeps every enclosing closure alive. Walk trees shaped by
     data with an explicit stack.
   - An async function that awaits a call to itself, such as a polling `return poll()`, chains one
@@ -279,6 +279,9 @@ or instruction to find an earlier link does not replace it.
     call, item, or render.
   - Keep server module state immutable or bounded. Every SSR request shares it, so a per-user entry
     is a leak and a privacy defect.
+  - On the server, read or cancel every `fetch` response body, error statuses included:
+    `await response.body?.cancel()` before an early `return` or `throw`. Node's undici returns the
+    connection to its pool only once the body settles.
 
 ## Completion checklist
 
