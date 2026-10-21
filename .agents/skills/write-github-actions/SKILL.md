@@ -115,6 +115,13 @@ runs:
   data instead of code.
 - Start each script with `set -euo pipefail`. Report failures with `::error::` so they surface as
   annotations, and write operator-facing results to `$GITHUB_STEP_SUMMARY`.
+- Check every tool an action installs against a pin its release cannot rewrite: whoever replaces a
+  release's files replaces its `checksums.txt` too. Install a Go tool with
+  `go install <module>@v<version>`, which builds the source Go's checksum database recorded, as
+  `scan-secrets` and `refresh-apko-locks` do. A downloaded binary takes a caller `sha256` input on the
+  line after `version` and passes `sha256sum --check` before it runs, and a datasource in the base
+  Renovate preset moves the hash with the version
+  ([release files pinned by hash](references/renovate-presets.md#release-files-pinned-by-hash)).
 - Reference a sibling action in the same repo by its pinned tag
   (`a-novel-kit/workflows/generic-actions/pull-bot@v1.20.1`). A relative `./` path would bind a
   released action to whatever sits on `master`, so a release could not be internally consistent.

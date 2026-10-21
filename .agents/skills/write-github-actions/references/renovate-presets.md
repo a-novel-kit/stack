@@ -9,6 +9,7 @@ Contents:
 - [One branch carries one configuration](#one-branch-carries-one-configuration)
 - [Indirect Go requirements](#indirect-go-requirements)
 - [Release age](#release-age)
+- [Release files pinned by hash](#release-files-pinned-by-hash)
 - [Proving a rule](#proving-a-rule)
 
 ## Where the configuration lives
@@ -35,7 +36,8 @@ branch, so a modfile sharing a branch can impose its options on another and sile
 tidy`.
 
 - Give every Go tool modfile its own `additionalBranchPrefix` (`golangci-lint-`, `gotestsum-`,
-  `buf-`, `mockery-`). Never add a modfile to `gomod.managerFilePatterns` without one.
+  `govulncheck-`, `buf-`, `mockery-`). Never add a modfile to `gomod.managerFilePatterns` without
+  one; `tests/renovate.test.mjs` fails when one is missing.
 - A group spanning managers, such as a service's module, images and npm client, carries the union
   of options on the group rule: `postUpdateOptions` concatenates across rules; `goGetDirs`,
   `postUpgradeTasks` and `groupName` take the last matching rule.
@@ -87,6 +89,27 @@ timestamp-required` it stays pending forever. MCR images and lockfile maintenanc
     # renovate: datasource=npm depName=playwright
     image: mcr.microsoft.com/playwright:v1.64.0-noble
   ```
+
+## Release files pinned by hash
+
+A workflow pin of a downloaded tool carries the SHA-256 of the file its action downloads, on the
+line after `version`. The base preset's workflow manager reads it as the digest:
+
+```yaml
+# renovate: datasource=custom.hadolint depName=hadolint/hadolint
+version: "2.15.1"
+sha256: "c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507"
+```
+
+- Each tool has a custom datasource in `renovate/base.json` that reads its file's `digest` from
+  GitHub's releases API and lists only the releases that carry one. A new tool adds its own, modeled
+  on `shellcheck` and `hadolint`, and joins the one-hour `github-releases` delay, which
+  `tests/renovate.test.mjs` checks.
+- A digest update keeps the version and changes the bytes, so someone replaced the release's files.
+  The digest review rule matches `custom.regex` as well as `github-actions`, so it waits for a
+  reviewer, as do the database preset's pgBackRest and apko hashes.
+- Prove a new datasource with a scratch repo pinned one release back, as in
+  [Proving a rule](#proving-a-rule): the lookup moves the version and the digest together.
 
 ## Proving a rule
 
