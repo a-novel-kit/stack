@@ -872,9 +872,11 @@ func listLabels(org, repo string) (map[string]ghLabel, error) {
 	return m, nil
 }
 
-// liveRulesets maps the repo's current ruleset names to their ids.
+// liveRulesets maps the repo's own ruleset names to their ids. The listing
+// leaves out the org rulesets that also apply to the repo: apply and prune
+// manage repo rulesets only.
 func liveRulesets(org, repo string) (map[string]string, error) {
-	out, err := gh("api", fmt.Sprintf("repos/%s/%s/rulesets", org, repo),
+	out, err := gh("api", fmt.Sprintf("repos/%s/%s/rulesets?includes_parents=false", org, repo),
 		"--jq", `.[]|"\(.name)\t\(.id)"`)
 	if err != nil {
 		return nil, err
