@@ -93,8 +93,10 @@ func TestDependabotGovernance(t *testing.T) {
 		t.Error("auto-approve must trigger on status to approve once renovate/stability-days turns green")
 	}
 	job := workflow.Jobs["auto-approve"]
-	if job.Permissions["statuses"] != "read" {
-		t.Errorf("auto-approve permissions = %v, want statuses: read", job.Permissions)
+	// The engine reads the release age, and each first-party version's release proof, with this token.
+	want := map[string]string{"statuses": "read", "attestations": "read", "packages": "read"}
+	if !maps.Equal(job.Permissions, want) {
+		t.Errorf("auto-approve permissions = %v, want %v", job.Permissions, want)
 	}
 	if !strings.Contains(job.If, "'renovate/stability-days'") || !strings.Contains(job.If, "'success'") {
 		t.Error("auto-approve must only run for the stability status turning green")
