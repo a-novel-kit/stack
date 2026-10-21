@@ -62,18 +62,30 @@ breaks something:
 ## Release age
 
 `minimumReleaseAge: "3 days"` applies to `matchDatasources: ["npm"]` and stays at or above pnpm's
-own release age. Third-party GitHub Actions wait the same three days
-(`matchManagers: ["github-actions"]`), and first-party releases skip both gates: the release proof
-the auto-approver checks stands in for the wait. The approval workflow withholds a Renovate PR's
-approval while `renovate/stability-days` is pending, because no ruleset requires that status.
+own release age. Go modules (`matchDatasources: ["go"]`) and third-party GitHub Actions
+(`matchDepTypes: ["action", "workflow"]`) wait the same three days, and first-party releases skip every gate:
+the release proof the auto-approver checks stands in for the wait. The approval workflow withholds a
+Renovate PR's approval while `renovate/stability-days` is pending, because no ruleset requires that
+status.
+
+A security fix skips every gate. `vulnerabilityAlerts` is mergeable, so the base preset's object keeps
+Renovate's default `minimumReleaseAge: null`, and both GitHub alerts and OSV alerts `force` that
+object onto their update. Never set a release age inside it. Neither source covers the Go toolchain:
+the `go` directive and the golang image have no security bypass, so a gate on them would hold every
+Go security point release.
 
 Compose files and Dockerfiles pin first-party images by digest (`pinDigests` for those two managers),
 so a moved tag changes nothing a consumer runs and each bump names the digest the approver checks.
 The composite-action default manager keeps a digest written after the tag, and a default gets that
-digest by hand once.
+digest by hand once. Third-party images stay on tags: official images rebuild their tags as routine,
+so a digest update carries no review signal, and no gate can hold it.
 
 A release without a timestamp cannot pass the gate: under the default `minimumReleaseAgeBehaviour:
-timestamp-required` it stays pending forever. MCR images and lockfile maintenance have none.
+timestamp-required` Renovate never creates its branch. GHCR and MCR images, lockfile maintenance,
+and the images and runners a workflow names have none. Neither do Docker Hub's large official
+images: Docker Hub answers an anonymous tag listing with 403 past 1,000 tags, and Renovate then falls
+back to the registry's undated list, so node, golang and postgres lose their dates. Docker images
+therefore have no gate.
 
 - Keep the gate off updates that carry no timestamp, such as lockfile maintenance.
 - Lockfile maintenance obeys only pnpm's shorter release age, so it moves a range past the version
@@ -125,3 +137,8 @@ jq -r 'select(.msg | test("flattened updates")) | .msg' renovate.log
 
 Compare against a run without the rule. The `packageFiles with updates` entry shows each dependency's
 `updates`, `pendingChecks` and `branchName`.
+
+- Before adding a release age, find the releases Renovate cannot date. Each debug entry containing
+  `do not have a releaseTimestamp` names some, and none of them ever clears the gate.
+- To prove a bypass or an exemption, stretch the gate to `3650 days`. Every ordinary update then
+  stays pending, so an update that comes out ready passed through the bypass.
