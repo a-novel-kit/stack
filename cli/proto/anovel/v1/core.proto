@@ -431,6 +431,9 @@ message StreamLogsRequest {
   // Archived run to read, from ListRuns, or empty for the current run. An
   // infra container has no archived runs.
   string run_id = 6;
+  // Number of lines to send from the end of the log, counted after the stream
+  // filter, before any followed line. Zero or less sends every line.
+  int32 tail_lines = 7;
 }
 // StreamLogsResponse is one entry of a target's or infra container's log.
 message StreamLogsResponse {
