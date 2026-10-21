@@ -42,7 +42,11 @@ suit scripts and .env files.`,
   a-novel run env --all-stacks`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return printEnv(cmd, strings.Join(args, ""), o)
+			var service string
+			if len(args) == 1 {
+				service = args[0]
+			}
+			return printEnv(cmd, service, o)
 		},
 	}
 	o.scope.bindAll(cmd)
@@ -78,31 +82,42 @@ func renderEnv(w io.Writer, entries []*anovelv1.EnvEntry, format string) {
 			_, _ = fmt.Fprintf(w, "%s=%s\n", e.GetKey(), e.GetValue())
 		}
 	default: // "shell"
-		var lastSvc string
-		for _, e := range entries {
-			svc := e.GetService()
-			if e.GetStack() != "" {
-				svc = e.GetStack() + "/" + svc
-			}
-			if svc != lastSvc {
-				if lastSvc != "" {
-					_, _ = fmt.Fprintln(w)
-				}
-				_, _ = fmt.Fprintf(w, "# %s\n", svc)
-				lastSvc = svc
-			}
-			// Single-quote the value, escaping embedded single quotes with
-			// the standard '"'"' trick, so the line is safe to eval.
-			esc := strings.ReplaceAll(e.GetValue(), "'", `'"'"'`)
-			_, _ = fmt.Fprintf(w, "export %s='%s'\n", e.GetKey(), esc)
-		}
+		renderShellEnv(w, entries)
 	}
 }
 
+// renderShellEnv prints entries as eval-able export lines, under a comment
+// header per service.
+func renderShellEnv(w io.Writer, entries []*anovelv1.EnvEntry) {
+	var lastGroup string
+	for _, e := range entries {
+		group := e.GetService()
+		if e.GetStack() != "" {
+			group = e.GetStack() + "/" + group
+		}
+
+		if group != lastGroup {
+			if lastGroup != "" {
+				_, _ = fmt.Fprintln(w)
+			}
+			_, _ = fmt.Fprintf(w, "# %s\n", group)
+			lastGroup = group
+		}
+
+		_, _ = fmt.Fprintf(w, "export %s=%s\n", e.GetKey(), shellQuote(e.GetValue()))
+	}
+}
+
+// shellQuote single-quotes v so the line is safe to eval. Each embedded single
+// quote becomes the standard '"'"' sequence.
+func shellQuote(v string) string {
+	return "'" + strings.ReplaceAll(v, "'", `'"'"'`) + "'"
+}
+
 // matchGlob reports whether an env key matches the --only pattern, a
-// filepath.Match glob such as "REST*" or "*_PORT"; an empty pattern matches
-// every key. A malformed pattern falls back to substring matching, so a typo
-// still does something reasonable.
+// filepath.Match glob such as "REST*" or "*_PORT". An empty pattern matches
+// every key. A malformed pattern falls back to a substring match, so a typo
+// still filters.
 func matchGlob(pattern, name string) bool {
 	if pattern == "" {
 		return true

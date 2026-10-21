@@ -52,30 +52,37 @@ func goCoverage(results []jobs.Result) []covEntry {
 			continue
 		}
 		for _, line := range strings.Split(r.Output, "\n") {
-			m := coverRe.FindStringSubmatch(line)
-			if m == nil {
-				continue
+			if e, ok := parseCoverLine(line, r.Name); ok {
+				es = append(es, e)
 			}
-			pct, err := strconv.ParseFloat(m[1], 64)
-			if err != nil {
-				continue
-			}
-			pkg := r.Name
-			for _, f := range strings.Fields(line) {
-				if strings.Contains(f, "/") {
-					pkg = f
-					break
-				}
-			}
-			// Generated and test-support packages ran, but their coverage is
-			// noise, so it stays out of the mean.
-			if covExclude.MatchString(pkg) {
-				continue
-			}
-			es = append(es, covEntry{pkg: pkg, pct: pct})
 		}
 	}
 	return es
+}
+
+// parseCoverLine reads one `go test -cover` package line. The package is the
+// first field holding a slash, or fallback when none does. It reports false
+// for any other line and for a package covExclude matches.
+func parseCoverLine(line, fallback string) (covEntry, bool) {
+	m := coverRe.FindStringSubmatch(line)
+	if m == nil {
+		return covEntry{}, false
+	}
+	pct, err := strconv.ParseFloat(m[1], 64)
+	if err != nil {
+		return covEntry{}, false
+	}
+	pkg := fallback
+	for _, f := range strings.Fields(line) {
+		if strings.Contains(f, "/") {
+			pkg = f
+			break
+		}
+	}
+	if covExclude.MatchString(pkg) {
+		return covEntry{}, false
+	}
+	return covEntry{pkg: pkg, pct: pct}, true
 }
 
 // nodeCoverageBlock returns the vitest v8 coverage table verbatim from a pnpm
@@ -131,7 +138,7 @@ func CoverageView(results []jobs.Result, width int) string {
 	b.WriteString(section("coverage", colGold, width) + "\n")
 
 	if len(goEntries) > 0 {
-		slices.SortFunc(goEntries, func(a, b covEntry) int { return strings.Compare(a.pkg, b.pkg) })
+		slices.SortFunc(goEntries, func(x, y covEntry) int { return strings.Compare(x.pkg, y.pkg) })
 		var sum float64
 		for _, e := range goEntries {
 			sum += e.pct

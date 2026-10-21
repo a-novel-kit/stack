@@ -44,8 +44,9 @@ func (s *Server) KillTarget(ctx context.Context, req *anovelv1.KillTargetRequest
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	resp := &anovelv1.KillTargetResponse{}
-	inst, ok := s.runner.Instance(req.GetTargetId())
-	if t, _ := s.stacks.Target(req.GetTargetId()); ok && t != nil {
+	inst, tracked := s.runner.Instance(req.GetTargetId())
+	t, _ := s.stacks.Target(req.GetTargetId())
+	if tracked && t != nil {
 		resp.Target = targetToProto(t, &inst)
 	}
 	return resp, nil

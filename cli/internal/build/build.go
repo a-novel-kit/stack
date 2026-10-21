@@ -154,28 +154,38 @@ func run(ctx context.Context, t detect.Target, timeout time.Duration, maxProcs i
 	return err
 }
 
+// envHealthTimeout bounds each bring-up wave's wait for healthy containers.
+const envHealthTimeout = 120 * time.Second
+
 // runInEnv brings t's compose env up, when it has one, runs the command, and
 // tears the env down unless keep is set.
 func runInEnv(ctx context.Context, t detect.Target, keep bool, runEnv []string, out io.Writer) error {
 	if t.Env != nil {
 		_, _ = fmt.Fprintf(out, "── env up: %s ──\n", t.Env.ID)
-		// The down is registered before the up so it runs even when bring-up
-		// fails midway, on a detached context so cleanup is never cancelled.
-		// The podman-compose provider accepts --volume in the singular.
 		if keep {
 			_, _ = fmt.Fprint(out, "── env kept up (--keep) ──\n")
 		} else {
-			defer func() {
-				_, _ = fmt.Fprint(out, "── env down ──\n")
-				_ = compose(context.WithoutCancel(ctx), out, runEnv, t.Env, nil, "down", "--volume")
-			}()
+			// Registered before the up, so a half-started env is torn down too.
+			defer envDown(ctx, t.Env, runEnv, out)
 		}
-		if err := composeUpPhased(ctx, out, runEnv, t.Env, 120*time.Second); err != nil {
+		if err := composeUpPhased(ctx, out, runEnv, t.Env, envHealthTimeout); err != nil {
 			return fmt.Errorf("environment %s failed to start: %w", t.Env.ID, err)
 		}
 		_, _ = fmt.Fprintf(out, "── %s ──\n", t.Name)
 	}
+	return runCommand(ctx, t, runEnv, out)
+}
 
+// envDown tears e down on a detached context, so an aborted run still cleans
+// up. The podman-compose provider spells the volume flag in the singular.
+func envDown(ctx context.Context, e *detect.ComposeEnv, runEnv []string, out io.Writer) {
+	_, _ = fmt.Fprint(out, "── env down ──\n")
+	_ = compose(context.WithoutCancel(ctx), out, runEnv, e, nil, "down", "--volume")
+}
+
+// runCommand runs t's command in its own process group, writing its output to
+// out, and kills the group when ctx ends.
+func runCommand(ctx context.Context, t detect.Target, runEnv []string, out io.Writer) error {
 	cmd := exec.Command(t.Cmd, t.Args...)
 	cmd.Dir = t.Dir
 	cmd.Env = runEnv
@@ -298,21 +308,19 @@ func derivedURLs(names []string, env []string) []string {
 }
 
 // compose runs `podman compose [global...] -p <project> -f <file> <args...>`
-// with the given environment, streaming combined output into buf.
-func compose(ctx context.Context, buf io.Writer, env []string, e *detect.ComposeEnv, global []string, args ...string) error {
-	full := append([]string{"compose"}, global...)
-	full = append(full, "-p", e.Project, "-f", e.File)
-	full = append(full, args...)
+// with the given environment, streaming combined output to out.
+func compose(ctx context.Context, out io.Writer, env []string, e *detect.ComposeEnv, global []string, args ...string) error {
+	full := slices.Concat([]string{"compose"}, global, []string{"-p", e.Project, "-f", e.File}, args)
 	cmd := exec.CommandContext(ctx, "podman", full...)
 	cmd.Env = env
-	cmd.Stdout = buf
-	cmd.Stderr = buf
+	cmd.Stdout = out
+	cmd.Stderr = out
 	return cmd.Run()
 }
 
-// podmanOut runs `podman <args...>` and returns trimmed stdout, folding stderr
-// into the error. It backs the inspect/ps polling in waitHealthy, which parses
-// the output, so it stays out of the report buffer.
+// podmanOut runs `podman <args...>` and returns its trimmed stdout, with stderr
+// folded into the error. Its output is parsed, so it stays out of the job's
+// log.
 func podmanOut(ctx context.Context, env []string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "podman", args...)
 	cmd.Env = env
@@ -456,7 +464,7 @@ func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect
 // one-shot init or migration. A non-zero exit fails fast; otherwise polling
 // continues to the timeout, whose error carries the offending containers' log
 // tails so the user sees why they never came up.
-func waitHealthy(ctx context.Context, log io.Writer, env []string, e *detect.ComposeEnv, timeout time.Duration) error {
+func waitHealthy(ctx context.Context, out io.Writer, env []string, e *detect.ComposeEnv, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
 		poll, err := pollEnv(ctx, env, e.Project+"_")
@@ -465,18 +473,11 @@ func waitHealthy(ctx context.Context, log io.Writer, env []string, e *detect.Com
 		}
 		states := strings.Join(poll.states, "  ")
 		if poll.ready {
-			_, _ = fmt.Fprintf(log, "ready: %s\n", states)
+			_, _ = fmt.Fprintf(out, "ready: %s\n", states)
 			return nil
 		}
 		if time.Now().After(deadline) {
-			var b strings.Builder
-			fmt.Fprintf(&b, "timed out after %s; last state: %s", timeout, states)
-			for _, id := range poll.pending {
-				if tail := containerLogTail(ctx, env, id, 20); tail != "" {
-					fmt.Fprintf(&b, "\n── tail %s ──\n%s", id[:12], tail)
-				}
-			}
-			return errors.New(b.String())
+			return healthTimeoutError(ctx, env, poll.pending, states, timeout)
 		}
 		select {
 		case <-ctx.Done():
@@ -484,6 +485,19 @@ func waitHealthy(ctx context.Context, log io.Writer, env []string, e *detect.Com
 		case <-time.After(1500 * time.Millisecond):
 		}
 	}
+}
+
+// healthTimeoutError reports the env's last state, with the log tail of each
+// container still pending.
+func healthTimeoutError(ctx context.Context, env, pending []string, states string, timeout time.Duration) error {
+	var b strings.Builder
+	fmt.Fprintf(&b, "timed out after %s; last state: %s", timeout, states)
+	for _, id := range pending {
+		if tail := containerLogTail(ctx, env, id, 20); tail != "" {
+			fmt.Fprintf(&b, "\n── tail %s ──\n%s", id[:12], tail)
+		}
+	}
+	return errors.New(b.String())
 }
 
 // envPoll is one inspection of a compose env's containers.

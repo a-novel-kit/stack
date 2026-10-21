@@ -99,15 +99,16 @@ func printLogs(w io.Writer, stream iter.Seq2[*anovelv1.StreamLogsResponse, error
 		if err != nil {
 			return err
 		}
-		switch {
-		case !cutoff.IsZero() && ln.GetTs().AsTime().Before(cutoff):
-		case tail > 0:
-			last = append(last, ln)
-			if len(last) > tail {
-				last = last[1:]
-			}
-		default:
+		if !cutoff.IsZero() && ln.GetTs().AsTime().Before(cutoff) {
+			continue
+		}
+		if tail <= 0 {
 			printLogLine(w, ln)
+			continue
+		}
+		last = append(last, ln)
+		if len(last) > tail {
+			last = last[1:]
 		}
 	}
 	for _, ln := range last {

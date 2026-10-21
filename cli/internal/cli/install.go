@@ -52,7 +52,7 @@ func installCLI(cmd *cobra.Command, source string) error {
 	}
 
 	_, _ = fmt.Fprintln(out, "▸ go install ./cmd/a-novel ...")
-	install := exec.CommandContext(ctx, "go", commandInstall, "./cmd/a-novel")
+	install := exec.CommandContext(ctx, "go", "install", "./cmd/a-novel")
 	install.Dir = sourceDir
 	install.Stdout = out
 	install.Stderr = cmd.ErrOrStderr()

@@ -68,10 +68,12 @@ object per service, one per line, and with --watch one more per state change.`,
 // listServices prints the services ps selects and, with --watch, keeps
 // printing on every state change: the table again, or the event as JSON.
 func listServices(cmd *cobra.Command, o psOpts) error {
-	if o.kind != "" && o.kind != "all" && o.kind != kindTarget && o.kind != kindInfra {
+	if !slices.Contains([]string{"", "all", kindTarget, kindInfra}, o.kind) {
 		return usageError(fmt.Errorf("--kind=%q: must be 'target', 'infra', or 'all'", o.kind))
 	}
-	ctx, out, c := cmd.Context(), cmd.OutOrStdout(), rpc.New("")
+
+	ctx, out := cmd.Context(), cmd.OutOrStdout()
+	c := rpc.New("")
 	resp, err := c.ListServices(ctx, o.scope.selector())
 	if err != nil {
 		return err
@@ -137,31 +139,39 @@ func renderPs(w io.Writer, services []*anovelv1.Service, asJSON bool) {
 		if i > 0 {
 			_, _ = fmt.Fprintln(w)
 		}
-		_, _ = fmt.Fprintf(w, "%s  (stack %s)\n", s.GetName(), s.GetStack())
-		// Targets first, then infra. The kind column and the trailing
-		// fully-qualified ID keep the two distinguishable at a glance, and
-		// the ID pastes straight into kill/restart/logs.
-		for _, t := range s.GetTargets() {
-			kindStr := targetKindShort(t.GetKind())
-			id := s.GetStack() + "/" + s.GetName() + "/" + t.GetName()
-			_, _ = fmt.Fprintf(w, "  %-6s %-30s  %-12s  %s\n",
-				kindStr, t.GetName(), targetStatusLabel(t), id)
-		}
-		for _, in := range s.GetInfra() {
-			label := phaseLabel(in.GetPhase())
-			switch in.GetHealth() {
-			case anovelv1.Health_HEALTH_HEALTHY:
-				label += " healthy"
-			case anovelv1.Health_HEALTH_UNHEALTHY:
-				label += " unhealthy"
-			case anovelv1.Health_HEALTH_STARTING:
-				label += " starting"
-			}
-			id := s.GetStack() + "/" + s.GetName() + "/infra/" + in.GetName()
-			_, _ = fmt.Fprintf(w, "  %-6s %-30s  %-10s  %s\n",
-				kindInfra, in.GetName(), label, id)
-		}
+		renderService(w, s)
 	}
+}
+
+// renderService prints a service's header, then one row per target, then one
+// per infra container. The kind column and the trailing fully-qualified ID tell
+// the two apart, and the ID pastes straight into kill, restart and logs.
+func renderService(w io.Writer, s *anovelv1.Service) {
+	prefix := s.GetStack() + "/" + s.GetName() + "/"
+	_, _ = fmt.Fprintf(w, "%s  (stack %s)\n", s.GetName(), s.GetStack())
+
+	for _, t := range s.GetTargets() {
+		_, _ = fmt.Fprintf(w, "  %-6s %-30s  %-12s  %s\n",
+			targetKindShort(t.GetKind()), t.GetName(), targetStatusLabel(t), prefix+t.GetName())
+	}
+
+	for _, in := range s.GetInfra() {
+		_, _ = fmt.Fprintf(w, "  %-6s %-30s  %-10s  %s\n",
+			kindInfra, in.GetName(), infraStatusLabel(in), prefix+"infra/"+in.GetName())
+	}
+}
+
+// healthSuffix is the word an infra container's health adds to its phase.
+var healthSuffix = map[anovelv1.Health]string{
+	anovelv1.Health_HEALTH_HEALTHY:   " healthy",
+	anovelv1.Health_HEALTH_UNHEALTHY: " unhealthy",
+	anovelv1.Health_HEALTH_STARTING:  " starting",
+}
+
+// infraStatusLabel returns an infra container's phase word, followed by its
+// health when the container reports one.
+func infraStatusLabel(in *anovelv1.Infra) string {
+	return phaseLabel(in.GetPhase()) + healthSuffix[in.GetHealth()]
 }
 
 // targetStatusLabel returns the user-facing status word for a target, folding
@@ -196,6 +206,7 @@ func targetStatusLabel(t *anovelv1.Target) string {
 	return phaseLabel(t.GetPhase())
 }
 
+// targetKindShort returns the kind column of a target row.
 func targetKindShort(k anovelv1.TargetKind) string {
 	switch k {
 	case anovelv1.TargetKind_TARGET_KIND_ONE_SHOT:

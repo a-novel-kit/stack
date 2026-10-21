@@ -159,7 +159,8 @@ func listStacks(ctx context.Context, out io.Writer) error {
 			len(held.volumes))
 		managed[st.GetName()] = true
 	}
-	return reportUnmanaged(out, managed)
+	reportUnmanaged(out, managed)
+	return nil
 }
 
 // =============================================================================
@@ -378,20 +379,22 @@ func reclaimStack(
 	ctx context.Context, c *rpc.Client, out io.Writer, st *anovelv1.Stack, held stackHoldings, purgeBackups bool,
 ) error {
 	name, root := st.GetName(), st.GetPath()
+	const force, noBackup = true, false
+
 	for _, id := range held.liveTargets {
 		if _, err := c.KillTarget(ctx, id, killGrace); err != nil {
 			return fmt.Errorf("kill target %s: %w", id, err)
 		}
 	}
 	for _, svc := range held.services {
-		// force cascades onto whatever the infra is still holding open;
-		// the targets above are already down, so nothing is orphaned by it.
-		if _, err := c.KillInfra(ctx, name, svc, true); err != nil {
+		// force stops what the infra still holds open. The targets above are
+		// already down, so it orphans nothing.
+		if _, err := c.KillInfra(ctx, name, svc, force); err != nil {
 			return fmt.Errorf("kill infra %s/%s: %w", name, svc, err)
 		}
-		// Backups are kept: a stack is pruned on the assumption its data was
-		// disposable, and that assumption is occasionally wrong.
-		if _, err := c.ClearVolume(ctx, name, svc, false, true); err != nil {
+		// A prune assumes the stack's data is disposable, and that is sometimes
+		// wrong, so every volume is backed up first.
+		if _, err := c.ClearVolume(ctx, name, svc, noBackup, force); err != nil {
 			return fmt.Errorf("clear volumes %s/%s: %w", name, svc, err)
 		}
 	}
@@ -419,20 +422,17 @@ func stackBackupDir(stack string) string {
 	return filepath.Join(paths.BackupsRoot(), stack)
 }
 
-// reportUnmanaged names the stacks $A_NOVEL_STACKS registers that the daemon is
-// not managing. The daemon skips a stack whose files are gone and starts
-// anyway, so a registration can outlive the stack it points at. This names
-// those entries.
-//
-// It reads the caller's own environment, so a shell whose $A_NOVEL_STACKS
-// differs from the one the daemon started with is reported as unmanaged too:
-// either way, this shell's registrations and the daemon's view disagree.
-func reportUnmanaged(out io.Writer, managed map[string]bool) error {
+// reportUnmanaged prints each $A_NOVEL_STACKS registration the daemon does not
+// manage, with its fix. The daemon skips a stack whose files are gone, so a
+// registration can outlive its stack. The registrations come from this shell,
+// so a shell whose $A_NOVEL_STACKS differs from the daemon's reports the
+// difference too.
+func reportUnmanaged(out io.Writer, managed map[string]bool) {
 	registered, err := stacks.ParseEnv()
 	if err != nil {
-		// A malformed $A_NOVEL_STACKS is the daemon's problem to report at
-		// start; the listing above is still valid without this footnote.
-		return nil //nolint:nilerr
+		// The daemon reports a malformed $A_NOVEL_STACKS at start. The listing
+		// above stays valid without this footnote.
+		return
 	}
 	for _, s := range registered {
 		if managed[s.Name] {
@@ -444,7 +444,6 @@ func reportUnmanaged(out io.Writer, managed map[string]bool) error {
 		}
 		_, _ = fmt.Fprintf(out, "! %-20s %-40s %s\n", s.Name, s.Path, reason)
 	}
-	return nil
 }
 
 // dryRunVerdict is the line a dry run prints in place of acting. A blocked

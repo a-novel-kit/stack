@@ -51,15 +51,13 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 	}
 	follow := req.GetFollow() && req.GetRunId() == ""
 
-	// Under --follow, subscribe before reading the file so no line written
-	// between snapshot and subscribe is lost. The unsub fires on handler exit,
-	// keeping dead channels out of the target's subscriber slice.
+	// Under --follow, subscribe before reading the file, so no line written in
+	// between is lost.
 	var sub <-chan logs.Line
 	if follow {
-		var unsub func()
-		var ok bool
-		if sub, unsub, ok = s.logs.Subscribe(tid); ok {
+		if ch, unsub, ok := s.logs.Subscribe(tid); ok {
 			defer unsub()
+			sub = ch
 		}
 	}
 

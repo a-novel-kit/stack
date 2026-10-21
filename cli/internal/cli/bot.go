@@ -21,6 +21,8 @@ import (
 var (
 	botRunPoll          = 3 * time.Second
 	botRunFinishTimeout = 10 * time.Minute
+	// botRunLookupPoll paces the wait for a dispatched run to register.
+	botRunLookupPoll = 2 * time.Second
 )
 
 const (
@@ -122,16 +124,14 @@ func postBotComments(cmd *cobra.Command, args []string, o botCommentOpts) error 
 		return errors.New("bot-comment: <number> is required (or use --batch to post many comments)")
 	}
 	number := args[2]
-	if err := validateBotCommentArgs(org, repo, number); err != nil {
-		return err
+	if !positiveInt(number) {
+		return fmt.Errorf("bot-comment: number %q must be a positive integer", number)
 	}
 	if strings.TrimSpace(o.body) == "" {
 		return errors.New("bot-comment: --body is required and must be non-empty")
 	}
-	if o.replyTo != "" {
-		if n, err := strconv.Atoi(o.replyTo); err != nil || n <= 0 {
-			return fmt.Errorf("bot-comment: --reply-to %q must be a positive integer (a REST review-comment id)", o.replyTo)
-		}
+	if o.replyTo != "" && !positiveInt(o.replyTo) {
+		return fmt.Errorf("bot-comment: --reply-to %q must be a positive integer (a REST review-comment id)", o.replyTo)
 	}
 	return runBotComment(cmd, org, repo, number, o.body, o.replyTo)
 }
@@ -151,16 +151,10 @@ func validateBotOrgRepo(org, repo string) error {
 	return nil
 }
 
-// validateBotCommentArgs checks the single-comment positional args before a
-// dispatch is spent on them.
-func validateBotCommentArgs(org, repo, number string) error {
-	if err := validateBotOrgRepo(org, repo); err != nil {
-		return err
-	}
-	if n, err := strconv.Atoi(number); err != nil || n <= 0 {
-		return fmt.Errorf("bot-comment: number %q must be a positive integer", number)
-	}
-	return nil
+// positiveInt reports whether s is a decimal integer above zero.
+func positiveInt(s string) bool {
+	n, err := strconv.Atoi(s)
+	return err == nil && n > 0
 }
 
 // runBotComment dispatches a single comment and watches its run.
@@ -350,7 +344,7 @@ func waitForDispatchedRun(dispatchRepo, nonce string) (int64, error) {
 			return 0, fmt.Errorf("dispatched run did not appear within %s "+
 				"(check 'gh run list --repo %s')", botRunLookupTimeout, dispatchRepo)
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(botRunLookupPoll)
 	}
 }
 

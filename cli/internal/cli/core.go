@@ -28,10 +28,10 @@ import (
 // accidental human invocation implausible.
 const daemonInternalCmd = "__daemon"
 
-// daemonLogTailLimit caps how much of a failed start's output is quoted back.
-// Enough for a stack trace or a handful of discovery errors; not enough for a
-// crash-looping daemon to bury the error under its own retries.
-const daemonLogTailLimit = 4 << 10
+// daemonLogQuoteLimit caps how much of a failed start's output is quoted back.
+// 4 KiB holds a stack trace or a handful of discovery errors. A daemon that
+// keeps retrying cannot push its first error out of view.
+const daemonLogQuoteLimit = 4 << 10
 
 // IsDaemonReexec reports whether args (typically os.Args) invoke the hidden
 // daemon re-exec, `a-novel core __daemon`. main() uses it to skip the
@@ -127,7 +127,7 @@ func killDaemon(cmd *cobra.Command, force bool) error {
 	c := rpc.New("")
 	if up, err := daemonUp(ctx, c); !up {
 		if err == nil {
-			_, _ = fmt.Fprintln(os.Stderr, "a-novel: daemon not running")
+			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "a-novel: daemon not running")
 		}
 		return err
 	}
@@ -139,7 +139,7 @@ func killDaemon(cmd *cobra.Command, force bool) error {
 	waitErr := waitDaemonGone(ctx, c, out)
 	if fails := resp.GetFailures(); len(fails) > 0 {
 		for _, f := range fails {
-			_, _ = fmt.Fprintf(os.Stderr, "a-novel: shutdown could not stop %s\n", f)
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "a-novel: shutdown could not stop %s\n", f)
 		}
 		return fmt.Errorf("shutdown left %d target(s) running", len(fails))
 	}
@@ -245,19 +245,25 @@ func restartDaemon(cmd *cobra.Command, force, preserve bool) error {
 		return err
 	}
 	if up {
-		if preserve {
-			err = prepareReinstall(ctx, c, out)
-		} else {
-			_, err = shutdown(ctx, c, force, out)
-		}
-		if err != nil {
-			return err
-		}
-		if err := waitDaemonGone(ctx, c, out); err != nil {
+		if err := stopForRestart(ctx, c, out, force, preserve); err != nil {
 			return err
 		}
 	}
 	return startDetached()
+}
+
+// stopForRestart stops a running daemon and waits until it is gone. preserve
+// checkpoints the go-exec targets first. Otherwise the daemon shuts down as
+// `core kill` does.
+func stopForRestart(ctx context.Context, c *rpc.Client, out io.Writer, force, preserve bool) error {
+	if preserve {
+		if err := prepareReinstall(ctx, c, out); err != nil {
+			return err
+		}
+	} else if _, err := shutdown(ctx, c, force, out); err != nil {
+		return err
+	}
+	return waitDaemonGone(ctx, c, out)
 }
 
 func newCoreStatusCmd() *cobra.Command {
@@ -487,7 +493,7 @@ func readDaemonLogFrom(path string, offset int64) string {
 	if _, err := f.Seek(offset, io.SeekStart); err != nil {
 		return ""
 	}
-	buf, err := io.ReadAll(io.LimitReader(f, daemonLogTailLimit))
+	buf, err := io.ReadAll(io.LimitReader(f, daemonLogQuoteLimit))
 	if err != nil {
 		return ""
 	}

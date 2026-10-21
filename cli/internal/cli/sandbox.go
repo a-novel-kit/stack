@@ -23,7 +23,7 @@ type sandboxSystem struct {
 	tempDir   func() (string, error)
 	clone     func(string) error
 	removeAll func(string) error
-	run       func(context.Context, string, []string, []string, io.Writer, io.Writer) error
+	run       func(ctx context.Context, dir string, env, args []string, stdout, stderr io.Writer) error
 	cwd       string
 	environ   []string
 }

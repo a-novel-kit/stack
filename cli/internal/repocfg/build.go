@@ -279,12 +279,11 @@ func environmentOps(t *RepoTarget, repoPath string) []Op {
 		ops = append(ops, environmentWrites(repoPath, "release", policies, "core", "owners-"+string(t.Class.Class))...)
 	}
 	// The privileged keys are secrets of the governance environment alone, so
-	// a branch's copy of a workflow cannot read them. It holds the ones the
-	// repo's workflows name.
+	// a branch's copy of a workflow cannot read them. It holds the privileged
+	// secrets the repo's workflows name.
 	governance := t.OrgProfile.Governance
-	governance.Secrets = slices.DeleteFunc(slices.Clone(t.Discovered.Secrets), func(name string) bool {
-		return !slices.Contains(t.OrgProfile.Governance.Secrets, name)
-	})
+	privileged := func(name string) bool { return slices.Contains(t.OrgProfile.Governance.Secrets, name) }
+	governance.Secrets = slices.DeleteFunc(slices.Clone(t.Discovered.Secrets), func(name string) bool { return !privileged(name) })
 	if len(governance.Secrets) > 0 {
 		ops = append(ops, environmentWrites(repoPath, "governance", policies)...)
 		ops = append(ops, Op{Path: repoPath + "/environments/governance/secrets", Governance: &governance})
@@ -345,18 +344,23 @@ func (w *workflowFiles) drop(names ...string) {
 // ones it does not.
 func workflowOps(c *ClassPreset, repoPath string) ([]Op, error) {
 	w := &workflowFiles{dir: repoPath + "/contents/.github/workflows/"}
-	// Merge governance ships wherever the master ruleset gates merges;
-	// recover-prs re-arms PRs the queue drops on a timeout, so it follows the
-	// queue, and check-dependencies and review-gate post checks that ruleset
-	// requires. pr-relay carries review and merge-queue events to the gates, which
-	// run from the default branch.
-	// feature-env removes the with-feature-env label a push made stale. Release
-	// callers are narrower: a class without the tags ruleset removes them, so
-	// changing a repo's class leaves no release mechanics behind.
+	// The master ruleset gates merges, and these workflows run that gate.
 	if c.Rulesets.Master {
-		w.put("merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml",
-			"recover-prs.yaml", "check-dependencies.yaml", "feature-env.yaml", "review-gate.yaml", "pr-relay.yaml")
+		w.put(
+			"merge-gate.yaml",
+			"epic-freeze.yaml",
+			"approve-pr.yaml",
+			"derive-status.yaml",
+			"epic-rollback.yaml",
+			"recover-prs.yaml",        // re-arms pull requests the merge queue drops on a timeout
+			"check-dependencies.yaml", // posts a check the master ruleset requires
+			"feature-env.yaml",        // removes the with-feature-env label a push made stale
+			"review-gate.yaml",        // posts a check the master ruleset requires
+			"pr-relay.yaml",           // carries review and merge-queue events to the gates on the default branch
+		)
 	}
+	// A class without the tags ruleset deletes the release callers, so a class
+	// change leaves no release mechanics behind.
 	if c.Rulesets.Master && c.Rulesets.Tags {
 		w.put("release-train.yaml", "hotfix.yaml")
 	} else {
@@ -550,14 +554,13 @@ func statusCheckParams(params *RSCParams, checks []CheckRef) map[string]any {
 }
 
 // resolveBypass maps one generic bypass entry to concrete actors. Admins
-// always bypass with mode "always"; bots bypass with "always" on master, tags
-// and release lines, where they write directly (the bump commit and the release
-// tag), and "exempt" elsewhere. Dependabot is GitHub's own App, so its ID is the same in
-// every org. An entry that resolves to nothing is an error, so a typo in a
-// ruleset template is caught before the bypass list ships.
+// bypass in mode "always". Bots bypass in mode "always" on master, tags and
+// release lines, where they write directly, and in mode "exempt" elsewhere.
+// Dependabot is GitHub's own App, so its ID is the same in every org. An entry
+// that resolves to no actor is an error, which catches a typo in a template.
 func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor, error) {
 	botMode := modeExempt
-	if rulesetName == rulesetMaster || rulesetName == rulesetTags || rulesetName == rulesetReleaseLines {
+	if slices.Contains([]string{rulesetMaster, rulesetTags, rulesetReleaseLines}, rulesetName) {
 		botMode = modeAlways
 	}
 	switch entry {
@@ -570,10 +573,9 @@ func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor
 	case "dependabot":
 		id := dependabotAppID
 		return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}, nil
-	default:
-		if id, ok := org.Bots[entry]; ok {
-			return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}, nil
-		}
+	}
+	if id, ok := org.Bots[entry]; ok {
+		return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}, nil
 	}
 	return nil, fmt.Errorf("bypass entry %q in ruleset %q resolves to no actor "+
 		"(expected admins, dependabot or an org bot key from orgs/<org>.yaml)", entry, rulesetName)

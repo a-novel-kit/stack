@@ -12,10 +12,11 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Validation errors shared by the palette verbs that need a selection.
+// Status texts of the palette verbs that need a selection.
 const (
 	noServiceText = "no active service — select one with ↑/↓ first"
 	noTabText     = "no active tab — select one with ←/→ first"
+	noTargetText  = "no active target — select one with ←/→ first"
 )
 
 // servicesMsg carries a fresh ListServices snapshot from the daemon.
@@ -43,27 +44,46 @@ type actionResultMsg struct {
 // statusFadeMsg is the tick that times out an info-level status entry.
 type statusFadeMsg struct{}
 
-// setStatusCmd is a Cmd that emits one statusMsg.
+// setStatusCmd returns a Cmd that sets the status bar to text at level.
 func setStatusCmd(level statusLevel, text string) tea.Cmd {
 	return func() tea.Msg {
-		return statusMsg{entry: statusEntry{level: level, text: text, at: time.Now()}}
+		return statusMsg{entry: newStatus(level, text)}
 	}
+}
+
+// newStatus stamps a status entry with the current time, which the info fade
+// measures from.
+func newStatus(level statusLevel, text string) statusEntry {
+	return statusEntry{level: level, text: text, at: time.Now()}
 }
 
 // errOf drops an RPC's response and keeps its error, so an action returns the
 // call directly.
 func errOf[T any](_ T, err error) error { return err }
 
-// runAction runs a daemon-backed palette action. It shows busyText while
-// do runs under timeout, then emits an actionResultMsg that Update renders
-// as successText, or as the error prefixed by actionLabel.
-func runAction(busyText, successText, actionLabel string, timeout time.Duration, do func(context.Context) error) tea.Cmd {
+// action is a daemon-backed palette action and the status texts around it.
+type action struct {
+	// busy is the status while do runs.
+	busy string
+	// success is the info status after do succeeds.
+	success string
+	// label prefixes the error status, such as "start grpc".
+	label string
+	// timeout bounds do.
+	timeout time.Duration
+	// do calls the daemon.
+	do func(context.Context) error
+}
+
+// run shows a.busy, runs a.do under a.timeout, then emits an actionResultMsg
+// that Update renders as a.success, or as the error prefixed by a.label.
+func (a action) run() tea.Cmd {
 	return tea.Batch(
-		setStatusCmd(statusBusy, busyText),
+		setStatusCmd(statusBusy, a.busy),
 		func() tea.Msg {
-			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			ctx, cancel := context.WithTimeout(context.Background(), a.timeout)
 			defer cancel()
-			return actionResultMsg{actionLabel: actionLabel, successText: successText, err: do(ctx)}
+			return actionResultMsg{actionLabel: a.label, successText: a.success, err: a.do(ctx)}
 		},
 	)
 }
@@ -192,36 +212,49 @@ func (m *model) runPaletteCommand(input string) tea.Cmd {
 // argument. It addresses targets only: a single infra container cannot be
 // cold-started in isolation, since it may depend on other infra.
 func (m *model) startCmd(args []string) tea.Cmd {
-	t := m.activeTarget()
 	if m.activeInfra() != nil {
 		return setStatusCmd(statusError,
 			":start only works on targets. For infra: use :infra-start (whole service) or :restart (this container)")
 	}
+	t := m.activeTarget()
 	if t == nil {
-		return setStatusCmd(statusError, "no active target — select one with ←/→ first")
+		return setStatusCmd(statusError, noTargetText)
 	}
 	mode, modeLabel := anovelv1.Mode_MODE_GO_EXEC, modeGoExec
 	if len(args) > 0 && args[0] == modeContainer {
 		mode, modeLabel = anovelv1.Mode_MODE_CONTAINER, modeContainer
 	}
-	start := func(ctx context.Context) error { return errOf(m.c.StartTarget(ctx, t.GetId(), mode)) }
-	return runAction("Starting "+t.GetName()+" ("+modeLabel+")... infra + one-shots will run first",
-		"Started "+t.GetName(), "start "+t.GetName(), time.Minute, start)
+	return action{
+		busy:    "Starting " + t.GetName() + " (" + modeLabel + ")... infra + one-shots will run first",
+		success: "Started " + t.GetName(),
+		label:   "start " + t.GetName(),
+		timeout: time.Minute,
+		do:      func(ctx context.Context) error { return errOf(m.c.StartTarget(ctx, t.GetId(), mode)) },
+	}.run()
 }
 
 // killCmd stops the active target, or the active infra container alone,
 // leaving the rest of the service's infra and targets up.
 func (m *model) killCmd() tea.Cmd {
 	if t := m.activeTarget(); t != nil {
-		kill := func(ctx context.Context) error { return errOf(m.c.KillTarget(ctx, t.GetId(), 10*time.Second)) }
-		return runAction("Killing "+t.GetName()+"...", "Killed "+t.GetName(), "kill "+t.GetName(), 30*time.Second, kill)
+		return action{
+			busy:    "Killing " + t.GetName() + "...",
+			success: "Killed " + t.GetName(),
+			label:   "kill " + t.GetName(),
+			timeout: 30 * time.Second,
+			do:      func(ctx context.Context) error { return errOf(m.c.KillTarget(ctx, t.GetId(), 10*time.Second)) },
+		}.run()
 	}
 	if in := m.activeInfra(); in != nil {
-		stop := func(ctx context.Context) error {
-			return errOf(m.c.KillInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName()))
-		}
-		return runAction("Stopping infra container "+in.GetName()+"...", "Stopped infra "+in.GetName(),
-			"kill infra "+in.GetName(), 30*time.Second, stop)
+		return action{
+			busy:    "Stopping infra container " + in.GetName() + "...",
+			success: "Stopped infra " + in.GetName(),
+			label:   "kill infra " + in.GetName(),
+			timeout: 30 * time.Second,
+			do: func(ctx context.Context) error {
+				return errOf(m.c.KillInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName()))
+			},
+		}.run()
 	}
 	return setStatusCmd(statusError, noTabText)
 }
@@ -230,18 +263,26 @@ func (m *model) killCmd() tea.Cmd {
 // place.
 func (m *model) restartCmd() tea.Cmd {
 	if t := m.activeTarget(); t != nil {
-		restart := func(ctx context.Context) error {
-			return errOf(m.c.RestartTarget(ctx, t.GetId(), anovelv1.Mode_MODE_UNSPECIFIED))
-		}
-		return runAction("Restarting "+t.GetName()+"...", "Restarted "+t.GetName(), "restart "+t.GetName(),
-			time.Minute, restart)
+		return action{
+			busy:    "Restarting " + t.GetName() + "...",
+			success: "Restarted " + t.GetName(),
+			label:   "restart " + t.GetName(),
+			timeout: time.Minute,
+			do: func(ctx context.Context) error {
+				return errOf(m.c.RestartTarget(ctx, t.GetId(), anovelv1.Mode_MODE_UNSPECIFIED))
+			},
+		}.run()
 	}
 	if in := m.activeInfra(); in != nil {
-		restart := func(ctx context.Context) error {
-			return errOf(m.c.RestartInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName()))
-		}
-		return runAction("Restarting infra container "+in.GetName()+"...", "Restarted infra "+in.GetName(),
-			"restart infra "+in.GetName(), time.Minute, restart)
+		return action{
+			busy:    "Restarting infra container " + in.GetName() + "...",
+			success: "Restarted infra " + in.GetName(),
+			label:   "restart infra " + in.GetName(),
+			timeout: time.Minute,
+			do: func(ctx context.Context) error {
+				return errOf(m.c.RestartInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName()))
+			},
+		}.run()
 	}
 	return setStatusCmd(statusError, noTabText)
 }
@@ -252,11 +293,15 @@ func (m *model) infraStartCmd() tea.Cmd {
 	if svc == nil {
 		return setStatusCmd(statusError, noServiceText)
 	}
-	start := func(ctx context.Context) error {
-		return errOf(m.c.StartInfra(ctx, "", svc.GetName(), anovelv1.Mode_MODE_GO_EXEC))
-	}
-	return runAction("Bringing up infra + one-shots for "+svc.GetName()+"...", "Infra ready for "+svc.GetName(),
-		"infra-start "+svc.GetName(), 5*time.Minute, start)
+	return action{
+		busy:    "Bringing up infra + one-shots for " + svc.GetName() + "...",
+		success: "Infra ready for " + svc.GetName(),
+		label:   "infra-start " + svc.GetName(),
+		timeout: 5 * time.Minute,
+		do: func(ctx context.Context) error {
+			return errOf(m.c.StartInfra(ctx, "", svc.GetName(), anovelv1.Mode_MODE_GO_EXEC))
+		},
+	}.run()
 }
 
 // infraKillCmd tears down the active service's infra, cascading to its
@@ -271,8 +316,13 @@ func (m *model) infraKillCmd(args []string) tea.Cmd {
 	if force {
 		busyText = "Force-tearing down infra + targets for " + svc.GetName() + "..."
 	}
-	kill := func(ctx context.Context) error { return errOf(m.c.KillInfra(ctx, "", svc.GetName(), force)) }
-	return runAction(busyText, "Infra down for "+svc.GetName(), "infra-kill "+svc.GetName(), 30*time.Second, kill)
+	return action{
+		busy:    busyText,
+		success: "Infra down for " + svc.GetName(),
+		label:   "infra-kill " + svc.GetName(),
+		timeout: 30 * time.Second,
+		do:      func(ctx context.Context) error { return errOf(m.c.KillInfra(ctx, "", svc.GetName(), force)) },
+	}.run()
 }
 
 // volumeBackupCmd backs up the active service's volumes.
@@ -281,9 +331,15 @@ func (m *model) volumeBackupCmd() tea.Cmd {
 	if svc == nil {
 		return setStatusCmd(statusError, noServiceText)
 	}
-	backup := func(ctx context.Context) error { return errOf(m.c.BackupVolume(ctx, "", svc.GetName(), "", false)) }
-	return runAction("Backing up volumes for "+svc.GetName()+"... (may take a while)",
-		"Backed up volumes for "+svc.GetName(), "volume-backup "+svc.GetName(), 5*time.Minute, backup)
+	return action{
+		busy:    "Backing up volumes for " + svc.GetName() + "... (may take a while)",
+		success: "Backed up volumes for " + svc.GetName(),
+		label:   "volume-backup " + svc.GetName(),
+		timeout: 5 * time.Minute,
+		do: func(ctx context.Context) error {
+			return errOf(m.c.BackupVolume(ctx, "", svc.GetName(), "", false))
+		},
+	}.run()
 }
 
 // topologyCmd fetches the dependency graph of the active service, or of the
@@ -296,7 +352,7 @@ func (m *model) topologyCmd() tea.Cmd {
 		defer cancel()
 		resp, err := m.c.GetTopology(ctx, "", svcName)
 		if err != nil {
-			return statusMsg{entry: statusEntry{level: statusError, text: "topology: " + err.Error(), at: time.Now()}}
+			return statusMsg{entry: newStatus(statusError, "topology: "+err.Error())}
 		}
 		return topologyMsg{rendered: resp.GetRendered()}
 	}

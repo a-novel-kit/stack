@@ -27,7 +27,7 @@ func TestReadDaemonLogFrom(t *testing.T) {
 		{name: "Success/AtEnd", content: first, offset: int64(len(first))},
 		// A log that was never created: the readiness error is still reportable.
 		{name: "Success/Missing"},
-		{name: "Success/Capped", content: strings.Repeat("x", daemonLogTailLimit*3), want: strings.Repeat("x", daemonLogTailLimit)},
+		{name: "Success/Capped", content: strings.Repeat("x", daemonLogQuoteLimit*3), want: strings.Repeat("x", daemonLogQuoteLimit)},
 	}
 
 	for _, testCase := range testCases {
@@ -44,6 +44,8 @@ func TestReadDaemonLogFrom(t *testing.T) {
 	}
 }
 
+// TestDaemonFailureDetail pins the three suffixes a failed start can quote: the
+// --foreground hint, the empty-log notice and the daemon's own words.
 func TestDaemonFailureDetail(t *testing.T) {
 	// Not parallel: t.Setenv redirects the process-wide XDG_STATE_HOME that
 	// paths.DaemonLog() resolves through.

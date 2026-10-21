@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -41,37 +40,35 @@ type Discovered struct {
 // the check context, so no class-based list can drift from the workflow. A
 // missing main.yaml contributes no jobs.
 func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
-	d := &Discovered{}
-	seen := map[string]bool{}
-	add := func(ctx string, integ int64) {
-		if ctx == "" || seen[ctx] {
-			return
-		}
-		seen[ctx] = true
-		d.Checks = append(d.Checks, CheckRef{Context: ctx, IntegrationID: integ})
-	}
-
-	for _, cd := range cc.Always {
-		add(cd.Context, cc.Integrations[cd.Integration])
-	}
-
 	jobs, err := workflowJobs(filepath.Join(repoPath, ".github", "workflows", "main.yaml"))
 	if err != nil {
 		return nil, err
 	}
+
+	var checks []CheckRef
+	for _, cd := range cc.Always {
+		checks = append(checks, CheckRef{Context: cd.Context, IntegrationID: cc.Integrations[cd.Integration]})
+	}
 	for _, j := range jobs {
-		if cc.Exclude.excludes(j) {
-			continue
+		if !cc.Exclude.excludes(j) {
+			checks = append(checks, CheckRef{Context: j.Context, IntegrationID: cc.Integrations[integrationActions]})
 		}
-		add(j.Context, cc.Integrations[integrationActions])
 	}
 
-	sort.Slice(d.Checks, func(i, j int) bool { return d.Checks[i].Context < d.Checks[j].Context })
-
+	d := &Discovered{Checks: uniqueChecks(checks)}
 	if d.Secrets, d.Environments, err = workflowUses(filepath.Join(repoPath, ".github", "workflows")); err != nil {
 		return nil, err
 	}
 	return d, nil
+}
+
+// uniqueChecks sorts checks by context and keeps the first check of each
+// context, so an always check wins over a main.yaml job of the same name. A
+// check without a context is dropped.
+func uniqueChecks(checks []CheckRef) []CheckRef {
+	checks = slices.DeleteFunc(checks, func(c CheckRef) bool { return c.Context == "" })
+	slices.SortStableFunc(checks, func(a, b CheckRef) int { return strings.Compare(a.Context, b.Context) })
+	return slices.CompactFunc(checks, func(a, b CheckRef) bool { return a.Context == b.Context })
 }
 
 // secretRef matches a secrets-context reference such as secrets.CODECOV_TOKEN.
@@ -92,27 +89,34 @@ func workflowUses(dir string) ([]string, []string, error) {
 		return nil, nil, err
 	}
 	for _, entry := range entries {
-		if ext := filepath.Ext(entry.Name()); entry.IsDir() || ext != ".yaml" && ext != ".yml" {
+		if ext := filepath.Ext(entry.Name()); entry.IsDir() || (ext != ".yaml" && ext != ".yml") {
 			continue
 		}
-		raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
-		if err != nil {
+		if secrets, environments, err = workflowFileUses(dir, entry.Name(), secrets, environments); err != nil {
 			return nil, nil, err
 		}
-		var doc yaml.Node
-		if err := yaml.Unmarshal(raw, &doc); err != nil {
-			return nil, nil, fmt.Errorf("%s: %w", entry.Name(), err)
-		}
-		secrets = secretRefs(secrets, &doc)
-		named, err := jobEnvironments(&doc)
-		if err != nil {
-			return nil, nil, fmt.Errorf("%s: %w", entry.Name(), err)
-		}
-		environments = append(environments, named...)
 	}
 	slices.Sort(secrets)
 	slices.Sort(environments)
 	return slices.Compact(secrets), slices.Compact(environments), nil
+}
+
+// workflowFileUses appends to secrets and environments what the workflow file
+// dir/name references.
+func workflowFileUses(dir, name string, secrets, environments []string) ([]string, []string, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		return nil, nil, err
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", name, err)
+	}
+	named, err := jobEnvironments(&doc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", name, err)
+	}
+	return secretRefs(secrets, &doc), append(environments, named...), nil
 }
 
 // secretRefs appends to secrets the name of every secret the scalars under
@@ -186,7 +190,7 @@ func workflowJobs(path string) ([]workflowJob, error) {
 	for id, j := range wf.Jobs {
 		out = append(out, workflowJob{ID: id, Context: cmp.Or(j.Name, id), If: j.If})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	slices.SortFunc(out, func(a, b workflowJob) int { return strings.Compare(a.ID, b.ID) })
 	return out, nil
 }
 

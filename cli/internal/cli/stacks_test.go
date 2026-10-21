@@ -169,9 +169,7 @@ func TestReportUnmanaged(t *testing.T) {
 	t.Setenv(stacks.EnvVar, "default:"+present+",alive:"+present+",swept:"+gone)
 
 	var buf bytes.Buffer
-	if err := reportUnmanaged(&buf, map[string]bool{"default": true}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	reportUnmanaged(&buf, map[string]bool{"default": true})
 	got := buf.String()
 
 	if strings.Contains(got, "default") {

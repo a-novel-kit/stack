@@ -32,21 +32,26 @@ func RunJobs(ctx context.Context, list []jobs.Job, limit int, live bool) Batch {
 	if live {
 		b = runLive(ctx, cancel, list, limit)
 	} else {
-		var mu sync.Mutex
-		say := func(s string) {
-			mu.Lock()
-			defer mu.Unlock()
-			fmt.Println(s)
-		}
-		progress := &jobs.Progress{
-			OnStart: func(i int) { say(startLine(list[i])) },
-			OnDone:  func(_ int, r jobs.Result) { say(statusLine(r)) },
-		}
-		b.Results = jobs.Run(ctx, list, limit, progress)
+		b.Results = runPlain(ctx, list, limit)
 	}
 	b.Aborted = b.Aborted || ctx.Err() != nil
 	b.Elapsed = time.Since(start)
 	return b
+}
+
+// runPlain runs list and prints a line as each job starts and as it finishes.
+func runPlain(ctx context.Context, list []jobs.Job, limit int) []jobs.Result {
+	var mu sync.Mutex
+	say := func(s string) {
+		mu.Lock()
+		defer mu.Unlock()
+		fmt.Println(s)
+	}
+	progress := &jobs.Progress{
+		OnStart: func(i int) { say(startLine(list[i])) },
+		OnDone:  func(_ int, r jobs.Result) { say(statusLine(r)) },
+	}
+	return jobs.Run(ctx, list, limit, progress)
 }
 
 // doneMsg delivers a finished job; finishedMsg follows the last one.

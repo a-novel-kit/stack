@@ -369,8 +369,14 @@ func cmdDirs(dir string) map[string]string {
 // long-runner. Compose resolves the build context against the compose file's
 // directory, and the Dockerfile against that context.
 func targetKind(composePath string, cs compose.Service) TargetKind {
-	if cs.Healthcheck != nil || cs.Build != nil && cs.Build.Dockerfile != "" &&
-		dockerfileHasHealthcheck(filepath.Join(filepath.Dir(composePath), cs.Build.Context, cs.Build.Dockerfile)) {
+	if cs.Healthcheck != nil {
+		return TargetKindLongRunner
+	}
+	if cs.Build == nil || cs.Build.Dockerfile == "" {
+		return TargetKindOneShot
+	}
+	dockerfile := filepath.Join(filepath.Dir(composePath), cs.Build.Context, cs.Build.Dockerfile)
+	if dockerfileHasHealthcheck(dockerfile) {
 		return TargetKindLongRunner
 	}
 	return TargetKindOneShot

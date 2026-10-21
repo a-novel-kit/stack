@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -28,7 +29,7 @@ func runGitRemote(dir string, args ...string) (string, error) {
 // runGitEnv is runGit with env added to the process environment.
 func runGitEnv(dir string, env []string, args ...string) (string, error) {
 	c := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	c.Env = append(os.Environ(), append(env, "GIT_LFS_SKIP_SMUDGE=1")...)
+	c.Env = slices.Concat(os.Environ(), env, []string{"GIT_LFS_SKIP_SMUDGE=1"})
 	out, err := c.CombinedOutput()
 	return string(out), err
 }
@@ -70,16 +71,15 @@ func defaultBranch(dir string) string {
 	return branchMaster
 }
 
-// ongoingWork names why dir holds work in progress (a detached HEAD, a branch
-// other than the default, uncommitted changes) or returns "" for a clean
-// default-branch checkout.
+// ongoingWork names the work in progress dir holds, such as a detached HEAD or
+// uncommitted changes. It returns "" for a clean checkout of the default branch.
 func ongoingWork(dir string) string {
 	out, err := runGit(dir, "symbolic-ref", "--quiet", "--short", "HEAD")
 	branch := strings.TrimSpace(out)
-	switch {
-	case err != nil || branch == "":
+	if err != nil || branch == "" {
 		return "detached HEAD"
-	case branch != defaultBranch(dir):
+	}
+	if branch != defaultBranch(dir) {
 		return "on " + branch
 	}
 	if out, err := runGit(dir, "status", "--porcelain"); err == nil && strings.TrimSpace(out) != "" {

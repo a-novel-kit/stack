@@ -219,7 +219,11 @@ func goTestPackageDirs(dir string) [][]string {
 // moduleDirStep is the walk's decision on a directory of the module at
 // absRoot: it skips the trees the main scan prunes and any nested module.
 func moduleDirStep(absRoot, path, name string, ignored map[string]struct{}) error {
-	if skipDir(absRoot, path, name, ignored) || path != absRoot && IsFile(filepath.Join(path, "go.mod")) {
+	if skipDir(absRoot, path, name, ignored) {
+		return filepath.SkipDir
+	}
+	// A nested go.mod starts another module, discovered on its own.
+	if path != absRoot && IsFile(filepath.Join(path, "go.mod")) {
 		return filepath.SkipDir
 	}
 	return nil

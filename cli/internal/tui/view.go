@@ -99,98 +99,76 @@ func (m *model) renderStatus(width int) string {
 	return style.Render(truncate(prefix+m.status.text, width-1))
 }
 
+// renderNav draws the service navigator: one block per service, or the reason
+// the list is empty.
 func (m *model) renderNav(width, height int) string {
-	// Three empty states get their own message, so loading, a hard failure
-	// and a genuinely empty stack read differently:
-	//   - !m.loaded            → refresh hasn't completed (or always errors)
-	//   - m.err != nil         → last refresh failed; surface the reason
-	//   - len(m.services) == 0 → refresh succeeded, stack has no services
 	if len(m.services) == 0 {
-		var msg string
-		switch {
-		case m.err != nil:
-			msg = "Error refreshing services:\n  " + truncate(m.err.Error(), width-4)
-		case !m.loaded:
-			msg = "Loading services..."
-		default:
-			msg = "(no services discovered)\nCheck that " + truncate("$A_NOVEL_STACKS app/ dirs exist", width-4)
-		}
-		return styleFrame.Width(width).Height(height).Render(styleDim.Render(msg))
+		return styleFrame.Width(width).Height(height).Render(styleDim.Render(m.navEmptyText(width)))
 	}
-	// Vertical per-service block: the name on its own full-width line, the
-	// status lines indented below it, a blank line between blocks. Long names
-	// like "service-authentication" then never collide with the counts on a
-	// narrow nav.
-	var lines []string
-	lines = append(lines, styleHeader.Render("Services"))
-	lines = append(lines, "")
+
+	blocks := make([]string, 0, len(m.services))
 	for i, svc := range m.services {
-		name := svc.GetName()
-		hasError := serviceHasError(svc)
-		inactive := countRunning(svc) == 0 && !hasError
-		// Selection wins over inactive dimming.
-		var nameLine string
-		switch {
-		case i == m.selectedSvc:
-			nameLine = styleSelected.Render("▸ " + name)
-		case inactive:
-			nameLine = "  " + styleDim.Render(name)
-		default:
-			nameLine = "  " + name
-		}
-		// One status row per kind, each summarizing its running/total count
-		// with a dot, so neither wraps when the nav is narrow. Indented by 4
-		// so the dots align with the first letter of the name above.
-		targetLine := "    " + serviceTargetsLine(svc)
-		infraLine := "    " + serviceInfraLine(svc)
-		lines = append(lines, nameLine, targetLine, infraLine)
-		if i != len(m.services)-1 {
-			lines = append(lines, "")
-		}
+		blocks = append(blocks, navBlock(svc, i == m.selectedSvc))
 	}
-	content := strings.Join(lines, "\n")
+	content := styleHeader.Render("Services") + "\n\n" + strings.Join(blocks, "\n\n")
 	return styleFrame.Width(width).Height(height).Render(styleNav.Render(content))
 }
 
+// navEmptyText says why the service list is empty: the last refresh failed,
+// the first refresh has not landed, or the stack has no services.
+func (m *model) navEmptyText(width int) string {
+	switch {
+	case m.err != nil:
+		return "Error refreshing services:\n  " + truncate(m.err.Error(), width-4)
+	case !m.loaded:
+		return "Loading services..."
+	default:
+		return "(no services discovered)\nCheck that " + truncate("$A_NOVEL_STACKS app/ dirs exist", width-4)
+	}
+}
+
+// navBlock is one service in the nav: its name on a line of its own, then one
+// status row per kind, each a dot and a running/total count, so neither wraps
+// on a narrow nav. The rows sit two columns inside the name. The selected name
+// is highlighted, and an idle service without errors is dimmed.
+func navBlock(svc *anovelv1.Service, selected bool) string {
+	name := svc.GetName()
+	nameLine := "  " + name
+	switch {
+	case selected:
+		nameLine = styleSelected.Render("▸ " + name)
+	case countRunning(svc) == 0 && !serviceHasError(svc):
+		nameLine = "  " + styleDim.Render(name)
+	}
+	return nameLine + "\n    " + serviceTargetsLine(svc) + "\n    " + serviceInfraLine(svc)
+}
+
+// renderRight draws the selected service's pane: its tab rows, a divider, the
+// selected tab's header and its logs.
 func (m *model) renderRight(width, height int) string {
 	if m.tabCount() == 0 {
 		return styleFrame.Width(width).Height(height).Render(styleDim.Render("(this service has no targets or infra)"))
 	}
-	// Detail header. Targets read "name · mode · phase [pid] [container]",
-	// infras "name · infra · phase healthy container=xxx".
-	var header string
-	switch t, in := m.activeTarget(), m.activeInfra(); {
-	case t != nil:
-		header = fmt.Sprintf("%s · %s · %s",
-			t.GetName(), modeShort(t.GetMode()), phaseShort(t.GetPhase()))
-		if t.GetPid() != 0 {
-			header += fmt.Sprintf(" pid=%d", t.GetPid())
-		}
-		if t.GetContainerId() != "" {
-			header += " container=" + safeShort(t.GetContainerId(), 12)
-		}
-	case in != nil:
-		header = fmt.Sprintf("%s · %s · %s %s",
-			in.GetName(),
-			styleDim.Render("infra"),
-			phaseShort(in.GetPhase()),
-			styleDim.Render(infraHealthLabel(in)))
-		if in.GetContainerId() != "" {
-			header += " container=" + safeShort(in.GetContainerId(), 12)
-		}
-	}
-	// Layout: [infra tabs] [target tabs] [divider] [header] [logs]. Two
-	// selectable tab rows, infra on top and targets below, each omitted when
-	// its slice is empty. selectedTab walks the concatenated
-	// [infras..., targets...] sequence so ←/→ flows across both rows linearly.
+	sections := append(m.tabRows(),
+		strings.Repeat("─", width-4),
+		styleHeader.Render(m.detailHeader()),
+		m.renderLogs(width-4, m.logViewportHeight()),
+	)
+	return styleFrame.Width(width).Height(height).Render(lipgloss.JoinVertical(lipgloss.Left, sections...))
+}
+
+// tabRows renders the infra tab row above the target tab row. A kind with no
+// entries gets no row. selectedTab walks infras then targets, so ←/→ flows
+// across both rows.
+func (m *model) tabRows() []string {
 	svc := m.activeService()
-	var sections []string
+	var rows []string
 	if infras := svc.GetInfra(); len(infras) > 0 {
 		tabs := make([]string, 0, len(infras))
 		for i, in := range infras {
 			tabs = append(tabs, renderTab(infraDot(in), "{"+in.GetName()+"}", i == m.selectedTab))
 		}
-		sections = append(sections, styleDim.Render("infra ")+strings.Join(tabs, "  "))
+		rows = append(rows, styleDim.Render("infra ")+strings.Join(tabs, "  "))
 	}
 	if targets := svc.GetTargets(); len(targets) > 0 {
 		tabs := make([]string, 0, len(targets))
@@ -198,15 +176,40 @@ func (m *model) renderRight(width, height int) string {
 		for i, t := range targets {
 			tabs = append(tabs, renderTab(targetStatusDot(t), "["+t.GetName()+"]", offset+i == m.selectedTab))
 		}
-		sections = append(sections, styleDim.Render("target ")+strings.Join(tabs, "  "))
+		rows = append(rows, styleDim.Render("target ")+strings.Join(tabs, "  "))
 	}
-	sections = append(sections,
-		strings.Repeat("─", width-4),
-		styleHeader.Render(header),
-		m.renderLogs(width-4, m.logViewportHeight()),
-	)
-	body := lipgloss.JoinVertical(lipgloss.Left, sections...)
-	return styleFrame.Width(width).Height(height).Render(body)
+	return rows
+}
+
+// detailHeader summarizes the selected tab. A target reads
+// "name · mode · phase [pid] [container]", and an infra
+// "name · infra · phase health [container]".
+func (m *model) detailHeader() string {
+	if t := m.activeTarget(); t != nil {
+		header := fmt.Sprintf("%s · %s · %s", t.GetName(), modeShort(t.GetMode()), phaseShort(t.GetPhase()))
+		if t.GetPid() != 0 {
+			header += fmt.Sprintf(" pid=%d", t.GetPid())
+		}
+		return header + containerSuffix(t.GetContainerId())
+	}
+	if in := m.activeInfra(); in != nil {
+		header := fmt.Sprintf("%s · %s · %s %s",
+			in.GetName(),
+			styleDim.Render("infra"),
+			phaseShort(in.GetPhase()),
+			styleDim.Render(infraHealthLabel(in)))
+		return header + containerSuffix(in.GetContainerId())
+	}
+	return ""
+}
+
+// containerSuffix is the " container=<short id>" header field, or "" without a
+// container.
+func containerSuffix(id string) string {
+	if id == "" {
+		return ""
+	}
+	return " container=" + safeShort(id, 12)
 }
 
 // renderTab renders one tab of the right pane's tab rows: its status dot,

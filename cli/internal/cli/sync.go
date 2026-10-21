@@ -109,16 +109,18 @@ func syncJobs(root string, repos []repoEntry, allowed, ignored map[string]bool) 
 	var list []jobs.Job
 	var skipped []string
 	for _, r := range repos {
-		switch {
-		case len(allowed) > 0 && !allowed[r.FullName()]:
-		case ignored[r.FullName()] || r == self:
-			skipped = append(skipped, r.FullName())
-		default:
-			list = append(list, jobs.Job{
-				Name: r.FullName(),
-				Run:  func(_ context.Context, out io.Writer) (string, error) { return syncRepo(root, r, out) },
-			})
+		name := r.FullName()
+		if len(allowed) > 0 && !allowed[name] {
+			continue
 		}
+		if ignored[name] || r == self {
+			skipped = append(skipped, name)
+			continue
+		}
+		list = append(list, jobs.Job{
+			Name: name,
+			Run:  func(_ context.Context, out io.Writer) (string, error) { return syncRepo(root, r, out) },
+		})
 	}
 	return list, skipped
 }

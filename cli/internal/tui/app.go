@@ -123,8 +123,16 @@ const maxLogLines = 500
 // statusInfoTTL is how long an info status stays before it fades.
 const statusInfoTTL = 5 * time.Second
 
+// refreshInterval is how often the UI polls the daemon for services.
+const refreshInterval = 2 * time.Second
+
+// pollCmd refreshes the services now and schedules the next poll.
+func (m *model) pollCmd() tea.Cmd {
+	return tea.Batch(refreshServicesCmd(m.c), tickEvery(refreshInterval))
+}
+
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(refreshServicesCmd(m.c), tickEvery(2*time.Second))
+	return m.pollCmd()
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -164,7 +172,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		return m, tea.Batch(refreshServicesCmd(m.c), tickEvery(2*time.Second))
+		return m, m.pollCmd()
 
 	case topologyMsg:
 		m.topologyTx = msg.rendered
@@ -199,10 +207,10 @@ func (m *model) onServices(services []*anovelv1.Service) {
 // truncates it, and even a plain start opens a fresh one.
 func (m *model) onActionResult(msg actionResultMsg) tea.Cmd {
 	if msg.err != nil {
-		m.status = statusEntry{level: statusError, text: msg.actionLabel + ": " + msg.err.Error(), at: time.Now()}
+		m.status = newStatus(statusError, msg.actionLabel+": "+msg.err.Error())
 		return refreshServicesCmd(m.c)
 	}
-	m.status = statusEntry{level: statusInfo, text: msg.successText, at: time.Now()}
+	m.status = newStatus(statusInfo, msg.successText)
 	m.followSelectedLogs()
 	fade := tea.Tick(statusInfoTTL, func(time.Time) tea.Msg { return statusFadeMsg{} })
 	return tea.Batch(refreshServicesCmd(m.c), fade)
