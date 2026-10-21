@@ -138,9 +138,12 @@ layer/role prefixes (`pg.*`, `rest.*`, `grpc.*`, `*.config.go`, `common.go`, …
   the cost; ambiguity is.
 - **Short names are fine for conventional roles only**: `w` / `r` for HTTP handler params, `ctx`
   for `context.Context`, `err` for errors, `i` / `k` / `v` in range loops, `t` for `*testing.T`.
-- **Acronyms keep ecosystem casing**: `ID`, `URL`, `JSON`, `JWT`, `JWK`, `HTTP`, `REST`, `gRPC`,
-  `SQL`, `TTL`. An acronym that _starts_ an unexported identifier goes all-lowercase: `id`,
-  `url`, `grpc`.
+- **Initialisms keep Go's casing**: `ID`, `URL`, `JSON`, `JWT`, `HTTP`, `SQL`, `TTL`, `DSN`, `KID`,
+  as in `GcloudProjectID`, `GrpcURL` and `PostgresDSN`. An initialism that _starts_ an unexported
+  identifier goes all-lowercase: `id`, `url`.
+- **Layer and protocol prefixes are words**: `Rest`, `Grpc`, `Pg`, `Jwk`, `Dao`, as in
+  `RestJwkGet`, `GrpcClaimsSign`, `PgJwkSearch` and `JwkSearchDao`. Generated code keeps the casing
+  its generator chose, such as protobuf's `GetId`.
 - **Don't shadow imported package names** (`json`, `http`, `context`, `errors`, `time`, …).
   Rename the variable.
 
