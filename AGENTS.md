@@ -13,6 +13,12 @@ Remove what you own by exact name, never with a store-wide prune, and state that
 that delegates work able to create or remove anything. See
 [workspace hygiene](.agents/skills/git-conventions/references/workspace.md#when-you-are-done).
 
+When the developer asks for a command, your next reply is that command and nothing else. Read only
+what its arguments need, then hand it over. Leave out the procedure around it, the follow-up
+commands and the checks it suggests: the developer is usually acting on a clock, as during a
+planned downtime, and each extra step delays them. Verify and monitor after the hand-off, and
+report only what they ask for.
+
 Commands handed to the developer to run must paste cleanly into zsh with oh-my-zsh, which bash
 accepts too. Put a space before a `;`, `&` or `|` that follows a URL: `url-quote-magic` escapes it
 on paste, so `…/pull/12; done` arrives as `…/pull/12\; done` and fails to parse. Quote arguments
