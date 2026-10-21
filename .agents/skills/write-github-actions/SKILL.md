@@ -171,17 +171,18 @@ repo under one `a-novel-kit workflows` update, so a repo's references move toget
 one version. Each release is immutable, so GitHub never lets its tag move, and a release stamps its
 actions' references to their siblings with its own tag, which no commit can name.
 
-Pin every third-party action to its release commit, with the version beside it:
-`actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`. Many run beside an App's
-private key. `release-core` hands the release App's key, which bypasses every ruleset, to
-`create-github-app-token`, and its checkout keeps the minted token for every later step, so a moved
-upstream tag would run new code there on the next release.
+Pin every third-party action, GitHub's own `actions/*` included, to its release commit, with the
+version beside it: `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`. Many run
+beside an App's private key. `release-core` hands the release App's key, which bypasses every
+ruleset, to `create-github-app-token`, and its checkout keeps the minted token for every later step,
+so a moved upstream tag would run new code there on the next release.
 
 - Resolve a new action's commit with `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`, and
   check that it is an immutable release or lies on the project's default branch.
-- The base Renovate preset keeps the pins current. It moves the commit and the version together three
-  days after a release, and holds a digest update, the same version on another commit, for review:
-  that is a moved tag.
+- The base Renovate preset keeps the pins current. It pins an action still referenced by tag to the
+  commit that tag names and merges it on its own, since the code that runs stays the same. It moves
+  the commit and the version together three days after a release, and holds a digest update, the
+  same version on another commit, for review: that is a moved tag.
 - The workflows repo's `pnpm lint` rejects any other form in an action manifest. zizmor's
   `unpinned-uses` audit rejects it in workflows with `"a-novel-kit/*": ref-pin` and `"*": hash-pin`,
   which the shipped baseline adopts once every repository is pinned (a-novel-kit/workflows#626).
