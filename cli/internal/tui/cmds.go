@@ -143,7 +143,7 @@ func (m *model) followSelectedLogs() {
 // carries every line received since the last one, so the replay of a long log
 // renders once per batch, not once per line.
 func (m *model) forwardLogs(ctx context.Context, id string, gen int) {
-	stream, err := m.c.StreamLogs(ctx, id, "", true /* follow */, 0, anovelv1.LogStream_LOG_STREAM_UNSPECIFIED)
+	stream, err := m.c.StreamLogs(ctx, id, "", true /* follow */, maxLogLines, anovelv1.LogStream_LOG_STREAM_UNSPECIFIED)
 	if err != nil {
 		m.program.Send(errMsg{err: err})
 		return
