@@ -72,7 +72,7 @@ func TestServe(t *testing.T) {
 
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			srv := server.New("test", path, nil, nil, nil, nil, cancel)
+			srv := server.New("test", path, nil, nil, nil, nil, cancel, ctx.Done())
 			serveErr := make(chan error, 1)
 			go func() { serveErr <- serve(ctx, wrapped, srv) }()
 

@@ -52,7 +52,7 @@ func TestPrepareReinstallStopsGoExecTargets(t *testing.T) {
 	logStore := logs.New()
 	run := runner.New(stacks, alloc, builder, logStore)
 	stopped := make(chan struct{})
-	srv := New("test", "", stacks, run, builder, logStore, func() { close(stopped) })
+	srv := New("test", "", stacks, run, builder, logStore, func() { close(stopped) }, stopped)
 
 	if err := run.Relaunch(t.Context(), tgt.ID(), []string{"REST_PORT=41235"}); err != nil {
 		t.Fatalf("Relaunch: %v", err)
