@@ -130,11 +130,16 @@ convention and is not substituted by bun's `NewRaw`. Never build SQL by concaten
 This service maintains two objects for the `keys` entity:
 
 - **`keys`** — the base table. All writes (INSERT, UPDATE) target this table directly.
-- **`active_keys`** — a materialized view that exposes only non-expired, non-deleted rows.
-  All reads (SELECT) target this view.
+- **`active_keys`** — a plain view that exposes only non-expired, non-deleted rows, evaluated
+  per query. All reads (SELECT) target this view.
 
 Never read from `keys` directly in a DAO query — `active_keys` enforces the expiry and
 soft-delete rules automatically. Never write to `active_keys`.
+
+Expired and revoked keys stay in `keys` for good, reachable only by manual maintenance queries.
+Since the view filters them at read time, the index under it leads with the lookup key, then the
+expiry the view filters on. `keys (usage, expires_at)` lets a search range-scan the live keys of its
+usage instead of every key the usage ever had.
 
 ---
 
@@ -211,6 +216,11 @@ created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
 -- NOT this — a corrective migration in a repo that never runs migrations against a live database
 ALTER TABLE items ALTER COLUMN created_at TYPE timestamp with time zone;
 ```
+
+The template's CI follows suit. Its `main.yaml` skips `check-migration-snapshots` and buf's
+breaking check when `github.event.repository.is_template` is true, so an in-place edit needs no
+override label. Regenerate the schema snapshot with `GOLIB_UPDATE_SNAPSHOTS=1`. A fork is no
+template repository, so both guards run there.
 
 This applies **only** to `service-template`. Every real service — `service-authentication`,
 `service-json-keys`, `service-narrative-engine`, and anything generated from the template — has
@@ -465,6 +475,28 @@ constraint is the last line of defense.
 Use `uuid` for all entity primary keys. Never use `serial` or `bigserial` — auto-increment
 integers leak row counts and make client-side ID generation impossible. Generate UUIDs in Go
 before the INSERT so the caller always has the ID without a database round-trip.
+
+Generate UUIDs with `uuid.NewV7`, and default the column to `uuidv7()`. A UUIDv7 starts with its
+creation time, so inserts land at the end of the primary key index, and a list pages by ID through
+that index:
+
+```sql
+SELECT
+  *
+FROM
+  items
+WHERE
+  id < ?1
+ORDER BY
+  id DESC
+LIMIT
+  ?0;
+```
+
+The caller passes the last ID of the previous page, or `uuid.Max` for the first one. A deleted
+cursor still marks its place, so no row repeats or goes missing. Never page with `OFFSET`: it reads
+and discards every row it skips. A UUIDv7 reveals when its row was created; keep `uuid.New` for an
+ID whose creation time must stay private.
 
 ### Indexes
 
