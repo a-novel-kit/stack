@@ -208,7 +208,8 @@ func (r *Runner) dropInfraSession(stack, service string) {
 }
 
 // runOneShot spawns a one-shot target and blocks until it terminates.
-// Returns nil iff it terminated with EXIT_REASON_SUCCESS.
+// Returns nil iff it terminated with EXIT_REASON_SUCCESS. A start already in
+// flight counts as the run, so two callers wait on one run.
 func (r *Runner) runOneShot(ctx context.Context, t *discovery.Target, mode anovelv1.Mode) error {
 	if _, err := r.launch(ctx, t, mode); err != nil {
 		return err

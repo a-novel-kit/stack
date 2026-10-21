@@ -158,9 +158,9 @@ func (r *Runner) AllInstances() []Instance {
 // container means go-exec. The dependency walk runs first, so the ports it
 // allocates land in the env built next.
 //
-// Starting a target already running in mode returns its instance. A target
-// running in the other mode, or stopping, is refused. A failure to build the
-// env wraps ErrEnv.
+// Starting a target already starting or running in mode returns its instance.
+// A target running in the other mode, or stopping, is refused. A failure to
+// build the env wraps ErrEnv.
 func (r *Runner) StartTarget(ctx context.Context, t *discovery.Target, svc *discovery.Service, mode anovelv1.Mode) (*Instance, error) {
 	if err := r.EnsureDepsReady(ctx, t, svc, mode); err != nil {
 		return nil, err
@@ -171,58 +171,105 @@ func (r *Runner) StartTarget(ctx context.Context, t *discovery.Target, svc *disc
 // Relaunch restarts target id as go-exec from a reinstall checkpoint, on the
 // host ports the previous daemon gave it, listed as KEY=port entries in held.
 // Reserving them before the env builds keeps the allocator in step with what
-// the process binds, so every other consumer resolves the same ports.
+// the process binds, so every other consumer resolves the same ports. The
+// claim comes first, so a target that already runs keeps its own ports.
 func (r *Runner) Relaunch(ctx context.Context, id string, held []string) error {
 	t, _ := r.stacks.Target(id)
 	if t == nil {
 		return fmt.Errorf("unknown target %q", id)
 	}
-	if _, running, err := r.canStart(id, anovelv1.Mode_MODE_GO_EXEC); err != nil || running {
+	inst, _, err := r.claim(t, anovelv1.Mode_MODE_GO_EXEC)
+	if inst == nil {
 		return err
 	}
 	r.builder.KeepPorts(t, held)
-	_, err := r.launch(ctx, t, anovelv1.Mode_MODE_GO_EXEC)
+	_, err = r.spawn(ctx, t, inst)
 	return err
 }
 
-// launch builds t's env and spawns it in mode. The start invariants are
-// checked before the env claims any port, so a refused start leaves a live
-// instance's ports alone, and a failed spawn releases what the env claimed.
+// launch claims t's start slot, then builds its env and spawns it in mode. The
+// claim comes before the env claims any port, so a refused start leaves a live
+// instance's ports alone.
 func (r *Runner) launch(ctx context.Context, t *discovery.Target, mode anovelv1.Mode) (*Instance, error) {
-	start := r.startGoExec
-	if mode == anovelv1.Mode_MODE_CONTAINER {
-		start = r.startContainer
-	} else {
+	if mode != anovelv1.Mode_MODE_CONTAINER {
 		mode = anovelv1.Mode_MODE_GO_EXEC
 	}
-	if inst, running, err := r.canStart(t.ID(), mode); err != nil || running {
-		return inst, err
+	inst, live, err := r.claim(t, mode)
+	if inst == nil {
+		return live, err
+	}
+	return r.spawn(ctx, t, inst)
+}
+
+// spawn builds the env of the claimed instance inst and starts it in the
+// claimed mode. Every failure marks inst terminated with the error, which
+// releases what the env claimed, so a caller waiting on inst sees the failure.
+func (r *Runner) spawn(ctx context.Context, t *discovery.Target, inst *Instance) (*Instance, error) {
+	start := r.startGoExec
+	if inst.Mode == anovelv1.Mode_MODE_CONTAINER {
+		start = r.startContainer
 	}
 	// The builder's snapshot fill picks up ports infra-up allocated, such as
 	// POSTGRES_PORT, so POSTGRES_DSN synthesizes to localhost:<port>.
 	entries, warnings, err := r.builder.ForTarget(t)
 	if err != nil {
-		r.alloc.Release(t.ID())
+		r.markTerminated(inst.ID, anovelv1.ExitReason_EXIT_REASON_ERROR, "env build: "+err.Error())
 		return nil, fmt.Errorf("%w: %w", ErrEnv, err)
 	}
-	inst, err := start(ctx, t, env.Environ(entries), warnings)
-	if err != nil {
-		r.alloc.Release(t.ID())
-	}
-	return inst, err
+	return start(ctx, inst, t, env.Environ(entries), warnings)
 }
 
-// canStart enforces the start-time invariants:
+// claim checks the start-time invariants and, when t may start, records a
+// PENDING instance of it in the same critical section, so a concurrent start
+// finds the slot taken. It returns the claimed instance, or, when t already
+// runs in mode, nil and a copy of the live instance.
+func (r *Runner) claim(t *discovery.Target, mode anovelv1.Mode) (*Instance, *Instance, error) {
+	id := t.ID()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if live, running, err := canStart(r.instances[id], id, mode); err != nil || running {
+		return nil, live, err
+	}
+	inst := &Instance{
+		ID:        id,
+		Target:    t.Name,
+		Service:   t.Service,
+		Stack:     t.Stack,
+		Mode:      mode,
+		Phase:     anovelv1.Phase_PHASE_PENDING,
+		StartedAt: time.Now(),
+	}
+	r.instances[id] = inst
+	return inst, nil, nil
+}
+
+// begin hands the claimed instance its process handle and moves it from PENDING
+// to STARTING. A kill that came first left the instance STOPPING: begin then
+// marks it killed and returns an error, and the caller spawns nothing. cmd is
+// nil for a container.
+func (r *Runner) begin(inst *Instance, cmd *exec.Cmd, cancel context.CancelFunc) error {
+	r.mu.Lock()
+	inst.cmd, inst.cancel = cmd, cancel
+	killed := inst.Phase == anovelv1.Phase_PHASE_STOPPING
+	r.mu.Unlock()
+	if killed {
+		r.markTerminated(inst.ID, anovelv1.ExitReason_EXIT_REASON_KILLED, "")
+		return fmt.Errorf("%s was killed before it started", inst.ID)
+	}
+	r.transition(inst.ID, anovelv1.Phase_PHASE_STARTING)
+	return nil
+}
+
+// canStart enforces the start-time invariants on inst, the target's current
+// record, or nil when there is none:
 //   - running in the same mode is idempotent and returns the existing instance
 //   - running in a different mode is refused, with a hint
 //   - a stopping instance is refused; the caller waits or restarts
 //
-// It returns (existing-instance, true, nil) when the call is a no-op.
-func (r *Runner) canStart(id string, mode anovelv1.Mode) (*Instance, bool, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	inst, ok := r.instances[id]
-	if !ok {
+// It returns (existing-instance, true, nil) when the call is a no-op. The
+// caller holds r.mu.
+func canStart(inst *Instance, id string, mode anovelv1.Mode) (*Instance, bool, error) {
+	if inst == nil {
 		return nil, false, nil
 	}
 	switch inst.Phase {
@@ -248,26 +295,6 @@ func modeLabel(m anovelv1.Mode) string {
 		return "container"
 	}
 	return "go-exec"
-}
-
-// register records a PENDING instance of t, replacing a terminated one, so
-// concurrent starts see the slot taken. cmd is nil for a container.
-func (r *Runner) register(t *discovery.Target, mode anovelv1.Mode, cmd *exec.Cmd, cancel context.CancelFunc) *Instance {
-	inst := &Instance{
-		ID:        t.ID(),
-		Target:    t.Name,
-		Service:   t.Service,
-		Stack:     t.Stack,
-		Mode:      mode,
-		Phase:     anovelv1.Phase_PHASE_PENDING,
-		StartedAt: time.Now(),
-		cmd:       cmd,
-		cancel:    cancel,
-	}
-	r.mu.Lock()
-	r.instances[inst.ID] = inst
-	r.mu.Unlock()
-	return inst
 }
 
 // =============================================================================
