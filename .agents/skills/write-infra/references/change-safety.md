@@ -33,6 +33,10 @@
   deleted while its objects stay.
 - **Grants that served retired tooling** are better adopted and then deleted under the label than
   left behind as unmanaged orphans.
+- **Changing an IAM binding's condition replaces the binding.** Its expression, title and
+  description are all force-new, so the plan deletes the binding and needs the label. To grant a
+  role on one more invocation class, add a second binding conditioned on that class: it plans as an
+  addition, as `foundation_maintenance_updates` did in a-novel/infra#962.
 - **Service roots read foundation's applied outputs.** A new foundation output must deploy before a
   service root reads it, or the service plans fail on a missing attribute. Ship the output in its
   own pull request first, then the change that uses it.
@@ -216,6 +220,17 @@ pins in the same change.
 - **A service that trusts a forwarded visitor header requires IAM.** Its invokers are only the
   platform and the health checks after each deploy and from drift, which send an ID token for the
   service's custom audience.
+- **Only named humans run a maintenance job.** Authentication's `agora-authentication-maintenance`
+  is the model (a-novel/infra#961, #962):
+  - the service root defines it with a pinned image and no `run_execution_token`. Its stored
+    definition names no operation, since the image's default only prints help, and it never
+    retries, so a failed run returns to the operator;
+  - foundation tags it `maintenance`. The deploy identity may update jobs of that class, so a
+    release moves the image, but never runs them;
+  - the principals in `authentication_maintenance_principals` hold
+    `roles/run.jobsExecutorWithOverrides` on that class alone, because only an execution's argument
+    overrides name the operation. `run.viewer` and `logging.viewer` let them follow the run;
+  - `docs/runbooks/setup.md` gives the `gcloud run jobs execute … --args=…` command.
 - **Inventory IAM by principal and resource:**
   - each workload runs as its own identity and reads only the secrets it mounts: the runtime
     account is the main server's, and `service-runtime`'s `workloads` map creates one account per
@@ -223,7 +238,8 @@ pins in the same change.
   - database and repository hosts pull only their service's images. `service-runtime` grants the
     database host's pull, so a host without native backups pulls too. Genai lost its database for
     over an hour on 2026-10-18 when that grant lived in the backup module;
-  - humans get no write access in workload projects.
+  - humans get no write access in workload projects; the named operators only run the maintenance
+    job.
 
 ## Recovery
 

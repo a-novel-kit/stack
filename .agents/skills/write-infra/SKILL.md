@@ -68,9 +68,9 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
   the pull request plan it.
 - **Use `gcloud` only for reads,** and only when the user allows it in the session. A useful read:
   `tofu plan -refresh=false -lock=false` with `GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)`.
-- **Humans** hold read access, IAP SSH and secret-version rights. Everything else goes through
-  `deploy.yaml`, `downtime.yaml` for planned downtimes, `roll-database.yaml` for database hosts, or
-  `recovery.yaml` for drills.
+- **Humans** hold read access, IAP SSH and secret-version rights, and the named operators run
+  Authentication's maintenance job. Everything else goes through `deploy.yaml`, `downtime.yaml` for
+  planned downtimes, `roll-database.yaml` for database hosts, or `recovery.yaml` for drills.
 - **Write runbook commands for the identity that actually runs them.** A command a human cannot
   run belongs in a workflow.
 - **Deleting, replacing or forgetting a resource, or weakening its protection,** needs the
