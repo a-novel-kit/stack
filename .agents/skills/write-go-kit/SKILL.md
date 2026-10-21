@@ -212,6 +212,11 @@ package, helpers, mockery where interfaces exist). The kit-flavoured additions:
 - **Authoring a bespoke `CODE_OF_CONDUCT.md` / restating the org contributing guide.** Use the
   `a-novel-kit/.github` defaults; the per-repo `CONTRIBUTING.md` only _extends_ the org-wide one.
 - **Moving tool dependencies into `go.mod`.** They live in `golangci-lint.mod` / `gotestsum.mod`.
+- **An attacker-controlled length reaching a `crypto/cipher` call that panics on it.**
+  `cipher.NewCBCDecrypter`, `CryptBlocks` and an AEAD's `Open` panic on a wrong IV, nonce or block
+  length. An integrity check does not protect them when the sender can know the key, as with
+  public-key key management. Check every length first and return the library's invalid-token
+  error. gRPC does not recover a handler panic, so the process exits.
 - **Graduating a sub-package without the developer's say-so.** Flag the candidate; let the
   developer decide.
 - **Treating a kit change as self-contained when a service needs it.** It's a cross-repo change —

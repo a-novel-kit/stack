@@ -17,6 +17,9 @@
   projects.
 - **Data sources the account cannot read** go in a scratch copy, stubbed with the literal value
   from state. Never stub them in the committed code.
+- **Without backend access,** diff `tofu test -verbose` between an `origin/master` export
+  (`git archive origin/master | tar -x`) and the branch. It prints every run's planned values under
+  the mocked providers, rendered templates included, and its output is deterministic.
 - **Within one state,** move addresses with `moved` blocks.
 - **Across states,** adopt with `import` blocks in the new root. Generate them from the old state's
   attributes; never hand-guess an ID:
@@ -132,8 +135,10 @@ pins in the same change.
 
 - **The host groups use an `OPPORTUNISTIC` update policy.** Merging a template, image or TLS change
   restarts nothing.
-- **Database host changes wait for a planned downtime.** `policy.jq` flags a database host's
-  template replacement or group update, which is not a deletion. Its pull request needs
+- **Database host changes wait for a planned downtime.** Any byte change under
+  `modules/database-runtime/files/`, and any reordering of its `local.files`, replaces the host
+  template. `policy.jq`
+  flags a database host's template replacement or group update, which is not a deletion. Its pull request needs
   `allow-downtime`, and `DOWNTIME` must list `service-<service>.database` with a `start` already
   passed. Ask for a full backup before the downtime starts.
 - **Planned downtimes come only from the admin-only `downtime.yaml`,** which writes `DOWNTIME`. A

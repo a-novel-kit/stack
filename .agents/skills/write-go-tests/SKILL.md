@@ -102,6 +102,11 @@ One test function per exported type. The name identifies what is under test, nev
 does: no "TestWhenUserIsNotFound", no "TestReturnsErrorOnBadInput". Scenarios are sub-tests (see
 below).
 
+A package-level function follows the same rule: `TestFunctionName`, one per exported function. A
+test that calls `t.Setenv` or swaps process-global state stays a top-level function of its own, with
+the `//nolint:paralleltest` reason. Under a parallel parent, `t.Setenv` panics and a global swap
+leaks into sibling sub-tests.
+
 ---
 
 ## Package
@@ -218,6 +223,9 @@ it?" If not, it is not worth writing.
   assignment to a variable declared _outside_ the closure is a data race. Declare a new local with
   `:=` inside the closure instead of writing to an outer one with `=` — above all for `err`
   variables shared between setup code and the table loop.
+- **A table case closure that captures the parent `t`.** The closure runs inside a parallel
+  sub-test, so a `require` on the parent calls `FailNow` from the wrong goroutine. Pass the sub-test's
+  `t` into the closure, or build the value in a helper that panics on an impossible setup error.
 - **`assert` instead of `require`.** Always use `require` in test bodies.
 - **`context.Background()` in test bodies.** Use `t.Context()` instead.
 - **Hard-coding mock expectations for context.** Always use `mock.Anything` for `ctx`.

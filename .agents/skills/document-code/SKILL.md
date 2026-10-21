@@ -160,6 +160,14 @@ matters, in as few words as it takes, and stop.
 - **Let structure carry parallel facts.** Three or more facts of the same kind go in a list or a
   table, one per row, not in one long sentence. A short lead sentence says what they have in common.
   The reader then takes the most information from the least text.
+- **Keep blocks short.** A long block loses the reader the way a long sentence does. A paragraph
+  carries one idea in three or four sentences. A doc comment rarely needs more than two short
+  paragraphs. Move the rest into a list, under a heading, or into a comment beside the code it
+  explains. An ordered chain of more than three steps, such as a middleware order, is a numbered
+  list.
+- **Untangle chained words.** A chain of nouns or `of` phrases, such as "the rotation policy of the
+  signing key of the tenant", makes the reader parse backwards. Name the thing, then describe it:
+  "The tenant's signing key rotates on a policy."
 
 This applies to every prose surface we write — doc comments, package docs, README sections, PR
 descriptions (see `open-pull-request`), and planning issues (see `plan-feature`). Load this section
@@ -381,7 +389,8 @@ and measure the tree you are sweeping: a `grep -r` over a sibling checkout repor
 branch that checkout happens to be parked on, not your baseline.
 
 **A pattern search locates candidates; reading classifies them.** Every mechanical scan is a proxy —
-`would`, `rather than`, `, not ` — and the worst findings match none of them. Change narrative
+`would`, `rather than`, `, not `, or a comment sentence over 32 words or with four or more commas
+and semicolons — and the worst findings match none of them. Change narrative
 ("the defect lived on the read path", "fixed in v1.4.5"), aggregate blocks describing the elements
 below them, and docs that contradict the code are all found by reading the block the grep dragged into
 view, never by the grep itself.

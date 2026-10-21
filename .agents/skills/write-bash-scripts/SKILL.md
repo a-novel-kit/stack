@@ -300,6 +300,18 @@ Most entries are stated in full in the sections above; this list is the review c
   ```bash
   VERSION="$(node -p "require('./package.json').version")"
   ```
+- **A process per loop iteration.** Each command substitution, `jq`, `grep`, or `gh api` call inside
+  a loop forks a process, and an API call also spends rate limit. Run the tool once over the whole
+  input and loop over its output. Resolve what a poll loop does not change, such as an instance
+  name, before the loop starts.
+- **Rows split on tabs.** Tab is IFS whitespace, so `@tsv` with `IFS=$'\t' read` collapses empty
+  fields and shifts the rest left. Join a row's fields with the unit separator,
+  `join("\u001f")`, and read them with `IFS=$'\x1f' read -r a b c`.
+- **A recursive function in a pipeline.** Each level forks a subshell. Walk the tree with a worklist
+  array instead.
+- **Control flow hidden at the end of a line.** A `continue`, `return` or `exit` after a long
+  `echo … | tee` sits where nobody reads it. Give it its own line. A long loop body becomes a
+  function with guard-clause `return`s.
 - **`source` instead of `.`.** Both work in bash, but `.` is POSIX. Use `.` for consistency.
 - **`tr ' ' '─'` for separator lines.** It corrupts the multi-byte UTF-8 character; build the rule
   with a pure-bash loop or `printf -v`.

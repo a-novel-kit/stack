@@ -266,6 +266,22 @@ or instruction to find an earlier link does not replace it.
   trade correctness or accessibility for an unmeasured micro-optimization.
 - Handle offline, timeout, retry, and partial-response behavior at the owning boundary. Never retry a
   non-idempotent operation invisibly.
+- Apply the shared traps in
+  [prefer-small-solutions](../prefer-small-solutions/SKILL.md#keep-simple-code-fast). JavaScript
+  adds these, in the browser and on the server:
+  - Deep recursion throws `RangeError` and keeps every enclosing closure alive. Walk trees shaped by
+    data with an explicit stack.
+  - An async function that awaits a call to itself, such as a polling `return poll()`, chains one
+    pending promise per turn and keeps them all. Loop with `while` and `await` instead.
+  - Give every `addEventListener`, `setInterval`, observer, and subscription a teardown at the same
+    ownership level. Prefer passing an `AbortSignal` as `{ signal }` so one abort removes them all.
+  - Create `Intl` formatters, `RegExp` objects, and collators once per locale or module, never per
+    call, item, or render.
+  - Keep server module state immutable or bounded. Every SSR request shares it, so a per-user entry
+    is a leak and a privacy defect.
+  - On the server, read or cancel every `fetch` response body, error statuses included:
+    `await response.body?.cancel()` before an early `return` or `throw`. Node's undici returns the
+    connection to its pool only once the body settles.
 
 ## Completion checklist
 
