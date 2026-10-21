@@ -101,13 +101,16 @@ Use these exact slot headings per repo type:
    description does NOT replace it — slot 2 is its own `##` section. A `go get` / `pnpm add`
    one-liner sitting before the first `##` heading is a violation; put it inside slot 3.
 2. **Slot 3 leads with the EXPECTED / production path.** For a service that is the production
-   split-image composition (one canonical compose block + an image-role table) plus the OpenTofu
-   forward-note below. The standalone single-command dev compose is relegated to `## Running
-locally`, the LAST section before Contributing. `### Configuration` lives inside `## Deploying`:
-   required env vars visible, optional groups (REST tuning, OTel) under `<details>`.
-   > **OpenTofu modules are the planned canonical deployment path.** Until they land, deploy the
-   > images with any container orchestrator — the composition below is the reference for which
-   > images to run, how they wire together, and the environment they expect.
+   split-image composition (one canonical compose block + an image-role table), introduced by
+   this plain paragraph, which states the path a reader takes today:
+
+   > Deploy the images with any container orchestrator. The composition below shows which images
+   > to run, how they wire together, and the environment they expect.
+
+   The standalone single-command dev compose is relegated to `## Running locally`, the LAST
+   section before Contributing. `### Configuration` lives inside `## Deploying`: required env vars
+   visible, optional groups (REST tuning, OTel) under `<details>`.
+
 3. **Contributing (slot 5) is always the last section.**
 4. **Describe in prose; enumerate in tables.** The role section (slot 2) is prose — never inline a
    capability list (sub-packages, packages, endpoints, env vars) in a sentence, and never pause an
