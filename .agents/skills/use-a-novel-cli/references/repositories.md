@@ -44,8 +44,10 @@ Behaviours to know before running it:
   carries every repo's per-operation log.
 - **Scoped secrets need `admin:org`.** `update` grants each scoped org secret to the repos whose
   workflows name it, an org-level write that needs the `admin:org` scope on the operator's `gh`
-  token on top of repo admin rights. Without it those operations fail with HTTP 403 ("You must be
-  an org admin or have the actions secrets fine-grained permission") and the rest applies. The human
+  token on top of repo admin rights. A token without the scope stops `create` and the write path
+  of `update` before planning, with the grant command; `--dry-run` and `--json` skip the check. An
+  operator who is not an org admin still sees those operations fail with HTTP 403 ("You must be an
+  org admin or have the actions secrets fine-grained permission") while the rest applies. The human
   runs `gh auth refresh -h github.com -s admin:org` before the update and `--remove-scopes
 admin:org` after.
 - **A newer deployed pin survives.** For files pinning `a-novel-kit/workflows` actions, a version
