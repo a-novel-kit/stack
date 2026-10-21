@@ -319,6 +319,11 @@ every language shares. Go adds these:
 - **Setup repeated per call.** `regexp.MustCompile`, `template.Must(template.New(…).Parse(…))`, and
   `&http.Client{}` belong in a package variable or the constructor. A client built per call also
   loses connection reuse.
+- **Expensive work in a package variable.** A package-level initializer runs in every binary that
+  links the package, test binaries and consumers of a published client included. Keep it to cheap
+  setup such as a compiled `regexp`. Build an expensive value, such as a password hash, on first use
+  with `sync.OnceValue`, and warm it at the entrypoint when the first request must not pay for it.
+  `GODEBUG=inittrace=1` prints each package's init time and allocations.
 - **A goroutine per item.** An unbounded fan-out has no ceiling on memory or open connections. Use
   `errgroup.Group` with `SetLimit`.
 - **A slice grown to a known size.** Allocate it with `make([]T, 0, len(source))` so `append` never
