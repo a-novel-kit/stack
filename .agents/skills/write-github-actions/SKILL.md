@@ -409,7 +409,11 @@ a list that outgrows 80 columns as a block sequence; `pnpm lint:templates` check
 
 Two of them keep dependency PRs moving without a person. `auto-approve-dependabot.yaml` approves the
 bots' PRs, withholding approval while `renovate/stability-days` is pending; its `status` trigger
-approves once Renovate marks the update stable. `recover-prs.yaml` re-arms auto-merge on a PR the
+approves once Renovate marks the update stable. It approves a PR on a `renovate/` branch only when
+Renovate itself put it on auto-merge, so an update a preset sets to `automerge: false`, such as a
+major, waits for a maintainer or an admin. The first to enable auto-merge decides, so a re-armed PR
+stays approved and a person taking it off auto-merge holds it. The bot's own `chore/deps/` and
+`backport/` PRs need no such choice. `recover-prs.yaml` re-arms auto-merge on a PR the
 merge queue dropped for `checks_timed_out`, and dispatches Renovate when a merge leaves a dependency
 PR conflicting.
 
