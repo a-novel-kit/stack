@@ -184,8 +184,7 @@ so a moved upstream tag would run new code there on the next release.
   the commit and the version together three days after a release, and holds a digest update, the
   same version on another commit, for review: that is a moved tag.
 - The workflows repo's `pnpm lint` rejects any other form in an action manifest. zizmor's
-  `unpinned-uses` audit rejects it in workflows with `"a-novel-kit/*": ref-pin` and `"*": hash-pin`,
-  which the shipped baseline adopts once every repository is pinned (a-novel-kit/workflows#626).
+  `unpinned-uses` audit rejects it in workflows with `"a-novel-kit/*": ref-pin` and `"*": hash-pin`.
 - The org setting `sha_pinning_required` stays off: it also checks the nested
   `a-novel-kit/workflows` references, which stay on tags.
 
