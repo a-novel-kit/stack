@@ -20,11 +20,13 @@ identities, folders and variables those guides consume, and the order that creat
    - `<slug>-visual-maintenance`: Manager on the Shared Drive. Maintenance deletes batches
      permanently, and the Drive API refuses that organizer authority on a folder.
 
-   A raw `Drive operation failed; check API access and quota in the private consoles` at the
-   `Download the current master reference` step means the CI identity cannot see a folder. Either a
-   share is missing, or a new Shared Drive refuses outside and non-member access: a service account
-   counts as outside the organization. Once the folders are visible, the helper's own messages name
-   the missing capability, such as `The identity cannot upload platform results`.
+   A failed Drive call adds its operation, HTTP status and Drive reason to the generic
+   `Drive operation failed; check API access and quota in the private consoles`. At the
+   `Download the current master reference` step, `(files.get, HTTP 404, notFound)` means the CI
+   identity cannot see a folder. Either a share is missing, or a new Shared Drive refuses outside
+   and non-member access: a service account counts as outside the organization. Once the folders
+   are visible, the helper's own messages name the missing capability, such as
+   `The identity cannot upload platform results`.
 
 3. **Merge the wiring pull request first.** Keep `VISUAL_CI_PROVIDER` unset until the pull request
    that passes `test-playwright`'s Drive inputs and adds `visual-tests.yaml` has merged. Drive turns on
