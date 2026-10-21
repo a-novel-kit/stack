@@ -68,6 +68,10 @@ maximum supported`. A tool's indirect `golang.org/x/tools` cannot read the new c
   Bump the preset; Renovate then closes the PR, or adds the image once it exists.
 - **Docker Hub `429` or `504`, or a Sigstore `tlog` 404.** External and transient: rerun within the
   flake budget.
+- **`build-*` fails with `no match for platform in manifest`.** Docker Hub created the tag before
+  its images, and Renovate bumped to it: `hub.docker.com/v2/repositories/library/<image>/tags/<tag>`
+  lists no `images`. On 2026-10-21 node `24.22.1` stayed empty for hours. Nothing in the repository
+  fixes it: once that tag lists `amd64`, dispatch `renovate.yaml` on each repository to rebase the PR.
 - **infra `scan-infrastructure` (Trivy) reports a CVE in an indirect Go module.** Renovate's
   `[security]` PR fixes it once the repo's preset enables OSV alerts; otherwise bump the module by hand.
 - **infra `plan-*` asks for `allow-downtime`.** A service release with a new database digest changes
