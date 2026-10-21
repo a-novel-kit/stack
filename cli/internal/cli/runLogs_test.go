@@ -11,7 +11,7 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// TestPrintLogs pins the client-side --since and --tail filters of `run logs`.
+// TestPrintLogs pins the client-side --since filter of `run logs`.
 func TestPrintLogs(t *testing.T) {
 	t.Parallel()
 
@@ -33,20 +33,17 @@ func TestPrintLogs(t *testing.T) {
 	testCases := []struct {
 		name  string
 		since time.Duration
-		tail  int
 		want  []string
 	}{
 		{name: "Success/Everything", want: []string{"old", "first", "second", "third"}},
 		{name: "Success/Since", since: 10 * time.Minute, want: []string{"first", "second", "third"}},
-		{name: "Success/Tail", tail: 2, want: []string{"second", "third"}},
-		{name: "Success/SinceAndTail", since: 10 * time.Minute, tail: 5, want: []string{"first", "second", "third"}},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			var out strings.Builder
-			if err := printLogs(&out, stream, testCase.since, testCase.tail); err != nil {
+			if err := printLogs(&out, stream, testCase.since); err != nil {
 				t.Fatalf("printLogs: %v", err)
 			}
 			printed := strings.Split(strings.TrimSpace(out.String()), "\n")

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"connectrpc.com/connect/v2"
@@ -25,8 +26,9 @@ import (
 //     terminates or the client disconnects
 //   - with --run-id, an archived run, never followed
 //
-// Snapshot lines come first in file order, and followed lines after. Each
-// StreamLogsResponse carries its original timestamp and stream tag.
+// Snapshot lines come first in file order, and followed lines after. A tail
+// keeps only the snapshot's last lines. Each StreamLogsResponse carries its
+// original timestamp and stream tag.
 func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest, stream anovelv1connect.CoreServiceStreamLogsServerStream) error {
 	tid := req.GetTargetId()
 	// An infra log ID, "<stack>/<service>/infra/<name>", streams an infra
@@ -38,7 +40,7 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 			return connect.Errorf(connect.CodeFailedPrecondition,
 				"no container for %s/%s/%s — has infra-start been run?", stack, service, name)
 		}
-		return streamPodmanLogs(ctx, st.ContainerID, req.GetFollow(), stream)
+		return streamPodmanLogs(ctx, st.ContainerID, req.GetFollow(), req.GetTailLines(), stream)
 	}
 	tgt, _, err := s.findTarget(tid)
 	if err != nil {
@@ -61,7 +63,7 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 		}
 	}
 
-	if err := streamFileToClient(ctx, path, stream, req.GetStream()); err != nil {
+	if err := streamFileToClient(ctx, path, stream.Send, req.GetStream(), int(req.GetTailLines())); err != nil {
 		// A missing file means no run yet, so fall through to the follow
 		// path when one was requested.
 		if !follow {
@@ -107,14 +109,33 @@ func (s *Server) ListRuns(_ context.Context, req *anovelv1.ListRunsRequest) (*an
 
 // streamFileToClient reads a JSON-lines log file and sends every line matching
 // the optional stream filter to the client, on both the snapshot and the
-// archived-run path.
-func streamFileToClient(ctx context.Context, path string, stream anovelv1connect.CoreServiceStreamLogsServerStream, filter anovelv1.LogStream) error {
+// archived-run path. A tail above zero sends only the last tail of those lines.
+func streamFileToClient(ctx context.Context, path string, send func(*anovelv1.StreamLogsResponse) error, filter anovelv1.LogStream, tail int) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = f.Close() }()
-	return streamLines(ctx, f, stream.Send, filter, path)
+	if tail <= 0 {
+		return streamLines(ctx, f, send, filter, path)
+	}
+	var last []*anovelv1.StreamLogsResponse
+	keep := func(ln *anovelv1.StreamLogsResponse) error {
+		last = append(last, ln)
+		if len(last) > tail {
+			last = last[1:]
+		}
+		return nil
+	}
+	if err := streamLines(ctx, f, keep, filter, path); err != nil {
+		return err
+	}
+	for _, ln := range last {
+		if err := send(ln); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // streamLines forwards one JSON-lines log stream to send, a line at a time. An
@@ -201,18 +222,14 @@ func parseInfraLogID(id string) (string, string, string, bool) {
 	return parts[0], parts[1], parts[3], true
 }
 
-// streamPodmanLogs forwards `podman logs [-f] <cid>` output to a client log
-// stream. The container's stdout and stderr merge into one pipe, reported as
-// stdout, since service images write to stdout anyway.
+// streamPodmanLogs forwards `podman logs` output to a client log stream. The
+// container's stdout and stderr merge into one pipe, reported as stdout, since
+// service images write to stdout anyway.
 //
 // Each line is stamped at read time, which is accurate enough for the log
 // viewer and skips parsing podman's optional --timestamps prefix.
-func streamPodmanLogs(ctx context.Context, cid string, follow bool, stream anovelv1connect.CoreServiceStreamLogsServerStream) error {
-	args := []string{"logs", cid}
-	if follow {
-		args = []string{"logs", "-f", cid}
-	}
-	cmd := exec.CommandContext(ctx, "podman", args...)
+func streamPodmanLogs(ctx context.Context, cid string, follow bool, tail int32, stream anovelv1connect.CoreServiceStreamLogsServerStream) error {
+	cmd := exec.CommandContext(ctx, "podman", podmanLogsArgs(cid, follow, tail)...)
 	pipeR, pipeW := io.Pipe()
 	// An early return leaves podman's output unread. Closing the reader fails
 	// the blocked copy, so Wait returns and the goroutine below ends.
@@ -239,6 +256,19 @@ func streamPodmanLogs(ctx context.Context, cid string, follow bool, stream anove
 		}
 	}
 	return nil
+}
+
+// podmanLogsArgs builds the `podman logs` arguments for container cid. A tail
+// above zero starts from its last tail lines.
+func podmanLogsArgs(cid string, follow bool, tail int32) []string {
+	args := []string{"logs"}
+	if follow {
+		args = append(args, "-f")
+	}
+	if tail > 0 {
+		args = append(args, "--tail", strconv.Itoa(int(tail)))
+	}
+	return append(args, cid)
 }
 
 // lineScanner scans r line by line. Command output carries long lines, such as

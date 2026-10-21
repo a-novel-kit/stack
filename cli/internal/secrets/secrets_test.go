@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
@@ -134,6 +136,31 @@ func TestStore(t *testing.T) {
 		}
 		if !bytes.Equal(keys[0], keys[1]) {
 			t.Fatal("init overwrote an existing key — must be idempotent")
+		}
+	})
+
+	t.Run("InitConcurrentCreatesOneKey", func(t *testing.T) {
+		t.Setenv("XDG_DATA_HOME", t.TempDir())
+		const runs = 16
+		start := make(chan struct{})
+		var created atomic.Int32
+		var wg sync.WaitGroup
+		for range runs {
+			wg.Go(func() {
+				<-start
+				ok, err := secrets.Init()
+				if err != nil {
+					t.Errorf("init: %v", err)
+				}
+				if ok {
+					created.Add(1)
+				}
+			})
+		}
+		close(start)
+		wg.Wait()
+		if n := created.Load(); n != 1 {
+			t.Fatalf("%d of %d concurrent inits created a key, want exactly 1", n, runs)
 		}
 	})
 }

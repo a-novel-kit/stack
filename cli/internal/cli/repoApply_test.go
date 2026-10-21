@@ -42,10 +42,12 @@ func contentsJSON(t *testing.T, text string) string {
 func TestApplyPlan(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam.
 	// No master ruleset exists yet, so it is created; the codecov one is updated.
+	// The listing must exclude org rulesets, or the matcher misses and codecov
+	// is created a second time.
 	responses := map[string]string{
-		"rulesets --jq":        "codecov\t777\n",
-		"git/ref/heads/master": "headoid123\n",
-		"repos/o/r --jq .id":   "4321\n",
+		"rulesets?includes_parents=false --jq": "codecov\t777\n",
+		"git/ref/heads/master":                 "headoid123\n",
+		"repos/o/r --jq .id":                   "4321\n",
 	}
 	calls := fakeGH(t, responses)
 

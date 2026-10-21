@@ -17,7 +17,7 @@ import (
 type logsOpts struct {
 	scope    stackScope
 	follow   bool
-	tail     int
+	tail     int32
 	since    time.Duration
 	stream   string
 	previous bool
@@ -30,7 +30,8 @@ func newLogsCmd() *cobra.Command {
 		Use:   "logs <target-or-infra>",
 		Short: "Print or stream logs for a target or infra container",
 		Long: `Print the log of a target's current run, or of an archived run with
---previous or --run-id. --follow keeps printing new lines as they arrive.
+--previous or --run-id. --tail starts from the last N lines, and --follow keeps
+printing new lines as they arrive.
 
 An infra container's log, named '<service>/infra/<name>', comes from podman,
 with stdout and stderr merged. It keeps no archived runs, so --previous and
@@ -38,6 +39,7 @@ with stdout and stderr merged. It keeps no archived runs, so --previous and
 		Example: `  a-novel run logs service-json-keys/rest
   a-novel run logs service-json-keys/rest --follow
   a-novel run logs service-json-keys/infra/postgres-json-keys --follow
+  a-novel run logs service-json-keys/rest --tail=100 --follow
   a-novel run logs service-json-keys/rest --tail=100 --stream=stderr
   a-novel run logs service-json-keys/rest --previous`,
 		Args: cobra.ExactArgs(1),
@@ -47,7 +49,7 @@ with stdout and stderr merged. It keeps no archived runs, so --previous and
 	}
 	o.scope.bind(cmd)
 	cmd.Flags().BoolVarP(&o.follow, "follow", "f", false, "stream new lines as they arrive")
-	cmd.Flags().IntVar(&o.tail, "tail", 0, "last N lines (0 = all)")
+	cmd.Flags().Int32Var(&o.tail, "tail", 0, "start from the last N lines (0 = all)")
 	cmd.Flags().DurationVar(&o.since, "since", 0, "only lines newer than this duration")
 	cmd.Flags().StringVar(&o.stream, "stream", "", "filter to stdout or stderr only")
 	cmd.Flags().BoolVar(&o.previous, "previous", false, "read the most recent archived run instead of the current")
@@ -73,11 +75,11 @@ func streamLogs(cmd *cobra.Command, ref entityRef, o logsOpts) error {
 		}
 		runID = runs.GetRunIds()[0]
 	}
-	stream, err := c.StreamLogs(ctx, ref.ID, runID, o.follow, logStreams[o.stream])
+	stream, err := c.StreamLogs(ctx, ref.ID, runID, o.follow, o.tail, logStreams[o.stream])
 	if err != nil {
 		return err
 	}
-	return printLogs(cmd.OutOrStdout(), stream, o.since, o.tail)
+	return printLogs(cmd.OutOrStdout(), stream, o.since)
 }
 
 // logStreams maps a --stream value to the stream it keeps; any other value
@@ -87,14 +89,14 @@ var logStreams = map[string]anovelv1.LogStream{
 	"stderr": anovelv1.LogStream_LOG_STREAM_STDERR,
 }
 
-// printLogs prints the lines of stream newer than since (when set), keeping
-// only the last tail lines (when set). Both filters run client-side.
-func printLogs(w io.Writer, stream iter.Seq2[*anovelv1.StreamLogsResponse, error], since time.Duration, tail int) error {
+// printLogs prints each line of stream as it arrives, skipping those older
+// than since when it is set. The daemon applies --tail, so a followed stream
+// prints without waiting for its end.
+func printLogs(w io.Writer, stream iter.Seq2[*anovelv1.StreamLogsResponse, error], since time.Duration) error {
 	var cutoff time.Time
 	if since > 0 {
 		cutoff = time.Now().Add(-since)
 	}
-	var last []*anovelv1.StreamLogsResponse
 	for ln, err := range stream {
 		if err != nil {
 			return err
@@ -102,16 +104,6 @@ func printLogs(w io.Writer, stream iter.Seq2[*anovelv1.StreamLogsResponse, error
 		if !cutoff.IsZero() && ln.GetTs().AsTime().Before(cutoff) {
 			continue
 		}
-		if tail <= 0 {
-			printLogLine(w, ln)
-			continue
-		}
-		last = append(last, ln)
-		if len(last) > tail {
-			last = last[1:]
-		}
-	}
-	for _, ln := range last {
 		printLogLine(w, ln)
 	}
 	return nil

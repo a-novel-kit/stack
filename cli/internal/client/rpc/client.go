@@ -150,9 +150,10 @@ func (c *Client) RestartInfraContainer(ctx context.Context, stack, service, name
 // StreamLogs returns the log lines of a target; ranging over them drains
 // and then closes the stream. `runID` of "" means
 // current.log; non-empty selects an archived run. `follow` keeps the
-// stream open for new lines past EOF (snapshot + subscribe).
-func (c *Client) StreamLogs(ctx context.Context, targetID, runID string, follow bool, streamFilter anovelv1.LogStream) (iter.Seq2[*anovelv1.StreamLogsResponse, error], error) {
-	req := &anovelv1.StreamLogsRequest{TargetId: targetID, Follow: follow, RunId: runID, Stream: streamFilter}
+// stream open for new lines past EOF (snapshot + subscribe). `tail` above zero
+// starts from the last tail lines.
+func (c *Client) StreamLogs(ctx context.Context, targetID, runID string, follow bool, tail int32, streamFilter anovelv1.LogStream) (iter.Seq2[*anovelv1.StreamLogsResponse, error], error) {
+	req := &anovelv1.StreamLogsRequest{TargetId: targetID, Follow: follow, RunId: runID, Stream: streamFilter, TailLines: tail}
 	stream, err := call(ctx, c, c.core.StreamLogs, req)
 	if err != nil {
 		return nil, err

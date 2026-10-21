@@ -2438,7 +2438,10 @@ type StreamLogsRequest struct {
 	Stream LogStream `protobuf:"varint,5,opt,name=stream,proto3,enum=anovel.v1.LogStream" json:"stream,omitempty"`
 	// Archived run to read, from ListRuns, or empty for the current run. An
 	// infra container has no archived runs.
-	RunId         string `protobuf:"bytes,6,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	RunId string `protobuf:"bytes,6,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// Number of lines to send from the end of the log, counted after the stream
+	// filter, before any followed line. Zero or less sends every line.
+	TailLines     int32 `protobuf:"varint,7,opt,name=tail_lines,json=tailLines,proto3" json:"tail_lines,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2499,6 +2502,13 @@ func (x *StreamLogsRequest) GetRunId() string {
 		return x.RunId
 	}
 	return ""
+}
+
+func (x *StreamLogsRequest) GetTailLines() int32 {
+	if x != nil {
+		return x.TailLines
+	}
+	return 0
 }
 
 // StreamLogsResponse is one entry of a target's or infra container's log.
@@ -3803,12 +3813,14 @@ const file_anovel_v1_core_proto_rawDesc = "" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\"G\n" +
 	"\x1dRestartInfraContainerResponse\x12&\n" +
-	"\x05infra\x18\x01 \x01(\v2\x10.anovel.v1.InfraR\x05infra\"\xa6\x01\n" +
+	"\x05infra\x18\x01 \x01(\v2\x10.anovel.v1.InfraR\x05infra\"\xc5\x01\n" +
 	"\x11StreamLogsRequest\x12\x1b\n" +
 	"\ttarget_id\x18\x01 \x01(\tR\btargetId\x12\x16\n" +
 	"\x06follow\x18\x02 \x01(\bR\x06follow\x12,\n" +
 	"\x06stream\x18\x05 \x01(\x0e2\x14.anovel.v1.LogStreamR\x06stream\x12\x15\n" +
-	"\x06run_id\x18\x06 \x01(\tR\x05runIdJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\x04tailR\x05since\"\x82\x01\n" +
+	"\x06run_id\x18\x06 \x01(\tR\x05runId\x12\x1d\n" +
+	"\n" +
+	"tail_lines\x18\a \x01(\x05R\ttailLinesJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\x04tailR\x05since\"\x82\x01\n" +
 	"\x12StreamLogsResponse\x12*\n" +
 	"\x02ts\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02ts\x12,\n" +
 	"\x06stream\x18\x02 \x01(\x0e2\x14.anovel.v1.LogStreamR\x06stream\x12\x12\n" +

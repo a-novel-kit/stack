@@ -1,7 +1,9 @@
 package setup
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -81,18 +83,24 @@ func isValidStackRepo(path string) bool {
 // partial blob filter for a fast, asset-free clone. It is exported so the
 // stack-creation verb allocates a new workspace through the same clone shape
 // setup uses to bootstrap a registered one.
+//
+// A failed clone removes path only when this call created it. git refuses a
+// path holding a file or a non-empty directory, and cleans up after itself in
+// an existing empty one.
 func CloneStack(path string) error {
 	// Ensure parent dir exists; clone creates the leaf.
 	parent := filepath.Dir(path)
 	if err := os.MkdirAll(parent, 0o700); err != nil {
 		return fmt.Errorf("mkdir parent %s: %w", parent, err)
 	}
+	_, statErr := os.Lstat(path)
 	cmd := exec.Command("git", "clone", "--filter=blob:none", stackRemoteURL, path)
 	cmd.Env = append(os.Environ(), "GIT_LFS_SKIP_SMUDGE=1")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		// Best-effort cleanup of partial clone so a re-run starts
-		// fresh.
-		_ = os.RemoveAll(path)
+		if errors.Is(statErr, fs.ErrNotExist) {
+			// Best-effort cleanup of the partial clone, so a re-run starts fresh.
+			_ = os.RemoveAll(path)
+		}
 		return fmt.Errorf("git clone: %w (output: %s)", err, strings.TrimSpace(string(out)))
 	}
 	return nil

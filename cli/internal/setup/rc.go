@@ -218,7 +218,17 @@ func locateBlock(content string) blockLoc {
 // writeWithBackup copies rcPath to a timestamped sibling before
 // overwriting. Backups beyond maxRCBackups are pruned (oldest first).
 // Returns the backup file path so the caller can surface it.
+//
+// A symlinked rc, as a dotfiles checkout links it, is written through: the link
+// stays, and the file it points to keeps its mode. A new rc is owner-only.
 func writeWithBackup(rcPath string, newContent []byte) (string, error) {
+	target, mode := rcPath, os.FileMode(0o600)
+	if info, err := os.Stat(rcPath); err == nil {
+		if target, err = filepath.EvalSymlinks(rcPath); err != nil {
+			return "", fmt.Errorf("resolve %s: %w", rcPath, err)
+		}
+		mode = info.Mode().Perm()
+	}
 	existing, err := os.ReadFile(rcPath)
 	var backupPath string
 	if err == nil && len(existing) > 0 {
@@ -230,12 +240,16 @@ func writeWithBackup(rcPath string, newContent []byte) (string, error) {
 		pruneOldRCBackups(rcPath)
 	}
 	// A temp file and a rename make the write atomic, so a partial write never
-	// leaves the rc broken.
-	tmp := rcPath + ".a-novel-tmp"
-	if err := os.WriteFile(tmp, newContent, 0o600); err != nil {
+	// leaves the rc broken. The umask filters WriteFile's mode, and Chmod does
+	// not.
+	tmp := target + ".a-novel-tmp"
+	if err := os.WriteFile(tmp, newContent, mode); err != nil {
 		return backupPath, fmt.Errorf("write tmp: %w", err)
 	}
-	if err := os.Rename(tmp, rcPath); err != nil {
+	if err := os.Chmod(tmp, mode); err != nil {
+		return backupPath, fmt.Errorf("chmod tmp: %w", err)
+	}
+	if err := os.Rename(tmp, target); err != nil {
 		return backupPath, fmt.Errorf("rename tmp: %w", err)
 	}
 	return backupPath, nil
