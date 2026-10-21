@@ -66,14 +66,12 @@ func stampVersion(out io.Writer, prefix string, patterns []string) error {
 }
 
 // stampTargets stamps version into every reference matching prefix across the
-// files the patterns resolve to, and reports the totals.
+// files the patterns resolve to. It returns the reference count, then the file
+// count.
 //
-// The whole set matching nothing is an error, the command-level counterpart to
-// resolveStampTargets refusing an empty file set. A prepublish:doc script exists
-// to keep a doc reference in step with the release. A pattern that matches zero
-// references has stopped tracking what it names, after a README rewrite changed
-// the reference shape or a field was renamed, and stamping nothing would hide
-// that until a release ships the stale reference.
+// Zero references in total is an error. Such a pattern no longer tracks its
+// reference, for example after a README rewrite or a renamed field. The error
+// stops the release before the stale reference ships.
 func stampTargets(patterns []string, prefix, version string) (int, int, error) {
 	re, err := stampPattern(prefix)
 	if err != nil {

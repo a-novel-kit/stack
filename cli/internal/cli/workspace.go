@@ -98,11 +98,9 @@ type checkout struct {
 	dir string
 }
 
-// workspaceCheckouts lists the checkouts of the workspace under root: the stack
+// workspaceCheckouts lists the workspace checkouts under root: the stack
 // repository at root, resolved from its origin, then each whitelisted
-// repository actually cloned under app/ or kit/. A whitelisted repository not
-// cloned yet has nothing local to offer. `core sync` populates the workspace,
-// and `repo update --all`, `core stacks prune` and `--sandbox` read it.
+// repository cloned under app/ or kit/.
 func workspaceCheckouts(root string) ([]checkout, error) {
 	var out []checkout
 	self, selfErr := repoFromGitRemote(root)

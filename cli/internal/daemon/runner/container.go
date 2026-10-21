@@ -66,7 +66,8 @@ func (r *Runner) startContainer(ctx context.Context, t *discovery.Target, env, w
 	r.mu.Unlock()
 
 	// Stream `podman logs -f` into the same JSON-line store go-exec mode uses,
-	// so `a-novel run logs <target>` shows the container's own output.
+	// so `a-novel run logs <target>` shows the container's own output. A log
+	// writer that fails to open costs this start only its log capture.
 	if logWriter, err := r.logs.OpenForWrite(id, t.Stack, t.Service, t.Name); err == nil {
 		// Surface the value-free missing-secret warnings so `run logs` and
 		// the TUI show the operator what to set.
@@ -138,8 +139,7 @@ type InfraState struct {
 
 // InfraStatesOf returns the live state of every infra container in the given
 // stack, keyed by "<service>/<infraName>". It costs one podman call whatever
-// the stack's size, which matters because each invocation carries roughly 1s of
-// cold-start overhead on rootless WSL2 podman and the TUI polls every 2s.
+// the stack's size.
 //
 // It reads no health: `podman ps --format json` omits Health.Status, and
 // reading it costs one inspect per container. PHASE_RUNNING with

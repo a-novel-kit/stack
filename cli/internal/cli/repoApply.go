@@ -248,10 +248,10 @@ func applyEnvironment(org string, op repocfg.Op) error {
 }
 
 // applyEnvSecrets reconciles an environment's secrets with the org's Bitwarden
-// project. A named secret is written when the environment lacks it or Bitwarden
-// holds a newer revision, and a secret no workflow names is deleted. Without an
-// access token the named secrets stay as they are, and one the environment
-// lacks fails the op. Values travel on stdin only.
+// project. A live secret the op does not name is deleted first. A named secret
+// is then written when the environment lacks it or Bitwarden holds a newer
+// revision. Without an access token, named secrets stay as they are, and one
+// the environment lacks fails the op. Values travel on stdin only.
 func applyEnvSecrets(org, repo string, op repocfg.Op) (string, error) {
 	live, err := envSecretDates(op.Path)
 	if err != nil {
@@ -298,6 +298,7 @@ func envSecretDates(secretsPath string) (map[string]time.Time, error) {
 	}
 	live := map[string]time.Time{}
 	for name, at := range tabPairs(out) {
+		// An unreadable date parses as the zero time, so the secret is rewritten.
 		live[name], _ = time.Parse(time.RFC3339, at)
 	}
 	return live, nil
@@ -546,10 +547,8 @@ func bootstrapEmpty(org, repo, branch string, changes []contentChange) (string, 
 	return commitSync(org, repo, branch, adds[1:])
 }
 
-// putContent creates or updates a single file through the Contents API and
-// returns the short id of the commit it makes. On an empty repository this is
-// the call that lays down the initial commit and the default branch; the
-// resulting commit is GitHub-verified.
+// putContent writes one file through the Contents API and returns the short id
+// of the commit it makes.
 func putContent(org, repo, branch string, change contentChange) (string, error) {
 	headline, body := syncCommitMessage([]contentChange{change})
 	request := map[string]string{
@@ -600,10 +599,8 @@ func branchHeadOid(org, repo, branch string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// applyCodeScanning turns CodeQL default setup off. Static analysis is the
-// lint-semgrep and scan-secrets jobs, which report as ordinary required checks.
-// Leaving default setup reachable would let an org-level toggle switch scanning
-// back on unnoticed. Reasserting its current state is idempotent.
+// applyCodeScanning asserts the code-scanning default setup state the plan asks
+// for. Reasserting the current state changes nothing.
 func applyCodeScanning(op repocfg.Op) (string, error) {
 	if err := ghJSON(http.MethodPatch, op.Path, op.Body); err != nil {
 		return "", err

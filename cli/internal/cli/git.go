@@ -43,8 +43,8 @@ func gitToplevel(dir string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// repoFromGitRemote parses the GitHub repository dir's origin points at, from
-// an SSH or HTTPS URL.
+// repoFromGitRemote reads the origin URL of the repository at dir and returns
+// the GitHub repository it names. The URL may be SSH or HTTPS.
 func repoFromGitRemote(dir string) (repoEntry, error) {
 	out, err := exec.Command("git", "-C", dir, "remote", "get-url", "origin").Output()
 	if err != nil {
@@ -95,6 +95,7 @@ func unpushedCommits(dir string) int {
 	if err != nil {
 		return 0
 	}
+	// git prints a bare count. Anything else counts as zero.
 	n, _ := strconv.Atoi(strings.TrimSpace(out))
 	return n
 }

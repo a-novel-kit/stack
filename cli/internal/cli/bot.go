@@ -33,9 +33,9 @@ const (
 	// nonce shows up in a run name.
 	botRunLookupTimeout = 60 * time.Second
 	// botMaxCommentsBytes caps the JSON size of one `comments` dispatch.
-	// workflow_dispatch limits the whole inputs payload to ~64KB; this
-	// leaves headroom for the repo + nonce inputs and the request framing,
-	// and a batch larger than this is split across dispatches.
+	// workflow_dispatch limits all inputs together to about 64KB, and the cap
+	// leaves room for the other inputs. A larger batch is split across
+	// dispatches.
 	botMaxCommentsBytes = 50000
 )
 

@@ -13,15 +13,15 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/jobs"
 )
 
-// coverRe matches the per-package line `go test -cover` prints, e.g.
-// "ok  pkg  0.12s  coverage: 78.3% of statements". Only go test -cover emits
-// that exact phrase, so it never matches podman, compose or pnpm output.
+// coverRe matches the package line `go test -cover` prints, such as
+// "ok  pkg  0.12s  coverage: 78.3% of statements". Its group captures the
+// percentage.
 var coverRe = regexp.MustCompile(`coverage:\s+([0-9.]+)%\s+of statements`)
 
-// covExclude matches the package paths kept out of the coverage mean: generated
-// mocks, test-support trees, and generated protobuf code. It filters what is
-// reported: a test in one of these paths still runs, and only stays out of a
-// mean that the zero coverage of generated code would drag down.
+// covExclude matches the package paths the coverage report leaves out:
+// generated mocks, test-support trees and generated protobuf code. Their tests
+// still run. Their coverage is noise, so they stay out of the list and the
+// mean.
 var covExclude = regexp.MustCompile(`/(mocks|test|protogen)(/|$)`)
 
 // vitestHeader matches the header row of vitest's v8 text coverage table. Its
@@ -39,6 +39,7 @@ func tableRow(s string) bool {
 	return t != "" && strings.Trim(t, "-| ") == ""
 }
 
+// covEntry is one Go package's statement coverage, in percent.
 type covEntry struct {
 	pkg string
 	pct float64
@@ -113,9 +114,8 @@ func nodeCoverageBlock(out string) string {
 
 // CoverageView renders the COVERAGE report section: Go packages as a
 // color-banded percentage list with a mean, and each pnpm target's native
-// vitest table verbatim beneath it. Returns "" when nothing was measured
-// (flag off, or no coverage produced) so callers can drop it in
-// unconditionally.
+// vitest table verbatim beneath it. CoverageView returns "" when nothing was
+// measured, so a caller can append it unconditionally.
 func CoverageView(results []jobs.Result, width int) string {
 	goEntries := goCoverage(results)
 

@@ -65,9 +65,10 @@ func (r *Runner) unsubscribe(sub *eventSub) {
 // markTerminated so every subscriber sees the same view as Instance readers.
 //
 // It holds subsMu.RLock across the whole iteration, so every send lands on a
-// channel unsub has not closed yet: unsub removes the sub and closes sub.ch
-// under the write lock, which waits for this one. Every send is non-blocking,
-// so the read lock costs microseconds per subscriber.
+// channel unsubscribe has not closed yet. unsubscribe removes the sub under the
+// write lock, which waits for this read lock, and closes the channel only
+// after. Every send is non-blocking, so the read lock costs microseconds per
+// subscriber.
 func (r *Runner) emitPhase(ev PhaseEvent) {
 	ev.Ts = time.Now()
 	r.subsMu.RLock()

@@ -22,13 +22,14 @@ import (
 )
 
 // killGrace is how long a target gets to exit on SIGTERM before the daemon
-// escalates. It matches the `run kill` default.
+// sends SIGKILL. It is the `run kill --timeout` default and the grace a prune
+// gives each target.
 const killGrace = 10 * time.Second
 
 // newCoreStacksCmd allocates, lists and prunes workspace stacks. A stack holds
-// a checkout, containers holding host ports, and podman volumes. Deleting the
-// root reclaims only the checkout, and the other two are the daemon's to
-// release, so pruning is a verb of its own.
+// a checkout, containers that hold host ports, and podman volumes. Deleting the
+// root frees only the checkout. The daemon releases the containers and volumes,
+// so pruning is a command of its own.
 func newCoreStacksCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stacks",
@@ -48,13 +49,10 @@ back its files, containers and volumes.`,
 // new
 // =============================================================================
 
-// defaultStackRoot is where an extra workspace lands when the caller does not
-// choose. os.TempDir() honors $TMPDIR, resolving to the per-user
-// /var/folders/…/T on macOS and /tmp on Linux. The OS reclaims both, so a
-// stack that outlives its session is a disk leak with an expiry date.
-//
-// The default stack lives elsewhere: it is the workspace, and a workspace under
-// a directory the OS empties is a trap.
+// defaultStackRoot is where an extra stack lands when the caller names no
+// root. It sits under os.TempDir(), which the OS empties, so an abandoned
+// stack frees its disk in time. The default stack is the workspace and never
+// lives there.
 func defaultStackRoot(name string) string {
 	return filepath.Join(os.TempDir(), "a-novel-stacks", name)
 }
@@ -282,11 +280,12 @@ func selectPruneTargets(registered []*anovelv1.Stack, args []string, all bool) (
 // printed to the operator and the teardown that follows cannot disagree.
 type stackHoldings struct {
 	services    []string
-	liveTargets []string // fully-qualified target IDs still short of TERMINATED
+	liveTargets []string // fully-qualified IDs of the targets isLive accepts
 	liveInfra   int
 	volumes     []string
 }
 
+// inspectStack snapshots what the stack name holds, from one ListServices call.
 func inspectStack(ctx context.Context, c *rpc.Client, name string) (stackHoldings, error) {
 	resp, err := c.ListServices(ctx, name)
 	if err != nil {
@@ -295,10 +294,9 @@ func inspectStack(ctx context.Context, c *rpc.Client, name string) (stackHolding
 	return holdingsOf(resp.GetServices()), nil
 }
 
-// holdingsOf reduces a stack's services to what teardown has to act on. A target
-// or container short of TERMINATED is live: PENDING and STARTING entries have a
-// process or container behind them (or are about to), and skipping those is how
-// a prune leaves a port held by something it reported as gone.
+// holdingsOf reduces a stack's services to what teardown acts on. A target or
+// infra container is live from PENDING until TERMINATED. A PENDING or STARTING
+// entry has, or soon has, a process or container holding a port.
 func holdingsOf(services []*anovelv1.Service) stackHoldings {
 	var h stackHoldings
 	for _, svc := range services {
@@ -402,9 +400,8 @@ func reclaimStack(
 		return fmt.Errorf("remove %s: %w", root, err)
 	}
 	if purgeBackups {
-		// Opt-in, because ClearVolume just took a backup on the way past: the
-		// default keeps the one artifact that can undo this command, and this
-		// flag is how the operator says the data really was disposable.
+		// ClearVolume just backed up every volume. Only this flag deletes those
+		// backups, the one way to undo a prune.
 		dir := stackBackupDir(name)
 		if err := os.RemoveAll(dir); err != nil {
 			return fmt.Errorf("purge backups %s: %w", dir, err)

@@ -45,8 +45,8 @@ func launchClaude(args []string) error {
 	if err != nil {
 		return fmt.Errorf("resolve stack root: %w", err)
 	}
-	// Resolve before chdir, so a missing binary is reported from the
-	// PATH lookup and no directory change is left half-applied.
+	// Resolve claude first, so a missing binary fails before the directory
+	// changes.
 	bin, err := exec.LookPath(claudeBin)
 	if err != nil {
 		return fmt.Errorf(
@@ -56,8 +56,8 @@ func launchClaude(args []string) error {
 		return fmt.Errorf("enter stack root %s: %w", stack.Path, err)
 	}
 
-	// On success Exec never returns, so nothing after this line runs,
-	// main's update notice and exit-code handling included: they belong
-	// to claude. argv[0] is the resolved path by convention.
+	// On success, Exec never returns. main's update notice and exit-code
+	// handling never run: they belong to claude. argv[0] is the resolved path,
+	// by convention.
 	return syscall.Exec(bin, append([]string{bin}, args...), os.Environ())
 }

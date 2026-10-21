@@ -117,13 +117,10 @@ func streamFileToClient(ctx context.Context, path string, stream anovelv1connect
 	return streamLines(ctx, f, stream.Send, filter, path)
 }
 
-// streamLines forwards one JSON-lines log stream to send.
-//
-// It reads a line at a time rather than through a json.Decoder: a decoder that
-// fails part-way cannot be resumed, so the only recovery left is to stop, and
-// stopping hands the viewer a short log that looks whole. The writer flushes
-// per line, but a process killed mid-write leaves a partial final one, and that
-// is the common case.
+// streamLines forwards one JSON-lines log stream to send, a line at a time. An
+// unparsable line becomes a marker and the stream goes on, so the viewer sees
+// every line after a torn write. A process killed mid-write leaves such a
+// partial final line.
 func streamLines(ctx context.Context, r io.Reader, send func(*anovelv1.StreamLogsResponse) error, filter anovelv1.LogStream, path string) error {
 	reader := bufio.NewReader(r)
 	lineNo := 0

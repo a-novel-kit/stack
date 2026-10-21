@@ -20,9 +20,8 @@ type Stack struct {
 	Path     string
 	Default  bool
 	Services []*Service
-	// Errors holds this stack's non-fatal discovery problems, surfaced through
-	// Status and the startup logs so the daemon still starts. A stack path that
-	// does not exist is returned as the function's error instead.
+	// Errors holds the stack's non-fatal discovery problems, which the daemon
+	// prints at startup.
 	Errors []DiscoveryError
 }
 
@@ -103,9 +102,7 @@ func (k TargetKind) String() string {
 }
 
 // A DiscoveryError is a non-fatal classification problem, such as a compose
-// service with no matching cmd directory. They are collected per stack and
-// surfaced through Status, so the daemon still starts. An unreadable stack path
-// bubbles up as the function's error instead.
+// service with no matching cmd directory. Discovery collects them per stack.
 type DiscoveryError struct {
 	Service string // service name within the stack
 	Path    string // file or directory path the error points at
@@ -197,10 +194,10 @@ func find[T any](list []*T, match func(*T) bool) *T {
 // Discovery
 // =============================================================================
 
-// DiscoverStacks parses every service in every registered stack, returning one
-// Stack per input with its services populated and its problems collected in
-// Errors. An inaccessible stack path returns an error and no Stack entry, while
-// a stack with malformed services still comes back with them listed in Errors.
+// DiscoverStacks parses every service of every registered stack. Each Stack
+// carries its services and its non-fatal problems in Errors. A non-default
+// stack whose path is missing or not a directory is skipped. The same problem
+// on the default stack returns an error.
 func DiscoverStacks(stk []stacks.Stack) (Stacks, error) {
 	out := make(Stacks, 0, len(stk))
 	for _, s := range stk {

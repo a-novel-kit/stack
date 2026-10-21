@@ -17,9 +17,10 @@ import (
 )
 
 // repoJobs is how many repositories `repo update --all` reconciles at once by
-// default. GitHub's secondary rate limit allows 900 REST points a minute, a
-// write costing five, and one repository's apply spends about 60 points in
-// some 20 seconds, so six concurrent applies stay under it.
+// default. GitHub's secondary rate limit allows 900 REST points a minute, and a
+// write costs five. One repository's apply spends about 60 points in some 20
+// seconds, so six concurrent applies can briefly exceed the limit. ghRun waits
+// out a rejected call and retries it.
 const repoJobs = 6
 
 // confirm prints prompt and reads a yes/no answer; only an explicit y/yes
@@ -269,7 +270,7 @@ func reconcileRepo(cmd *cobra.Command, o repoUpdateOpts) error {
 }
 
 // planRepo discovers repo's config from its working tree at root and computes
-// the plan, writing nothing. The org's [Agent] App id is injected before
+// the plan, writing nothing. The org's Agent App id is injected before
 // discovery, so the merge-gate check resolves to that org's App. Discovery
 // reads the working tree, so a bulk caller must first confirm the checkout is
 // clean and on its default branch.

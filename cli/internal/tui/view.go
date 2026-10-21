@@ -288,7 +288,6 @@ func (m *model) renderLogs(width, height int) string {
 		fmt.Fprintf(&b, "%s %s %s\n",
 			styleDim.Render(ts), styleWarn.Render(tag), truncate(ln.GetLine(), width-20))
 	}
-	// The scroll indicator appears only while auto-follow is paused.
 	if m.logScroll > 0 {
 		indicator := fmt.Sprintf("⏸ paused — %d line(s) below cursor  ·  pgdn/end resumes tail",
 			m.logScroll)
@@ -297,10 +296,8 @@ func (m *model) renderLogs(width, height int) string {
 	return b.String()
 }
 
-// renderFooter draws the always-visible one-line hint of the commands most
-// relevant to the current context; action feedback belongs to renderStatus
-// above it. While the log pane is scrolled back, the hint advertises End as
-// the way out.
+// renderFooter draws the one-line key hint under the status bar. While the log
+// pane is scrolled back, it offers End to resume the tail.
 func (m *model) renderFooter() string {
 	scrollHint := styleCmd.Render("PgUp/PgDn") + " scroll logs"
 	if m.logScroll > 0 {
@@ -408,8 +405,8 @@ var paletteCommands = []struct{ verb, desc string }{
 	{"quit", "exit the UI (daemon keeps running)"},
 }
 
-// suggestCommands returns the top 5 paletteCommands matching `prefix`
-// (prefix-match on verb), formatted as styled lines.
+// suggestCommands returns, as styled lines, up to five palette commands whose
+// verb starts with prefix, in table order.
 func suggestCommands(prefix string) []string {
 	prefix = strings.TrimSpace(prefix)
 	if prefix == "" {
@@ -428,6 +425,7 @@ func suggestCommands(prefix string) []string {
 	return matches
 }
 
+// countRunning counts the service's targets in the running phase.
 func countRunning(svc *anovelv1.Service) int {
 	n := 0
 	for _, t := range svc.GetTargets() {
@@ -438,9 +436,9 @@ func countRunning(svc *anovelv1.Service) int {
 	return n
 }
 
-// serviceTargetsLine is the per-service "X/Y targets" row in the nav block:
-// a green dot when any target is running, red when any exited with an error,
-// dim otherwise.
+// serviceTargetsLine is the nav's targets row. A failed target turns it into a
+// red "● errored". Otherwise it shows running out of total targets, behind a
+// green dot when one runs and a dim one when none does.
 func serviceTargetsLine(svc *anovelv1.Service) string {
 	if serviceHasError(svc) {
 		return styleErr.Render("●") + " errored"
@@ -488,9 +486,9 @@ func countInfraHealthy(svc *anovelv1.Service) (int, int) {
 	return healthy, total
 }
 
-// infraDot returns the colored status glyph for one infra entry,
-// matching the four-state model: green ● healthy, yellow ● starting,
-// red ● unhealthy, dim ○ down/terminated/idle.
+// infraDot returns the colored status glyph for one infra entry: a dim ○ when
+// it is not running or reports an unknown health, else a dot colored by
+// health.
 func infraDot(in *anovelv1.Infra) string {
 	if in.GetPhase() != anovelv1.Phase_PHASE_RUNNING {
 		return styleDim.Render("○")
@@ -516,7 +514,7 @@ func infraHealthLabel(in *anovelv1.Infra) string {
 	case anovelv1.Health_HEALTH_HEALTHY:
 		return "healthy"
 	case anovelv1.Health_HEALTH_UNSPECIFIED:
-		return "running" // no probe declared
+		return "running" // the daemon reads no infra health
 	case anovelv1.Health_HEALTH_STARTING:
 		return "starting"
 	case anovelv1.Health_HEALTH_UNHEALTHY:

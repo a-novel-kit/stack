@@ -140,8 +140,8 @@ var injectSecrets = secrets.InjectForRepo
 // port is unallocated appears with an empty value.
 func (b *Builder) ForService(svc *discovery.Service, consumer string) ([]Entry, error) {
 	services := b.alloc.Services()
-	// Every target in the service shares the same env block, since compose's
-	// environment is per-compose-service and maps one-to-one to a target here.
+	// GetEnv shows one block per service, so every target's block is merged
+	// into it. A later target's key overwrites an earlier one.
 	merged := make(map[string]string)
 	for _, t := range svc.Targets {
 		vars, err := b.buildEnv(t, services, false /* lookup-only */, "")

@@ -101,9 +101,9 @@ func syncNeedsAttention(r jobs.Result) bool {
 	return r.Err != nil || r.Status == syncSkipped
 }
 
-// syncJobs returns a sync job for each of repos the filters keep, and the
-// names of the ones --ignore leaves out. The stack repo checked out at root is
-// never synced into itself.
+// syncJobs returns a sync job for each of repos the filters keep. It also
+// returns the names left out: those --ignore names, and the stack repository at
+// root, which never syncs into itself. --allow drops the others silently.
 func syncJobs(root string, repos []repoEntry, allowed, ignored map[string]bool) ([]jobs.Job, []string) {
 	self, _ := repoFromGitRemote(root)
 	var list []jobs.Job
@@ -159,6 +159,8 @@ func updateRepo(dir string, out io.Writer) (string, error) {
 	if _, err := runGit(dir, "rev-parse", "--verify", "--quiet", "refs/heads/"+def); err != nil {
 		_, _ = runGit(dir, "branch", "--quiet", "--track", def, "origin/"+def)
 	}
+	// A failed rev-parse prints an error naming its ref, so the two outputs
+	// never match, and the fast-forward below reports the problem.
 	local, _ := runGit(dir, "rev-parse", "refs/heads/"+def)
 	remote, _ := runGit(dir, "rev-parse", "refs/remotes/origin/"+def)
 	if local == remote {

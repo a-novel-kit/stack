@@ -14,9 +14,9 @@ import (
 // value, so (stack, service, "") watches one service and three empty fields
 // watch everything.
 //
-// The stream stays open until the client cancels its side, or the daemon shuts
-// down and the runner's fanout stops. Nothing is emitted up front, so a caller
-// needing the initial state pairs Watch with a ListServices snapshot.
+// The stream stays open until the client cancels its side. Nothing is emitted
+// up front, so a caller needing the initial state pairs Watch with a
+// ListServices snapshot.
 func (s *Server) Watch(ctx context.Context, req *anovelv1.WatchRequest, stream anovelv1connect.CoreServiceWatchServerStream) error {
 	ch, unsub := s.runner.SubscribePhases(func(ev runner.PhaseEvent) bool { return watches(req, ev) })
 	defer unsub()
@@ -44,12 +44,9 @@ func watches(req *anovelv1.WatchRequest, ev runner.PhaseEvent) bool {
 		(targetID == "" || ev.TargetID == targetID)
 }
 
-// describePhaseEvent produces the one-line human summary that lands in
-// WatchResponse.description, such as "<id> running" or "<id> terminated
-// (killed)". The field is opaque to the daemon, and a client may re-render
-// from (old_phase, new_phase, exit_reason) instead, but the pre-baked summary
-// is the cheap default for `ps --watch`. A phase without a summary, such as
-// PENDING, falls back to its enum name.
+// describePhaseEvent renders the one-line summary WatchResponse.description
+// carries, such as "<id> running" or "<id> terminated (killed)". A phase with
+// no summary, such as PENDING, renders as its enum name.
 func describePhaseEvent(ev runner.PhaseEvent) string {
 	switch ev.NewPhase {
 	case anovelv1.Phase_PHASE_STARTING, anovelv1.Phase_PHASE_RUNNING, anovelv1.Phase_PHASE_STOPPING:

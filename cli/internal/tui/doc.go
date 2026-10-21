@@ -3,20 +3,22 @@
 // routes through the same RPC client the CLI uses, so the UI and CLI
 // always observe the same daemon state.
 //
-// The screen is a two-column dashboard: a service navigator on the
-// left and a per-target detail-and-log pane on the right, with a
-// status bar and a footer hint below.
+// The screen is two frames side by side, the service navigator and the
+// selected service's pane, above a status bar and a footer hint.
 //
-//	┌──────────────┬──────────────────────────────────────────────────┐
-//	│ Services     │ Tabs: [t1] [t2] [t3]                             │
-//	│              │ ┌──────────────────────────────────────────────┐ │
-//	│ ● svc-X 2/4  │ │ <target detail header>                       │ │
-//	│ ○ svc-Y 0/4  │ │ ────────────────────────────────────────── │ │
-//	│              │ │ <log lines, follow-end>                      │ │
-//	│              │ │                                              │ │
-//	│              │ └──────────────────────────────────────────────┘ │
-//	│              │ <footer hint>                          [Esc] cmd │
-//	└──────────────┴──────────────────────────────────────────────────┘
+//	╭────────────────────────╮╭────────────────────────────────────────────╮
+//	│ Services               ││infra ● {postgres}                          │
+//	│                        ││target ● [grpc]  ○ [rest]                   │
+//	│ ▸ service-x            ││──────────────────────────────────────────  │
+//	│     ● 1/2 targets      ││grpc · go-exec · running pid=4242           │
+//	│     ● 1/1 infra        ││15:04:05 out <log line>                     │
+//	│                        ││15:04:05 err <log line>                     │
+//	│   service-y            ││                                            │
+//	│     ○ 0/1 targets      ││                                            │
+//	│       (no infra)       ││                                            │
+//	╰────────────────────────╯╰────────────────────────────────────────────╯
+//	✓  Started grpc
+//	? help  ·  Esc command  ·  ↑↓ service  ·  ←→ target  ·  PgUp/PgDn scroll logs  ·  q quit
 //
 // The footer lists the common keys, Esc opens a command palette with
 // autocomplete, and ? opens the help screen.

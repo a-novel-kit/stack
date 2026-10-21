@@ -11,17 +11,16 @@ import (
 )
 
 const (
-	// modeGoExec is the canonical token for go-exec mode across flag
-	// defaults, palette args and user-visible labels.
+	// modeGoExec is the --mode token and the label of go-exec mode.
 	modeGoExec = "go-exec"
-	// modeContainer is the canonical token for container mode on the same
-	// surfaces.
+	// modeContainer is the --mode token and the label of container mode.
 	modeContainer = "container"
 	// kindTarget selects targets in the --kind filter.
 	kindTarget = "target"
-	// kindInfra selects infra containers in the --kind filter, and is the
-	// sentinel segment the entity-ID parser looks for.
-	kindInfra      = "infra"
+	// kindInfra is the word for infra containers, in flags, output and entity
+	// IDs.
+	kindInfra = "infra"
+	// cmdNameService is the name of the `run service` command.
 	cmdNameService = "service"
 )
 
@@ -95,11 +94,9 @@ starts.`,
 	}
 }
 
-// entityRef is a parsed CLI argument identifying either a target or an infra
-// container, told apart by the literal "infra" segment (see parseEntityID).
-// kill, restart and logs dispatch to the right RPC from it, since a slash
-// count alone cannot separate a 3-segment target ID from a 3-segment infra
-// shorthand.
+// entityRef is a parsed CLI argument naming a target or an infra container.
+// A literal "infra" segment tells the two apart, because a 3-segment target ID
+// and a 3-segment infra shorthand have the same slash count.
 type entityRef struct {
 	IsInfra bool
 	Stack   string
@@ -119,9 +116,10 @@ type entityRef struct {
 //	<service>/infra/<name>                  → infra shorthand
 //	<stack>/<service>/infra/<name>          → infra canonical
 //
-// Only an "infra" in the second-to-last segment marks an infra reference;
-// anywhere else the word is an ordinary target name. A shorthand resolves
-// against defaultStack, or the default stack, the first $A_NOVEL_STACKS entry.
+// Only "infra" in the second-to-last segment marks an infra reference.
+// Anywhere else the word is an ordinary target name. A shorthand resolves
+// against defaultStack. An empty defaultStack means the first $A_NOVEL_STACKS
+// entry.
 func parseEntityID(arg, defaultStack string) entityRef {
 	if defaultStack == "" {
 		defaultStack = stacks.DefaultName
@@ -155,8 +153,8 @@ func parseEntityID(arg, defaultStack string) entityRef {
 		ref.Service = parts[0]
 		ref.Target = parts[1]
 	default:
-		// Unrecognized: pass it through as a bare name and let the daemon
-		// 404 with a message pointing at the right shape.
+		// Any other shape becomes "<stack>//<arg>", which the daemon refuses
+		// as an unknown target.
 		ref.Stack = defaultStack
 		ref.Target = arg
 	}
@@ -164,7 +162,7 @@ func parseEntityID(arg, defaultStack string) entityRef {
 	return ref
 }
 
-// parseMode reads a --mode token, an empty or unknown one yielding fallback.
+// parseMode reads a --mode token. An empty or unknown token yields fallback.
 func parseMode(token string, fallback anovelv1.Mode) anovelv1.Mode {
 	switch token {
 	case modeGoExec:

@@ -37,15 +37,12 @@ const (
 	ClassMeta Class = "meta"
 )
 
-// AllClasses is the ordered set of known classes (for the UI picker and
-// flag validation).
+// AllClasses lists the known classes, in the order the --class help shows them.
 var AllClasses = []Class{ClassService, ClassPlatform, ClassInfra, ClassLibrary, ClassWorkflows, ClassMeta}
 
-// DetectClass infers a repo's class from its name, used when neither a
-// repos/<org>_<repo>.yaml override nor the --class flag is given. The
-// strong-semantic classes match exact names (infra, workflows, .github), the
-// service-* and platform-* families map to the service and platform classes,
-// and everything else falls to the freeform library default.
+// DetectClass infers a repo's class from its name. It applies when neither a
+// repos/<org>_<repo>.yaml override nor --class names one. A name no case
+// matches is a library.
 func DetectClass(repo string) Class {
 	switch {
 	case repo == "infra":
@@ -145,12 +142,13 @@ type CheckDef struct {
 	Integration string `yaml:"integration"`
 }
 
-// ExcludeRules narrows the main.yaml jobs that become required checks. A job is
-// excluded when its id starts with any Prefix (reporting / post-merge jobs) or
-// its `if:` contains any IfContains string (e.g. master-only jobs, which never
-// run on a PR and so cannot gate one).
+// ExcludeRules narrows the main.yaml jobs that become required checks.
 type ExcludeRules struct {
-	Prefixes   []string `yaml:"prefixes"`
+	// Prefixes excludes a job whose id starts with one, such as a reporting or
+	// post-merge job.
+	Prefixes []string `yaml:"prefixes"`
+	// IfContains excludes a job whose `if:` holds one, such as a master-only
+	// job, which never runs on a pull request and so cannot gate one.
 	IfContains []string `yaml:"if_contains"`
 }
 
@@ -177,12 +175,10 @@ func LoadChecks() (*ChecksConfig, error) {
 	return loadTemplate[ChecksConfig]("checks.yaml", "checks.yaml")
 }
 
-// ResolveBotIntegrations fills the integration ids that belong to a per-org
-// bot. checks.yaml cannot hardcode these: each org runs its own [Agent] App
-// with a distinct id, and the same checks.yaml is loaded for both. Call it with
-// the target repo's org profile before discovery, so a check that org's App
-// posts, such as the merge-gate, is required against an App that can satisfy
-// it.
+// ResolveBotIntegrations fills the integration ids of the per-org bots. Each
+// org runs its own Agent App with a distinct id, and both orgs load the same
+// checks.yaml. Call it with the target repo's org profile before discovery, so
+// a check that App posts, such as merge-gate, is required against it.
 func (c *ChecksConfig) ResolveBotIntegrations(org *OrgProfile) {
 	if c.Integrations == nil {
 		c.Integrations = map[string]int64{}
@@ -200,13 +196,14 @@ type LabelDef struct {
 	Description string `yaml:"description"`
 }
 
-// LabelsConfig is governance/labels.yaml, the label set every repo carries. An
-// Ensure label is created when absent and updated when its color or
-// description drifts, a Retire label is deleted, and any other label is left
-// untouched.
+// LabelsConfig is governance/labels.yaml, the label set every repo carries.
+// A label it names in neither list is left untouched.
 type LabelsConfig struct {
+	// Ensure labels are created when absent and updated when their color or
+	// description drifts.
 	Ensure []LabelDef `yaml:"ensure"`
-	Retire []string   `yaml:"retire"`
+	// Retire labels are deleted.
+	Retire []string `yaml:"retire"`
 }
 
 // LoadLabels reads and parses governance/labels.yaml.
@@ -324,9 +321,10 @@ func loadTemplateYAML(rel string, out any) error {
 	return nil
 }
 
-// ReadTemplate returns the bytes of templates/<rel>, preferring an on-disk
-// copy so edits don't need a rebuild, falling back to the embedded copy.
-// On-disk precedence: $REPO_CONFIG_DIR, else <stack>/cli/internal/repocfg/templates.
+// ReadTemplate returns the bytes of templates/<rel>. An on-disk copy wins, so an
+// edit needs no rebuild. The on-disk root is $REPO_CONFIG_DIR, else the default
+// stack's cli/internal/repocfg/templates. A file missing or unreadable there
+// falls back to the embedded copy.
 func ReadTemplate(rel string) ([]byte, error) {
 	if dir := onDiskTemplatesDir(); dir != "" {
 		if b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel))); err == nil {
@@ -336,6 +334,7 @@ func ReadTemplate(rel string) ([]byte, error) {
 	return templatesFS.ReadFile(path.Join("templates", rel))
 }
 
+// onDiskTemplatesDir is the on-disk templates root, or "" when none resolves.
 func onDiskTemplatesDir() string {
 	if d := os.Getenv("REPO_CONFIG_DIR"); d != "" {
 		return d

@@ -39,10 +39,11 @@ func Job(t detect.Target, timeout time.Duration, maxProcs int, keep bool) jobs.J
 	}
 }
 
-// PrepareEnv builds the process environment for a target: os.Environ() plus,
-// when the target has a compose env, the allocated host ports, the URLs derived
-// from them and standard local test credentials, then the repo's declared
-// secrets. It streams its progress to out.
+// PrepareEnv builds the process environment for a target. It starts from
+// os.Environ(). A target with a compose env adds its allocated host ports, the
+// URLs derived from them and the local test credentials. The repo's declared
+// secrets come last, so a provisioned value wins over any default. Progress
+// goes to out, and secret values never do.
 func PrepareEnv(t detect.Target, out io.Writer) ([]string, error) {
 	runEnv := os.Environ()
 	if t.Env != nil {
@@ -60,9 +61,8 @@ func PrepareEnv(t detect.Target, out io.Writer) ([]string, error) {
 		return runEnv, nil
 	}
 
-	// Secrets come last so a provisioned value wins over any default. Values
-	// never reach the `── env ──` block above, and a declared-but-unset secret
-	// only raises a value-free warning, so tests that don't need it still run.
+	// An unset secret only raises a value-free warning, so tests that do not
+	// need it still run.
 	res, err := secrets.InjectForRepo(root)
 	if err != nil {
 		return nil, fmt.Errorf("secrets injection failed: %w", err)
@@ -248,11 +248,11 @@ var stdTestEnv = map[string]string{
 	"POSTGRES_USER":     pgStd,
 	"POSTGRES_PASSWORD": pgStd,
 	"POSTGRES_DB":       pgStd,
-	// 32-byte hex-encoded master key for at-rest encryption, matching the
-	// fixed value every service's CI workflow uses so locally-encrypted blobs
-	// interchange with CI. Local only, never a production secret. Without it
-	// the compose file's `${APP_MASTER_KEY}` resolves empty and container-mode
-	// rotate-keys panics with "expected 32 bytes, got 0 bytes".
+	// APP_MASTER_KEY is the 32-byte hex master key for at-rest encryption. It
+	// equals the fixed value the services' CI workflows use, so blobs encrypted
+	// locally and in CI interchange. It is a local-only value. Container-mode
+	// rotate-keys needs it: an empty `${APP_MASTER_KEY}` makes it panic with
+	// "expected 32 bytes, got 0 bytes".
 	"APP_MASTER_KEY": "fec0681a2f57242211c559ca347721766f8a3acd8ed2e63b36b3768051c702ca",
 }
 
@@ -378,19 +378,19 @@ func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
 	return conflicts
 }
 
-// TearDown removes one compose project's containers, volumes and orphans,
-// scoped to that env through `-p <project> -f <file>`. --remove-orphans clears
-// the containers the compose file no longer declares, such as after a profile
-// change, which a later `up` would collide with.
+// TearDown removes one compose project's containers, volumes and orphans.
+// `-p <project> -f <file>` scopes it to that env. --remove-orphans also clears
+// containers the compose file no longer declares, such as after a profile
+// change, which a later `up` would collide with. `-t 10` gives Postgres ten
+// seconds for its shutdown checkpoint, which can pass 2s once migrations and
+// key rotation dirtied its buffers.
 //
-// `compose down -t 10` gives postgres 10s for its shutdown checkpoint, which
-// can pass 2s once migrations and key rotation dirtied its buffers. When it
-// fails, a container it left still holds the env's pod, the pod holds the
-// network, and the next run cannot claim the project name. TearDown then
-// removes the pod, which frees its containers, and the network, ignoring
-// errors, since either may be gone already. The names follow podman-compose:
-// the pod is "pod_<project>", and the network "<project>_api", after the
-// `networks: { api: }` every service compose file declares.
+// A failed `down` can leave a container that keeps the env's pod and network
+// alive, and the next run then cannot claim the project name. TearDown then
+// force-removes the pod `pod_<project>` and the network `<project>_api`, and
+// ignores their errors because either may be gone. Both names follow
+// podman-compose's naming for the `networks: { api: }` block every service
+// compose file declares.
 func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	var buf bytes.Buffer
 	err := compose(ctx, &buf, os.Environ(), &e, nil,
@@ -398,7 +398,6 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	if err == nil {
 		return nil
 	}
-	// Force-reclaim the pod and network so the project name is free again.
 	_ = exec.CommandContext(ctx, "podman", "pod", "rm", "-f", "pod_"+e.Project).Run()
 	_ = exec.CommandContext(ctx, "podman", "network", "rm", "-f", e.Project+"_api").Run()
 	return err
@@ -408,22 +407,21 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 // OCI format drops a Dockerfile's HEALTHCHECK, which waitHealthy follows.
 const dockerFormatBuildArgs = "--podman-build-args=--format docker -q"
 
-// composeUpPhased brings a compose env up in two waves: dependency-free
-// services first, then the ones declaring `depends_on:` (e.Dependents), waiting
-// for each wave to become healthy before starting the next. --no-deps keeps the
-// provider from ordering anything itself. Its `depends_on` wait hangs on
-// podman-compose ≤1.5.x, and without systemd it silently no-ops and leaves
-// health at "starting". Two waves cover the flat test composes: infra plus one
-// standalone subject.
+// composeUpPhased brings a compose env up in two waves and waits for each wave
+// to become healthy. The first wave holds the dependency-free services, the
+// second the ones declaring `depends_on:` (e.Dependents). Two waves cover the
+// flat test composes: infra plus one standalone subject. An env with an
+// unknown service list comes up in one whole-env `up`.
 //
-// An env whose service list is unknown comes up in a single whole-env `up`.
+// --no-deps stops the provider from ordering services itself. The
+// podman-compose `depends_on` wait hangs on versions up to 1.5.x, and without
+// systemd it does nothing and leaves health at "starting".
 //
-// --remove-orphans stays out: podman-compose's orphan handling around a
-// positional `up <svc>` varies by version and can sweep services it just
-// created. TearDown owns orphan removal.
+// --remove-orphans stays out: podman-compose handles orphans around a
+// positional `up <svc>` differently across versions, and can remove services
+// it just created. TearDown owns orphan removal.
 func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect.ComposeEnv, healthTimeout time.Duration) error {
 	if len(e.Services) == 0 {
-		// Unknown service list: bring the whole env up at once.
 		if err := compose(ctx, out, env, e, []string{dockerFormatBuildArgs}, "up", "-d", "--build"); err != nil {
 			return err
 		}

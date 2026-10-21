@@ -23,8 +23,8 @@ func dockerfileHasHealthcheck(path string) bool {
 	defer func() { _ = f.Close() }()
 
 	sc := bufio.NewScanner(f)
-	// Multi-line RUN blocks with continuations easily pass the scanner's
-	// default 64KB line limit.
+	// A single physical line, such as an embedded script, can pass the
+	// scanner's 64KB default.
 	sc.Buffer(make([]byte, 0, 1<<20), 1<<20)
 	var logical strings.Builder
 	for sc.Scan() {

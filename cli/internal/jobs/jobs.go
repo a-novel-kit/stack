@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// ErrAborted marks a job the run was cancelled before starting.
+// ErrAborted is the error of a job the run cancelled before it started.
 var ErrAborted = errors.New("aborted before completion")
 
 // Job is one named unit of work.
@@ -39,8 +39,9 @@ type Result struct {
 
 // Progress is the live state of a run. Its methods are safe for concurrent use.
 type Progress struct {
-	// OnStart and OnDone, when set, observe each job from the goroutine that
-	// runs it. A job aborted before starting only reaches OnDone.
+	// OnStart and OnDone, when set, observe each job on the goroutine that
+	// runs it. A job aborted before it starts reaches only OnDone, on the
+	// goroutine calling Run.
 	OnStart func(i int)
 	OnDone  func(i int, r Result)
 

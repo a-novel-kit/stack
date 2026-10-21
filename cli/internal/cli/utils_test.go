@@ -168,7 +168,7 @@ func initBare(t *testing.T) string {
 // initSyncRepo builds a bare "origin" with master holding a.txt ("a0") and
 // b.txt ("b0"), and returns (local, seed): a clone of it, and a second clone
 // that pushes new commits so tests can put local "behind". origin/HEAD is set
-// by the clone, so resolveDefaultBranch reads "master" as it does in the field.
+// by the clone, so defaultBranch reads "master" as it does in the field.
 func initSyncRepo(t *testing.T) (string, string) {
 	t.Helper()
 	origin := initBare(t)

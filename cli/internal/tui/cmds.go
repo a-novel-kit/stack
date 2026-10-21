@@ -124,8 +124,6 @@ func tickEvery(d time.Duration) tea.Cmd {
 func (m *model) followSelectedLogs() {
 	m.logLines = nil
 	m.logScroll = 0
-	// Cancel the prior follower and bump the generation tag, so any of
-	// its late messages carry a stale gen and Update drops them.
 	if m.followCancel != nil {
 		m.followCancel()
 		m.followCancel = nil

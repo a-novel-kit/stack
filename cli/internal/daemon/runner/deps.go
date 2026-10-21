@@ -9,26 +9,18 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// EnsureDepsReady walks `t`'s compose `depends_on` chain and verifies
-// every upstream dependency is ready before allowing the target to
-// start. A dependency counts as ready when:
+// EnsureDepsReady readies everything t's compose depends_on names before t
+// starts, by dependency kind:
+//   - infra: the service's infra starts when it is down.
+//   - one-shot target: it must have succeeded in the current infra session,
+//     and it runs now when it has not run yet. A failed run refuses the start.
+//   - long-runner target: it must already be running. A container one must not
+//     report a starting or unhealthy healthcheck. The daemon never starts a
+//     long-runner on its own.
 //
-//	(phase=running AND (mode=go-exec OR health=healthy))
-//	  OR (phase=terminated AND exitReason=success)
-//
-// Behavior by dep kind:
-//   - infra: ensures the service's infra session is Up. Auto-triggers
-//     StartInfra if it isn't (cascade).
-//   - one-shot target: ensures the current infra session recorded
-//     success for it. Auto-triggers via the infra session if the session
-//     is Up but the one-shot hasn't run yet. Refuses if the previous run
-//     failed (caller must re-start infra or fix the underlying issue).
-//   - long-runner target: must already be running. A long-runner is never
-//     auto-started; that stays an explicit user action.
-//
-// A long-runner also needs every one-shot of its service, which its compose
-// file leaves out: its standalone image runs them at boot, so a plain
-// `podman compose` up waits on no one-shot, which podman would run again.
+// A long-runner also waits for every one-shot of its service. Its compose file
+// leaves them out, since its standalone image runs them at boot, so the daemon
+// adds the gate.
 func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *discovery.Service, oneShotsMode anovelv1.Mode) error {
 	for _, depName := range t.DependsOn {
 		if err := r.ensureDepReady(ctx, svc, depName, oneShotsMode); err != nil {

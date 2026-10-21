@@ -113,8 +113,8 @@ func TestResolveBackup(t *testing.T) {
 		wantErr bool
 		errHas  []string
 	}{
-		// Same timestamp, two variants — the collision the fix exists for. The
-		// message names both candidates so the operator can disambiguate.
+		// Two variants share one timestamp. The message names both candidates
+		// so the operator can tell them apart.
 		{name: "Error/AmbiguousPrefix", files: []string{tagged, plain}, from: "20260722-1200", wantErr: true, errHas: []string{"auto-pre-clear", "matches 2"}},
 		// The plain archive's full name is not a prefix of the tagged one, so it
 		// resolves uniquely — the operator's escape hatch from the ambiguity above.

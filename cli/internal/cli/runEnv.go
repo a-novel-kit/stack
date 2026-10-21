@@ -69,7 +69,7 @@ func printEnv(cmd *cobra.Command, service string, o envOpts) error {
 }
 
 // renderEnv writes the env entries in the requested format. shell is
-// eval-able; json is one-record-per-entry; dotenv is plain KEY=VALUE.
+// eval-able, json is one record per entry, and dotenv is plain KEY=VALUE.
 func renderEnv(w io.Writer, entries []*anovelv1.EnvEntry, format string) {
 	switch format {
 	case "json":

@@ -22,17 +22,13 @@ const (
 	modeExempt = "exempt"
 )
 
-// rulesetMaster is the name of the default-branch ruleset; bots bypass it with
-// mode "always" (they push to the default branch directly).
+// rulesetMaster is the name of the default-branch ruleset.
 const rulesetMaster = "master"
 
-// rulesetTags is the name of the release-tag ruleset. The release bot creates
-// the tag, so like master it bypasses with mode "always".
+// rulesetTags is the name of the release-tag ruleset.
 const rulesetTags = "tags"
 
-// rulesetReleaseLines is the name of the release/vX.Y branch ruleset. The
-// release bot creates a line and pushes its version-bump commits, so it also
-// bypasses with mode "always".
+// rulesetReleaseLines is the name of the release/vX.Y branch ruleset.
 const rulesetReleaseLines = "release-lines"
 
 // APIBypassActor is one bypass-actor entry in the GitHub rulesets API request body.
@@ -81,8 +77,9 @@ type Op struct {
 	RulesetName string `json:"ruleset,omitempty"`
 	// PruneRulesets marks the op that reconciles the whole ruleset set: apply
 	// deletes every live ruleset KeepRulesets does not name.
-	PruneRulesets bool     `json:"prune_rulesets,omitempty"`
-	KeepRulesets  []string `json:"keep_rulesets,omitempty"`
+	PruneRulesets bool `json:"prune_rulesets,omitempty"`
+	// KeepRulesets names the rulesets the prune keeps.
+	KeepRulesets []string `json:"keep_rulesets,omitempty"`
 	// Secret names the scoped org secret the op grants (PUT) or revokes
 	// (DELETE) the repo's access to. Apply appends the repo's numeric ID to
 	// Path.
@@ -243,11 +240,10 @@ func securityOps(c *ClassPreset, repoPath string) []Op {
 	workflowPermissions := map[string]any{"default_workflow_permissions": "read", "can_approve_pull_request_reviews": false}
 	forkApproval := map[string]any{"approval_policy": "all_external_contributors"}
 	return []Op{
-		// Code scanning stays off, asserted on every update rather than assumed.
-		// Static analysis is the lint-semgrep and scan-secrets jobs in
-		// main.yaml, which report as ordinary required checks, and an org-level
-		// "enable for all repositories" toggle would otherwise switch scanning
-		// back on here unnoticed. The call is idempotent.
+		// Code scanning stays off, asserted on every update. The lint-semgrep
+		// and scan-secrets jobs of main.yaml do the static analysis, as
+		// required checks. The assertion undoes an org-level "enable for all
+		// repositories" toggle.
 		{Method: http.MethodPatch, Path: repoPath + "/code-scanning/default-setup", Body: map[string]any{"state": "not-configured"}},
 		{Method: http.MethodPatch, Path: repoPath + "/code-quality/setup", Body: map[string]any{"state": codeQuality}},
 		// A workflow token is read-only unless its job asks for more, and it
@@ -432,10 +428,9 @@ func rulesetOps(t *RepoTarget, repoPath string) ([]Op, error) {
 		keep = append(keep, w.name)
 	}
 
-	// A repo's ruleset set is derived. Everything above follows from the class
-	// preset, the org profile and code-driven discovery, so any ruleset this
-	// plan does not name is drift, dropped from the templates or added by hand
-	// in the UI, and apply deletes it.
+	// A repo's ruleset set is derived from the class preset, the org profile
+	// and discovery. Any ruleset this plan does not name is drift, dropped from
+	// the templates or added by hand in the UI, and apply deletes it.
 	//
 	// Pruning runs last, once every desired ruleset has been written, so a repo
 	// is never momentarily left ungoverned.
@@ -646,7 +641,8 @@ func (p *Plan) Render(w io.Writer) error {
 			_, _ = fmt.Fprint(w, op.Content)
 			continue
 		}
-		// Deletions and a prune carry no request body, so their titles stand alone.
+		// An op without a request body, such as a deletion or the prune, prints
+		// its title alone.
 		if op.PruneRulesets || op.Body == nil {
 			continue
 		}

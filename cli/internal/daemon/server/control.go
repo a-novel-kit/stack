@@ -78,10 +78,9 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *anovelv1.PrepareReinstal
 // an active infra session, cascade-killing the remaining targets and tearing
 // down their infra containers.
 //
-// The response names every target that could not be stopped. Whoever ran this
-// asked for a clean environment, and a partial one that reports success is one
-// they will not go back and check. The shutdown signal fires after the
-// response is sent, so the client gets a clean reply.
+// The response names every target that could not be stopped, so a partial
+// shutdown never reads as a success. The daemon stops after the response is
+// sent.
 func (s *Server) Shutdown(_ context.Context, req *anovelv1.ShutdownRequest) (*anovelv1.ShutdownResponse, error) {
 	var sessions []runner.InfraSessionRef
 	if req.GetForce() {

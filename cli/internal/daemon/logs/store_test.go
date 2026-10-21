@@ -158,7 +158,7 @@ func TestStore_NoSubscriberStillWritesFile(t *testing.T) {
 }
 
 // TestStore_ListRunsSkipsMalformedNames covers archive names outside the
-// run-<stamp>.log shape, such as a stray run-x, which once panicked the listing.
+// run-<stamp>.log shape, such as a stray run-x. The listing skips them.
 func TestStore_ListRunsSkipsMalformedNames(t *testing.T) {
 	s, _, _ := withStore(t)
 	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "a-novel", "logs", "default", "test", "x")
