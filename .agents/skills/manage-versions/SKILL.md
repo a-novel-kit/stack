@@ -55,8 +55,8 @@ A release is cut **in CI**, not from a developer's working tree. An admin trigge
   key only that environment holds. It bumps version files (workspace-aware), refreshes doc refs
   (`prepublish:doc` / `a-novel publish stamp`), commits, tags `vX.Y.Z`, pushes the commit and tags
   together, and creates the GitHub Release.
-- **The tag publishes.** The root tag runs `release.yaml` again, and that run builds the images and
-  attestations, publishes the npm packages and dispatches infra's `pin-release.yaml`.
+- **The tag publishes.** The root tag runs `release.yaml` again, and that run builds and attests the
+  images, attests and publishes the npm tarballs, and dispatches infra's `pin-release.yaml`.
 
 A repository that has not adopted the split yet releases in one job as the [Agent] bot; the
 workflows repo's `docs/migrations/v1.57.0.md` is the adoption guide.
@@ -68,7 +68,7 @@ form — `--recursive` for workspaces, `--no-git-tag-version` for single-package
 under `a-novel publish` is `stamp`, the doc-version helper `prepublish:doc` calls (see
 `use-a-novel-cli`).
 
-**Who can actually publish is enforced server-side**, by rulesets and the environment that
+**Who can cut a release is enforced server-side**, by rulesets and the environment that
 `a-novel repo update` reconciles:
 
 1. **The `master` ruleset** restricts who can push the version-bump commit.
@@ -78,6 +78,14 @@ under `a-novel publish` is `stamp`, the doc-version helper `prepublish:doc` call
    `release/v*` lines and `v*` tags. Every cut waits there for `core` or the repo's `owners-<class>`
    team; the person who dispatched may approve their own run. The first backport onto a new line
    waits there too, since only the release App may create the line.
+
+These guard the release, never the registries. GitHub Packages lets every workflow run of a
+repository write that repository's packages, whatever its ref, so a branch can publish an npm version
+or push and move an image tag. A version proves its origin only through its release proof: an
+attestation over its bytes, signed by the producer's `release.yaml` at the version's tag, and an
+immutable Release of that tag from the release App. A branch run's attestation names its branch, and
+only a release makes the tag and the Release. The auto-approver merges a first-party version only
+with that proof (`write-github-actions`), and infra deploys an image only with it (`write-infra`).
 
 A `v*` tag is only ever created by a CI dispatch — the release or release-train job, running as the
 release App. Nobody pushes one by hand, maintainers included. Repo admins can bypass every rule
@@ -207,9 +215,11 @@ re-pins to the released tag first.**
    (or `@latest`), `go mod tidy`, commit (`chore(deps): bump golib to vX.Y.Z`). B's CI goes green.
 3. **Merge B's PR.** Now production is fully on released versions.
 
-For a pnpm consumer, a fresh release sits inside pnpm's `minimumReleaseAge` (one day by default).
-Exempt it by exact version in `pnpm-workspace.yaml` `minimumReleaseAgeExclude`, one entry per pinned
-package. Bump in two steps, because pnpm also rejects the outgoing pin when it is still too fresh:
+For a pnpm consumer, a fresh first-party release installs at once: every workspace exempts the
+`@a-novel` and `@a-novel-kit` scopes from pnpm's `minimumReleaseAge`, since the release proof stands
+in for the wait. A fresh third-party release sits inside that age (one day by default). Exempt it by
+exact version in `pnpm-workspace.yaml` `minimumReleaseAgeExclude`, one entry per pinned package. Bump
+in two steps, because pnpm also rejects the outgoing pin when it is still too fresh:
 
 1. Add the new versions next to the old ones, then run `pnpm install`.
 2. Remove the old entries, then pass `pnpm install --frozen-lockfile`.

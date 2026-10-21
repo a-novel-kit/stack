@@ -61,9 +61,14 @@ breaks something:
 
 `minimumReleaseAge: "3 days"` applies to `matchDatasources: ["npm"]` and stays at or above pnpm's
 own release age. Third-party GitHub Actions wait the same three days
-(`matchManagers: ["github-actions"]`), and first-party releases skip both gates. The approval
-workflow withholds a Renovate PR's approval while `renovate/stability-days` is pending, because no
-ruleset requires that status.
+(`matchManagers: ["github-actions"]`), and first-party releases skip both gates: the release proof
+the auto-approver checks stands in for the wait. The approval workflow withholds a Renovate PR's
+approval while `renovate/stability-days` is pending, because no ruleset requires that status.
+
+Compose files and Dockerfiles pin first-party images by digest (`pinDigests` for those two managers),
+so a moved tag changes nothing a consumer runs and each bump names the digest the approver checks.
+The composite-action default manager keeps a digest written after the tag, and a default gets that
+digest by hand once.
 
 A release without a timestamp cannot pass the gate: under the default `minimumReleaseAgeBehaviour:
 timestamp-required` it stays pending forever. MCR images and lockfile maintenance have none.
