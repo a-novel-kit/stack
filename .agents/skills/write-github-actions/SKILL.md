@@ -359,7 +359,9 @@ must stay with admins or maintainers runs `generic-actions/require-role` first: 
 and the role name, because the legacy permission field reports Maintain as `write`. Another workflow
 starts a gated one through `workflow_run`, whose run inherits the upstream run's triggering actor. A
 dispatch with the workflow token runs as `github-actions[bot]`, which the gate refuses. Never exempt
-that bot: any writer's branch workflow can dispatch as it.
+that bot: any writer's branch workflow can dispatch as it. `approve-pr` admits an admin, core
+included through its org role, and only for a pull request that same triggering actor opened;
+anyone else's pull request gets an ordinary review.
 
 A workflow that reads the Agent key runs from the default branch's copy, which no pull request can
 rewrite. `pull_request`, `pull_request_review` and `merge_group` run the pull request's own copy, so
@@ -406,12 +408,14 @@ cannot read commit statuses. `recover-prs.yaml` re-arms auto-merge on a PR the m
 On `a-novel/infra` the auto-approver runs strict, because a merge there deploys production. A bot's
 PR merges on its own only as a release pin, or as a version update Renovate itself put on
 auto-merge whose every changed line moves only a dependency reference's version, or a digest with its
-version. Anything else, Renovate's `automerge: false` updates included, waits for `approve-pr`. The
-approval names the commit it classified, so a later push needs its own.
+version. Anything else, Renovate's `automerge: false` updates included, waits for a maintainer's or
+an admin's review. The bot's approval names the commit it classified, so a later push needs its own.
 
 A person's PR posts to the Discord reviews feed alone, through `notify-pr-run`: a review request
 pings its reviewers, a review or a drop from the merge queue pings its owner, and its merge posts
-without a ping. Nothing posts its draft, assignee or reopen changes.
+without a ping. Nothing posts its draft, assignee or reopen changes. A post that asks for a reviewer
+ends with two commands: one requests the reader's own review, the other dispatches `approve-pr` for
+an admin who opened the pull request.
 
 Each repository has its own reviews and issues channels. The `REVIEWS_WEBHOOKS` org secret and the
 `.github` repo's `ISSUES_WEBHOOKS` secret map `<org>/<repo>` to that channel's webhook, and a

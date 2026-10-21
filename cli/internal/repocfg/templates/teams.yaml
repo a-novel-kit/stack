@@ -13,8 +13,7 @@ tiers:
   # merge until a maintainer approves.
   - name: developers
     permission: push
-  # Triage, manage labels, approve the pull requests that merge, and dispatch
-  # approve-pr for their own.
+  # Triage, manage labels and approve the pull requests that merge.
   - name: maintainers
     permission: maintain
   # Admin on their area's repositories: core's rights there, ruleset bypass included.

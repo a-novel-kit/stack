@@ -31,8 +31,8 @@ link required by `write-frontend`, adjacent to the recap table or in the relevan
 that local-only link in the PR body.
 
 For every open PR in the recap, put a copy-pasteable command **inside that PR's table row** that lets
-a repository admin record their approval through the repo's `approve-pr` workflow after reviewing
-the PR:
+the repository admin who opened it record their approval through the repo's `approve-pr` workflow
+after reviewing the PR:
 
 ```bash
 gh workflow run approve-pr.yaml --repo <org>/<repo> --ref <default-branch> --field pull_request=<PR-URL>
