@@ -144,6 +144,10 @@ jobs:
 
           # Each marker carries nonce:index, and the same array yields the same
           # markers, so a retried run skips every comment that already landed.
+          # Each thread is listed once per run. A comment this run posts carries
+          # a marker no other item looks for, so that first listing answers
+          # every item of the thread.
+          declare -A listings=()
           idx=0
           while IFS= read -r item; do
             number=$(printf '%s' "$item" | jq -r '.number')
@@ -163,8 +167,14 @@ jobs:
               post_url="repos/${slug}/issues/${number}/comments"
             fi
 
-            existing=$(gh api "$list_url" --paginate \
-              --jq "[.[] | select(.body | contains(\"${marker}\")) | .html_url] | .[0] // empty")
+            # --paginate prints one array per page, and jq reads each in turn.
+            if [ -z "${listings[$list_url]:-}" ]; then
+              listings[$list_url]=$(mktemp)
+              gh api "$list_url" --paginate > "${listings[$list_url]}"
+            fi
+            existing=$(jq -r --arg marker "$marker" \
+              '[.[] | select(.body | contains($marker)) | .html_url] | .[0] // empty' "${listings[$list_url]}")
+
             if [ -n "$existing" ]; then
               echo "already posted (idempotent): $existing" | tee -a "$GITHUB_STEP_SUMMARY"
             else
