@@ -107,6 +107,11 @@ a maintenance liability, a supply-chain surface, and a constraint on future choi
   empty as possible.)
 - **Remove, don't accumulate.** During maintenance, actively look for dependencies — and
   hand-rolled helpers — that a newer upstream now subsumes, and delete the duplicate.
+- **Fix what govulncheck reports.** A module that pins `govulncheck` in `govulncheck.mod` gets a
+  `lint-go` warning for each vulnerability its code reaches, and the daily CI digest collects those
+  from the default branch. The report never fails CI. Move the module to its fixed version, or the
+  `go` directive for a standard-library finding, and confirm with
+  `go tool -modfile=govulncheck.mod govulncheck ./...`.
 
 ---
 

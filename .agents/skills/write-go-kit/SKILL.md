@@ -164,9 +164,9 @@ Match the repo's existing setup; the standard shape:
   `write-go` already says: run `pnpm format:go` and `pnpm lint:go` after every edit;
   `pnpm generate:go` when generated inputs changed.
 
-- **Tool dependencies are pinned in `*.mod` side files** — `golangci-lint.mod`, `gotestsum.mod` —
-  kept out of the main `go.mod`, invoked via `go tool -modfile=<name>.mod <tool>`. Don't move tool
-  deps into `go.mod`.
+- **Tool dependencies are pinned in `*.mod` side files** — `golangci-lint.mod`, `gotestsum.mod`,
+  `govulncheck.mod` — kept out of the main `go.mod`, invoked via `go tool -modfile=<name>.mod <tool>`.
+  Don't move tool deps into `go.mod`.
 - **`renovate.json`** keeps dependencies (and the consumers, in service repos) up to date; a
   `pnpm` workspace + `prettier.config.js` cover the docs/markdown tooling.
 - **CI is the reusable workflows from `a-novel-kit/workflows`** (`go-actions/lint-go`,
