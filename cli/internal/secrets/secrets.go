@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -58,17 +59,22 @@ func initAt(root string) (bool, error) {
 	if err := os.MkdirAll(root, dirMode); err != nil {
 		return false, fmt.Errorf("secrets: create %s: %w", root, err)
 	}
-	keyPath := filepath.Join(root, keyFile)
-	if _, statErr := os.Stat(keyPath); statErr == nil {
-		return false, nil // key already exists — never overwrite
-	} else if !errors.Is(statErr, os.ErrNotExist) {
-		return false, fmt.Errorf("secrets: stat key: %w", statErr)
-	}
 	key := make([]byte, keyLen)
 	if _, err := rand.Read(key); err != nil {
 		return false, fmt.Errorf("secrets: generate key: %w", err)
 	}
-	if err := os.WriteFile(keyPath, key, fileMode); err != nil {
+	// O_EXCL makes creating the key and checking for it one step, so of two
+	// concurrent first runs exactly one writes a key. The key is drawn first, so
+	// a failed draw leaves no empty key file behind.
+	f, err := os.OpenFile(filepath.Join(root, keyFile), os.O_WRONLY|os.O_CREATE|os.O_EXCL, fileMode)
+	if errors.Is(err, fs.ErrExist) {
+		return false, nil // key already exists — never overwrite
+	}
+	if err != nil {
+		return false, fmt.Errorf("secrets: create key: %w", err)
+	}
+	_, err = f.Write(key)
+	if err = errors.Join(err, f.Close()); err != nil {
 		return false, fmt.Errorf("secrets: write key: %w", err)
 	}
 	return true, nil
