@@ -57,8 +57,9 @@ branch that diverged. LFS files stay unfetched.`,
 	cmd.Flags().StringVar(&o.rootDir, "root", "",
 		"workspace root containing kit/ and app/ (default: the default stack, else the working directory)")
 	cmd.Flags().StringSliceVar(&o.allow, "allow", nil,
-		"only sync these repos (e.g. --allow=a-novel-kit/golib); may be repeated")
-	cmd.Flags().StringSliceVar(&o.ignore, "ignore", nil, "skip these repos; wins over --allow")
+		"only sync these repos (<org>/<name> or bare <name>); may be repeated")
+	cmd.Flags().StringSliceVar(&o.ignore, "ignore", nil,
+		"skip these repos (<org>/<name> or bare <name>); wins over --allow")
 	cmd.Flags().IntVarP(&o.limit, "jobs", "j", runtime.NumCPU(), "max repos synced at once")
 	return cmd
 }
@@ -101,19 +102,20 @@ func syncNeedsAttention(r jobs.Result) bool {
 	return r.Err != nil || r.Status == syncSkipped
 }
 
-// syncJobs returns a sync job for each of repos the filters keep. It also
-// returns the names left out: those --ignore names, and the stack repository at
-// root, which never syncs into itself. --allow drops the others silently.
+// syncJobs returns a sync job for each of repos the filters keep. Both filters
+// name a repo by its full or its bare name. It also returns the names left out:
+// those --ignore names, and the stack repository at root, which never syncs into
+// itself. --allow drops the others silently.
 func syncJobs(root string, repos []repoEntry, allowed, ignored map[string]bool) ([]jobs.Job, []string) {
 	self, _ := repoFromGitRemote(root)
 	var list []jobs.Job
 	var skipped []string
 	for _, r := range repos {
 		name := r.FullName()
-		if len(allowed) > 0 && !allowed[name] {
+		if len(allowed) > 0 && !r.listed(allowed) {
 			continue
 		}
-		if ignored[name] || r == self {
+		if r.listed(ignored) || r == self {
 			skipped = append(skipped, name)
 			continue
 		}

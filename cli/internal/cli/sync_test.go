@@ -3,6 +3,7 @@ package cli
 import (
 	"cmp"
 	"io"
+	"slices"
 	"testing"
 )
 
@@ -90,6 +91,48 @@ func TestUpdateRepo(t *testing.T) {
 				if got := readFixture(t, local, name); got != want {
 					t.Errorf("%s = %q, want %q", name, got, want)
 				}
+			}
+		})
+	}
+}
+
+// TestSyncJobs pins that --allow and --ignore name a repo by its full or its
+// bare name, as `repo update --all --exclude` does, and that --ignore wins.
+func TestSyncJobs(t *testing.T) {
+	t.Parallel()
+
+	repos := []repoEntry{
+		{Org: orgAnovelKit, Name: "golib"},
+		{Org: orgAnovel, Name: "service-json-keys"},
+	}
+	testCases := []struct {
+		name            string
+		allow, ignore   []string
+		want, wantSkips []string
+	}{
+		{name: "Success/NoFilter", want: []string{"a-novel-kit/golib", "a-novel/service-json-keys"}},
+		{name: "Success/AllowFullName", allow: []string{"a-novel-kit/golib"}, want: []string{"a-novel-kit/golib"}},
+		{name: "Success/AllowBareName", allow: []string{"golib"}, want: []string{"a-novel-kit/golib"}},
+		{
+			name: "Success/IgnoreBareName", ignore: []string{"service-json-keys"},
+			want: []string{"a-novel-kit/golib"}, wantSkips: []string{"a-novel/service-json-keys"},
+		},
+		{
+			name: "Success/IgnoreWinsOverAllow", allow: []string{"golib"}, ignore: []string{"a-novel-kit/golib"},
+			wantSkips: []string{"a-novel-kit/golib"},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			list, skipped := syncJobs(t.TempDir(), repos, normalizeFilter(testCase.allow), normalizeFilter(testCase.ignore))
+			got := make([]string, len(list))
+			for i, job := range list {
+				got[i] = job.Name
+			}
+			if !slices.Equal(got, testCase.want) || !slices.Equal(skipped, testCase.wantSkips) {
+				t.Errorf("syncJobs = (%v, skipped %v), want (%v, skipped %v)", got, skipped, testCase.want, testCase.wantSkips)
 			}
 		})
 	}
