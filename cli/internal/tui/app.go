@@ -12,26 +12,27 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Run launches the TUI in the alt-screen and blocks until the user
-// quits. Returns nil on clean exit, error on unrecoverable failure
-// (typically: daemon unreachable).
+// Run opens the TUI in the alternate screen and blocks until the user quits.
+// It returns an error when the daemon does not answer a ping or the program
+// fails.
 func Run() error {
 	c := rpc.New("")
-	// Pre-flight ping so a down daemon surfaces clearly.
+	// A ping first, so a stopped daemon fails here with a clear error.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if _, err := c.Ping(ctx); err != nil {
 		return err
 	}
 	m := &model{c: c}
-	// Mouse-cell-motion capture stays off, so the terminal keeps its own
-	// click-drag text selection. This keyboard-driven UI needs it for
-	// copying log lines out.
+	// Mouse capture stays off, so the terminal keeps click-and-drag selection
+	// for copying log lines.
 	p := tea.NewProgram(m)
-	// Background log-follow goroutines inject events through p.Send, so
-	// the model needs the program.
+	// The log follower sends its lines through the program.
 	m.program = p
 	_, err := p.Run()
+	if m.followCancel != nil {
+		m.followCancel()
+	}
 	return err
 }
 
@@ -75,18 +76,17 @@ type model struct {
 	// through both kinds, and consumers branch on activeInfra and
 	// activeTarget.
 	selectedTab int
-	// Log streaming.
-	logLines     []*anovelv1.StreamLogsResponse
-	followCancel context.CancelFunc // cancels the current follow goroutine on target switch
-	// followGen tags each follower-goroutine generation; messages
-	// from previous followers are dropped on arrival so the
-	// cancel-then-start race window can't mix streams.
+	// logLines holds the newest maxLogLines lines of the followed log.
+	logLines []*anovelv1.StreamLogsResponse
+	// followCancel stops the current log follower.
+	followCancel context.CancelFunc
+	// followGen numbers the log followers. onLogLines drops the lines of an
+	// older follower, so a cancelled follower's late lines never reach the
+	// pane.
 	followGen int
-	// logScroll is the offset from the tail of logLines. Zero auto-follows
-	// the bottom, so new lines push the view forward. A positive value
-	// means the user paged up: the view holds at
-	// `logLines[len-h-scroll : len-scroll]` while new lines accumulate in
-	// the buffer. followSelectedLogs resets it along with the buffer.
+	// logScroll counts the newer lines below the visible window. Zero follows
+	// the tail. A positive offset holds the window in place while lines
+	// arrive. followSelectedLogs resets it.
 	logScroll  int
 	cmdInput   string // command-palette input buffer, leading ":" included
 	topologyTx string // last GetTopology response, rendered by viewTopology
@@ -120,8 +120,16 @@ const maxLogLines = 500
 // statusInfoTTL is how long an info status stays before it fades.
 const statusInfoTTL = 5 * time.Second
 
+// refreshInterval is how often the UI polls the daemon for services.
+const refreshInterval = 2 * time.Second
+
+// pollCmd refreshes the services now and schedules the next poll.
+func (m *model) pollCmd() tea.Cmd {
+	return tea.Batch(refreshServicesCmd(m.c), tickEvery(refreshInterval))
+}
+
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(refreshServicesCmd(m.c), tickEvery(2*time.Second))
+	return m.pollCmd()
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -156,12 +164,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case logLineMsg:
-		m.onLogLine(msg)
+	case logLinesMsg:
+		m.onLogLines(msg)
 		return m, nil
 
 	case tickMsg:
-		return m, tea.Batch(refreshServicesCmd(m.c), tickEvery(2*time.Second))
+		return m, m.pollCmd()
 
 	case topologyMsg:
 		m.topologyTx = msg.rendered
@@ -196,30 +204,29 @@ func (m *model) onServices(services []*anovelv1.Service) {
 // truncates it, and even a plain start opens a fresh one.
 func (m *model) onActionResult(msg actionResultMsg) tea.Cmd {
 	if msg.err != nil {
-		m.status = statusEntry{level: statusError, text: msg.actionLabel + ": " + msg.err.Error(), at: time.Now()}
+		m.status = newStatus(statusError, msg.actionLabel+": "+msg.err.Error())
 		return refreshServicesCmd(m.c)
 	}
-	m.status = statusEntry{level: statusInfo, text: msg.successText, at: time.Now()}
+	m.status = newStatus(statusInfo, msg.successText)
 	m.followSelectedLogs()
 	fade := tea.Tick(statusInfoTTL, func(time.Time) tea.Msg { return statusFadeMsg{} })
 	return tea.Batch(refreshServicesCmd(m.c), fade)
 }
 
-// onLogLine appends a followed log line. A line from a stale follower
-// generation, which arrives during the cancel-then-start window of a tab or
-// service switch, is dropped. While the pane is scrolled back, the offset moves
-// past the new line, so the window keeps showing the same lines; clamping
-// snaps it back when trimming pushed that window past the buffer.
-func (m *model) onLogLine(msg logLineMsg) {
+// onLogLines appends a follower's batch. While the pane is scrolled back, the
+// offset grows with each line, so the window keeps its lines. Once the buffer
+// is full, trimming drops the oldest lines and the clamp keeps the window
+// inside the buffer.
+func (m *model) onLogLines(msg logLinesMsg) {
 	if msg.gen != m.followGen {
 		return
 	}
-	m.logLines = append(m.logLines, msg.line)
-	if len(m.logLines) > maxLogLines {
-		m.logLines = m.logLines[len(m.logLines)-maxLogLines:]
+	m.logLines = append(m.logLines, msg.lines...)
+	if over := len(m.logLines) - maxLogLines; over > 0 {
+		m.logLines = m.logLines[over:]
 	}
 	if m.logScroll > 0 {
-		m.logScroll = m.clampLogScroll(m.logScroll + 1)
+		m.logScroll = m.clampLogScroll(m.logScroll + len(msg.lines))
 	}
 }
 
@@ -250,9 +257,8 @@ func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveTab(1)
 	case "h", "left", "shift+tab":
 		m.moveTab(-1)
-	// Log-pane scrolling: ctrl+up/down step one line, pgup/pgdn jump a
-	// half-page, end/G returns to the tail (auto-follow) and home/g to the
-	// top of the buffered window. clampLogScroll bounds the offset.
+	// Log-pane scrolling. Ctrl+↑/↓ step one line and PgUp/PgDn half a page.
+	// Home/g jumps to the oldest buffered line and End/G back to the tail.
 	case "pgup":
 		m.logScroll = m.clampLogScroll(m.logScroll + m.logViewportHeight()/2)
 	case "pgdown", "pgdn":
@@ -288,11 +294,8 @@ func (m *model) moveTab(delta int) {
 	}
 }
 
-// clampLogScroll keeps logScroll inside [0, maxScroll], where maxScroll
-// is the largest offset that still leaves the visible window full. That
-// ceiling stops the user paging back until a single log line shows above
-// the "logs paused" indicator, which takes one row of the pane whenever
-// logScroll > 0.
+// clampLogScroll bounds a scroll offset to [0, max]. At max, the window still
+// fills the pane above the paused indicator.
 func (m *model) clampLogScroll(n int) int {
 	if n <= 0 {
 		return 0
@@ -325,6 +328,7 @@ func (m *model) logViewportHeight() int {
 	return max(h, 4)
 }
 
+// handleCommandKey edits the palette input. Enter runs it and Esc discards it.
 func (m *model) handleCommandKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.Key().Code {
 	case tea.KeyEsc:
@@ -341,9 +345,8 @@ func (m *model) handleCommandKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.cmdInput = m.cmdInput[:len(m.cmdInput)-size]
 		return m, nil
 	}
-	// Printable input carries its characters in Key.Text, which is populated
-	// for runes and space and empty for modifier combos and special keys, so
-	// appending it captures typed text while ignoring chords.
+	// Key.Text holds the characters a printable key types. Chords and special
+	// keys leave it empty.
 	if txt := msg.Key().Text; txt != "" {
 		m.cmdInput += txt
 	}

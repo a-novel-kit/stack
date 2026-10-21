@@ -90,9 +90,9 @@ func pillRow(pills ...string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, spaced...)
 }
 
-// panel wraps body in a rounded muted border under a title bar colored c. The
-// box's content is set to width-4 (border and padding each side), so lipgloss
-// wraps long log lines inside the border.
+// panel wraps body in a rounded muted box under a title bar colored c. The box
+// is width-4 cells wide, borders included, and lipgloss wraps long lines
+// inside it.
 func panel(title string, c color.Color, body string, width int) string {
 	bar := lipgloss.NewStyle().Foreground(c).Bold(true).MaxWidth(width).Render("▌ " + title)
 	box := lipgloss.NewStyle().

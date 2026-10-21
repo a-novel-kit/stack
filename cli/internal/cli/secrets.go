@@ -14,9 +14,8 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
 )
 
-// readPassword reads a line from the terminal with echo disabled. A package var
-// so tests can stub it; production reads via golang.org/x/term so the typed
-// secret never appears on screen.
+// readPassword reads a line from the terminal with echo disabled, so the typed
+// secret never shows. It is a package var so tests can stub it.
 var readPassword = func() ([]byte, error) { return term.ReadPassword(int(os.Stdin.Fd())) }
 
 // newSecretsCmd manages the local encrypted secrets the secrets package stores.
@@ -84,9 +83,9 @@ passes through a pipe, a log or a shell history.`,
 	}
 }
 
-// setSecret reads the value of id from the terminal, with echo off, and stores
-// it. Reading with echo off takes a real terminal, so a non-interactive stdin
-// is refused: a secret must never reach a pipe, a log or a shell history.
+// setSecret reads the value of id from the terminal with echo off, and stores
+// it. Echo-off reading takes a real terminal, so a non-interactive stdin is
+// refused. A secret then never passes through a pipe, a log or a shell history.
 func setSecret(out io.Writer, id string) error {
 	if strings.TrimSpace(id) == "" {
 		return errors.New("secrets set: <id> must not be empty")

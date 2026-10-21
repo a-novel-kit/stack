@@ -14,9 +14,9 @@ import (
 )
 
 // newInstallCmd rebuilds the CLI and restarts the daemon on the new binary. A
-// bare `go install` leaves the old daemon running, so a new CLI talks to an old
-// daemon. This verb checkpoints the daemon first, so the same containers and
-// go-exec targets end up running on the new binary.
+// bare `go install` leaves the old daemon running beside the new CLI. This
+// command checkpoints the go-exec targets first, and the new daemon relaunches
+// them. Containers keep running throughout.
 func newInstallCmd() *cobra.Command {
 	var source string
 	cmd := &cobra.Command{
@@ -52,7 +52,7 @@ func installCLI(cmd *cobra.Command, source string) error {
 	}
 
 	_, _ = fmt.Fprintln(out, "▸ go install ./cmd/a-novel ...")
-	install := exec.CommandContext(ctx, "go", commandInstall, "./cmd/a-novel")
+	install := exec.CommandContext(ctx, "go", "install", "./cmd/a-novel")
 	install.Dir = sourceDir
 	install.Stdout = out
 	install.Stderr = cmd.ErrOrStderr()

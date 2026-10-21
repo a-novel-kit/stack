@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -100,23 +99,27 @@ func TestRun(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 
-			var running, peak atomic.Int32
+			var mu sync.Mutex
+			var running, peak, done int
 			list := make([]jobs.Job, testCase.jobs)
 			for i := range list {
 				list[i] = jobs.Job{
 					Name: fmt.Sprintf("job-%d", i),
 					Run: func(_ context.Context, out io.Writer) (string, error) {
-						n := running.Add(1)
-						defer running.Add(-1)
-						for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
-						}
+						mu.Lock()
+						running++
+						peak = max(peak, running)
+						mu.Unlock()
+						defer func() {
+							mu.Lock()
+							running--
+							mu.Unlock()
+						}()
 						return testCase.run(i, out)
 					},
 				}
 			}
 
-			var mu sync.Mutex
-			var done int
 			progress := &jobs.Progress{OnDone: func(int, jobs.Result) {
 				mu.Lock()
 				defer mu.Unlock()
@@ -132,7 +135,7 @@ func TestRun(t *testing.T) {
 			if done != testCase.jobs {
 				t.Errorf("OnDone ran %d times, want once per job (%d)", done, testCase.jobs)
 			}
-			testCase.check(t, results, int(peak.Load()))
+			testCase.check(t, results, peak)
 		})
 	}
 }
@@ -150,6 +153,7 @@ func TestProgress(t *testing.T) {
 		{name: "LastCompleteLine", write: []string{"one\ntwo\n"}, want: "two"},
 		{name: "LineInProgress", write: []string{"one\n", "tw"}, want: "tw"},
 		{name: "CarriageReturnRedraw", write: []string{"10%\r50%\r90%"}, want: "90%"},
+		{name: "CarriageReturnAcrossWrites", write: []string{"a\rb", "c\n"}, want: "bc"},
 		{name: "AnsiStripped", write: []string{"\x1b[32mok\x1b[0m\n"}, want: "ok"},
 		{name: "BlankLineKeepsPrevious", write: []string{"real\n", "\n"}, want: "real"},
 	}

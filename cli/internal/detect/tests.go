@@ -72,9 +72,10 @@ func composeEnvs(dir string) []envFile {
 
 var nonProjectChar = regexp.MustCompile(`[^a-z0-9]+`)
 
-// composeProject builds a podman-safe (lowercase, [a-z0-9-]) project name that
-// is unique per (location, env id), so concurrent test targets never share a
-// compose project.
+// composeProject builds a podman-safe (lowercase, [a-z0-9-]) project name from
+// a location and an env id. Ordinary layouts get one project per pair, so
+// concurrent test targets do not share one. Paths such as a/b and a-b, which
+// slug alike, would.
 func composeProject(rel, id string) string {
 	loc := rel
 	if loc == "." {
@@ -128,21 +129,15 @@ func goTests(dir, rel string, envs []envFile) []Target {
 		}
 	}
 
-	// No env files means a single self-contained `go test ./...` (kit libs).
-	// These have no external state, so Go's test cache is safe: it tracks the
-	// sources plus the env vars and files each test consults, and re-runs when
-	// any of those change. Omitting -count=1 lets the tight edit-test loop hit
-	// that cache.
+	// A module without env files runs a single `go test ./...`, as kit
+	// libraries do. It has no external state, so it omits -count=1 and the
+	// edit-test loop hits Go's test cache.
 	if len(goEnvs) == 0 {
 		return []Target{goTarget(dir, rel, module, "go test "+pkgAll, testArg, pkgAll)}
 	}
 
-	// One target per env file, scoped to the path it covers. These keep
-	// -count=1: their result depends on the Postgres state the compose env
-	// stands up, which Go's cache cannot see, so a cached pass could hide a
-	// migration or schema change.
+	// One target per env file, scoped to the path it covers.
 	targets := make([]Target, 0, len(goEnvs))
-
 	scoped := make([][]string, 0, len(goEnvs))
 
 	for _, e := range goEnvs {
@@ -151,28 +146,24 @@ func goTests(dir, rel string, envs []envFile) []Target {
 			sel = "./" + strings.Join(e.path, "/") + "/..."
 		}
 
-		// A bare env (empty path) selects ./... and so covers the whole module;
-		// its empty prefix matches every package, leaving nothing for the
-		// catch-all. Recording every env's path, empty included, is what makes
-		// that fall out.
+		// A bare env has an empty path. An empty path prefixes every package,
+		// so a bare env leaves the catch-all nothing to run.
 		scoped = append(scoped, e.path)
 
 		// The env id, such as "go.internal", is unique within the directory.
+		// Env-backed targets keep -count=1: Go's test cache cannot see the
+		// Postgres state the env stands up.
 		detail := "go test " + sel + "  ·  env " + filepath.Base(e.file)
 		target := goTarget(dir, rel, e.id, detail, testArg, "-count=1", sel)
 		target.Env = e.toEnv(rel)
 		targets = append(targets, target)
 	}
 
-	// Every scoped env narrows the run to its own subtree, so a test package
-	// under no env's path runs nowhere and reports nothing. This catch-all
-	// selects exactly those packages, so adding pkg/go/client_test.go to a
-	// module whose only env covers ./internal does not silently skip it.
-	//
-	// It carries no env: a package that needs external state declares its own
-	// env file, so an uncovered one is either cache-safe or fails loudly on the
-	// missing state, which surfaces the absent env. That is also why it omits
-	// -count=1.
+	// Scoped envs run only their own subtrees. The catch-all runs every test
+	// package outside them, such as pkg/go when the only env covers
+	// ./internal. It has no env and omits -count=1: a package that needs
+	// external state declares its own env file, so an uncovered package is
+	// cache-safe or fails on the missing state.
 	if uncovered := uncoveredGoSelectors(goTestPackageDirs(dir), scoped); len(uncovered) > 0 {
 		detail := "go test " + strings.Join(uncovered, " ") + "  ·  no env"
 		args := append([]string{testArg}, uncovered...)
@@ -204,8 +195,10 @@ func goTestPackageDirs(dir string) [][]string {
 		if entry.IsDir() {
 			return moduleDirStep(absRoot, path, entry.Name(), ignored)
 		}
-		rel, relErr := filepath.Rel(absRoot, filepath.Dir(path))
-		if strings.HasSuffix(entry.Name(), "_test.go") && relErr == nil && !seen[rel] {
+		if !strings.HasSuffix(entry.Name(), "_test.go") {
+			return nil
+		}
+		if rel, err := filepath.Rel(absRoot, filepath.Dir(path)); err == nil && !seen[rel] {
 			seen[rel] = true
 			pkgs = append(pkgs, pathSegments(rel))
 		}
@@ -217,7 +210,11 @@ func goTestPackageDirs(dir string) [][]string {
 // moduleDirStep is the walk's decision on a directory of the module at
 // absRoot: it skips the trees the main scan prunes and any nested module.
 func moduleDirStep(absRoot, path, name string, ignored map[string]struct{}) error {
-	if skipDir(absRoot, path, name, ignored) || path != absRoot && IsFile(filepath.Join(path, "go.mod")) {
+	if skipDir(absRoot, path, name, ignored) {
+		return filepath.SkipDir
+	}
+	// A nested go.mod starts another module, discovered on its own.
+	if path != absRoot && IsFile(filepath.Join(path, "go.mod")) {
 		return filepath.SkipDir
 	}
 	return nil

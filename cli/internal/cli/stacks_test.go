@@ -15,10 +15,13 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
+// stack builds a registered stack fixture rooted at /tmp/<name>.
 func stack(name string, isDefault bool) *anovelv1.Stack {
 	return &anovelv1.Stack{Name: name, Path: "/tmp/" + name, IsDefault: isDefault}
 }
 
+// TestSelectPruneTargets pins the default-stack protections of prune: --all
+// skips the default stack, and naming it is refused.
 func TestSelectPruneTargets(t *testing.T) {
 	t.Parallel()
 
@@ -97,8 +100,8 @@ func TestHoldingsOf(t *testing.T) {
 			},
 		},
 		{
-			// A zero-valued phase is a decoding artifact, so it counts as not
-			// running and the prune leaves it alone.
+			// An UNSPECIFIED phase means the daemon never started the entity,
+			// so it holds nothing and the prune leaves it alone.
 			name: "Success/UnknownPhase",
 			services: []*anovelv1.Service{{
 				Name:    "service-a",
@@ -169,9 +172,7 @@ func TestReportUnmanaged(t *testing.T) {
 	t.Setenv(stacks.EnvVar, "default:"+present+",alive:"+present+",swept:"+gone)
 
 	var buf bytes.Buffer
-	if err := reportUnmanaged(&buf, map[string]bool{"default": true}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	reportUnmanaged(&buf, map[string]bool{"default": true})
 	got := buf.String()
 
 	if strings.Contains(got, "default") {
@@ -185,8 +186,8 @@ func TestReportUnmanaged(t *testing.T) {
 	}
 }
 
-// TestDryRunVerdict pins that a dry run always reports. A blocked stack gets a
-// verdict and the reason behind it, which is what the question asked for.
+// TestDryRunVerdict pins that a dry run always prints a verdict, and that a
+// blocked stack's verdict names the refusal.
 func TestDryRunVerdict(t *testing.T) {
 	t.Parallel()
 

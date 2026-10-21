@@ -81,7 +81,7 @@ git config --global user.email $GitEmail
 
 ### Symbolic links on Windows
 
-The stack repository contains a symbolic link. On Windows, turn on Developer Mode from an administrator PowerShell, then let Git create links:
+The stack repository contains symbolic links. On Windows, turn on Developer Mode from an administrator PowerShell, then let Git create links:
 
 ```powershell
 reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1

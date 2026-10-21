@@ -100,33 +100,3 @@ func newVersionCmd() *cobra.Command {
 		Run:   func(cmd *cobra.Command, _ []string) { cmd.Println(version.String()) },
 	}
 }
-
-// newRunCmd is the parent of every daemon-backed verb. Each verb is a thin
-// client of the daemon's RPC holding no supervision state: the daemon owns the
-// running targets, their phases and their logs.
-func newRunCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   commandRun,
-		Short: "Operate on services and targets via the a-novel daemon",
-		Long: `Every verb under 'run' talks to the long-lived a-novel daemon over its unix
-socket, and refuses with a clear error when it is not running (see 'a-novel
-core start'). Daemon control itself lives under 'a-novel core'.`,
-	}
-	cmd.AddCommand(
-		newUICmd(),
-		newPsCmd(),
-		newStacksCmd(),
-		newTopologyCmd(),
-		newServiceCmd(),
-		newStartCmd(),
-		newKillCmd(),
-		newRestartCmd(),
-		newLogsCmd(),
-		newEnvCmd(),
-		newWatchCmd(),
-		newVolumeCmd(),
-		newExecCmd(),
-		newDebugCmd(),
-	)
-	return cmd
-}

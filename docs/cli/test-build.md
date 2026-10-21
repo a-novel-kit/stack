@@ -16,11 +16,11 @@ Tests that need a database get a throwaway one. `-y` skips the picker, and `--he
 a-novel build
 ```
 
-It builds binaries, bundles and container images the way CI does.
+`a-novel build` builds the Go binaries, pnpm bundles and container images it finds.
 
 ## Parallelism
 
-The picker runs several targets at once, `-y` one at a time; `-j` sets the limit:
+With the picker, several targets run at once. With `-y`, one runs at a time. `-j` sets the limit:
 
 ```bash
 a-novel test -y -j 4
@@ -28,7 +28,7 @@ a-novel test -y -j 4
 
 ## Lint, format and generate
 
-These are pnpm scripts, named the same in every repository:
+Most repositories expose these as pnpm scripts. A repository's `CONTRIBUTING.md` names any check outside them.
 
 ```bash
 pnpm lint            # every linter of the repository

@@ -290,7 +290,10 @@ func receive[T any](next func() (*T, error), closeStream func() error) iter.Seq2
 
 		for {
 			msg, err := next()
-			if errors.Is(err, io.EOF) || !yield(msg, err) || err != nil {
+			if errors.Is(err, io.EOF) {
+				return
+			}
+			if !yield(msg, err) || err != nil {
 				return
 			}
 		}

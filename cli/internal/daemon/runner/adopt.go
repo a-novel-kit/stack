@@ -18,10 +18,9 @@ import (
 // Instance record for each. The daemon calls it at startup, so a `core kill`
 // and `core start` cycle keeps its container-mode supervision.
 //
-// It also re-flags each per-service infra session Up, so a target start after
-// adoption does not spin infra again. One-shot results stay unrestored, since
-// nothing records whether they succeeded in the session that is now gone; being
-// idempotent, they re-run on the next infra-up.
+// It also flags each service's infra session Up, so a later target start does
+// not bring the infra up again. One-shot results are not restored. The next
+// long-runner start re-runs its one-shots, which are idempotent.
 //
 // It returns the number of containers and of targets adopted.
 func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
@@ -54,10 +53,9 @@ func (r *Runner) adoptEntries(ctx context.Context, entries []psEntry) (int, int)
 
 		if e.Labels[labelTarget] == "" {
 			// An infra container carries no target label and needs no
-			// Instance record, but the env allocator must be re-seeded with
-			// the host ports it is bound to. Otherwise the next Acquire,
-			// say for the migrations one-shot's POSTGRES_PORT, picks a
-			// fresh port and the one-shot connects to the wrong one.
+			// Instance record. The env allocator learns its host ports, so
+			// the next Acquire, such as the migrations one-shot's
+			// POSTGRES_PORT, returns the port the container is bound to.
 			r.reseedAllocator(ctx, stack, service, e.ID)
 			continue
 		}
@@ -116,9 +114,7 @@ func (r *Runner) adoptTarget(e psEntry, phase anovelv1.Phase, health anovelv1.He
 
 // reseedAllocator re-records every host-port → `${VAR}` mapping for an adopted
 // infra container, so a later Acquire returns the same host port the running
-// container is bound to. Without it a daemon restart moves POSTGRES_PORT
-// between sessions, and every target connecting afterward gets "connection
-// refused".
+// container is bound to. POSTGRES_PORT then stays put across a daemon restart.
 //
 // The mapping goes:
 //  1. `podman inspect` → NetworkSettings.Ports = { "5432/tcp": [{HostPort: "38631"}] }

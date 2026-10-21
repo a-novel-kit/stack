@@ -39,10 +39,11 @@ func Job(t detect.Target, timeout time.Duration, maxProcs int, keep bool) jobs.J
 	}
 }
 
-// PrepareEnv builds the process environment for a target: os.Environ() plus,
-// when the target has a compose env, the allocated host ports, the URLs derived
-// from them and standard local test credentials, then the repo's declared
-// secrets. It streams its progress to out.
+// PrepareEnv builds the process environment for a target. It starts from
+// os.Environ(). A target with a compose env adds its allocated host ports, the
+// URLs derived from them and the local test credentials. The repo's declared
+// secrets come last, so a provisioned value wins over any default. Progress
+// goes to out, and secret values never do.
 func PrepareEnv(t detect.Target, out io.Writer) ([]string, error) {
 	runEnv := os.Environ()
 	if t.Env != nil {
@@ -60,9 +61,8 @@ func PrepareEnv(t detect.Target, out io.Writer) ([]string, error) {
 		return runEnv, nil
 	}
 
-	// Secrets come last so a provisioned value wins over any default. Values
-	// never reach the `── env ──` block above, and a declared-but-unset secret
-	// only raises a value-free warning, so tests that don't need it still run.
+	// An unset secret only raises a value-free warning, so tests that do not
+	// need it still run.
 	res, err := secrets.InjectForRepo(root)
 	if err != nil {
 		return nil, fmt.Errorf("secrets injection failed: %w", err)
@@ -154,28 +154,38 @@ func run(ctx context.Context, t detect.Target, timeout time.Duration, maxProcs i
 	return err
 }
 
+// envHealthTimeout bounds each bring-up wave's wait for healthy containers.
+const envHealthTimeout = 120 * time.Second
+
 // runInEnv brings t's compose env up, when it has one, runs the command, and
 // tears the env down unless keep is set.
 func runInEnv(ctx context.Context, t detect.Target, keep bool, runEnv []string, out io.Writer) error {
 	if t.Env != nil {
 		_, _ = fmt.Fprintf(out, "── env up: %s ──\n", t.Env.ID)
-		// The down is registered before the up so it runs even when bring-up
-		// fails midway, on a detached context so cleanup is never cancelled.
-		// The podman-compose provider accepts --volume in the singular.
 		if keep {
 			_, _ = fmt.Fprint(out, "── env kept up (--keep) ──\n")
 		} else {
-			defer func() {
-				_, _ = fmt.Fprint(out, "── env down ──\n")
-				_ = compose(context.WithoutCancel(ctx), out, runEnv, t.Env, nil, "down", "--volume")
-			}()
+			// Registered before the up, so a half-started env is torn down too.
+			defer envDown(ctx, t.Env, runEnv, out)
 		}
-		if err := composeUpPhased(ctx, out, runEnv, t.Env, 120*time.Second); err != nil {
+		if err := composeUpPhased(ctx, out, runEnv, t.Env, envHealthTimeout); err != nil {
 			return fmt.Errorf("environment %s failed to start: %w", t.Env.ID, err)
 		}
 		_, _ = fmt.Fprintf(out, "── %s ──\n", t.Name)
 	}
+	return runCommand(ctx, t, runEnv, out)
+}
 
+// envDown tears e down on a detached context, so an aborted run still cleans
+// up. The podman-compose provider spells the volume flag in the singular.
+func envDown(ctx context.Context, e *detect.ComposeEnv, runEnv []string, out io.Writer) {
+	_, _ = fmt.Fprint(out, "── env down ──\n")
+	_ = compose(context.WithoutCancel(ctx), out, runEnv, e, nil, "down", "--volume")
+}
+
+// runCommand runs t's command in its own process group, writing its output to
+// out, and kills the group when ctx ends.
+func runCommand(ctx context.Context, t detect.Target, runEnv []string, out io.Writer) error {
 	cmd := exec.Command(t.Cmd, t.Args...)
 	cmd.Dir = t.Dir
 	cmd.Env = runEnv
@@ -238,11 +248,11 @@ var stdTestEnv = map[string]string{
 	"POSTGRES_USER":     pgStd,
 	"POSTGRES_PASSWORD": pgStd,
 	"POSTGRES_DB":       pgStd,
-	// 32-byte hex-encoded master key for at-rest encryption, matching the
-	// fixed value every service's CI workflow uses so locally-encrypted blobs
-	// interchange with CI. Local only, never a production secret. Without it
-	// the compose file's `${APP_MASTER_KEY}` resolves empty and container-mode
-	// rotate-keys panics with "expected 32 bytes, got 0 bytes".
+	// APP_MASTER_KEY is the 32-byte hex master key for at-rest encryption. It
+	// equals the fixed value the services' CI workflows use, so blobs encrypted
+	// locally and in CI interchange. It is a local-only value. Container-mode
+	// rotate-keys needs it: an empty `${APP_MASTER_KEY}` makes it panic with
+	// "expected 32 bytes, got 0 bytes".
 	"APP_MASTER_KEY": "fec0681a2f57242211c559ca347721766f8a3acd8ed2e63b36b3768051c702ca",
 }
 
@@ -298,21 +308,19 @@ func derivedURLs(names []string, env []string) []string {
 }
 
 // compose runs `podman compose [global...] -p <project> -f <file> <args...>`
-// with the given environment, streaming combined output into buf.
-func compose(ctx context.Context, buf io.Writer, env []string, e *detect.ComposeEnv, global []string, args ...string) error {
-	full := append([]string{"compose"}, global...)
-	full = append(full, "-p", e.Project, "-f", e.File)
-	full = append(full, args...)
+// with the given environment, streaming combined output to out.
+func compose(ctx context.Context, out io.Writer, env []string, e *detect.ComposeEnv, global []string, args ...string) error {
+	full := slices.Concat([]string{"compose"}, global, []string{"-p", e.Project, "-f", e.File}, args)
 	cmd := exec.CommandContext(ctx, "podman", full...)
 	cmd.Env = env
-	cmd.Stdout = buf
-	cmd.Stderr = buf
+	cmd.Stdout = out
+	cmd.Stderr = out
 	return cmd.Run()
 }
 
-// podmanOut runs `podman <args...>` and returns trimmed stdout, folding stderr
-// into the error. It backs the inspect/ps polling in waitHealthy, which parses
-// the output, so it stays out of the report buffer.
+// podmanOut runs `podman <args...>` and returns its trimmed stdout, with stderr
+// folded into the error. Its output is parsed, so it stays out of the job's
+// log.
 func podmanOut(ctx context.Context, env []string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "podman", args...)
 	cmd.Env = env
@@ -370,19 +378,19 @@ func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
 	return conflicts
 }
 
-// TearDown removes one compose project's containers, volumes and orphans,
-// scoped to that env through `-p <project> -f <file>`. --remove-orphans clears
-// the containers the compose file no longer declares, such as after a profile
-// change, which a later `up` would collide with.
+// TearDown removes one compose project's containers, volumes and orphans.
+// `-p <project> -f <file>` scopes it to that env. --remove-orphans also clears
+// containers the compose file no longer declares, such as after a profile
+// change, which a later `up` would collide with. `-t 10` gives Postgres ten
+// seconds for its shutdown checkpoint, which can pass 2s once migrations and
+// key rotation dirtied its buffers.
 //
-// `compose down -t 10` gives postgres 10s for its shutdown checkpoint, which
-// can pass 2s once migrations and key rotation dirtied its buffers. When it
-// fails, a container it left still holds the env's pod, the pod holds the
-// network, and the next run cannot claim the project name. TearDown then
-// removes the pod, which frees its containers, and the network, ignoring
-// errors, since either may be gone already. The names follow podman-compose:
-// the pod is "pod_<project>", and the network "<project>_api", after the
-// `networks: { api: }` every service compose file declares.
+// A failed `down` can leave a container that keeps the env's pod and network
+// alive, and the next run then cannot claim the project name. TearDown then
+// force-removes the pod `pod_<project>` and the network `<project>_api`, and
+// ignores their errors because either may be gone. Both names follow
+// podman-compose's naming for the `networks: { api: }` block every service
+// compose file declares.
 func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	var buf bytes.Buffer
 	err := compose(ctx, &buf, os.Environ(), &e, nil,
@@ -390,7 +398,6 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	if err == nil {
 		return nil
 	}
-	// Force-reclaim the pod and network so the project name is free again.
 	_ = exec.CommandContext(ctx, "podman", "pod", "rm", "-f", "pod_"+e.Project).Run()
 	_ = exec.CommandContext(ctx, "podman", "network", "rm", "-f", e.Project+"_api").Run()
 	return err
@@ -400,22 +407,21 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 // OCI format drops a Dockerfile's HEALTHCHECK, which waitHealthy follows.
 const dockerFormatBuildArgs = "--podman-build-args=--format docker -q"
 
-// composeUpPhased brings a compose env up in two waves: dependency-free
-// services first, then the ones declaring `depends_on:` (e.Dependents), waiting
-// for each wave to become healthy before starting the next. --no-deps keeps the
-// provider from ordering anything itself. Its `depends_on` wait hangs on
-// podman-compose ≤1.5.x, and without systemd it silently no-ops and leaves
-// health at "starting". Two waves cover the flat test composes: infra plus one
-// standalone subject.
+// composeUpPhased brings a compose env up in two waves and waits for each wave
+// to become healthy. The first wave holds the dependency-free services, the
+// second the ones declaring `depends_on:` (e.Dependents). Two waves cover the
+// flat test composes: infra plus one standalone subject. An env with an
+// unknown service list comes up in one whole-env `up`.
 //
-// An env whose service list is unknown comes up in a single whole-env `up`.
+// --no-deps stops the provider from ordering services itself. The
+// podman-compose `depends_on` wait hangs on versions up to 1.5.x, and without
+// systemd it does nothing and leaves health at "starting".
 //
-// --remove-orphans stays out: podman-compose's orphan handling around a
-// positional `up <svc>` varies by version and can sweep services it just
-// created. TearDown owns orphan removal.
+// --remove-orphans stays out: podman-compose handles orphans around a
+// positional `up <svc>` differently across versions, and can remove services
+// it just created. TearDown owns orphan removal.
 func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect.ComposeEnv, healthTimeout time.Duration) error {
 	if len(e.Services) == 0 {
-		// Unknown service list: bring the whole env up at once.
 		if err := compose(ctx, out, env, e, []string{dockerFormatBuildArgs}, "up", "-d", "--build"); err != nil {
 			return err
 		}
@@ -456,7 +462,7 @@ func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect
 // one-shot init or migration. A non-zero exit fails fast; otherwise polling
 // continues to the timeout, whose error carries the offending containers' log
 // tails so the user sees why they never came up.
-func waitHealthy(ctx context.Context, log io.Writer, env []string, e *detect.ComposeEnv, timeout time.Duration) error {
+func waitHealthy(ctx context.Context, out io.Writer, env []string, e *detect.ComposeEnv, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
 		poll, err := pollEnv(ctx, env, e.Project+"_")
@@ -465,18 +471,11 @@ func waitHealthy(ctx context.Context, log io.Writer, env []string, e *detect.Com
 		}
 		states := strings.Join(poll.states, "  ")
 		if poll.ready {
-			_, _ = fmt.Fprintf(log, "ready: %s\n", states)
+			_, _ = fmt.Fprintf(out, "ready: %s\n", states)
 			return nil
 		}
 		if time.Now().After(deadline) {
-			var b strings.Builder
-			fmt.Fprintf(&b, "timed out after %s; last state: %s", timeout, states)
-			for _, id := range poll.pending {
-				if tail := containerLogTail(ctx, env, id, 20); tail != "" {
-					fmt.Fprintf(&b, "\n── tail %s ──\n%s", id[:12], tail)
-				}
-			}
-			return errors.New(b.String())
+			return healthTimeoutError(ctx, env, poll.pending, states, timeout)
 		}
 		select {
 		case <-ctx.Done():
@@ -484,6 +483,19 @@ func waitHealthy(ctx context.Context, log io.Writer, env []string, e *detect.Com
 		case <-time.After(1500 * time.Millisecond):
 		}
 	}
+}
+
+// healthTimeoutError reports the env's last state, with the log tail of each
+// container still pending.
+func healthTimeoutError(ctx context.Context, env, pending []string, states string, timeout time.Duration) error {
+	var b strings.Builder
+	fmt.Fprintf(&b, "timed out after %s; last state: %s", timeout, states)
+	for _, id := range pending {
+		if tail := containerLogTail(ctx, env, id, 20); tail != "" {
+			fmt.Fprintf(&b, "\n── tail %s ──\n%s", id[:12], tail)
+		}
+	}
+	return errors.New(b.String())
 }
 
 // envPoll is one inspection of a compose env's containers.
@@ -502,11 +514,10 @@ func pollEnv(ctx context.Context, env []string, prefix string) (envPoll, error) 
 	}
 	idList := strings.Fields(ids)
 	poll := envPoll{ready: len(idList) > 0}
+	inspected := inspectContainers(ctx, env, idList)
 	for _, id := range idList {
-		out, ierr := podmanOut(ctx, env, "inspect", id, "--format",
-			"{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}")
-		parts := strings.Split(out, "|")
-		if ierr != nil || len(parts) < 4 {
+		parts, ok := inspected[id]
+		if !ok {
 			poll.ready = false
 			poll.pending = append(poll.pending, id)
 			continue
@@ -527,6 +538,38 @@ func pollEnv(ctx context.Context, env []string, prefix string) (envPoll, error) 
 		}
 	}
 	return poll, nil
+}
+
+// pollInspectFormat prints a container's full id, name, status, health and exit
+// code on one line.
+const pollInspectFormat = "{{.Id}}|{{.Name}}|{{.State.Status}}|" +
+	"{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}"
+
+// inspectContainers inspects every container of ids in one podman call. It maps
+// each id to its name, status, health and exit code. A failed call maps none,
+// and the poll then counts every container as pending.
+func inspectContainers(ctx context.Context, env, ids []string) map[string][]string {
+	if len(ids) == 0 {
+		return nil
+	}
+	out, err := podmanOut(ctx, env, slices.Concat([]string{"inspect", "--format", pollInspectFormat}, ids)...)
+	if err != nil {
+		return nil
+	}
+	fields := make(map[string][]string, len(ids))
+	for line := range strings.Lines(out) {
+		parts := strings.Split(strings.TrimRight(line, "\n"), "|")
+		if len(parts) < 5 {
+			continue
+		}
+		// podman ps prints short ids, and the inspect line starts with the full one.
+		for _, id := range ids {
+			if strings.HasPrefix(parts[0], id) {
+				fields[id] = parts[1:]
+			}
+		}
+	}
+	return fields
 }
 
 // containerLogTail returns the last `lines` lines of a container's combined

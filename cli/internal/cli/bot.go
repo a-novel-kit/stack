@@ -21,6 +21,8 @@ import (
 var (
 	botRunPoll          = 3 * time.Second
 	botRunFinishTimeout = 10 * time.Minute
+	// botRunLookupPoll paces the wait for a dispatched run to register.
+	botRunLookupPoll = 2 * time.Second
 )
 
 const (
@@ -31,9 +33,9 @@ const (
 	// nonce shows up in a run name.
 	botRunLookupTimeout = 60 * time.Second
 	// botMaxCommentsBytes caps the JSON size of one `comments` dispatch.
-	// workflow_dispatch limits the whole inputs payload to ~64KB; this
-	// leaves headroom for the repo + nonce inputs and the request framing,
-	// and a batch larger than this is split across dispatches.
+	// workflow_dispatch limits all inputs together to about 64KB, and the cap
+	// leaves room for the other inputs. A larger batch is split across
+	// dispatches.
 	botMaxCommentsBytes = 50000
 )
 
@@ -122,16 +124,14 @@ func postBotComments(cmd *cobra.Command, args []string, o botCommentOpts) error 
 		return errors.New("bot-comment: <number> is required (or use --batch to post many comments)")
 	}
 	number := args[2]
-	if err := validateBotCommentArgs(org, repo, number); err != nil {
-		return err
+	if !positiveInt(number) {
+		return fmt.Errorf("bot-comment: number %q must be a positive integer", number)
 	}
 	if strings.TrimSpace(o.body) == "" {
 		return errors.New("bot-comment: --body is required and must be non-empty")
 	}
-	if o.replyTo != "" {
-		if n, err := strconv.Atoi(o.replyTo); err != nil || n <= 0 {
-			return fmt.Errorf("bot-comment: --reply-to %q must be a positive integer (a REST review-comment id)", o.replyTo)
-		}
+	if o.replyTo != "" && !positiveInt(o.replyTo) {
+		return fmt.Errorf("bot-comment: --reply-to %q must be a positive integer (a REST review-comment id)", o.replyTo)
 	}
 	return runBotComment(cmd, org, repo, number, o.body, o.replyTo)
 }
@@ -151,16 +151,10 @@ func validateBotOrgRepo(org, repo string) error {
 	return nil
 }
 
-// validateBotCommentArgs checks the single-comment positional args before a
-// dispatch is spent on them.
-func validateBotCommentArgs(org, repo, number string) error {
-	if err := validateBotOrgRepo(org, repo); err != nil {
-		return err
-	}
-	if n, err := strconv.Atoi(number); err != nil || n <= 0 {
-		return fmt.Errorf("bot-comment: number %q must be a positive integer", number)
-	}
-	return nil
+// positiveInt reports whether s is a decimal integer above zero.
+func positiveInt(s string) bool {
+	n, err := strconv.Atoi(s)
+	return err == nil && n > 0
 }
 
 // runBotComment dispatches a single comment and watches its run.
@@ -244,31 +238,28 @@ func readBotBatch(path string, stdin io.Reader) ([]botBatchItem, error) {
 // stays within maxBytes, so each chunk fits a single workflow_dispatch. A
 // lone comment larger than maxBytes is an error, since it cannot be split.
 func chunkBotComments(items []botBatchItem, maxBytes int) ([][]botBatchItem, error) {
+	// A chunk's JSON is "[" plus each item followed by "," or the closing "]".
+	const open = 1
 	var (
 		chunks  [][]botBatchItem
 		current []botBatchItem
 	)
+	size := open
 	for _, item := range items {
-		solo, err := json.Marshal([]botBatchItem{item})
+		raw, err := json.Marshal(item)
 		if err != nil {
 			return nil, fmt.Errorf("marshal comment number %d: %w", item.Number, err)
 		}
-		if len(solo) > maxBytes {
-			return nil, fmt.Errorf("comment number %d is %d bytes, over the %d-byte dispatch limit", item.Number, len(solo), maxBytes)
+		cost := len(raw) + 1
+		if open+cost > maxBytes {
+			return nil, fmt.Errorf("comment number %d is %d bytes, over the %d-byte dispatch limit", item.Number, open+cost, maxBytes)
 		}
-		if len(current) > 0 {
-			// The full three-index slice keeps append from writing into
-			// current's backing array while measuring the trial size.
-			trial, err := json.Marshal(append(current[:len(current):len(current)], item))
-			if err != nil {
-				return nil, fmt.Errorf("marshal batch chunk: %w", err)
-			}
-			if len(trial) > maxBytes {
-				chunks = append(chunks, current)
-				current = nil
-			}
+		if size+cost > maxBytes {
+			chunks = append(chunks, current)
+			current, size = nil, open
 		}
 		current = append(current, item)
+		size += cost
 	}
 	if len(current) > 0 {
 		chunks = append(chunks, current)
@@ -353,7 +344,7 @@ func waitForDispatchedRun(dispatchRepo, nonce string) (int64, error) {
 			return 0, fmt.Errorf("dispatched run did not appear within %s "+
 				"(check 'gh run list --repo %s')", botRunLookupTimeout, dispatchRepo)
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(botRunLookupPoll)
 	}
 }
 

@@ -75,7 +75,7 @@ Approve the one-time code in your browser.
 
 Git reaches GitHub over SSH, with a key registered on your account.
 
-Skip if `ls ~/.ssh/*.pub` lists a key already, and put its path in place of `~/.ssh/id_ed25519.pub` below.
+Skip if `ls ~/.ssh` lists a `.pub` file already, and put its path in place of `~/.ssh/id_ed25519.pub` below.
 
 :::tabs key:shell
 == Linux / macOS

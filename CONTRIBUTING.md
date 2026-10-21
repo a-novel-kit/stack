@@ -20,13 +20,13 @@ The CLI's own vocabulary. **Target**, **server**, **job** and **infra** come fro
 
 - `cli/`: the CLI's Go module, `github.com/a-novel-kit/stack/cli`. Commands live under `cli/internal/cli/` as Cobra subcommands.
 - `docs/`: the developer guide, a [VitePress](https://vitepress.dev) site that `main.yaml` publishes to GitHub Pages from `master`.
-- `app/`, `kit/`: checkouts of the repositories the CLI operates on, populated by `a-novel core sync`. Git ignores them; never commit inside them.
+- `app/`, `kit/`: the checkouts `a-novel core sync` clones. Each is its own Git repository, and the stack's Git ignores them.
 
 ## Agent skills
 
-The skill documents live in `.agents/skills/`, the shared path the Agent Skills standard defines. Codex and Copilot scan it directly. Claude Code scans only `.claude/skills`, so that path is a symlink into the same directory. Add a skill at `.agents/skills/<name>/SKILL.md` and every agent picks it up.
+The skill documents live in `.agents/skills/`, the shared path the Agent Skills standard defines. Codex and Copilot scan it directly. Claude Code, Factory, Junie, Kiro, Qoder and Qwen Code each scan a `skills` directory of their own, such as `.claude/skills`. Each of those directories is a symlink into `.agents/skills`. Add a skill at `.agents/skills/<name>/SKILL.md` and every agent picks it up.
 
-Git records that link as a symlink, so a Windows checkout needs symlink support to reproduce it: enable Developer Mode, or install Git with its "Enable symbolic links" option. Without it, the path arrives as a plain file holding the target, and Claude Code finds no skills. Staging that file would turn the link into a regular blob for everyone, so `pnpm lint:symlinks` checks the recorded mode and fails on it.
+Git records those links as symlinks, so a Windows checkout needs symlink support: enable Developer Mode, or install Git with its "Enable symbolic links" option. Without it, each link arrives as a plain file holding its target, and those agents find no skills. Staging such a file turns the link into a regular file for everyone. `pnpm lint:symlinks` checks the mode of every link and fails on it.
 
 ## How the CLI works
 
@@ -59,7 +59,11 @@ cli/
 
 `test`, `build`, `core sync` and `repo update --all` hand their work to one runner, `internal/jobs`. At most `--jobs` units run at once, each with its output captured. On a terminal, each finished job prints one status line above a live view of the running jobs. Without a terminal, each job prints a line as it starts and as it finishes, so output never interleaves.
 
-A report closes the run. It shows the full output of every failure, or of every repository for `repo update --all`, as the audit trail of its writes, then coverage for tests. The summary prints last, so it is on screen when the command returns.
+A report closes the run. It prints, in order:
+
+- the full output of every failed job, or of every repository for `repo update --all`, as the audit trail of its writes;
+- coverage, for tests;
+- the summary, last, so it is on screen when the command returns.
 
 The default limit follows what bounds the work:
 
@@ -71,11 +75,11 @@ The default limit follows what bounds the work:
 
 ### Key invariants
 
-- **One daemon per user**, listening on `$XDG_RUNTIME_DIR/a-novel.sock`.
+- **One daemon per user**, listening on `$XDG_RUNTIME_DIR/a-novel.sock`, else `/run/user/<uid>/a-novel.sock`, else `/tmp/a-novel-<uid>.sock`.
 - **Stateless recovery.** The daemon checkpoints no state of its own: every restart rebuilds it from podman labels, the filesystem and `A_NOVEL_STACKS`. The reinstall checkpoint is the one exception, scoped to one handoff.
 - **Strict refusal of incoherent operations**, always with a remediation hint, such as "kill the target first".
 - **Labeled containers.** The `anovel.stack`, `anovel.service` and `anovel.target` labels let the daemon adopt and clean up containers across restarts.
-- **The daemon owns dependency ordering and health-gating.** Before starting a target, it brings infra up, waits for its health, and runs the one-shots to success, then passes `--no-deps` on every container `up`. Compose cannot do this: a go-exec host process can depend on a container's health, and podman-compose does not reliably enforce `depends_on` conditions, notably the one-shot completion that holds a server back until migrations finish.
+- **The daemon owns dependency ordering and health-gating.** Before it starts a target, the daemon brings the infra up, waits for its health and runs the one-shots to success. It then passes `--no-deps` on every container `up`. Compose cannot order this alone. A go-exec target is a host process that depends on a container's health. podman-compose does not reliably enforce `depends_on` conditions either, such as the one-shot completion that holds a server back until migrations finish.
 
 ### Secrets
 
@@ -98,7 +102,7 @@ $XDG_STATE_HOME/a-novel/           default ~/.local/state/a-novel/
 $XDG_DATA_HOME/a-novel/            default ~/.local/share/a-novel/
 ├── backups/<stack>/<service>/<volume>/<timestamp>.tar.zst   the latest five per volume
 └── secrets/{key, store.enc}
-$XDG_RUNTIME_DIR/a-novel.sock      the daemon's socket
+$XDG_RUNTIME_DIR/a-novel.sock      the daemon's socket (fallbacks: see Key invariants)
 ```
 
 ### The compose contract
@@ -107,29 +111,39 @@ In container mode the daemon runs a target through the compose file its service 
 
 ## Adding a command
 
-A new command is a Cobra subcommand under `cli/internal/cli/`, built by a `new<Name>Cmd` function and wired into its parent: `core` for the daemon's lifecycle and the workspace, `run` for daemon-backed verbs, or the root for standalone ones such as `test` and `build`. Lint, format and generate stay `pnpm` scripts, not CLI verbs.
+A new command is a Cobra subcommand under `cli/internal/cli/`, built by a `new<Name>Cmd` function. Wire it into the parent that fits:
+
+| Parent | Holds                                        |
+| ------ | -------------------------------------------- |
+| `core` | the daemon's lifecycle and the workspace     |
+| `run`  | daemon-backed verbs                          |
+| root   | standalone verbs, such as `test` and `build` |
+
+Lint, format and generate stay `pnpm` scripts, not CLI verbs.
 
 ## Building and testing
 
-After a change under `cli/`, rebuild and reinstall the CLI. The new binary takes over from the running daemon in place, so running services stay up:
+After a change under `cli/`, rebuild and reinstall the CLI from the checkout you changed. `install` builds the default stack's `cli/` unless `--source` names another. The new binary takes over from the running daemon in place, so running services stay up:
 
 ```bash
-a-novel install
+a-novel install --source "$PWD/cli"   # from the root of the checkout you changed
 ```
 
-Run the checks CI runs, from the stack root:
+Run the main CI checks from the stack root:
 
 ```bash
 cd cli
 go generate ./...   # proto bindings; CI fails on a diff
+go tool -modfile=buf.mod buf lint
+go tool -modfile=buf.mod buf format --diff --exit-code
 go tool -modfile=golangci-lint.mod golangci-lint run ./...
-go test ./...
+go test -race ./...
 cd ..
 pnpm lint
 pnpm docs:build     # fails on a dead internal link
 ```
 
-`go generate ./...` regenerates the daemon contract's Go bindings after an edit to `cli/proto/anovel/v1/core.proto`. `pnpm docs:dev` serves the guide with live reload.
+`pnpm docs:dev` serves the guide with live reload.
 
 ## Questions?
 

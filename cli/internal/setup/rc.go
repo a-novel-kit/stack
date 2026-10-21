@@ -42,15 +42,14 @@ const (
 // user's $HOME with unbounded copies.
 const maxRCBackups = 3
 
-// resolveRC picks the shell rc file to manage. Detection priority:
-// explicit override → $ZDOTDIR/.zshrc → $SHELL
-// basename mapping → fallback ~/.zshrc. Returns (path, shellName)
-// where shellName is one of "zsh" | "bash" | "fish" so renderRCBlock
-// can emit the matching completion-source line.
+// resolveRC picks the shell rc file to manage and the shell it belongs to:
+// "zsh", "bash" or "fish". An explicit override wins, then $ZDOTDIR/.zshrc,
+// then the rc matching $SHELL's basename, then ~/.zshrc. The shell selects
+// renderRCBlock's completion line.
 func resolveRC(override string) (string, string) {
 	home, _ := os.UserHomeDir()
 	if override != "" {
-		// User-supplied path always wins. Infer shell from filename.
+		// An override names the rc, and its file name names the shell.
 		p := paths.ExpandHome(override)
 		return p, shellFromPath(p)
 	}

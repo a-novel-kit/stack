@@ -24,26 +24,16 @@ func TestCache_InvalidateBumpsGenerationAndClearsEntries(t *testing.T) {
 
 // TestCache_GenCheck covers the race the generation counter closes: the cache
 // write ending a long InfraStatesOf scan is skipped when
-// InvalidateInfraStateCache fired mid-scan, and proceeds otherwise. Standing in
-// for the podman scan, it replays the snapshot-work-compare-and-write sequence.
+// InvalidateInfraStateCache fired mid-scan, and proceeds otherwise. It drives
+// the scan's own cache read and write around the podman call.
 func TestCache_GenCheck(t *testing.T) {
 	for _, invalidated := range []bool{true, false} {
 		r := &Runner{infraStateCache: make(map[string]infraStateCacheEntry)}
-		// Snapshot the generation, the way a scan does as it starts.
-		r.infraStateMu.Lock()
-		startGen := r.infraStateGen
-		r.infraStateMu.Unlock()
+		_, startGen, _ := r.cachedInfraStates("default")
 		if invalidated {
 			r.InvalidateInfraStateCache()
 		}
-		// The cache write then mirrors the runtime check.
-		r.infraStateMu.Lock()
-		if r.infraStateGen == startGen {
-			r.infraStateCache["default"] = infraStateCacheEntry{
-				at: time.Now(), states: map[string]InfraState{"x/y": {ContainerID: "scanned"}},
-			}
-		}
-		r.infraStateMu.Unlock()
+		r.storeInfraStates("default", startGen, map[string]InfraState{"x/y": {ContainerID: "scanned"}})
 		if got, ok := r.infraStateCache["default"]; ok == invalidated || (ok && got.states["x/y"].ContainerID != "scanned") {
 			t.Errorf("invalidated mid-scan = %v: cache = %v (written %v)", invalidated, got, ok)
 		}

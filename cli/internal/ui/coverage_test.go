@@ -7,9 +7,8 @@ import (
 )
 
 // TestGoCoverageExcludesGeneratedPackages pins that goCoverage keeps generated and
-// test-support packages out of the mean. Every package runs under coverage mode, so their
-// zero-coverage lines appear in the output, and parsing drops them before they drag the
-// reported figure down.
+// test-support packages out of the coverage report. Every package runs under coverage
+// mode, so their zero-coverage lines appear in the output, and parsing drops them.
 func TestGoCoverageExcludesGeneratedPackages(t *testing.T) {
 	t.Parallel()
 

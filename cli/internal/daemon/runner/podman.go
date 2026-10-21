@@ -159,18 +159,51 @@ func containerByName(ctx context.Context, project, composeName string) string {
 	return ""
 }
 
+// inspectFormat prints a container's state word, health word and exit code on
+// one line.
+const inspectFormat = "{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}"
+
 // podmanInspect returns one container's state word, health word, and exit
 // code.
 func podmanInspect(ctx context.Context, cid string) (string, string, int, error) {
-	out, err := exec.CommandContext(ctx, "podman", "inspect", cid,
-		"--format", "{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}").Output()
+	states, err := podmanInspectAll(ctx, []string{cid})
 	if err != nil {
-		return "", "", 0, fmt.Errorf("inspect %s: %w", cid, err)
+		return "", "", 0, err
 	}
-	parts := strings.SplitN(strings.TrimSpace(string(out)), "|", 3)
+	return states[0].phase, states[0].health, states[0].exitCode, nil
+}
+
+// podmanInspectAll inspects every container of ids in one podman call. Any
+// failure, a vanished container included, fails the whole call.
+func podmanInspectAll(ctx context.Context, ids []string) ([]infraContainerState, error) {
+	args := append([]string{"inspect", "--format=" + inspectFormat}, ids...)
+	out, err := exec.CommandContext(ctx, "podman", args...).Output()
+	if err != nil {
+		return nil, fmt.Errorf("inspect %s: %w", strings.Join(ids, " "), err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) != len(ids) {
+		return nil, fmt.Errorf("inspect %s: malformed output %q", strings.Join(ids, " "), string(out))
+	}
+	states := make([]infraContainerState, 0, len(ids))
+	for _, line := range lines {
+		s, ok := parseInspect(line)
+		if !ok {
+			return nil, fmt.Errorf("inspect %s: malformed output %q", strings.Join(ids, " "), string(out))
+		}
+		states = append(states, s)
+	}
+	return states, nil
+}
+
+// parseInspect reads one inspectFormat line.
+func parseInspect(line string) (infraContainerState, bool) {
+	parts := strings.SplitN(strings.TrimSpace(line), "|", 3)
 	if len(parts) < 3 {
-		return "", "", 0, fmt.Errorf("inspect %s: malformed output %q", cid, string(out))
+		return infraContainerState{}, false
 	}
+	// podman prints a bare integer, so Atoi fails only on output it never
+	// produces.
 	exitCode, _ := strconv.Atoi(parts[2])
-	return parts[0], parts[1], exitCode, nil
+	return infraContainerState{phase: parts[0], health: parts[1], exitCode: exitCode}, true
 }

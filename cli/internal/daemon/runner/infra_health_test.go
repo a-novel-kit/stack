@@ -24,7 +24,7 @@ func TestInfraHealthy(t *testing.T) {
 		{"no infra declared is ready", 0, nil, true},
 		{"no infra declared ignores stray containers", 0, []infraContainerState{starting}, true},
 
-		// The bug: infra is declared, but no container resolved. Not ready — keep waiting.
+		// Infra is declared but no container resolved yet, so keep waiting.
 		{"declared but none resolved is not ready", 1, nil, false},
 
 		{"single running container is ready", 1, []infraContainerState{running}, true},

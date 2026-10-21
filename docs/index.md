@@ -30,7 +30,7 @@ features:
 
 ## Start here
 
-A-Novel spans two GitHub organizations. [`a-novel`](https://github.com/a-novel) holds the applications and business code of the A-Novel brand. [`a-novel-kit`](https://github.com/a-novel-kit) holds the shared libraries and tooling. The [stack repository](https://github.com/a-novel-kit/stack) gathers them into one workspace, with the `a-novel` CLI to work across it. The workspace is optimized for AI agents, and its code and tools stay easy to audit and use by hand.
+A-Novel spans two GitHub organizations. [`a-novel`](https://github.com/a-novel) holds the applications and business code of the A-Novel brand. [`a-novel-kit`](https://github.com/a-novel-kit) holds the shared libraries and tooling. The [stack repository](https://github.com/a-novel-kit/stack) gathers them into one workspace, with the `a-novel` CLI to work across it.
 
 [Start your contributor setup](/dependencies/).
 

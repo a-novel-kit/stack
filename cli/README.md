@@ -11,7 +11,7 @@ go install github.com/a-novel-kit/stack/cli/cmd/a-novel@latest
 ## Set up
 
 ```bash
-a-novel core setup    # once: checks your tools, clones the stack, starts the background service
+a-novel core setup    # once: checks your tools, clones the stack, starts the daemon
 a-novel core sync     # clone every repository; run it again to bring them all up to date
 ```
 
@@ -24,7 +24,7 @@ a-novel <command> [flags]
 a-novel <command> --help
 ```
 
-`a-novel run ui` is the everyday view: every service, its logs, and a palette to start and stop them. A background service, the daemon, keeps your services running between commands.
+`a-novel run ui` is the everyday view: every service, its logs, and a palette to start and stop them. The daemon, a background process, keeps your services running between commands.
 
 ```text
 a-novel
@@ -44,10 +44,10 @@ a-novel
 │   ├── volume (list / backup / restore / clear)   a service's data
 │   └── exec / debug                  a command beside a target, a debugger
 ├── core
-│   ├── setup / start / kill / restart / status    the background service
+│   ├── setup / start / kill / restart / status    the daemon
 │   ├── sync                          clone or fast-forward the workspace repositories
 │   ├── stacks (new / list / prune)   extra workspaces
-│   └── bot-comment <org> <repo> <n>  comment as the organization bot
+│   └── bot-comment <org> <repo> [<n>]  comment as the organization bot
 ├── repo
 │   ├── create <org> <name>           create a repository and apply its class settings
 │   └── update                        reconcile a repository's settings (--all: every one)
@@ -57,9 +57,9 @@ a-novel
 └── version                           print the CLI version
 ```
 
-`--sandbox`, placed before a command that needs no background service, runs it in a freshly cloned temporary stack that is removed afterwards: `a-novel --sandbox test -y`.
+`--sandbox` runs one command in a freshly cloned temporary stack, removed afterwards. Put it first: `a-novel --sandbox test -y`. It refuses `core`, `run` and `install`, which drive the daemon.
 
-Lint, format and code generation are pnpm scripts in every repository: `pnpm lint`, `pnpm format`, `pnpm generate:go`.
+Lint, format and code generation are pnpm scripts in most repositories: `pnpm lint`, `pnpm format`, `pnpm generate:go`.
 
 ## Configuration
 
@@ -74,9 +74,9 @@ Lint, format and code generation are pnpm scripts in every repository: `pnpm lin
 | Path                              | Holds                                                |
 | --------------------------------- | ---------------------------------------------------- |
 | `~/.local/state/a-novel/logs/`    | Each target's current log and those of its last runs |
-| `~/.local/share/a-novel/backups/` | Recent volume backups, the oldest pruned first       |
+| `~/.local/share/a-novel/backups/` | The latest five backups of each volume               |
 | `~/.local/share/a-novel/secrets/` | The encrypted secrets store and its key              |
 
-The logs follow `XDG_STATE_HOME` and the other two `XDG_DATA_HOME` when those are set.
+Logs move with `XDG_STATE_HOME`, and backups and secrets with `XDG_DATA_HOME`, when set.
 
 Every command documents its flags and examples in `a-novel <command> --help`. How the CLI works inside, and the conventions a service follows for it, are in [CONTRIBUTING.md](../CONTRIBUTING.md#how-the-cli-works).

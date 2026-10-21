@@ -7,8 +7,9 @@ import (
 	"time"
 )
 
-// Files returns the paths of the regular files in dir whose name satisfies
-// match, oldest modification first. An unreadable dir yields none.
+// Files returns the paths of the entries in dir that are not directories and
+// whose name satisfies match, oldest modification first. An unreadable dir
+// yields none.
 func Files(dir string, match func(name string) bool) []string {
 	entries, _ := os.ReadDir(dir)
 	type file struct {

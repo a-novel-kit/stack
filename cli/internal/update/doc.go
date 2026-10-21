@@ -1,7 +1,7 @@
 // Package update implements a best-effort "a newer version is available" notice
 // for the a-novel CLI. Every failure, from an offline network to an unwritable
-// cache, is swallowed, because a version check must never disrupt or slow a
-// command. The latest version is cached, so the network is hit at
-// most once per checkInterval and the cached value drives the notice between
-// fetches.
+// cache, is swallowed, so a version check never fails a command. A successful
+// fetch is cached, and the cached value drives the notice for checkInterval. A
+// failed fetch caches nothing, so the next command tries again, bounded by
+// httpTimeout.
 package update

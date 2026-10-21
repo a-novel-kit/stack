@@ -13,15 +13,15 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/jobs"
 )
 
-// coverRe matches the per-package line `go test -cover` prints, e.g.
-// "ok  pkg  0.12s  coverage: 78.3% of statements". Only go test -cover emits
-// that exact phrase, so it never matches podman, compose or pnpm output.
+// coverRe matches the package line `go test -cover` prints, such as
+// "ok  pkg  0.12s  coverage: 78.3% of statements". Its group captures the
+// percentage.
 var coverRe = regexp.MustCompile(`coverage:\s+([0-9.]+)%\s+of statements`)
 
-// covExclude matches the package paths kept out of the coverage mean: generated
-// mocks, test-support trees, and generated protobuf code. It filters what is
-// reported: a test in one of these paths still runs, and only stays out of a
-// mean that the zero coverage of generated code would drag down.
+// covExclude matches the package paths the coverage report leaves out:
+// generated mocks, test-support trees and generated protobuf code. Their tests
+// still run. Their coverage is noise, so they stay out of the list and the
+// mean.
 var covExclude = regexp.MustCompile(`/(mocks|test|protogen)(/|$)`)
 
 // vitestHeader matches the header row of vitest's v8 text coverage table. Its
@@ -39,6 +39,7 @@ func tableRow(s string) bool {
 	return t != "" && strings.Trim(t, "-| ") == ""
 }
 
+// covEntry is one Go package's statement coverage, in percent.
 type covEntry struct {
 	pkg string
 	pct float64
@@ -52,30 +53,37 @@ func goCoverage(results []jobs.Result) []covEntry {
 			continue
 		}
 		for _, line := range strings.Split(r.Output, "\n") {
-			m := coverRe.FindStringSubmatch(line)
-			if m == nil {
-				continue
+			if e, ok := parseCoverLine(line, r.Name); ok {
+				es = append(es, e)
 			}
-			pct, err := strconv.ParseFloat(m[1], 64)
-			if err != nil {
-				continue
-			}
-			pkg := r.Name
-			for _, f := range strings.Fields(line) {
-				if strings.Contains(f, "/") {
-					pkg = f
-					break
-				}
-			}
-			// Generated and test-support packages ran, but their coverage is
-			// noise, so it stays out of the mean.
-			if covExclude.MatchString(pkg) {
-				continue
-			}
-			es = append(es, covEntry{pkg: pkg, pct: pct})
 		}
 	}
 	return es
+}
+
+// parseCoverLine reads one `go test -cover` package line. The package is the
+// first field holding a slash, or fallback when none does. It reports false
+// for any other line and for a package covExclude matches.
+func parseCoverLine(line, fallback string) (covEntry, bool) {
+	m := coverRe.FindStringSubmatch(line)
+	if m == nil {
+		return covEntry{}, false
+	}
+	pct, err := strconv.ParseFloat(m[1], 64)
+	if err != nil {
+		return covEntry{}, false
+	}
+	pkg := fallback
+	for _, f := range strings.Fields(line) {
+		if strings.Contains(f, "/") {
+			pkg = f
+			break
+		}
+	}
+	if covExclude.MatchString(pkg) {
+		return covEntry{}, false
+	}
+	return covEntry{pkg: pkg, pct: pct}, true
 }
 
 // nodeCoverageBlock returns the vitest v8 coverage table verbatim from a pnpm
@@ -106,9 +114,8 @@ func nodeCoverageBlock(out string) string {
 
 // CoverageView renders the COVERAGE report section: Go packages as a
 // color-banded percentage list with a mean, and each pnpm target's native
-// vitest table verbatim beneath it. Returns "" when nothing was measured
-// (flag off, or no coverage produced) so callers can drop it in
-// unconditionally.
+// vitest table verbatim beneath it. CoverageView returns "" when nothing was
+// measured, so a caller can append it unconditionally.
 func CoverageView(results []jobs.Result, width int) string {
 	goEntries := goCoverage(results)
 
@@ -131,7 +138,7 @@ func CoverageView(results []jobs.Result, width int) string {
 	b.WriteString(section("coverage", colGold, width) + "\n")
 
 	if len(goEntries) > 0 {
-		slices.SortFunc(goEntries, func(a, b covEntry) int { return strings.Compare(a.pkg, b.pkg) })
+		slices.SortFunc(goEntries, func(x, y covEntry) int { return strings.Compare(x.pkg, y.pkg) })
 		var sum float64
 		for _, e := range goEntries {
 			sum += e.pct

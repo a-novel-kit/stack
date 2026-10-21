@@ -122,7 +122,7 @@ func TestLoadLabels(t *testing.T) {
 	}
 	// meta is the no-PR / meta-epic label.
 	if meta := named("meta"); meta < 0 || l.Ensure[meta].Color != "bfd4f2" {
-		t.Errorf("ensure set lacks the `meta` label coloured bfd4f2; got %v", l.Ensure)
+		t.Errorf("ensure set lacks the `meta` label colored bfd4f2; got %v", l.Ensure)
 	}
 	ensured := []string{
 		"append-only-override", "with-feature-env", "buf skip breaking",
@@ -160,13 +160,9 @@ func TestLoadTeams(t *testing.T) {
 	}
 }
 
-// TestLoadRulesets loads every shipped ruleset. Coverage once shipped too, as a
-// required check exempting the bot Apps so dependency PRs were not blocked on
-// it. A ruleset bypass exempts the author of a PULL REQUEST, but the merge queue
-// validates required checks against a merge GROUP, which has no author, so a
-// coverage provider that accepted an upload without posting its status stalled
-// the entire queue. Removing the template is the whole removal, because the
-// ruleset SET is derived (see TestBuildPlanPrunesUnknownRulesets).
+// TestLoadRulesets loads every shipped ruleset. No coverage ruleset ships. A
+// bypass exempts a pull request's author, but the merge queue checks a merge
+// group, which has no author, so a missing coverage status stalls the queue.
 func TestLoadRulesets(t *testing.T) {
 	t.Parallel()
 	rulesets := []string{"master", "commit-messages", "require-approval", "tags", "release-lines"}

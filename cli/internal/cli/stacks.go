@@ -7,7 +7,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -20,13 +22,14 @@ import (
 )
 
 // killGrace is how long a target gets to exit on SIGTERM before the daemon
-// escalates. It matches the `run kill` default.
+// sends SIGKILL. It is the `run kill --timeout` default and the grace a prune
+// gives each target.
 const killGrace = 10 * time.Second
 
 // newCoreStacksCmd allocates, lists and prunes workspace stacks. A stack holds
-// a checkout, containers holding host ports, and podman volumes. Deleting the
-// root reclaims only the checkout, and the other two are the daemon's to
-// release, so pruning is a verb of its own.
+// a checkout, containers that hold host ports, and podman volumes. Deleting the
+// root frees only the checkout. The daemon releases the containers and volumes,
+// so pruning is a command of its own.
 func newCoreStacksCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stacks",
@@ -46,13 +49,10 @@ back its files, containers and volumes.`,
 // new
 // =============================================================================
 
-// defaultStackRoot is where an extra workspace lands when the caller does not
-// choose. os.TempDir() honors $TMPDIR, resolving to the per-user
-// /var/folders/…/T on macOS and /tmp on Linux. The OS reclaims both, so a
-// stack that outlives its session is a disk leak with an expiry date.
-//
-// The default stack lives elsewhere: it is the workspace, and a workspace under
-// a directory the OS empties is a trap.
+// defaultStackRoot is where an extra stack lands when the caller names no
+// root. It sits under os.TempDir(), which the OS empties, so an abandoned
+// stack frees its disk in time. The default stack is the workspace and never
+// lives there.
 func defaultStackRoot(name string) string {
 	return filepath.Join(os.TempDir(), "a-novel-stacks", name)
 }
@@ -157,7 +157,8 @@ func listStacks(ctx context.Context, out io.Writer) error {
 			len(held.volumes))
 		managed[st.GetName()] = true
 	}
-	return reportUnmanaged(out, managed)
+	reportUnmanaged(out, managed)
+	return nil
 }
 
 // =============================================================================
@@ -279,11 +280,12 @@ func selectPruneTargets(registered []*anovelv1.Stack, args []string, all bool) (
 // printed to the operator and the teardown that follows cannot disagree.
 type stackHoldings struct {
 	services    []string
-	liveTargets []string // fully-qualified target IDs still short of TERMINATED
+	liveTargets []string // fully-qualified IDs of the targets isLive accepts
 	liveInfra   int
 	volumes     []string
 }
 
+// inspectStack snapshots what the stack name holds, from one ListServices call.
 func inspectStack(ctx context.Context, c *rpc.Client, name string) (stackHoldings, error) {
 	resp, err := c.ListServices(ctx, name)
 	if err != nil {
@@ -292,10 +294,9 @@ func inspectStack(ctx context.Context, c *rpc.Client, name string) (stackHolding
 	return holdingsOf(resp.GetServices()), nil
 }
 
-// holdingsOf reduces a stack's services to what teardown has to act on. A target
-// or container short of TERMINATED is live: PENDING and STARTING entries have a
-// process or container behind them (or are about to), and skipping those is how
-// a prune leaves a port held by something it reported as gone.
+// holdingsOf reduces a stack's services to what teardown acts on. A target or
+// infra container is live from PENDING until TERMINATED. A PENDING or STARTING
+// entry has, or soon has, a process or container holding a port.
 func holdingsOf(services []*anovelv1.Service) stackHoldings {
 	var h stackHoldings
 	for _, svc := range services {
@@ -376,20 +377,22 @@ func reclaimStack(
 	ctx context.Context, c *rpc.Client, out io.Writer, st *anovelv1.Stack, held stackHoldings, purgeBackups bool,
 ) error {
 	name, root := st.GetName(), st.GetPath()
+	const force, noBackup = true, false
+
 	for _, id := range held.liveTargets {
 		if _, err := c.KillTarget(ctx, id, killGrace); err != nil {
 			return fmt.Errorf("kill target %s: %w", id, err)
 		}
 	}
 	for _, svc := range held.services {
-		// force cascades onto whatever the infra is still holding open;
-		// the targets above are already down, so nothing is orphaned by it.
-		if _, err := c.KillInfra(ctx, name, svc, true); err != nil {
+		// force stops what the infra still holds open. The targets above are
+		// already down, so it orphans nothing.
+		if _, err := c.KillInfra(ctx, name, svc, force); err != nil {
 			return fmt.Errorf("kill infra %s/%s: %w", name, svc, err)
 		}
-		// Backups are kept: a stack is pruned on the assumption its data was
-		// disposable, and that assumption is occasionally wrong.
-		if _, err := c.ClearVolume(ctx, name, svc, false, true); err != nil {
+		// A prune assumes the stack's data is disposable, and that is sometimes
+		// wrong, so every volume is backed up first.
+		if _, err := c.ClearVolume(ctx, name, svc, noBackup, force); err != nil {
 			return fmt.Errorf("clear volumes %s/%s: %w", name, svc, err)
 		}
 	}
@@ -397,9 +400,8 @@ func reclaimStack(
 		return fmt.Errorf("remove %s: %w", root, err)
 	}
 	if purgeBackups {
-		// Opt-in, because ClearVolume just took a backup on the way past: the
-		// default keeps the one artifact that can undo this command, and this
-		// flag is how the operator says the data really was disposable.
+		// ClearVolume just backed up every volume. Only this flag deletes those
+		// backups, the one way to undo a prune.
 		dir := stackBackupDir(name)
 		if err := os.RemoveAll(dir); err != nil {
 			return fmt.Errorf("purge backups %s: %w", dir, err)
@@ -417,20 +419,17 @@ func stackBackupDir(stack string) string {
 	return filepath.Join(paths.BackupsRoot(), stack)
 }
 
-// reportUnmanaged names the stacks $A_NOVEL_STACKS registers that the daemon is
-// not managing. The daemon skips a stack whose files are gone and starts
-// anyway, so a registration can outlive the stack it points at. This names
-// those entries.
-//
-// It reads the caller's own environment, so a shell whose $A_NOVEL_STACKS
-// differs from the one the daemon started with is reported as unmanaged too:
-// either way, this shell's registrations and the daemon's view disagree.
-func reportUnmanaged(out io.Writer, managed map[string]bool) error {
+// reportUnmanaged prints each $A_NOVEL_STACKS registration the daemon does not
+// manage, with its fix. The daemon skips a stack whose files are gone, so a
+// registration can outlive its stack. The registrations come from this shell,
+// so a shell whose $A_NOVEL_STACKS differs from the daemon's reports the
+// difference too.
+func reportUnmanaged(out io.Writer, managed map[string]bool) {
 	registered, err := stacks.ParseEnv()
 	if err != nil {
-		// A malformed $A_NOVEL_STACKS is the daemon's problem to report at
-		// start; the listing above is still valid without this footnote.
-		return nil //nolint:nilerr
+		// The daemon reports a malformed $A_NOVEL_STACKS at start. The listing
+		// above stays valid without this footnote.
+		return
 	}
 	for _, s := range registered {
 		if managed[s.Name] {
@@ -442,7 +441,6 @@ func reportUnmanaged(out io.Writer, managed map[string]bool) error {
 		}
 		_, _ = fmt.Fprintf(out, "! %-20s %-40s %s\n", s.Name, s.Path, reason)
 	}
-	return nil
 }
 
 // dryRunVerdict is the line a dry run prints in place of acting. A blocked
@@ -454,10 +452,9 @@ func dryRunVerdict(blockers []string, force bool) string {
 	return "(dry run — nothing changed)"
 }
 
-// pruneBlockers lists the reasons a stack's checkouts should outlive the prune,
-// one per checkout: work in progress (see ongoingWork), or unpushed commits,
-// since a clean checkout on its default branch can still hold the only copy of
-// a commit.
+// pruneBlockers lists the reasons a stack's checkouts should outlive the
+// prune, at most one per checkout, in checkout order. It checks every checkout
+// at once: each check runs several local git commands.
 func pruneBlockers(root string) []string {
 	checkouts, err := workspaceCheckouts(root)
 	if err != nil {
@@ -465,13 +462,26 @@ func pruneBlockers(root string) []string {
 		// removing it is the whole point of the command.
 		return nil
 	}
-	var blockers []string
-	for _, c := range checkouts {
-		if reason := ongoingWork(c.dir); reason != "" {
-			blockers = append(blockers, c.Name+": "+reason)
-		} else if n := unpushedCommits(c.dir); n > 0 {
-			blockers = append(blockers, fmt.Sprintf("%s: %d unpushed commit(s)", c.Name, n))
-		}
+
+	reasons := make([]string, len(checkouts))
+	var wg sync.WaitGroup
+	for i, c := range checkouts {
+		wg.Go(func() { reasons[i] = checkoutBlocker(c) })
 	}
-	return blockers
+	wg.Wait()
+
+	return slices.DeleteFunc(reasons, func(r string) bool { return r == "" })
+}
+
+// checkoutBlocker names the work c holds that exists nowhere else, or returns
+// "". A clean checkout on its default branch can still hold the only copy of a
+// commit, so unpushed commits block too.
+func checkoutBlocker(c checkout) string {
+	if reason := ongoingWork(c.dir); reason != "" {
+		return c.Name + ": " + reason
+	}
+	if n := unpushedCommits(c.dir); n > 0 {
+		return fmt.Sprintf("%s: %d unpushed commit(s)", c.Name, n)
+	}
+	return ""
 }

@@ -72,8 +72,9 @@ func ghError(err error, stdout, stderr string) error {
 	return fmt.Errorf("%w: %s", err, msg)
 }
 
-// errContains reports whether err's message holds every one of parts, case
-// insensitively; GitHub's error wording is the only signal gh exposes.
+// errContains reports whether err's lowercased message holds every one of
+// parts, which callers pass in lowercase. GitHub's error wording is the only
+// signal gh exposes.
 func errContains(err error, parts ...string) bool {
 	if err == nil {
 		return false

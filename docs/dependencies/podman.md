@@ -4,7 +4,7 @@
 
 ## Install
 
-Skip to [Configure](#configure) if both commands answer and podman-compose reports 1.6.0 or newer:
+Skip to [Configure](#configure) if both commands answer and the second names podman-compose 1.6.0 or newer. An installed docker-compose takes precedence over podman-compose.
 
 ```bash
 podman --version
@@ -72,7 +72,7 @@ pipx install podman-compose
 
 :::tabs key:os
 == Linux
-Nothing to start on Linux. Under WSL2, health checks need systemd, and this prints `systemd` when it runs:
+Linux needs nothing started. Under WSL2, health checks need systemd. This command prints `systemd` when systemd runs:
 
 ```bash
 ps -p 1 -o comm=
@@ -108,4 +108,4 @@ Check that Podman runs:
 podman info --format '{{.Version.Version}}'
 ```
 
-An error means Podman or its machine is down. `podman compose version` must name podman-compose, since an installed docker-compose takes precedence.
+An error means Podman or its machine is down.

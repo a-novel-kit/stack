@@ -59,9 +59,9 @@ func (m *sshMux) open() {
 	}
 }
 
-// connect reports whether the connection is up, opening it when it is not, and
-// must run under m.mu so a lapsed connection is reopened once. Opening prompts
-// for the key's touch on the terminal.
+// connect reports whether the connection is up, and opens it when it is not.
+// Callers hold m.mu, so a lapsed connection reopens once. Opening prompts for
+// the key's touch on the terminal.
 func (m *sshMux) connect() bool {
 	if exec.Command("ssh", slices.Concat(m.opts, []string{"-O", "check", githubSSHHost})...).Run() == nil {
 		return true

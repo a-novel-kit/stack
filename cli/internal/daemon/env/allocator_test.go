@@ -144,7 +144,6 @@ func TestAllocator_ConcurrentAcquireSameKey(t *testing.T) {
 	}
 	snap := a.Snapshot()
 	if len(snap) != 1 || len(snap[0].Refs) != N {
-		t.Errorf("expected 1 slot with %d refs, got %d slot(s) refs=%v",
-			N, len(snap), snap[0].Refs)
+		t.Errorf("expected 1 slot with %d refs, got %v", N, snap)
 	}
 }

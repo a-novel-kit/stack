@@ -1,6 +1,6 @@
 // Package discovery parses each stack's per-service podman-compose.yaml files
 // and exposes the result as a structured model of services, targets, infra,
-// volumes, networks, and the dependency graph. It is the daemon's operational
+// volumes, and the dependency graph. It is the daemon's operational
 // source of truth: supervision, env, logs, and volumes all key off these types.
 //
 // # The compose contract
@@ -40,6 +40,6 @@
 //     allocates or derives (ports, hosts, URLs, DSNs) appear as ${VAR}
 //     references the daemon fills.
 //
-// Discovery is strict: a contract violation surfaces as an error at daemon
-// startup, so a misconfiguration never becomes a runtime surprise.
+// Discovery reports every contract violation at daemon startup and leaves the
+// offending entry out.
 package discovery

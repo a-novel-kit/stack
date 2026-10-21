@@ -88,8 +88,9 @@ type Target struct {
 type ComposeEnv struct {
 	// File is the absolute path to the compose YAML.
 	File string
-	// Project is the `podman compose -p` project name, unique per env file so
-	// parallel test targets never collide on container or network names.
+	// Project is the `podman compose -p` project name, one per env file in
+	// ordinary layouts, so parallel test targets do not collide on container or
+	// network names.
 	Project string
 	// ID is the parsed identifier, e.g. "go.internal" or "pnpm".
 	ID string
@@ -99,9 +100,10 @@ type ComposeEnv struct {
 	// parallel targets never collide.
 	Ports []string
 	// Refs is every ${VAR} the compose file interpolates, host-exposed or
-	// not. The runner fills known test defaults (POSTGRES_USER, PASSWORD, DB,
-	// HOST) for any it references, so an internal-only postgres with no host
-	// port, and therefore no entry in Ports, still gets credentials.
+	// not. The runner fills the known local test defaults, such as
+	// POSTGRES_USER, for the ones it references. An internal-only Postgres has
+	// no host port and no entry in Ports, and still gets its credentials this
+	// way.
 	Refs []string
 	// Services lists every compose service the file declares, sorted.
 	Services []string
@@ -274,7 +276,7 @@ func pnpmTarget(dir, rel string, s pnpmScriptDef) Target {
 	}
 }
 
-// IsFile reports whether path is an existing regular file.
+// IsFile reports whether path exists and is not a directory.
 func IsFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()

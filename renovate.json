@@ -3,7 +3,7 @@
   "extends": ["github>a-novel-kit/workflows//renovate/library#v1.70.0"],
   "packageRules": [
     {
-      "description": "Keep cli/golangci-lint.mod on its own branch. A Renovate artifact update receives the whole branch config, inherited from whichever upgrade sorts first, so a shared branch would let this modfile impose its goGetDirs on cli/go.mod \u2014 and would run only one modfile's post-upgrade task. One branch per modfile keeps every rule pointed at the file it names.",
+      "description": "Keep cli/golangci-lint.mod on its own branch. A Renovate artifact update takes its whole config from the upgrade that sorts first on the branch. One branch per modfile keeps each goGetDirs and post-upgrade task on the file it names.",
       "matchFileNames": ["cli/golangci-lint.mod"],
       "additionalBranchPrefix": "golangci-lint-",
       "goGetDirs": ["."],
@@ -16,7 +16,7 @@
       }
     },
     {
-      "description": "Keep cli/gotestsum.mod on its own branch. A Renovate artifact update receives the whole branch config, inherited from whichever upgrade sorts first, so a shared branch would let this modfile impose its goGetDirs on cli/go.mod \u2014 and would run only one modfile's post-upgrade task. One branch per modfile keeps every rule pointed at the file it names.",
+      "description": "Keep cli/gotestsum.mod on its own branch. A Renovate artifact update takes its whole config from the upgrade that sorts first on the branch. One branch per modfile keeps each goGetDirs and post-upgrade task on the file it names.",
       "matchFileNames": ["cli/gotestsum.mod"],
       "additionalBranchPrefix": "gotestsum-",
       "goGetDirs": ["."],
@@ -26,7 +26,7 @@
       }
     },
     {
-      "description": "Keep cli/buf.mod on its own branch, and regenerate the proto stubs after a bump. buf is a generator, never imported: the emitted code links google.golang.org/protobuf, which stays in cli/go.mod, while buf's own graph does not.",
+      "description": "Keep cli/buf.mod on its own branch, and regenerate the proto stubs after a bump. No code imports buf. The code it emits links google.golang.org/protobuf, which cli/go.mod keeps, and buf's own dependencies stay out of cli/go.mod.",
       "matchFileNames": ["cli/buf.mod"],
       "additionalBranchPrefix": "buf-",
       "goGetDirs": ["."],
@@ -41,12 +41,12 @@
       }
     },
     {
-      "description": "Tidy cli/go.mod after a Go bump so go.sum gets the module-content (h1:) hashes, not just the /go.mod hashes; without it any job that compiles cli/ fails with `missing go.sum entry`. This works because each Go modfile has its own branch (see the rules above), so cli/go.mod is the only upgrade on its branch and the option reaches it. Do not merge those branches back together: a Renovate artifact update reads the branch config, which is inherited from whichever upgrade sorts first.",
+      "description": "Tidy cli/go.mod after a Go bump, so go.sum holds the module-content (h1:) hashes too. A job that compiles cli/ without them fails with `missing go.sum entry`. The option reaches cli/go.mod because each Go modfile has its own branch (see the rules above), so keep those branches apart.",
       "matchFileNames": ["cli/go.mod"],
       "postUpdateOptions": ["gomodTidy"]
     },
     {
-      "description": "Regenerate cli/proto/gen when a generator module moves. cli/buf.gen.yaml runs protoc-gen-go and protoc-gen-connect-go from cli/go.mod, so generated code always matches the runtime it links, and must change in the same branch as the bump or generated-go-cli fails.",
+      "description": "Regenerate cli/proto/gen when a generator module moves. cli/buf.gen.yaml runs protoc-gen-go and protoc-gen-connect-go from cli/go.mod, so the generated code matches the runtime it links. The regeneration lands on the bump's own branch, which generated-go-cli checks.",
       "matchFileNames": ["cli/go.mod"],
       "matchPackageNames": ["google.golang.org/protobuf", "connectrpc.com/connect/v2"],
       "postUpgradeTasks": {
@@ -58,7 +58,7 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Keep the a-novel-kit/workflows action pins in the repocfg governance caller templates current. Renovate's built-in github-actions manager only scans real .github/workflows/ files, not these CLI templates, so without this manager the pins go stale and `a-novel repo update` re-deploys an outdated (or load-broken) action version fleet-wide.",
+      "description": "Keep the a-novel-kit/workflows action pins in the repocfg governance caller templates current. Renovate's built-in github-actions manager scans only .github/workflows/, and `a-novel repo update` deploys these templates fleet-wide.",
       "managerFilePatterns": ["cli/internal/repocfg/templates/governance/**"],
       "matchStrings": ["a-novel-kit/workflows/[^@\\s]+@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
       "depNameTemplate": "a-novel-kit/workflows",

@@ -8,8 +8,8 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/repocfg"
 )
 
-// TestRenderCompactSummary asserts the batch view shows the per-repo dimensions
-// that vary — class, rulesets, codecov, and the discovered required checks.
+// TestRenderCompactSummary pins the batch view's two lines: the class, the
+// rulesets and the discovered required checks.
 func TestRenderCompactSummary(t *testing.T) {
 	t.Parallel()
 	target := &repocfg.RepoTarget{

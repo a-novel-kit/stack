@@ -1,6 +1,6 @@
 # Back up service data
 
-A service keeps its data in volumes that survive restarts.
+A service keeps its data in volumes that survive restarts. Backup, restore and clear need the service stopped. `--force` stops it first.
 
 ```bash
 SERVICE=service-json-keys
@@ -8,8 +8,6 @@ a-novel run volume list "$SERVICE"
 ```
 
 ## Back up and restore
-
-These commands need the service stopped; `--force` stops it first.
 
 ```bash
 BACKUP_TAG=before-migration
@@ -20,7 +18,7 @@ a-novel run volume backup "$SERVICE" --tag="$BACKUP_TAG"
 a-novel run volume restore "$SERVICE"
 ```
 
-`--from` restores an older backup instead, by the timestamp in its file name, which `volume backup` prints.
+To restore an older backup, pass `--from` with the timestamp from its file name. `volume backup` prints that name.
 
 ## Reset to empty
 

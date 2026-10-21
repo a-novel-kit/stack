@@ -1,6 +1,6 @@
 # Set up an agent
 
-An agent loads the team's conventions, `AGENTS.md` and the skills in `.agents/skills`, from its workspace root. Make that the stack root, `~/git-projects/a-novel` by default. Each repository below it is a separate checkout, so an agent started inside one misses them.
+An agent loads the team's conventions from its workspace root: `AGENTS.md` and the skills in `.agents/skills`. Make the stack root its workspace, `~/git-projects/a-novel` by default. Each repository below the stack root is a separate checkout. An agent started inside one never sees the conventions.
 
 The team works mostly with Claude Code and Codex. Any agent that loads these conventions works too, such as the others below.
 
@@ -14,14 +14,8 @@ For the terminal, skip to [Open the workspace](#open-the-workspace) if this prin
 claude --version
 ```
 
-:::tabs key:os
-== Linux
-
-```bash
-curl -fsSL https://claude.ai/install.sh | bash
-```
-
-== macOS
+:::tabs key:shell
+== Linux / macOS
 
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash
@@ -39,11 +33,10 @@ The [desktop app](https://claude.ai/download) includes Claude Code. The [VS Code
 
 ### Open the workspace
 
-In a terminal, start it from the stack root:
+In a terminal, start it in the stack root, wherever you put it:
 
 ```bash
-cd ~/git-projects/a-novel
-claude
+a-novel claude
 ```
 
 In the desktop app's **Code** tab, select **Local**, then **Select folder**, and choose the stack root. In VS Code or JetBrains, open the stack root as the project.
@@ -107,7 +100,7 @@ copilot
 
 ## Antigravity CLI
 
-Google's terminal agent.
+Antigravity CLI is Google's terminal agent.
 
 :::tabs key:shell
 == Linux / macOS
@@ -133,7 +126,7 @@ agy
 
 ## OpenCode
 
-An open-source terminal agent that works with your own model provider:
+OpenCode is an open-source terminal agent that works with your own model provider:
 
 ```bash
 npm install -g opencode-ai

@@ -120,10 +120,12 @@ func requiredSecretID(mount string) string {
 	return id
 }
 
+// secretEnvReplacer turns a Dockerfile secret ID's separators into underscores.
+var secretEnvReplacer = strings.NewReplacer("-", "_", ".", "_")
+
 // dockerfileSecretEnv maps a Dockerfile secret ID to its host environment name.
 func dockerfileSecretEnv(id string) string {
-	replacer := strings.NewReplacer("-", "_", ".", "_")
-	return strings.ToUpper(replacer.Replace(id))
+	return strings.ToUpper(secretEnvReplacer.Replace(id))
 }
 
 // registryBase computes the ghcr.io image prefix for a service directory from

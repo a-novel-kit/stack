@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -65,7 +66,8 @@ func (r *Runner) startContainer(ctx context.Context, t *discovery.Target, env, w
 	r.mu.Unlock()
 
 	// Stream `podman logs -f` into the same JSON-line store go-exec mode uses,
-	// so `a-novel run logs <target>` shows the container's own output.
+	// so `a-novel run logs <target>` shows the container's own output. A log
+	// writer that fails to open costs this start only its log capture.
 	if logWriter, err := r.logs.OpenForWrite(id, t.Stack, t.Service, t.Name); err == nil {
 		// Surface the value-free missing-secret warnings so `run logs` and
 		// the TUI show the operator what to set.
@@ -137,64 +139,76 @@ type InfraState struct {
 
 // InfraStatesOf returns the live state of every infra container in the given
 // stack, keyed by "<service>/<infraName>". It costs one podman call whatever
-// the stack's size, which matters because each invocation carries roughly 1s of
-// cold-start overhead on rootless WSL2 podman and the TUI polls every 2s.
+// the stack's size.
 //
 // It reads no health: `podman ps --format json` omits Health.Status, and
 // reading it costs one inspect per container. PHASE_RUNNING with
 // HEALTH_UNSPECIFIED renders correctly downstream, as a green ● in the TUI and
 // "running" in CLI ps.
 //
-// A podman error yields an empty map, so a caller can check
-// `if state, ok := m[key]` without a nil guard.
+// A podman error yields an empty map.
 func (r *Runner) InfraStatesOf(ctx context.Context, stack string) map[string]InfraState {
-	// The TUI's ~2s poll hits this cache most of the time, and every mutating
-	// RPC invalidates it so a stale entry never outlives a state change.
-	r.infraStateMu.Lock()
-	if entry, ok := r.infraStateCache[stack]; ok && time.Since(entry.at) < infraStateCacheTTL {
-		// Copy the map so callers don't race a concurrent invalidation.
-		states := maps.Clone(entry.states)
-		r.infraStateMu.Unlock()
+	states, gen, ok := r.cachedInfraStates(stack)
+	if ok {
 		return states
 	}
-	// Snapshot the generation: the reseed below refuses to write the cache
-	// when an invalidation fired meanwhile, so a scan started before a
-	// mutation cannot resurrect pre-mutation state.
-	startGen := r.infraStateGen
-	r.infraStateMu.Unlock()
 
-	out := make(map[string]InfraState)
 	entries, err := podmanPS(ctx, labelFilters(stack)...)
 	if err != nil {
-		return out
+		return map[string]InfraState{}
 	}
+
+	states = infraStatesFrom(entries)
+	r.storeInfraStates(stack, gen, states)
+	return states
+}
+
+// cachedInfraStates returns a copy of the stack's cached scan while it is
+// fresh. It also returns the cache generation, which a new scan hands to
+// storeInfraStates.
+func (r *Runner) cachedInfraStates(stack string) (map[string]InfraState, uint64, bool) {
+	r.infraStateMu.Lock()
+	defer r.infraStateMu.Unlock()
+	if entry, ok := r.infraStateCache[stack]; ok && time.Since(entry.at) < infraStateCacheTTL {
+		return maps.Clone(entry.states), r.infraStateGen, true
+	}
+	return nil, r.infraStateGen, false
+}
+
+// storeInfraStates caches a copy of a scan that started at generation gen. An
+// invalidation since then skips the write, so a scan older than a mutation
+// cannot bring back the state the mutation changed.
+func (r *Runner) storeInfraStates(stack string, gen uint64, states map[string]InfraState) {
+	r.infraStateMu.Lock()
+	defer r.infraStateMu.Unlock()
+	if r.infraStateGen == gen {
+		r.infraStateCache[stack] = infraStateCacheEntry{at: time.Now(), states: maps.Clone(states)}
+	}
+}
+
+// infraStatesFrom keys the infra containers of a podman scan by
+// "<service>/<infraName>". Target containers carry anovel.target, and the
+// runner tracks them through its own Instance records instead.
+func infraStatesFrom(entries []psEntry) map[string]InfraState {
+	states := make(map[string]InfraState)
 	for _, e := range entries {
-		// Target containers carry anovel.target and are tracked through the
-		// runner's own Instance records, so skip them.
 		if _, isTarget := e.Labels[labelTarget]; isTarget {
 			continue
 		}
-		// The compose service name lives in com.docker.compose.service,
-		// mirrored by io.podman.compose.service. That is the infra name
-		// discovery reads from the compose file.
-		infraName := e.Labels["com.docker.compose.service"]
-		if infraName == "" {
-			infraName = e.Labels["io.podman.compose.service"]
-		}
-		svc := e.Labels[labelService]
+		svc, infraName := e.Labels[labelService], composeServiceName(e.Labels)
 		if svc == "" || infraName == "" {
 			continue
 		}
-		out[svc+"/"+infraName] = InfraState{ContainerID: e.ID, Phase: podmanPhase(e.State)}
+		states[svc+"/"+infraName] = InfraState{ContainerID: e.ID, Phase: podmanPhase(e.State)}
 	}
-	// Seed the cache for the TTL window, unless an invalidation landed during
-	// the scan.
-	r.infraStateMu.Lock()
-	if r.infraStateGen == startGen {
-		r.infraStateCache[stack] = infraStateCacheEntry{at: time.Now(), states: maps.Clone(out)}
-	}
-	r.infraStateMu.Unlock()
-	return out
+	return states
+}
+
+// composeServiceName returns the compose service a container runs, the infra
+// name discovery reads from the compose file. podman-compose mirrors the
+// docker label into its own.
+func composeServiceName(labels map[string]string) string {
+	return cmp.Or(labels["com.docker.compose.service"], labels["io.podman.compose.service"])
 }
 
 // InfraContainer runs `podman <verb> --time 10` on one infra container, found

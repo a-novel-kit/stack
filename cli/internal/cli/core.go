@@ -28,10 +28,10 @@ import (
 // accidental human invocation implausible.
 const daemonInternalCmd = "__daemon"
 
-// daemonLogTailLimit caps how much of a failed start's output is quoted back.
-// Enough for a stack trace or a handful of discovery errors; not enough for a
-// crash-looping daemon to bury the error under its own retries.
-const daemonLogTailLimit = 4 << 10
+// daemonLogQuoteLimit caps how much of a failed start's output is quoted back.
+// 4 KiB holds a stack trace or a handful of discovery errors. A daemon that
+// keeps retrying cannot push its first error out of view.
+const daemonLogQuoteLimit = 4 << 10
 
 // IsDaemonReexec reports whether args (typically os.Args) invoke the hidden
 // daemon re-exec, `a-novel core __daemon`. main() uses it to skip the
@@ -41,10 +41,8 @@ func IsDaemonReexec(args []string) bool {
 	return len(args) >= 3 && args[1] == commandCore && args[2] == daemonInternalCmd
 }
 
-// newCoreCmd groups the verbs that manage the daemon's lifecycle and the
-// workspace it serves. `core start` is the .zshrc-friendly entrypoint: silent
-// when a daemon already runs, it detaches one into the background, and it
-// refuses with a hint when setup is missing.
+// newCoreCmd groups the verbs that manage the daemon and the workspace it
+// serves.
 func newCoreCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   commandCore,
@@ -120,14 +118,13 @@ stopping the targets left first. The next 'core start' relaunches nothing;
 
 // killDaemon stops a running daemon and waits for it to exit. force also tears
 // down every service's infra. A target the shutdown could not stop fails the
-// command: whoever ran it to get a clean environment learns from the shell
-// that they did not.
+// command, so a script learns its environment is not clean.
 func killDaemon(cmd *cobra.Command, force bool) error {
 	ctx, out := cmd.Context(), cmd.OutOrStdout()
 	c := rpc.New("")
 	if up, err := daemonUp(ctx, c); !up {
 		if err == nil {
-			_, _ = fmt.Fprintln(os.Stderr, "a-novel: daemon not running")
+			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "a-novel: daemon not running")
 		}
 		return err
 	}
@@ -139,7 +136,7 @@ func killDaemon(cmd *cobra.Command, force bool) error {
 	waitErr := waitDaemonGone(ctx, c, out)
 	if fails := resp.GetFailures(); len(fails) > 0 {
 		for _, f := range fails {
-			_, _ = fmt.Fprintf(os.Stderr, "a-novel: shutdown could not stop %s\n", f)
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "a-novel: shutdown could not stop %s\n", f)
 		}
 		return fmt.Errorf("shutdown left %d target(s) running", len(fails))
 	}
@@ -162,8 +159,8 @@ func daemonUp(ctx context.Context, c *rpc.Client) (bool, error) {
 // socket.
 const daemonExitTimeout = 10 * time.Second
 
-// waitDaemonGone polls until the daemon stops answering, a deterministic "the
-// daemon is gone" signal so a script can run `core start` on the next line.
+// waitDaemonGone polls until the daemon stops answering, for up to
+// daemonExitTimeout. A script can then run `core start` on the next line.
 func waitDaemonGone(ctx context.Context, c *rpc.Client, out io.Writer) error {
 	deadline := time.Now().Add(daemonExitTimeout)
 	for time.Now().Before(deadline) {
@@ -245,19 +242,25 @@ func restartDaemon(cmd *cobra.Command, force, preserve bool) error {
 		return err
 	}
 	if up {
-		if preserve {
-			err = prepareReinstall(ctx, c, out)
-		} else {
-			_, err = shutdown(ctx, c, force, out)
-		}
-		if err != nil {
-			return err
-		}
-		if err := waitDaemonGone(ctx, c, out); err != nil {
+		if err := stopForRestart(ctx, c, out, force, preserve); err != nil {
 			return err
 		}
 	}
 	return startDetached()
+}
+
+// stopForRestart stops a running daemon and waits until it is gone. preserve
+// checkpoints the go-exec targets first. Otherwise the daemon shuts down as
+// `core kill` does.
+func stopForRestart(ctx context.Context, c *rpc.Client, out io.Writer, force, preserve bool) error {
+	if preserve {
+		if err := prepareReinstall(ctx, c, out); err != nil {
+			return err
+		}
+	} else if _, err := shutdown(ctx, c, force, out); err != nil {
+		return err
+	}
+	return waitDaemonGone(ctx, c, out)
 }
 
 func newCoreStatusCmd() *cobra.Command {
@@ -405,13 +408,12 @@ func startDetached() error {
 	c := exec.Command(bin, commandCore, daemonInternalCmd)
 	// Detach: new process group, no terminal.
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	// A detached daemon has nowhere to write but a file. Keeping its output
-	// is what separates a bad $A_NOVEL_STACKS from an unreadable stack path
-	// or an already-bound port; discard it and every startup failure reads
-	// alike as "did not become ready".
+	// A detached daemon can only write to a file. Its log tells a bad
+	// $A_NOVEL_STACKS apart from an unreadable stack path or a bound port.
 	logFile, logErr := openDaemonLog()
-	// Where this attempt's output begins, so a failure quotes only what this
-	// start wrote.
+	// logOffset is where this start's output begins, so a failure quotes only
+	// what this start wrote. A failed Seek leaves it at 0, and the quote then
+	// starts at the top of the log.
 	var logOffset int64
 	if logErr == nil {
 		defer func() { _ = logFile.Close() }()
@@ -460,10 +462,10 @@ func openDaemonLog() (*os.File, error) {
 	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 }
 
-// daemonFailureDetail renders what the daemon said before giving up, as a
-// suffix to the readiness error. It reads from offset, so a crash-looping
-// daemon is diagnosed by its latest words. When the log could not be opened at
-// all it falls back to pointing the operator at --foreground.
+// daemonFailureDetail renders what the daemon wrote during this start, as a
+// suffix to the readiness error. The log before offset belongs to earlier
+// starts and is left out. When the log could not be opened, the suffix points
+// the operator at --foreground.
 func daemonFailureDetail(logErr error, offset int64) string {
 	if logErr != nil {
 		return "; check stderr by running `a-novel core start --foreground`"
@@ -476,8 +478,8 @@ func daemonFailureDetail(logErr error, offset int64) string {
 	return fmt.Sprintf(":\n%s\n(full log: %s)", out, paths.DaemonLog())
 }
 
-// readDaemonLogFrom returns the trimmed tail of path starting at offset, capped
-// so a runaway daemon cannot flood the terminal with its own failure.
+// readDaemonLogFrom returns the first daemonLogQuoteLimit bytes of path after
+// offset, trimmed. A read failure returns "".
 func readDaemonLogFrom(path string, offset int64) string {
 	f, err := os.Open(path)
 	if err != nil {
@@ -487,7 +489,7 @@ func readDaemonLogFrom(path string, offset int64) string {
 	if _, err := f.Seek(offset, io.SeekStart); err != nil {
 		return ""
 	}
-	buf, err := io.ReadAll(io.LimitReader(f, daemonLogTailLimit))
+	buf, err := io.ReadAll(io.LimitReader(f, daemonLogQuoteLimit))
 	if err != nil {
 		return ""
 	}

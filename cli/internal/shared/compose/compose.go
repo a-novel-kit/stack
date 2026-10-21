@@ -133,9 +133,9 @@ func Refs(s string) []string {
 	return out
 }
 
-// Substitute resolves every reference in s against vars. An unknown one
-// resolves to the empty string, as compose does, so a missing variable never
-// survives as a literal ${VAR}.
+// Substitute resolves every reference in s against vars. An unknown reference
+// resolves to the empty string, and its `:-default` is never applied, so a
+// missing variable never survives as a literal ${VAR}.
 func Substitute(s string, vars map[string]string) string {
 	return refPattern.ReplaceAllStringFunc(s, func(ref string) string {
 		return vars[refPattern.FindStringSubmatch(ref)[1]]

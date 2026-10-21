@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// ErrAborted marks a job the run was cancelled before starting.
+// ErrAborted is the error of a job the run cancelled before it started.
 var ErrAborted = errors.New("aborted before completion")
 
 // Job is one named unit of work.
@@ -39,8 +39,9 @@ type Result struct {
 
 // Progress is the live state of a run. Its methods are safe for concurrent use.
 type Progress struct {
-	// OnStart and OnDone, when set, observe each job from the goroutine that
-	// runs it. A job aborted before starting only reaches OnDone.
+	// OnStart and OnDone, when set, observe each job on the goroutine that
+	// runs it. A job aborted before it starts reaches only OnDone, on the
+	// goroutine calling Run.
 	OnStart func(i int)
 	OnDone  func(i int, r Result)
 
@@ -170,17 +171,23 @@ func (w *tailWriter) Write(p []byte) (int, error) {
 		w.report(lastLine(w.rest[:i]))
 		w.rest = w.rest[i+1:]
 	}
+	// Only the text after the last carriage return can still show, so a
+	// redrawing progress bar keeps rest short.
+	if i := bytes.LastIndexByte(w.rest, '\r'); i >= 0 {
+		w.rest = w.rest[i+1:]
+	}
 	w.report(lastLine(w.rest))
 	return len(p), nil
 }
 
+// lastLine is b's last line as a terminal shows it: the text after the last
+// carriage return, without ANSI escapes.
 func lastLine(b []byte) string {
-	s := string(b)
-	if i := strings.LastIndexByte(s, '\n'); i >= 0 {
-		s = s[i+1:]
+	if i := bytes.LastIndexByte(b, '\n'); i >= 0 {
+		b = b[i+1:]
 	}
-	if i := strings.LastIndexByte(s, '\r'); i >= 0 {
-		s = s[i+1:]
+	if i := bytes.LastIndexByte(b, '\r'); i >= 0 {
+		b = b[i+1:]
 	}
-	return strings.TrimSpace(ansiSeq.ReplaceAllString(s, ""))
+	return strings.TrimSpace(ansiSeq.ReplaceAllString(string(b), ""))
 }

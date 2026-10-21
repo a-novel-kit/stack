@@ -12,13 +12,12 @@ import (
 
 // Palette.
 //
-// Semantic colors are the exact A-Novel values and stay fixed across terminal
-// themes, so brand and status signalling never drift; only the dimming colors
-// adapt. Everything is foreground-only for readability on any background.
+// Brand and status colors are fixed A-Novel values on every terminal theme.
+// The muted and warn colors adapt to a light or dark background. Every color
+// is a foreground, so text stays readable on any background.
 //
-// Purple and blue are the identity. Gold is a structural accent for headings and
-// counts, and colCrit is reserved for what demands the eye at once, such as a
-// failed run.
+// Purple and blue are the identity. Gold is a structural accent for headings
+// and counts. colCrit marks what needs attention at once, such as a failed run.
 var (
 	colBrand  = lipgloss.Color("#DC24FF")                                                               // A-Novel purple
 	colAccent = lipgloss.Color("#00A9B2")                                                               // A-Novel blue
@@ -32,14 +31,22 @@ var (
 
 // Styles shared by every screen of the CLI.
 var (
-	Brand  = lipgloss.NewStyle().Foreground(colBrand).Bold(true)
+	// Brand renders bold A-Novel purple, for the CLI's identity.
+	Brand = lipgloss.NewStyle().Foreground(colBrand).Bold(true)
+	// Accent renders A-Novel blue.
 	Accent = lipgloss.NewStyle().Foreground(colAccent)
-	Gold   = lipgloss.NewStyle().Foreground(colGold).Bold(true)
-	Muted  = lipgloss.NewStyle().Foreground(colMuted)
-	OK     = lipgloss.NewStyle().Foreground(colOK).Bold(true)
-	Warn   = lipgloss.NewStyle().Foreground(colWarn).Bold(true)
-	Err    = lipgloss.NewStyle().Foreground(colErr).Bold(true)
-	Crit   = lipgloss.NewStyle().Foreground(colCrit).Bold(true)
+	// Gold renders bold headings and counts.
+	Gold = lipgloss.NewStyle().Foreground(colGold).Bold(true)
+	// Muted renders dim detail.
+	Muted = lipgloss.NewStyle().Foreground(colMuted)
+	// OK renders a success in bold.
+	OK = lipgloss.NewStyle().Foreground(colOK).Bold(true)
+	// Warn renders a caution, such as an aborted job, in bold.
+	Warn = lipgloss.NewStyle().Foreground(colWarn).Bold(true)
+	// Err renders an error in bold.
+	Err = lipgloss.NewStyle().Foreground(colErr).Bold(true)
+	// Crit renders what needs attention at once, such as a failed run.
+	Crit = lipgloss.NewStyle().Foreground(colCrit).Bold(true)
 )
 
 var styleVersion = lipgloss.NewStyle().
@@ -48,8 +55,8 @@ var styleVersion = lipgloss.NewStyle().
 	BorderForeground(colBrand).
 	Padding(0, 1)
 
-// wordmark is the quill logo. Each row's first glyph, its contour, renders in
-// purple and the rest in blue, painting a shadow down the diagonal.
+// wordmark is the quill logo. Each row is a contour in purple and a body in
+// blue, painting a shadow down the diagonal.
 var wordmark = []struct{ contour, body string }{
 	{"▄", "    "},
 	{"█", "▙   "},
@@ -108,7 +115,7 @@ func kindLabel(k detect.Kind) string {
 	}
 }
 
-// Status glyphs.
+// Glyphs of the picker and the job status lines.
 const (
 	glyphChecked   = "◉"
 	glyphPartial   = "◐" // group: some-but-not-all members selected

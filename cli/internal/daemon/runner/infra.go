@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
@@ -170,9 +171,13 @@ func (r *Runner) KillInfra(ctx context.Context, stack, service string, force boo
 		return fmt.Errorf("%s/%s has running targets (e.g., %s); kill them first or use --force", stack, service, target)
 	}
 	r.mu.RUnlock()
+	// The kills run at once, each with its own grace. compose down below runs
+	// either way, and a target that survives its kill keeps its process.
+	var wg sync.WaitGroup
 	for _, inst := range live {
-		_ = r.Kill(ctx, inst.ID, 5*time.Second)
+		wg.Go(func() { _ = r.Kill(ctx, inst.ID, 5*time.Second) })
 	}
+	wg.Wait()
 	// `compose down` tears down the project's infra and any orphaned
 	// containers. Without --volume the postgres data survives; only
 	// `volume clear` destroys volumes.
@@ -326,12 +331,16 @@ func (r *Runner) waitInfraHealthy(ctx context.Context, svc *discovery.Service, t
 	return fmt.Errorf("infra not healthy within %s", timeout)
 }
 
-// inspectInfra inspects each container of ids.
+// inspectInfra inspects every container of ids in one podman call. A failed
+// call marks the poll failed, which reads as not ready, as one failed
+// container does.
 func inspectInfra(ctx context.Context, ids []string) []infraContainerState {
-	states := make([]infraContainerState, 0, len(ids))
-	for _, cid := range ids {
-		phase, health, exitCode, err := podmanInspect(ctx, cid)
-		states = append(states, infraContainerState{phase: phase, health: health, exitCode: exitCode, inspectErr: err != nil})
+	if len(ids) == 0 {
+		return nil
+	}
+	states, err := podmanInspectAll(ctx, ids)
+	if err != nil {
+		return []infraContainerState{{inspectErr: true}}
 	}
 	return states
 }

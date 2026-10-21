@@ -371,7 +371,7 @@ func TestApplySettingsSignoffRetry(t *testing.T) {
 func TestApplySecretAccess(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam. GitHub answers 409
 	// while the secret is visible to every repo, and 404 to a revoke of a repo
-	// it never selected, as every revoke of the first fleet reconcile showed.
+	// it never selected.
 	testCases := []struct {
 		name, method, status, wantDetail string
 		wantErr                          bool
@@ -524,7 +524,7 @@ func TestApplyLabels(t *testing.T) {
 		wantCalls := []string{
 			"repos/o/r/labels?per_page=100",                         // list existing
 			"api -X POST repos/o/r/labels --input -",                // create the missing one
-			"api -X PATCH repos/o/r/labels/documentation --input -", // recolour the drifted one
+			"api -X PATCH repos/o/r/labels/documentation --input -", // recolor the drifted one
 			"api -X DELETE repos/o/r/labels/triage",                 // retire
 		}
 
@@ -704,7 +704,7 @@ func TestApplyTeams(t *testing.T) {
 		next := 10
 		calls := stubGH(t, func(call string) (string, error) {
 			switch {
-			case strings.Contains(call, "orgs/o/teams --jq"):
+			case strings.Contains(call, "orgs/o/teams?per_page=100 --jq"):
 				return "developers\t1\ncore\t9\n", nil
 			case strings.Contains(call, "-X POST orgs/o/teams"):
 				next++
@@ -793,10 +793,9 @@ func TestApplyTeams(t *testing.T) {
 	})
 }
 
-// TestPruneRulesets covers the one operation in repocfg that DESTROYS live
-// configuration. Anything the plan does not name is drift, so the keep-list is
-// the only thing standing between a reconcile and a repo's protection, and a
-// bug here is silent until a merge that should have been gated goes through.
+// TestPruneRulesets covers the operation that deletes live configuration:
+// every live ruleset outside the keep list is deleted, and a failed read
+// deletes none.
 func TestPruneRulesets(t *testing.T) {
 	// Not parallel: sub-tests swap the package-level ghStdin seam.
 	const copilot = "Code Quality Copilot review for default branch"
@@ -860,10 +859,8 @@ func TestPruneRulesets(t *testing.T) {
 	}
 }
 
-// TestPruneImpact covers the preview an operator confirms a destructive
-// reconcile from: the offline plan only states what SURVIVES, so this is the
-// only place the deletions are visible. A read failure must never render as
-// "none", which reads as safe and gets waved through.
+// TestPruneImpact covers the deletions a dry run shows. A failed read renders
+// UNRESOLVED, never "none".
 func TestPruneImpact(t *testing.T) {
 	// Not parallel: sub-tests swap the package-level ghStdin seam.
 	target := &repocfg.RepoTarget{Org: "a-novel", Repo: "service-auth"}

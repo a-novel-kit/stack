@@ -2,7 +2,7 @@
 
 Every repository requires signed commits, and protected branches refuse anything else. Git signs them with the SSH key from the [GitHub](./github#create-an-ssh-key) page.
 
-Skip this page if your commits already show **Verified** on GitHub. Using another key? Put its path in place of `~/.ssh/id_ed25519.pub`.
+Skip this page if your commits already show **Verified** on GitHub. The first block names the key to sign with. Change its path if you registered another key.
 
 ## Configure Git
 
@@ -10,8 +10,9 @@ Skip this page if your commits already show **Verified** on GitHub. Using anothe
 == Linux / macOS
 
 ```bash
+SSH_KEY="$HOME/.ssh/id_ed25519.pub"
 git config --global gpg.format ssh
-git config --global user.signingkey ~/.ssh/id_ed25519.pub
+git config --global user.signingkey "$SSH_KEY"
 git config --global commit.gpgsign true
 git config --global tag.gpgsign true
 ```
@@ -19,8 +20,9 @@ git config --global tag.gpgsign true
 == Windows
 
 ```powershell
+$SshKey = "$HOME\.ssh\id_ed25519.pub"
 git config --global gpg.format ssh
-git config --global user.signingkey "$HOME\.ssh\id_ed25519.pub"
+git config --global user.signingkey $SshKey
 git config --global commit.gpgsign true
 git config --global tag.gpgsign true
 ```
@@ -36,7 +38,7 @@ GitHub checks signatures against signing keys only. Register your key again, as 
 
 ```bash
 gh auth refresh -h github.com -s admin:ssh_signing_key
-gh ssh-key add ~/.ssh/id_ed25519.pub --type signing --title "$(hostname)"
+gh ssh-key add "$SSH_KEY" --type signing --title "$(hostname)"
 gh auth refresh -h github.com --remove-scopes admin:ssh_signing_key
 ```
 
@@ -44,7 +46,7 @@ gh auth refresh -h github.com --remove-scopes admin:ssh_signing_key
 
 ```powershell
 gh auth refresh -h github.com -s admin:ssh_signing_key
-gh ssh-key add "$HOME\.ssh\id_ed25519.pub" --type signing --title $env:COMPUTERNAME
+gh ssh-key add $SshKey --type signing --title $env:COMPUTERNAME
 gh auth refresh -h github.com --remove-scopes admin:ssh_signing_key
 ```
 
@@ -59,16 +61,19 @@ Trust your key locally, then sign a test commit:
 
 ```bash
 mkdir -p ~/.config/git
-echo "$(git config user.email) namespaces=\"git\" $(cat ~/.ssh/id_ed25519.pub)" >> ~/.config/git/allowed_signers
+echo "$(git config user.email) namespaces=\"git\" $(cat "$SSH_KEY")" >> ~/.config/git/allowed_signers
 git config --global gpg.ssh.allowedSignersFile ~/.config/git/allowed_signers
-cd "$(mktemp -d)" && git init -q && git commit -q --allow-empty -m "test: signing" && git log --show-signature -1
+cd "$(mktemp -d)"
+git init -q
+git commit -q --allow-empty -m "test: signing"
+git log --show-signature -1
 ```
 
 == Windows
 
 ```powershell
 New-Item -ItemType Directory -Force "$HOME\.config\git" | Out-Null
-Add-Content "$HOME\.config\git\allowed_signers" "$(git config user.email) namespaces=`"git`" $(Get-Content "$HOME\.ssh\id_ed25519.pub")"
+Add-Content "$HOME\.config\git\allowed_signers" "$(git config user.email) namespaces=`"git`" $(Get-Content $SshKey)"
 git config --global gpg.ssh.allowedSignersFile "$HOME\.config\git\allowed_signers"
 Set-Location (New-Item -ItemType Directory (Join-Path ([IO.Path]::GetTempPath()) (New-Guid)))
 git init -q; git commit -q --allow-empty -m "test: signing"; git log --show-signature -1

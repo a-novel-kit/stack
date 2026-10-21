@@ -1,6 +1,6 @@
 # Comment as the bot
 
-Automated notes, such as an agent's review replies, post as the organization's bot rather than as you. The bot can only comment, and its key stays in CI, behind a workflow in each organization's dispatcher repository:
+Automated notes, such as an agent's review replies, post as the organization's bot rather than as you. The bot can only comment. Its key stays in CI, behind a workflow in each organization's dispatcher repository:
 
 | Organization  | Dispatcher repository |
 | ------------- | --------------------- |

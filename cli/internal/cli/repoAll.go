@@ -121,14 +121,22 @@ func applyAll(cmd *cobra.Command, planned []plannedUpdate, limit int) error {
 	return batchError(batch)
 }
 
-// planAll plans every checkout at once and returns the eligible plans in
-// checkout order, with one note per checkout left out (or "").
+// planJobs bounds how many checkouts plan at once. Each one runs git and gh.
+const planJobs = 16
+
+// planAll plans up to planJobs checkouts at once and returns the eligible plans
+// in checkout order, with one note per checkout left out (or "").
 func planAll(checkouts []checkout, class string, excluded map[string]bool, preview bool) ([]plannedUpdate, []string) {
 	plans := make([]*plannedUpdate, len(checkouts))
 	notes := make([]string, len(checkouts))
+	slots := make(chan struct{}, planJobs)
 	var wg sync.WaitGroup
 	for i, c := range checkouts {
-		wg.Go(func() { plans[i], notes[i] = planCheckout(c, class, excluded, preview) })
+		wg.Go(func() {
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			plans[i], notes[i] = planCheckout(c, class, excluded, preview)
+		})
 	}
 	wg.Wait()
 

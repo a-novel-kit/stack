@@ -178,6 +178,9 @@ func writeBackup(volumeName, dest string) (err error) {
 	}
 
 	if err := compressTo(out, stdout); err != nil {
+		// The export still holds unread output and blocks on the full pipe, so
+		// it never exits on its own.
+		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 
 		return err

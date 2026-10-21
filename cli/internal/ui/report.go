@@ -11,13 +11,11 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/jobs"
 )
 
-// Report renders a finished batch under title ("TEST", "SYNC"): the full output
-// of every job show selects, so nothing is lost to a truncated view, and
-// coverage when the output carries it.
-//
-// The summary closes the report, so it is what the terminal shows when the
-// command returns. It repeats the job status lines when the sections above
-// pushed them out of view, then gives the headline and outcome counts.
+// Report renders a finished batch under title, such as "TEST" or "SYNC". It
+// prints the full output of each job that show selects, then the coverage when
+// the output carries any. The job status lines follow when either section
+// printed, so they stay in view. The headline and the outcome counts close the
+// report, so they are what the terminal shows when the command returns.
 func Report(title string, b Batch, show func(jobs.Result) bool) string {
 	w := termWidth()
 	return reportDetail(b, show, w) + reportSummary(title, b, w)

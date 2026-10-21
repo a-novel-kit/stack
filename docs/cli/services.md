@@ -1,6 +1,6 @@
 # Run services
 
-A service runs as **targets**, the programs in its `cmd/` directory: servers stay up, jobs such as `migrations` run once. Its **infrastructure** is what it depends on, such as its database. Name a target `<service>/<target>`:
+A service runs as **targets**, the programs in its `cmd/` directory. A server stays up, and a job such as `migrations` runs once. Its **infrastructure** is what it depends on, such as its database. Name a target `<service>/<target>`:
 
 ```bash
 SERVICE=service-json-keys
@@ -21,7 +21,7 @@ a-novel run topology --service="$SERVICE"   # what its targets depend on
 a-novel run start "$SERVICE/$TARGET"
 ```
 
-Dependencies start first: the database, then migrations, then the target. Targets run from source; to test the container image instead:
+Dependencies start first: the database, then migrations, then the target. Targets run from source. Run the container image instead with `--mode=container`:
 
 ```bash
 a-novel run start "$SERVICE/$TARGET" --mode=container

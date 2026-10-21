@@ -43,8 +43,8 @@ func (r *Runner) startGoExec(_ context.Context, t *discovery.Target, env, warnin
 		_, _ = fmt.Fprintln(logWriter.Stderr(), w)
 	}
 
-	// Register the instance in PENDING so concurrent Start callers see the
-	// slot taken before the exec.
+	// Register the instance in PENDING, so a start that checks after this
+	// sees the slot taken.
 	inst := r.register(t, anovelv1.Mode_MODE_GO_EXEC, cmd, cancel)
 	r.transition(id, anovelv1.Phase_PHASE_STARTING)
 	if err := cmd.Start(); err != nil {

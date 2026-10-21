@@ -11,28 +11,26 @@ import (
 // testBotRepo is one const so the repeated literal does not trip goconst.
 const testBotRepo = "service-authentication"
 
-func TestValidateBotCommentArgs(t *testing.T) {
+// TestPositiveInt pins the check on a comment number and a --reply-to id.
+func TestPositiveInt(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name, org, repo, number string
-		wantErr                 bool
+		name, input string
+		want        bool
 	}{
-		{"Success", orgAnovel, testBotRepo, "549", false},
-		{"Success/AnovelKit", orgAnovelKit, "golib", "1", false},
-		{"Error/UnknownOrg", "a-other", testBotRepo, "549", true},
-		{"Error/EmptyRepo", orgAnovel, "", "549", true},
-		{"Error/RepoCarriesOrgPrefix", orgAnovel, orgAnovel + "/" + testBotRepo, "549", true},
-		{"Error/NonNumericNumber", orgAnovel, testBotRepo, "abc", true},
-		{"Error/ZeroNumber", orgAnovel, testBotRepo, "0", true},
-		{"Error/NegativeNumber", orgAnovel, testBotRepo, "-3", true},
+		{"Success", "549", true},
+		{"Success/One", "1", true},
+		{"Error/NonNumeric", "abc", false},
+		{"Error/Zero", "0", false},
+		{"Error/Negative", "-3", false},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			if err := validateBotCommentArgs(testCase.org, testCase.repo, testCase.number); (err != nil) != testCase.wantErr {
-				t.Fatalf("validateBotCommentArgs(%q, %q, %q) = %v, wantErr %v", testCase.org, testCase.repo, testCase.number, err, testCase.wantErr)
+			if got := positiveInt(testCase.input); got != testCase.want {
+				t.Fatalf("positiveInt(%q) = %v, want %v", testCase.input, got, testCase.want)
 			}
 		})
 	}

@@ -177,12 +177,12 @@ func TestUncoveredGoSelectors(t *testing.T) {
 			want:    []string{".", "./cmd/rest"},
 		},
 		{
-			// pkg is not covered by pkg/go — the prefix must match whole segments,
-			// not a string prefix.
+			// A scoped path covers whole segments: pkg/go covers neither
+			// pkg/js nor pkg/gox.
 			name:    "Success/SiblingOfAScopedTreeStaysUncovered",
-			testPkg: [][]string{seg("pkg", "js"), seg("pkg", "go")},
+			testPkg: [][]string{seg("pkg", "js"), seg("pkg", "gox"), seg("pkg", "go")},
 			scoped:  [][]string{seg("pkg", "go")},
-			want:    []string{"./pkg/js"},
+			want:    []string{"./pkg/gox", "./pkg/js"},
 		},
 	}
 

@@ -43,8 +43,8 @@ type Store struct {
 	streams map[string]*targetStream // key: targetID = stack/service/target
 }
 
-// targetStream owns the file handle, the subscriber list, and the
-// buffered writer for one target. Created lazily on first OpenForWrite.
+// targetStream owns one target's log file, its encoder and its subscribers.
+// OpenForWrite creates it.
 type targetStream struct {
 	mu          sync.Mutex
 	current     *os.File
@@ -73,6 +73,8 @@ func (s *Store) OpenForWrite(targetID, stack, service, target string) (*Writer, 
 	if info, err := os.Stat(currentPath); err == nil && info.Size() > 0 {
 		stamp := info.ModTime().UTC().Format("2006-01-02T15-04-05Z")
 		archivePath := filepath.Join(dir, "run-"+stamp+".log")
+		// A failed rotation loses the previous run: the open below truncates
+		// current.log.
 		_ = os.Rename(currentPath, archivePath)
 		retention.Prune(dir, func(name string) bool { return strings.HasPrefix(name, "run-") }, maxArchivedRuns)
 	}
@@ -92,16 +94,15 @@ func (s *Store) OpenForWrite(targetID, stack, service, target string) (*Writer, 
 	return &Writer{ts: ts}, nil
 }
 
-// Subscribe adds a delivery channel for targetID and returns it with an
-// unsubscribe function the caller must defer. Skipping that call leaves the
-// channel in the stream's fanout list until the target terminates, a leak that
-// grows with the disconnect rate on long-running targets.
+// Subscribe adds a delivery channel for targetID. The caller must call the
+// returned unsubscribe, or the channel stays in the fanout until the target
+// terminates.
 //
-// The channel holds 32 lines; a subscriber that falls behind loses lines
-// silently, so the daemon never blocks the runner on a stuck client.
+// The channel holds 32 lines. A subscriber that falls behind loses lines, so a
+// stuck client never blocks the runner.
 //
-// It returns (nil, nil, false) when the target has no stream yet, leaving the
-// caller to poll again later or read an archived run instead.
+// It returns (nil, nil, false) when the target has no stream yet. The caller
+// then polls again later or reads an archived run.
 func (s *Store) Subscribe(targetID string) (<-chan Line, func(), bool) {
 	s.mu.RLock()
 	ts, ok := s.streams[targetID]
@@ -134,9 +135,8 @@ func (ts *targetStream) unsubscribe(ch chan Line) {
 	}
 }
 
-// CloseTarget ends the target's stream: it closes the file handle and every
-// subscriber channel, then drops the stream record. The runner calls it when an
-// instance reaches PHASE_TERMINATED.
+// CloseTarget ends the target's stream and drops its record, so a later
+// Subscribe reports no stream.
 func (s *Store) CloseTarget(targetID string) {
 	s.mu.Lock()
 	ts, ok := s.streams[targetID]

@@ -22,17 +22,13 @@ const (
 	modeExempt = "exempt"
 )
 
-// rulesetMaster is the name of the default-branch ruleset; bots bypass it with
-// mode "always" (they push to the default branch directly).
+// rulesetMaster is the name of the default-branch ruleset.
 const rulesetMaster = "master"
 
-// rulesetTags is the name of the release-tag ruleset. The release bot creates
-// the tag, so like master it bypasses with mode "always".
+// rulesetTags is the name of the release-tag ruleset.
 const rulesetTags = "tags"
 
-// rulesetReleaseLines is the name of the release/vX.Y branch ruleset. The
-// release bot creates a line and pushes its version-bump commits, so it also
-// bypasses with mode "always".
+// rulesetReleaseLines is the name of the release/vX.Y branch ruleset.
 const rulesetReleaseLines = "release-lines"
 
 // APIBypassActor is one bypass-actor entry in the GitHub rulesets API request body.
@@ -81,8 +77,9 @@ type Op struct {
 	RulesetName string `json:"ruleset,omitempty"`
 	// PruneRulesets marks the op that reconciles the whole ruleset set: apply
 	// deletes every live ruleset KeepRulesets does not name.
-	PruneRulesets bool     `json:"prune_rulesets,omitempty"`
-	KeepRulesets  []string `json:"keep_rulesets,omitempty"`
+	PruneRulesets bool `json:"prune_rulesets,omitempty"`
+	// KeepRulesets names the rulesets the prune keeps.
+	KeepRulesets []string `json:"keep_rulesets,omitempty"`
 	// Secret names the scoped org secret the op grants (PUT) or revokes
 	// (DELETE) the repo's access to. Apply appends the repo's numeric ID to
 	// Path.
@@ -243,11 +240,10 @@ func securityOps(c *ClassPreset, repoPath string) []Op {
 	workflowPermissions := map[string]any{"default_workflow_permissions": "read", "can_approve_pull_request_reviews": false}
 	forkApproval := map[string]any{"approval_policy": "all_external_contributors"}
 	return []Op{
-		// Code scanning stays off, asserted on every update rather than assumed.
-		// Static analysis is the lint-semgrep and scan-secrets jobs in
-		// main.yaml, which report as ordinary required checks, and an org-level
-		// "enable for all repositories" toggle would otherwise switch scanning
-		// back on here unnoticed. The call is idempotent.
+		// Code scanning stays off, asserted on every update. The lint-semgrep
+		// and scan-secrets jobs of main.yaml do the static analysis, as
+		// required checks. The assertion undoes an org-level "enable for all
+		// repositories" toggle.
 		{Method: http.MethodPatch, Path: repoPath + "/code-scanning/default-setup", Body: map[string]any{"state": "not-configured"}},
 		{Method: http.MethodPatch, Path: repoPath + "/code-quality/setup", Body: map[string]any{"state": codeQuality}},
 		// A workflow token is read-only unless its job asks for more, and it
@@ -279,12 +275,11 @@ func environmentOps(t *RepoTarget, repoPath string) []Op {
 		ops = append(ops, environmentWrites(repoPath, "release", policies, "core", "owners-"+string(t.Class.Class))...)
 	}
 	// The privileged keys are secrets of the governance environment alone, so
-	// a branch's copy of a workflow cannot read them. It holds the ones the
-	// repo's workflows name.
+	// a branch's copy of a workflow cannot read them. It holds the privileged
+	// secrets the repo's workflows name.
 	governance := t.OrgProfile.Governance
-	governance.Secrets = slices.DeleteFunc(slices.Clone(t.Discovered.Secrets), func(name string) bool {
-		return !slices.Contains(t.OrgProfile.Governance.Secrets, name)
-	})
+	privileged := func(name string) bool { return slices.Contains(t.OrgProfile.Governance.Secrets, name) }
+	governance.Secrets = slices.DeleteFunc(slices.Clone(t.Discovered.Secrets), func(name string) bool { return !privileged(name) })
 	if len(governance.Secrets) > 0 {
 		ops = append(ops, environmentWrites(repoPath, "governance", policies)...)
 		ops = append(ops, Op{Path: repoPath + "/environments/governance/secrets", Governance: &governance})
@@ -345,18 +340,23 @@ func (w *workflowFiles) drop(names ...string) {
 // ones it does not.
 func workflowOps(c *ClassPreset, repoPath string) ([]Op, error) {
 	w := &workflowFiles{dir: repoPath + "/contents/.github/workflows/"}
-	// Merge governance ships wherever the master ruleset gates merges;
-	// recover-prs re-arms PRs the queue drops on a timeout, so it follows the
-	// queue, and check-dependencies and review-gate post checks that ruleset
-	// requires. pr-relay carries review and merge-queue events to the gates, which
-	// run from the default branch.
-	// feature-env removes the with-feature-env label a push made stale. Release
-	// callers are narrower: a class without the tags ruleset removes them, so
-	// changing a repo's class leaves no release mechanics behind.
+	// The master ruleset gates merges, and these workflows run that gate.
 	if c.Rulesets.Master {
-		w.put("merge-gate.yaml", "epic-freeze.yaml", "approve-pr.yaml", "derive-status.yaml", "epic-rollback.yaml",
-			"recover-prs.yaml", "check-dependencies.yaml", "feature-env.yaml", "review-gate.yaml", "pr-relay.yaml")
+		w.put(
+			"merge-gate.yaml",
+			"epic-freeze.yaml",
+			"approve-pr.yaml",
+			"derive-status.yaml",
+			"epic-rollback.yaml",
+			"recover-prs.yaml",        // re-arms pull requests the merge queue drops on a timeout
+			"check-dependencies.yaml", // posts a check the master ruleset requires
+			"feature-env.yaml",        // removes the with-feature-env label a push made stale
+			"review-gate.yaml",        // posts a check the master ruleset requires
+			"pr-relay.yaml",           // carries review and merge-queue events to the gates on the default branch
+		)
 	}
+	// A class without the tags ruleset deletes the release callers, so a class
+	// change leaves no release mechanics behind.
 	if c.Rulesets.Master && c.Rulesets.Tags {
 		w.put("release-train.yaml", "hotfix.yaml")
 	} else {
@@ -428,10 +428,9 @@ func rulesetOps(t *RepoTarget, repoPath string) ([]Op, error) {
 		keep = append(keep, w.name)
 	}
 
-	// A repo's ruleset set is derived. Everything above follows from the class
-	// preset, the org profile and code-driven discovery, so any ruleset this
-	// plan does not name is drift, dropped from the templates or added by hand
-	// in the UI, and apply deletes it.
+	// A repo's ruleset set is derived from the class preset, the org profile
+	// and discovery. Any ruleset this plan does not name is drift, dropped from
+	// the templates or added by hand in the UI, and apply deletes it.
 	//
 	// Pruning runs last, once every desired ruleset has been written, so a repo
 	// is never momentarily left ungoverned.
@@ -550,14 +549,13 @@ func statusCheckParams(params *RSCParams, checks []CheckRef) map[string]any {
 }
 
 // resolveBypass maps one generic bypass entry to concrete actors. Admins
-// always bypass with mode "always"; bots bypass with "always" on master, tags
-// and release lines, where they write directly (the bump commit and the release
-// tag), and "exempt" elsewhere. Dependabot is GitHub's own App, so its ID is the same in
-// every org. An entry that resolves to nothing is an error, so a typo in a
-// ruleset template is caught before the bypass list ships.
+// bypass in mode "always". Bots bypass in mode "always" on master, tags and
+// release lines, where they write directly, and in mode "exempt" elsewhere.
+// Dependabot is GitHub's own App, so its ID is the same in every org. An entry
+// that resolves to no actor is an error, which catches a typo in a template.
 func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor, error) {
 	botMode := modeExempt
-	if rulesetName == rulesetMaster || rulesetName == rulesetTags || rulesetName == rulesetReleaseLines {
+	if slices.Contains([]string{rulesetMaster, rulesetTags, rulesetReleaseLines}, rulesetName) {
 		botMode = modeAlways
 	}
 	switch entry {
@@ -570,10 +568,9 @@ func resolveBypass(entry, rulesetName string, org *OrgProfile) ([]APIBypassActor
 	case "dependabot":
 		id := dependabotAppID
 		return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}, nil
-	default:
-		if id, ok := org.Bots[entry]; ok {
-			return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}, nil
-		}
+	}
+	if id, ok := org.Bots[entry]; ok {
+		return []APIBypassActor{{ActorID: &id, ActorType: "Integration", BypassMode: botMode}}, nil
 	}
 	return nil, fmt.Errorf("bypass entry %q in ruleset %q resolves to no actor "+
 		"(expected admins, dependabot or an org bot key from orgs/<org>.yaml)", entry, rulesetName)
@@ -644,7 +641,8 @@ func (p *Plan) Render(w io.Writer) error {
 			_, _ = fmt.Fprint(w, op.Content)
 			continue
 		}
-		// Deletions and a prune carry no request body, so their titles stand alone.
+		// An op without a request body, such as a deletion or the prune, prints
+		// its title alone.
 		if op.PruneRulesets || op.Body == nil {
 			continue
 		}

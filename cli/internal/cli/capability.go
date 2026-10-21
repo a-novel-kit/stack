@@ -238,15 +238,17 @@ func parseKinds(v string) ([]detect.Kind, error) {
 }
 
 // withCoverage rewrites every test target for coverage mode. A Go target keeps
-// its own package selectors and only gains -cover, so every test package runs;
-// generated and test-support trees are dropped from the reported mean, not from
-// the run (see ui.CoverageView). A pnpm target gets `-- --coverage`, and
-// vitest's v8 text reporter prints a table the report extracts verbatim.
+// its package selectors and gains -cover, so every test package runs. The
+// report leaves generated and test-support trees out (see ui.CoverageView). A
+// pnpm target gains `-- --coverage`, whose vitest table the report shows
+// verbatim.
 func withCoverage(targets []detect.Target) []detect.Target {
 	for i := range targets {
 		t := &targets[i]
+		if len(t.Args) == 0 {
+			continue
+		}
 		switch {
-		case len(t.Args) == 0:
 		case t.Kind == detect.KindGo && t.Args[0] == testCapability.name:
 			t.Args = append([]string{testCapability.name, "-cover"}, t.Args[1:]...)
 			t.Detail = "go test -cover " + strings.Join(t.Args[2:], " ")

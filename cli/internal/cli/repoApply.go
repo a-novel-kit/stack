@@ -39,19 +39,14 @@ func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
 		repoID:   sync.OnceValues(func() (string, error) { return githubRepoID(t.Org, t.Repo) }),
 	}
 	for _, op := range plan.Ops {
-		if op.RulesetName != "" || op.PruneRulesets {
-			run.flushStaged()
-			if run.managedFilesFailed {
-				run.note(op.Title(), "skipped because managed-file sync failed", errSkipped)
-				continue
-			}
-		}
-		if isManagedFile(op) {
+		switch {
+		case isManagedFile(op):
 			run.stage(op)
-			continue
+		case op.RulesetName != "" || op.PruneRulesets:
+			run.applyRulesetOp(op)
+		default:
+			run.note(run.apply(op))
 		}
-		label, detail, err := run.apply(op)
-		run.note(label, detail, err)
 	}
 
 	// Plans without rulesets still flush their managed files at the end.
@@ -150,6 +145,17 @@ func (r *planRun) note(label, detail string, err error) {
 	_, _ = fmt.Fprintln(r.out, line)
 }
 
+// applyRulesetOp lands the staged managed files, then applies a ruleset op
+// unless they failed. A ruleset never requires a check whose workflow is absent.
+func (r *planRun) applyRulesetOp(op repocfg.Op) {
+	r.flushStaged()
+	if r.managedFilesFailed {
+		r.note(op.Title(), "skipped because managed-file sync failed", errSkipped)
+		return
+	}
+	r.note(r.apply(op))
+}
+
 // stage queues the changes a managed-file op needs for the next sync commit.
 func (r *planRun) stage(op repocfg.Op) {
 	stageOp := stageContents
@@ -157,14 +163,16 @@ func (r *planRun) stage(op repocfg.Op) {
 		stageOp = stageContentDeletion
 	}
 	changes, unchanged, err := stageOp(op)
-	switch {
-	case err != nil:
+	if err != nil {
 		r.managedFilesFailed = true
 		r.note(shortPath(op.Path), "", err)
 		return
-	case unchanged:
+	}
+	if unchanged {
 		r.note(shortPath(op.Path), opUnchanged, nil)
 	}
+	// An unchanged .github/CODEOWNERS can still stage the stray root copy's
+	// deletion.
 	r.staged = append(r.staged, changes...)
 }
 
@@ -240,10 +248,10 @@ func applyEnvironment(org string, op repocfg.Op) error {
 }
 
 // applyEnvSecrets reconciles an environment's secrets with the org's Bitwarden
-// project. A named secret is written when the environment lacks it or Bitwarden
-// holds a newer revision, and a secret no workflow names is deleted. Without an
-// access token the named secrets stay as they are, and one the environment
-// lacks fails the op. Values travel on stdin only.
+// project. A live secret the op does not name is deleted first. A named secret
+// is then written when the environment lacks it or Bitwarden holds a newer
+// revision. Without an access token, named secrets stay as they are, and one
+// the environment lacks fails the op. Values travel on stdin only.
 func applyEnvSecrets(org, repo string, op repocfg.Op) (string, error) {
 	live, err := envSecretDates(op.Path)
 	if err != nil {
@@ -290,34 +298,38 @@ func envSecretDates(secretsPath string) (map[string]time.Time, error) {
 	}
 	live := map[string]time.Time{}
 	for name, at := range tabPairs(out) {
+		// An unreadable date parses as the zero time, so the secret is rewritten.
 		live[name], _ = time.Parse(time.RFC3339, at)
 	}
 	return live, nil
 }
 
-// checkSecretSources fails before the first write unless every secret
+// checkSecretSources fails before any secret is set unless every secret
 // governance names has a value: in Bitwarden when source holds the project's
 // secrets, or already in the environment when no access token is stored.
 func checkSecretSources(governance *repocfg.Governance, live map[string]time.Time, source map[string]bwsSecret) error {
+	if source == nil {
+		missing := slices.DeleteFunc(slices.Clone(governance.Secrets), func(name string) bool {
+			_, found := live[name]
+			return found
+		})
+		if len(missing) > 0 {
+			return fmt.Errorf("%s missing; store a Bitwarden access token with `a-novel secrets set %s`",
+				strings.Join(missing, ", "), bwsTokenID)
+		}
+		return nil
+	}
+
 	// A token whose machine account cannot read the project lists no secret at all.
-	if source != nil && len(source) == 0 {
+	if len(source) == 0 {
 		return fmt.Errorf("the Bitwarden access token reads no secret in project %s; store the token of a machine account "+
 			"that reads it with `a-novel secrets set %s`", governance.BWSProject, bwsTokenID)
 	}
-	var missing []string
 	for _, name := range governance.Secrets {
-		_, found := live[name]
-		secret, ok := source[name]
-		switch {
-		case source == nil && !found:
-			missing = append(missing, name)
-		case source != nil && (!ok || secret.Value == ""):
+		// A missing name reads as the zero bwsSecret, whose Value is empty.
+		if source[name].Value == "" {
 			return fmt.Errorf("the Bitwarden project %s holds no %s", governance.BWSProject, name)
 		}
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("%s missing; store a Bitwarden access token with `a-novel secrets set %s`",
-			strings.Join(missing, ", "), bwsTokenID)
 	}
 	return nil
 }
@@ -390,13 +402,7 @@ const codeownersName = "CODEOWNERS"
 // a-novel-kit/workflows actions, deployed pins newer than the template's
 // survive (see preserveNewerPins).
 func stageContents(op repocfg.Op) ([]contentChange, bool, error) {
-	var changes []contentChange
-	if strings.HasSuffix(op.Path, "/contents/.github/"+codeownersName) {
-		rootPath := strings.Replace(op.Path, "/contents/.github/"+codeownersName, "/contents/"+codeownersName, 1)
-		if rootSHA, shaErr := contentSHA(rootPath); shaErr == nil && rootSHA != "" {
-			changes = append(changes, contentChange{path: codeownersName, outcome: opDeleted})
-		}
-	}
+	changes := strayRootCodeowners(op)
 
 	// Pin-bearing files are compared against the deployed text, at the cost of
 	// one extra read, so a newer deployed pin survives; everything else takes
@@ -423,14 +429,28 @@ func stageContents(op repocfg.Op) ([]contentChange, bool, error) {
 	return append(changes, contentChange{path: shortPath(op.Path), content: desired, outcome: outcome}), false, nil
 }
 
+// strayRootCodeowners stages the deletion of a root CODEOWNERS when op writes
+// the managed .github/ copy. A failed read leaves the stray copy for the next
+// reconcile.
+func strayRootCodeowners(op repocfg.Op) []contentChange {
+	base, ok := strings.CutSuffix(op.Path, "/contents/.github/"+codeownersName)
+	if !ok {
+		return nil
+	}
+	if sha, err := contentSHA(base + "/contents/" + codeownersName); err != nil || sha == "" {
+		return nil
+	}
+	return []contentChange{{path: codeownersName, outcome: opDeleted}}
+}
+
 // stageContentDeletion stages the deletion of a managed file. unchanged
 // reports that the file is already absent.
 func stageContentDeletion(op repocfg.Op) ([]contentChange, bool, error) {
 	sha, err := contentSHA(op.Path)
-	switch {
-	case err != nil:
+	if err != nil {
 		return nil, false, err
-	case sha == "":
+	}
+	if sha == "" {
 		return nil, true, nil
 	}
 	return []contentChange{{path: shortPath(op.Path), outcome: opDeleted}}, false, nil
@@ -445,25 +465,7 @@ const syncCommitQuery = `mutation($input: CreateCommitOnBranchInput!) { createCo
 // commitSync commits the staged changes to the branch in one
 // createCommitOnBranch mutation and returns the short commit id.
 func commitSync(org, repo, branch string, changes []contentChange) (string, error) {
-	headline, body := syncCommitMessage(changes)
-	// The mutation accepts [], so both slices start empty.
-	additions, deletions := []map[string]string{}, []map[string]string{}
-	for _, change := range changes {
-		if change.outcome == opDeleted {
-			deletions = append(deletions, map[string]string{"path": change.path})
-			continue
-		}
-		addition := map[string]string{
-			"path":     change.path,
-			"contents": base64.StdEncoding.EncodeToString([]byte(change.content)),
-		}
-		additions = append(additions, addition)
-	}
-	input := map[string]any{
-		"branch":      map[string]string{"repositoryNameWithOwner": org + "/" + repo, "branchName": branch},
-		"message":     map[string]string{"headline": headline, "body": body},
-		"fileChanges": map[string]any{"additions": additions, "deletions": deletions},
-	}
+	input := syncCommitInput(org, repo, branch, changes)
 
 	// One retry when the branch tip moves between the oid read and the commit
 	// (STALE_DATA). repocfg is the only writer of the staged files, so a moved
@@ -500,14 +502,35 @@ func commitSync(org, repo, branch string, changes []contentChange) (string, erro
 	}
 }
 
-// bootstrapEmpty seeds a repository that has no commits yet. Both
-// createCommitOnBranch and the Git Data API (blobs/trees/commits) build on an
-// existing object store and answer 409 on an empty repo. The Contents API is
-// the one endpoint that creates a repo's first commit and its default branch,
-// so the first managed file lands through it, as a GitHub-verified commit that
-// satisfies required_signatures. The remaining files then take the normal
-// createCommitOnBranch path. An empty repo has nothing to delete, so deletions
-// are dropped.
+// syncCommitInput is the createCommitOnBranch input that lands changes on the
+// branch. commitSync adds expectedHeadOid on each attempt.
+func syncCommitInput(org, repo, branch string, changes []contentChange) map[string]any {
+	headline, body := syncCommitMessage(changes)
+	// The mutation accepts [], so both slices start empty.
+	additions, deletions := []map[string]string{}, []map[string]string{}
+	for _, change := range changes {
+		if change.outcome == opDeleted {
+			deletions = append(deletions, map[string]string{"path": change.path})
+			continue
+		}
+		additions = append(additions, map[string]string{
+			"path":     change.path,
+			"contents": base64.StdEncoding.EncodeToString([]byte(change.content)),
+		})
+	}
+	return map[string]any{
+		"branch":      map[string]string{"repositoryNameWithOwner": org + "/" + repo, "branchName": branch},
+		"message":     map[string]string{"headline": headline, "body": body},
+		"fileChanges": map[string]any{"additions": additions, "deletions": deletions},
+	}
+}
+
+// bootstrapEmpty seeds a repository that has no commits yet.
+// createCommitOnBranch and the Git Data API answer 409 on an empty repository.
+// The Contents API creates the first commit and the default branch, so the
+// first added file lands through it, as a GitHub-verified commit. The other
+// files then land in one sync commit. An empty repository holds no file to
+// delete, so deletions drop.
 func bootstrapEmpty(org, repo, branch string, changes []contentChange) (string, error) {
 	adds := slices.DeleteFunc(slices.Clone(changes), func(change contentChange) bool { return change.outcome == opDeleted })
 	if len(adds) == 0 {
@@ -524,10 +547,8 @@ func bootstrapEmpty(org, repo, branch string, changes []contentChange) (string, 
 	return commitSync(org, repo, branch, adds[1:])
 }
 
-// putContent creates or updates a single file through the Contents API and
-// returns the short id of the commit it makes. On an empty repository this is
-// the call that lays down the initial commit and the default branch; the
-// resulting commit is GitHub-verified.
+// putContent writes one file through the Contents API and returns the short id
+// of the commit it makes.
 func putContent(org, repo, branch string, change contentChange) (string, error) {
 	headline, body := syncCommitMessage([]contentChange{change})
 	request := map[string]string{
@@ -578,10 +599,8 @@ func branchHeadOid(org, repo, branch string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// applyCodeScanning turns CodeQL default setup off. Static analysis is the
-// lint-semgrep and scan-secrets jobs, which report as ordinary required checks.
-// Leaving default setup reachable would let an org-level toggle switch scanning
-// back on unnoticed. Reasserting its current state is idempotent.
+// applyCodeScanning asserts the code-scanning default setup state the plan asks
+// for. Reasserting the current state changes nothing.
 func applyCodeScanning(op repocfg.Op) (string, error) {
 	if err := ghJSON(http.MethodPatch, op.Path, op.Body); err != nil {
 		return "", err
@@ -734,13 +753,13 @@ func applyDeploymentPolicies(op repocfg.Op) (string, error) {
 	return fmt.Sprintf("%d created, %d deleted", created, deleted), nil
 }
 
-// applyTeams reconciles a repo's tier-team grants. A missing tier or area team
-// is created, the area team nested under its tier; each area team is granted
-// its role; and a grant any other tier team holds here is removed. Teams
-// outside the tiers are left untouched: core reaches every repo through its org
-// role, which no repository grant can remove.
+// applyTeams reconciles a repo's tier-team grants. It creates a missing tier
+// or area team, the area team under its tier, and grants each area team its
+// role. It then removes the grant of any other team in a tier's namespace.
+// Teams outside the tiers keep their grants. Core reaches every repo through
+// its org role, which no repository grant can remove.
 func applyTeams(org, repo string, op repocfg.Op) (string, error) {
-	out, err := gh("api", "--paginate", "orgs/"+org+"/teams", "--jq", `.[] | "\(.slug)\t\(.id)"`)
+	out, err := gh("api", "--paginate", "orgs/"+org+"/teams?per_page=100", "--jq", `.[] | "\(.slug)\t\(.id)"`)
 	if err != nil {
 		return "", err
 	}
@@ -764,20 +783,9 @@ func applyTeams(org, repo string, op repocfg.Op) (string, error) {
 		tiers = append(tiers, g.Parent)
 	}
 
-	live, err := gh("api", "--paginate", fmt.Sprintf("repos/%s/%s/teams", org, repo), "--jq", ".[].slug")
+	removed, err := removeStrayTierGrants(org, repo, tiers, granted)
 	if err != nil {
 		return "", err
-	}
-	removed := 0
-	for _, slug := range strings.Fields(live) {
-		tier, _, _ := strings.Cut(slug, "-")
-		if !slices.Contains(tiers, tier) || slices.Contains(granted, slug) {
-			continue
-		}
-		if _, err := gh("api", "-X", http.MethodDelete, fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s", org, slug, org, repo)); err != nil {
-			return "", fmt.Errorf("remove team %q: %w", slug, err)
-		}
-		removed++
 	}
 	return fmt.Sprintf("%d granted, %d created, %d removed", len(granted), teams.created, removed), nil
 }
@@ -885,43 +893,48 @@ func tabPairs(out string) map[string]string {
 	return pairs
 }
 
-// pruneRulesets reconciles the repo's ruleset set: every live ruleset the plan
-// did not name is deleted.
-//
-// This is what keeps repo config derived. The desired set follows entirely
-// from the class preset, the org profile and code-driven discovery, so any
-// other ruleset on the repo is drift, dropped from the templates or added by
-// hand in the UI, and a reconcile removes it.
+// removeStrayTierGrants removes the grant of every team in a tier's namespace
+// that granted does not name, and returns how many it removed.
+func removeStrayTierGrants(org, repo string, tiers, granted []string) (int, error) {
+	live, err := gh("api", "--paginate", fmt.Sprintf("repos/%s/%s/teams", org, repo), "--jq", ".[].slug")
+	if err != nil {
+		return 0, err
+	}
+	removed := 0
+	for _, slug := range strings.Fields(live) {
+		tier, _, _ := strings.Cut(slug, "-")
+		if !slices.Contains(tiers, tier) || slices.Contains(granted, slug) {
+			continue
+		}
+		if _, err := gh("api", "-X", http.MethodDelete, fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s", org, slug, org, repo)); err != nil {
+			return 0, fmt.Errorf("remove team %q: %w", slug, err)
+		}
+		removed++
+	}
+	return removed, nil
+}
+
+// pruneRulesets deletes every live ruleset the op's keep list does not name.
 func pruneRulesets(org, repo string, rulesets func() (map[string]string, error), op repocfg.Op) (string, error) {
 	live, err := rulesets()
 	if err != nil {
 		return "", err
 	}
-	dropped := make([]string, 0, len(live))
-	for name, id := range live {
-		if slices.Contains(op.KeepRulesets, name) {
-			continue
-		}
-		if _, err := gh("api", "-X", "DELETE", fmt.Sprintf("repos/%s/%s/rulesets/%s", org, repo, id)); err != nil {
+	drop := rulesetsToDrop(live, op.KeepRulesets)
+	for _, name := range drop {
+		if _, err := gh("api", "-X", "DELETE", fmt.Sprintf("repos/%s/%s/rulesets/%s", org, repo, live[name])); err != nil {
 			return "", fmt.Errorf("delete ruleset %q: %w", name, err)
 		}
-		dropped = append(dropped, name)
 	}
-	if len(dropped) == 0 {
+	if len(drop) == 0 {
 		return opUnchanged, nil
 	}
-	slices.Sort(dropped)
-	return opDeleted + " " + strings.Join(dropped, ", "), nil
+	return opDeleted + " " + strings.Join(drop, ", "), nil
 }
 
-// pruneImpact names the rulesets a plan's prune op would delete.
-//
-// The plan is computed offline, so the op itself can only state what survives,
-// and "keep only: master, require-approval, tags" reads the same whether it
-// removes nothing or strips a repo of every protection it has. A preview of
-// the one destructive operation has to name its casualties, so this resolves
-// them live. A read failure is reported as UNRESOLVED, because an operator who
-// sees "none" will confirm without looking.
+// pruneImpact names the rulesets a plan's prune op would delete, read live.
+// The prune op lists only the rulesets that survive, so a dry run prints this
+// line to show the deletions. A failed read prints UNRESOLVED, never "none".
 func pruneImpact(t *repocfg.RepoTarget, plan *repocfg.Plan) string {
 	i := slices.IndexFunc(plan.Ops, func(op repocfg.Op) bool { return op.PruneRulesets })
 	if i < 0 {
@@ -931,23 +944,24 @@ func pruneImpact(t *repocfg.RepoTarget, plan *repocfg.Plan) string {
 	if err != nil {
 		return "# rulesets to delete: UNRESOLVED — " + err.Error()
 	}
-	var drop []string
-	for name := range live {
-		if !slices.Contains(plan.Ops[i].KeepRulesets, name) {
-			drop = append(drop, name)
-		}
-	}
+	drop := rulesetsToDrop(live, plan.Ops[i].KeepRulesets)
 	if len(drop) == 0 {
 		return "# rulesets to delete: none"
 	}
-	slices.Sort(drop)
 	return "# rulesets to DELETE: " + strings.Join(drop, ", ")
+}
+
+// rulesetsToDrop lists, sorted, the live rulesets keep does not name.
+func rulesetsToDrop(live map[string]string, keep []string) []string {
+	return slices.DeleteFunc(slices.Sorted(maps.Keys(live)), func(name string) bool {
+		return slices.Contains(keep, name)
+	})
 }
 
 // keyDescription is the "description" field of a GitHub label.
 const keyDescription = "description"
 
-// outcome labels for staged managed-file changes.
+// Outcome details an applied operation reports on its line.
 const (
 	opCreated   = "created"
 	opUpdated   = "updated"

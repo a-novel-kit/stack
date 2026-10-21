@@ -90,13 +90,15 @@ func (p picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return p, nil
 }
 
-// toggle flips the targets matching in: it clears them when every one is
-// selected and selects them all otherwise, which stays predictable under a
-// mixed state.
+// toggle flips the targets matching in as one group: it clears them when all
+// are selected, and selects them all otherwise.
 func (p *picker) toggle(in func(detect.Target) bool) {
 	all := true
 	for i, t := range p.targets {
-		all = all && (!in(t) || p.selected[i])
+		if in(t) && !p.selected[i] {
+			all = false
+			break
+		}
 	}
 	for i, t := range p.targets {
 		if in(t) {

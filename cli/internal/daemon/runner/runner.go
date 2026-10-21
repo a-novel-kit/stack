@@ -53,8 +53,7 @@ func (i *Instance) Live() bool {
 // fault rather than a refused precondition.
 var ErrEnv = errors.New("env build")
 
-// Runner supervises every spawned target across every stack. A single RWMutex
-// guards the instance map, making per-target state last-write-wins.
+// Runner supervises every spawned target across every stack.
 type Runner struct {
 	mu        sync.RWMutex
 	instances map[string]*Instance // keyed by Instance.ID
@@ -72,9 +71,7 @@ type Runner struct {
 	// stderr through it, and streams `podman logs` of its containers into it.
 	logs *logs.Store
 
-	// sessMu guards infraSessions. Separate from mu so the (sometimes
-	// long) `compose up` invocations don't block per-instance state
-	// reads in the rest of the package.
+	// sessMu guards infraSessions.
 	sessMu        sync.RWMutex
 	infraSessions map[string]*infraSession // keyed by sessionKey(stack, service)
 
@@ -84,17 +81,12 @@ type Runner struct {
 	subsMu sync.RWMutex
 	subs   []*eventSub
 
-	// infraStateCache memoizes InfraStatesOf per stack, sparing every
-	// ListServices RPC podman's ~1s cold-start scan, which otherwise makes the
-	// TUI's 2-second poll feel laggy and back-to-back CLI `ps` calls slow. Any
-	// RPC that mutates infra state calls InvalidateInfraStateCache, so a
-	// user-initiated change surfaces at once.
+	// infraStateCache holds the latest InfraStatesOf scan per stack. Every
+	// infra-mutating RPC invalidates it.
 	infraStateMu    sync.Mutex
 	infraStateCache map[string]infraStateCacheEntry // keyed by stack
-	// infraStateGen bumps on every InvalidateInfraStateCache call.
-	// InfraStatesOf snapshots it before its long podman scan and writes the
-	// cache only when the generation still matches, so a scan older than an
-	// invalidation cannot resurrect just-killed state.
+	// infraStateGen counts invalidations. A scan caches its result only when
+	// no invalidation happened while it ran.
 	infraStateGen uint64
 }
 
@@ -104,10 +96,9 @@ type infraStateCacheEntry struct {
 	states map[string]InfraState
 }
 
-// infraStateCacheTTL is the freshness window for the batched podman scan. At
-// 2.5s the TUI's 2-second poll hits cache every other iteration while never
-// serving data older than roughly one poll, and a CLI caller pays the cold
-// ~1s scan only on its first call.
+// infraStateCacheTTL is how long a scan stays fresh. A podman call costs about
+// 1s on rootless WSL2, and the TUI polls every 2s, so the cache answers every
+// other poll and never serves data older than about one poll.
 const infraStateCacheTTL = 2500 * time.Millisecond
 
 // New returns an empty Runner wired to the discovery snapshot it resolves

@@ -45,19 +45,16 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	// Discover every service in every registered stack before serving.
-	// Per-service classification errors surface through Status and the startup
-	// logs, and a non-default stack whose path has vanished is skipped, so a
-	// swept scratch checkout cannot keep the daemon down. Only an unreadable
-	// default stack is fatal. The stacks discovery keeps are the ones the
-	// daemon manages and reports.
+	// Discover every service of every registered stack before serving. A
+	// non-default stack whose path is gone is skipped, so a swept scratch
+	// checkout cannot keep the daemon down. Only an unreadable default stack is
+	// fatal. The stacks discovery keeps are the ones the daemon manages.
 	disc, err := discovery.DiscoverStacks(registered)
 	if err != nil {
 		return fmt.Errorf("discover stacks: %w", err)
 	}
-	// Surface per-service discovery errors at daemon start. The daemon keeps
-	// running: well-formed services still work, and a broken one refuses with
-	// this same error.
+	// Print each non-fatal discovery problem to the daemon log. A service or
+	// target that failed discovery is left out, and the rest work.
 	for _, st := range disc {
 		for _, e := range st.Errors {
 			fmt.Fprintf(os.Stderr, "discovery: stack %s: %v\n", st.Name, e)
@@ -171,8 +168,7 @@ func serve(ctx context.Context, ln net.Listener, srv *server.Server, socketPath 
 	case <-ctx.Done():
 	}
 
-	// Graceful shutdown: 10s for in-flight RPCs to complete. Streaming RPCs
-	// observe ctx cancellation and exit.
+	// Graceful shutdown waits up to 10s for open RPCs, streams included.
 	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	shutErr := httpServer.Shutdown(shutCtx)
