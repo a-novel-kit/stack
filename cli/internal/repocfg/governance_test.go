@@ -94,7 +94,7 @@ func TestDependabotGovernance(t *testing.T) {
 	}
 	job := workflow.Jobs["auto-approve"]
 	// The engine reads the release age, and each first-party version's release proof, with this token.
-	want := map[string]string{"statuses": "read", "attestations": "read", "packages": "read"}
+	want := map[string]string{"statuses": "read", "contents": "read", "attestations": "read", "packages": "read"}
 	if !maps.Equal(job.Permissions, want) {
 		t.Errorf("auto-approve permissions = %v, want %v", job.Permissions, want)
 	}
