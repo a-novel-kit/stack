@@ -120,7 +120,12 @@ runs:
   released action to whatever sits on `master`, so a release could not be internally consistent.
 - Mint the narrowest App token the step needs: `actions/create-github-app-token` takes
   `permission-*` inputs (`permission-organization-projects: write`), which bounds a leak of that
-  token to the one operation.
+  token to the one operation. When reads span the organization but a write lands in one repository,
+  mint the write as its own token with `repositories:`, as `merge-gate` does for its check.
+- `lint-workflows` audits every manifest with zizmor. Fix a finding, or record an exception as
+  `# zizmor: ignore[<audit>] <reason>` on the line the finding points to, such as the `owner:` line
+  of an org-wide token. A `run: |` line takes the comment for its whole block. The config's
+  `ignore` list matches file names, and every manifest is called `action.yaml`.
 - Update the README catalog in the same change whenever a `name` or `description` moves.
 - Non-trivial bash in an action belongs under `tests/`. The suites there extract the functions
   verbatim out of the manifest and run them against stubbed network leaves, so the shipped code is
@@ -184,7 +189,8 @@ so a moved upstream tag would run new code there on the next release.
   the commit and the version together three days after a release, and holds a digest update, the
   same version on another commit, for review: that is a moved tag.
 - The workflows repo's `pnpm lint` rejects any other form in an action manifest. zizmor's
-  `unpinned-uses` audit rejects it in workflows with `"a-novel-kit/*": ref-pin` and `"*": hash-pin`.
+  `unpinned-uses` audit rejects it in workflows and composite actions, with `"a-novel-kit/*": ref-pin`
+  and `"*": hash-pin`.
 - The org setting `sha_pinning_required` stays off: it also checks the nested
   `a-novel-kit/workflows` references, which stay on tags.
 
