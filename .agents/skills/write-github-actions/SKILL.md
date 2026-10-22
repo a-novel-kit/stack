@@ -472,6 +472,12 @@ reason, plus regular expressions for `repo`, `job` or `message`. The run's step 
 each rule hid; delete a rule that keeps matching nothing. A test that runs code printing
 `::warning::` leaves a real annotation on its job, as the workflows repo's `test-actions` does.
 
+Security-relevant audit-log entries reach the private security channel within half an hour:
+`notify-audit-run` polls each org's log every 30 minutes, and each `.github` repo's
+`notify-audit.yaml` holds the org's ignore rules for its routine shapes. An admin's own action can
+alert, such as a member added in the browser. Before changing the feed or an ignore rule, or when
+an alert needs an answer, read [audit-log alerts](references/audit-alerts.md).
+
 ---
 
 ## Verifying a change
