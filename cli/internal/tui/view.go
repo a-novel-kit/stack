@@ -280,8 +280,12 @@ func targetFailed(t *anovelv1.Target) bool {
 		(reason == anovelv1.ExitReason_EXIT_REASON_ERROR || reason == anovelv1.ExitReason_EXIT_REASON_CRASHED)
 }
 
-// logPrefixWidth is the width of a log row's "15:04:05 out " prefix.
-const logPrefixWidth = 13
+const (
+	// logPrefixWidth is the width of a log row's "15:04:05 out " prefix.
+	logPrefixWidth = 13
+	// tabSpaces is what Lip Gloss renders a tab as by default.
+	tabSpaces = "    "
+)
 
 // renderLogs draws the window of the followed log that fits in width by height
 // cells, ending logScroll lines before the tail. While scrolled back, its last
@@ -306,7 +310,10 @@ func (m *model) renderLogs(width, height int) string {
 			tag = "err"
 		}
 		ts := ln.GetTs().AsTime().Format("15:04:05")
-		rows = append(rows, styleDim.Render(ts)+" "+styleWarn.Render(tag)+" "+truncate(ln.GetLine(), width-logPrefixWidth))
+		// truncate measures a tab as zero cells, and the frame renders it as
+		// tabSpaces. Tabs are expanded first, so truncate counts their cells.
+		line := strings.ReplaceAll(ln.GetLine(), "\t", tabSpaces)
+		rows = append(rows, styleDim.Render(ts)+" "+styleWarn.Render(tag)+" "+truncate(line, width-logPrefixWidth))
 	}
 	if m.logScroll > 0 {
 		indicator := fmt.Sprintf("⏸ paused — %d line(s) below cursor  ·  pgdn/end resumes tail",
