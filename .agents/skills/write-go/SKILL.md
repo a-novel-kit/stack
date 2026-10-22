@@ -351,6 +351,15 @@ timer. Do not replace it with a `Ticker` for that reason; a ticker changes the p
 
 ---
 
+## Correctness traps
+
+Before you write or review code that shares state across goroutines, runs a subprocess, serves a
+stream or a unix socket, or builds a URL or DSN from parts, read
+[correctness traps](references/correctness-traps.md). It lists the race, cancellation and
+stdlib pitfalls that reached `master` once, each with the fix that held.
+
+---
+
 ## Common pitfalls
 
 - **`context.Context` stored in a struct.** Always a method parameter.
