@@ -344,9 +344,9 @@ func applySecretAccess(op repocfg.Op, repoID func() (string, error)) (string, er
 	}
 	if _, err := gh("api", "-X", op.Method, op.Path+"/"+id, "--silent"); err != nil {
 		switch {
-		case errContains(err, "409"):
+		case hasHTTPStatus(err, http.StatusConflict):
 			return "switch its visibility to selected repositories in the org settings", err
-		case op.Method == http.MethodDelete && errContains(err, "404"):
+		case op.Method == http.MethodDelete && isNotFound(err):
 			return "already revoked", nil
 		}
 		return "", err

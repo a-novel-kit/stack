@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -88,7 +90,15 @@ func errContains(err error, parts ...string) bool {
 	return true
 }
 
-func isNotFound(err error) bool      { return errContains(err, "404") }
+// hasHTTPStatus reports whether gh failed with the HTTP status code. gh prints
+// the status after GitHub's message, as in "gh: Not Found (HTTP 404)", or
+// alone, as in "gh: HTTP 404", when the response carries no message.
+func hasHTTPStatus(err error, code int) bool {
+	status := "http " + strconv.Itoa(code)
+	return errContains(err, "("+status+")") || errContains(err, "gh: "+status)
+}
+
+func isNotFound(err error) bool      { return hasHTTPStatus(err, http.StatusNotFound) }
 func isRateLimited(err error) bool   { return errContains(err, "rate limit") }
 func isSignoffLocked(err error) bool { return errContains(err, "signoff", "enforced") }
 func isWorkflowScope(err error) bool { return errContains(err, "workflow", "scope") }
@@ -98,7 +108,7 @@ func isWorkflowScope(err error) bool { return errContains(err, "workflow", "scop
 func isEmptyRepo(err error) bool { return errContains(err, "git repository is empty") }
 
 func isAlreadyExists(err error) bool {
-	return errContains(err, "409") || errContains(err, "already exists")
+	return hasHTTPStatus(err, http.StatusConflict) || errContains(err, "already exists")
 }
 
 // isStaleHead reports the typed STALE_DATA error createCommitOnBranch returns
