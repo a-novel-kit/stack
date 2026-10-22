@@ -11,6 +11,7 @@ repos:
   - a-novel-kit/nodelib
   - a-novel-kit/jwt
   - a-novel-kit/uikit
+  - a-novel-kit/ui-assets
   - a-novel-kit/workflows
   - a-novel/.github
   - a-novel/infra
