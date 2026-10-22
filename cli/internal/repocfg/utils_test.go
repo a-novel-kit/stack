@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -39,7 +40,14 @@ case "$*" in
  *) exit 91;;
 esac
 `
-	if err := os.WriteFile(filepath.Join(directory, "gh"), []byte(stub), 0o700); err != nil {
+	// A fork takes ForkLock for writing, so nothing forks while this read lock
+	// holds the stub open. A child forked by a parallel test keeps the open
+	// descriptor until it execs, and running the stub meanwhile fails with
+	// "Text file busy".
+	syscall.ForkLock.RLock()
+	err := os.WriteFile(filepath.Join(directory, "gh"), []byte(stub), 0o700)
+	syscall.ForkLock.RUnlock()
+	if err != nil {
 		t.Fatal(err)
 	}
 	outputPath := filepath.Join(directory, "output")
