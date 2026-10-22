@@ -514,9 +514,10 @@ func syncCommitInput(org, repo, branch string, changes []contentChange) map[stri
 // bootstrapEmpty seeds a repository that has no commits yet.
 // createCommitOnBranch and the Git Data API answer 409 on an empty repository.
 // The Contents API creates the first commit and the default branch, so the
-// first added file lands through it, as a GitHub-verified commit. The other
-// files then land in one sync commit. An empty repository holds no file to
-// delete, so deletions drop.
+// first added file lands through it. Under a person's token GitHub leaves that
+// commit unsigned, which no ruleset rejects: they check pushes, not history.
+// The other files then land in one sync commit. An empty repository holds no
+// file to delete, so deletions drop.
 func bootstrapEmpty(org, repo, branch string, changes []contentChange) (string, error) {
 	adds := slices.DeleteFunc(slices.Clone(changes), func(change contentChange) bool { return change.outcome == opDeleted })
 	if len(adds) == 0 {
