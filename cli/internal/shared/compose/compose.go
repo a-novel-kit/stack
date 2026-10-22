@@ -96,11 +96,13 @@ func (e *Environment) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-// ReadFile reads and parses the compose file at path.
+// ReadFile reads and parses the compose file at path. Its error names the file
+// once.
 func ReadFile(path string) (*File, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
+		// The os error already names the file.
+		return nil, fmt.Errorf("read compose file: %w", err)
 	}
 	f, err := Parse(raw)
 	if err != nil {
