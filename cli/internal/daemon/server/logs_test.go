@@ -86,20 +86,35 @@ func TestPodmanLogsArgs(t *testing.T) {
 	}
 }
 
-// TestStreamLogs pins how a log follow ends. A client that cancels ends it with
-// nil. A daemon stop ends it at once with CodeUnavailable, so the follow never
-// holds the graceful shutdown and the client reports the stop.
+// TestStreamLogs pins how a log stream ends. A follow ends with nil when the
+// client cancels, and at once with CodeUnavailable when the daemon stops, so it
+// never holds the graceful shutdown. A missing log means no run yet: a snapshot
+// fails with CodeNotFound and a follow waits for the run. Any other read
+// failure fails the stream as it is.
 func TestStreamLogs(t *testing.T) {
 	testCases := []struct {
 		name string
-		// stop ends the follow by stopping the daemon. Otherwise the client
-		// cancels it.
+		// follow asks for the lines written after the snapshot.
+		follow bool
+		// running opens the target's log writer, as a running target does.
+		// Its follow sends nothing to the zero stream and lasts until the test
+		// ends it.
+		running bool
+		// stop ends a running follow by stopping the daemon. Otherwise the
+		// client cancels it.
 		stop bool
-		// wantCode is the connect code the follow ends with, 0 for nil.
+		// unreadable puts a directory where current.log belongs, so the read
+		// fails.
+		unreadable bool
+		// wantCode is the connect code the stream ends with, 0 for nil.
 		wantCode connect.Code
 	}{
-		{name: "Success/ClientCancel"},
-		{name: "Error/DaemonStopping", stop: true, wantCode: connect.CodeUnavailable},
+		{name: "Success/ClientCancel", follow: true, running: true},
+		{name: "Success/NoRunFollow", follow: true},
+		{name: "Error/DaemonStopping", follow: true, running: true, stop: true, wantCode: connect.CodeUnavailable},
+		{name: "Error/NoRun", wantCode: connect.CodeNotFound},
+		{name: "Error/UnreadableLog", unreadable: true, wantCode: connect.CodeUnknown},
+		{name: "Error/UnreadableLogFollow", follow: true, unreadable: true, wantCode: connect.CodeUnknown},
 	}
 
 	for _, testCase := range testCases {
@@ -113,14 +128,18 @@ func TestStreamLogs(t *testing.T) {
 				Services: []*discovery.Service{{Name: "svc", Stack: "default", Targets: []*discovery.Target{tgt}}},
 			}}
 			logStore := logs.New()
-			// An open writer gives the follow a live subscription and an
-			// empty current.log, so the follow sends nothing to the zero
-			// stream.
-			w, err := logStore.OpenForWrite(tgt.ID(), tgt.Stack, tgt.Service, tgt.Name)
-			if err != nil {
-				t.Fatal(err)
+			if testCase.running {
+				w, err := logStore.OpenForWrite(tgt.ID(), tgt.Stack, tgt.Service, tgt.Name)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = w.Close() })
 			}
-			t.Cleanup(func() { _ = w.Close() })
+			if testCase.unreadable {
+				if err := os.MkdirAll(logStore.CurrentPath(tgt.Stack, tgt.Service, tgt.Name), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
 
 			stopping := make(chan struct{})
 			s := &Server{stacks: stacks, logs: logStore, stopping: stopping}
@@ -128,13 +147,14 @@ func TestStreamLogs(t *testing.T) {
 			defer cancel()
 
 			ended := make(chan error, 1)
-			req := &anovelv1.StreamLogsRequest{TargetId: tgt.ID(), Follow: true}
+			req := &anovelv1.StreamLogsRequest{TargetId: tgt.ID(), Follow: testCase.follow}
 			go func() {
 				ended <- s.StreamLogs(ctx, req, anovelv1connect.CoreServiceStreamLogsServerStream{})
 			}()
-			if testCase.stop {
+			switch {
+			case testCase.running && testCase.stop:
 				close(stopping)
-			} else {
+			case testCase.running:
 				cancel()
 			}
 

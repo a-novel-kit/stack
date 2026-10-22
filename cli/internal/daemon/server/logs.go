@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strconv"
@@ -71,6 +72,9 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 	}
 
 	if err := streamFileToClient(ctx, path, stream.Send, req.GetStream(), int(req.GetTailLines())); err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
 		// A missing file means no run yet, so fall through to the follow
 		// path when one was requested.
 		if !follow {
