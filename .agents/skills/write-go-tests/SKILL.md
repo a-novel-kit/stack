@@ -226,6 +226,12 @@ it?" If not, it is not worth writing.
 - **A table case closure that captures the parent `t`.** The closure runs inside a parallel
   sub-test, so a `require` on the parent calls `FailNow` from the wrong goroutine. Pass the sub-test's
   `t` into the closure, or build the value in a helper that panics on an impossible setup error.
+- **An executable stub written inside a parallel test.** A child that a sibling test forks keeps
+  the stub's open write descriptor until it execs. Running the stub in that window fails with
+  "Text file busy" (golang/go#22315). Write the stub while holding `syscall.ForkLock.RLock()`,
+  which keeps every fork out. A stub written in a `t.Setenv` test is safe, since that test never
+  runs beside parallel ones. A script that reads the stub through `$(…)` swallows the failure, so
+  print the script's output in the assertion.
 - **`assert` instead of `require`.** Always use `require` in test bodies.
 - **`context.Background()` in test bodies.** Use `t.Context()` instead.
 - **Hard-coding mock expectations for context.** Always use `mock.Anything` for `ctx`.

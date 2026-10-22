@@ -782,7 +782,7 @@ func TestLockClosedGovernance(t *testing.T) {
 				return !strings.HasSuffix(call, "/lock")
 			})
 			if got := strings.Join(writes, ""); got != testCase.want {
-				t.Errorf("writes = %q, want %q", got, testCase.want)
+				t.Errorf("writes = %q, want %q; output %q", got, testCase.want, output)
 			}
 		})
 	}
