@@ -149,3 +149,51 @@ func TestStreamLogs(t *testing.T) {
 		})
 	}
 }
+
+// TestLineScanner pins that a line over 1 MiB never stops a scan. It comes out
+// in 1 MiB pieces and the lines after it still come through, so an Exec child
+// writing it never blocks on a pipe nobody reads.
+func TestLineScanner(t *testing.T) {
+	t.Parallel()
+
+	long := strings.Repeat("x", 2*maxLineBytes+maxLineBytes/2)
+	piece, rest := strings.Repeat("x", maxLineBytes), strings.Repeat("x", maxLineBytes/2)
+
+	testCases := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{name: "Success/ShortLines", input: "one\ntwo\n", want: []string{"one", "two"}},
+		{name: "Success/LongLine", input: "before\n" + long + "\nafter\n", want: []string{"before", piece, piece, rest, "after"}},
+		{name: "Success/LongLineAtEOF", input: long, want: []string{piece, piece, rest}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var got []string
+			sc := lineScanner(strings.NewReader(testCase.input))
+			for sc.Scan() {
+				got = append(got, sc.Text())
+			}
+			if err := sc.Err(); err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			// The lines run to MiBs, so a mismatch reports their lengths.
+			if !slices.Equal(got, testCase.want) {
+				t.Errorf("line lengths = %v, want %v", lengths(got), lengths(testCase.want))
+			}
+		})
+	}
+}
+
+// lengths returns the length of each line.
+func lengths(lines []string) []int {
+	out := make([]int, len(lines))
+	for i, line := range lines {
+		out[i] = len(line)
+	}
+	return out
+}

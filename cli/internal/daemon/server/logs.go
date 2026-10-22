@@ -278,11 +278,26 @@ func podmanLogsArgs(cid string, follow bool, tail int32) []string {
 	return append(args, cid)
 }
 
+// maxLineBytes is the longest line lineScanner hands out in one piece.
+const maxLineBytes = 1024 * 1024
+
 // lineScanner scans r line by line. Command output carries long lines, such as
-// panics and JSON dumps, so the per-token cap goes up to 1 MiB to keep the
-// scanner from bisecting one.
+// panics and JSON dumps, so a line comes out whole up to 1 MiB. A longer line
+// comes out in 1 MiB pieces, so the scan never stops on it, and a child process
+// writing it never blocks on a pipe nobody reads.
 func lineScanner(r io.Reader) *bufio.Scanner {
 	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 64*1024), 1024*1024)
+	sc.Buffer(make([]byte, 64*1024), maxLineBytes)
+	sc.Split(scanLinesInPieces)
 	return sc
+}
+
+// scanLinesInPieces is bufio.ScanLines that also hands out a line filling the
+// whole buffer, as one piece, before the scanner stops with bufio.ErrTooLong.
+func scanLinesInPieces(data []byte, atEOF bool) (int, []byte, error) {
+	advance, token, err := bufio.ScanLines(data, atEOF)
+	if advance == 0 && token == nil && err == nil && len(data) >= maxLineBytes {
+		return maxLineBytes, data[:maxLineBytes], nil
+	}
+	return advance, token, err
 }
