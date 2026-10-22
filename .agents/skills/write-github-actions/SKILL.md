@@ -488,9 +488,10 @@ There is no local runner, so verification is reading plus CI.
 - For a composite action, grep the manifest for `${{ vars.`, `${{ secrets.`, `${{ needs.`,
   `${{ matrix.` and `${{ strategy.` before pushing. The workflows repo's `pnpm lint` checks this; a
   repo-local action under `.github/actions/` does not.
-- In the workflows repo, `lint-shell` shellchecks every `run:` block that
-  `.github/scripts/extract-shell.mjs` pulls out of the manifests and workflows. Reproduce it with
-  `node .github/scripts/extract-shell.mjs <dir>`, then shellcheck the files in `<dir>`.
+- `lint-shell`'s `run_steps` input shellchecks the Bash `run:` steps of the workflows and composite
+  actions it names, each as its own script. actionlint never reads a composite action, so a repo
+  with them passes `.github/actions/*/action.y*ml` there; the workflows repo passes all of its own.
+  Its CONTRIBUTING.md reproduces the extraction locally.
 - A change to a shared action is not exercised by the workflows repo's own PR CI. It is proven when a
   consumer re-pins to the released tag, which `manage-versions` sequences.
 - Never trigger `release.yaml` to test a change — it cuts a real release. Use its `dry_run` input.
