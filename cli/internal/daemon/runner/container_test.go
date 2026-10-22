@@ -168,7 +168,8 @@ func podmanCalls(t *testing.T, dir string) int {
 // TestCheckContainers covers one tick of the poller. A single podman call
 // inspects every container, and each line reaches its own instance. A vanished
 // container fails that call, and one inspect per container then ends only the
-// vanished one, as crashed.
+// vanished one, as crashed. A result that comes back after a restart leaves the
+// target's new instance alone.
 func TestCheckContainers(t *testing.T) {
 	type container struct {
 		// phase is the instance's phase before the check.
@@ -176,6 +177,9 @@ func TestCheckContainers(t *testing.T) {
 		// inspect is the line podman prints for the container, "" once it
 		// vanished.
 		inspect string
+		// restarted marks an instance that a kill and a restart replaced
+		// while the check ran. The new instance has no container yet.
+		restarted bool
 
 		wantPhase  anovelv1.Phase
 		wantReason anovelv1.ExitReason
@@ -219,6 +223,14 @@ func TestCheckContainers(t *testing.T) {
 			// The batch, then one inspect per container.
 			wantCalls: 3,
 		},
+		{
+			name: "Success/Restarted",
+			containers: map[string]container{
+				"exited": {phase: anovelv1.Phase_PHASE_PENDING, inspect: "exited|-|1", restarted: true, wantPhase: anovelv1.Phase_PHASE_PENDING},
+				"gone":   {phase: anovelv1.Phase_PHASE_PENDING, restarted: true, wantPhase: anovelv1.Phase_PHASE_PENDING},
+			},
+			wantCalls: 3,
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -233,7 +245,11 @@ func TestCheckContainers(t *testing.T) {
 					}
 				}
 				id := "default/svc/" + cid
-				r.instances[id] = &Instance{ID: id, Mode: anovelv1.Mode_MODE_CONTAINER, Phase: c.phase, ContainerID: cid}
+				inst := &Instance{ID: id, Mode: anovelv1.Mode_MODE_CONTAINER, Phase: c.phase, ContainerID: cid}
+				if c.restarted {
+					inst.ContainerID = ""
+				}
+				r.instances[id] = inst
 				watches = append(watches, containerWatch{id: id, cid: cid})
 			}
 

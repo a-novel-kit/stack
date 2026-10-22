@@ -175,7 +175,7 @@ func (r *Runner) checkContainers(watches []containerWatch) {
 		return
 	}
 	for i, w := range watches {
-		r.applyContainerState(w.id, states[i])
+		r.applyContainerState(w, states[i])
 	}
 }
 
@@ -185,23 +185,28 @@ func (r *Runner) checkContainers(watches []containerWatch) {
 func (r *Runner) checkContainer(w containerWatch) {
 	states, err := podmanInspectAll(context.Background(), []string{w.cid})
 	if err != nil {
-		r.markTerminated(w.id, anovelv1.ExitReason_EXIT_REASON_CRASHED, err.Error())
+		if r.stillRuns(w) {
+			r.markTerminated(w.id, anovelv1.ExitReason_EXIT_REASON_CRASHED, err.Error())
+		}
 		return
 	}
-	r.applyContainerState(w.id, states[0])
+	r.applyContainerState(w, states[0])
 }
 
-// applyContainerState folds one inspect result into instance id through
+// applyContainerState folds one inspect result into the instance of w through
 // updateContainerState. An exited container ends the instance: killed when a
 // stop was asked, an error on a nonzero exit code, a success otherwise.
-func (r *Runner) applyContainerState(id string, s infraContainerState) {
-	r.updateContainerState(id, s.phase, s.health)
+func (r *Runner) applyContainerState(w containerWatch, s infraContainerState) {
+	if !r.stillRuns(w) {
+		return
+	}
+	r.updateContainerState(w.id, s.phase, s.health)
 	if podmanPhase(s.phase) != anovelv1.Phase_PHASE_TERMINATED {
 		return
 	}
 	reason := anovelv1.ExitReason_EXIT_REASON_SUCCESS
 	r.mu.RLock()
-	stopping := r.instances[id] != nil && r.instances[id].Phase == anovelv1.Phase_PHASE_STOPPING
+	stopping := r.instances[w.id] != nil && r.instances[w.id].Phase == anovelv1.Phase_PHASE_STOPPING
 	r.mu.RUnlock()
 	switch {
 	case stopping:
@@ -209,7 +214,18 @@ func (r *Runner) applyContainerState(id string, s infraContainerState) {
 	case s.exitCode != 0:
 		reason = anovelv1.ExitReason_EXIT_REASON_ERROR
 	}
-	r.markTerminated(id, reason, "")
+	r.markTerminated(w.id, reason, "")
+}
+
+// stillRuns reports whether the instance of w is live and still runs its
+// container. A check can outlive its instance: a kill and a restart while
+// podman runs hand the target ID to a new instance, whose container is another
+// one or not up yet.
+func (r *Runner) stillRuns(w containerWatch) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	inst := r.instances[w.id]
+	return inst != nil && inst.ContainerID == w.cid && inst.Phase != anovelv1.Phase_PHASE_TERMINATED
 }
 
 // InfraState is one row in the batched podman scan: the container ID and
