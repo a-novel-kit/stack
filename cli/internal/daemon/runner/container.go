@@ -247,23 +247,29 @@ func (r *Runner) InfraContainer(ctx context.Context, stack, service, infraName, 
 // a container instance, translating podman's state and health words into
 // the Phase and Health enums. A terminated instance is never revived, and
 // a stopping instance isn't bumped back to running; the exited state is
-// handled by watchContainer, not here.
+// handled by watchContainer, not here. A phase change emits its PhaseEvent.
 func (r *Runner) updateContainerState(id, state, health string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	inst, ok := r.instances[id]
 	if !ok || inst.Phase == anovelv1.Phase_PHASE_TERMINATED {
+		r.mu.Unlock()
 		return
 	}
+	var ev PhaseEvent
+	var changed bool
 	switch phase := podmanPhase(state); phase {
 	case anovelv1.Phase_PHASE_RUNNING:
 		if inst.Phase != anovelv1.Phase_PHASE_STOPPING {
-			inst.Phase = phase
+			ev, changed = setPhase(inst, phase)
 		}
 	case anovelv1.Phase_PHASE_STARTING, anovelv1.Phase_PHASE_STOPPING:
-		inst.Phase = phase
+		ev, changed = setPhase(inst, phase)
 	}
 	inst.Health = podmanHealth(health)
+	r.mu.Unlock()
+	if changed {
+		r.emitPhase(ev)
+	}
 }
 
 // killContainer issues `podman stop -t <grace>` to the container.

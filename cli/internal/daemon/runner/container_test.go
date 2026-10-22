@@ -76,3 +76,58 @@ func waitForFile(t *testing.T, path string) {
 	}
 	t.Fatalf("%s never appeared", path)
 }
+
+// TestUpdateContainerState pins that a container phase podman reports emits its
+// PhaseEvent, as every other phase change does, so `run watch` and
+// `ps --watch` follow container targets. A terminated instance never revives,
+// and a stopping one never goes back to running.
+func TestUpdateContainerState(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name  string
+		phase anovelv1.Phase
+		// state is the container state podman reports.
+		state string
+
+		wantPhase anovelv1.Phase
+		wantEvent bool
+	}{
+		{name: "Success/Running", phase: anovelv1.Phase_PHASE_STARTING, state: "running", wantPhase: anovelv1.Phase_PHASE_RUNNING, wantEvent: true},
+		{name: "Success/Stopping", phase: anovelv1.Phase_PHASE_RUNNING, state: "stopping", wantPhase: anovelv1.Phase_PHASE_STOPPING, wantEvent: true},
+		{name: "Success/Restarting", phase: anovelv1.Phase_PHASE_RUNNING, state: "created", wantPhase: anovelv1.Phase_PHASE_STARTING, wantEvent: true},
+		{name: "Success/Unchanged", phase: anovelv1.Phase_PHASE_RUNNING, state: "running", wantPhase: anovelv1.Phase_PHASE_RUNNING},
+		{name: "Success/StoppingStays", phase: anovelv1.Phase_PHASE_STOPPING, state: "running", wantPhase: anovelv1.Phase_PHASE_STOPPING},
+		{name: "Success/TerminatedStays", phase: anovelv1.Phase_PHASE_TERMINATED, state: "running", wantPhase: anovelv1.Phase_PHASE_TERMINATED},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			const id = "default/svc/rest"
+			inst := &Instance{ID: id, Service: "svc", Stack: "default", Mode: anovelv1.Mode_MODE_CONTAINER, Phase: testCase.phase}
+			r := &Runner{instances: map[string]*Instance{id: inst}}
+			events, unsubscribe := r.SubscribePhases(nil)
+			defer unsubscribe()
+
+			r.updateContainerState(id, testCase.state, "")
+
+			if inst.Phase != testCase.wantPhase {
+				t.Errorf("phase = %v, want %v", inst.Phase, testCase.wantPhase)
+			}
+			// emitPhase sends before updateContainerState returns, so an event
+			// that is not buffered now was never emitted.
+			select {
+			case ev := <-events:
+				if !testCase.wantEvent || ev.OldPhase != testCase.phase || ev.NewPhase != testCase.wantPhase {
+					t.Errorf("event %v→%v, want event %v for %v→%v", ev.OldPhase, ev.NewPhase, testCase.wantEvent, testCase.phase, testCase.wantPhase)
+				}
+			default:
+				if testCase.wantEvent {
+					t.Errorf("no event, want %v→%v", testCase.phase, testCase.wantPhase)
+				}
+			}
+		})
+	}
+}
