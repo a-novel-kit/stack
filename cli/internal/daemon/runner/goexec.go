@@ -16,7 +16,7 @@ import (
 // startGoExec spawns t as a `go run ./cmd/<target>` invocation inside the
 // owning service's directory, with env as the process environment, and moves
 // it through PENDING, STARTING, and RUNNING.
-func (r *Runner) startGoExec(_ context.Context, inst *Instance, t *discovery.Target, env, warnings []string) (*Instance, error) {
+func (r *Runner) startGoExec(ctx context.Context, inst *Instance, t *discovery.Target, env, warnings []string) (*Instance, error) {
 	id := t.ID()
 	// Running go from the service directory picks up that service's own
 	// go.mod, and each target gets its own context so Kill can cancel cleanly.
@@ -53,16 +53,34 @@ func (r *Runner) startGoExec(_ context.Context, inst *Instance, t *discovery.Tar
 		r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_ERROR, "spawn: "+err.Error())
 		return nil, fmt.Errorf("start %s: %w", id, err)
 	}
-	r.mu.Lock()
-	inst.PID = int32(cmd.Process.Pid)
-	r.mu.Unlock()
-	r.transition(id, anovelv1.Phase_PHASE_RUNNING)
 	go r.watchGoExec(inst, cmd, logWriter)
+	if err := r.running(ctx, inst, cmd.Process.Pid); err != nil {
+		return nil, err
+	}
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := *inst
 	return &out, nil
+}
+
+// running records the PID of inst's started process and moves inst to RUNNING.
+// A kill that reached inst before the process existed found nothing to signal
+// and left inst STOPPING. running then kills the process itself, and the start
+// fails.
+func (r *Runner) running(ctx context.Context, inst *Instance, pid int) error {
+	r.mu.Lock()
+	inst.PID = int32(pid)
+	killed := inst.Phase == anovelv1.Phase_PHASE_STOPPING
+	r.mu.Unlock()
+	if killed {
+		if err := r.killGoExec(ctx, inst.ID, 0); err != nil {
+			return err
+		}
+		return fmt.Errorf("%s: %w", inst.ID, errKilledWhileStarting)
+	}
+	r.advance(inst.ID, anovelv1.Phase_PHASE_STARTING, anovelv1.Phase_PHASE_RUNNING)
+	return nil
 }
 
 // watchGoExec blocks on cmd.Wait() and transitions the instance to
@@ -107,15 +125,16 @@ func (r *Runner) watchGoExec(inst *Instance, cmd *exec.Cmd, logWriter *logs.Writ
 func (r *Runner) killGoExec(ctx context.Context, id string, grace time.Duration) error {
 	r.mu.RLock()
 	inst, ok := r.instances[id]
-	var cmd *exec.Cmd
-	if ok {
-		cmd = inst.cmd
+	var pid int
+	if ok && inst.cmd != nil {
+		pid = int(inst.PID)
 	}
 	r.mu.RUnlock()
-	if cmd == nil || cmd.Process == nil {
+	// A start in flight has no PID yet. It finds the instance STOPPING once its
+	// process exists, and ends the process itself.
+	if pid == 0 {
 		return nil
 	}
-	pid := cmd.Process.Pid
 
 	// Signal the whole process group through the negative pid, so the binary
 	// `go run` compiled and spawned receives it too.
@@ -171,4 +190,27 @@ func (r *Runner) transition(id string, phase anovelv1.Phase) {
 	inst.Phase = phase
 	r.mu.Unlock()
 	r.emitPhase(ev)
+}
+
+// advance moves id from phase from to phase to and emits the PhaseEvent. It
+// reports false and changes nothing when id no longer holds from, as after a
+// kill moved it to STOPPING.
+func (r *Runner) advance(id string, from, to anovelv1.Phase) bool {
+	r.mu.Lock()
+	inst, ok := r.instances[id]
+	if !ok || inst.Phase != from {
+		r.mu.Unlock()
+		return false
+	}
+	ev := PhaseEvent{
+		TargetID: inst.ID,
+		Service:  inst.Service,
+		Stack:    inst.Stack,
+		OldPhase: from,
+		NewPhase: to,
+	}
+	inst.Phase = to
+	r.mu.Unlock()
+	r.emitPhase(ev)
+	return true
 }

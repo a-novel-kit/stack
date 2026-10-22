@@ -53,6 +53,10 @@ func (i *Instance) Live() bool {
 // fault rather than a refused precondition.
 var ErrEnv = errors.New("env build")
 
+// errKilledWhileStarting fails a start that a kill reached before the target
+// ran.
+var errKilledWhileStarting = errors.New("killed while starting")
+
 // Runner supervises every spawned target across every stack.
 type Runner struct {
 	mu        sync.RWMutex
@@ -254,13 +258,11 @@ func (r *Runner) claim(t *discovery.Target, mode anovelv1.Mode) (*Instance, *Ins
 func (r *Runner) begin(inst *Instance, cmd *exec.Cmd, cancel context.CancelFunc) error {
 	r.mu.Lock()
 	inst.cmd, inst.cancel = cmd, cancel
-	killed := inst.Phase == anovelv1.Phase_PHASE_STOPPING
 	r.mu.Unlock()
-	if killed {
+	if !r.advance(inst.ID, anovelv1.Phase_PHASE_PENDING, anovelv1.Phase_PHASE_STARTING) {
 		r.markTerminated(inst.ID, anovelv1.ExitReason_EXIT_REASON_KILLED, "")
-		return fmt.Errorf("%s was killed before it started", inst.ID)
+		return fmt.Errorf("%s: %w", inst.ID, errKilledWhileStarting)
 	}
-	r.transition(inst.ID, anovelv1.Phase_PHASE_STARTING)
 	return nil
 }
 
@@ -309,6 +311,10 @@ func modeLabel(m anovelv1.Mode) string {
 // target returns nil. Sends SIGTERM, waits up to `grace`, then SIGKILL.
 //
 // `grace` of 0 means "SIGKILL immediately" (no grace period).
+//
+// An instance still starting has no process or container to stop yet. Kill
+// then leaves it STOPPING and returns, and the start stops what it brings up
+// and fails.
 func (r *Runner) Kill(ctx context.Context, id string, grace time.Duration) error {
 	r.mu.RLock()
 	inst, ok := r.instances[id]
