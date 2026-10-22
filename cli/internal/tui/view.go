@@ -41,10 +41,8 @@ func (m *model) render() string {
 		return "loading..."
 	}
 	switch m.view {
-	case viewHelp:
-		return m.renderHelp()
-	case viewTopology:
-		return m.renderTopology()
+	case viewHelp, viewTopology:
+		return m.renderPage()
 	}
 	// Main layout (with command-palette overlay if in viewCommand).
 	main := m.renderMain()
@@ -350,66 +348,88 @@ func footerHint(key, text string) string {
 	return styleCmd.Render(key) + styleFooter.Render(" "+text)
 }
 
-// renderHelp draws the full-screen help listing every command, grouped
-// by category.
-func (m *model) renderHelp() string {
-	lines := []string{
-		styleHeader.Render("a-novel run ui  —  command reference"),
-		"",
-		styleHeader.Render("Navigation"),
-		"  ↑/↓ or j/k           select service",
-		"  ←/→ or h/l or Tab   select target tab",
-		"",
-		styleHeader.Render("Log pane"),
-		"  PgUp/PgDn             scroll a half page (auto-follow pauses on PgUp)",
-		"  Ctrl-↑/Ctrl-↓        step one line",
-		"  Home / g              jump to oldest buffered line",
-		"  End  / G              jump to tail and resume auto-follow",
-		styleDim.Render("  (terminal text selection works — click + drag to copy lines)"),
-		"",
-		styleHeader.Render("Tab kinds"),
-		"  [target]               daemon-supervised process (go-exec or container)",
-		"  {infra}                podman container (postgres, mailserver, ...)",
-		"",
-		styleHeader.Render("Daemon-backed actions (via Esc command palette)"),
-		"  :start                 start active target (default go-exec) — targets only",
-		"  :start container       start active target in container mode",
-		"  :kill                  kill active tab (target → SIGTERM; infra → podman stop)",
-		"  :restart               kill then start (target) / podman restart (infra)",
-		"  :infra-start           bring up active service's WHOLE infra + one-shots",
-		"  :infra-kill            tear down active service's WHOLE infra (refuses if targets up)",
-		"  :infra-kill force      cascade-kill targets + infra",
-		"  :volume-backup         snapshot active service's volumes",
-		"  :topology              show the dependency graph (any key returns)",
-		"  :refresh               refresh services + logs now",
-		"",
-		styleHeader.Render("UI"),
-		"  ?                      this help screen (any key to dismiss)",
-		"  Esc                    open command palette",
-		"  q or Ctrl-C            quit (daemon keeps running)",
-		"",
-		styleHeader.Render("Status bar (above the footer)"),
-		"  " + styleWarn.Render("⏳") + "  busy   — action in flight; persists until it resolves",
-		"  " + styleSuccess.Render("✓") + "  done   — last action succeeded; fades after 5s",
-		"  " + styleErr.Render("✗") + "  error  — last action failed or invalid; sticks until the next action",
-		"",
-		styleDim.Render("(daemon-backed verbs are implemented via the same RPC as the CLI; what you see in the UI is what `a-novel run ps` would show)"),
-	}
-	return styleFrame.Width(m.width).Height(m.height).Render(strings.Join(lines, "\n"))
+// helpLines is the help page, listing every command, grouped by category.
+var helpLines = []string{
+	styleHeader.Render("a-novel run ui  —  command reference"),
+	"",
+	styleHeader.Render("Navigation"),
+	"  ↑/↓ or j/k           select service",
+	"  ←/→ or h/l or Tab   select target tab",
+	"",
+	styleHeader.Render("Log pane"),
+	"  PgUp/PgDn             scroll a half page (auto-follow pauses on PgUp)",
+	"  Ctrl-↑/Ctrl-↓        step one line",
+	"  Home / g              jump to oldest buffered line",
+	"  End  / G              jump to tail and resume auto-follow",
+	styleDim.Render("  (terminal text selection works — click + drag to copy lines)"),
+	"",
+	styleHeader.Render("Tab kinds"),
+	"  [target]               daemon-supervised process (go-exec or container)",
+	"  {infra}                podman container (postgres, mailserver, ...)",
+	"",
+	styleHeader.Render("Daemon-backed actions (via Esc command palette)"),
+	"  :start                 start active target (default go-exec) — targets only",
+	"  :start container       start active target in container mode",
+	"  :kill                  kill active tab (target → SIGTERM; infra → podman stop)",
+	"  :restart               kill then start (target) / podman restart (infra)",
+	"  :infra-start           bring up active service's WHOLE infra + one-shots",
+	"  :infra-kill            tear down active service's WHOLE infra (refuses if targets up)",
+	"  :infra-kill force      cascade-kill targets + infra",
+	"  :volume-backup         snapshot active service's volumes",
+	"  :topology              show the dependency graph (↑/↓ scroll, any other key returns)",
+	"  :refresh               refresh services + logs now",
+	"",
+	styleHeader.Render("UI"),
+	"  ?                      this help screen (↑/↓ scroll, any other key returns)",
+	"  Esc                    open command palette",
+	"  q or Ctrl-C            quit (daemon keeps running)",
+	"",
+	styleHeader.Render("Status bar (above the footer)"),
+	"  " + styleWarn.Render("⏳") + "  busy   — action in flight; persists until it resolves",
+	"  " + styleSuccess.Render("✓") + "  done   — last action succeeded; fades after 5s",
+	"  " + styleErr.Render("✗") + "  error  — last action failed or invalid; sticks until the next action",
+	"",
+	styleDim.Render("(daemon-backed verbs are implemented via the same RPC as the CLI; what you see in the UI is what `a-novel run ps` would show)"),
 }
 
-// renderTopology is the dedicated topology screen, populated by the
-// :topology palette command's response. Any keystroke returns to
-// viewMain.
-func (m *model) renderTopology() string {
-	lines := []string{
-		styleHeader.Render("Dependency topology"),
-		"",
-		m.topologyTx,
-		"",
-		styleDim.Render("(press any key to return)"),
+// pageLines returns the lines of the full-screen page in view: the help, or
+// the dependency graph from the last :topology.
+func (m *model) pageLines() []string {
+	if m.view != viewTopology {
+		return helpLines
 	}
-	return styleFrame.Width(m.width).Height(m.height).Render(strings.Join(lines, "\n"))
+	lines := append([]string{styleHeader.Render("Dependency topology"), ""}, strings.Split(m.topologyTx, "\n")...)
+	return append(lines, "", styleDim.Render("(↑/↓ scroll, any other key returns)"))
+}
+
+// pageWindow returns the page in view, the index of its first line shown, and
+// how many lines the frame shows. A page taller than the frame gives up the
+// frame's last row to its scroll position, and pageScroll is clamped to the
+// page.
+func (m *model) pageWindow() ([]string, int, int) {
+	lines := m.pageLines()
+	rows := m.height - 2 // inside the border
+	if len(lines) > rows {
+		rows--
+	}
+	rows = max(rows, 1)
+	return lines, min(m.pageScroll, max(len(lines)-rows, 0)), rows
+}
+
+// renderPage draws the help or topology page in a frame that fills the
+// terminal. Each line is cut to the frame's width, so the frame keeps its
+// height. A page taller than the frame ends on its scroll position.
+func (m *model) renderPage() string {
+	lines, from, rows := m.pageWindow()
+	shown := make([]string, 0, rows+1)
+	for _, line := range lines[from:min(from+rows, len(lines))] {
+		shown = append(shown, truncate(line, m.width-2))
+	}
+	if len(lines) > rows {
+		position := fmt.Sprintf("lines %d–%d of %d  ·  ↑/↓ scroll  ·  any other key returns", from+1, from+rows, len(lines))
+		shown = append(shown, styleDim.Render(truncate(position, m.width-2)))
+	}
+	return styleFrame.Width(m.width).Height(m.height).Render(strings.Join(shown, "\n"))
 }
 
 // overlayCommand draws the command input and autocomplete suggestions
@@ -436,7 +456,7 @@ var paletteCommands = []struct{ verb, desc string }{
 	{"infra-kill", "tear down active service's infra (refuses if targets up)"},
 	{"infra-kill force", "cascade-kill targets + infra"},
 	{"volume-backup", "snapshot active service's volumes"},
-	{"topology", "show dependency graph (any key returns)"},
+	{"topology", "show dependency graph (↑/↓ scroll, any other key returns)"},
 	{"refresh", "force-refresh services + logs"},
 	{"quit", "exit the UI (daemon keeps running)"},
 }

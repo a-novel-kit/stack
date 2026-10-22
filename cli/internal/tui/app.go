@@ -90,6 +90,9 @@ type model struct {
 	logScroll  int
 	cmdInput   string // command-palette input buffer, leading ":" included
 	topologyTx string // last GetTopology response, rendered by viewTopology
+	// pageScroll is the first line shown of the help or topology page.
+	// pageWindow clamps it to the page.
+	pageScroll int
 	// status is the line of action feedback above the footer. Busy
 	// persists until the action resolves, info fades after 5s, and an
 	// error stays until the next action overrides it.
@@ -174,6 +177,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case topologyMsg:
 		m.topologyTx = msg.rendered
 		m.view = viewTopology
+		m.pageScroll = 0
 		return m, nil
 
 	case tea.KeyPressMsg:
@@ -240,8 +244,16 @@ func (m *model) onLogLines(msg logLinesMsg) {
 func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.view {
 	case viewHelp, viewTopology:
-		// Any key returns to main.
-		m.view = viewMain
+		// ↑/↓ scroll the page, and any other key returns to main.
+		_, from, _ := m.pageWindow()
+		switch msg.Key().Code {
+		case tea.KeyUp, 'k':
+			m.pageScroll = max(from-1, 0)
+		case tea.KeyDown, 'j':
+			m.pageScroll = from + 1
+		default:
+			m.view = viewMain
+		}
 		return m, nil
 	case viewCommand:
 		return m.handleCommandKey(msg)
@@ -252,6 +264,7 @@ func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "?":
 		m.view = viewHelp
+		m.pageScroll = 0
 	case "esc":
 		m.view = viewCommand
 		m.cmdInput = ":"

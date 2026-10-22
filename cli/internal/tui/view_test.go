@@ -59,15 +59,18 @@ func TestRender(t *testing.T) {
 		name string
 
 		view      view
+		height    int
 		logLines  []*anovelv1.StreamLogsResponse
 		logScroll int
 
 		wantText string
 	}{
-		{name: "Main/Tail", logLines: logLines, wantText: "▸ " + service.GetName()},
-		{name: "Main/ScrolledBack", logLines: logLines, logScroll: 10, wantText: "⏸ paused"},
-		{name: "Main/NoLogs", wantText: "no log lines yet"},
-		{name: "Help", view: viewHelp, wantText: "command reference"},
+		{name: "Main/Tail", height: 50, logLines: logLines, wantText: "▸ " + service.GetName()},
+		{name: "Main/ScrolledBack", height: 50, logLines: logLines, logScroll: 10, wantText: "⏸ paused"},
+		{name: "Main/NoLogs", height: 50, wantText: "no log lines yet"},
+		{name: "Help", view: viewHelp, height: 50, wantText: "command reference"},
+		// The help is taller than the terminal, so it scrolls in place.
+		{name: "Help/Overflow", view: viewHelp, height: 24, wantText: "↑/↓ scroll"},
 	}
 
 	for _, testCase := range testCases {
@@ -76,7 +79,7 @@ func TestRender(t *testing.T) {
 
 			m := &model{
 				width:     120,
-				height:    50,
+				height:    testCase.height,
 				view:      testCase.view,
 				services:  []*anovelv1.Service{service},
 				logLines:  testCase.logLines,
