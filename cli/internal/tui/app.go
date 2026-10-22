@@ -184,8 +184,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // onServices takes a fresh service list. It clears a transient error, such as
 // a daemon-restart blip, so the nav stops showing it after recovery, and
-// clamps the selection to the new list.
+// clamps the selection to the new list. onServices then follows the selected
+// tab's log when that log changed, as on the first list or after the list
+// shifts under the selection.
 func (m *model) onServices(services []*anovelv1.Service) {
+	prevLogID := m.activeLogID()
 	m.services = services
 	m.loaded = true
 	m.err = nil
@@ -194,6 +197,9 @@ func (m *model) onServices(services []*anovelv1.Service) {
 	}
 	if m.selectedTab >= m.tabCount() {
 		m.selectedTab = 0
+	}
+	if m.activeLogID() != prevLogID {
+		m.followSelectedLogs()
 	}
 }
 
