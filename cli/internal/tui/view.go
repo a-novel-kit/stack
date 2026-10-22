@@ -187,7 +187,7 @@ func (m *model) tabRows() []string {
 
 // detailHeader summarizes the selected tab. A target reads
 // "name · mode · phase [pid] [container]", and an infra
-// "name · infra · phase health [container]".
+// "name · infra · phase [health] [container]".
 //
 // Each run of text takes its own Render. A Render ends with a reset, which
 // clears any style around it.
@@ -202,9 +202,13 @@ func (m *model) detailHeader() string {
 			styleHeader.Render(tail)
 	}
 	if in := m.activeInfra(); in != nil {
+		health := infraHealthLabel(in)
+		if health != "" {
+			health = " " + health
+		}
 		return styleHeader.Render(in.GetName()+" · ") + styleDim.Render("infra") + styleHeader.Render(" · ") +
 			phaseShort(in.GetPhase()) +
-			styleDim.Render(" "+infraHealthLabel(in)) +
+			styleDim.Render(health) +
 			styleHeader.Render(containerSuffix(in.GetContainerId()))
 	}
 	return ""
@@ -530,7 +534,9 @@ func infraDot(in *anovelv1.Infra) string {
 }
 
 // infraHealthLabel returns the short human descriptor that pairs
-// with infraDot ("healthy", "starting", "unhealthy", "down").
+// with infraDot ("healthy", "starting", "unhealthy", "down"), or "" when the
+// daemon reads no health for a running infra: the header's phase already says
+// "running".
 func infraHealthLabel(in *anovelv1.Infra) string {
 	if in.GetPhase() != anovelv1.Phase_PHASE_RUNNING {
 		return "down"
@@ -539,7 +545,7 @@ func infraHealthLabel(in *anovelv1.Infra) string {
 	case anovelv1.Health_HEALTH_HEALTHY:
 		return "healthy"
 	case anovelv1.Health_HEALTH_UNSPECIFIED:
-		return "running" // the daemon reads no infra health
+		return ""
 	case anovelv1.Health_HEALTH_STARTING:
 		return "starting"
 	case anovelv1.Health_HEALTH_UNHEALTHY:

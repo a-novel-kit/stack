@@ -128,6 +128,16 @@ func TestDetailHeader(t *testing.T) {
 			}}},
 			want: "grpc · container · starting container=0123456789ab",
 		},
+		// The daemon reads no infra health, so the phase alone describes it.
+		{
+			name: "Infra/NoHealth",
+			service: &anovelv1.Service{Infra: []*anovelv1.Infra{{
+				Name:        "postgres",
+				Phase:       anovelv1.Phase_PHASE_RUNNING,
+				ContainerId: "0123456789abcdef",
+			}}},
+			want: "postgres · infra · running container=0123456789ab",
+		},
 		{
 			name: "Infra/Healthy",
 			service: &anovelv1.Service{Infra: []*anovelv1.Infra{{
