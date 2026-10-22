@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -228,13 +229,14 @@ func renderTab(dot, label string, selected bool) string {
 //
 //	long-runner running        → ● green
 //	long-runner starting       → ● yellow
-//	long-runner errored        → ● red    (terminated non-success)
-//	long-runner clean exit     → ○ dim    (killed deliberately)
+//	long-runner failed         → ● red    (error or crash)
+//	long-runner stopped        → ○ dim    (exited 0 or killed)
 //	long-runner not started    → ○ dim
 //
 //	one-shot running           → ● yellow (in progress)
 //	one-shot completed (ok)    → ✓ green
-//	one-shot completed (fail)  → ✗ red
+//	one-shot failed            → ✗ red
+//	one-shot killed            → ○ dim
 //	one-shot not started       → ○ dim
 func targetStatusDot(t *anovelv1.Target) string {
 	isOneShot := t.GetKind() == anovelv1.TargetKind_TARGET_KIND_ONE_SHOT
@@ -247,22 +249,25 @@ func targetStatusDot(t *anovelv1.Target) string {
 	case anovelv1.Phase_PHASE_STARTING:
 		return styleWarn.Render("●")
 	case anovelv1.Phase_PHASE_TERMINATED:
-		switch t.GetExitReason() {
-		case anovelv1.ExitReason_EXIT_REASON_SUCCESS:
-			if isOneShot {
-				return styleSuccess.Render("✓")
-			}
-			return styleDim.Render("○")
-		case anovelv1.ExitReason_EXIT_REASON_UNSPECIFIED:
-			return styleDim.Render("○")
-		default:
-			if isOneShot {
-				return styleErr.Render("✗")
-			}
+		switch {
+		case targetFailed(t) && isOneShot:
+			return styleErr.Render("✗")
+		case targetFailed(t):
 			return styleErr.Render("●")
+		case isOneShot && t.GetExitReason() == anovelv1.ExitReason_EXIT_REASON_SUCCESS:
+			return styleSuccess.Render("✓")
 		}
 	}
 	return styleDim.Render("○")
+}
+
+// targetFailed reports whether t terminated on a failure of its own: a
+// non-zero exit or a crash. A killed target was stopped on request, and reads
+// as stopped, as in `run ps`.
+func targetFailed(t *anovelv1.Target) bool {
+	reason := t.GetExitReason()
+	return t.GetPhase() == anovelv1.Phase_PHASE_TERMINATED &&
+		(reason == anovelv1.ExitReason_EXIT_REASON_ERROR || reason == anovelv1.ExitReason_EXIT_REASON_CRASHED)
 }
 
 func (m *model) renderLogs(width, height int) string {
@@ -537,18 +542,11 @@ func computeNavWidth(svcs []*anovelv1.Service) int {
 	return min(w, maxW)
 }
 
-// serviceHasError reports whether any target in the service terminated with a
-// non-success exit. serviceTargetsLine renders the red "● errored" line from
-// it, and the nav keeps such a service undimmed since it needs attention.
+// serviceHasError reports whether any target in the service failed.
+// serviceTargetsLine renders the red "● errored" line from it, and the nav
+// keeps such a service undimmed since it needs attention.
 func serviceHasError(svc *anovelv1.Service) bool {
-	for _, t := range svc.GetTargets() {
-		if t.GetPhase() == anovelv1.Phase_PHASE_TERMINATED &&
-			t.GetExitReason() != anovelv1.ExitReason_EXIT_REASON_SUCCESS &&
-			t.GetExitReason() != anovelv1.ExitReason_EXIT_REASON_UNSPECIFIED {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(svc.GetTargets(), targetFailed)
 }
 
 func modeShort(m anovelv1.Mode) string {
