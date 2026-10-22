@@ -37,6 +37,9 @@ func applyPlan(out io.Writer, t *repocfg.RepoTarget, plan *repocfg.Plan) error {
 		// so the prune's candidates are fixed before the first write.
 		rulesets: sync.OnceValues(func() (map[string]string, error) { return liveRulesets(t.Org, t.Repo) }),
 		repoID:   sync.OnceValues(func() (string, error) { return githubRepoID(t.Org, t.Repo) }),
+		files: sync.OnceValues(func() (map[string]blob, error) {
+			return liveFiles(t.Org, t.Repo, t.DefaultBranch, managedPaths(plan))
+		}),
 	}
 	for _, op := range plan.Ops {
 		switch {
@@ -69,9 +72,10 @@ func isManagedFile(op repocfg.Op) bool {
 type planRun struct {
 	out    io.Writer
 	target *repocfg.RepoTarget
-	// rulesets and repoID read the repository's live state on first use.
+	// rulesets, repoID and files read the repository's live state on first use.
 	rulesets func() (map[string]string, error)
 	repoID   func() (string, error)
+	files    func() (map[string]blob, error)
 	failures []string
 	staged   []contentChange
 	// managedFilesFailed reports that a managed file failed to stage or sync,
@@ -157,17 +161,19 @@ func (r *planRun) applyRulesetOp(op repocfg.Op) {
 }
 
 // stage queues the changes a managed-file op needs for the next sync commit.
+// A failed read of the live files fails every managed-file op.
 func (r *planRun) stage(op repocfg.Op) {
-	stageOp := stageContents
-	if op.Method == http.MethodDelete {
-		stageOp = stageContentDeletion
-	}
-	changes, unchanged, err := stageOp(op)
+	files, err := r.files()
 	if err != nil {
 		r.managedFilesFailed = true
 		r.note(shortPath(op.Path), "", err)
 		return
 	}
+	stageOp := stageContents
+	if op.Method == http.MethodDelete {
+		stageOp = stageContentDeletion
+	}
+	changes, unchanged := stageOp(op, files)
 	if unchanged {
 		r.note(shortPath(op.Path), opUnchanged, nil)
 	}
@@ -394,50 +400,34 @@ type contentChange struct {
 const codeownersName = "CODEOWNERS"
 
 // stageContents turns a managed-file op into the changes the sync commit must
-// carry. unchanged reports that the file already matches the desired content,
-// so nothing is staged for it and a sync that changes nothing commits nothing.
+// carry, given the live files. unchanged reports that the file already matches
+// the desired content, so nothing is staged for it and a sync that changes
+// nothing commits nothing.
 //
 // A stray root CODEOWNERS is staged as a deletion even when the .github/ copy
 // is unchanged, so a repo never carries two. For a file that pins
 // a-novel-kit/workflows actions, deployed pins newer than the template's
 // survive (see preserveNewerPins).
-func stageContents(op repocfg.Op) ([]contentChange, bool, error) {
-	changes := strayRootCodeowners(op)
+func stageContents(op repocfg.Op, files map[string]blob) ([]contentChange, bool) {
+	changes := strayRootCodeowners(op, files)
 
-	// Pin-bearing files are compared against the deployed text, at the cost of
-	// one extra read, so a newer deployed pin survives; everything else takes
-	// the cheaper sha-only path.
-	var deployed, sha string
-	var err error
-	if workflowsPinRe.MatchString(op.Content) {
-		deployed, sha, err = contentText(op.Path)
-	} else {
-		sha, err = contentSHA(op.Path)
-	}
-	if err != nil {
-		return nil, false, err
-	}
-
-	desired := preserveNewerPins(op.Content, deployed)
-	if sha == blobSHA(desired) {
-		return changes, true, nil
+	live := files[shortPath(op.Path)]
+	desired := preserveNewerPins(op.Content, live.Text)
+	if live.OID == blobSHA(desired) {
+		return changes, true
 	}
 	outcome := opCreated
-	if sha != "" {
+	if live.OID != "" {
 		outcome = opUpdated
 	}
-	return append(changes, contentChange{path: shortPath(op.Path), content: desired, outcome: outcome}), false, nil
+	return append(changes, contentChange{path: shortPath(op.Path), content: desired, outcome: outcome}), false
 }
 
 // strayRootCodeowners stages the deletion of a root CODEOWNERS when op writes
-// the managed .github/ copy. A failed read leaves the stray copy for the next
-// reconcile.
-func strayRootCodeowners(op repocfg.Op) []contentChange {
-	base, ok := strings.CutSuffix(op.Path, "/contents/.github/"+codeownersName)
-	if !ok {
-		return nil
-	}
-	if sha, err := contentSHA(base + "/contents/" + codeownersName); err != nil || sha == "" {
+// the managed .github/ copy.
+func strayRootCodeowners(op repocfg.Op, files map[string]blob) []contentChange {
+	_, stray := files[codeownersName]
+	if !stray || shortPath(op.Path) != ".github/"+codeownersName {
 		return nil
 	}
 	return []contentChange{{path: codeownersName, outcome: opDeleted}}
@@ -445,15 +435,11 @@ func strayRootCodeowners(op repocfg.Op) []contentChange {
 
 // stageContentDeletion stages the deletion of a managed file. unchanged
 // reports that the file is already absent.
-func stageContentDeletion(op repocfg.Op) ([]contentChange, bool, error) {
-	sha, err := contentSHA(op.Path)
-	if err != nil {
-		return nil, false, err
+func stageContentDeletion(op repocfg.Op, files map[string]blob) ([]contentChange, bool) {
+	if _, found := files[shortPath(op.Path)]; !found {
+		return nil, true
 	}
-	if sha == "" {
-		return nil, true, nil
-	}
-	return []contentChange{{path: shortPath(op.Path), outcome: opDeleted}}, false, nil
+	return []contentChange{{path: shortPath(op.Path), outcome: opDeleted}}, false
 }
 
 // syncCommitQuery applies every staged change as a single commit on the
@@ -971,55 +957,55 @@ const (
 	opDeleted   = "deleted"
 )
 
-// contentSHA returns the blob sha of an existing file at path, or "" when the
-// file does not exist yet. Only a 404 reads as the create case, and any other
-// error, such as an auth, network or rate-limit failure, is returned.
-func contentSHA(path string) (string, error) {
-	out, err := gh("api", path, "--jq", ".sha")
-	if err != nil {
-		if isNotFound(err) {
-			return "", nil
-		}
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
+// blob is a live file on the default branch. GitHub leaves Text empty for a
+// binary file, so staging keeps the template's pins.
+type blob struct {
+	// OID is the git blob id, which blobSHA computes for a file's content.
+	OID  string `json:"oid"`
+	Text string `json:"text"`
 }
 
-// ghContent is the subset of the contents API's file object contentText reads:
-// the blob sha and the base64-encoded content.
-type ghContent struct {
-	SHA      string `json:"sha"`
-	Content  string `json:"content"`
-	Encoding string `json:"encoding"`
+// managedPaths lists the repo-relative path of each managed file plan touches,
+// and the root CODEOWNERS that strayRootCodeowners deletes.
+func managedPaths(plan *repocfg.Plan) []string {
+	paths := []string{codeownersName}
+	for _, op := range plan.Ops {
+		if isManagedFile(op) {
+			paths = append(paths, shortPath(op.Path))
+		}
+	}
+	return paths
 }
 
-// contentText returns the decoded text and blob sha of an existing file at
-// path, or ("", "", nil) when it does not exist yet (a 404). Like contentSHA,
-// any other error is propagated. A file the contents API does not base64,
-// which happens over 1MB, yields ("", sha, nil). The managed files are a few
-// KB, so that is a safe fallback that keeps the template's pins.
-func contentText(path string) (string, string, error) {
-	out, err := gh("api", path)
+// liveFiles reads every path on the branch in one GraphQL query, one alias per
+// path, and returns the files that exist, keyed by path. An error, such as an
+// auth, network or rate-limit failure, is returned.
+func liveFiles(org, repo, branch string, paths []string) (map[string]blob, error) {
+	var aliases strings.Builder
+	for i, p := range paths {
+		// A JSON string is a valid GraphQL string literal, and a string always
+		// marshals.
+		expression, _ := json.Marshal(branch + ":" + p)
+		fmt.Fprintf(&aliases, " f%d: object(expression: %s) { ... on Blob { oid text } }", i, expression)
+	}
+	query := "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {" + aliases.String() + " } }"
+	out, err := gh("api", "graphql", "-f", "owner="+org, "-f", "name="+repo, "-f", "query="+query, "--jq", ".data.repository")
 	if err != nil {
-		if isNotFound(err) {
-			return "", "", nil
+		return nil, err
+	}
+
+	// A missing file answers null, which leaves its alias nil.
+	var found map[string]*blob
+	if err := json.Unmarshal([]byte(out), &found); err != nil {
+		return nil, fmt.Errorf("parse managed files: %w", err)
+	}
+	files := map[string]blob{}
+	for i, p := range paths {
+		if file := found["f"+strconv.Itoa(i)]; file != nil {
+			files[p] = *file
 		}
-		return "", "", err
 	}
-	var obj ghContent
-	if err := json.Unmarshal([]byte(out), &obj); err != nil {
-		return "", "", fmt.Errorf("parse contents %s: %w", path, err)
-	}
-	if obj.Encoding != "base64" {
-		return "", obj.SHA, nil
-	}
-	// The contents API wraps its base64 at 60 columns; strip the newlines the
-	// standard decoder rejects.
-	raw, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(obj.Content, "\n", ""))
-	if err != nil {
-		return "", "", fmt.Errorf("decode contents %s: %w", path, err)
-	}
-	return string(raw), obj.SHA, nil
+	return files, nil
 }
 
 // workflowsPinRe matches an a-novel-kit/workflows action pin, capturing the
