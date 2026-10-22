@@ -290,6 +290,9 @@ Most entries are stated in full in the sections above; this list is the review c
 - **Missing `set -e`.** A failed `podman compose up --build` is then ignored, and the migrations and
   tests that follow run against nonexistent containers — a confusing "connection refused" instead of
   a clear build failure.
+- **A command substitution used as a `case` or test word.** `set -e` never sees its failure:
+  `case "$(gh api …)" in` matches an empty string and the script carries on. Assign it first,
+  `state="$(gh api …)"`, so a failed call stops the script.
 - **`trap cleanup INT EXIT ERR`.** Use `INT EXIT` only; `ERR` fires the cleanup twice.
 - **No readiness wait after `compose up -d`.** Poll for health before running tests or migrations.
 - **Unquoted `$1` / `$2` in function calls.** Breaks on paths and version strings containing spaces.

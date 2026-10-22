@@ -36,7 +36,7 @@ case "$*" in
  *'/commits') printf '%s\n' "$COMMITS";;
  *'/labels/'*) [ -z "${LABEL_ERROR:-}" ] || { printf '%s\n' "$LABEL_ERROR" >&2; exit 1; };;
  *'/lock') ;;
- *'/issues/'*) printf '%s\n' "$ISSUE";;
+ *'/issues/'*) [ -z "${ISSUE_ERROR:-}" ] || { printf '%s\n' "$ISSUE_ERROR" >&2; exit 1; }; printf '%s\n' "$ISSUE";;
  *) exit 91;;
 esac
 `

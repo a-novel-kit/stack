@@ -759,24 +759,26 @@ func TestLockClosedGovernance(t *testing.T) {
 		t.Errorf("concurrency = %+v, want group %q without cancel-in-progress", workflow.Concurrency, want)
 	}
 
-	// Whatever the event, the step acts on the conversation's live state.
+	// Whatever the event, the step acts on the conversation's live state. A
+	// failed read of that state fails the run.
 	lock, unlock := "api --method PUT repos/example/repo/issues/7/lock", "api --method DELETE repos/example/repo/issues/7/lock"
 	testCases := []struct {
-		name, state, want string
+		name, state, issueError, want string
 	}{
 		{name: "ClosedAndUnlocked", state: "closed false", want: lock},
 		{name: "OpenAndLocked", state: "open true", want: unlock},
 		{name: "ReopenedBeforeTheLock", state: "open false"},
 		{name: "AlreadyLocked", state: "closed true"},
+		{name: "IssueReadFails", state: "open true", issueError: "HTTP 502"},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			env := []string{"GITHUB_REPOSITORY=example/repo", "NUMBER=7", "ISSUE=" + testCase.state}
+			env := []string{"GITHUB_REPOSITORY=example/repo", "NUMBER=7", "ISSUE=" + testCase.state, "ISSUE_ERROR=" + testCase.issueError}
 			output, calls, err := runGovernanceScript(t, workflow.Jobs["lock"].Steps[0].Run, env)
-			if err != nil {
-				t.Fatalf("lock step: %v\n%s", err, output)
+			if (err != nil) != (testCase.issueError != "") {
+				t.Fatalf("lock step error = %v, want one only when the issue read fails\n%s", err, output)
 			}
 			writes := slices.DeleteFunc(strings.Split(strings.TrimSpace(calls), "\n"), func(call string) bool {
 				return !strings.HasSuffix(call, "/lock")
