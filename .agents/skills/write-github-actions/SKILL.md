@@ -121,7 +121,9 @@ runs:
   `scan-secrets` and `refresh-apko-locks` do. A downloaded binary takes a caller `sha256` input on the
   line after `version` and passes `sha256sum --check` before it runs, and a datasource in the base
   Renovate preset moves the hash with the version
-  ([release files pinned by hash](references/renovate-presets.md#release-files-pinned-by-hash)).
+  ([release files pinned by hash](references/renovate-presets.md#release-files-pinned-by-hash)). A
+  container image runs by digest: the caller pins `version: "<tag>@sha256:<digest>"`, as for
+  `lint-semgrep` and `lint-workflows`, and the base preset moves the digest with the tag.
 - Reference a sibling action in the same repo by its pinned tag
   (`a-novel-kit/workflows/generic-actions/pull-bot@v1.20.1`). A relative `./` path would bind a
   released action to whatever sits on `master`, so a release could not be internally consistent.
