@@ -12,8 +12,10 @@ import (
 // EnsureDepsReady readies everything t's compose depends_on names before t
 // starts, by dependency kind:
 //   - infra: the service's infra starts when it is down.
-//   - one-shot target: it must have succeeded in the current infra session,
-//     and it runs now when it has not run yet. A failed run refuses the start.
+//   - one-shot target: the service's infra starts when it is down, whatever
+//     the order of the dependencies. The one-shot must have succeeded in the
+//     current infra session, and it runs now when it has not run yet. A failed
+//     run refuses the start.
 //   - long-runner target: it must already be running. A container one must not
 //     report a starting or unhealthy healthcheck. The daemon never starts a
 //     long-runner on its own.
@@ -31,9 +33,6 @@ func (r *Runner) EnsureDepsReady(ctx context.Context, t *discovery.Target, svc *
 	oneShots := topoSortOneShots(svc)
 	if t.Kind != discovery.TargetKindLongRunner || len(oneShots) == 0 {
 		return nil
-	}
-	if err := r.ensureInfraReady(ctx, svc, oneShotsMode); err != nil {
-		return fmt.Errorf("infra: %w", err)
 	}
 	for _, oneShot := range oneShots {
 		if err := r.ensureOneShotSatisfied(ctx, svc, oneShot, oneShotsMode); err != nil {
@@ -90,7 +89,15 @@ func (r *Runner) ensureInfraReady(ctx context.Context, svc *discovery.Service, o
 // ensureOneShotSatisfied verifies the one-shot has succeeded in the
 // current infra session, OR runs it now. Refuses-with-hint if a previous
 // run failed (caller must fix the failure and re-run infra).
+//
+// A one-shot runs against its service's infra, so the infra comes up first
+// when it is down. Bringing it up runs the service's one-shots, this one
+// included, so the result is then on record.
 func (r *Runner) ensureOneShotSatisfied(ctx context.Context, svc *discovery.Service, t *discovery.Target, mode anovelv1.Mode) error {
+	if err := r.ensureInfraReady(ctx, svc, mode); err != nil {
+		return fmt.Errorf("infra: %w", err)
+	}
+	// A teardown between the bring-up and this read leaves no session.
 	sess, ok := r.InfraSession(svc.Stack, svc.Name)
 	if !ok || !sess.Up {
 		return fmt.Errorf("one-shot dep %s/%s requires infra up — call `a-novel run service infra start %s` first",

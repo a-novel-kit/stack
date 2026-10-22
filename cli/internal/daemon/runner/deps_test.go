@@ -1,9 +1,15 @@
 package runner
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
+	"github.com/a-novel-kit/stack/cli/internal/daemon/env"
+	"github.com/a-novel-kit/stack/cli/internal/daemon/logs"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -53,5 +59,47 @@ func TestEnsureDepsReadyGatesALongRunnerOnItsOneShots(t *testing.T) {
 				t.Fatalf("EnsureDepsReady(%s) = %v, want error %v", testCase.target.Name, err, testCase.wantErr)
 			}
 		})
+	}
+}
+
+// TestEnsureDepsReadyStartsInfraForAOneShotDepListedFirst covers a target whose
+// one-shot dependency sorts before its infra dependency. The one-shot brings
+// the infra up instead of refusing the start. A stand-in podman records the
+// bring-up and fails it, which ends the start there.
+func TestEnsureDepsReadyStartsInfraForAOneShotDepListedFirst(t *testing.T) {
+	dir := t.TempDir()
+	script := fmt.Sprintf("#!/bin/sh\necho \"$@\" >> %s/calls\nexit 1\n", dir)
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "podman"), []byte(script), 0o700); err != nil { //nolint:gosec // an executable fixture
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	migrations := &discovery.Target{
+		Name: "migrations", ComposeName: "service-x-migrations", Service: "service-x", Stack: "default",
+		Kind: discovery.TargetKindOneShot,
+	}
+	// Discovery sorts DependsOn by name, and service-x-migrations sorts
+	// before valkey-x.
+	rest := &discovery.Target{
+		Name: "rest", ComposeName: "service-x-rest", Service: "service-x", Stack: "default",
+		Kind: discovery.TargetKindLongRunner, DependsOn: []string{"service-x-migrations", "valkey-x"},
+	}
+	svc := &discovery.Service{
+		Name: "service-x", Stack: "default",
+		Infra:   []*discovery.Infra{{Name: "valkey-x", Service: "service-x", Stack: "default"}},
+		Targets: []*discovery.Target{migrations, rest},
+	}
+	alloc := env.NewAllocator()
+	alloc.SetServices([]string{"service-x"})
+	r := New(discovery.Stacks{{Name: "default", Default: true, Services: []*discovery.Service{svc}}}, alloc, env.NewBuilder(alloc), logs.New())
+
+	err := r.EnsureDepsReady(t.Context(), rest, svc, anovelv1.Mode_MODE_GO_EXEC)
+
+	if err == nil || strings.Contains(err.Error(), "requires infra up") {
+		t.Fatalf("EnsureDepsReady: got %v, want the failed infra bring-up", err)
+	}
+	if calls, _ := os.ReadFile(filepath.Join(dir, "calls")); !strings.Contains(string(calls), "compose") {
+		t.Errorf("podman calls = %q, want a compose up", calls)
 	}
 }
