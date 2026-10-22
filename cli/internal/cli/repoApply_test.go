@@ -2,9 +2,10 @@ package cli
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -24,20 +25,8 @@ func liveOf(org, repo string) func() (map[string]string, error) {
 	return func() (map[string]string, error) { return liveRulesets(org, repo) }
 }
 
-// contentsJSON builds the contents-API body GitHub returns for a deployed file
-// holding text.
-func contentsJSON(t *testing.T, text string) string {
-	t.Helper()
-	raw, err := json.Marshal(ghContent{
-		SHA:      blobSHA(text),
-		Content:  base64.StdEncoding.EncodeToString([]byte(text)),
-		Encoding: "base64",
-	})
-	if err != nil {
-		panic(err)
-	}
-	return string(raw)
-}
+// liveBlob is the live state of a deployed file holding text.
+func liveBlob(text string) blob { return blob{OID: blobSHA(text), Text: text} }
 
 func TestApplyPlan(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam.
@@ -48,6 +37,7 @@ func TestApplyPlan(t *testing.T) {
 		"rulesets?includes_parents=false --jq": "codecov\t777\n",
 		"git/ref/heads/master":                 "headoid123\n",
 		"repos/o/r --jq .id":                   "4321\n",
+		"--jq .data.repository":                "{}",
 	}
 	calls := fakeGH(t, responses)
 
@@ -95,7 +85,8 @@ func TestApplyPlan(t *testing.T) {
 }
 
 func TestStageContents(t *testing.T) {
-	// Not parallel: sub-tests swap the package-level ghStdin seam.
+	t.Parallel()
+
 	const (
 		managed  = "name: Managed\n"
 		owners   = "* @a-novel-kit/maintainers\n"
@@ -105,75 +96,121 @@ func TestStageContents(t *testing.T) {
 	pin := func(v string) string {
 		return "      - uses: a-novel-kit/workflows/generic-actions/merge-gate@" + v + "\n"
 	}
-	deployedGate := map[string]string{gatePath: contentsJSON(t, pin("v1.15.0"))}
+	deployedGate := map[string]blob{".github/workflows/merge-gate.yaml": liveBlob(pin("v1.15.0"))}
 
 	testCases := []struct {
 		name          string
-		responses     map[string]string
+		files         map[string]blob
 		op            repocfg.Op
 		wantChanges   []contentChange
 		wantUnchanged bool
 	}{
 		{
 			name:          "Success/Unchanged",
-			responses:     map[string]string{"--jq .sha": blobSHA(managed) + "\n"},
+			files:         map[string]blob{".github/workflows/managed.yaml": liveBlob(managed)},
 			op:            repocfg.Op{Path: wfPath, Content: managed},
 			wantUnchanged: true,
 		},
 		{
-			// The sha read yields "": the file does not exist yet.
 			name:        "Success/NewFile",
 			op:          repocfg.Op{Path: wfPath, Content: managed},
 			wantChanges: []contentChange{{path: ".github/workflows/managed.yaml", content: managed, outcome: opCreated}},
 		},
 		{
 			name:        "Success/Drifted",
-			responses:   map[string]string{"--jq .sha": "someothersha\n"},
+			files:       map[string]blob{".github/workflows/managed.yaml": liveBlob("name: Drifted\n")},
 			op:          repocfg.Op{Path: wfPath, Content: managed},
 			wantChanges: []contentChange{{path: ".github/workflows/managed.yaml", content: managed, outcome: opUpdated}},
 		},
 		{
-			// Both copies report this sha: the .github/ copy is unchanged, and
-			// the stray root copy is deleted anyway.
+			// The .github/ copy is unchanged, and the stray root copy is deleted
+			// anyway.
 			name:          "Success/StrayRootCODEOWNERS",
-			responses:     map[string]string{"--jq .sha": blobSHA(owners) + "\n"},
+			files:         map[string]blob{".github/CODEOWNERS": liveBlob(owners), "CODEOWNERS": liveBlob(owners)},
 			op:            repocfg.Op{Path: "repos/o/r/contents/.github/CODEOWNERS", Content: owners},
 			wantChanges:   []contentChange{{path: "CODEOWNERS", outcome: opDeleted}},
 			wantUnchanged: true,
 		},
 		{
+			// Only the .github/CODEOWNERS op deletes the root copy.
+			name:        "Success/RootCODEOWNERSLeftToItsOp",
+			files:       map[string]blob{"CODEOWNERS": liveBlob(owners)},
+			op:          repocfg.Op{Path: wfPath, Content: managed},
+			wantChanges: []contentChange{{path: ".github/workflows/managed.yaml", content: managed, outcome: opCreated}},
+		},
+		{
 			// Renovate bumped the deployed caller past the template's pin; the
 			// sync must not write the older pin back.
 			name:          "Success/KeepsNewerDeployedPin",
-			responses:     deployedGate,
+			files:         deployedGate,
 			op:            repocfg.Op{Path: gatePath, Content: pin("v1.14.0")},
 			wantUnchanged: true,
 		},
 		{
 			name:        "Success/UpgradesToNewerTemplatePin",
-			responses:   deployedGate,
+			files:       deployedGate,
 			op:          repocfg.Op{Path: gatePath, Content: pin("v1.16.0")},
 			wantChanges: []contentChange{{path: ".github/workflows/merge-gate.yaml", content: pin("v1.16.0"), outcome: opUpdated}},
 		},
 		{
 			// A genuine template edit still lands, but the pin is not downgraded.
-			name:      "Success/TemplateEditKeepsNewerPin",
-			responses: deployedGate,
-			op:        repocfg.Op{Path: gatePath, Content: "# refreshed comment\n" + pin("v1.14.0")},
+			name:  "Success/TemplateEditKeepsNewerPin",
+			files: deployedGate,
+			op:    repocfg.Op{Path: gatePath, Content: "# refreshed comment\n" + pin("v1.14.0")},
 			wantChanges: []contentChange{{
 				path: ".github/workflows/merge-gate.yaml", content: "# refreshed comment\n" + pin("v1.15.0"), outcome: opUpdated,
 			}},
+		},
+		{
+			// GitHub returns no text for a binary file, so the template's pins
+			// stay.
+			name:        "Success/BinaryKeepsTemplatePins",
+			files:       map[string]blob{".github/workflows/merge-gate.yaml": {OID: "binaryoid"}},
+			op:          repocfg.Op{Path: gatePath, Content: pin("v1.14.0")},
+			wantChanges: []contentChange{{path: ".github/workflows/merge-gate.yaml", content: pin("v1.14.0"), outcome: opUpdated}},
 		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			fakeGH(t, testCase.responses)
-			changes, unchanged, err := stageContents(testCase.op)
-			if err != nil || unchanged != testCase.wantUnchanged || !slices.Equal(changes, testCase.wantChanges) {
-				t.Fatalf("stageContents = (%+v, %v, %v), want (%+v, %v, nil)", changes, unchanged, err, testCase.wantChanges, testCase.wantUnchanged)
+			t.Parallel()
+
+			changes, unchanged := stageContents(testCase.op, testCase.files)
+			if unchanged != testCase.wantUnchanged || !slices.Equal(changes, testCase.wantChanges) {
+				t.Fatalf("stageContents = (%+v, %v), want (%+v, %v)", changes, unchanged, testCase.wantChanges, testCase.wantUnchanged)
 			}
 		})
+	}
+}
+
+// TestApplyPlanReadsManagedFilesOnce pins a single read of the live managed
+// files, the root CODEOWNERS included, however many files the plan manages.
+func TestApplyPlanReadsManagedFilesOnce(t *testing.T) {
+	// Not parallel: swaps the package-level ghStdin seam.
+	calls := stubGH(t, func(call string) (string, error) {
+		switch {
+		case strings.Contains(call, "--jq .data.repository"):
+			return "{}", nil
+		case strings.Contains(call, "git/ref/heads/master"):
+			return "headoid123\n", nil
+		}
+		return "", nil
+	})
+
+	plan := &repocfg.Plan{Ops: []repocfg.Op{
+		{Method: http.MethodPut, Path: "repos/o/r/contents/.github/CODEOWNERS", Content: "* @o/maintainers\n"},
+		{Method: http.MethodPut, Path: "repos/o/r/contents/.github/workflows/a.yaml", Content: "name: A\n"},
+		{Method: http.MethodPut, Path: "repos/o/r/contents/.github/workflows/b.yaml", Content: "name: B\n"},
+		{Method: http.MethodDelete, Path: "repos/o/r/contents/.github/workflows/retired.yaml"},
+	}}
+	if err := applyPlan(io.Discard, testTarget, plan); err != nil {
+		t.Fatalf("applyPlan: %v", err)
+	}
+
+	// Every call but the sync commit's tip read and mutation reads files.
+	reads := len(*calls) - countCalls(*calls, "git/ref/heads/master") - countCalls(*calls, "createCommitOnBranch")
+	if reads != 1 {
+		t.Fatalf("managed files read in %d calls, want 1:\n%s", reads, strings.Join(*calls, "\n"))
 	}
 }
 
@@ -442,55 +479,42 @@ func TestPreserveNewerPins(t *testing.T) {
 	}
 }
 
-func TestContentText(t *testing.T) {
+func TestLiveFiles(t *testing.T) {
 	// Not parallel: sub-tests swap the package-level ghStdin seam.
-	const path = "repos/o/r/contents/x.yaml"
-	text := "hello: world\n"
+	paths := []string{codeownersName, ".github/workflows/a.yaml", ".github/logo.png"}
 	testCases := []struct {
-		name              string
-		out               string
-		err               error
-		wantText, wantSHA string
-		wantErr           bool
+		name    string
+		out     string
+		err     error
+		want    map[string]blob
+		wantErr bool
 	}{
-		{name: "Success", out: contentsJSON(t, text), wantText: text, wantSHA: blobSHA(text)},
-		{name: "Success/NotFound", err: errGHNotFound},
-		// Files over 1MB are not base64-encoded: sha only, a safe no-splice fallback.
-		{name: "Success/NonBase64", out: `{"sha":"deadbeef","content":"","encoding":"none"}`, wantSHA: "deadbeef"},
+		{
+			// A missing file answers null, and a binary file has no text.
+			name: "Success",
+			out:  `{"f0":null,"f1":{"oid":"a1","text":"name: A\n"},"f2":{"oid":"b2","text":null}}`,
+			want: map[string]blob{".github/workflows/a.yaml": {OID: "a1", Text: "name: A\n"}, ".github/logo.png": {OID: "b2"}},
+		},
 		{name: "Error/Propagated", err: errGHBadCredentials, wantErr: true},
+		{name: "Error/Unparsable", out: "not json", wantErr: true},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			calls := stubGH(t, func(string) (string, error) { return testCase.out, testCase.err })
-			got, sha, err := contentText(path)
-			if got != testCase.wantText || sha != testCase.wantSHA || (err != nil) != testCase.wantErr || !strings.Contains((*calls)[0], path) {
-				t.Fatalf("contentText = (%q, %q, %v) via %q, want (%q, %q, error %v)", got, sha, err, *calls, testCase.wantText, testCase.wantSHA, testCase.wantErr)
+			files, err := liveFiles("o", "r", branchMaster, paths)
+			if (err != nil) != testCase.wantErr || !maps.Equal(files, testCase.want) {
+				t.Fatalf("liveFiles = (%+v, %v), want (%+v, error %v)", files, err, testCase.want, testCase.wantErr)
 			}
-		})
-	}
-}
 
-func TestContentSHA(t *testing.T) {
-	// Not parallel: sub-tests swap the package-level ghStdin seam.
-	const path = "repos/o/r/contents/x.yml"
-	testCases := []struct {
-		name, out, wantSHA string
-		err                error
-		wantErr            bool
-	}{
-		{name: "Success", out: "abc123\n", wantSHA: "abc123"},
-		// A 404 is the create case.
-		{name: "Success/NotFound", err: errGHNotFound},
-		{name: "Error/Propagated", err: errGHBadCredentials, wantErr: true},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			calls := stubGH(t, func(string) (string, error) { return testCase.out, testCase.err })
-			sha, err := contentSHA(path)
-			if sha != testCase.wantSHA || (err != nil) != testCase.wantErr || !strings.Contains((*calls)[0], path) {
-				t.Fatalf("contentSHA = (%q, %v) via %q, want (%q, error %v)", sha, err, *calls, testCase.wantSHA, testCase.wantErr)
+			// One call reads every path, each through its own alias.
+			if len(*calls) != 1 || !strings.Contains((*calls)[0], "-f owner=o -f name=r") {
+				t.Fatalf("liveFiles calls = %q, want one query on o/r", *calls)
+			}
+			for i, p := range paths {
+				if alias := fmt.Sprintf(`f%d: object(expression: "master:%s")`, i, p); !strings.Contains((*calls)[0], alias) {
+					t.Errorf("query lacks %s:\n%s", alias, (*calls)[0])
+				}
 			}
 		})
 	}
@@ -925,8 +949,8 @@ func TestApplyPlanSkipsRulesetsWhenManagedSyncFails(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam.
 	calls := stubGH(t, func(call string) (string, error) {
 		switch {
-		case strings.Contains(call, "/contents/"):
-			return "", errGHNotFound
+		case strings.Contains(call, "--jq .data.repository"):
+			return "{}", nil
 		case strings.Contains(call, "git/ref/heads/master"):
 			return "headoid123", nil
 		case strings.Contains(call, "api graphql"):
@@ -976,23 +1000,17 @@ func TestInfraDisabledStateOperationsAreIdempotent(t *testing.T) {
 }
 
 func TestStageContentDeletionIsIdempotent(t *testing.T) {
-	// Not parallel: swaps the package-level ghStdin seam.
-	exists := true
-	stubGH(t, func(string) (string, error) {
-		if exists {
-			exists = false
-			return "existing-sha", nil
-		}
-		return "", errGHNotFound
-	})
-	op := repocfg.Op{Method: http.MethodDelete, Path: "repos/o/infra/contents/.github/workflows/release-train.yaml"}
+	t.Parallel()
 
-	changes, unchanged, err := stageContentDeletion(op)
-	if err != nil || unchanged || len(changes) != 1 || changes[0].outcome != opDeleted {
-		t.Fatalf("existing deletion = (%+v, %v, %v), want one staged deletion", changes, unchanged, err)
+	op := repocfg.Op{Method: http.MethodDelete, Path: "repos/o/infra/contents/.github/workflows/release-train.yaml"}
+	live := map[string]blob{".github/workflows/release-train.yaml": {OID: "existing-sha"}}
+
+	changes, unchanged := stageContentDeletion(op, live)
+	if unchanged || len(changes) != 1 || changes[0].outcome != opDeleted {
+		t.Fatalf("existing deletion = (%+v, %v), want one staged deletion", changes, unchanged)
 	}
-	changes, unchanged, err = stageContentDeletion(op)
-	if err != nil || !unchanged || len(changes) != 0 {
-		t.Fatalf("missing deletion = (%+v, %v, %v), want unchanged", changes, unchanged, err)
+	changes, unchanged = stageContentDeletion(op, map[string]blob{})
+	if !unchanged || len(changes) != 0 {
+		t.Fatalf("missing deletion = (%+v, %v), want unchanged", changes, unchanged)
 	}
 }

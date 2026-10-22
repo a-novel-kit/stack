@@ -27,8 +27,8 @@ func TestRepoCreateInfraDefaultsPublicAndBootstrapsBeforeRulesets(t *testing.T) 
 			return "seedoid123", nil
 		case strings.Contains(call, "api -X PUT repos/a-novel/infra/contents/"):
 			return "seedcommit123", nil
-		case strings.Contains(call, "/contents/"):
-			return "", errGHNotFound
+		case strings.Contains(call, "--jq .data.repository"):
+			return "{}", nil
 		case strings.Contains(call, "api graphql"):
 			return "synccommit456", nil
 		}
@@ -76,7 +76,7 @@ func TestRepoCreateInfraDefaultsPublicAndBootstrapsBeforeRulesets(t *testing.T) 
 	}
 
 	seedAt := indexCall(calls, "-X PUT repos/a-novel/infra/contents/.github/CODEOWNERS")
-	syncAt := indexCall(calls, "api graphql")
+	syncAt := indexCall(calls, "createCommitOnBranch")
 	rulesetAt := indexCall(calls, "/rulesets")
 	if seedAt < 0 || syncAt < 0 || rulesetAt < 0 {
 		t.Fatalf("missing bootstrap calls (seed=%d sync=%d ruleset=%d):\n%s", seedAt, syncAt, rulesetAt, joined)
