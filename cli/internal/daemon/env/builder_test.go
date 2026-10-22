@@ -415,3 +415,55 @@ func TestBuilderHeldPorts(t *testing.T) {
 		t.Errorf("next daemon SERVICE_OTHER_GRPC_PORT = %d, want %d", got, grpc)
 	}
 }
+
+// TestBuilderURLRefs pins how a `${X_URL}` reference resolves. A URL beside its
+// port carries that port, and a cross-service URL never carries the consumer's
+// own port. Each case builds many times, so a result that depends on map
+// order shows.
+func TestBuilderURLRefs(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		services []string
+		// env is the target's environment block. Its URL reference is A.
+		env map[string]string
+		// wantA derives the expected value of A from the built env.
+		wantA func(env map[string]string) string
+	}{
+		{
+			name: "Success/BesideItsPort", services: []string{"svc"},
+			env:   map[string]string{"A": "${REST_URL}", "B": "${REST_PORT}"},
+			wantA: func(env map[string]string) string { return "http://localhost:" + env["B"] },
+		},
+		{
+			name: "Success/CrossServiceBesideItsPort", services: []string{"svc", "service-y"},
+			env:   map[string]string{"A": "${SERVICE_Y_GRPC_URL}", "B": "${SERVICE_Y_GRPC_PORT}"},
+			wantA: func(env map[string]string) string { return "localhost:" + env["B"] },
+		},
+		{
+			name: "Success/CrossServiceBesideOwnPort", services: []string{"svc", "service-y"},
+			env:   map[string]string{"A": "${SERVICE_Y_GRPC_URL}", "B": "${GRPC_PORT}"},
+			wantA: func(map[string]string) string { return "" },
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			b, _ := newBuilderWith(testCase.services)
+			target := discovery.Target{Name: "rest", Service: "svc", Stack: "default", Environment: testCase.env}
+			for range 50 {
+				entries, _, err := b.ForTarget(&target)
+				if err != nil {
+					t.Fatal(err)
+				}
+				env := toMap(entries)
+				if want := testCase.wantA(env); env["A"] != want {
+					t.Fatalf("A = %q, want %q (env %v)", env["A"], want, env)
+				}
+			}
+		})
+	}
+}

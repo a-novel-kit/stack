@@ -289,18 +289,28 @@ func (b *Builder) resolveContext(env map[string]string, owner string, services [
 			ctx[k] = v
 		}
 	}
-	// Then resolve every referenced VAR.
+	// Then resolve every referenced VAR, the `*_PORT` refs first. A port fills
+	// its derived HOST and URL into ctx, so a `*_URL` ref finds its port there
+	// whatever order the map yields.
+	var ports, others []string
 	for _, v := range env {
 		for _, ref := range compose.Refs(v) {
-			if _, already := ctx[ref]; already {
-				continue
+			if isAllocatedKind(ref) {
+				ports = append(ports, ref)
+			} else {
+				others = append(others, ref)
 			}
-			val, err := b.resolveOne(ref, owner, services, allocate, consumer, ctx)
-			if err != nil {
-				return nil, err
-			}
-			ctx[ref] = val
 		}
+	}
+	for _, ref := range slices.Concat(ports, others) {
+		if _, already := ctx[ref]; already {
+			continue
+		}
+		val, err := b.resolveOne(ref, owner, services, allocate, consumer, ctx)
+		if err != nil {
+			return nil, err
+		}
+		ctx[ref] = val
 	}
 	return ctx, nil
 }
@@ -350,10 +360,10 @@ func (b *Builder) resolveOne(varName, owner string, services []string, allocate 
 	case isHostKind(localVar):
 		return hostLocalhost, nil
 	case isURLKind(localVar):
-		// The URL composes from the matching _PORT, which must already be
-		// resolved.
+		// The URL composes from the matching _PORT, read under the same service
+		// prefix, so a cross-service URL never takes the consumer's own port.
 		base := strings.TrimSuffix(localVar, "_URL")
-		if portStr := ctx[base+"_PORT"]; portStr != "" {
+		if portStr := ctx[strings.TrimSuffix(varName, "_URL")+"_PORT"]; portStr != "" {
 			port, _ := strconv.Atoi(portStr)
 			return urlFor(base, port), nil
 		}
