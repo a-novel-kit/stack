@@ -97,7 +97,7 @@ func (r *Runner) adoptTarget(e psEntry, phase anovelv1.Phase, health anovelv1.He
 	r.instances[inst.ID] = inst
 	r.mu.Unlock()
 
-	// Resume watching and log streaming on the adopted container. A log
+	// Resume polling and log streaming on the adopted container. A log
 	// writer that fails to open costs this adoption only its streaming.
 	if phase != anovelv1.Phase_PHASE_TERMINATED && r.logs != nil {
 		ctxAdopt, cancel := context.WithCancel(context.Background())
@@ -107,7 +107,7 @@ func (r *Runner) adoptTarget(e psEntry, phase anovelv1.Phase, health anovelv1.He
 		if w, err := r.logs.OpenForWrite(inst.ID, stack, service, target); err == nil {
 			go r.streamContainerLogs(ctxAdopt, e.ID, w)
 		}
-		go r.watchContainer(ctxAdopt, inst.ID, e.ID)
+		go r.watchContainer(inst.ID, e.ID)
 	}
 	return true
 }

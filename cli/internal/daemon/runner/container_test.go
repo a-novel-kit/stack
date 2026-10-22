@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -127,6 +128,200 @@ func TestUpdateContainerState(t *testing.T) {
 				if testCase.wantEvent {
 					t.Errorf("no event, want %v→%v", testCase.phase, testCase.wantPhase)
 				}
+			}
+		})
+	}
+}
+
+// fakePodmanInspect puts on PATH a stand-in podman whose inspect prints, for
+// each container ID, the line held in the file of that name under the returned
+// directory. An ID with no file fails the call with exit 125 after the other
+// lines, as podman does. Every call appends its arguments to the directory's
+// calls file.
+func fakePodmanInspect(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	script := fmt.Sprintf(`#!/bin/sh
+echo "$@" >> %[1]s/calls
+shift 2
+status=0
+for cid in "$@"; do
+	cat %[1]s/"$cid" 2>/dev/null || status=125
+done
+exit $status
+`, dir)
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "podman"), []byte(script), 0o700); err != nil { //nolint:gosec // an executable fixture
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return dir
+}
+
+// podmanCalls counts the calls a fakePodmanInspect directory recorded.
+func podmanCalls(t *testing.T, dir string) int {
+	t.Helper()
+	calls, _ := os.ReadFile(filepath.Join(dir, "calls"))
+	return strings.Count(string(calls), "\n")
+}
+
+// TestCheckContainers covers one tick of the poller. A single podman call
+// inspects every container, and each line reaches its own instance. A vanished
+// container fails that call, and one inspect per container then ends only the
+// vanished one, as crashed.
+func TestCheckContainers(t *testing.T) {
+	type container struct {
+		// phase is the instance's phase before the check.
+		phase anovelv1.Phase
+		// inspect is the line podman prints for the container, "" once it
+		// vanished.
+		inspect string
+
+		wantPhase  anovelv1.Phase
+		wantReason anovelv1.ExitReason
+	}
+
+	testCases := []struct {
+		name string
+		// containers is keyed by container ID.
+		containers map[string]container
+
+		wantCalls int
+	}{
+		{
+			name: "Success",
+			containers: map[string]container{
+				"starting": {phase: anovelv1.Phase_PHASE_STARTING, inspect: "running|healthy|0", wantPhase: anovelv1.Phase_PHASE_RUNNING},
+				"done": {
+					phase: anovelv1.Phase_PHASE_RUNNING, inspect: "exited|-|0",
+					wantPhase: anovelv1.Phase_PHASE_TERMINATED, wantReason: anovelv1.ExitReason_EXIT_REASON_SUCCESS,
+				},
+				"failed": {
+					phase: anovelv1.Phase_PHASE_RUNNING, inspect: "exited|-|1",
+					wantPhase: anovelv1.Phase_PHASE_TERMINATED, wantReason: anovelv1.ExitReason_EXIT_REASON_ERROR,
+				},
+				"killed": {
+					phase: anovelv1.Phase_PHASE_STOPPING, inspect: "exited|-|137",
+					wantPhase: anovelv1.Phase_PHASE_TERMINATED, wantReason: anovelv1.ExitReason_EXIT_REASON_KILLED,
+				},
+			},
+			wantCalls: 1,
+		},
+		{
+			name: "Error/Vanished",
+			containers: map[string]container{
+				"running": {phase: anovelv1.Phase_PHASE_RUNNING, inspect: "running|healthy|0", wantPhase: anovelv1.Phase_PHASE_RUNNING},
+				"gone": {
+					phase:     anovelv1.Phase_PHASE_RUNNING,
+					wantPhase: anovelv1.Phase_PHASE_TERMINATED, wantReason: anovelv1.ExitReason_EXIT_REASON_CRASHED,
+				},
+			},
+			// The batch, then one inspect per container.
+			wantCalls: 3,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			dir := fakePodmanInspect(t)
+			r := &Runner{instances: map[string]*Instance{}}
+			watches := make([]containerWatch, 0, len(testCase.containers))
+			for cid, c := range testCase.containers {
+				if c.inspect != "" {
+					if err := os.WriteFile(filepath.Join(dir, cid), []byte(c.inspect+"\n"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				id := "default/svc/" + cid
+				r.instances[id] = &Instance{ID: id, Mode: anovelv1.Mode_MODE_CONTAINER, Phase: c.phase, ContainerID: cid}
+				watches = append(watches, containerWatch{id: id, cid: cid})
+			}
+
+			r.checkContainers(watches)
+
+			if calls := podmanCalls(t, dir); calls != testCase.wantCalls {
+				t.Errorf("podman calls = %d, want %d", calls, testCase.wantCalls)
+			}
+			for cid, c := range testCase.containers {
+				inst := r.instances["default/svc/"+cid]
+				if inst.Phase != c.wantPhase || inst.ExitReason != c.wantReason {
+					t.Errorf("%s: record = (%v, %v), want (%v, %v)", cid, inst.Phase, inst.ExitReason, c.wantPhase, c.wantReason)
+				}
+			}
+		})
+	}
+}
+
+// TestWatchContainer pins that a new container is checked at once, so one that
+// exits right away ends its instance without waiting a tick.
+func TestWatchContainer(t *testing.T) {
+	dir := fakePodmanInspect(t)
+	if err := os.WriteFile(filepath.Join(dir, "cid123"), []byte("exited|-|0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const id = "default/svc/rest"
+	r := &Runner{instances: map[string]*Instance{
+		id: {ID: id, Mode: anovelv1.Mode_MODE_CONTAINER, Phase: anovelv1.Phase_PHASE_RUNNING, ContainerID: "cid123"},
+	}}
+
+	r.watchContainer(id, "cid123")
+
+	if inst, _ := r.Instance(id); inst.Phase != anovelv1.Phase_PHASE_TERMINATED || inst.ExitReason != anovelv1.ExitReason_EXIT_REASON_SUCCESS {
+		t.Errorf("record = (%v, %v), want TERMINATED with SUCCESS", inst.Phase, inst.ExitReason)
+	}
+	if calls := podmanCalls(t, dir); calls != 1 {
+		t.Errorf("podman calls = %d, want 1", calls)
+	}
+}
+
+// TestLiveContainers pins the set the poller follows: the container of every
+// container instance not yet terminated. With none left, the poller stops.
+func TestLiveContainers(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name      string
+		instances []*Instance
+
+		want []containerWatch
+	}{
+		{
+			name: "Success",
+			instances: []*Instance{
+				{ID: "running", Mode: anovelv1.Mode_MODE_CONTAINER, Phase: anovelv1.Phase_PHASE_RUNNING, ContainerID: "c-running"},
+				{ID: "stopping", Mode: anovelv1.Mode_MODE_CONTAINER, Phase: anovelv1.Phase_PHASE_STOPPING, ContainerID: "c-stopping"},
+				{ID: "terminated", Mode: anovelv1.Mode_MODE_CONTAINER, Phase: anovelv1.Phase_PHASE_TERMINATED, ContainerID: "c-terminated"},
+				// compose up has not returned yet, so the container has no ID.
+				{ID: "pending", Mode: anovelv1.Mode_MODE_CONTAINER, Phase: anovelv1.Phase_PHASE_PENDING},
+				{ID: "go-exec", Mode: anovelv1.Mode_MODE_GO_EXEC, Phase: anovelv1.Phase_PHASE_RUNNING},
+			},
+			want: []containerWatch{{id: "running", cid: "c-running"}, {id: "stopping", cid: "c-stopping"}},
+		},
+		{
+			name: "Success/NoneLeft",
+			instances: []*Instance{
+				{ID: "terminated", Mode: anovelv1.Mode_MODE_CONTAINER, Phase: anovelv1.Phase_PHASE_TERMINATED, ContainerID: "c-terminated"},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := &Runner{instances: map[string]*Instance{}, polling: true}
+			for _, inst := range testCase.instances {
+				r.instances[inst.ID] = inst
+			}
+
+			got := r.liveContainers()
+			slices.SortFunc(got, func(a, b containerWatch) int { return strings.Compare(a.id, b.id) })
+
+			if !slices.Equal(got, testCase.want) {
+				t.Errorf("followed %v, want %v", got, testCase.want)
+			}
+			if wantPolling := len(testCase.want) > 0; r.polling != wantPolling {
+				t.Errorf("polling = %v, want %v", r.polling, wantPolling)
 			}
 		})
 	}

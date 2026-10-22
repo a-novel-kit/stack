@@ -163,16 +163,6 @@ func containerByName(ctx context.Context, project, composeName string) string {
 // one line.
 const inspectFormat = "{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}"
 
-// podmanInspect returns one container's state word, health word, and exit
-// code.
-func podmanInspect(ctx context.Context, cid string) (string, string, int, error) {
-	states, err := podmanInspectAll(ctx, []string{cid})
-	if err != nil {
-		return "", "", 0, err
-	}
-	return states[0].phase, states[0].health, states[0].exitCode, nil
-}
-
 // podmanInspectAll inspects every container of ids in one podman call. Any
 // failure, a vanished container included, fails the whole call.
 func podmanInspectAll(ctx context.Context, ids []string) ([]infraContainerState, error) {

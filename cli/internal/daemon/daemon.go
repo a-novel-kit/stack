@@ -85,7 +85,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Reconstitute the Instance and InfraSession records of every podman
 	// container carrying the adoption labels, so containers that outlived a
-	// daemon restart rejoin its view with log streaming and watchers resumed.
+	// daemon restart rejoin its view with log streaming and polling resumed.
 	if cN, tN := run.AdoptOrphanContainers(ctx); cN > 0 {
 		fmt.Fprintf(os.Stderr, "recovery: adopted %d orphan container(s), %d target(s)\n", cN, tN)
 	}
