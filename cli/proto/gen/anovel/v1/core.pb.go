@@ -390,9 +390,13 @@ type Stack struct {
 	// Absolute path of the checkout.
 	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
 	// Whether this is the default stack, the first $A_NOVEL_STACKS entry.
-	IsDefault     bool `protobuf:"varint,3,opt,name=is_default,json=isDefault,proto3" json:"is_default,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	IsDefault bool `protobuf:"varint,3,opt,name=is_default,json=isDefault,proto3" json:"is_default,omitempty"`
+	// Problems discovery found in the stack at daemon startup, one per entry.
+	// Discovery leaves out the service or target a problem names, except for an
+	// unresolved ${VAR} reference, which only warns.
+	DiscoveryErrors []string `protobuf:"bytes,4,rep,name=discovery_errors,json=discoveryErrors,proto3" json:"discovery_errors,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Stack) Reset() {
@@ -444,6 +448,13 @@ func (x *Stack) GetIsDefault() bool {
 		return x.IsDefault
 	}
 	return false
+}
+
+func (x *Stack) GetDiscoveryErrors() []string {
+	if x != nil {
+		return x.DiscoveryErrors
+	}
+	return nil
 }
 
 // Service is one app/service-<name>/ directory of a stack.
@@ -3689,12 +3700,13 @@ var File_anovel_v1_core_proto protoreflect.FileDescriptor
 
 const file_anovel_v1_core_proto_rawDesc = "" +
 	"\n" +
-	"\x14anovel/v1/core.proto\x12\tanovel.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"N\n" +
+	"\x14anovel/v1/core.proto\x12\tanovel.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"y\n" +
 	"\x05Stack\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1d\n" +
 	"\n" +
-	"is_default\x18\x03 \x01(\bR\tisDefault\"\xe1\x01\n" +
+	"is_default\x18\x03 \x01(\bR\tisDefault\x12)\n" +
+	"\x10discovery_errors\x18\x04 \x03(\tR\x0fdiscoveryErrors\"\xe1\x01\n" +
 	"\aService\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05stack\x18\x02 \x01(\tR\x05stack\x12*\n" +
