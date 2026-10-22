@@ -43,15 +43,15 @@ func (r *Runner) adoptEntries(ctx context.Context, entries []psEntry) (int, int)
 		}
 		containers++
 
-		// `podman ps -a` lists exited containers too, and an infra session marked Up short-circuits
-		// EnsureDepsReady: the target then starts against a database that is not running. Only a
-		// container podman reports as running counts.
 		phase, health := translatePodmanStatus(e.Status)
-		if phase == anovelv1.Phase_PHASE_RUNNING {
-			r.markInfraSessionUp(stack, service)
-		}
-
 		if e.Labels[labelTarget] == "" {
+			// `podman ps -a` lists exited containers too, and an infra session marked Up
+			// short-circuits EnsureDepsReady: the target then starts against a database that is
+			// not running. Only an infra container podman reports as running counts, since a
+			// running target container says nothing about its database.
+			if phase == anovelv1.Phase_PHASE_RUNNING {
+				r.markInfraSessionUp(stack, service)
+			}
 			// An infra container carries no target label and needs no
 			// Instance record. The env allocator learns its host ports, so
 			// the next Acquire, such as the migrations one-shot's
