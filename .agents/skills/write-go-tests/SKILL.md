@@ -32,6 +32,8 @@ the codebase. Fix a stale or failing test; do not delete it.
 Before writing, modifying, or reviewing a test body, read
 [table-driven tests and mocks](references/patterns.md). For work involving test data or setup,
 including changes to existing fixtures and fixture reviews, also read [fixtures](references/fixtures.md).
+For a test of concurrent code, a subprocess, or a result that could depend on map order, also read
+[concurrency, subprocess and ordering tests](references/concurrency-and-subprocesses.md).
 For layer-specific behavior load `write-go-service` or `write-go-kit` as appropriate.
 
 Pick the closest truthful layer that exposes the changed behavior. Reuse established cases and
