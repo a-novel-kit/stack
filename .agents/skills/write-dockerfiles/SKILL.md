@@ -146,7 +146,8 @@ footprint.
 
 ## Healthchecks
 
-Every image that serves traffic must have a `HEALTHCHECK`.
+Every image that serves traffic must have a `HEALTHCHECK`. Write its `CMD` in exec form, as below:
+hadolint rejects the shell form (DL3025), and each tool already exits non-zero when the check fails.
 
 ### gRPC healthcheck
 
@@ -154,7 +155,7 @@ Use `grpcurl` against the standard `grpc.health.v1.Health/Check` endpoint:
 
 ```dockerfile
 HEALTHCHECK --interval=1s --timeout=5s --retries=10 --start-period=1s \
-  CMD grpcurl --plaintext -d '' localhost:8080 grpc.health.v1.Health/Check || exit 1
+  CMD ["grpcurl", "--plaintext", "-d", "", "localhost:8080", "grpc.health.v1.Health/Check"]
 ```
 
 Install `grpcurl` in the builder (`RUN GOBIN=/usr/local/bin go install .../grpcurl@v1.9.3`) and
@@ -167,7 +168,7 @@ Alpine's BusyBox includes `wget` — no extra `apk add` required:
 
 ```dockerfile
 HEALTHCHECK --interval=1s --timeout=5s --retries=10 --start-period=1s \
-  CMD wget -qO /dev/null http://localhost:8080/ping || exit 1
+  CMD ["wget", "-qO", "/dev/null", "http://localhost:8080/ping"]
 ```
 
 Never add `curl` to the runtime image just for a healthcheck. BusyBox `wget` is already present in
@@ -178,8 +179,7 @@ any Alpine-based image and serves the same purpose at zero size cost.
 Use the `pg_isready` utility, already present in the PostgreSQL base image:
 
 ```dockerfile
-HEALTHCHECK --interval=1s --timeout=5s --retries=10 --start-period=1s \
-  CMD pg_isready || exit 1
+HEALTHCHECK --interval=1s --timeout=5s --retries=10 --start-period=1s CMD ["pg_isready"]
 ```
 
 ### Job images
@@ -393,3 +393,5 @@ Always exclude:
   the host.
 - **`RUN chmod +x` after COPY.** Use `COPY --chmod=755 <src> <dst>` instead — a single instruction,
   one fewer layer.
+- **A `USER` by name.** hadolint rejects it (DL3066), since a runtime cannot verify that a name is
+  not root. Use the numeric IDs: `USER 1000:1000` is the `node` user of the Node.js images.
