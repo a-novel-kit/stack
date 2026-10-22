@@ -77,8 +77,11 @@ Go security point release.
 Compose files and Dockerfiles pin first-party images by digest (`pinDigests` for those two managers),
 so a moved tag changes nothing a consumer runs and each bump names the digest the approver checks.
 The composite-action default manager keeps a digest written after the tag, and a default gets that
-digest by hand once. Third-party images stay on tags: official images rebuild their tags as routine,
-so a digest update carries no review signal, and no gate can hold it.
+digest by hand once. The scanner images of `lint-semgrep` and `lint-workflows` are pinned the same
+way, as `version: "<tag>@sha256:<digest>"`, which the workflow manager reads as the tag and its
+digest. Other third-party images stay on tags. Publishers rebuild image tags as routine, so an image
+digest update carries no review signal: the digest review rule leaves out the `docker` datasource,
+and the update merges on its own.
 
 A release without a timestamp cannot pass the gate: under the default `minimumReleaseAgeBehaviour:
 timestamp-required` Renovate never creates its branch. GHCR and MCR images, lockfile maintenance,
