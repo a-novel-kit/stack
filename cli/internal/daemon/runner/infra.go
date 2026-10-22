@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"sync"
@@ -160,8 +161,9 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 
 // KillInfra tears down the service's infra containers and resets its session.
 // It refuses while a target of the service is live, unless force stops those
-// targets first. It waits for a StartInfra of the service in flight, so a
-// teardown never overlaps a bring-up.
+// targets first. A target it fails to stop is reported in the returned error,
+// after the teardown ran. It waits for a StartInfra of the service in flight,
+// so a teardown never overlaps a bring-up.
 func (r *Runner) KillInfra(ctx context.Context, stack, service string, force bool) error {
 	defer r.InvalidateInfraStateCache()
 	svc, err := r.findService(stack, service)
@@ -189,10 +191,16 @@ func (r *Runner) KillInfra(ctx context.Context, stack, service string, force boo
 	}
 	r.mu.RUnlock()
 	// The kills run at once, each with its own grace. compose down below runs
-	// either way, and a target that survives its kill keeps its process.
+	// either way, and a target that survives its kill keeps its process, so
+	// its error reaches the caller.
+	errs := make([]error, len(live)+1)
 	var wg sync.WaitGroup
-	for _, inst := range live {
-		wg.Go(func() { _ = r.Kill(ctx, inst.ID, 5*time.Second) })
+	for i, inst := range live {
+		wg.Go(func() {
+			if err := r.Kill(ctx, inst.ID, 5*time.Second); err != nil {
+				errs[i] = fmt.Errorf("kill %s: %w", inst.ID, err)
+			}
+		})
 	}
 	wg.Wait()
 	// `compose down` tears down the project's infra and any orphaned
@@ -208,9 +216,9 @@ func (r *Runner) KillInfra(ctx context.Context, stack, service string, force boo
 		r.alloc.Release(infraConsumer(stack, service))
 	}
 	if err != nil {
-		return fmt.Errorf("compose down for %s/%s: %w", stack, service, err)
+		errs[len(live)] = fmt.Errorf("compose down for %s/%s: %w", stack, service, err)
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // lockInfra takes the infra lock of (stack, service) and returns its unlock. A

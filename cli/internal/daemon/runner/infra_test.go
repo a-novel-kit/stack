@@ -3,12 +3,18 @@ package runner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
+	"github.com/a-novel-kit/stack/cli/internal/daemon/env"
+	"github.com/a-novel-kit/stack/cli/internal/daemon/logs"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -140,6 +146,54 @@ func TestLockInfra(t *testing.T) {
 			}
 			if r.infraSessions[key] != sess || !sess.Up {
 				t.Error("the call changed the session")
+			}
+		})
+	}
+}
+
+// TestKillInfra pins that a forced teardown reports a target it failed to
+// stop. The teardown still runs and resets the session, so the user can re-run
+// it, but the caller learns which target survived.
+func TestKillInfra(t *testing.T) {
+	testCases := []struct {
+		name string
+		// stopExit is the exit status of the stand-in `podman stop`.
+		stopExit int
+		wantErr  bool
+	}{
+		{name: "Success", stopExit: 0},
+		{name: "Error/TargetSurvives", stopExit: 1, wantErr: true},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			// A stand-in podman: compose down succeeds, and stop exits as the
+			// case says.
+			script := fmt.Sprintf("#!/bin/sh\ncase \"$1\" in\ncompose) exit 0 ;;\nstop) exit %d ;;\n*) exit 1 ;;\nesac\n", testCase.stopExit)
+			bin := t.TempDir()
+			if err := os.WriteFile(filepath.Join(bin, "podman"), []byte(script), 0o700); err != nil { //nolint:gosec // an executable fixture
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+			const id = "default/svc/rest"
+			svc := &discovery.Service{Name: "svc", Stack: "default"}
+			r := New(discovery.Stacks{{Name: "default", Default: true, Services: []*discovery.Service{svc}}}, env.NewAllocator(), nil, logs.New())
+			r.instances[id] = &Instance{
+				ID: id, Target: "rest", Service: "svc", Stack: "default",
+				Mode: anovelv1.Mode_MODE_CONTAINER, Phase: anovelv1.Phase_PHASE_RUNNING, ContainerID: "cid1",
+			}
+			sess := newInfraSession("default", "svc")
+			sess.Up = true
+			r.infraSessions[sessionKey("default", "svc")] = sess
+
+			err := r.KillInfra(t.Context(), "default", "svc", true)
+
+			if (err != nil) != testCase.wantErr || (err != nil && !strings.Contains(err.Error(), "kill "+id)) {
+				t.Fatalf("KillInfra: got %v, want an error naming %s: %v", err, id, testCase.wantErr)
+			}
+			if _, ok := r.InfraSession("default", "svc"); ok {
+				t.Error("the teardown left the session in place")
 			}
 		})
 	}
