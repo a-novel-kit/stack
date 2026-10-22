@@ -189,3 +189,14 @@ func TestRenderSummaryOmitsRetiredRulesets(t *testing.T) {
 		t.Errorf("summary still lists the retired codecov ruleset:\n%s", buf.String())
 	}
 }
+
+// TestNewRepoUpdateCmd pins that the --jobs help names 0 as no limit, which
+// the batch runner applies to any limit below one.
+func TestNewRepoUpdateCmd(t *testing.T) {
+	t.Parallel()
+
+	usage := newRepoUpdateCmd().Flags().Lookup("jobs").Usage
+	if !strings.Contains(usage, "0 for no limit") {
+		t.Fatalf("--jobs help = %q, want it to name 0 as no limit", usage)
+	}
+}
