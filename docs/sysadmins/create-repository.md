@@ -38,6 +38,20 @@ a-novel core sync
 
 Then [apply its settings](./repositories#apply) from its new checkout, under `app/` or `kit/`.
 
+`repo create` configures the repository before it holds any workflow, so it creates no environment. Until the settings are applied again, every governance check fails on a missing key. Apply them as soon as a checkout holds the first `main.yaml` and `release.yaml`, even on its pull request branch. Discovery reads the working tree, so one run creates the `governance` and `release` environments and requires the new jobs.
+
+## Give it the release key
+
+The release workflow signs in as the release App with a key that only the repository's `release` environment holds. Once the settings created that environment, open the App's settings in the organization, generate a key under **Private keys**, and set it:
+
+```bash
+KEY_FILE=~/Downloads/anovelkitbot-release.2026-10-22.private-key.pem
+gh secret set RELEASE_BOT_PRIVATE_KEY --env release --repo "$ORG/$NAME" < "$KEY_FILE"
+rm "$KEY_FILE"
+```
+
+The App keeps its other keys, so every other repository keeps releasing.
+
 ## Create its Discord role
 
 CI mentions a repository through its own role.
