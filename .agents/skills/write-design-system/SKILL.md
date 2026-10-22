@@ -47,20 +47,22 @@ their provenance with the asset package; do not require a remote icon service or
 
 ## Brand images
 
-`@a-novel-kit/uikit-images` publishes logo banners and icons. Each logo keeps its sources in
-`packages/images/raw/<logo>/`: the GIMP project, its export plug-in, the fonts, and the
-`exports/*.png` files the generator reads. Git LFS stores `raw/`; follow
-[Git LFS](../git-conventions/SKILL.md#git-lfs) before committing there. The generated files in
-`packages/images/files/` stay in plain Git, so every checkout reads them without LFS.
+`@a-novel-kit/ui-images` publishes logo banners and icons from
+[a-novel-kit/ui-assets](https://github.com/a-novel-kit/ui-assets), which releases apart from uikit,
+so uikit's CI never downloads their LFS sources. uikit's Storybook documents them from the published
+package. Each logo keeps its sources in `packages/images/raw/<logo>/` there: the GIMP project, its
+export plug-in, the fonts, and the `exports/*.png` files the generator reads. Git LFS stores `raw/`;
+follow [Git LFS](../git-conventions/SKILL.md#git-lfs) before committing there. The generated files
+in `packages/images/files/` stay in plain Git, so every checkout reads them without LFS.
 
 `scripts/generate-images.mjs` lists the logos, sizes, and variants. After changing a source, run
 `git lfs pull`, then `pnpm generate:images`; `pnpm lint:generated` fails on drift. Banners are keyed
 by height (`banner/{h}h/`), the one dimension every logo shares. Icons are keyed `icon/{n}x{n}/`.
 File names end in a variant suffix: none for dark on transparent, `-black` for dark on black,
-`-light` for light on transparent, and `-light-white` for light on white. Every uikit tag
-republishes the package, about 10 MB, so each added size or variant ships in every release.
-READMEs in both organizations link `files/` on uikit's `master`, so renaming or removing a published
-file breaks them the moment it merges; update those READMEs with the change.
+`-light` for light on transparent, and `-light-white` for light on white. Every ui-assets tag
+republishes the package, about 10 MB, so each added size or variant ships in every release. READMEs
+in both organizations link `files/` on ui-assets' `master`, so renaming or removing a published file
+breaks them the moment it merges; update those READMEs with the change.
 
 ## Token architecture
 
