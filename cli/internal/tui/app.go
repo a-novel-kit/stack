@@ -97,6 +97,9 @@ type model struct {
 	// persists until the action resolves, info fades after 5s, and an
 	// error stays until the next action overrides it.
 	status statusEntry
+	// discoveryProblems counts the problems discovery found in the stack.
+	// While positive, the idle status bar points to `a-novel core status`.
+	discoveryProblems int
 }
 
 // statusLevel discriminates the four status-bar visual modes.
@@ -142,6 +145,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case servicesMsg:
+		m.discoveryProblems = msg.discoveryProblems
 		m.onServices(msg.services)
 		return m, nil
 

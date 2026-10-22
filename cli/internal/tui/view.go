@@ -80,8 +80,13 @@ func (m *model) renderMain() string {
 // renderStatus is the always-visible feedback line for action progress,
 // results, errors and validation warnings. It stays one line and truncates
 // with an ellipsis, since a wrapped status line breaks the layout below it.
+// With no action to report, it notes the stack's discovery problems, if any.
 func (m *model) renderStatus(width int) string {
 	if m.status.level == statusIdle || m.status.text == "" {
+		if m.discoveryProblems > 0 {
+			note := fmt.Sprintf("!  %d discovery problem(s) — run `a-novel core status` to read them", m.discoveryProblems)
+			return styleWarn.Render(truncate(note, width-1))
+		}
 		return styleDim.Render(strings.Repeat("─", width))
 	}
 	var prefix string
@@ -388,6 +393,7 @@ var helpLines = []string{
 	"  " + styleWarn.Render("⏳") + "  busy   — action in flight; persists until it resolves",
 	"  " + styleSuccess.Render("✓") + "  done   — last action succeeded; fades after 5s",
 	"  " + styleErr.Render("✗") + "  error  — last action failed or invalid; sticks until the next action",
+	"  " + styleWarn.Render("!") + "  issues — discovery found problems in the stack; `a-novel core status` lists them",
 	"",
 	styleDim.Render("(daemon-backed verbs are implemented via the same RPC as the CLI; what you see in the UI is what `a-novel run ps` would show)"),
 }

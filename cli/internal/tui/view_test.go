@@ -58,16 +58,18 @@ func TestRender(t *testing.T) {
 	testCases := []struct {
 		name string
 
-		view      view
-		height    int
-		logLines  []*anovelv1.StreamLogsResponse
-		logScroll int
+		view              view
+		height            int
+		logLines          []*anovelv1.StreamLogsResponse
+		logScroll         int
+		discoveryProblems int
 
 		wantText string
 	}{
 		{name: "Main/Tail", height: 50, logLines: logLines, wantText: "▸ " + service.GetName()},
 		{name: "Main/ScrolledBack", height: 50, logLines: logLines, logScroll: 10, wantText: "⏸ paused"},
 		{name: "Main/NoLogs", height: 50, wantText: "no log lines yet"},
+		{name: "Main/DiscoveryProblems", height: 50, discoveryProblems: 2, wantText: "2 discovery problem(s)"},
 		{name: "Help", view: viewHelp, height: 50, wantText: "command reference"},
 		// The help is taller than the terminal, so it scrolls in place.
 		{name: "Help/Overflow", view: viewHelp, height: 24, wantText: "↑/↓ scroll"},
@@ -78,12 +80,13 @@ func TestRender(t *testing.T) {
 			t.Parallel()
 
 			m := &model{
-				width:     120,
-				height:    testCase.height,
-				view:      testCase.view,
-				services:  []*anovelv1.Service{service},
-				logLines:  testCase.logLines,
-				logScroll: testCase.logScroll,
+				width:             120,
+				height:            testCase.height,
+				view:              testCase.view,
+				services:          []*anovelv1.Service{service},
+				logLines:          testCase.logLines,
+				logScroll:         testCase.logScroll,
+				discoveryProblems: testCase.discoveryProblems,
 			}
 			screen := m.render()
 
