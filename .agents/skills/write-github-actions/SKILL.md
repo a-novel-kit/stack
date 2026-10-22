@@ -402,7 +402,9 @@ The enterprise subscription is the only spend. Standard runners on public repos 
 features cost nothing; GitHub Code Quality bills per active committer and per AI credit on every
 default-branch push, so every class sets `code_quality: false` and `repo update` keeps it off.
 `repo update` also keeps CodeQL's default setup off and provisions no CodeQL workflow. The
-`lint-semgrep`, `scan-secrets` and `lint-workflows` jobs do the static analysis.
+`scan-secrets` and `lint-workflows` jobs do the static analysis. The services add `lint-semgrep`,
+whose `service` ruleset checks their layered layout. A repository that no semgrep ruleset fits carries
+no `lint-semgrep` job.
 
 The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.yaml`,
 `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`, `recover-prs.yaml`,
