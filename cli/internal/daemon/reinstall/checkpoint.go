@@ -73,9 +73,9 @@ func Write(cp Checkpoint) error {
 }
 
 // Read returns the checkpoint at Path(), or (nil, nil) when none exists, the
-// common case at a fresh start. A schema mismatch or malformed file also yields
-// (nil, nil), so the daemon still starts and the handoff degrades to
-// "containers survive, go-exec targets are lost".
+// common case at a fresh start. A malformed file or an unknown schema is an
+// error. The daemon logs it and discards the checkpoint, so the handoff
+// degrades to "containers survive, go-exec targets are lost".
 func Read() (*Checkpoint, error) {
 	data, err := os.ReadFile(Path())
 	if err != nil {
@@ -86,10 +86,10 @@ func Read() (*Checkpoint, error) {
 	}
 	var cp Checkpoint
 	if err := json.Unmarshal(data, &cp); err != nil {
-		return nil, nil //nolint:nilerr // intentional: malformed checkpoint is non-fatal
+		return nil, fmt.Errorf("decode %s: %w", Path(), err)
 	}
 	if cp.Schema != SchemaVersion {
-		return nil, nil
+		return nil, fmt.Errorf("%s has schema %d, want %d", Path(), cp.Schema, SchemaVersion)
 	}
 	return &cp, nil
 }

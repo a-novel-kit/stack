@@ -127,11 +127,18 @@ func listen(socketPath string) (net.Listener, error) {
 }
 
 // replayCheckpoint relaunches the go-exec targets a prior PrepareReinstall
-// checkpointed, then drops the checkpoint. A relaunch that fails is reported
-// and skipped, so it never blocks startup.
+// checkpointed, then drops the checkpoint. A checkpoint is used once: an
+// unusable one is reported and dropped too, so it never refuses a later
+// install. A relaunch that fails is reported and skipped, so it never blocks
+// startup.
 func replayCheckpoint(ctx context.Context, run *runner.Runner) {
 	cp, err := reinstall.Read()
-	if err != nil || cp == nil {
+	defer func() { _ = reinstall.Delete() }()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "reinstall: discarding the checkpoint: %v\n", err)
+		return
+	}
+	if cp == nil {
 		return
 	}
 	fmt.Fprintf(os.Stderr, "reinstall: replaying %d go-exec target(s) from %s\n", len(cp.GoExec), reinstall.Path())
@@ -140,7 +147,6 @@ func replayCheckpoint(ctx context.Context, run *runner.Runner) {
 			fmt.Fprintf(os.Stderr, "reinstall: relaunch %s failed: %v\n", gx.TargetID, err)
 		}
 	}
-	_ = reinstall.Delete()
 }
 
 // serve answers connect-rpc on ln until ctx ends, then shuts down gracefully.
