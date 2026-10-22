@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"sync/atomic"
 
 	"github.com/spf13/cobra"
 
@@ -46,8 +47,9 @@ func newPsCmd() *cobra.Command {
 row each: the kind (1shot, longr or infra), the name, the state, and the
 fully-qualified ID that kill, restart and logs take.
 
---watch prints the table again on every state change. --json prints one JSON
-object per service, one per line, and with --watch one more per state change.`,
+--watch redraws the table after each state change, once for a burst of them,
+above the latest change. --json prints one JSON object per service, one per
+line, and with --watch one more per state change.`,
 		Example: `  a-novel run ps
   a-novel run ps --stack=branch-foo
   a-novel run ps --service=service-json-keys --json
@@ -82,16 +84,52 @@ func listServices(cmd *cobra.Command, o psOpts) error {
 	if !o.watch {
 		return nil
 	}
-	handle := func(ev *anovelv1.WatchResponse) { repaintPs(ctx, c, out, o, ev) }
-	if o.jsonOut {
-		handle = func(ev *anovelv1.WatchResponse) { encodeEvent(out, ev) }
+	handle := func(ev *anovelv1.WatchResponse) { encodeEvent(out, ev) }
+	if !o.jsonOut {
+		repaint, wait := coalesce(func(ev *anovelv1.WatchResponse) { repaintPs(ctx, c, out, o, ev) })
+		defer wait()
+		handle = repaint
 	}
 	return watchEvents(ctx, c, o.scope.selector(), o.service, "", handle)
 }
 
+// coalesce returns a handler that passes each event to paint on a goroutine of
+// its own. Events that arrive while paint runs collapse into the newest, so a
+// burst costs one paint instead of one per event.
+//
+// The second function returns once the newest event is painted. Call it after
+// the handler's last call.
+func coalesce(paint func(*anovelv1.WatchResponse)) (func(*anovelv1.WatchResponse), func()) {
+	var newest atomic.Pointer[anovelv1.WatchResponse]
+	pending := make(chan struct{}, 1)
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		for range pending {
+			if ev := newest.Swap(nil); ev != nil {
+				paint(ev)
+			}
+		}
+	}()
+
+	handle := func(ev *anovelv1.WatchResponse) {
+		newest.Store(ev)
+		select {
+		case pending <- struct{}{}:
+		default:
+		}
+	}
+	wait := func() {
+		close(pending)
+		<-done
+	}
+	return handle, wait
+}
+
 // repaintPs redraws the ps table in place after ev, so it reads like `top`
-// and the frames stay out of the scrollback. One ListServices call per event
-// keeps the table current.
+// and the frames stay out of the scrollback. It fetches the services again, so
+// the table shows their state after ev.
 func repaintPs(ctx context.Context, c *rpc.Client, out io.Writer, o psOpts, ev *anovelv1.WatchResponse) {
 	resp, err := c.ListServices(ctx, o.scope.selector())
 	if err != nil {
