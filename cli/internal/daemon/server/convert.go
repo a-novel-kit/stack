@@ -14,11 +14,21 @@ import (
 )
 
 // stacksToProto lists the discovered stacks, the ones the daemon manages, in
-// registration order, so the default stack comes first.
+// registration order, so the default stack comes first. Each carries its
+// discovery problems in the text the daemon log prints.
 func stacksToProto(stacks discovery.Stacks) []*anovelv1.Stack {
 	out := make([]*anovelv1.Stack, 0, len(stacks))
 	for _, st := range stacks {
-		out = append(out, &anovelv1.Stack{Name: st.Name, Path: st.Path, IsDefault: st.Default})
+		problems := make([]string, 0, len(st.Errors))
+		for _, e := range st.Errors {
+			problems = append(problems, e.Error())
+		}
+		out = append(out, &anovelv1.Stack{
+			Name:            st.Name,
+			Path:            st.Path,
+			IsDefault:       st.Default,
+			DiscoveryErrors: problems,
+		})
 	}
 	return out
 }

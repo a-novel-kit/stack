@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"os/exec"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -64,12 +65,17 @@ func TestDescribePhaseEvent(t *testing.T) {
 
 // TestListStacksReportsDiscoveredStacks pins that ListStacks and Status
 // advertise the stacks discovery kept, in registration order, so they match
-// what every other RPC accepts.
+// what every other RPC accepts. Each stack carries its discovery problems in
+// the text the daemon log prints.
 func TestListStacksReportsDiscoveredStacks(t *testing.T) {
 	t.Parallel()
 
+	problems := []discovery.DiscoveryError{
+		{Service: "service-a", Reason: "compose service has no profile"},
+		{Service: "service-b", Path: "/w/app/service-b/cmd/rest", Reason: "cmd/rest/ has no compose service"},
+	}
 	srv := &Server{stacks: discovery.Stacks{
-		{Name: "default", Path: "/w", Default: true},
+		{Name: "default", Path: "/w", Default: true, Errors: problems},
 		{Name: "alive", Path: "/tmp/here"},
 	}}
 
@@ -86,6 +92,14 @@ func TestListStacksReportsDiscoveredStacks(t *testing.T) {
 	}
 	if got[1].GetName() != "alive" || got[1].GetIsDefault() {
 		t.Errorf("second stack = %v, want alive", got[1])
+	}
+
+	wantProblems := []string{problems[0].Error(), problems[1].Error()}
+	if sent := got[0].GetDiscoveryErrors(); !slices.Equal(sent, wantProblems) {
+		t.Errorf("default stack problems = %q, want %q", sent, wantProblems)
+	}
+	if sent := got[1].GetDiscoveryErrors(); len(sent) != 0 {
+		t.Errorf("alive stack problems = %q, want none", sent)
 	}
 }
 

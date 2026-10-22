@@ -10,8 +10,8 @@ import (
 
 // ValidateEnvRefs scans every compose env block for ${VAR} references the
 // daemon cannot fill and appends a non-fatal warning to the owning stack's
-// Errors. It runs at the end of discovery, so parse errors and validation
-// warnings land in the one stream the daemon prints at startup.
+// Errors. It runs at the end of discovery, once every service name of the
+// stack is known.
 //
 // A reference resolves when it is:
 //   - `*_PORT`, allocated by the daemon

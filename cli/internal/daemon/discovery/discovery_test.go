@@ -154,3 +154,37 @@ func TestStacksLookups(t *testing.T) {
 		t.Errorf("ServiceNames: got %v", got)
 	}
 }
+
+// TestDiscoveryError pins the one-line text the daemon logs and sends to
+// clients for each problem. A stack-level problem names no service, and its
+// text starts with the reason.
+func TestDiscoveryError(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name string
+		err  DiscoveryError
+		want string
+	}{
+		{
+			name: "Success",
+			err:  DiscoveryError{Service: "service-x", Path: "/w/app/service-x/cmd/rest", Reason: "orphan cmd"},
+			want: "service-x: orphan cmd (/w/app/service-x/cmd/rest)",
+		},
+		{name: "Success/NoPath", err: DiscoveryError{Service: "service-x", Reason: "orphan cmd"}, want: "service-x: orphan cmd"},
+		{
+			name: "Success/NoService",
+			err:  DiscoveryError{Path: "/w/app", Reason: "no app/ directory under stack root"},
+			want: "no app/ directory under stack root (/w/app)",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			if got := testCase.err.Error(); got != testCase.want {
+				t.Errorf("Error() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}

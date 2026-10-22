@@ -40,6 +40,7 @@
 //     allocates or derives (ports, hosts, URLs, DSNs) appear as ${VAR}
 //     references the daemon fills.
 //
-// Discovery reports every contract violation at daemon startup and leaves the
-// offending entry out.
+// Discovery records every contract violation in [Stack.Errors], which the
+// daemon logs at startup and reports to clients. A violation leaves the
+// offending entry out, except an unresolved ${VAR} reference, which only warns.
 package discovery

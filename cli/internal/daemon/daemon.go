@@ -53,8 +53,9 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("discover stacks: %w", err)
 	}
-	// Print each non-fatal discovery problem to the daemon log. A service or
-	// target that failed discovery is left out, and the rest work.
+	// Print each non-fatal discovery problem to the daemon log. Status and
+	// ListStacks also report them with their stack. A service or target that
+	// failed discovery is left out, and the rest work.
 	for _, st := range disc {
 		for _, e := range st.Errors {
 			fmt.Fprintf(os.Stderr, "discovery: stack %s: %v\n", st.Name, e)
