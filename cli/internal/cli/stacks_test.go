@@ -186,6 +186,45 @@ func TestReportUnmanaged(t *testing.T) {
 	}
 }
 
+// TestPrintDiscoveryErrors pins the lines `core status` and `core stacks list`
+// print under a stack's row: one per problem, and none for a healthy stack, so
+// its listing reads as before.
+func TestPrintDiscoveryErrors(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		problems []string
+		want     string
+	}{
+		{name: "Success/NoProblems"},
+		{
+			name:     "Success",
+			problems: []string{"service-a: orphan cmd (/w/app/service-a/cmd/rest)", "no app/ directory under stack root (/w/app)"},
+			want:     "  ! service-a: orphan cmd (/w/app/service-a/cmd/rest)\n  ! no app/ directory under stack root (/w/app)\n",
+		},
+		{
+			name:     "Success/MultiLineProblem",
+			problems: []string{"service-a: parse compose: yaml: unmarshal errors:\n  line 3: cannot unmarshal"},
+			want:     "  ! service-a: parse compose: yaml: unmarshal errors: line 3: cannot unmarshal\n",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			st := stack(stacks.DefaultName, true)
+			st.DiscoveryErrors = testCase.problems
+
+			var buf bytes.Buffer
+			printDiscoveryErrors(&buf, "  ", st)
+			if got := buf.String(); got != testCase.want {
+				t.Errorf("printed %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
 // TestDryRunVerdict pins that a dry run always prints a verdict, and that a
 // blocked stack's verdict names the refusal.
 func TestDryRunVerdict(t *testing.T) {

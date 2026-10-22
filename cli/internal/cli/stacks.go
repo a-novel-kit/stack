@@ -118,7 +118,8 @@ func newStacksListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List every registered stack and what it is holding",
 		Long: `Print one row per stack: its name and path, and the targets, infra containers
-and volumes it holds. A '*' marks the default stack, which is never pruned. A
+and volumes it holds. A '*' marks the default stack, which is never pruned.
+Each problem discovery found in a stack follows its row, marked '!'. A
 registration the daemon does not manage follows, with the reason.`,
 		Example: `  a-novel core stacks list`,
 		Args:    cobra.NoArgs,
@@ -128,9 +129,9 @@ registration the daemon does not manage follows, with the reason.`,
 	}
 }
 
-// listStacks prints every registered stack with what it holds, then the
-// registrations the daemon does not manage. `core stacks list` and `run
-// stacks` both render it.
+// listStacks prints every registered stack with what it holds and its
+// discovery problems, then the registrations the daemon does not manage.
+// `core stacks list` and `run stacks` both render it.
 func listStacks(ctx context.Context, out io.Writer) error {
 	c := rpc.New("")
 	resp, err := c.ListStacks(ctx)
@@ -155,6 +156,7 @@ func listStacks(ctx context.Context, out io.Writer) error {
 			fmt.Sprintf("%d up", len(held.liveTargets)),
 			fmt.Sprintf("%d up", held.liveInfra),
 			len(held.volumes))
+		printDiscoveryErrors(out, "    ", st)
 		managed[st.GetName()] = true
 	}
 	reportUnmanaged(out, managed)
@@ -440,6 +442,15 @@ func reportUnmanaged(out io.Writer, managed map[string]bool) {
 			reason = "files are gone — drop it from " + stacks.EnvVar
 		}
 		_, _ = fmt.Fprintf(out, "! %-20s %-40s %s\n", s.Name, s.Path, reason)
+	}
+}
+
+// printDiscoveryErrors prints each discovery problem of st on its own line,
+// after indent. A problem spanning several lines, such as a YAML error, is
+// folded onto one.
+func printDiscoveryErrors(out io.Writer, indent string, st *anovelv1.Stack) {
+	for _, problem := range st.GetDiscoveryErrors() {
+		_, _ = fmt.Fprintf(out, "%s! %s\n", indent, strings.Join(strings.Fields(problem), " "))
 	}
 }
 
