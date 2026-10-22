@@ -1,9 +1,15 @@
 package runner
 
 import (
+	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
+	"github.com/a-novel-kit/stack/cli/internal/daemon/env"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -86,5 +92,86 @@ func TestAdoptEntriesMarksTheSessionUpFromRunningContainersOnly(t *testing.T) {
 		if sess, _ := r.InfraSession("default", "service-json-keys"); sess.Up != testCase.up {
 			t.Errorf("infra %q, target %q: session up = %v, want %v", testCase.statuses, testCase.target, sess.Up, testCase.up)
 		}
+	}
+}
+
+// TestReseedAllocator covers adoption reseeding the env allocator from the
+// adopted infra containers. One podman call inspects them all, and each line
+// finds its container by ID, so a container that vanished since the scan skips
+// only itself.
+func TestReseedAllocator(t *testing.T) {
+	// inspectLines are the lines podman prints per container ID. A container
+	// with no line has vanished.
+	inspectLines := map[string]string{
+		"cid-a": `cid-a|default_svc-a_postgres-a_1|{"5432/tcp":[{"HostIp":"","HostPort":"38631"}]}`,
+		"cid-b": `cid-b|default_svc-b_valkey-b_1|{"6379/tcp":[{"HostIp":"","HostPort":"38632"}]}`,
+	}
+	stacks := discovery.Stacks{{Name: "default", Services: []*discovery.Service{
+		{Name: "svc-a", Stack: "default", Infra: []*discovery.Infra{{Name: "postgres-a", Ports: []string{"${POSTGRES_PORT}:5432"}}}},
+		{Name: "svc-b", Stack: "default", Infra: []*discovery.Infra{{Name: "valkey-b", Ports: []string{"${VALKEY_PORT}:6379"}}}},
+	}}}
+	wantPorts := []struct {
+		owner, localVar string
+		port            int
+	}{
+		{"svc-a", "POSTGRES_PORT", 38631},
+		{"svc-b", "VALKEY_PORT", 38632},
+	}
+
+	testCases := []struct {
+		name string
+		// containers are the adopted infra containers, as service and ID.
+		containers [][2]string
+	}{
+		{name: "Success", containers: [][2]string{{"svc-a", "cid-a"}, {"svc-b", "cid-b"}}},
+		// The vanished container sits between the others, which shifts the
+		// line positions.
+		{name: "Error/Vanished", containers: [][2]string{{"svc-a", "cid-a"}, {"svc-a", "cid-gone"}, {"svc-b", "cid-b"}}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			// A stand-in podman prints the line of each known ID, then fails
+			// with exit 125 when one was unknown, as podman does.
+			dir := t.TempDir()
+			script := fmt.Sprintf(`#!/bin/sh
+echo "$@" >> %[1]s/calls
+shift 2
+status=0
+for cid in "$@"; do
+	cat %[1]s/"$cid" 2>/dev/null || status=125
+done
+exit $status
+`, dir)
+			bin := t.TempDir()
+			if err := os.WriteFile(filepath.Join(bin, "podman"), []byte(script), 0o700); err != nil { //nolint:gosec // an executable fixture
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			for id, line := range inspectLines {
+				if err := os.WriteFile(filepath.Join(dir, id), []byte(line+"\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			alloc := env.NewAllocator()
+			alloc.SetServices([]string{"svc-a", "svc-b"})
+			r := &Runner{stacks: stacks, alloc: alloc}
+			infra := make([]psEntry, 0, len(testCase.containers))
+			for _, c := range testCase.containers {
+				infra = append(infra, psEntry{ID: c[1], Labels: map[string]string{labelStack: "default", labelService: c[0]}})
+			}
+
+			r.reseedAllocator(t.Context(), infra)
+
+			if calls, _ := os.ReadFile(filepath.Join(dir, "calls")); strings.Count(string(calls), "\n") != 1 {
+				t.Errorf("podman calls = %q, want one", calls)
+			}
+			for _, want := range wantPorts {
+				if port, ok := alloc.Lookup(want.owner, want.localVar); !ok || port != want.port {
+					t.Errorf("%s/%s = (%d, %v), want %d", want.owner, want.localVar, port, ok, want.port)
+				}
+			}
+		})
 	}
 }
