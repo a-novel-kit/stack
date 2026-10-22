@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 )
 
 // githubSSHHost is the login behind every SSH remote of the workspace.
@@ -14,6 +15,13 @@ const githubSSHHost = "git@github.com"
 // githubSessionCap is how many sessions GitHub accepts on one SSH connection.
 // It refuses the next one, and ssh then opens a connection of its own.
 const githubSessionCap = 10
+
+// sshUpWindow is how long a successful check vouches for the connection, so
+// parallel git calls skip the check and the lock it holds. A connection that
+// lapses inside the window goes unnoticed until the window ends. A git call
+// that starts in that time connects on its own, as without sharing, and can ask
+// for a touch whose prompt git hides.
+const sshUpWindow = 30 * time.Second
 
 // ownMuxOpts multiplex GitHub connections when the user's SSH config does not.
 // The connection outlives the run, so a concurrent or follow-up run reuses it.
@@ -32,6 +40,8 @@ type sshMux struct {
 	opts []string
 	// slots caps concurrent sessions at githubSessionCap; nil until open succeeds.
 	slots chan struct{}
+	// upAt is when a check last found the connection up.
+	upAt time.Time
 }
 
 // githubMux is the process-wide connection a multi-repo command opens.
@@ -54,19 +64,32 @@ func (m *sshMux) open() {
 		strings.Contains(string(out), "\ncontrolpath ") {
 		m.opts = nil
 	}
-	if m.connect() {
+	if m.up(time.Now()) {
 		m.slots = make(chan struct{}, githubSessionCap)
 	}
 }
 
-// connect reports whether the connection is up, and opens it when it is not.
-// Callers hold m.mu, so a lapsed connection reopens once. Opening prompts for
-// the key's touch on the terminal.
-func (m *sshMux) connect() bool {
-	if exec.Command("ssh", slices.Concat(m.opts, []string{"-O", "check", githubSSHHost})...).Run() == nil {
+// up reports whether the connection is up at now, and opens it when it is not.
+// It skips the check within sshUpWindow after the last one that succeeded.
+// Callers hold m.mu, so a lapsed connection reopens once.
+func (m *sshMux) up(now time.Time) bool {
+	if now.Sub(m.upAt) < sshUpWindow {
 		return true
 	}
-	start := exec.Command("ssh", slices.Concat(m.opts, []string{"-fN", githubSSHHost})...)
+	if !connectSSH(m.opts) {
+		return false
+	}
+	m.upAt = now
+	return true
+}
+
+// connectSSH reports whether the connection that opts reach is up, and opens
+// it when it is not. Opening prompts for the key's touch on the terminal.
+var connectSSH = func(opts []string) bool {
+	if exec.Command("ssh", slices.Concat(opts, []string{"-O", "check", githubSSHHost})...).Run() == nil {
+		return true
+	}
+	start := exec.Command("ssh", slices.Concat(opts, []string{"-fN", githubSSHHost})...)
 	start.Stderr = os.Stderr
 	return start.Run() == nil
 }
@@ -83,7 +106,7 @@ func (m *sshMux) acquire() ([]string, func()) {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !m.connect() || m.opts == nil {
+	if !m.up(time.Now()) || m.opts == nil {
 		return nil, release
 	}
 	return []string{"GIT_SSH_COMMAND=ssh " + strings.Join(m.opts, " ")}, release
