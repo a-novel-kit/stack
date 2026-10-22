@@ -3,11 +3,16 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 
+	"github.com/a-novel-kit/stack/cli/internal/daemon/logs"
+	"github.com/a-novel-kit/stack/cli/internal/daemon/reinstall"
+	"github.com/a-novel-kit/stack/cli/internal/daemon/runner"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/server"
 )
 
@@ -94,6 +99,42 @@ func TestServe(t *testing.T) {
 			t.Cleanup(func() { _ = wrapped.next.Close() })
 			if !isLive(path) {
 				t.Fatal("serve removed the socket the next daemon bound")
+			}
+		})
+	}
+}
+
+// TestReplayCheckpoint pins that startup consumes the reinstall checkpoint
+// whatever it holds. An unusable checkpoint left on disk refuses every later
+// install with "checkpoint already present".
+func TestReplayCheckpoint(t *testing.T) {
+	testCases := []struct {
+		name string
+		// content is the checkpoint file, "" for none.
+		content string
+	}{
+		{name: "Success/None"},
+		{name: "Success/Valid", content: fmt.Sprintf(`{"schema": %d, "go_exec": []}`, reinstall.SchemaVersion)},
+		{name: "Error/Malformed", content: "{"},
+		{name: "Error/OtherSchema", content: fmt.Sprintf(`{"schema": %d}`, reinstall.SchemaVersion+1)},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			if testCase.content != "" {
+				if err := os.MkdirAll(filepath.Dir(reinstall.Path()), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(reinstall.Path(), []byte(testCase.content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			replayCheckpoint(t.Context(), runner.New(nil, nil, nil, logs.New()))
+
+			if reinstall.Exists() {
+				t.Error("the checkpoint is still on disk after startup")
 			}
 		})
 	}
