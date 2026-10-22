@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -40,10 +41,8 @@ func (m *model) render() string {
 		return "loading..."
 	}
 	switch m.view {
-	case viewHelp:
-		return m.renderHelp()
-	case viewTopology:
-		return m.renderTopology()
+	case viewHelp, viewTopology:
+		return m.renderPage()
 	}
 	// Main layout (with command-palette overlay if in viewCommand).
 	main := m.renderMain()
@@ -54,10 +53,12 @@ func (m *model) render() string {
 }
 
 // renderMain is the two-column layout: services nav left, target detail
-// + log viewer right. Bottom two rows are the status bar + footer.
+// + log viewer right. Bottom two rows are the status bar + footer. A Lip
+// Gloss frame's Width and Height include its border, and the two frames split
+// the terminal width.
 func (m *model) renderMain() string {
 	navWidth := computeNavWidth(m.services)
-	mainWidth := m.width - navWidth - 4 // borders
+	mainWidth := m.width - navWidth
 	if mainWidth < 20 {
 		mainWidth = m.width
 		navWidth = 0
@@ -149,10 +150,11 @@ func (m *model) renderRight(width, height int) string {
 	if m.tabCount() == 0 {
 		return styleFrame.Width(width).Height(height).Render(styleDim.Render("(this service has no targets or infra)"))
 	}
+	inner := width - 2 // inside the border
 	sections := append(m.tabRows(),
-		strings.Repeat("─", width-4),
-		styleHeader.Render(m.detailHeader()),
-		m.renderLogs(width-4, m.logViewportHeight()),
+		strings.Repeat("─", inner),
+		m.detailHeader(),
+		m.renderLogs(inner, m.logViewportHeight()),
 	)
 	return styleFrame.Width(width).Height(height).Render(lipgloss.JoinVertical(lipgloss.Left, sections...))
 }
@@ -183,22 +185,29 @@ func (m *model) tabRows() []string {
 
 // detailHeader summarizes the selected tab. A target reads
 // "name · mode · phase [pid] [container]", and an infra
-// "name · infra · phase health [container]".
+// "name · infra · phase [health] [container]".
+//
+// Each run of text takes its own Render. A Render ends with a reset, which
+// clears any style around it.
 func (m *model) detailHeader() string {
 	if t := m.activeTarget(); t != nil {
-		header := fmt.Sprintf("%s · %s · %s", t.GetName(), modeShort(t.GetMode()), phaseShort(t.GetPhase()))
+		tail := containerSuffix(t.GetContainerId())
 		if t.GetPid() != 0 {
-			header += fmt.Sprintf(" pid=%d", t.GetPid())
+			tail = fmt.Sprintf(" pid=%d", t.GetPid()) + tail
 		}
-		return header + containerSuffix(t.GetContainerId())
+		return styleHeader.Render(t.GetName()+" · "+modeShort(t.GetMode())+" · ") +
+			phaseShort(t.GetPhase()) +
+			styleHeader.Render(tail)
 	}
 	if in := m.activeInfra(); in != nil {
-		header := fmt.Sprintf("%s · %s · %s %s",
-			in.GetName(),
-			styleDim.Render("infra"),
-			phaseShort(in.GetPhase()),
-			styleDim.Render(infraHealthLabel(in)))
-		return header + containerSuffix(in.GetContainerId())
+		health := infraHealthLabel(in)
+		if health != "" {
+			health = " " + health
+		}
+		return styleHeader.Render(in.GetName()+" · ") + styleDim.Render("infra") + styleHeader.Render(" · ") +
+			phaseShort(in.GetPhase()) +
+			styleDim.Render(health) +
+			styleHeader.Render(containerSuffix(in.GetContainerId()))
 	}
 	return ""
 }
@@ -228,13 +237,14 @@ func renderTab(dot, label string, selected bool) string {
 //
 //	long-runner running        → ● green
 //	long-runner starting       → ● yellow
-//	long-runner errored        → ● red    (terminated non-success)
-//	long-runner clean exit     → ○ dim    (killed deliberately)
+//	long-runner failed         → ● red    (error or crash)
+//	long-runner stopped        → ○ dim    (exited 0 or killed)
 //	long-runner not started    → ○ dim
 //
 //	one-shot running           → ● yellow (in progress)
 //	one-shot completed (ok)    → ✓ green
-//	one-shot completed (fail)  → ✗ red
+//	one-shot failed            → ✗ red
+//	one-shot killed            → ○ dim
 //	one-shot not started       → ○ dim
 func targetStatusDot(t *anovelv1.Target) string {
 	isOneShot := t.GetKind() == anovelv1.TargetKind_TARGET_KIND_ONE_SHOT
@@ -247,24 +257,37 @@ func targetStatusDot(t *anovelv1.Target) string {
 	case anovelv1.Phase_PHASE_STARTING:
 		return styleWarn.Render("●")
 	case anovelv1.Phase_PHASE_TERMINATED:
-		switch t.GetExitReason() {
-		case anovelv1.ExitReason_EXIT_REASON_SUCCESS:
-			if isOneShot {
-				return styleSuccess.Render("✓")
-			}
-			return styleDim.Render("○")
-		case anovelv1.ExitReason_EXIT_REASON_UNSPECIFIED:
-			return styleDim.Render("○")
-		default:
-			if isOneShot {
-				return styleErr.Render("✗")
-			}
+		switch {
+		case targetFailed(t) && isOneShot:
+			return styleErr.Render("✗")
+		case targetFailed(t):
 			return styleErr.Render("●")
+		case isOneShot && t.GetExitReason() == anovelv1.ExitReason_EXIT_REASON_SUCCESS:
+			return styleSuccess.Render("✓")
 		}
 	}
 	return styleDim.Render("○")
 }
 
+// targetFailed reports whether t terminated on a failure of its own: a
+// non-zero exit or a crash. A killed target was stopped on request, and reads
+// as stopped, as in `run ps`.
+func targetFailed(t *anovelv1.Target) bool {
+	reason := t.GetExitReason()
+	return t.GetPhase() == anovelv1.Phase_PHASE_TERMINATED &&
+		(reason == anovelv1.ExitReason_EXIT_REASON_ERROR || reason == anovelv1.ExitReason_EXIT_REASON_CRASHED)
+}
+
+const (
+	// logPrefixWidth is the width of a log row's "15:04:05 out " prefix.
+	logPrefixWidth = 13
+	// tabSpaces is what Lip Gloss renders a tab as by default.
+	tabSpaces = "    "
+)
+
+// renderLogs draws the window of the followed log that fits in width by height
+// cells, ending logScroll lines before the tail. While scrolled back, its last
+// row is the paused indicator.
 func (m *model) renderLogs(width, height int) string {
 	if len(m.logLines) == 0 {
 		return styleDim.Render("(no log lines yet — start the target or run :refresh)")
@@ -278,102 +301,135 @@ func (m *model) renderLogs(width, height int) string {
 	// The window into logLines ends logScroll lines before the tail.
 	end := max(len(m.logLines)-m.logScroll, 0)
 	from := max(end-contentH, 0)
-	var b strings.Builder
+	rows := make([]string, 0, end-from+1)
 	for _, ln := range m.logLines[from:end] {
 		tag := "out"
 		if ln.GetStream() == anovelv1.LogStream_LOG_STREAM_STDERR {
 			tag = "err"
 		}
 		ts := ln.GetTs().AsTime().Format("15:04:05")
-		fmt.Fprintf(&b, "%s %s %s\n",
-			styleDim.Render(ts), styleWarn.Render(tag), truncate(ln.GetLine(), width-20))
+		// truncate measures a tab as zero cells, and the frame renders it as
+		// tabSpaces. Tabs are expanded first, so truncate counts their cells.
+		line := strings.ReplaceAll(ln.GetLine(), "\t", tabSpaces)
+		rows = append(rows, styleDim.Render(ts)+" "+styleWarn.Render(tag)+" "+truncate(line, width-logPrefixWidth))
 	}
 	if m.logScroll > 0 {
 		indicator := fmt.Sprintf("⏸ paused — %d line(s) below cursor  ·  pgdn/end resumes tail",
 			m.logScroll)
-		b.WriteString(styleWarn.Render(truncate(indicator, width)))
+		rows = append(rows, styleWarn.Render(truncate(indicator, width)))
 	}
-	return b.String()
+	// The rows end without a newline. A trailing one adds a row, which grows
+	// the frame past its height.
+	return strings.Join(rows, "\n")
 }
 
 // renderFooter draws the one-line key hint under the status bar. While the log
-// pane is scrolled back, it offers End to resume the tail.
+// pane is scrolled back, it offers End to resume the tail. Keys and text take
+// separate Renders, because each Render ends with a reset that clears the
+// style around it.
 func (m *model) renderFooter() string {
-	scrollHint := styleCmd.Render("PgUp/PgDn") + " scroll logs"
+	scrollHint := footerHint("PgUp/PgDn", "scroll logs")
 	if m.logScroll > 0 {
-		scrollHint = styleCmd.Render("End") + " resume tail"
+		scrollHint = footerHint("End", "resume tail")
 	}
 	hints := []string{
-		styleCmd.Render("?") + " help",
-		styleCmd.Render("Esc") + " command",
-		styleCmd.Render("↑↓") + " service",
-		styleCmd.Render("←→") + " target",
+		footerHint("?", "help"),
+		footerHint("Esc", "command"),
+		footerHint("↑↓", "service"),
+		footerHint("←→", "target"),
 		scrollHint,
-		styleCmd.Render("q") + " quit",
+		footerHint("q", "quit"),
 	}
-	return styleFooter.Render(strings.Join(hints, "  ·  "))
+	return strings.Join(hints, styleFooter.Render("  ·  "))
 }
 
-// renderHelp draws the full-screen help listing every command, grouped
-// by category.
-func (m *model) renderHelp() string {
-	lines := []string{
-		styleHeader.Render("a-novel run ui  —  command reference"),
-		"",
-		styleHeader.Render("Navigation"),
-		"  ↑/↓ or j/k           select service",
-		"  ←/→ or h/l or Tab   select target tab",
-		"",
-		styleHeader.Render("Log pane"),
-		"  PgUp/PgDn             scroll a half page (auto-follow pauses on PgUp)",
-		"  Ctrl-↑/Ctrl-↓        step one line",
-		"  Home / g              jump to oldest buffered line",
-		"  End  / G              jump to tail and resume auto-follow",
-		styleDim.Render("  (terminal text selection works — click + drag to copy lines)"),
-		"",
-		styleHeader.Render("Tab kinds"),
-		"  [target]               daemon-supervised process (go-exec or container)",
-		"  {infra}                podman container (postgres, mailserver, ...)",
-		"",
-		styleHeader.Render("Daemon-backed actions (via Esc command palette)"),
-		"  :start                 start active target (default go-exec) — targets only",
-		"  :start container       start active target in container mode",
-		"  :kill                  kill active tab (target → SIGTERM; infra → podman stop)",
-		"  :restart               kill then start (target) / podman restart (infra)",
-		"  :infra-start           bring up active service's WHOLE infra + one-shots",
-		"  :infra-kill            tear down active service's WHOLE infra (refuses if targets up)",
-		"  :infra-kill force      cascade-kill targets + infra",
-		"  :volume-backup         snapshot active service's volumes",
-		"  :topology              show the dependency graph (any key returns)",
-		"  :refresh               refresh services + logs now",
-		"",
-		styleHeader.Render("UI"),
-		"  ?                      this help screen (any key to dismiss)",
-		"  Esc                    open command palette",
-		"  q or Ctrl-C            quit (daemon keeps running)",
-		"",
-		styleHeader.Render("Status bar (above the footer)"),
-		"  " + styleWarn.Render("⏳") + "  busy   — action in flight; persists until it resolves",
-		"  " + styleSuccess.Render("✓") + "  done   — last action succeeded; fades after 5s",
-		"  " + styleErr.Render("✗") + "  error  — last action failed or invalid; sticks until the next action",
-		"",
-		styleDim.Render("(daemon-backed verbs are implemented via the same RPC as the CLI; what you see in the UI is what `a-novel run ps` would show)"),
-	}
-	return styleFrame.Width(m.width - 2).Height(m.height - 2).Render(strings.Join(lines, "\n"))
+// footerHint renders one footer hint: the key, then what it does.
+func footerHint(key, text string) string {
+	return styleCmd.Render(key) + styleFooter.Render(" "+text)
 }
 
-// renderTopology is the dedicated topology screen, populated by the
-// :topology palette command's response. Any keystroke returns to
-// viewMain.
-func (m *model) renderTopology() string {
-	lines := []string{
-		styleHeader.Render("Dependency topology"),
-		"",
-		m.topologyTx,
-		"",
-		styleDim.Render("(press any key to return)"),
+// helpLines is the help page, listing every command, grouped by category.
+var helpLines = []string{
+	styleHeader.Render("a-novel run ui  —  command reference"),
+	"",
+	styleHeader.Render("Navigation"),
+	"  ↑/↓ or j/k           select service",
+	"  ←/→ or h/l or Tab   select target tab",
+	"",
+	styleHeader.Render("Log pane"),
+	"  PgUp/PgDn             scroll a half page (auto-follow pauses on PgUp)",
+	"  Ctrl-↑/Ctrl-↓        step one line",
+	"  Home / g              jump to oldest buffered line",
+	"  End  / G              jump to tail and resume auto-follow",
+	styleDim.Render("  (terminal text selection works — click + drag to copy lines)"),
+	"",
+	styleHeader.Render("Tab kinds"),
+	"  [target]               daemon-supervised process (go-exec or container)",
+	"  {infra}                podman container (postgres, mailserver, ...)",
+	"",
+	styleHeader.Render("Daemon-backed actions (via Esc command palette)"),
+	"  :start                 start active target (default go-exec) — targets only",
+	"  :start container       start active target in container mode",
+	"  :kill                  kill active tab (target → SIGTERM; infra → podman stop)",
+	"  :restart               kill then start (target) / podman restart (infra)",
+	"  :infra-start           bring up active service's WHOLE infra + one-shots",
+	"  :infra-kill            tear down active service's WHOLE infra (refuses if targets up)",
+	"  :infra-kill force      cascade-kill targets + infra",
+	"  :volume-backup         snapshot active service's volumes",
+	"  :topology              show the dependency graph (↑/↓ scroll, any other key returns)",
+	"  :refresh               refresh services + logs now",
+	"",
+	styleHeader.Render("UI"),
+	"  ?                      this help screen (↑/↓ scroll, any other key returns)",
+	"  Esc                    open command palette",
+	"  q or Ctrl-C            quit (daemon keeps running)",
+	"",
+	styleHeader.Render("Status bar (above the footer)"),
+	"  " + styleWarn.Render("⏳") + "  busy   — action in flight; persists until it resolves",
+	"  " + styleSuccess.Render("✓") + "  done   — last action succeeded; fades after 5s",
+	"  " + styleErr.Render("✗") + "  error  — last action failed or invalid; sticks until the next action",
+	"",
+	styleDim.Render("(daemon-backed verbs are implemented via the same RPC as the CLI; what you see in the UI is what `a-novel run ps` would show)"),
+}
+
+// pageLines returns the lines of the full-screen page in view: the help, or
+// the dependency graph from the last :topology.
+func (m *model) pageLines() []string {
+	if m.view != viewTopology {
+		return helpLines
 	}
-	return styleFrame.Width(m.width - 2).Height(m.height - 2).Render(strings.Join(lines, "\n"))
+	lines := append([]string{styleHeader.Render("Dependency topology"), ""}, strings.Split(m.topologyTx, "\n")...)
+	return append(lines, "", styleDim.Render("(↑/↓ scroll, any other key returns)"))
+}
+
+// pageWindow returns the page in view, the index of its first line shown, and
+// how many lines the frame shows. A page taller than the frame gives up the
+// frame's last row to its scroll position, and pageScroll is clamped to the
+// page.
+func (m *model) pageWindow() ([]string, int, int) {
+	lines := m.pageLines()
+	rows := m.height - 2 // inside the border
+	if len(lines) > rows {
+		rows--
+	}
+	rows = max(rows, 1)
+	return lines, min(m.pageScroll, max(len(lines)-rows, 0)), rows
+}
+
+// renderPage draws the help or topology page in a frame that fills the
+// terminal. Each line is cut to the frame's width, so the frame keeps its
+// height. A page taller than the frame ends on its scroll position.
+func (m *model) renderPage() string {
+	lines, from, rows := m.pageWindow()
+	shown := make([]string, 0, rows+1)
+	for _, line := range lines[from:min(from+rows, len(lines))] {
+		shown = append(shown, truncate(line, m.width-2))
+	}
+	if len(lines) > rows {
+		position := fmt.Sprintf("lines %d–%d of %d  ·  ↑/↓ scroll  ·  any other key returns", from+1, from+rows, len(lines))
+		shown = append(shown, styleDim.Render(truncate(position, m.width-2)))
+	}
+	return styleFrame.Width(m.width).Height(m.height).Render(strings.Join(shown, "\n"))
 }
 
 // overlayCommand draws the command input and autocomplete suggestions
@@ -400,7 +456,7 @@ var paletteCommands = []struct{ verb, desc string }{
 	{"infra-kill", "tear down active service's infra (refuses if targets up)"},
 	{"infra-kill force", "cascade-kill targets + infra"},
 	{"volume-backup", "snapshot active service's volumes"},
-	{"topology", "show dependency graph (any key returns)"},
+	{"topology", "show dependency graph (↑/↓ scroll, any other key returns)"},
 	{"refresh", "force-refresh services + logs"},
 	{"quit", "exit the UI (daemon keeps running)"},
 }
@@ -505,7 +561,9 @@ func infraDot(in *anovelv1.Infra) string {
 }
 
 // infraHealthLabel returns the short human descriptor that pairs
-// with infraDot ("healthy", "starting", "unhealthy", "down").
+// with infraDot ("healthy", "starting", "unhealthy", "down"), or "" when the
+// daemon reads no health for a running infra: the header's phase already says
+// "running".
 func infraHealthLabel(in *anovelv1.Infra) string {
 	if in.GetPhase() != anovelv1.Phase_PHASE_RUNNING {
 		return "down"
@@ -514,7 +572,7 @@ func infraHealthLabel(in *anovelv1.Infra) string {
 	case anovelv1.Health_HEALTH_HEALTHY:
 		return "healthy"
 	case anovelv1.Health_HEALTH_UNSPECIFIED:
-		return "running" // the daemon reads no infra health
+		return ""
 	case anovelv1.Health_HEALTH_STARTING:
 		return "starting"
 	case anovelv1.Health_HEALTH_UNHEALTHY:
@@ -523,32 +581,26 @@ func infraHealthLabel(in *anovelv1.Infra) string {
 	return "unknown"
 }
 
-// computeNavWidth picks the sidebar width so the longest service name fits on
-// one line, clamped to [24, 40]: 24 keeps the panel a recognizable width when
-// nothing is discovered yet, 40 stops one very long name squeezing the right
-// pane.
+// computeNavWidth picks the sidebar's frame width so the longest service name
+// fits on one line, clamped to [24, 40]: 24 keeps the panel a recognizable
+// width when nothing is discovered yet, 40 stops one very long name squeezing
+// the right pane.
 func computeNavWidth(svcs []*anovelv1.Service) int {
 	const minW, maxW = 24, 40
 	w := minW
 	for _, svc := range svcs {
-		// "▸ " prefix + name + 2 cols of right padding.
-		w = max(w, 4+len(svc.GetName()))
+		// Two border columns, styleNav's padding column on each side, then the
+		// "▸ " prefix and the name.
+		w = max(w, 6+len(svc.GetName()))
 	}
 	return min(w, maxW)
 }
 
-// serviceHasError reports whether any target in the service terminated with a
-// non-success exit. serviceTargetsLine renders the red "● errored" line from
-// it, and the nav keeps such a service undimmed since it needs attention.
+// serviceHasError reports whether any target in the service failed.
+// serviceTargetsLine renders the red "● errored" line from it, and the nav
+// keeps such a service undimmed since it needs attention.
 func serviceHasError(svc *anovelv1.Service) bool {
-	for _, t := range svc.GetTargets() {
-		if t.GetPhase() == anovelv1.Phase_PHASE_TERMINATED &&
-			t.GetExitReason() != anovelv1.ExitReason_EXIT_REASON_SUCCESS &&
-			t.GetExitReason() != anovelv1.ExitReason_EXIT_REASON_UNSPECIFIED {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(svc.GetTargets(), targetFailed)
 }
 
 func modeShort(m anovelv1.Mode) string {
@@ -562,12 +614,14 @@ func modeShort(m anovelv1.Mode) string {
 	}
 }
 
+// phaseShort renders a phase for the detail header: in its own color when
+// running, stopping or terminated, in the header style otherwise.
 func phaseShort(p anovelv1.Phase) string {
 	switch p {
 	case anovelv1.Phase_PHASE_PENDING:
-		return "pending"
+		return styleHeader.Render("pending")
 	case anovelv1.Phase_PHASE_STARTING:
-		return "starting"
+		return styleHeader.Render("starting")
 	case anovelv1.Phase_PHASE_RUNNING:
 		return styleSuccess.Render("running")
 	case anovelv1.Phase_PHASE_STOPPING:
@@ -575,7 +629,7 @@ func phaseShort(p anovelv1.Phase) string {
 	case anovelv1.Phase_PHASE_TERMINATED:
 		return styleDim.Render("terminated")
 	default:
-		return "idle"
+		return styleHeader.Render("idle")
 	}
 }
 

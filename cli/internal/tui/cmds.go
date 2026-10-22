@@ -76,9 +76,11 @@ type action struct {
 }
 
 // run shows a.busy, runs a.do under a.timeout, then emits an actionResultMsg
-// that Update renders as a.success, or as the error prefixed by a.label.
+// that Update renders as a.success, or as the error prefixed by a.label. The
+// sequence delivers the busy status before a.do starts, so the result always
+// replaces it.
 func (a action) run() tea.Cmd {
-	return tea.Batch(
+	return tea.Sequence(
 		setStatusCmd(statusBusy, a.busy),
 		func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), a.timeout)
@@ -117,10 +119,10 @@ func tickEvery(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
-// followSelectedLogs restarts the log pane on the selected tab. The
-// server's follow mode streams the whole log before tailing it, so the
-// buffer and scroll restart empty. A background goroutine feeds the lines
-// in through program.Send until the next call cancels it.
+// followSelectedLogs restarts the log pane on the selected tab. The server
+// replays the log's last maxLogLines lines before tailing it, so the buffer
+// and scroll restart empty. A background goroutine feeds the lines in through
+// program.Send until the next call cancels it.
 func (m *model) followSelectedLogs() {
 	m.logLines = nil
 	m.logScroll = 0
