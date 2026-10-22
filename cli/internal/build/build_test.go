@@ -1,11 +1,13 @@
 package build
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/a-novel-kit/stack/cli/internal/detect"
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
@@ -113,6 +115,41 @@ func TestComposeEnv(t *testing.T) {
 	}
 	if vars["POSTGRES_USER"] != "postgres" {
 		t.Errorf("POSTGRES_USER = %q, want the local default", vars["POSTGRES_USER"])
+	}
+}
+
+// cancelOnWrite cancels a context on the first write it receives.
+type cancelOnWrite struct{ cancel context.CancelFunc }
+
+func (w cancelOnWrite) Write(p []byte) (int, error) {
+	w.cancel()
+	return len(p), nil
+}
+
+// TestCompose pins that a cancelled compose returns at once, even while a
+// child of podman holds its output pipe, as podman-compose's children do.
+//
+// Not parallel: t.Setenv puts a stand-in podman first on PATH.
+func TestCompose(t *testing.T) {
+	bin := t.TempDir()
+	podman := "#!/bin/sh\nsleep 30 &\necho started\nwait\n"
+	if err := os.WriteFile(filepath.Join(bin, "podman"), []byte(podman), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	// The first output line proves the background sleep runs, so the cancel
+	// lands while it holds the pipe.
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	start := time.Now()
+	err := compose(ctx, cancelOnWrite{cancel}, os.Environ(), &detect.ComposeEnv{Project: "p", File: "f"}, nil, "up")
+	if err == nil {
+		t.Fatal("compose succeeded after its context was cancelled")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("compose returned %s after the cancel: a child of podman outlived it", elapsed)
 	}
 }
 

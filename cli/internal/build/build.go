@@ -309,12 +309,20 @@ func derivedURLs(names []string, env []string) []string {
 
 // compose runs `podman compose [global...] -p <project> -f <file> <args...>`
 // with the given environment, streaming combined output to out.
+//
+// The command runs in its own process group, and a cancelled ctx kills the
+// whole group. The compose provider's children hold the output pipe, and
+// killing podman alone leaves Run waiting on them. WaitDelay bounds the wait
+// for a descendant that left the group.
 func compose(ctx context.Context, out io.Writer, env []string, e *detect.ComposeEnv, global []string, args ...string) error {
 	full := slices.Concat([]string{"compose"}, global, []string{"-p", e.Project, "-f", e.File}, args)
 	cmd := exec.CommandContext(ctx, "podman", full...)
 	cmd.Env = env
 	cmd.Stdout = out
 	cmd.Stderr = out
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = 5 * time.Second
 	return cmd.Run()
 }
 
