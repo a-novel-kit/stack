@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -156,6 +157,7 @@ func TestProgress(t *testing.T) {
 		{name: "CarriageReturnAcrossWrites", write: []string{"a\rb", "c\n"}, want: "bc"},
 		{name: "AnsiStripped", write: []string{"\x1b[32mok\x1b[0m\n"}, want: "ok"},
 		{name: "BlankLineKeepsPrevious", write: []string{"real\n", "\n"}, want: "real"},
+		{name: "LongLineEndsAtCap", write: []string{strings.Repeat("x", 1<<20+1), "y"}, want: "y"},
 	}
 
 	for _, testCase := range testCases {
@@ -179,7 +181,7 @@ func TestProgress(t *testing.T) {
 					t.Errorf("job not reported running")
 				}
 				if got := progress.Last(0); got != testCase.want {
-					t.Errorf("Last = %q, want %q", got, testCase.want)
+					t.Errorf("Last = %.80q, want %.80q", got, testCase.want)
 				}
 			}()
 			jobs.Run(t.Context(), []jobs.Job{job}, 1, progress)

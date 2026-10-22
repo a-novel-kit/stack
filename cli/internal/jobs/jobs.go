@@ -157,9 +157,13 @@ func run(ctx context.Context, job Job, report func(string)) Result {
 
 var ansiSeq = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
 
+// maxLineBytes is the longest line in progress tailWriter keeps.
+const maxLineBytes = 1024 * 1024
+
 // tailWriter reports the latest output line, complete or in progress, reduced
 // to what a terminal would show: text after the last carriage return, without
-// ANSI escapes.
+// ANSI escapes. A line in progress ends once it passes maxLineBytes, and the
+// output after it starts a new line.
 type tailWriter struct {
 	report func(string)
 	rest   []byte
@@ -177,6 +181,9 @@ func (w *tailWriter) Write(p []byte) (int, error) {
 		w.rest = w.rest[i+1:]
 	}
 	w.report(lastLine(w.rest))
+	if len(w.rest) > maxLineBytes {
+		w.rest = nil
+	}
 	return len(p), nil
 }
 
