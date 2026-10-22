@@ -55,6 +55,11 @@ taken from you mid-task, and the shared object store keeps every commit you have
 git worktree add <path-outside-the-repo> <branch>
 ```
 
+Run a worktree's checks from inside the worktree, after installing its dependencies there. A tool
+started in the main checkout reads that checkout's ignore files, which list `tmp/`. Prettier then
+skips every file of a worktree under `tmp/` and still reports success. A check borrowing the main
+checkout's `node_modules` must turn those files off, as `prettier --ignore-path /dev/null` does.
+
 After a collision nothing is lost: the commit is unreferenced, not deleted. Find it in `git reflog`,
 point your branch at it with `git branch -f <branch> <sha>`, and put local `master` back with
 `git branch -f master origin/master`. Clear your own stray files out of the shared tree so the other
