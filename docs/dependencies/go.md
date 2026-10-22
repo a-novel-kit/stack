@@ -90,9 +90,12 @@ The CLI installs into Go's program directory, `~/go/bin` unless you moved it. Sk
 == Linux / macOS
 
 ```bash
-echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> "$HOME/.$(basename "$SHELL")rc"
+GO_BIN="$(go env GOPATH)/bin"
+printf 'export PATH="$PATH:%s"\n' "$GO_BIN" >> "$HOME/.$(basename "$SHELL")rc"
 exec "$SHELL"
 ```
+
+The rc stores the path itself, so a new shell starts no Go command. An rc line that calls `go env GOPATH` still works but starts Go in every new shell. Replace it with the one this block writes.
 
 == Windows
 
