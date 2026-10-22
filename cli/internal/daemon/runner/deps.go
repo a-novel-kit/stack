@@ -110,15 +110,12 @@ func (r *Runner) ensureOneShotSatisfied(ctx context.Context, svc *discovery.Serv
 		return fmt.Errorf("one-shot dep %s/%s last exited %s — restart infra to retry (`a-novel run service infra kill %s && a-novel run service infra start %s`)",
 			svc.Name, t.Name, prev, svc.Name, svc.Name)
 	}
-	// A one-shot not yet run in this session runs now.
-	if err := r.runOneShot(ctx, t, mode); err != nil {
+	// A one-shot not yet run in this session runs now, and its outcome is
+	// recorded, so a failure refuses later starts until the infra restarts.
+	err := r.runOneShot(ctx, t, mode)
+	r.recordOneShot(svc.Stack, svc.Name, t.Name, err)
+	if err != nil {
 		return fmt.Errorf("one-shot %s/%s: %w", svc.Name, t.Name, err)
-	}
-	// Record success in the session.
-	r.sessMu.Lock()
-	defer r.sessMu.Unlock()
-	if s, ok := r.infraSessions[sessionKey(svc.Stack, svc.Name)]; ok {
-		s.OneShotResults[t.Name] = anovelv1.ExitReason_EXIT_REASON_SUCCESS
 	}
 	return nil
 }

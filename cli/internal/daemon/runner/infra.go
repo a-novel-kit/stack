@@ -145,13 +145,7 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 	//    that depends on another runs after.
 	for _, ts := range topoSortOneShots(svc) {
 		err := r.runOneShot(ctx, ts, oneShotsMode)
-		result := anovelv1.ExitReason_EXIT_REASON_SUCCESS
-		if err != nil {
-			result = anovelv1.ExitReason_EXIT_REASON_ERROR
-		}
-		r.sessMu.Lock()
-		sess.OneShotResults[ts.Name] = result
-		r.sessMu.Unlock()
+		r.recordOneShot(stack, service, ts.Name, err)
 		if err != nil {
 			return fmt.Errorf("one-shot %s/%s failed: %w", service, ts.Name, err)
 		}
@@ -237,6 +231,25 @@ func (r *Runner) lockInfra(ctx context.Context, stack, service string) (func(), 
 		return func() { <-lock }, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	}
+}
+
+// recordOneShot records the outcome of a one-shot run in the infra session of
+// (stack, service): SUCCESS, or ERROR for a run that failed. A later start then
+// refuses the failed one-shot until the infra restarts. A wait the caller
+// cancelled records nothing, since the one-shot may still succeed.
+func (r *Runner) recordOneShot(stack, service, name string, err error) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return
+	}
+	result := anovelv1.ExitReason_EXIT_REASON_SUCCESS
+	if err != nil {
+		result = anovelv1.ExitReason_EXIT_REASON_ERROR
+	}
+	r.sessMu.Lock()
+	defer r.sessMu.Unlock()
+	if s, ok := r.infraSessions[sessionKey(stack, service)]; ok {
+		s.OneShotResults[name] = result
 	}
 }
 
