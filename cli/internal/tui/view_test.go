@@ -48,6 +48,11 @@ func TestRender(t *testing.T) {
 		Infra:   []*anovelv1.Infra{{Name: "postgres", Phase: anovelv1.Phase_PHASE_RUNNING}},
 		Targets: []*anovelv1.Target{{Id: "default/service-narrative-engine/rest", Name: "rest"}},
 	}
+	// More lines than the pane holds, each longer than the pane.
+	logLines := make([]*anovelv1.StreamLogsResponse, 60)
+	for i := range logLines {
+		logLines[i] = &anovelv1.StreamLogsResponse{Line: "info batch synced shard=2 line=7 keys=" + strings.Repeat("k", 200)}
+	}
 
 	testCases := []struct {
 		name string
@@ -58,6 +63,8 @@ func TestRender(t *testing.T) {
 
 		wantText string
 	}{
+		{name: "Main/Tail", logLines: logLines, wantText: "▸ " + service.GetName()},
+		{name: "Main/ScrolledBack", logLines: logLines, logScroll: 10, wantText: "⏸ paused"},
 		{name: "Main/NoLogs", wantText: "no log lines yet"},
 		{name: "Help", view: viewHelp, wantText: "command reference"},
 	}

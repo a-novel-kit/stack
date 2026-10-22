@@ -292,22 +292,23 @@ func (m *model) renderLogs(width, height int) string {
 	// The window into logLines ends logScroll lines before the tail.
 	end := max(len(m.logLines)-m.logScroll, 0)
 	from := max(end-contentH, 0)
-	var b strings.Builder
+	rows := make([]string, 0, end-from+1)
 	for _, ln := range m.logLines[from:end] {
 		tag := "out"
 		if ln.GetStream() == anovelv1.LogStream_LOG_STREAM_STDERR {
 			tag = "err"
 		}
 		ts := ln.GetTs().AsTime().Format("15:04:05")
-		fmt.Fprintf(&b, "%s %s %s\n",
-			styleDim.Render(ts), styleWarn.Render(tag), truncate(ln.GetLine(), width-logPrefixWidth))
+		rows = append(rows, styleDim.Render(ts)+" "+styleWarn.Render(tag)+" "+truncate(ln.GetLine(), width-logPrefixWidth))
 	}
 	if m.logScroll > 0 {
 		indicator := fmt.Sprintf("⏸ paused — %d line(s) below cursor  ·  pgdn/end resumes tail",
 			m.logScroll)
-		b.WriteString(styleWarn.Render(truncate(indicator, width)))
+		rows = append(rows, styleWarn.Render(truncate(indicator, width)))
 	}
-	return b.String()
+	// The rows end without a newline. A trailing one adds a row, which grows
+	// the frame past its height.
+	return strings.Join(rows, "\n")
 }
 
 // renderFooter draws the one-line key hint under the status bar. While the log
