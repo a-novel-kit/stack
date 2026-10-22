@@ -176,20 +176,15 @@ func (r *Runner) awaitTerminated(ctx context.Context, inst *Instance, timeout ti
 func (r *Runner) transition(id string, phase anovelv1.Phase) {
 	r.mu.Lock()
 	inst, ok := r.instances[id]
-	if !ok || inst.Phase == phase {
+	if !ok {
 		r.mu.Unlock()
 		return
 	}
-	ev := PhaseEvent{
-		TargetID: inst.ID,
-		Service:  inst.Service,
-		Stack:    inst.Stack,
-		OldPhase: inst.Phase,
-		NewPhase: phase,
-	}
-	inst.Phase = phase
+	ev, changed := setPhase(inst, phase)
 	r.mu.Unlock()
-	r.emitPhase(ev)
+	if changed {
+		r.emitPhase(ev)
+	}
 }
 
 // advance moves id from phase from to phase to and emits the PhaseEvent. It
@@ -202,15 +197,29 @@ func (r *Runner) advance(id string, from, to anovelv1.Phase) bool {
 		r.mu.Unlock()
 		return false
 	}
+	ev, changed := setPhase(inst, to)
+	r.mu.Unlock()
+	if changed {
+		r.emitPhase(ev)
+	}
+	return true
+}
+
+// setPhase moves inst to phase and returns the PhaseEvent announcing it, or
+// false when inst already holds phase. The caller holds r.mu and emits the
+// event once it unlocks, so the change and its event share one critical
+// section.
+func setPhase(inst *Instance, phase anovelv1.Phase) (PhaseEvent, bool) {
+	if inst.Phase == phase {
+		return PhaseEvent{}, false
+	}
 	ev := PhaseEvent{
 		TargetID: inst.ID,
 		Service:  inst.Service,
 		Stack:    inst.Stack,
-		OldPhase: from,
-		NewPhase: to,
+		OldPhase: inst.Phase,
+		NewPhase: phase,
 	}
-	inst.Phase = to
-	r.mu.Unlock()
-	r.emitPhase(ev)
-	return true
+	inst.Phase = phase
+	return ev, true
 }
