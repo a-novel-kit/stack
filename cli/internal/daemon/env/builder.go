@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"maps"
+	"net/url"
 	"os"
 	"slices"
 	"strconv"
@@ -214,7 +215,7 @@ func (b *Builder) addOwnedPorts(out map[string]string, owner string) {
 // setPostgresDSN points POSTGRES_DSN at localhost when out holds an allocated
 // POSTGRES_PORT. It overwrites the compose file's in-container
 // `postgres-<svc>:5432` form, wrong for go-exec. Unset credentials fall back to
-// postgres, so the DSN stays well-formed.
+// postgres, and set ones are percent-escaped, so the DSN stays well-formed.
 func setPostgresDSN(out map[string]string) {
 	portStr := out["POSTGRES_PORT"]
 	if portStr == "" {
@@ -223,7 +224,15 @@ func setPostgresDSN(out map[string]string) {
 	user := cmp.Or(out["POSTGRES_USER"], "postgres")
 	pass := cmp.Or(out["POSTGRES_PASSWORD"], "postgres")
 	db := cmp.Or(out["POSTGRES_DB"], "postgres")
-	out["POSTGRES_DSN"] = "postgres://" + user + ":" + pass + "@" + hostLocalhost + ":" + portStr + "/" + db + "?sslmode=disable"
+
+	dsn := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(user, pass),
+		Host:     hostLocalhost + ":" + portStr,
+		Path:     "/" + db,
+		RawQuery: "sslmode=disable",
+	}
+	out["POSTGRES_DSN"] = dsn.String()
 }
 
 // addOwnPrefixForms gives owner's ports both forms, so service-json-keys-grpc

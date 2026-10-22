@@ -65,6 +65,23 @@ func TestBuilderForTarget(t *testing.T) {
 			},
 		},
 		{
+			// The rewritten DSN carries the compose credentials percent-escaped, so a
+			// password holding `@` or `/` still parses.
+			name: "DSNEscapesCredentials", services: []string{"svc"}, infraPort: "POSTGRES_PORT",
+			target: discovery.Target{Name: "migrations", Service: "svc", Environment: map[string]string{
+				"POSTGRES_USER":     "alice",
+				"POSTGRES_PASSWORD": "p@ss/word",
+				"POSTGRES_DB":       "novels",
+			}},
+			check: func(t *testing.T, env map[string]string, _ []string, alloc *Allocator) {
+				port, _ := alloc.Lookup("svc", "POSTGRES_PORT")
+				want := "postgres://alice:p%40ss%2Fword@localhost:" + strconv.Itoa(port) + "/novels?sslmode=disable"
+				if env["POSTGRES_DSN"] != want {
+					t.Errorf("POSTGRES_DSN: got %q want %q", env["POSTGRES_DSN"], want)
+				}
+			},
+		},
+		{
 			// ${SERVICE_X_GRPC_PORT} resolves to an allocation against service-x's
 			// grpc target, recorded so a later service-x/grpc target lands on the
 			// same slot. "service-x" yields the prefix "SERVICE_X", which
