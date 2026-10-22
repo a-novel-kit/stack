@@ -61,6 +61,9 @@ var errKilledWhileStarting = errors.New("killed while starting")
 type Runner struct {
 	mu        sync.RWMutex
 	instances map[string]*Instance // keyed by Instance.ID
+	// polling records that the container poller runs. mu guards it with
+	// instances, so a container added while the poller stops still gets one.
+	polling bool
 
 	// stacks translates a target ID into a discovery.Target at start time.
 	stacks discovery.Stacks
@@ -357,8 +360,8 @@ func (r *Runner) markTerminated(id string, reason anovelv1.ExitReason, errMsg st
 		inst.LastErr = errMsg
 	}
 	inst.cmd = nil
-	// Held to close outside the lock. The watch and log-stream goroutines run on the context this
-	// closes, and a container that outlives its instance keeps both polling.
+	// Held to close outside the lock. Closing it ends the log stream of a container, which can
+	// outlive its instance.
 	cancel := inst.cancel
 	inst.cancel = nil
 	ev := PhaseEvent{

@@ -59,7 +59,7 @@ func (r *Runner) startContainer(ctx context.Context, inst *Instance, t *discover
 
 	r.mu.Lock()
 	inst.ContainerID = cid
-	// Health starts at STARTING, and the watcher follows podman's healthcheck
+	// Health starts at STARTING, and the poller follows podman's healthcheck
 	// from there.
 	inst.Health = anovelv1.Health_HEALTH_STARTING
 	killed := inst.Phase == anovelv1.Phase_PHASE_STOPPING
@@ -86,7 +86,7 @@ func (r *Runner) startContainer(ctx context.Context, inst *Instance, t *discover
 		go r.streamContainerLogs(procCtx, cid, logWriter)
 	}
 
-	go r.watchContainer(procCtx, id, cid)
+	go r.watchContainer(id, cid)
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -104,43 +104,128 @@ func targetContainer(ctx context.Context, t *discovery.Target) string {
 	return containerByName(ctx, composeProjectName(t.Stack, t.Service), t.ComposeName)
 }
 
-// watchContainer polls `podman inspect` every 2s to update the instance's
-// phase, health, and exit code, one inspect per running container per tick. It
-// returns when the container exits or ctx is cancelled.
-func (r *Runner) watchContainer(ctx context.Context, id, cid string) {
-	ticker := time.NewTicker(2 * time.Second)
+// containerPollInterval is how often the poller checks the runner's containers.
+const containerPollInterval = 2 * time.Second
+
+// containerWatch names a container and the instance it runs.
+type containerWatch struct{ id, cid string }
+
+// watchContainer checks container cid of instance id at once, so a
+// fast-exiting container shows without waiting a tick. It then starts the
+// runner's poller unless one already runs.
+func (r *Runner) watchContainer(id, cid string) {
+	r.checkContainer(containerWatch{id: id, cid: cid})
+
+	r.mu.Lock()
+	start := !r.polling
+	r.polling = true
+	r.mu.Unlock()
+	if start {
+		go r.pollContainers()
+	}
+}
+
+// pollContainers checks every live container every 2s, with one podman call
+// per tick whatever their number. It returns once no live container is left.
+func (r *Runner) pollContainers() {
+	ticker := time.NewTicker(containerPollInterval)
 	defer ticker.Stop()
-	// First tick: immediate, so a fast-exiting container is observed
-	// without waiting 2s.
-	for {
-		phase, health, exitCode, err := podmanInspect(ctx, cid)
-		if err != nil {
-			// A failed inspect means the container is gone, so mark
-			// the instance terminated.
-			r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_CRASHED, err.Error())
+	for range ticker.C {
+		watches := r.liveContainers()
+		if len(watches) == 0 {
 			return
 		}
-		r.updateContainerState(id, phase, health)
-		if podmanPhase(phase) == anovelv1.Phase_PHASE_TERMINATED {
-			reason := anovelv1.ExitReason_EXIT_REASON_SUCCESS
-			r.mu.RLock()
-			stopping := r.instances[id] != nil && r.instances[id].Phase == anovelv1.Phase_PHASE_STOPPING
-			r.mu.RUnlock()
-			switch {
-			case stopping:
-				reason = anovelv1.ExitReason_EXIT_REASON_KILLED
-			case exitCode != 0:
-				reason = anovelv1.ExitReason_EXIT_REASON_ERROR
-			}
-			r.markTerminated(id, reason, "")
-			return
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
+		r.checkContainers(watches)
+	}
+}
+
+// liveContainers lists the container of every container instance not yet
+// terminated, the set the poller follows. A container leaves it when
+// markTerminated ends its instance.
+//
+// With nothing left, liveContainers clears r.polling under the same lock, so
+// the next watchContainer starts a new poller.
+func (r *Runner) liveContainers() []containerWatch {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var watches []containerWatch
+	for _, inst := range r.instances {
+		if inst.Mode == anovelv1.Mode_MODE_CONTAINER && inst.ContainerID != "" && inst.Phase != anovelv1.Phase_PHASE_TERMINATED {
+			watches = append(watches, containerWatch{id: inst.ID, cid: inst.ContainerID})
 		}
 	}
+	r.polling = len(watches) > 0
+	return watches
+}
+
+// checkContainers inspects the containers of watches in one podman call and
+// applies each result to its instance. One vanished container fails the whole
+// call, so a failed call checks each container alone to find it.
+func (r *Runner) checkContainers(watches []containerWatch) {
+	cids := make([]string, len(watches))
+	for i, w := range watches {
+		cids[i] = w.cid
+	}
+	// The call serves every instance, so no instance's end cancels it.
+	states, err := podmanInspectAll(context.Background(), cids)
+	if err != nil {
+		for _, w := range watches {
+			r.checkContainer(w)
+		}
+		return
+	}
+	for i, w := range watches {
+		r.applyContainerState(w, states[i])
+	}
+}
+
+// checkContainer inspects one container and applies the result to its
+// instance. A failed inspect means the container is gone, and its instance
+// ends as crashed.
+func (r *Runner) checkContainer(w containerWatch) {
+	states, err := podmanInspectAll(context.Background(), []string{w.cid})
+	if err != nil {
+		if r.stillRuns(w) {
+			r.markTerminated(w.id, anovelv1.ExitReason_EXIT_REASON_CRASHED, err.Error())
+		}
+		return
+	}
+	r.applyContainerState(w, states[0])
+}
+
+// applyContainerState folds one inspect result into the instance of w through
+// updateContainerState. An exited container ends the instance: killed when a
+// stop was asked, an error on a nonzero exit code, a success otherwise.
+func (r *Runner) applyContainerState(w containerWatch, s infraContainerState) {
+	if !r.stillRuns(w) {
+		return
+	}
+	r.updateContainerState(w.id, s.phase, s.health)
+	if podmanPhase(s.phase) != anovelv1.Phase_PHASE_TERMINATED {
+		return
+	}
+	reason := anovelv1.ExitReason_EXIT_REASON_SUCCESS
+	r.mu.RLock()
+	stopping := r.instances[w.id] != nil && r.instances[w.id].Phase == anovelv1.Phase_PHASE_STOPPING
+	r.mu.RUnlock()
+	switch {
+	case stopping:
+		reason = anovelv1.ExitReason_EXIT_REASON_KILLED
+	case s.exitCode != 0:
+		reason = anovelv1.ExitReason_EXIT_REASON_ERROR
+	}
+	r.markTerminated(w.id, reason, "")
+}
+
+// stillRuns reports whether the instance of w is live and still runs its
+// container. A check can outlive its instance: a kill and a restart while
+// podman runs hand the target ID to a new instance, whose container is another
+// one or not up yet.
+func (r *Runner) stillRuns(w containerWatch) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	inst := r.instances[w.id]
+	return inst != nil && inst.ContainerID == w.cid && inst.Phase != anovelv1.Phase_PHASE_TERMINATED
 }
 
 // InfraState is one row in the batched podman scan: the container ID and
@@ -246,8 +331,8 @@ func (r *Runner) InfraContainer(ctx context.Context, stack, service, infraName, 
 // updateContainerState folds one inspect result into the runner's view of
 // a container instance, translating podman's state and health words into
 // the Phase and Health enums. A terminated instance is never revived, and
-// a stopping instance isn't bumped back to running; the exited state is
-// handled by watchContainer, not here. A phase change emits its PhaseEvent.
+// a stopping instance isn't bumped back to running. applyContainerState
+// handles the exited state. A phase change emits its PhaseEvent.
 func (r *Runner) updateContainerState(id, state, health string) {
 	r.mu.Lock()
 	inst, ok := r.instances[id]
@@ -294,8 +379,8 @@ func (r *Runner) killContainer(ctx context.Context, id string, grace time.Durati
 	if err := podman(ctx, nil, "stop", "-t", strconv.Itoa(seconds), cid); err != nil {
 		return fmt.Errorf("podman stop %s: %w", cid, err)
 	}
-	// The watcher reaches markTerminated when it observes the exit. Calling it here covers a watcher
-	// whose context is already closed, so the phase settles either way.
+	// The poller also reaches markTerminated once it sees the exit. Calling it here settles the phase
+	// without waiting for a tick.
 	r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_KILLED, "")
 
 	return nil
