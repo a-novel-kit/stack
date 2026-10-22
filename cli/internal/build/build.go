@@ -2,11 +2,13 @@ package build
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -77,16 +79,16 @@ func PrepareEnv(t detect.Target, out io.Writer) ([]string, error) {
 }
 
 // composeEnv lists the vars a compose env adds to base: allocated host ports,
-// the URLs derived from them, and standard local test values for the vars the
-// compose file references that no host port produced, such as an
-// internal-only Postgres' credentials.
+// standard local test values for the vars the compose file references that
+// nothing else set, such as an internal-only Postgres' credentials, and the
+// URLs derived from both.
 func composeEnv(e *detect.ComposeEnv, base []string) ([]string, error) {
 	ports, err := allocPorts(e.Ports)
 	if err != nil {
 		return nil, fmt.Errorf("port allocation failed: %w", err)
 	}
-	added := slices.Concat(ports, derivedURLs(e.Ports, ports))
-	return append(added, testDefaults(e.Refs, slices.Concat(base, added))...), nil
+	added := slices.Concat(ports, testDefaults(e.Refs, slices.Concat(base, ports)))
+	return append(added, derivedURLs(e.Ports, slices.Concat(base, added))...), nil
 }
 
 // ANSI SGR codes used by formatEnvBlock. The block lands in captured output, so
@@ -261,9 +263,10 @@ func has(env []string, key string) bool {
 	return slices.ContainsFunc(env, func(kv string) bool { return strings.HasPrefix(kv, key+"=") })
 }
 
-// envVal returns env's value for key, or "".
+// envVal returns env's value for key, or "". The last entry for key wins, as
+// it does for a child process's [exec.Cmd.Env].
 func envVal(env []string, key string) string {
-	for _, kv := range env {
+	for _, kv := range slices.Backward(env) {
 		if v, ok := strings.CutPrefix(kv, key+"="); ok {
 			return v
 		}
@@ -272,7 +275,7 @@ func envVal(env []string, key string) string {
 }
 
 // testDefaults fills in stdTestEnv values for every var the compose file
-// references that no port, derived URL, or inherited variable already set.
+// references that no port or inherited variable already set.
 func testDefaults(refs, env []string) []string {
 	var out []string
 	for _, r := range refs {
@@ -285,8 +288,7 @@ func testDefaults(refs, env []string) []string {
 
 // derivedURLs builds the host connection vars from the allocated ports by the
 // fixed `<X>_PORT` rule: POSTGRES_PORT→POSTGRES_DSN, GRPC_PORT→GRPC_URL
-// (host:port), and any other X_PORT→X_URL (http://localhost:port). Credentials
-// come from testDefaults.
+// (host:port), and any other X_PORT→X_URL (http://localhost:port).
 func derivedURLs(names []string, env []string) []string {
 	var out []string
 	for _, n := range names {
@@ -297,7 +299,7 @@ func derivedURLs(names []string, env []string) []string {
 		p := envVal(env, n)
 		switch base {
 		case "POSTGRES":
-			out = append(out, "POSTGRES_DSN=postgres://"+pgStd+":"+pgStd+"@localhost:"+p+"/"+pgStd+"?sslmode=disable")
+			out = append(out, "POSTGRES_DSN="+postgresDSN(env, p))
 		case "GRPC":
 			out = append(out, "GRPC_URL=localhost:"+p)
 		default:
@@ -305,6 +307,24 @@ func derivedURLs(names []string, env []string) []string {
 		}
 	}
 	return out
+}
+
+// postgresDSN is the host DSN of the env's Postgres on port. Its credentials
+// are env's POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_DB, the values the
+// compose file hands the container, and default to pgStd when unset.
+func postgresDSN(env []string, port string) string {
+	user := cmp.Or(envVal(env, "POSTGRES_USER"), pgStd)
+	password := cmp.Or(envVal(env, "POSTGRES_PASSWORD"), pgStd)
+	db := cmp.Or(envVal(env, "POSTGRES_DB"), pgStd)
+
+	dsn := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(user, password),
+		Host:     "localhost:" + port,
+		Path:     "/" + db,
+		RawQuery: "sslmode=disable",
+	}
+	return dsn.String()
 }
 
 // compose runs `podman compose [global...] -p <project> -f <file> <args...>`
