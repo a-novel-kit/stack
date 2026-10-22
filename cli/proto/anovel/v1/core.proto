@@ -107,6 +107,10 @@ message Stack {
   string path = 2;
   // Whether this is the default stack, the first $A_NOVEL_STACKS entry.
   bool is_default = 3;
+  // Problems discovery found in the stack at daemon startup, one per entry.
+  // Discovery leaves out the service or target a problem names, except for an
+  // unresolved ${VAR} reference, which only warns.
+  repeated string discovery_errors = 4;
 }
 
 // Service is one app/service-<name>/ directory of a stack.

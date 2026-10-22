@@ -268,8 +268,9 @@ func newCoreStatusCmd() *cobra.Command {
 		Use:   "status",
 		Short: "Show whether the daemon runs, with its socket, stacks and uptime",
 		Long: `Print whether the daemon runs, with its version, socket, uptime and stacks,
-and whether a reinstall checkpoint waits. A stopped daemon is a normal state,
-and the command exits 0 for it.`,
+and whether a reinstall checkpoint waits. Each problem discovery found in a
+stack follows its row, marked '!'. A stopped daemon is a normal state, and the
+command exits 0 for it.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return printDaemonStatus(cmd.Context(), cmd.OutOrStdout())
 		},
@@ -277,7 +278,8 @@ and the command exits 0 for it.`,
 }
 
 // printDaemonStatus prints whether the daemon runs and, when it does, its
-// version, socket, uptime and stacks, the default one starred.
+// version, socket, uptime and stacks, the default one starred and each one
+// followed by its discovery problems.
 func printDaemonStatus(ctx context.Context, out io.Writer) error {
 	c := rpc.New("")
 	s, err := c.Status(ctx)
@@ -301,6 +303,7 @@ func printDaemonStatus(ctx context.Context, out io.Writer) error {
 			marker = "*"
 		}
 		_, _ = fmt.Fprintf(out, "    %s %s\t%s\n", marker, st.GetName(), st.GetPath())
+		printDiscoveryErrors(out, "        ", st)
 	}
 	if s.GetReinstallCheckpointPending() {
 		_, _ = fmt.Fprintln(out, "  reinstall checkpoint: pending")

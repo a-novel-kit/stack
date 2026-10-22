@@ -20,8 +20,8 @@ type Stack struct {
 	Path     string
 	Default  bool
 	Services []*Service
-	// Errors holds the stack's non-fatal discovery problems, which the daemon
-	// prints at startup.
+	// Errors holds the stack's non-fatal discovery problems. The daemon logs
+	// them at startup and sends them to clients with the stack.
 	Errors []DiscoveryError
 }
 
@@ -110,10 +110,14 @@ type DiscoveryError struct {
 }
 
 func (e DiscoveryError) Error() string {
-	if e.Path != "" {
-		return fmt.Sprintf("%s: %s (%s)", e.Service, e.Reason, e.Path)
+	msg := e.Reason
+	if e.Service != "" {
+		msg = e.Service + ": " + msg
 	}
-	return fmt.Sprintf("%s: %s", e.Service, e.Reason)
+	if e.Path != "" {
+		msg += " (" + e.Path + ")"
+	}
+	return msg
 }
 
 // =============================================================================
@@ -222,16 +226,15 @@ func DiscoverStacks(stk []stacks.Stack) (Stacks, error) {
 		discoverStack(st)
 		out = append(out, st)
 	}
-	// Validate compose env-var references, appending non-fatal warnings to each
-	// stack's Errors so the startup log surfaces every unresolvable `${VAR}`.
+	// Validate compose env-var references, appending a non-fatal warning to the
+	// stack's Errors for each `${VAR}` the daemon cannot fill.
 	ValidateEnvRefs(out)
 	return out, nil
 }
 
 // discoverStack walks <stack>/app/service-*/ and adds Service entries to st.
-// Per-service errors are accumulated in st.Errors; the stack itself is
-// returned even when its services are problematic, so the user can still
-// inspect partial state.
+// A service's problems go to st.Errors, and every service that passed stays
+// in st.Services.
 func discoverStack(st *Stack) {
 	appDir := filepath.Join(st.Path, "app")
 	entries, err := os.ReadDir(appDir)

@@ -168,3 +168,11 @@ First-time setup: `a-novel core setup`.
 
 The daemon refuses to start if the default stack isn't set up — surface the error
 verbatim to the user.
+
+## Failure mode: service or target not found
+
+The daemon discovers each stack once, at startup, and leaves out a service or
+target that breaks the compose contract. A command naming it then answers "not
+found" or "unknown target". `a-novel core status` prints each stack's discovery
+problems under its row, marked `!`. Fix what the problem names, then run
+`a-novel core restart --preserve-targets` to discover again.
