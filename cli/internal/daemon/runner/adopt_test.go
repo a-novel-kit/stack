@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"maps"
 	"testing"
 
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
@@ -41,37 +42,49 @@ func TestTranslatePodmanStatus(t *testing.T) {
 }
 
 // TestAdoptEntriesMarksTheSessionUpFromRunningContainersOnly applies the
-// predicate adoption uses before marking a session Up. Only a running container
-// clears it, so a stopped or half-created one leaves EnsureDepsReady to bring
-// the infra up. discovery is absent, so only the infra decisions run.
+// predicate adoption uses before marking a session Up. Only a running infra
+// container clears it, so a stopped or half-created one, or a running target
+// container beside them, leaves EnsureDepsReady to bring the infra up.
+// discovery is absent, so only the infra decisions run.
 func TestAdoptEntriesMarksTheSessionUpFromRunningContainersOnly(t *testing.T) {
 	testCases := []struct {
+		// statuses are the service's infra containers.
 		statuses []string
-		up       bool
+		// target is the status of a target container beside them, "" for none.
+		target string
+		up     bool
 	}{
-		{[]string{"Up 11 minutes"}, true},
-		{[]string{"Up 2 hours (healthy)"}, true},
+		{[]string{"Up 11 minutes"}, "", true},
+		{[]string{"Up 2 hours (healthy)"}, "", true},
 		// A container the operator killed with `run kill` survives in Exited state so it can be
 		// restarted, so adoption meets one on every daemon restart after a kill.
-		{[]string{"Exited (0) 5 minutes ago"}, false},
-		{[]string{"Stopped"}, false},
-		{[]string{"Created"}, false},
+		{[]string{"Exited (0) 5 minutes ago"}, "", false},
+		{[]string{"Stopped"}, "", false},
+		{[]string{"Created"}, "", false},
 		// The whole service is down. EnsureDepsReady has to bring it up rather than short-circuit
 		// on a session flagged from the corpses.
-		{[]string{"Exited (0) 2 minutes ago", "Exited (137) 2 minutes ago"}, false},
+		{[]string{"Exited (0) 2 minutes ago", "Exited (137) 2 minutes ago"}, "", false},
+		// A running target container says nothing about its database.
+		{[]string{"Exited (137) 2 minutes ago"}, "Up 3 minutes", false},
+		{[]string{"Up 11 minutes"}, "Up 3 minutes", true},
 	}
 
 	labels := map[string]string{"anovel.stack": "default", "anovel.service": "service-json-keys"}
 	for _, testCase := range testCases {
 		r := &Runner{instances: map[string]*Instance{}, infraSessions: map[string]*infraSession{}}
-		entries := make([]psEntry, len(testCase.statuses))
-		for i, status := range testCase.statuses {
-			entries[i] = psEntry{ID: "cid-" + status, Status: status, Labels: labels}
+		entries := make([]psEntry, 0, len(testCase.statuses)+1)
+		for _, status := range testCase.statuses {
+			entries = append(entries, psEntry{ID: "cid-" + status, Status: status, Labels: labels})
+		}
+		if testCase.target != "" {
+			targetLabels := map[string]string{"anovel.target": "rest"}
+			maps.Copy(targetLabels, labels)
+			entries = append(entries, psEntry{ID: "cid-target", Status: testCase.target, Labels: targetLabels})
 		}
 		r.adoptEntries(t.Context(), entries)
 
 		if sess, _ := r.InfraSession("default", "service-json-keys"); sess.Up != testCase.up {
-			t.Errorf("infra %q: session up = %v, want %v", testCase.statuses, sess.Up, testCase.up)
+			t.Errorf("infra %q, target %q: session up = %v, want %v", testCase.statuses, testCase.target, sess.Up, testCase.up)
 		}
 	}
 }
