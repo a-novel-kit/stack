@@ -118,7 +118,9 @@ runs:
 - Check every tool an action installs against a pin its release cannot rewrite: whoever replaces a
   release's files replaces its `checksums.txt` too. Install a Go tool with
   `go install <module>@v<version>`, which builds the source Go's checksum database recorded, as
-  `scan-secrets` and `refresh-apko-locks` do. A downloaded binary takes a caller `sha256` input on the
+  `scan-secrets` and `refresh-apko-locks` do. The step sets `GOPROXY: "https://proxy.golang.org|direct"`:
+  `go install` never retries, and the pipe sends any proxy error to the origin, which the checksum
+  database still checks. A downloaded binary takes a caller `sha256` input on the
   line after `version` and passes `sha256sum --check` before it runs, and a datasource in the base
   Renovate preset moves the hash with the version
   ([release files pinned by hash](references/renovate-presets.md#release-files-pinned-by-hash)). A
