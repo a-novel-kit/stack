@@ -26,6 +26,19 @@
       }
     },
     {
+      "description": "Keep cli/govulncheck.mod on its own branch. A Renovate artifact update takes its whole config from the upgrade that sorts first on the branch. One branch per modfile keeps each goGetDirs and post-upgrade task on the file it names.",
+      "matchFileNames": ["cli/govulncheck.mod"],
+      "additionalBranchPrefix": "govulncheck-",
+      "goGetDirs": ["."],
+      "postUpgradeTasks": {
+        "commands": [
+          "rm -f cli/govulncheck.sum",
+          "go -C cli get -modfile=govulncheck.mod -tool golang.org/x/vuln/cmd/govulncheck"
+        ],
+        "executionMode": "branch"
+      }
+    },
+    {
       "description": "Keep cli/buf.mod on its own branch, and regenerate the proto stubs after a bump. No code imports buf. The code it emits links google.golang.org/protobuf, which cli/go.mod keeps, and buf's own dependencies stay out of cli/go.mod.",
       "matchFileNames": ["cli/buf.mod"],
       "additionalBranchPrefix": "buf-",
