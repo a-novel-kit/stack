@@ -198,3 +198,42 @@ func TestKillInfra(t *testing.T) {
 		})
 	}
 }
+
+// TestRecordOneShot pins how a one-shot's outcome lands in its infra session.
+// A failed run is recorded, so later starts refuse it until the infra restarts.
+// A wait the caller cancelled records nothing, since the one-shot may still
+// succeed.
+func TestRecordOneShot(t *testing.T) {
+	t.Parallel()
+
+	errFoo := errors.New("foo")
+
+	testCases := []struct {
+		name string
+		err  error
+
+		wantResult   anovelv1.ExitReason
+		wantRecorded bool
+	}{
+		{name: "Success", wantResult: anovelv1.ExitReason_EXIT_REASON_SUCCESS, wantRecorded: true},
+		{name: "Error/Failed", err: errFoo, wantResult: anovelv1.ExitReason_EXIT_REASON_ERROR, wantRecorded: true},
+		{name: "Error/Cancelled", err: fmt.Errorf("wait: %w", context.Canceled)},
+		{name: "Error/DeadlineExceeded", err: fmt.Errorf("wait: %w", context.DeadlineExceeded)},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			sess := newInfraSession("default", "service-x")
+			r := &Runner{infraSessions: map[string]*infraSession{sessionKey("default", "service-x"): sess}}
+
+			r.recordOneShot("default", "service-x", "migrations", testCase.err)
+
+			result, recorded := sess.OneShotResults["migrations"]
+			if recorded != testCase.wantRecorded || result != testCase.wantResult {
+				t.Errorf("recorded (%v, %v), want (%v, %v)", result, recorded, testCase.wantResult, testCase.wantRecorded)
+			}
+		})
+	}
+}
