@@ -155,7 +155,7 @@ func (m *model) renderRight(width, height int) string {
 	inner := width - 2 // inside the border
 	sections := append(m.tabRows(),
 		strings.Repeat("─", inner),
-		styleHeader.Render(m.detailHeader()),
+		m.detailHeader(),
 		m.renderLogs(inner, m.logViewportHeight()),
 	)
 	return styleFrame.Width(width).Height(height).Render(lipgloss.JoinVertical(lipgloss.Left, sections...))
@@ -188,21 +188,24 @@ func (m *model) tabRows() []string {
 // detailHeader summarizes the selected tab. A target reads
 // "name · mode · phase [pid] [container]", and an infra
 // "name · infra · phase health [container]".
+//
+// Each run of text takes its own Render. A Render ends with a reset, which
+// clears any style around it.
 func (m *model) detailHeader() string {
 	if t := m.activeTarget(); t != nil {
-		header := fmt.Sprintf("%s · %s · %s", t.GetName(), modeShort(t.GetMode()), phaseShort(t.GetPhase()))
+		tail := containerSuffix(t.GetContainerId())
 		if t.GetPid() != 0 {
-			header += fmt.Sprintf(" pid=%d", t.GetPid())
+			tail = fmt.Sprintf(" pid=%d", t.GetPid()) + tail
 		}
-		return header + containerSuffix(t.GetContainerId())
+		return styleHeader.Render(t.GetName()+" · "+modeShort(t.GetMode())+" · ") +
+			phaseShort(t.GetPhase()) +
+			styleHeader.Render(tail)
 	}
 	if in := m.activeInfra(); in != nil {
-		header := fmt.Sprintf("%s · %s · %s %s",
-			in.GetName(),
-			styleDim.Render("infra"),
-			phaseShort(in.GetPhase()),
-			styleDim.Render(infraHealthLabel(in)))
-		return header + containerSuffix(in.GetContainerId())
+		return styleHeader.Render(in.GetName()+" · ") + styleDim.Render("infra") + styleHeader.Render(" · ") +
+			phaseShort(in.GetPhase()) +
+			styleDim.Render(" "+infraHealthLabel(in)) +
+			styleHeader.Render(containerSuffix(in.GetContainerId()))
 	}
 	return ""
 }
@@ -312,21 +315,28 @@ func (m *model) renderLogs(width, height int) string {
 }
 
 // renderFooter draws the one-line key hint under the status bar. While the log
-// pane is scrolled back, it offers End to resume the tail.
+// pane is scrolled back, it offers End to resume the tail. Keys and text take
+// separate Renders, because each Render ends with a reset that clears the
+// style around it.
 func (m *model) renderFooter() string {
-	scrollHint := styleCmd.Render("PgUp/PgDn") + " scroll logs"
+	scrollHint := footerHint("PgUp/PgDn", "scroll logs")
 	if m.logScroll > 0 {
-		scrollHint = styleCmd.Render("End") + " resume tail"
+		scrollHint = footerHint("End", "resume tail")
 	}
 	hints := []string{
-		styleCmd.Render("?") + " help",
-		styleCmd.Render("Esc") + " command",
-		styleCmd.Render("↑↓") + " service",
-		styleCmd.Render("←→") + " target",
+		footerHint("?", "help"),
+		footerHint("Esc", "command"),
+		footerHint("↑↓", "service"),
+		footerHint("←→", "target"),
 		scrollHint,
-		styleCmd.Render("q") + " quit",
+		footerHint("q", "quit"),
 	}
-	return styleFooter.Render(strings.Join(hints, "  ·  "))
+	return strings.Join(hints, styleFooter.Render("  ·  "))
+}
+
+// footerHint renders one footer hint: the key, then what it does.
+func footerHint(key, text string) string {
+	return styleCmd.Render(key) + styleFooter.Render(" "+text)
 }
 
 // renderHelp draws the full-screen help listing every command, grouped
@@ -571,12 +581,14 @@ func modeShort(m anovelv1.Mode) string {
 	}
 }
 
+// phaseShort renders a phase for the detail header: in its own color when
+// running, stopping or terminated, in the header style otherwise.
 func phaseShort(p anovelv1.Phase) string {
 	switch p {
 	case anovelv1.Phase_PHASE_PENDING:
-		return "pending"
+		return styleHeader.Render("pending")
 	case anovelv1.Phase_PHASE_STARTING:
-		return "starting"
+		return styleHeader.Render("starting")
 	case anovelv1.Phase_PHASE_RUNNING:
 		return styleSuccess.Render("running")
 	case anovelv1.Phase_PHASE_STOPPING:
@@ -584,7 +596,7 @@ func phaseShort(p anovelv1.Phase) string {
 	case anovelv1.Phase_PHASE_TERMINATED:
 		return styleDim.Render("terminated")
 	default:
-		return "idle"
+		return styleHeader.Render("idle")
 	}
 }
 

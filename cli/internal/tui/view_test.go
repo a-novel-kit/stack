@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -97,6 +98,94 @@ func TestRender(t *testing.T) {
 	}
 }
 
+func TestDetailHeader(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name string
+
+		service *anovelv1.Service
+
+		want string
+	}{
+		{
+			name: "Target",
+			service: &anovelv1.Service{Targets: []*anovelv1.Target{{
+				Name:  "grpc",
+				Mode:  anovelv1.Mode_MODE_GO_EXEC,
+				Phase: anovelv1.Phase_PHASE_RUNNING,
+				Pid:   4242,
+			}}},
+			want: "grpc · go-exec · running pid=4242",
+		},
+		{
+			name: "Target/Container",
+			service: &anovelv1.Service{Targets: []*anovelv1.Target{{
+				Name:        "grpc",
+				Mode:        anovelv1.Mode_MODE_CONTAINER,
+				Phase:       anovelv1.Phase_PHASE_STARTING,
+				ContainerId: "0123456789abcdef",
+			}}},
+			want: "grpc · container · starting container=0123456789ab",
+		},
+		{
+			name: "Infra/Healthy",
+			service: &anovelv1.Service{Infra: []*anovelv1.Infra{{
+				Name:   "postgres",
+				Phase:  anovelv1.Phase_PHASE_RUNNING,
+				Health: anovelv1.Health_HEALTH_HEALTHY,
+			}}},
+			want: "postgres · infra · running healthy",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := &model{services: []*anovelv1.Service{testCase.service}}
+			header := m.detailHeader()
+
+			if got := ansi.Strip(header); got != testCase.want {
+				t.Errorf("detailHeader() reads %q, want %q", got, testCase.want)
+			}
+			if unstyled := unstyledText(t, header); unstyled != "" {
+				t.Errorf("detailHeader() leaves %q unstyled", unstyled)
+			}
+		})
+	}
+}
+
+func TestRenderFooter(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name string
+
+		logScroll int
+
+		want string
+	}{
+		{name: "Tail", want: "? help  ·  Esc command  ·  ↑↓ service  ·  ←→ target  ·  PgUp/PgDn scroll logs  ·  q quit"},
+		{name: "ScrolledBack", logScroll: 3, want: "? help  ·  Esc command  ·  ↑↓ service  ·  ←→ target  ·  End resume tail  ·  q quit"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			footer := (&model{logScroll: testCase.logScroll}).renderFooter()
+
+			if got := ansi.Strip(footer); got != testCase.want {
+				t.Errorf("renderFooter() reads %q, want %q", got, testCase.want)
+			}
+			if unstyled := unstyledText(t, footer); unstyled != "" {
+				t.Errorf("renderFooter() leaves %q unstyled", unstyled)
+			}
+		})
+	}
+}
+
 func TestTargetStatusDot(t *testing.T) {
 	t.Parallel()
 
@@ -185,4 +274,27 @@ func TestServiceHasError(t *testing.T) {
 			}
 		})
 	}
+}
+
+// unstyledText returns the text of s that no SGR style covers: text before the
+// first style, or after a reset. It reads every escape sequence in s as SGR.
+func unstyledText(t *testing.T, s string) string {
+	t.Helper()
+
+	var unstyled strings.Builder
+	styled := false
+	for s != "" {
+		if strings.HasPrefix(s, "\x1b[") {
+			end := strings.IndexByte(s, 'm') + 1
+			styled = s[:end] != "\x1b[m" && s[:end] != "\x1b[0m"
+			s = s[end:]
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s)
+		if !styled {
+			unstyled.WriteRune(r)
+		}
+		s = s[size:]
+	}
+	return unstyled.String()
 }
