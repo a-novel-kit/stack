@@ -119,10 +119,10 @@ func tickEvery(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
-// followSelectedLogs restarts the log pane on the selected tab. The
-// server's follow mode streams the whole log before tailing it, so the
-// buffer and scroll restart empty. A background goroutine feeds the lines
-// in through program.Send until the next call cancels it.
+// followSelectedLogs restarts the log pane on the selected tab. The server
+// replays the log's last maxLogLines lines before tailing it, so the buffer
+// and scroll restart empty. A background goroutine feeds the lines in through
+// program.Send until the next call cancels it.
 func (m *model) followSelectedLogs() {
 	m.logLines = nil
 	m.logScroll = 0

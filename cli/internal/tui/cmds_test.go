@@ -9,8 +9,8 @@ import (
 func TestRunPaletteCommand(t *testing.T) {
 	t.Parallel()
 
-	// The follower replays the whole log, so :refresh must restart the buffer
-	// instead of appending a second copy of the history.
+	// The follower replays the log's last lines, so :refresh must restart the
+	// buffer instead of appending a second copy of them.
 	t.Run("Refresh/RestartsLogBuffer", func(t *testing.T) {
 		t.Parallel()
 
