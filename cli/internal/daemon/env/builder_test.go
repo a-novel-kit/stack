@@ -1,6 +1,7 @@
 package env
 
 import (
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -200,6 +201,56 @@ func TestBuilderForTarget(t *testing.T) {
 			}
 			if testCase.check != nil {
 				testCase.check(t, toMap(entries), warnings, alloc)
+			}
+		})
+	}
+}
+
+// TestSetPostgresDSN pins the host DSN built from the Postgres credentials.
+// Plain credentials appear verbatim, and a reserved character is escaped, so
+// the DSN parses back to the credentials Postgres receives.
+func TestSetPostgresDSN(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		password string
+		wantDSN  string
+	}{
+		{
+			name:     "Success/PlainPassword",
+			password: "secret",
+			wantDSN:  "postgres://alice:secret@localhost:5432/novels?sslmode=disable",
+		},
+		{
+			name:     "Success/ReservedCharacters",
+			password: "p@ss/w:rd#1",
+			wantDSN:  "postgres://alice:p%40ss%2Fw%3Ard%231@localhost:5432/novels?sslmode=disable",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			env := map[string]string{
+				"POSTGRES_PORT":     "5432",
+				"POSTGRES_USER":     "alice",
+				"POSTGRES_PASSWORD": testCase.password,
+				"POSTGRES_DB":       "novels",
+			}
+			setPostgresDSN(env)
+			if env["POSTGRES_DSN"] != testCase.wantDSN {
+				t.Errorf("POSTGRES_DSN = %q, want %q", env["POSTGRES_DSN"], testCase.wantDSN)
+			}
+
+			dsn, err := url.Parse(env["POSTGRES_DSN"])
+			if err != nil {
+				t.Fatalf("parse POSTGRES_DSN: %v", err)
+			}
+			password, _ := dsn.User.Password()
+			if dsn.User.Username() != "alice" || password != testCase.password {
+				t.Errorf("parsed credentials %q/%q, want alice/%q", dsn.User.Username(), password, testCase.password)
 			}
 		})
 	}
