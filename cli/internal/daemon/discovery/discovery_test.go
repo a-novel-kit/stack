@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
@@ -118,6 +119,40 @@ volumes:
 	}
 	if len(svc.Volumes) != 1 || svc.Volumes[0].Name != "x-data" {
 		t.Errorf("volumes = %+v, want x-data", svc.Volumes)
+	}
+
+	// A compose file discovery cannot read drops its service, and the one
+	// problem it reports names the file once.
+	errorCases := []struct {
+		name    string
+		compose string
+	}{
+		{name: "Error/MissingCompose"},
+		{name: "Error/MalformedCompose", compose: "services:\n  x:\n    ports: {a: b}\n"},
+	}
+	for _, testCase := range errorCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := filepath.Join(t.TempDir(), "service-y")
+			composePath := filepath.Join(dir, "builds", "podman-compose.yaml")
+			if testCase.compose != "" {
+				if err := os.MkdirAll(filepath.Dir(composePath), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(composePath, []byte(testCase.compose), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			svc, errs := discoverService("default", dir)
+			if svc != nil || len(errs) != 1 {
+				t.Fatalf("discoverService = (%+v, %v), want no service and one problem", svc, errs)
+			}
+			if msg := errs[0].Error(); strings.Count(msg, composePath) != 1 {
+				t.Errorf("problem %q names %s %d times, want once", msg, composePath, strings.Count(msg, composePath))
+			}
+		})
 	}
 }
 

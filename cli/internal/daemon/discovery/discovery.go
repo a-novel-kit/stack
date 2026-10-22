@@ -270,8 +270,9 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 	cf, err := compose.ReadFile(composePath)
 	if err != nil {
 		// A missing or malformed compose file leaves nothing to classify, so
-		// the service drops out of the list with an error explaining why.
-		return nil, []DiscoveryError{{Service: name, Path: composePath, Reason: err.Error()}}
+		// the service drops out of the list with an error explaining why. The
+		// error already names the file.
+		return nil, []DiscoveryError{{Service: name, Reason: err.Error()}}
 	}
 	svc := &Service{Name: name, Stack: stack, ComposePath: composePath}
 	cmdNames := cmdDirs(dir)
