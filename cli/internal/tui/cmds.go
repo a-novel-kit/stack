@@ -76,9 +76,11 @@ type action struct {
 }
 
 // run shows a.busy, runs a.do under a.timeout, then emits an actionResultMsg
-// that Update renders as a.success, or as the error prefixed by a.label.
+// that Update renders as a.success, or as the error prefixed by a.label. The
+// sequence delivers the busy status before a.do starts, so the result always
+// replaces it.
 func (a action) run() tea.Cmd {
-	return tea.Batch(
+	return tea.Sequence(
 		setStatusCmd(statusBusy, a.busy),
 		func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), a.timeout)
