@@ -7,6 +7,7 @@ import (
 	"io"
 	"os/exec"
 	"sync"
+	"syscall"
 
 	"connectrpc.com/connect/v2"
 
@@ -106,6 +107,10 @@ func (s *Server) siblingCommand(ctx context.Context, tgt *discovery.Target, cmdv
 	cmd := exec.CommandContext(ctx, cmdv[0], cmdv[1:]...)
 	cmd.Dir = tgt.ServiceDir()
 	cmd.Env = env.Environ(envEntries)
+	// A cancelled Exec kills the command's whole process group. A background
+	// job it started holds the output pipes, and so the handler, until it ends.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	return cmd, nil
 }
 
