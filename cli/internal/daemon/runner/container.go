@@ -59,12 +59,20 @@ func (r *Runner) startContainer(ctx context.Context, inst *Instance, t *discover
 
 	r.mu.Lock()
 	inst.ContainerID = cid
-	inst.Phase = anovelv1.Phase_PHASE_RUNNING
 	// Health starts at STARTING, and the watcher follows podman's healthcheck
 	// from there.
 	inst.Health = anovelv1.Health_HEALTH_STARTING
-	out := *inst
+	killed := inst.Phase == anovelv1.Phase_PHASE_STOPPING
 	r.mu.Unlock()
+	// A kill during compose up found no container to stop and left the
+	// instance STOPPING, so the start stops the container itself.
+	if killed {
+		if err := r.killContainer(ctx, id, 0); err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%s: %w", id, errKilledWhileStarting)
+	}
+	r.advance(id, anovelv1.Phase_PHASE_STARTING, anovelv1.Phase_PHASE_RUNNING)
 
 	// Stream `podman logs -f` into the same JSON-line store go-exec mode uses,
 	// so `a-novel run logs <target>` shows the container's own output. A log
@@ -79,6 +87,10 @@ func (r *Runner) startContainer(ctx context.Context, inst *Instance, t *discover
 	}
 
 	go r.watchContainer(procCtx, id, cid)
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := *inst
 	return &out, nil
 }
 
@@ -262,13 +274,19 @@ func (r *Runner) updateContainerState(id, state, health string) {
 func (r *Runner) killContainer(ctx context.Context, id string, grace time.Duration) error {
 	r.mu.RLock()
 	inst, ok := r.instances[id]
+	var cid string
+	if ok {
+		cid = inst.ContainerID
+	}
 	r.mu.RUnlock()
-	if !ok || inst.ContainerID == "" {
+	// A start in flight has no container yet. It finds the instance STOPPING
+	// once compose up returns, and stops the container itself.
+	if cid == "" {
 		return nil
 	}
 	seconds := max(int(grace.Seconds()), 0)
-	if err := podman(ctx, nil, "stop", "-t", strconv.Itoa(seconds), inst.ContainerID); err != nil {
-		return fmt.Errorf("podman stop %s: %w", inst.ContainerID, err)
+	if err := podman(ctx, nil, "stop", "-t", strconv.Itoa(seconds), cid); err != nil {
+		return fmt.Errorf("podman stop %s: %w", cid, err)
 	}
 	// The watcher reaches markTerminated when it observes the exit. Calling it here covers a watcher
 	// whose context is already closed, so the phase settles either way.
