@@ -35,6 +35,7 @@ func (r *Runner) AdoptOrphanContainers(ctx context.Context) (int, int) {
 // decisions it makes can be exercised against a fixture.
 func (r *Runner) adoptEntries(ctx context.Context, entries []psEntry) (int, int) {
 	var containers, targets int
+	var infra []psEntry
 
 	for _, e := range entries {
 		stack, service := e.Labels[labelStack], e.Labels[labelService]
@@ -53,10 +54,8 @@ func (r *Runner) adoptEntries(ctx context.Context, entries []psEntry) (int, int)
 				r.markInfraSessionUp(stack, service)
 			}
 			// An infra container carries no target label and needs no
-			// Instance record. The env allocator learns its host ports, so
-			// the next Acquire, such as the migrations one-shot's
-			// POSTGRES_PORT, returns the port the container is bound to.
-			r.reseedAllocator(ctx, stack, service, e.ID)
+			// Instance record.
+			infra = append(infra, e)
 			continue
 		}
 
@@ -64,6 +63,11 @@ func (r *Runner) adoptEntries(ctx context.Context, entries []psEntry) (int, int)
 			targets++
 		}
 	}
+
+	// The env allocator learns the infra host ports, so the next Acquire, such
+	// as the migrations one-shot's POSTGRES_PORT, returns the port the
+	// container is bound to.
+	r.reseedAllocator(ctx, infra)
 	return containers, targets
 }
 
@@ -112,9 +116,10 @@ func (r *Runner) adoptTarget(e psEntry, phase anovelv1.Phase, health anovelv1.He
 	return true
 }
 
-// reseedAllocator re-records every host-port → `${VAR}` mapping for an adopted
-// infra container, so a later Acquire returns the same host port the running
+// reseedAllocator re-records every host-port → `${VAR}` mapping of the adopted
+// infra containers, so a later Acquire returns the same host port a running
 // container is bound to. POSTGRES_PORT then stays put across a daemon restart.
+// One podman call inspects every container.
 //
 // The mapping goes:
 //  1. `podman inspect` → NetworkSettings.Ports = { "5432/tcp": [{HostPort: "38631"}] }
@@ -123,11 +128,33 @@ func (r *Runner) adoptTarget(e psEntry, phase anovelv1.Phase, health anovelv1.He
 //     and take its ${VAR}
 //  4. Reserve(owner=service, localVar=VAR, port=hostPort, consumer=session)
 //
-// A pair that fails to parse is skipped, keeping adoption cheap and infallible.
-func (r *Runner) reseedAllocator(ctx context.Context, stack, service, cid string) {
-	if r.alloc == nil {
+// A container that vanished since the scan, or a pair that fails to parse, is
+// skipped, keeping adoption cheap and infallible.
+func (r *Runner) reseedAllocator(ctx context.Context, infra []psEntry) {
+	if r.alloc == nil || len(infra) == 0 {
 		return
 	}
+	byID := make(map[string]psEntry, len(infra))
+	args := []string{"inspect", "--format={{.Id}}|{{.Name}}|{{json .NetworkSettings.Ports}}"}
+	for _, e := range infra {
+		byID[e.ID] = e
+		args = append(args, e.ID)
+	}
+	// A vanished container fails the call, and podman still prints a line for
+	// every other one. Each line names its container, so the others reseed
+	// whatever the exit status.
+	out, _ := exec.CommandContext(ctx, "podman", args...).Output()
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		id, rest, _ := strings.Cut(line, "|")
+		if e, ok := byID[id]; ok {
+			r.reseedInfra(e.Labels[labelStack], e.Labels[labelService], rest)
+		}
+	}
+}
+
+// reseedInfra reserves the host ports of one infra container of stack and
+// service. line holds the rest of its inspect line, "<name>|<ports JSON>".
+func (r *Runner) reseedInfra(stack, service, line string) {
 	// The compose `ports:` block maps container-side ports back to ${VAR}
 	// names. Container names follow compose's `<project>_<infraName>_N`
 	// pattern, and infraName picks the right Infra record among the several a
@@ -136,13 +163,7 @@ func (r *Runner) reseedAllocator(ctx context.Context, stack, service, cid string
 	if svc == nil {
 		return
 	}
-	// One inspect covers both the name and the ports.
-	out, err := exec.CommandContext(ctx, "podman", "inspect", cid,
-		"--format", "{{.Name}}|{{json .NetworkSettings.Ports}}").Output()
-	if err != nil {
-		return
-	}
-	rawName, portsJSON, ok := strings.Cut(string(out), "|")
+	rawName, portsJSON, ok := strings.Cut(line, "|")
 	if !ok {
 		return
 	}
