@@ -380,9 +380,9 @@ func TestApplySecretAccess(t *testing.T) {
 	}{
 		{name: "Success/Granted", method: "PUT", wantDetail: "granted"},
 		{name: "Success/Revoked", method: "DELETE", wantDetail: "revoked"},
-		{name: "Success/AlreadyRevoked", method: "DELETE", status: "HTTP 404: Not Found", wantDetail: "already revoked"},
-		{name: "Error/GrantNotFound", method: "PUT", status: "HTTP 404: Not Found", wantErr: true},
-		{name: "Error/NotSelected", method: "DELETE", status: "HTTP 409: Conflict", wantDetail: "selected repositories", wantErr: true},
+		{name: "Success/AlreadyRevoked", method: "DELETE", status: "gh: Not Found (HTTP 404)", wantDetail: "already revoked"},
+		{name: "Error/GrantNotFound", method: "PUT", status: "gh: Not Found (HTTP 404)", wantErr: true},
+		{name: "Error/NotSelected", method: "DELETE", status: "gh: Conflict (HTTP 409)", wantDetail: "selected repositories", wantErr: true},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
