@@ -55,10 +55,12 @@ func (m *model) render() string {
 }
 
 // renderMain is the two-column layout: services nav left, target detail
-// + log viewer right. Bottom two rows are the status bar + footer.
+// + log viewer right. Bottom two rows are the status bar + footer. A Lip
+// Gloss frame's Width and Height include its border, and the two frames split
+// the terminal width.
 func (m *model) renderMain() string {
 	navWidth := computeNavWidth(m.services)
-	mainWidth := m.width - navWidth - 4 // borders
+	mainWidth := m.width - navWidth
 	if mainWidth < 20 {
 		mainWidth = m.width
 		navWidth = 0
@@ -150,10 +152,11 @@ func (m *model) renderRight(width, height int) string {
 	if m.tabCount() == 0 {
 		return styleFrame.Width(width).Height(height).Render(styleDim.Render("(this service has no targets or infra)"))
 	}
+	inner := width - 2 // inside the border
 	sections := append(m.tabRows(),
-		strings.Repeat("─", width-4),
+		strings.Repeat("─", inner),
 		styleHeader.Render(m.detailHeader()),
-		m.renderLogs(width-4, m.logViewportHeight()),
+		m.renderLogs(inner, m.logViewportHeight()),
 	)
 	return styleFrame.Width(width).Height(height).Render(lipgloss.JoinVertical(lipgloss.Left, sections...))
 }
@@ -270,6 +273,12 @@ func targetFailed(t *anovelv1.Target) bool {
 		(reason == anovelv1.ExitReason_EXIT_REASON_ERROR || reason == anovelv1.ExitReason_EXIT_REASON_CRASHED)
 }
 
+// logPrefixWidth is the width of a log row's "15:04:05 out " prefix.
+const logPrefixWidth = 13
+
+// renderLogs draws the window of the followed log that fits in width by height
+// cells, ending logScroll lines before the tail. While scrolled back, its last
+// row is the paused indicator.
 func (m *model) renderLogs(width, height int) string {
 	if len(m.logLines) == 0 {
 		return styleDim.Render("(no log lines yet — start the target or run :refresh)")
@@ -291,7 +300,7 @@ func (m *model) renderLogs(width, height int) string {
 		}
 		ts := ln.GetTs().AsTime().Format("15:04:05")
 		fmt.Fprintf(&b, "%s %s %s\n",
-			styleDim.Render(ts), styleWarn.Render(tag), truncate(ln.GetLine(), width-20))
+			styleDim.Render(ts), styleWarn.Render(tag), truncate(ln.GetLine(), width-logPrefixWidth))
 	}
 	if m.logScroll > 0 {
 		indicator := fmt.Sprintf("⏸ paused — %d line(s) below cursor  ·  pgdn/end resumes tail",
@@ -364,7 +373,7 @@ func (m *model) renderHelp() string {
 		"",
 		styleDim.Render("(daemon-backed verbs are implemented via the same RPC as the CLI; what you see in the UI is what `a-novel run ps` would show)"),
 	}
-	return styleFrame.Width(m.width - 2).Height(m.height - 2).Render(strings.Join(lines, "\n"))
+	return styleFrame.Width(m.width).Height(m.height).Render(strings.Join(lines, "\n"))
 }
 
 // renderTopology is the dedicated topology screen, populated by the
@@ -378,7 +387,7 @@ func (m *model) renderTopology() string {
 		"",
 		styleDim.Render("(press any key to return)"),
 	}
-	return styleFrame.Width(m.width - 2).Height(m.height - 2).Render(strings.Join(lines, "\n"))
+	return styleFrame.Width(m.width).Height(m.height).Render(strings.Join(lines, "\n"))
 }
 
 // overlayCommand draws the command input and autocomplete suggestions
@@ -528,16 +537,17 @@ func infraHealthLabel(in *anovelv1.Infra) string {
 	return "unknown"
 }
 
-// computeNavWidth picks the sidebar width so the longest service name fits on
-// one line, clamped to [24, 40]: 24 keeps the panel a recognizable width when
-// nothing is discovered yet, 40 stops one very long name squeezing the right
-// pane.
+// computeNavWidth picks the sidebar's frame width so the longest service name
+// fits on one line, clamped to [24, 40]: 24 keeps the panel a recognizable
+// width when nothing is discovered yet, 40 stops one very long name squeezing
+// the right pane.
 func computeNavWidth(svcs []*anovelv1.Service) int {
 	const minW, maxW = 24, 40
 	w := minW
 	for _, svc := range svcs {
-		// "▸ " prefix + name + 2 cols of right padding.
-		w = max(w, 4+len(svc.GetName()))
+		// Two border columns, styleNav's padding column on each side, then the
+		// "▸ " prefix and the name.
+		w = max(w, 6+len(svc.GetName()))
 	}
 	return min(w, maxW)
 }

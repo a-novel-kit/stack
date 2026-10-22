@@ -1,7 +1,11 @@
 package tui
 
 import (
+	"strings"
 	"testing"
+
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
@@ -31,6 +35,56 @@ func TestTruncate(t *testing.T) {
 
 			if got := truncate(testCase.s, testCase.maxLen); got != testCase.want {
 				t.Errorf("truncate(%q, %d) = %q, want %q", testCase.s, testCase.maxLen, got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestRender(t *testing.T) {
+	t.Parallel()
+
+	service := &anovelv1.Service{
+		Name:    "service-narrative-engine",
+		Infra:   []*anovelv1.Infra{{Name: "postgres", Phase: anovelv1.Phase_PHASE_RUNNING}},
+		Targets: []*anovelv1.Target{{Id: "default/service-narrative-engine/rest", Name: "rest"}},
+	}
+
+	testCases := []struct {
+		name string
+
+		view      view
+		logLines  []*anovelv1.StreamLogsResponse
+		logScroll int
+
+		wantText string
+	}{
+		{name: "Main/NoLogs", wantText: "no log lines yet"},
+		{name: "Help", view: viewHelp, wantText: "command reference"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := &model{
+				width:     120,
+				height:    50,
+				view:      testCase.view,
+				services:  []*anovelv1.Service{service},
+				logLines:  testCase.logLines,
+				logScroll: testCase.logScroll,
+			}
+			screen := m.render()
+
+			// The top row is frame border only. JoinVertical pads it with
+			// spaces to the widest row, so the trimmed row measures the frames.
+			top, _, _ := strings.Cut(ansi.Strip(screen), "\n")
+			width, height := lipgloss.Width(strings.TrimRight(top, " ")), lipgloss.Height(screen)
+			if width != m.width || height != m.height {
+				t.Errorf("screen is %d wide and %d high, want %d and %d", width, height, m.width, m.height)
+			}
+			if !strings.Contains(screen, testCase.wantText) {
+				t.Errorf("screen lacks %q on one line", testCase.wantText)
 			}
 		})
 	}

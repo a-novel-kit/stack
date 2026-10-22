@@ -310,11 +310,10 @@ func (m *model) clampLogScroll(n int) int {
 	return min(n, max(len(m.logLines)-rows, 0))
 }
 
-// contentHeight is the height of the nav and right frames: the terminal
-// height less the rows reserved for the status bar, the footer hint and the
-// frame borders.
+// contentHeight is the height of the nav and right frames, borders included:
+// the terminal height less the status bar and the footer hint.
 func (m *model) contentHeight() int {
-	return m.height - 4
+	return m.height - 2
 }
 
 // logViewportHeight is the row count of the log pane. renderRight sizes the
