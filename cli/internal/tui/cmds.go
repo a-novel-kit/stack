@@ -19,8 +19,12 @@ const (
 	noTargetText  = "no active target — select one with ←/→ first"
 )
 
-// servicesMsg carries a fresh ListServices snapshot from the daemon.
-type servicesMsg struct{ services []*anovelv1.Service }
+// servicesMsg carries a fresh ListServices snapshot from the daemon, with the
+// number of problems discovery found in the same stack.
+type servicesMsg struct {
+	services          []*anovelv1.Service
+	discoveryProblems int
+}
 
 // errMsg surfaces a non-fatal error, such as a transient RPC failure
 // during refresh. It lands in m.err, which the nav panel renders when
@@ -101,7 +105,9 @@ type logLinesMsg struct {
 type tickMsg struct{}
 
 // refreshServicesCmd asks the daemon for a snapshot of every service in
-// the default stack. The UI is scoped to a single stack.
+// the default stack, and for that stack's discovery problems. The UI is scoped
+// to a single stack. The problems are read on every refresh, so a daemon
+// restart that fixes them clears the status bar note.
 func refreshServicesCmd(c *rpc.Client) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -110,7 +116,17 @@ func refreshServicesCmd(c *rpc.Client) tea.Cmd {
 		if err != nil {
 			return errMsg{err: err}
 		}
-		return servicesMsg{services: resp.GetServices()}
+		stacks, err := c.ListStacks(ctx)
+		if err != nil {
+			return errMsg{err: err}
+		}
+		msg := servicesMsg{services: resp.GetServices()}
+		for _, st := range stacks.GetStacks() {
+			if st.GetIsDefault() {
+				msg.discoveryProblems = len(st.GetDiscoveryErrors())
+			}
+		}
+		return msg
 	}
 }
 
