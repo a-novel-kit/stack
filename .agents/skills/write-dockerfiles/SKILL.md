@@ -176,11 +176,18 @@ any Alpine-based image and serves the same purpose at zero size cost.
 
 ### Database healthcheck
 
-Use the `pg_isready` utility, already present in the PostgreSQL base image:
+Use the `pg_isready` utility, already present in the PostgreSQL base image. Give it the configured
+role and database through `sh -c`. By default it connects as the OS user, and infra's hosts trust
+local connections, so the server checks that role at once. A missing role or database then logs a
+`FATAL` line on every probe:
 
 ```dockerfile
-HEALTHCHECK --interval=1s --timeout=5s --retries=10 --start-period=1s CMD ["pg_isready"]
+HEALTHCHECK --interval=1s --timeout=5s --retries=10 --start-period=1s \
+  CMD ["sh", "-c", "PGUSER=$POSTGRES_USER PGDATABASE=$POSTGRES_DB pg_isready"]
 ```
+
+libpq treats an empty `PGUSER` or `PGDATABASE` as unset, so the probe still works where the image
+runs without those variables.
 
 ### Job images
 
