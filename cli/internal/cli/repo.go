@@ -222,7 +222,7 @@ branch or with uncommitted changes is skipped.`,
 	cmd.Flags().StringVar(&o.rootDir, "root", "",
 		"with --all, the workspace root containing kit/ and app/ (defaults like `core sync`)")
 	cmd.Flags().IntVarP(&o.limit, "jobs", "j", repoJobs,
-		"with --all, max repos applied at once (GitHub rate-limits concurrent writes)")
+		"with --all, max repos applied at once, or 0 for no limit (GitHub rate-limits concurrent writes)")
 	return cmd
 }
 
