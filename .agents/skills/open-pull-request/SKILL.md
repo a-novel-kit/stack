@@ -32,7 +32,8 @@ update an open PR rather than recreating it.
   [readiness rule](references/authoring.md#61-flip-a-draft-to-ready-the-moment-it-qualifies-mandatory).
   Mark it ready in the same turn once all applicable completion gates pass.
 - Before a final code/issue handoff, read [the session recap contract](references/handoff.md).
-  Include every outstanding session item and each PR's admin-only approval command after review.
+  Include every outstanding session item and, when the operator is an admin of the repository,
+  each PR's admin-only approval command after review.
 - After a push, use `monitor-ci` through green or a documented escalation, and inspect feedback
   with `resolve-pr-feedback`. Publication alone does not complete the task.
 
@@ -253,8 +254,8 @@ Do not merge — merges are a developer decision unless explicitly delegated.
 - **Treating a green draft as ready.** Scope approval, full relevant coverage, visual verification,
   and final cleanup must be complete before the ready transition.
 - **Ending a code/issue turn without the recap table.** Close with the Phase 8 table linking
-  everything still outstanding this session, with the admin-only approval command inside each open
-  PR's row rather than in adjacent prose.
+  everything still outstanding this session, with the admin-only approval command, when the
+  operator may run it, inside each open PR's row rather than in adjacent prose.
 - **Trying to author a PR as the bot.** There is no bot path — `a-novel core bot-comment`
   only posts comments (5.0).
 - **Treating "PR opened" as task-done.** Carry `monitor-ci` through to CI green or an

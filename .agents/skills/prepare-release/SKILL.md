@@ -14,9 +14,9 @@ A release has two questions this skill answers before anyone clicks "Run":
 2. **What must a consumer do to adopt it?** — captured as a **migration guide** that ships with the
    code and lives forever, so the answer is never lost in a PR description or a Slack thread.
 
-You are advisory: read the diff, propose the version, draft the guide. The human reviews and cuts the
-release from the Actions tab. You never tag, push, or publish — releases are human-only (see
-`manage-versions`).
+You are advisory: read the diff, propose the version, draft the guide. Core or the repository's
+`owners-<class>` review and cut the release from the Actions tab. You never tag, push, or publish —
+releases are human-only (see `manage-versions`).
 
 > This skill is the manual stand-in for a future agent that runs it automatically before every
 > release. Until then, invoke it deliberately when a release is near.
@@ -161,8 +161,9 @@ a feature. Keep each change section to _what changed → why → before/after �
 ## 5. Present — advisory only
 
 Hand the operator: the **proposed version**, the **commits that drove it**, whether a **guide** was
-written (and where), and the **release-type to pick** in the workflow. Then stop. The human cuts the
-release (Actions ▸ `release` ▸ pick the bump); `release-core` stamps versions, tags, and publishes.
+written (and where), and the **release-type to pick** in the workflow. Then stop. Core or the
+repository's owners cut the release (Actions ▸ `release` ▸ pick the bump); `release-core` stamps
+versions, tags, and publishes.
 You do not run it.
 
 If the change ships in stages or spans repos, that ordering is a `manage-versions` concern — note it
@@ -181,7 +182,7 @@ and defer.
   initiative with its own `vX` branch that becomes master when it lands. A `!` in an ordinary range is
   an absorbable breaking change (a minor with a guide), or a prompt to raise that initiative — never a
   second-digit bump on the current line.
-- **Advisory, never the trigger.** You propose; the human releases.
+- **Advisory, never the trigger.** You propose; core or the repository's owners release.
 
 ---
 

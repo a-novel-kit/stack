@@ -186,8 +186,9 @@ straight there. Cover it in:
 | Delete an overtaken draft     | `gh issue delete <n> --repo <o>/<r> --yes`                                                          |
 
 Field / option / item IDs come from `gh project field-list <num> --owner <org>` and
-`gh project item-list`. Scopes: `repo` + `project` (see `plan-feature` → _Token scopes_); on an
-authorization failure, stop and ask the operator to grant the missing scope.
+`gh project item-list`. Scopes: `repo` + `project`, on top of write on the board, which
+[check-access](../check-access/SKILL.md) checks. On an authorization failure, follow `plan-feature` →
+_Token scopes_: ask for a missing scope, report a missing role.
 
 ---
 

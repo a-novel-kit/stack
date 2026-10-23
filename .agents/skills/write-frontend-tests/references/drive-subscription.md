@@ -7,6 +7,11 @@ The adoption guides in a-novel-kit/workflows cover the repository's wiring: `doc
 for Playwright journeys, plus `v1.64.0.md` for a Vitest browser project. This runbook provides the
 identities, folders and variables those guides consume, and the order that creates the first reference.
 
+Most steps need more than a developer holds: an infra pull request and its `visual_tests` output
+(ops), the Drive shares (the Workspace owner), repository variables and `a-novel repo update`
+(core). Check each with [check-access](../../check-access/SKILL.md) before its step, and hand the
+steps the developer cannot run to their holder.
+
 1. **Admit the repository in a-novel/infra.** Add an entry to `visual_test_repositories` in
    `bootstrap/visual-tests.tf`: a slug of 2 to 11 characters, the repository, and its numeric ID from
    `gh api repos/<owner>/<repo> --jq .id`. The validation admits `a-novel/platform-*` and

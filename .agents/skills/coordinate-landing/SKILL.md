@@ -11,7 +11,7 @@ A single feature often spans several repos — a `golib` change plus the two ser
 Under the a-novel model those repos are **independently versioned and independently merged**, so
 "land them together" is not free: it is a **saga**, a coordinated sequence with compensating actions
 when a step fails. This skill maps that saga: what the pieces are called, the one invariant they all
-serve, and the operator procedures that need a human.
+serve, and the operator procedures that need core or a repository admin.
 
 The contributor-facing half — what a held or frozen Pull Request means to the person who opened it —
 is published in
@@ -137,7 +137,9 @@ author → LAND (merge-gate + queue, atomic) → DETECT (reconcile sweep)
 ## Operator runbook
 
 Every entry is admin-gated at the point of action; the destructive ones (rollback) additionally force
-a human approval. All the write actions honor `AGENT_KILL_SWITCH` and `automation:paused`.
+a human approval. All the write actions honor `AGENT_KILL_SWITCH` and `automation:paused`. Check the
+operator's role first with [check-access](../check-access/SKILL.md): a developer reports the
+incident to core instead of acting.
 
 ### Halt everything (incident brake)
 

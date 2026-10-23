@@ -17,7 +17,7 @@ library (`golib`, `nodelib`, `jwt`, `stack`). A repo needing a different class c
 
 ```bash
 a-novel repo update --dry-run    # print the API operations, no writes — the agent-safe form
-a-novel repo update              # interactive, human-only: a human must run this
+a-novel repo update              # interactive, core-only: a core member runs this
 a-novel repo update --all        # every whitelisted checkout present under app/ or kit/, in parallel
 ```
 
@@ -47,9 +47,12 @@ Behaviours to know before running it:
   token on top of repo admin rights. A token without the scope stops `create` and the write path
   of `update` before planning, with the grant command; `--dry-run` and `--json` skip the check. An
   operator who is not an org admin still sees those operations fail with HTTP 403 ("You must be an
-  org admin or have the actions secrets fine-grained permission") while the rest applies. The human
-  runs `gh auth refresh -h github.com -s admin:org` before the update and `--remove-scopes
+  org admin or have the actions secrets fine-grained permission") while the rest applies. The core
+  member runs `gh auth refresh -h github.com -s admin:org` before the update and `--remove-scopes
 admin:org` after.
+- **Governance secrets come from Bitwarden.** `update` compares them with the `BWS_ACCESS_TOKEN`
+  secret, which only core holds. Without it, the operation reports `none compared with Bitwarden
+(no access token)` and sets nothing.
 - **A newer deployed pin survives.** For files pinning `a-novel-kit/workflows` actions, a version
   already ahead of the template's is kept, so `update` never rolls back a bump Renovate landed.
 

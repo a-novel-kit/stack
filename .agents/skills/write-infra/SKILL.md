@@ -45,8 +45,8 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
   Services keep apart inside a zone through their own identities, image repositories, network tags,
   database hosts and secrets. Never propose a project per service: audits treat the shared zone
   project, its quota pool and its project-wide log writing as settled.
-- **Inputs live in each root's committed `terraform.tfvars`.** Secret values never do: humans add
-  them with `gcloud`.
+- **Inputs live in each root's committed `terraform.tfvars`.** Secret values never do: ops add them
+  with `gcloud`.
 - **Images are pinned** as `ghcr.io/…:tag@sha256:…`. Every plan verifies each release image it
   changes: its release tag's own run built it, the release App published that tag as an immutable
   GitHub Release, and its version is not below the one deployed. Deploy then copies the images to
@@ -66,17 +66,20 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 
 - **Agents never apply, dispatch production workflows or change IAM by hand.** Push a branch and let
   the pull request plan it.
-- **Use `gcloud` only for reads,** and only when the user allows it in the session. A useful read:
+- **Use `gcloud` only for reads,** and only when the user allows it in the session and holds ops
+  access ([check-access](../check-access/SKILL.md)). A useful read:
   `tofu plan -refresh=false -lock=false` with `GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)`.
-- **Humans** hold read access, IAP SSH and secret-version rights, and the named operators run
-  Authentication's maintenance job. Everything else goes through `deploy.yaml`, `downtime.yaml` for
-  planned downtimes, `roll-database.yaml` for database hosts, or `recovery.yaml` for drills.
-- **Write runbook commands for the identity that actually runs them.** A command a human cannot
-  run belongs in a workflow.
+  Without ops access, prove plans offline as [Change safety](references/change-safety.md) shows.
+- **Ops** hold read access, IAP SSH and secret-version rights, and the named operators run
+  Authentication's maintenance job. Other developers hold none of them. Everything else goes
+  through `deploy.yaml`, `downtime.yaml` for planned downtimes, `roll-database.yaml` for database
+  hosts, or `recovery.yaml` for drills.
+- **Write runbook commands for the identity that actually runs them.** A command ops cannot run
+  belongs in a workflow.
 - **Deleting, replacing or forgetting a resource, or weakening its protection,** needs the
-  `allow-resource-deletion` label on the pull request.
+  `allow-resource-deletion` label on the pull request, applied by a maintainer or an admin.
 - **Changing a database host's template or group configuration** needs the `allow-downtime` label,
-  and that service's planned downtime in progress.
+  applied the same way, and that service's planned downtime, scheduled by core, in progress.
 
 ## Route the work
 
@@ -92,9 +95,11 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 Prove a refactor is a no-op before review. Report each root's expected plan in the pull request:
 imports, in-place changes and deletions, with the reason for each. Separate stages that need the
 deletion or downtime label from those that do not. Stack them when they depend on one another. In the handoff,
-list what the user must do by hand: label, admin-bypass merge after a required-check rename, GitHub
-settings, then `a-novel repo update`.
+list what must be done by hand and who holds it: the label (a maintainer), then the admin-bypass
+merge after a required-check rename, GitHub settings and `a-novel repo update` (core).
 
-`master` requires an approval the author's account cannot give. The user reviews, then records it
-with `gh workflow run approve-pr.yaml --repo a-novel/infra -f pull_request=<PR URL>`. Never
-dispatch it yourself: that records a review nobody did.
+`master` requires an approval the author's account cannot give. When the user is an admin of
+a-novel/infra, they review, then record it with
+`gh workflow run approve-pr.yaml --repo a-novel/infra -f pull_request=<PR URL>`. Otherwise the pull
+request waits for a maintainer's review. Never dispatch it yourself: that records a review nobody
+did.

@@ -31,8 +31,11 @@ link required by `write-frontend`, adjacent to the recap table or in the relevan
 that local-only link in the PR body.
 
 For every open PR in the recap, put a copy-pasteable command **inside that PR's table row** that lets
-the repository admin who opened it record their approval through the repo's `approve-pr` workflow
-after reviewing the PR:
+the admin who opened it, a member of `owners-<class>` or core, record their approval through the
+repo's `approve-pr` workflow after reviewing the PR. Fill it only when the operator opened the PR and
+`gh api repos/<org>/<repo> --jq .permissions.admin` prints `true` (see
+[check-access](../../check-access/SKILL.md)). Otherwise put an em dash there, and the Needs cell
+names a maintainer's review:
 
 ```bash
 gh workflow run approve-pr.yaml --repo <org>/<repo> --ref <default-branch> --field pull_request=<PR-URL>

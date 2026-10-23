@@ -1,0 +1,4 @@
+interface:
+  display_name: "Check Access"
+  short_description: "Check the operator's roles and grants before privileged operations"
+  default_prompt: "Use $check-access to check whether I can run this operation."

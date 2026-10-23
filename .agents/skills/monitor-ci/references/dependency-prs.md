@@ -26,6 +26,10 @@ Query each org once with GraphQL `search`, reading `mergeStateStatus`, `reviewDe
 token's 5,000 calls an hour are shared by every session on the account, so poll with one query per
 cycle, at most every two minutes, and never loop REST calls over every repo.
 
+The sweep acts only in repositories where the operator holds Write, and approves only where they are
+a maintainer or an admin ([check-access](../../check-access/SKILL.md)). Report every other PR with
+what it needs and who holds it.
+
 ## Classify each stuck PR
 
 Read the PR's timeline (`RemovedFromMergeQueueEvent.reason`) before acting.
@@ -83,8 +87,8 @@ stream error … INTERNAL_ERROR`.** The Go module proxy dropped a download. From
   `[security]` PR fixes it once the repo's preset enables OSV alerts; otherwise bump the module by hand.
 - **infra `plan-*` asks for `allow-downtime`.** A service release with a new database digest changes
   its database host's template, so it merges only during that service's planned downtime, with the
-  label. A release without a database change keeps the digest and plans nothing for the hosts. Both
-  the downtime and the label are human decisions.
+  label. A release without a database change keeps the digest and plans nothing for the hosts. Core
+  schedules the downtime, and a maintainer or an admin applies the label.
 
 ### Stranded required checks
 
