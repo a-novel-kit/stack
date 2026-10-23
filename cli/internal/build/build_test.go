@@ -90,43 +90,78 @@ func TestPrepareEnv(t *testing.T) {
 
 // TestComposeEnv pins that the derived connection vars follow the ports the
 // run allocates, even when the inherited environment already sets the same
-// port variable. Referenced credentials get their local defaults, and the DSN
-// carries the credentials Postgres receives, inherited ones included.
+// port variable. Referenced credentials get their local defaults. The test
+// process reaches Postgres through the DSN and the discrete settings alike,
+// both carrying the credentials Postgres receives, inherited ones included.
 func TestComposeEnv(t *testing.T) {
 	t.Parallel()
 
 	inheritedPorts := []string{"POSTGRES_PORT=5432", "REST_PORT=8080"}
 	inheritedCredentials := []string{"POSTGRES_USER=alice", "POSTGRES_PASSWORD=p@ss", "POSTGRES_DB=novels"}
+	credentialRefs := []string{"POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"}
+	// defaultPostgres is the connection with the local defaults, PORT standing
+	// for the allocated port.
+	defaultPostgres := map[string]string{
+		"POSTGRES_DSN":         "postgres://postgres:postgres@localhost:PORT/postgres?sslmode=disable",
+		"POSTGRES_HOST":        "localhost",
+		"POSTGRES_PORT":        "PORT",
+		"POSTGRES_USER":        "postgres",
+		"POSTGRES_PASSWORD":    "postgres",
+		"POSTGRES_DATABASE":    "postgres",
+		"POSTGRES_TLS_ENABLED": "false",
+	}
 
 	testCases := []struct {
 		name string
 		base []string
-		// wantDSN is POSTGRES_DSN with PORT standing for the allocated port.
-		wantDSN string
-		// wantUser is the POSTGRES_USER entry composeEnv adds, "" for none.
-		wantUser string
+		refs []string
+		// wantPostgres is the connection the test process sees, base overlaid
+		// with what composeEnv adds, with PORT standing for the allocated port.
+		wantPostgres map[string]string
 	}{
 		{
-			name:     "Success/DefaultCredentials",
-			base:     inheritedPorts,
-			wantDSN:  "postgres://postgres:postgres@localhost:PORT/postgres?sslmode=disable",
-			wantUser: "postgres",
+			name:         "Success/DefaultCredentials",
+			base:         inheritedPorts,
+			refs:         credentialRefs,
+			wantPostgres: defaultPostgres,
 		},
 		{
-			name:    "Success/InheritedCredentials",
-			base:    slices.Concat(inheritedPorts, inheritedCredentials),
-			wantDSN: "postgres://alice:p%40ss@localhost:PORT/novels?sslmode=disable",
+			name: "Success/InheritedCredentials",
+			base: slices.Concat(inheritedPorts, inheritedCredentials),
+			refs: credentialRefs,
+			wantPostgres: map[string]string{
+				"POSTGRES_DSN":         "postgres://alice:p%40ss@localhost:PORT/novels?sslmode=disable",
+				"POSTGRES_HOST":        "localhost",
+				"POSTGRES_PORT":        "PORT",
+				"POSTGRES_USER":        "alice",
+				"POSTGRES_PASSWORD":    "p@ss",
+				"POSTGRES_DATABASE":    "novels",
+				"POSTGRES_TLS_ENABLED": "false",
+			},
+		},
+		{
+			// Discrete settings inherited from the shell name another database, and
+			// the test database's replace them.
+			name: "Success/InheritedDiscreteSettings",
+			base: slices.Concat(inheritedPorts,
+				[]string{"POSTGRES_HOST=db.example", "POSTGRES_DATABASE=other", "POSTGRES_TLS_ENABLED=true"}),
+			refs:         credentialRefs,
+			wantPostgres: defaultPostgres,
+		},
+		{
+			// A compose file that references no credentials still gets a discrete
+			// login matching the DSN's defaults.
+			name:         "Success/UnreferencedCredentials",
+			base:         inheritedPorts,
+			wantPostgres: defaultPostgres,
 		},
 	}
 
-	env := &detect.ComposeEnv{
-		Ports: []string{"POSTGRES_PORT", "REST_PORT"},
-		Refs:  []string{"POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"},
-	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
+			env := &detect.ComposeEnv{Ports: []string{"POSTGRES_PORT", "REST_PORT"}, Refs: testCase.refs}
 			added, err := composeEnv(env, testCase.base)
 			if err != nil {
 				t.Fatalf("composeEnv: %v", err)
@@ -134,19 +169,22 @@ func TestComposeEnv(t *testing.T) {
 			vars := map[string]string{}
 			for _, kv := range added {
 				key, value, _ := strings.Cut(kv, "=")
+				if _, listed := vars[key]; listed {
+					t.Errorf("composeEnv lists %s twice: %v", key, added)
+				}
 				vars[key] = value
 			}
 			if vars["POSTGRES_PORT"] == "5432" || vars["REST_PORT"] == "8080" {
 				t.Fatalf("composeEnv kept an inherited port: %v", added)
 			}
-			if want := strings.Replace(testCase.wantDSN, "PORT", vars["POSTGRES_PORT"], 1); vars["POSTGRES_DSN"] != want {
-				t.Errorf("POSTGRES_DSN = %q, want %q", vars["POSTGRES_DSN"], want)
-			}
 			if want := "http://localhost:" + vars["REST_PORT"]; vars["REST_URL"] != want {
 				t.Errorf("REST_URL = %q, want %q", vars["REST_URL"], want)
 			}
-			if vars["POSTGRES_USER"] != testCase.wantUser {
-				t.Errorf("POSTGRES_USER = %q, want %q", vars["POSTGRES_USER"], testCase.wantUser)
+			runEnv := slices.Concat(testCase.base, added)
+			for key, want := range testCase.wantPostgres {
+				if want = strings.ReplaceAll(want, "PORT", vars["POSTGRES_PORT"]); envVal(runEnv, key) != want {
+					t.Errorf("%s = %q, want %q", key, envVal(runEnv, key), want)
+				}
 			}
 		})
 	}

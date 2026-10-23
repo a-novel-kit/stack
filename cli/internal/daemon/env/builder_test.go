@@ -39,6 +39,17 @@ func TestBuilderForTarget(t *testing.T) {
 	// serviceRoot resolves only from a non-empty CmdDir, which gates the
 	// secrets injection.
 	cmdDir := filepath.Join("/tmp", "service-svc", "cmd", "rest")
+	// hostPostgres is the connection a host process gets to svc's postgres infra
+	// with the default credentials, PORT standing for the allocated port.
+	hostPostgres := map[string]string{
+		"POSTGRES_DSN":         "postgres://postgres:postgres@localhost:PORT/postgres?sslmode=disable",
+		"POSTGRES_HOST":        "localhost",
+		"POSTGRES_PORT":        "PORT",
+		"POSTGRES_USER":        "postgres",
+		"POSTGRES_PASSWORD":    "postgres",
+		"POSTGRES_DATABASE":    "postgres",
+		"POSTGRES_TLS_ENABLED": "false",
+	}
 
 	testCases := []struct {
 		name      string
@@ -46,39 +57,83 @@ func TestBuilderForTarget(t *testing.T) {
 		infraPort string // acquired for the target's service first, as infra-up does
 		target    discovery.Target
 		secrets   *secrets.Resolution // nil: injectSecrets must not be called
-		check     func(t *testing.T, env map[string]string, warnings []string, alloc *Allocator)
+		// wantEnv holds entries the env must carry, "" for an unset one, with PORT
+		// standing for the service's allocated POSTGRES_PORT.
+		wantEnv map[string]string
+		check   func(t *testing.T, env map[string]string, warnings []string, alloc *Allocator)
 	}{
 		{
 			// Compose declares a literal in-container DSN (`postgres-X:5432`), and the
 			// service's POSTGRES_PORT allocation overrides it to `localhost:<port>`.
-			// Without that rewrite, go-exec mode cannot reach its own postgres.
+			// Without that rewrite, go-exec mode cannot reach its own postgres. The
+			// discrete settings describe the same login, since a service prefers them
+			// once POSTGRES_HOST is set.
 			name: "DSNRewriteForGoExec", services: []string{"svc"}, infraPort: "POSTGRES_PORT",
 			target: discovery.Target{Name: "migrations", Service: "svc", Environment: map[string]string{
 				"POSTGRES_DSN": "postgres://postgres:postgres@postgres-svc:5432/postgres?sslmode=disable",
 			}},
-			check: func(t *testing.T, env map[string]string, _ []string, alloc *Allocator) {
-				port, _ := alloc.Lookup("svc", "POSTGRES_PORT")
-				want := "postgres://postgres:postgres@localhost:" + strconv.Itoa(port) + "/postgres?sslmode=disable"
-				if env["POSTGRES_DSN"] != want {
-					t.Errorf("POSTGRES_DSN: got %q want %q", env["POSTGRES_DSN"], want)
-				}
-			},
+			wantEnv: hostPostgres,
 		},
 		{
 			// The rewritten DSN carries the compose credentials percent-escaped, so a
-			// password holding `@` or `/` still parses.
+			// password holding `@` or `/` still parses. The discrete settings carry
+			// them as they are.
 			name: "DSNEscapesCredentials", services: []string{"svc"}, infraPort: "POSTGRES_PORT",
 			target: discovery.Target{Name: "migrations", Service: "svc", Environment: map[string]string{
 				"POSTGRES_USER":     "alice",
 				"POSTGRES_PASSWORD": "p@ss/word",
 				"POSTGRES_DB":       "novels",
 			}},
-			check: func(t *testing.T, env map[string]string, _ []string, alloc *Allocator) {
-				port, _ := alloc.Lookup("svc", "POSTGRES_PORT")
-				want := "postgres://alice:p%40ss%2Fword@localhost:" + strconv.Itoa(port) + "/novels?sslmode=disable"
-				if env["POSTGRES_DSN"] != want {
-					t.Errorf("POSTGRES_DSN: got %q want %q", env["POSTGRES_DSN"], want)
-				}
+			wantEnv: map[string]string{
+				"POSTGRES_DSN":      "postgres://alice:p%40ss%2Fword@localhost:PORT/novels?sslmode=disable",
+				"POSTGRES_USER":     "alice",
+				"POSTGRES_PASSWORD": "p@ss/word",
+				"POSTGRES_DATABASE": "novels",
+			},
+		},
+		{
+			// A target on the discrete settings names the in-network host, which go-exec
+			// cannot resolve. Its database and its TLS choice stay, and the DSN names
+			// the same database.
+			name: "DiscreteRewriteForGoExec", services: []string{"svc"}, infraPort: "POSTGRES_PORT",
+			target: discovery.Target{Name: "rest", Service: "svc", Environment: map[string]string{
+				"POSTGRES_HOST":        "postgres-svc",
+				"POSTGRES_USER":        "postgres",
+				"POSTGRES_PASSWORD":    "postgres",
+				"POSTGRES_DATABASE":    "novels",
+				"POSTGRES_TLS_ENABLED": "true",
+			}},
+			wantEnv: map[string]string{
+				"POSTGRES_DSN":         "postgres://postgres:postgres@localhost:PORT/novels?sslmode=disable",
+				"POSTGRES_HOST":        "localhost",
+				"POSTGRES_PORT":        "PORT",
+				"POSTGRES_DATABASE":    "novels",
+				"POSTGRES_TLS_ENABLED": "true",
+			},
+		},
+		{
+			// A target's own POSTGRES_PORT is the database's port inside the compose
+			// network, so the service's host-port allocation replaces it.
+			name: "InNetworkPortYieldsToAllocation", services: []string{"svc"}, infraPort: "POSTGRES_PORT",
+			target: discovery.Target{Name: "rest", Service: "svc", Environment: map[string]string{
+				"POSTGRES_HOST": "postgres-svc",
+				"POSTGRES_PORT": "5432",
+			}},
+			wantEnv: hostPostgres,
+		},
+		{
+			// Without the allocation, which infra-up makes, nothing listens on the host,
+			// and the compose values stay.
+			name: "NoAllocationKeepsCompose", services: []string{"svc"},
+			target: discovery.Target{Name: "rest", Service: "svc", Environment: map[string]string{
+				"POSTGRES_HOST": "postgres-svc",
+				"POSTGRES_DSN":  "postgres://postgres:postgres@postgres-svc:5432/postgres?sslmode=disable",
+			}},
+			wantEnv: map[string]string{
+				"POSTGRES_DSN":         "postgres://postgres:postgres@postgres-svc:5432/postgres?sslmode=disable",
+				"POSTGRES_HOST":        "postgres-svc",
+				"POSTGRES_PORT":        "",
+				"POSTGRES_TLS_ENABLED": "",
 			},
 		},
 		{
@@ -215,8 +270,15 @@ func TestBuilderForTarget(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			env := toMap(entries)
+			port, _ := alloc.Lookup(testCase.target.Service, "POSTGRES_PORT")
+			for key, want := range testCase.wantEnv {
+				if want = strings.ReplaceAll(want, "PORT", strconv.Itoa(port)); env[key] != want {
+					t.Errorf("%s = %q, want %q", key, env[key], want)
+				}
+			}
 			if testCase.check != nil {
-				testCase.check(t, toMap(entries), warnings, alloc)
+				testCase.check(t, env, warnings, alloc)
 			}
 		})
 	}
@@ -292,14 +354,18 @@ func TestBuilder_OverlappingServiceNamesResolveLongestFirst(t *testing.T) {
 // consumer, the ports the infra references are acquired for it, and Release
 // frees them again. Compose publishes the infra on what the block holds, so
 // every allocated port appears with its number, whether a target names it or
-// not.
+// not. A target's own POSTGRES_PORT, the port inside the compose network,
+// yields to the allocation.
 func TestForService_ConsumerAllocatesInfraPorts(t *testing.T) {
 	b, alloc := newBuilderWith([]string{"svc"})
 	svc := &discovery.Service{
 		Name:  "svc",
 		Stack: "default",
 		Targets: []*discovery.Target{
-			{Name: "migrations", Service: "svc", Stack: "default", Environment: map[string]string{"POSTGRES_HOST": "postgres-svc"}},
+			{Name: "migrations", Service: "svc", Stack: "default", Environment: map[string]string{
+				"POSTGRES_HOST": "postgres-svc",
+				"POSTGRES_PORT": "5432",
+			}},
 			{Name: "rest", Service: "svc", Stack: "default", Environment: map[string]string{"MAIL_ADDR": "${MAIL_HOST}:${MAIL_PORT}"}},
 		},
 		Infra: []*discovery.Infra{
@@ -327,8 +393,8 @@ func TestForService_ConsumerAllocatesInfraPorts(t *testing.T) {
 		t.Fatal("infra-up ForService did not allocate MAIL_PORT")
 	}
 	m := toMap(entries)
-	if m["POSTGRES_USER"] != "postgres" || m["POSTGRES_PORT"] != strconv.Itoa(port) {
-		t.Errorf("infra env: got %v, want the constant and POSTGRES_PORT=%d", m, port)
+	if m["POSTGRES_USER"] != "postgres" || m["POSTGRES_PORT"] != strconv.Itoa(port) || m["POSTGRES_HOST"] != "localhost" {
+		t.Errorf("infra env: got %v, want the constant, POSTGRES_PORT=%d and the host", m, port)
 	}
 	if want := "localhost:" + strconv.Itoa(mailPort); m["MAIL_PORT"] != strconv.Itoa(mailPort) || m["MAIL_ADDR"] != want {
 		t.Errorf("MAIL_PORT/MAIL_ADDR = %q/%q, want %d and %q", m["MAIL_PORT"], m["MAIL_ADDR"], mailPort, want)

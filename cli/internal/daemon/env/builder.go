@@ -195,15 +195,14 @@ func (b *Builder) buildEnv(t *discovery.Target, services []string, allocate bool
 	// them from the user view.
 	maps.DeleteFunc(out, func(k, _ string) bool { return strings.HasPrefix(k, "__port_") })
 	b.addOwnedPorts(out, owner)
-	setPostgresDSN(out)
+	b.setHostPostgres(out, owner)
 	addOwnPrefixForms(out, owner, services)
 	return out, nil
 }
 
 // addOwnedPorts adds every `*_PORT` owner holds that out lacks, with its
-// derived HOST and URL. A one-shot like `migrations` declares POSTGRES_DSN as a
-// literal while the service itself holds the POSTGRES_PORT allocation for its
-// postgres infra, and this is what lets setPostgresDSN point it at localhost.
+// derived HOST and URL. A target reaches its service's infra this way without
+// naming the port, as a `migrations` one-shot does for the postgres infra.
 func (b *Builder) addOwnedPorts(out map[string]string, owner string) {
 	for _, slot := range b.alloc.Snapshot() {
 		if _, present := out[slot.LocalVar]; slot.Owner != owner || present {
@@ -215,27 +214,43 @@ func (b *Builder) addOwnedPorts(out map[string]string, owner string) {
 	}
 }
 
-// setPostgresDSN points POSTGRES_DSN at localhost when out holds an allocated
-// POSTGRES_PORT. It overwrites the compose file's in-container
-// `postgres-<svc>:5432` form, wrong for go-exec. Unset credentials fall back to
-// postgres, and set ones are percent-escaped, so the DSN stays well-formed.
-func setPostgresDSN(out map[string]string) {
-	portStr := out["POSTGRES_PORT"]
-	if portStr == "" {
+// setHostPostgres points a host process at owner's postgres infra, on the
+// host port owner holds as POSTGRES_PORT. It writes the connection in both
+// forms services read: the POSTGRES_DSN URL, and the discrete POSTGRES_*
+// settings a service prefers once POSTGRES_HOST is set. Both replace the
+// compose file's in-container `postgres-<svc>:5432`, wrong for go-exec. A
+// target's own POSTGRES_PORT names the port inside the compose network, so the
+// allocation wins over it.
+//
+// Both forms log in alike. An unset user, password or database falls back to
+// postgres, and the DSN percent-escapes set ones. The local database serves no
+// TLS, so POSTGRES_TLS_ENABLED defaults to false.
+func (b *Builder) setHostPostgres(out map[string]string, owner string) {
+	port, allocated := b.alloc.Lookup(owner, "POSTGRES_PORT")
+	if !allocated {
 		return
 	}
+	hostPort := strconv.Itoa(port)
 	user := cmp.Or(out["POSTGRES_USER"], "postgres")
 	pass := cmp.Or(out["POSTGRES_PASSWORD"], "postgres")
-	db := cmp.Or(out["POSTGRES_DB"], "postgres")
+	db := cmp.Or(out["POSTGRES_DATABASE"], out["POSTGRES_DB"], "postgres")
 
 	dsn := url.URL{
 		Scheme:   "postgres",
 		User:     url.UserPassword(user, pass),
-		Host:     hostLocalhost + ":" + portStr,
+		Host:     hostLocalhost + ":" + hostPort,
 		Path:     "/" + db,
 		RawQuery: "sslmode=disable",
 	}
-	out["POSTGRES_DSN"] = dsn.String()
+	maps.Copy(out, map[string]string{
+		"POSTGRES_DSN":      dsn.String(),
+		"POSTGRES_HOST":     hostLocalhost,
+		"POSTGRES_PORT":     hostPort,
+		"POSTGRES_USER":     user,
+		"POSTGRES_PASSWORD": pass,
+		"POSTGRES_DATABASE": db,
+	})
+	setDefault(out, "POSTGRES_TLS_ENABLED", "false")
 }
 
 // addOwnPrefixForms gives owner's ports both forms, so service-json-keys-grpc

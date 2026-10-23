@@ -221,7 +221,7 @@ func (r *Runner) spawn(ctx context.Context, t *discovery.Target, inst *Instance)
 		start = r.startContainer
 	}
 	// The builder's snapshot fill picks up ports infra-up allocated, such as
-	// POSTGRES_PORT, so POSTGRES_DSN synthesizes to localhost:<port>.
+	// POSTGRES_PORT, so the Postgres settings point at localhost:<port>.
 	entries, warnings, err := r.builder.ForTarget(t)
 	if err != nil {
 		r.markTerminated(inst.ID, anovelv1.ExitReason_EXIT_REASON_ERROR, "env build: "+err.Error())
