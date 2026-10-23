@@ -14,34 +14,8 @@ func newServiceCmd() *cobra.Command {
 		Use:   cmdNameService,
 		Short: "Operate on a service's infrastructure",
 	}
-	cmd.AddCommand(newServiceStatusCmd())
 	cmd.AddCommand(newServiceInfraCmd())
 	return cmd
-}
-
-func newServiceStatusCmd() *cobra.Command {
-	var ss stackScope
-	cmd := &cobra.Command{
-		Use:        "status <service>",
-		Short:      "Show one service's infrastructure and targets",
-		Deprecated: "use 'a-novel run ps --service=<service>' instead",
-		Args:       cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return printService(cmd, ss.stack, args[0])
-		},
-	}
-	ss.bind(cmd)
-	return cmd
-}
-
-// printService prints one service as `run ps` does.
-func printService(cmd *cobra.Command, stack, service string) error {
-	resp, err := rpc.New("").DescribeService(cmd.Context(), stack, service)
-	if err != nil {
-		return err
-	}
-	renderPs(cmd.OutOrStdout(), []*anovelv1.Service{resp.GetService()}, false)
-	return nil
 }
 
 func newServiceInfraCmd() *cobra.Command {

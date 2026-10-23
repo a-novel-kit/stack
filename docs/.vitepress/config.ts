@@ -7,6 +7,9 @@ export default defineConfig({
   // Served as the a-novel-kit/stack project site on GitHub Pages.
   base: "/stack/",
   cleanUrls: true,
+  // Release notes link the migration guides on GitHub, so the site leaves
+  // them out.
+  srcExclude: ["migrations/**"],
   markdown: {
     config: (md) => {
       md.use(tabsMarkdownPlugin);

@@ -77,11 +77,6 @@ func (c *Client) ListServices(ctx context.Context, stack string) (*anovelv1.List
 	return call(ctx, c, c.core.ListServices, &anovelv1.ListServicesRequest{Stack: stack})
 }
 
-// DescribeService returns one service in detail.
-func (c *Client) DescribeService(ctx context.Context, stack, service string) (*anovelv1.DescribeServiceResponse, error) {
-	return call(ctx, c, c.core.DescribeService, &anovelv1.DescribeServiceRequest{Stack: stack, Service: service})
-}
-
 // GetTopology returns the dependency-graph text for one service (or every
 // service in the stack if `service` is empty).
 func (c *Client) GetTopology(ctx context.Context, stack, service string) (*anovelv1.GetTopologyResponse, error) {

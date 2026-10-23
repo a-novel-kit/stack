@@ -14,21 +14,6 @@ import (
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-func newStacksCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "stacks",
-		Short: "List the registered stacks",
-		Long: `Print the stacks the daemon manages, one per row: path, a '*' on the
-default, and what each holds. Stacks come from $A_NOVEL_STACKS, parsed at
-daemon start. Same as 'a-novel core stacks list'.`,
-		Deprecated: "use 'a-novel core stacks list' instead",
-		Args:       cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return listStacks(cmd.Context(), cmd.OutOrStdout())
-		},
-	}
-}
-
 // psOpts holds the flags of `run ps`.
 type psOpts struct {
 	scope   stackScope

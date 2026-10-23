@@ -41,9 +41,6 @@ const (
 	CoreServiceListStacksProcedure = "/anovel.v1.CoreService/ListStacks"
 	// CoreServiceListServicesProcedure is the procedure name of the CoreService's ListServices RPC.
 	CoreServiceListServicesProcedure = "/anovel.v1.CoreService/ListServices"
-	// CoreServiceDescribeServiceProcedure is the procedure name of the CoreService's DescribeService
-	// RPC.
-	CoreServiceDescribeServiceProcedure = "/anovel.v1.CoreService/DescribeService"
 	// CoreServiceGetTopologyProcedure is the procedure name of the CoreService's GetTopology RPC.
 	CoreServiceGetTopologyProcedure = "/anovel.v1.CoreService/GetTopology"
 	// CoreServiceStartTargetProcedure is the procedure name of the CoreService's StartTarget RPC.
@@ -125,13 +122,6 @@ var (
 			StreamType: connect.StreamTypeUnary,
 			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("ListServices"),
 			Procedure:  CoreServiceListServicesProcedure,
-		}
-	})
-	coreServiceDescribeServiceSpec = sync.OnceValue(func() connect.Spec {
-		return connect.Spec{
-			StreamType: connect.StreamTypeUnary,
-			Schema:     v1.File_anovel_v1_core_proto.Services().ByName("CoreService").Methods().ByName("DescribeService"),
-			Procedure:  CoreServiceDescribeServiceProcedure,
 		}
 	})
 	coreServiceGetTopologySpec = sync.OnceValue(func() connect.Spec {
@@ -277,8 +267,6 @@ type CoreServiceClient interface {
 	ListStacks(context.Context, *v1.ListStacksRequest) (*v1.ListStacksResponse, error)
 	// ListServices lists the services of a stack, or of every stack.
 	ListServices(context.Context, *v1.ListServicesRequest) (*v1.ListServicesResponse, error)
-	// DescribeService returns one service.
-	DescribeService(context.Context, *v1.DescribeServiceRequest) (*v1.DescribeServiceResponse, error)
 	// GetTopology renders the dependency graph of a stack or a service.
 	GetTopology(context.Context, *v1.GetTopologyRequest) (*v1.GetTopologyResponse, error)
 	// StartTarget starts a target once its infra is up and its one-shots have
@@ -407,8 +395,6 @@ type CoreServiceHandler interface {
 	ListStacks(context.Context, *v1.ListStacksRequest) (*v1.ListStacksResponse, error)
 	// ListServices lists the services of a stack, or of every stack.
 	ListServices(context.Context, *v1.ListServicesRequest) (*v1.ListServicesResponse, error)
-	// DescribeService returns one service.
-	DescribeService(context.Context, *v1.DescribeServiceRequest) (*v1.DescribeServiceResponse, error)
 	// GetTopology renders the dependency graph of a stack or a service.
 	GetTopology(context.Context, *v1.GetTopologyRequest) (*v1.GetTopologyResponse, error)
 	// StartTarget starts a target once its infra is up and its one-shots have
@@ -466,7 +452,6 @@ func RegisterCoreServiceHandler(server *connect.Server, svc CoreServiceHandler) 
 		connect.Method{Spec: coreServiceShutdownSpec(), Handler: adapter.shutdown},
 		connect.Method{Spec: coreServiceListStacksSpec(), Handler: adapter.listStacks},
 		connect.Method{Spec: coreServiceListServicesSpec(), Handler: adapter.listServices},
-		connect.Method{Spec: coreServiceDescribeServiceSpec(), Handler: adapter.describeService},
 		connect.Method{Spec: coreServiceGetTopologySpec(), Handler: adapter.getTopology},
 		connect.Method{Spec: coreServiceStartTargetSpec(), Handler: adapter.startTarget},
 		connect.Method{Spec: coreServiceKillTargetSpec(), Handler: adapter.killTarget},
@@ -558,10 +543,6 @@ func (UnimplementedCoreServiceHandler) ListStacks(context.Context, *v1.ListStack
 
 func (UnimplementedCoreServiceHandler) ListServices(context.Context, *v1.ListServicesRequest) (*v1.ListServicesResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.ListServices is not implemented")
-}
-
-func (UnimplementedCoreServiceHandler) DescribeService(context.Context, *v1.DescribeServiceRequest) (*v1.DescribeServiceResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, "anovel.v1.CoreService.DescribeService is not implemented")
 }
 
 func (UnimplementedCoreServiceHandler) GetTopology(context.Context, *v1.GetTopologyRequest) (*v1.GetTopologyResponse, error) {
@@ -683,14 +664,6 @@ func (c *coreServiceClient) ListStacks(ctx context.Context, req *v1.ListStacksRe
 func (c *coreServiceClient) ListServices(ctx context.Context, req *v1.ListServicesRequest) (*v1.ListServicesResponse, error) {
 	var res v1.ListServicesResponse
 	if err := c.client.CallUnary(ctx, coreServiceListServicesSpec(), req, &res); err != nil {
-		return nil, err
-	}
-	return &res, nil
-}
-
-func (c *coreServiceClient) DescribeService(ctx context.Context, req *v1.DescribeServiceRequest) (*v1.DescribeServiceResponse, error) {
-	var res v1.DescribeServiceResponse
-	if err := c.client.CallUnary(ctx, coreServiceDescribeServiceSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -908,18 +881,6 @@ func (h coreServiceHandler) listServices(ctx context.Context, _ connect.Spec, st
 		return err
 	}
 	res, err := h.svc.ListServices(ctx, &req)
-	if err != nil {
-		return err
-	}
-	return stream.Send(res)
-}
-
-func (h coreServiceHandler) describeService(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
-	var req v1.DescribeServiceRequest
-	if err := stream.Receive(&req); err != nil {
-		return err
-	}
-	res, err := h.svc.DescribeService(ctx, &req)
 	if err != nil {
 		return err
 	}
