@@ -31,6 +31,23 @@ in the other mode). One-shots are tracked per infra-up session and re-run on eve
 `infra start`; they are idempotent by contract, so re-applying migrations locally
 is by design.
 
+### Host processes and Postgres
+
+A process the daemon runs on the host, a go-exec target or `run exec` beside
+one, reaches its service's database through both Postgres contracts, so a service
+on either one runs locally:
+
+- `POSTGRES_DSN`, the connection URL.
+- The discrete settings: `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
+  `POSTGRES_PASSWORD`, `POSTGRES_DATABASE` and `POSTGRES_TLS_ENABLED`. A service
+  prefers them once `POSTGRES_HOST` is set.
+
+Both name `localhost`, the database's allocated host port and the same login,
+with TLS off unless the target sets `POSTGRES_TLS_ENABLED`. They replace the
+target's compose values, which name the database inside the compose network.
+`run env` shows the same block. A container-mode target keeps its compose
+values.
+
 ### Observability
 
 ```bash

@@ -260,7 +260,11 @@ suite it names. A repository ships only the test envs its suites need.
 - In `podman-compose.yaml` and the test envs, publish each host port as `${<NAME>_PORT}`, never as
   a fixed number. The daemon allocates the ports of `podman-compose.yaml` when `a-novel run` starts
   the service, and `a-novel test` allocates those of each test env; both derive the URLs and the
-  Postgres DSN from them. A compose file never holds a real secret.
+  Postgres connection from them. A compose file never holds a real secret.
+- A process the CLI runs on the host, a go-exec target or a test, gets that Postgres connection in
+  both contracts services read: `POSTGRES_DSN`, and the discrete `POSTGRES_*` settings on
+  `localhost` with TLS off. Write a target's own values for the compose network; the CLI replaces
+  them for a host process, and a container keeps them.
 - Use `depends_on` with `condition: service_healthy` so the dependent service waits for the
   dependency's `HEALTHCHECK` to pass, not just for the container to start. Without it, a standalone
   image that runs migrations at startup may connect to postgres before it accepts connections and
@@ -392,12 +396,14 @@ Always exclude:
   container to start, so a standalone image running migrations at startup fails with a connection
   error while postgres is still initializing. Always use `condition: service_healthy`, and declare
   the dependency's healthcheck in compose: podman drops a Dockerfile `HEALTHCHECK` from OCI images.
-- **Hardcoded credentials in a test env's `POSTGRES_DSN`.** A test env's DSN to its own database
-  reads the same three variables as that database:
-  `postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host:5432/${POSTGRES_DB}`.
-- **`${POSTGRES_PORT}` in a `POSTGRES_DSN`.** Every DSN uses port `5432`, the container port, never
-  the host-mapped `${POSTGRES_PORT}`: services communicate over the compose network, not through
-  the host.
+- **Hardcoded credentials in a test env's connection.** A test env's connection to its own database
+  reads the same three variables as that database, in either contract:
+  `postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host:5432/${POSTGRES_DB}`, or
+  `POSTGRES_DATABASE: "${POSTGRES_DB}"` beside the user and password.
+- **`${POSTGRES_PORT}` in a target's connection.** A target's `POSTGRES_DSN` or `POSTGRES_PORT` uses
+  port `5432`, the container port, never the host-mapped `${POSTGRES_PORT}`: services communicate
+  over the compose network, not through the host. The daemon owns `POSTGRES_PORT` for the host port
+  it publishes the database on, and hands that port to a host process itself.
 - **`RUN chmod +x` after COPY.** Use `COPY --chmod=755 <src> <dst>` instead — a single instruction,
   one fewer layer.
 - **A `USER` by name.** hadolint rejects it (DL3066), since a runtime cannot verify that a name is
