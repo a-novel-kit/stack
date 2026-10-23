@@ -281,19 +281,6 @@ message ListServicesResponse {
   repeated Service services = 1;
 }
 
-// DescribeServiceRequest names one service.
-message DescribeServiceRequest {
-  // Name of the service.
-  string service = 1;
-  // Name of the stack, empty for the default one.
-  string stack = 2;
-}
-// DescribeServiceResponse is one service with its live state.
-message DescribeServiceResponse {
-  // The service.
-  Service service = 1;
-}
-
 // GetTopologyRequest asks for the dependency graph of a stack or a service.
 message GetTopologyRequest {
   // Name of the stack, empty for the default one.
@@ -656,8 +643,6 @@ service CoreService {
   rpc ListStacks(ListStacksRequest) returns (ListStacksResponse);
   // ListServices lists the services of a stack, or of every stack.
   rpc ListServices(ListServicesRequest) returns (ListServicesResponse);
-  // DescribeService returns one service.
-  rpc DescribeService(DescribeServiceRequest) returns (DescribeServiceResponse);
   // GetTopology renders the dependency graph of a stack or a service.
   rpc GetTopology(GetTopologyRequest) returns (GetTopologyResponse);
 

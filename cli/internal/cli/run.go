@@ -63,7 +63,6 @@ core start'). Daemon control itself lives under 'a-novel core'.`,
 	cmd.AddCommand(
 		newUICmd(),
 		newPsCmd(),
-		newStacksCmd(),
 		newTopologyCmd(),
 		newServiceCmd(),
 		newStartCmd(),

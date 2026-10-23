@@ -131,7 +131,6 @@ registration the daemon does not manage follows, with the reason.`,
 
 // listStacks prints every registered stack with what it holds and its
 // discovery problems, then the registrations the daemon does not manage.
-// `core stacks list` and `run stacks` both render it.
 func listStacks(ctx context.Context, out io.Writer) error {
 	c := rpc.New("")
 	resp, err := c.ListStacks(ctx)
