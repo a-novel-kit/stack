@@ -141,18 +141,11 @@ var injectSecrets = secrets.InjectForRepo
 // port is unallocated appears with an empty value.
 func (b *Builder) ForService(svc *discovery.Service, consumer string) ([]Entry, error) {
 	services := b.alloc.Services()
-	// GetEnv shows one block per service, so every target's block is merged
-	// into it. A later target's key overwrites an earlier one.
-	merged := make(map[string]string)
-	for _, t := range svc.Targets {
-		vars, err := b.buildEnv(t, services, false /* lookup-only */, "")
-		if err != nil {
-			return nil, err
-		}
-		maps.Copy(merged, vars)
-	}
 	// Each infra env block contributes its constants and derived vars, which is
-	// where `run env` picks up the Postgres credentials.
+	// where `run env` picks up the Postgres credentials. The infra comes first:
+	// it acquires the ports its mappings name, so the targets after it resolve
+	// them, and compose publishes the infra on the ports the daemon recorded.
+	merged := make(map[string]string)
 	for _, in := range svc.Infra {
 		vars, err := b.buildInfraEnv(in, services, consumer != "", consumer)
 		if err != nil {
@@ -161,6 +154,16 @@ func (b *Builder) ForService(svc *discovery.Service, consumer string) ([]Entry, 
 		for k, v := range vars {
 			setDefault(merged, k, v)
 		}
+	}
+	// GetEnv shows one block per service, so every target's block is merged
+	// into it. A target's key overwrites an infra's, and a later target's an
+	// earlier one's.
+	for _, t := range svc.Targets {
+		vars, err := b.buildEnv(t, services, false /* lookup-only */, "")
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(merged, vars)
 	}
 	return entriesOf(merged), nil
 }
