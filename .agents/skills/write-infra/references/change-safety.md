@@ -210,6 +210,29 @@ pins in the same change.
   group, Google's ranges minus its Cloud customers', which `refresh-google-ranges.yaml` keeps
   current. A refused connection times out without a log, and a health probe can pass by luck, so
   prove an allowlist change with a real call from the workload, such as an email.
+- **Google API calls stay inside the `agora_production` perimeter,** a VPC Service Controls
+  perimeter around the private and public-api projects, in foundation's `service-perimeter.tf`. Its
+  spec runs in dry run until a-novel/infra#1042 enforces it.
+  - Its restricted services are every API either project enables, plus Secret Manager, and their VPC
+    reaches only those. A pull request that enables an API adds it to the list, or foundation's
+    test fails.
+  - CI's three identities and the operators enter from any source. Any identity inside may call
+    Secret Manager and Cloud Storage in management, and only there. A new call that crosses the
+    perimeter needs a rule in the same pull request.
+  - IAP's tunnel and Cloud Run's `run.app` invocations reach the perimeter without the caller's
+    identity, so no identity rule admits them. The tunnel stays unrestricted, and a service with
+    ingress `all` skips the invocation check.
+  - Each project's `cloudaudit.googleapis.com/policy` log holds the violations, and in dry run the
+    calls the spec would refuse. Prove a perimeter change with a real call: from a database host, a
+    read of a public bucket outside logs one.
+  - Management stays outside, since its Workflows call Discord and GitHub, which Workflows inside a
+    perimeter cannot reach.
+- **Organization guardrails are set by hand,** from the setup runbook: the private project's Cloud
+  Run policies, `run.allowedVPCEgress` on both workload projects, the plan identity's deny policy,
+  and the access policy with its two grants. Organization Administrator holds none of their roles,
+  so an admin first grants themselves Access Context Manager Admin, Organization Policy
+  Administrator or Deny Admin. `gcloud` bills a user's calls to their configured project, which
+  needs each API it calls enabled.
 - **The writer's federation condition** pins `deploy.yaml`, `roll-database.yaml` and
   `recovery.yaml` on `master` behind the `production` environment. Changing it is a bootstrap change, applied by the last trusted
   workflow before a new one depends on it.

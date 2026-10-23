@@ -32,13 +32,13 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 
 ## The repository
 
-| Path                                 | Owns                                                                         |
-| ------------------------------------ | ---------------------------------------------------------------------------- |
-| `bootstrap/`                         | Management project: state bucket, CI identities and trust, secret containers |
-| `environments/production/foundation` | Projects, VPC, firewall, database hosts, shared IAM, budget, alerts          |
-| `environments/production/<service>`  | One service: Cloud Run services and jobs, backup repository, alerts          |
-| `environments/recovery`              | One manual disaster-recovery drill host per disposable project               |
-| `modules/`                           | Only code with two callers or one shared invariant                           |
+| Path                                 | Owns                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------ |
+| `bootstrap/`                         | Management project: state bucket, CI identities and trust, secret containers   |
+| `environments/production/foundation` | Projects, VPC, firewall, perimeter, database hosts, shared IAM, budget, alerts |
+| `environments/production/<service>`  | One service: Cloud Run services and jobs, backup repository, alerts            |
+| `environments/recovery`              | One manual disaster-recovery drill host per disposable project                 |
+| `modules/`                           | Only code with two callers or one shared invariant                             |
 
 - **Projects are one per trust zone, and the zone's services share it.** An organization holds a
   limited number of Google Cloud projects, and raising that quota is a slow request to Google.
