@@ -15,7 +15,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: a-novel-kit/workflows/go-actions/generate-go@v1.77.0
+      - uses: a-novel-kit/workflows/go-actions/generate-go@v1.77.1
         with:
           working_directory: cli
           failure_message: cli/ go generate definitions are not up-to-date, please run 'go generate ./...' inside cli/ and commit the changes
@@ -43,7 +43,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: a-novel-kit/workflows/go-actions/lint-go@v1.77.0
+      - uses: a-novel-kit/workflows/go-actions/lint-go@v1.77.1
         with:
           working-directory: cli
 
@@ -53,7 +53,7 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: a-novel-kit/workflows/node-actions/lint-node@v1.77.0
+      - uses: a-novel-kit/workflows/node-actions/lint-node@v1.77.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -66,7 +66,7 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: a-novel-kit/workflows/node-actions/build-node@v1.77.0
+      - uses: a-novel-kit/workflows/node-actions/build-node@v1.77.1
         with:
           build_action: docs:build
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -100,7 +100,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: a-novel-kit/workflows/security-actions/scan-secrets@v1.77.0
+      - uses: a-novel-kit/workflows/security-actions/scan-secrets@v1.77.1
         with:
           config: .gitleaks.toml
           # renovate: datasource=github-releases depName=gitleaks/gitleaks
@@ -115,7 +115,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: a-novel-kit/workflows/security-actions/lint-workflows@v1.77.0
+      - uses: a-novel-kit/workflows/security-actions/lint-workflows@v1.77.1
         with:
           # renovate: datasource=docker depName=ghcr.io/zizmorcore/zizmor
           version: "1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9"
@@ -127,7 +127,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: a-novel-kit/workflows/go-actions/test-go@v1.77.0
+      - uses: a-novel-kit/workflows/go-actions/test-go@v1.77.1
         with:
           working_directory: cli
           modfile: gotestsum.mod
