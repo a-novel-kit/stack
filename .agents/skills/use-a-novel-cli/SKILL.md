@@ -144,12 +144,14 @@ Some tasks fall outside the CLI and use pnpm scripts or raw commands:
   `go tool -modfile=buf.mod buf format -w`, `go generate ./...`), so the raw forms
   stay valid too. Every Go tool is pinned in its own `<tool>.mod`, so each raw
   invocation names the modfile it comes from.
-- **Direct database access**: `a-novel run exec <service>/<target> -- psql ...`.
+- **Direct database access**: `a-novel run exec <service>/<target> -- <cmd>`.
   For a running container-mode target, the command runs inside its container
   (`podman exec`); for a go-exec or stopped target it runs on the host with the
-  target's resolved env (`POSTGRES_DSN`, `*_PORT`, …) — e.g.
-  `a-novel run exec <service>/migrations -- psql` to get `psql` with the right
-  DSN. Raw `podman exec <container-name> psql ...` still works against a running
+  target's resolved env, the `*_PORT` values and both Postgres contracts
+  included (see [service operations](references/services.md#host-processes-and-postgres)).
+  `psql` reads neither contract, so pass it the DSN:
+  `a-novel run exec <service>/migrations -- sh -c 'psql "$POSTGRES_DSN"'`.
+  Raw `podman exec <container-name> psql ...` still works against a running
   container.
 - **CI workflows**: CI never shells into the CLI — the `kit/workflows`
   composite actions invoke `gotestsum` / `golangci-lint` / `pnpm run <script>`

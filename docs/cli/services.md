@@ -63,10 +63,10 @@ eval "$(a-novel run env "$SERVICE")"
 curl "$REST_URL/ping"
 ```
 
-`run exec` runs a command with a target's environment, inside its container when it has one:
+`run exec` runs a command with a target's environment, inside its container when it has one. A command on your machine reaches the database through `POSTGRES_DSN` or the discrete `POSTGRES_*` settings:
 
 ```bash
-a-novel run exec "$SERVICE/migrations" -- psql
+a-novel run exec "$SERVICE/migrations" -- sh -c 'psql "$POSTGRES_DSN"'
 ```
 
 For a target running from source, get the debugger's attach command:

@@ -81,7 +81,7 @@ func PrepareEnv(t detect.Target, out io.Writer) ([]string, error) {
 // composeEnv lists the vars a compose env adds to base: allocated host ports,
 // standard local test values for the vars the compose file references that
 // nothing else set, such as an internal-only Postgres' credentials, and the
-// URLs derived from both.
+// URLs and connection settings derived from both.
 func composeEnv(e *detect.ComposeEnv, base []string) ([]string, error) {
 	ports, err := allocPorts(e.Ports)
 	if err != nil {
@@ -287,8 +287,9 @@ func testDefaults(refs, env []string) []string {
 }
 
 // derivedURLs builds the host connection vars from the allocated ports by the
-// fixed `<X>_PORT` rule: POSTGRES_PORT→POSTGRES_DSN, GRPC_PORT→GRPC_URL
-// (host:port), and any other X_PORT→X_URL (http://localhost:port).
+// fixed `<X>_PORT` rule: POSTGRES_PORT→the Postgres connection settings,
+// GRPC_PORT→GRPC_URL (host:port), and any other X_PORT→X_URL
+// (http://localhost:port).
 func derivedURLs(names []string, env []string) []string {
 	var out []string
 	for _, n := range names {
@@ -299,7 +300,7 @@ func derivedURLs(names []string, env []string) []string {
 		p := envVal(env, n)
 		switch base {
 		case "POSTGRES":
-			out = append(out, "POSTGRES_DSN="+postgresDSN(env, p))
+			out = append(out, postgresEnv(env, p)...)
 		case "GRPC":
 			out = append(out, "GRPC_URL=localhost:"+p)
 		default:
@@ -309,10 +310,16 @@ func derivedURLs(names []string, env []string) []string {
 	return out
 }
 
-// postgresDSN is the host DSN of the env's Postgres on port. Its credentials
-// are env's POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_DB, the values the
-// compose file hands the container, and default to pgStd when unset.
-func postgresDSN(env []string, port string) string {
+// postgresEnv lists the settings that point a test process at the env's
+// Postgres on port, in both forms services read: the POSTGRES_DSN URL, and the
+// discrete POSTGRES_* settings a service prefers once POSTGRES_HOST is set,
+// beside the allocated POSTGRES_PORT. It leaves out a setting env already
+// holds, so the env block lists each once.
+//
+// Both forms log in with env's POSTGRES_USER, POSTGRES_PASSWORD and
+// POSTGRES_DB, the values the compose file hands the container, or pgStd for an
+// unset one. The test database serves no TLS.
+func postgresEnv(env []string, port string) []string {
 	user := cmp.Or(envVal(env, "POSTGRES_USER"), pgStd)
 	password := cmp.Or(envVal(env, "POSTGRES_PASSWORD"), pgStd)
 	db := cmp.Or(envVal(env, "POSTGRES_DB"), pgStd)
@@ -324,7 +331,18 @@ func postgresDSN(env []string, port string) string {
 		Path:     "/" + db,
 		RawQuery: "sslmode=disable",
 	}
-	return dsn.String()
+	settings := []string{
+		"POSTGRES_DSN=" + dsn.String(),
+		"POSTGRES_HOST=localhost",
+		"POSTGRES_USER=" + user,
+		"POSTGRES_PASSWORD=" + password,
+		"POSTGRES_DATABASE=" + db,
+		"POSTGRES_TLS_ENABLED=false",
+	}
+	return slices.DeleteFunc(settings, func(kv string) bool {
+		key, value, _ := strings.Cut(kv, "=")
+		return envVal(env, key) == value
+	})
 }
 
 // compose runs `podman compose [global...] -p <project> -f <file> <args...>`

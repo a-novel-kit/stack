@@ -11,6 +11,11 @@ picker, runs the selection in parallel, and prints a pass/fail report with cover
 the full output of every failure. Test envs come up and down per-target, so independent
 envs run in parallel safely.
 
+A test process reaches its env's published database through both Postgres contracts,
+as a go-exec target does (see [service operations](services.md#host-processes-and-postgres)):
+`POSTGRES_DSN` and the discrete `POSTGRES_*` settings, on `localhost` and the allocated
+port with TLS off. Both log in with the credentials the env hands the database.
+
 Common patterns:
 
 ```bash
