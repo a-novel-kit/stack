@@ -290,19 +290,28 @@ func TestBuilder_OverlappingServiceNamesResolveLongestFirst(t *testing.T) {
 
 // TestForService_ConsumerAllocatesInfraPorts covers the infra-up path: with a
 // consumer, the ports the infra references are acquired for it, and Release
-// frees them again.
+// frees them again. Compose publishes the infra on what the block holds, so
+// every allocated port appears with its number, whether a target names it or
+// not.
 func TestForService_ConsumerAllocatesInfraPorts(t *testing.T) {
 	b, alloc := newBuilderWith([]string{"svc"})
 	svc := &discovery.Service{
 		Name:  "svc",
 		Stack: "default",
-		Infra: []*discovery.Infra{{
-			Name:        "postgres-svc",
-			Service:     "svc",
-			Stack:       "default",
-			Ports:       []string{"${POSTGRES_PORT}:5432"},
-			Environment: map[string]string{"POSTGRES_USER": "postgres"},
-		}},
+		Targets: []*discovery.Target{
+			{Name: "migrations", Service: "svc", Stack: "default", Environment: map[string]string{"POSTGRES_HOST": "postgres-svc"}},
+			{Name: "rest", Service: "svc", Stack: "default", Environment: map[string]string{"MAIL_ADDR": "${MAIL_HOST}:${MAIL_PORT}"}},
+		},
+		Infra: []*discovery.Infra{
+			{
+				Name:        "postgres-svc",
+				Service:     "svc",
+				Stack:       "default",
+				Ports:       []string{"${POSTGRES_PORT}:5432"},
+				Environment: map[string]string{"POSTGRES_USER": "postgres"},
+			},
+			{Name: "mail-svc", Service: "svc", Stack: "default", Ports: []string{"${MAIL_PORT}:1025"}},
+		},
 	}
 
 	entries, err := b.ForService(svc, "default/svc-infra")
@@ -313,9 +322,16 @@ func TestForService_ConsumerAllocatesInfraPorts(t *testing.T) {
 	if !ok {
 		t.Fatal("infra-up ForService did not allocate POSTGRES_PORT")
 	}
+	mailPort, ok := alloc.Lookup("svc", "MAIL_PORT")
+	if !ok {
+		t.Fatal("infra-up ForService did not allocate MAIL_PORT")
+	}
 	m := toMap(entries)
-	if m["POSTGRES_USER"] != "postgres" || m["POSTGRES_HOST"] != "localhost" {
-		t.Errorf("infra env: got %v, want the constant and the derived host", m)
+	if m["POSTGRES_USER"] != "postgres" || m["POSTGRES_PORT"] != strconv.Itoa(port) {
+		t.Errorf("infra env: got %v, want the constant and POSTGRES_PORT=%d", m, port)
+	}
+	if want := "localhost:" + strconv.Itoa(mailPort); m["MAIL_PORT"] != strconv.Itoa(mailPort) || m["MAIL_ADDR"] != want {
+		t.Errorf("MAIL_PORT/MAIL_ADDR = %q/%q, want %d and %q", m["MAIL_PORT"], m["MAIL_ADDR"], mailPort, want)
 	}
 	alloc.Release("default/svc-infra")
 	if _, ok := alloc.Lookup("svc", "POSTGRES_PORT"); ok {
