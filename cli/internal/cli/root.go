@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -81,7 +83,39 @@ See https://a-novel-kit.github.io/stack/ for the everyday workflows.`,
 		newInstallCmd(),
 		newRunCmd(),
 	)
+	rejectUnknownSubcommands(root)
 	return root
+}
+
+// rejectUnknownSubcommands makes every command group below cmd fail on an
+// argument that names none of its subcommands. Cobra rejects an unknown command
+// only at the root, and checks arguments only for a command it can run. Each
+// group therefore gets an argument check and a run function that prints its
+// help.
+func rejectUnknownSubcommands(cmd *cobra.Command) {
+	for _, child := range cmd.Commands() {
+		if child.HasSubCommands() && !child.Runnable() {
+			child.Args = unknownSubcommand
+			child.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
+			// Cobra suggests commands within this edit distance at the root.
+			child.SuggestionsMinimumDistance = 2
+		}
+		rejectUnknownSubcommands(child)
+	}
+}
+
+// unknownSubcommand rejects any argument given to a command group, with the
+// error and suggestions cobra prints for an unknown command at the root.
+func unknownSubcommand(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+
+	msg := fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath())
+	if suggestions := cmd.SuggestionsFor(args[0]); len(suggestions) > 0 {
+		msg += "\n\nDid you mean this?\n\t" + strings.Join(suggestions, "\n\t")
+	}
+	return errors.New(msg)
 }
 
 // rejectLateSandbox refuses a --sandbox that reached a subcommand. main acts on
