@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use Discord"
+  short_description: "Read and answer A-Novel Discord messages, channels and threads"
+  default_prompt: "Use $use-discord to read or answer this Discord message or channel."

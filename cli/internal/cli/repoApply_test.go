@@ -715,15 +715,17 @@ func TestApplyEnvSecrets(t *testing.T) {
 }
 
 // TestApplyTeams pins the tier-team reconcile: a missing team is created under
-// its tier, each area team is granted its role, and only grants inside the tier
-// namespace are removed, since core reaches every repo through its org role and
-// other teams belong to whoever made them.
+// its tier, each area team is granted its role, a grant without a parent goes
+// to the tier team itself, and only grants inside the tier namespace are
+// removed, since core reaches every repo through its org role and other teams
+// belong to whoever made them.
 func TestApplyTeams(t *testing.T) {
 	// Not parallel: swaps the package-level ghStdin seam.
 	op := repocfg.Op{Path: "repos/o/r/teams", Teams: []repocfg.TeamGrant{
 		{Team: "developers-service", Parent: "developers", Permission: "push"},
 		{Team: "maintainers-service", Parent: "maintainers", Permission: "maintain"},
 		{Team: "owners-service", Parent: "owners", Permission: "admin"},
+		{Team: "developers", Permission: "push"},
 	}}
 
 	t.Run("Success", func(t *testing.T) {
@@ -738,13 +740,13 @@ func TestApplyTeams(t *testing.T) {
 			case strings.Contains(call, "api user"):
 				return "operator\n", nil
 			case strings.Contains(call, "repos/o/r/teams"):
-				return "core\ndevelopers-service\ndevelopers-platform\nmaintainers\nreleasers\n", nil
+				return "core\ndevelopers\ndevelopers-service\ndevelopers-platform\nmaintainers\nreleasers\n", nil
 			}
 			return "", nil
 		})
 
 		detail, err := applyTeams("o", "r", op)
-		if want := "3 granted, 5 created, 2 removed"; err != nil || detail != want {
+		if want := "4 granted, 5 created, 2 removed"; err != nil || detail != want {
 			t.Fatalf("applyTeams = (%q, %v), want %q", detail, err, want)
 		}
 		joined := strings.Join(*calls, "\n")
@@ -754,6 +756,7 @@ func TestApplyTeams(t *testing.T) {
 			`-X POST orgs/o/teams --input - --jq .id {"name":"maintainers-service","parent_team_id":12,"privacy":"closed"}`,
 			`-X PUT orgs/o/teams/developers-service/repos/o/r --input - {"permission":"push"}`,
 			`-X PUT orgs/o/teams/owners-service/repos/o/r --input - {"permission":"admin"}`,
+			`-X PUT orgs/o/teams/developers/repos/o/r --input - {"permission":"push"}`,
 			"-X DELETE orgs/o/teams/developers-platform/repos/o/r",
 			"-X DELETE orgs/o/teams/maintainers/repos/o/r",
 			// GitHub made the operator a maintainer of each team it created.
@@ -768,7 +771,7 @@ func TestApplyTeams(t *testing.T) {
 		}
 		untouched := []string{
 			"teams/core/", "teams/releasers/", "DELETE orgs/o/teams/developers-service/repos", `"name":"developers",`,
-			"teams/developers/memberships",
+			"teams/developers/memberships", "DELETE orgs/o/teams/developers/repos",
 		}
 
 		for _, kept := range untouched {

@@ -21,7 +21,8 @@ a-novel secrets exec --env NAME=<id> -- <cmd>     # run <cmd> with the secret in
 `secrets:` list of `{env, id, optional description}` — and the declared secrets are injected
 automatically into the child env of `a-novel test`, `a-novel run` and `a-novel run ui`. A
 declared-but-unset secret is **skipped with a descriptive warning**, never failed silently. The
-manifest carries no values, so it is safe to commit.
+manifest carries no values, so it is safe to commit. When a run needs a secret it warned about, name
+it to the developer: core hands out the values, and no stand-in value replaces one.
 
 ## `a-novel install` — rebuild and reinstall the CLI
 

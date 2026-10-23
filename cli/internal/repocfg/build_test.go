@@ -14,8 +14,14 @@ import (
 // ruleset may name and checks as the discovered required checks.
 func planFor(t *testing.T, class *ClassPreset, checks ...CheckRef) *Plan {
 	t.Helper()
+	return planForRepo(t, "example", class, checks...)
+}
+
+// planForRepo builds the plan planFor does, for a-novel-kit/<repo>.
+func planForRepo(t *testing.T, repo string, class *ClassPreset, checks ...CheckRef) *Plan {
+	t.Helper()
 	plan, err := BuildPlan(&RepoTarget{
-		Org: "a-novel-kit", Repo: "example", DefaultBranch: "master", Class: class,
+		Org: "a-novel-kit", Repo: repo, DefaultBranch: "master", Class: class,
 		OrgProfile: &OrgProfile{Org: "a-novel-kit", Bots: map[string]int64{
 			"agent": 3549379, "publish": 1734949, "dependencies": 1734926,
 		}},
@@ -490,29 +496,61 @@ func TestBuildPlanProtectsReleaseEnvironment(t *testing.T) {
 
 // TestBuildPlanGrantsTierTeams pins how access follows a repo's class: each
 // tier's area team for that class holds the tier's role, and the op names the
-// complete set, so apply can remove any other tier team's grant.
+// complete set, so apply can remove any other tier team's grant. On the org's
+// bot-comment dispatcher, every tier team also holds Write, so every member can
+// post bot comments.
 func TestBuildPlanGrantsTierTeams(t *testing.T) {
 	t.Parallel()
-	plan := planFor(t, &ClassPreset{Class: ClassService})
-	var op *Op
-	for i := range plan.Ops {
-		if len(plan.Ops[i].Teams) > 0 {
-			op = &plan.Ops[i]
-		}
-	}
-	if op == nil {
-		t.Fatal("plan has no team op")
-	}
-	want := []TeamGrant{
+	areaGrants := []TeamGrant{
 		{Team: "developers-service", Parent: "developers", Permission: "push"},
 		{Team: "maintainers-service", Parent: "maintainers", Permission: "maintain"},
 		{Team: "owners-service", Parent: "owners", Permission: "admin"},
 	}
-	if !slices.Equal(op.Teams, want) {
-		t.Errorf("team grants = %v, want %v", op.Teams, want)
+	areaTitle := "developers-service=push, maintainers-service=maintain, owners-service=admin"
+	testCases := []struct {
+		name      string
+		repo      string
+		want      []TeamGrant
+		wantTitle string
+	}{
+		{
+			name:      "Success",
+			repo:      "example",
+			want:      areaGrants,
+			wantTitle: "RECONCILE tier teams (repos/a-novel-kit/example/teams) — grant only: " + areaTitle,
+		},
+		{
+			name: "Success/BotDispatcher",
+			repo: "stack",
+			want: append(slices.Clone(areaGrants),
+				TeamGrant{Team: "developers", Permission: "push"},
+				TeamGrant{Team: "maintainers", Permission: "push"},
+				TeamGrant{Team: "owners", Permission: "push"},
+			),
+			wantTitle: "RECONCILE tier teams (repos/a-novel-kit/stack/teams) — grant only: " + areaTitle +
+				", developers=push, maintainers=push, owners=push",
+		},
 	}
-	if want := "RECONCILE tier teams (repos/a-novel-kit/example/teams) — grant only: " +
-		"developers-service=push, maintainers-service=maintain, owners-service=admin"; op.Title() != want {
-		t.Errorf("title = %q, want %q", op.Title(), want)
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			plan := planForRepo(t, testCase.repo, &ClassPreset{Class: ClassService})
+			var op *Op
+			for i := range plan.Ops {
+				if len(plan.Ops[i].Teams) > 0 {
+					op = &plan.Ops[i]
+				}
+			}
+			if op == nil {
+				t.Fatal("plan has no team op")
+			}
+			if !slices.Equal(op.Teams, testCase.want) {
+				t.Errorf("team grants = %v, want %v", op.Teams, testCase.want)
+			}
+			if op.Title() != testCase.wantTitle {
+				t.Errorf("title = %q, want %q", op.Title(), testCase.wantTitle)
+			}
+		})
 	}
 }

@@ -368,8 +368,12 @@ review ("Issue is locked"), which would block the approval bot. An outsider's co
 conversation is moderated by hand, and a bot that must comment on a closed one reopens it first.
 
 Write access is split by tier. Developers hold Write, maintainers Maintain and owners Admin, each
-through a `<tier>-<class>` area team that `repo update` grants from `teams.yaml`. Anyone with Write
-can approve, label and dispatch, so the tiers rest on gates rather than roles. `review-gate`, required
+through a `<tier>-<class>` area team that `repo update` grants from `teams.yaml`. Each tier team
+also holds Write on its org's bot-comment dispatcher, so every member can post bot comments. That
+Write also opens the dispatcher repo's branches, issues and other workflows to every member, which
+is settled: the gates below hold there too. Anyone with Write can approve, label and dispatch, so
+the tiers rest on gates rather than roles.
+`review-gate`, required
 everywhere, needs an approval of the head from a maintainer, an admin or the [Agent] App, and counts
 a privileged label only when one of them applied it last; the list of privileged labels lives in the
 `review-gate.yaml` template, mirrored by the Dependabot job's step. A dispatch-only workflow that

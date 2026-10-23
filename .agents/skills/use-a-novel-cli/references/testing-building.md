@@ -68,7 +68,8 @@ Dockerfiles, builds them with the same convention CI uses, and prints a pass/fai
 ## `a-novel publish` — release doc helpers
 
 Releases are cut **in CI**: trigger the repo's release workflow and pick a release
-type (patch / minor / major), and the `release-core` action (in `a-novel-kit/workflows`)
+type (patch / minor / major). The cut waits for `core` or the repo's `owners-<class>` to
+approve it, then the `release-core` action (in `a-novel-kit/workflows`)
 bumps the version, refreshes doc refs, commits, tags `vX.Y.Z`, pushes, and creates the
 GitHub Release. The [Agent] bot performs the push. `manage-versions` covers it in depth.
 

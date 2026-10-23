@@ -28,21 +28,29 @@ IDs (project, field, single-select option) are discovered with `gh project field
 
 Issue work is core to this workflow, so the `gh` session **should always be able to manage the full
 issue lifecycle** — create, read, update, delete, plus sub-issues, dependencies, labels, and
-milestones. That rides on the **`repo`** scope (deleting an issue additionally needs an owner/admin
-role on the repo, which org owners have). Reading and writing **board fields** (Priority / Size /
-Status / Stage) needs the **`project`** scope. Managing the org-level **issue types** themselves
-(adding / editing / removing a type such as `Epic`) needs **`admin:org`** — a one-time admin act.
+milestones. That rides on the **`repo`** scope. Reading and writing **board fields** (Priority / Size
+/ Status / Stage) needs the **`project`** scope. A scope only unlocks what a role allows:
+
+- Setting labels, assignees or a milestone needs Write on the repo; GitHub silently drops them
+  otherwise.
+- Deleting an issue needs Admin on the repo.
+- Board fields need write on that project.
+- Managing the org-level **issue types** (adding, editing or removing a type such as `Epic`) needs
+  an org owner with **`admin:org`**, a one-time core act.
+
+Check the role before the first write with [check-access](../../check-access/SKILL.md).
 
 **If any `gh` / `gh api` command fails with an authorization or `INSUFFICIENT_SCOPES` error, do not
-work around it** (don't fall back to a label, a comment, or a local file). Stop and **ask the human
-to grant the missing scope**, naming it explicitly:
+work around it** (don't fall back to a label, a comment, or a local file). When the role allows the
+operation and only the scope is missing, stop and **ask the human to grant the missing scope**,
+naming it explicitly:
 
 ```bash
-gh auth refresh -h github.com -s <missing-scope>   # e.g. -s project, -s admin:org
+gh auth refresh -h github.com -s <missing-scope>   # e.g. -s project
 ```
 
-Then retry the command. Higher privilege is granted on request for exactly this reason; never
-silently degrade the plan to fit a missing scope.
+Then retry the command. When the role is missing, no scope helps: tell the developer which role the
+step needs and who holds it, and stop. Never silently degrade the plan to fit missing access.
 
 ---
 

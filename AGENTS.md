@@ -19,6 +19,13 @@ commands and the checks it suggests: the developer is usually acting on a clock,
 planned downtime, and each extra step delays them. Verify and monitor after the hand-off, and
 report only what they ask for.
 
+You act with the developer's access, and most developers hold less than these skills describe.
+Before an operation they may lack, such as an approval, a release, a privileged label, a repository
+or org setting, a secret, Google Cloud or Discord, check their access with
+[check-access](.agents/skills/check-access/SKILL.md). When they lack it, say what is missing and who
+holds it, then stop: never look for a workaround. A command they ask for but cannot run gets that
+answer instead of the command.
+
 Commands handed to the developer to run must paste cleanly into zsh with oh-my-zsh, which bash
 accepts too. Put a space before a `;`, `&` or `|` that follows a URL: `url-quote-magic` escapes it
 on paste, so `…/pull/12; done` arrives as `…/pull/12\; done` and fails to parse. Quote arguments

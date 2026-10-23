@@ -48,7 +48,7 @@ The selected reference is required before executing its commands.
 
 - Tests, builds, or release doc stamping: [testing and building](references/testing-building.md).
 - Repository templates, rulesets, or required checks: [repository configuration](references/repositories.md).
-  Agents use the dry-run path; repository writes remain human-only.
+  Agents use the dry-run path; repository writes are core's.
 - Starting, stopping, inspecting, or clearing a service: [service operations](references/services.md).
 - Daemon, stacks, workspace sync, or bot comments: [workspace operations](references/workspace.md).
 - Installation, launch, version checks, or secrets: [installation and secrets](references/installation-secrets.md).

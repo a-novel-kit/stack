@@ -48,7 +48,10 @@ scanners do not mistake public commit IDs for credentials.
    ```
 
 4. Commit the change, push it, and open a PR. Include it in the current feature PR when one already
-   exists; otherwise use a dedicated `docs/skills/register-<agent>` PR.
+   exists; otherwise use a dedicated `docs/skills/register-<agent>` PR. The registry lives in
+   `a-novel-kit/stack`, which takes PRs only from its writers
+   ([check-access](../check-access/SKILL.md)). Without Write there, report the verified entry to the
+   developer and commit without the trailer.
 5. Use the new verified identity only after its registry entry exists on the branch. Never rewrite
    already-published commits merely to add attribution.
 
