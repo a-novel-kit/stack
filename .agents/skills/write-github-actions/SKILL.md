@@ -444,10 +444,12 @@ reads the App cannot: `statuses`, `contents`, `attestations` and `packages`, all
 and its auto-merge name the commit the job checked, so a later push needs its own.
 
 On `a-novel/infra` the auto-approver runs strict, because a merge there deploys production. A bot's
-PR merges on its own only as a release pin, or as a version update Renovate itself put on
-auto-merge whose every changed line moves only a dependency reference's version, or a digest with its
-version. Anything else, Renovate's `automerge: false` updates included, waits for a maintainer's or
-an admin's review.
+PR merges on its own only as a release pin, as a version update Renovate itself put on auto-merge
+whose every changed line moves only a dependency reference's version, or a digest with its version,
+or as a refresh of `google-service-ranges.json` alone. The refresh passes only when the file at the
+approved commit equals the list `generic-actions/google-service-ranges` computes from Google's files
+at that moment, so a bot can refresh the SMTP egress ranges but never widen them. Anything else,
+Renovate's `automerge: false` updates included, waits for a maintainer's or an admin's review.
 
 A person's PR posts to the Discord reviews feed alone, through `notify-pr-run`: a review request
 pings its reviewers, a review or a drop from the merge queue pings its owner, and its merge posts

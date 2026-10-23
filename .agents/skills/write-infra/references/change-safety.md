@@ -197,9 +197,18 @@ pins in the same change.
   `governance` environment, filled from Bitwarden by `a-novel repo update`. That environment admits
   the default branch, plus guarded release lines and tags. Every repository's default-branch
   workflows can read the keys, so no bot may push `master` directly. The `infra` class sets
-  `rulesets.admins_only`. A bot's pull request merges alone only as a release pin or a version
-  update Renovate armed, and a pin deploys only an image of an immutable Release the release App
-  published, built by that tag's own run.
+  `rulesets.admins_only`. A bot's pull request merges alone only as a release pin, a version update
+  Renovate armed, or a refresh of Google's service ranges to exactly what Google publishes. A pin
+  deploys only an image of an immutable Release the release App published, built by that tag's own
+  run.
+- **Internet egress leaves through Cloud NAT, past the egress allowlist.** A rule names a host by
+  FQDN only when every client resolves it alike, as Cloudflare's anycast does for `api.openai.com`.
+  The firewall admits only the addresses its own lookup returned, and Google's domains answer each
+  client location with another frontend: an FQDN rule for `smtp-relay.gmail.com` dropped most of
+  Authentication's mail (a-novel/infra#1033). Match Google's hosts with the `google-services` address
+  group, Google's ranges minus its Cloud customers', which `refresh-google-ranges.yaml` keeps
+  current. A refused connection times out without a log, and a health probe can pass by luck, so
+  prove an allowlist change with a real call from the workload, such as an email.
 - **The writer's federation condition** pins `deploy.yaml`, `roll-database.yaml` and
   `recovery.yaml` on `master` behind the `production` environment. Changing it is a bootstrap change, applied by the last trusted
   workflow before a new one depends on it.
