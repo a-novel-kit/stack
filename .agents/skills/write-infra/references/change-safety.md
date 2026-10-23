@@ -165,11 +165,12 @@ pins in the same change.
   never an undo: a faulty host change is fixed forward by a new pull request
   (`docs/runbooks/database.md`). The data disk still ignores its source snapshot, so a disk ever
   recreated from one plans no replacement.
-- **Database images are pinned** by `tag@digest` in foundation and in the service root. Both
-  Artifact Registry copies (`agora-production`, `agora-<service>-private-production`) derive from
-  that one pin. The hosts use the digest alone, so the pin rides with the service's release pull
-  request: a release without a database change keeps the reproducible digest and plans nothing. A
-  new digest replaces the host template, so that release merges during a planned downtime.
+- **Database images are pinned** by `tag@digest` in foundation and in the service root. Both pins
+  copy the image into the service's `agora-<service>-private-production`, the only repository its
+  host pulls PostgreSQL from. The hosts use the digest alone, so the pins ride with the service's
+  release pull request: a release without a database change keeps the reproducible digest and plans
+  nothing. A new digest replaces the host template, so that release merges during a planned
+  downtime.
 - **`host-credentials` is pinned once,** in foundation's `host_credentials_image`, as the
   `tag@digest` `publish-rollout-verifier.yaml` published. Deploy verifies it against that workflow
   and copies it into each service's tooling repository; the hosts and the service roots derive the
