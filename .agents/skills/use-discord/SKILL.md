@@ -2,31 +2,34 @@
 name: use-discord
 description: >
   Read and post on the A-Novel Discord server through the A-Novel Reader and Writer bots: message
-  links, channels by name, history, threads, and replies. Load when the developer shares a Discord
-  link, asks what a channel says, or asks to post or answer there.
+  links, channels by name, history, threads, replies, and reactions. Load when the developer shares
+  a Discord link, asks what a channel says, asks to post or answer there, or asks to answer the alert
+  feeds.
 ---
 
 # Use Discord
 
 Two bots give agents access to the A-Novel Discord server through Discord's REST API, one per access
 level. The A-Novel Reader reads and never posts. The A-Novel Writer reads too, and posts the messages
-the developer asks for. The server's notification feeds post through webhooks, which no agent uses.
+and reactions the developer asks for. The server's notification feeds post through webhooks, which
+no agent uses.
 
 ## Check access first
 
 Core hands each bot token only to the members who need it; the `developers` role grants neither.
 The Reader token goes to more members than the Writer's, and a Writer holder needs no Reader token.
 Before the first call, check that `a-novel secrets ls` lists a token the operation accepts:
-`DISCORD_READER_TOKEN` or `DISCORD_WRITER_TOKEN` to read, `DISCORD_WRITER_TOKEN` to post. When it
-is missing, tell the developer they lack that access and that core grants it, then stop. Nothing
-else replaces the bots: do not try a webhook, a browser session or a personal token.
+`DISCORD_READER_TOKEN` or `DISCORD_WRITER_TOKEN` to read, `DISCORD_WRITER_TOKEN` to post or react.
+When it is missing, tell the developer they lack that access and that core grants it, then stop.
+Nothing else replaces the bots: do not try a webhook, a browser session or a personal token.
 
 ## Call the API
 
 [`scripts/discord-api.sh`](scripts/discord-api.sh) calls one path relative to
 `https://discord.com/api/v10/` and prints the JSON response. With a path alone it reads, with the
 Reader token, or the Writer's when the developer holds only that one. With a JSON body as second
-argument it posts that body, with the Writer token. Quote paths that hold `?` or `&`.
+argument it posts that body. With `PUT` or `DELETE` instead, it sends that method with an empty
+body. Every write uses the Writer token. Quote paths that hold `?` or `&`.
 
 ```bash
 bash <skill-dir>/scripts/discord-api.sh 'channels/<channel-id>/messages?limit=20'
@@ -37,20 +40,28 @@ only. The token never reaches the output, a command line, or the conversation.
 
 ## Map the request to a path
 
-| Request                                                             | Path                                                                                   |
-| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Message link `https://discord.com/channels/<guild>/<channel>/<msg>` | `channels/<channel>/messages/<msg>`                                                    |
-| The conversation around that message                                | `channels/<channel>/messages?around=<msg>&limit=10`                                    |
-| Recent history of a channel                                         | `channels/<channel>/messages?limit=50`; older pages add `before=<oldest id>` (100 max) |
-| Servers the bot belongs to                                          | `users/@me/guilds`                                                                     |
-| A channel by name                                                   | `guilds/<guild>/channels`; match `name` and the category through `parent_id`           |
-| Active threads of the server                                        | `guilds/<guild>/threads/active`                                                        |
-| Archived threads of a channel                                       | `channels/<channel>/threads/archived/public`                                           |
+| Request                                                             | Path                                                                                      |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Message link `https://discord.com/channels/<guild>/<channel>/<msg>` | `channels/<channel>/messages/<msg>`                                                       |
+| The conversation around that message                                | `channels/<channel>/messages?around=<msg>&limit=10`                                       |
+| Recent history of a channel                                         | `channels/<channel>/messages?limit=50`; older pages add `before=<oldest id>` (100 max)    |
+| Servers the bot belongs to                                          | `users/@me/guilds`                                                                        |
+| A channel by name                                                   | `guilds/<guild>/channels`; match `name` and the category through `parent_id`              |
+| Active threads of the server                                        | `guilds/<guild>/threads/active`                                                           |
+| Archived threads of a channel                                       | `channels/<channel>/threads/archived/public`                                              |
+| React to a message as the bot                                       | `channels/<channel>/messages/<msg>/reactions/<emoji>/@me` with `PUT`; `DELETE` removes it |
 
 Channel names repeat across categories (each org has a `github-reviews`), so confirm the category
 before reading. A thread is a channel: read its messages through the channel paths with the thread
 id. A channel link is the message link without `/<msg>`. Links on `ptb.discord.com`,
 `canary.discord.com` and `discordapp.com` have the same shape.
+
+A reaction path takes the emoji URL-encoded: ✅ is `%E2%9C%85`, ❌ is `%E2%9D%8C` and 👀 is
+`%F0%9F%91%80`. Discord answers a reaction with no body, so success prints nothing:
+
+```bash
+bash <skill-dir>/scripts/discord-api.sh 'channels/<channel-id>/messages/<msg>/reactions/%E2%9C%85/@me' PUT
+```
 
 ## Read the response
 
@@ -91,6 +102,28 @@ EOF
 Drop `message_reference` to post a new message; a thread takes posts through its id. The response
 is the posted message: give the developer its link, `https://discord.com/channels/<guild>/<channel>/<id>`.
 
+## Answer the alert feeds
+
+Each org's category holds three alert feeds: CI, dependencies and `security-audit`. A request to
+answer them covers the reactions. Each drafted reply still waits for the developer's yes.
+
+| Reaction | Meaning                                       |
+| -------- | --------------------------------------------- |
+| 👀       | Under investigation; remove it once you reply |
+| ✅       | A change fixed it                             |
+| ❌       | It was transient or needed no fix             |
+
+Reply to the alert with its cause and a link to the PR that fixed it. Link the fix itself, never the
+bump PRs that carried it. Add `"flags": 4` to the reply body to suppress link embeds.
+
+- A transient failure gets its explanation and no link.
+- An external cause links whatever already tracks it: a status-page incident, an upstream issue or a
+  release to watch. Never open an upstream issue yourself. GitHub lists its incidents at
+  `https://www.githubstatus.com/api/v2/incidents.json`; npm and Docker report on `status.npmjs.org`
+  and `dockerstatus.com`.
+- A dependency thread that already shows the bot's **Merged** or **Closed** post needs no reply.
+- A duplicate alert of the same run gets the reaction only.
+
 ## Handle errors
 
 The script exits non-zero and prints Discord's error body:
@@ -99,8 +132,8 @@ The script exits non-zero and prints Discord's error body:
   `a-novel secrets set <token id>`.
 - `50001 Missing Access`: the bot is not in that private channel. Name the channel and ask the
   developer to have a server admin add the bot's role to its permissions.
-- `50013 Missing Permissions` or `160002`: the Writer lacks Send Messages, Send Messages in Threads
-  or Read Message History there. The same fix applies.
+- `50013 Missing Permissions` or `160002`: the Writer lacks Send Messages, Send Messages in Threads,
+  Add Reactions or Read Message History there. The same fix applies.
 - `10003 Unknown Channel` or `10008 Unknown Message`: the link is wrong or the message was deleted.
 - `429`: wait `retry_after` seconds, then retry once.
 
@@ -116,8 +149,8 @@ The server owner sets the bots up once and hands each token to the members who n
    channel's permission overrides.
    - Reader, View Channels and Read Message History:
      `https://discord.com/oauth2/authorize?client_id=<app-id>&scope=bot&permissions=66560`.
-   - Writer, which adds Send Messages and Send Messages in Threads:
-     `https://discord.com/oauth2/authorize?client_id=<app-id>&scope=bot&permissions=274877975552`.
+   - Writer, which adds Send Messages, Send Messages in Threads and Add Reactions:
+     `https://discord.com/oauth2/authorize?client_id=<app-id>&scope=bot&permissions=274877975616`.
 3. Private channels hide from `@everyone`. Add the bot's role to each one it should read or post in,
    with the permissions above.
 4. A member who receives a token stores it once: `a-novel secrets set DISCORD_READER_TOKEN` or
