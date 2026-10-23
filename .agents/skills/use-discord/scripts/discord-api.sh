@@ -12,11 +12,10 @@ if [ $# -lt 1 ] || [ $# -gt 2 ]; then
     exit 1
 fi
 
-# Discord refuses a bodiless PUT that has no Content-Length.
 BODY_ARGS=()
 if [ $# -eq 2 ]; then
     case "$2" in
-        PUT | DELETE) BODY_ARGS=(-X "$2" -H 'Content-Length: 0') ;;
+        PUT | DELETE) BODY_ARGS=(-X "$2") ;;
         *) BODY_ARGS=(-H 'Content-Type: application/json' --data "$2") ;;
     esac
 fi
