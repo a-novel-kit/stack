@@ -8,24 +8,25 @@ description: >
 
 # Use Discord
 
-Two bots give agents access to the A-Novel Discord server through Discord's REST API. The A-Novel
-Reader reads and never posts. The A-Novel Writer posts the messages the developer asks for. The
-server's notification feeds post through webhooks, which no agent uses.
+Two bots give agents access to the A-Novel Discord server through Discord's REST API, one per access
+level. The A-Novel Reader reads and never posts. The A-Novel Writer reads too, and posts the messages
+the developer asks for. The server's notification feeds post through webhooks, which no agent uses.
 
 ## Check access first
 
 Core hands each bot token only to the members who need it; the `developers` role grants neither.
-Before the first call, check that `a-novel secrets ls` lists the token the operation needs:
-`DISCORD_READER_TOKEN` to read, `DISCORD_WRITER_TOKEN` to post. When it is missing, tell the
-developer they lack that access and that core grants it, then stop. Nothing else replaces the bots:
-do not try a webhook, a browser session or a personal token.
+The Reader token goes to more members than the Writer's, and a Writer holder needs no Reader token.
+Before the first call, check that `a-novel secrets ls` lists a token the operation accepts:
+`DISCORD_READER_TOKEN` or `DISCORD_WRITER_TOKEN` to read, `DISCORD_WRITER_TOKEN` to post. When it
+is missing, tell the developer they lack that access and that core grants it, then stop. Nothing
+else replaces the bots: do not try a webhook, a browser session or a personal token.
 
 ## Call the API
 
 [`scripts/discord-api.sh`](scripts/discord-api.sh) calls one path relative to
 `https://discord.com/api/v10/` and prints the JSON response. With a path alone it reads, with the
-Reader token. With a JSON body as second argument it posts that body, with the Writer token. Quote
-paths that hold `?` or `&`.
+Reader token, or the Writer's when the developer holds only that one. With a JSON body as second
+argument it posts that body, with the Writer token. Quote paths that hold `?` or `&`.
 
 ```bash
 bash <skill-dir>/scripts/discord-api.sh 'channels/<channel-id>/messages?limit=20'
@@ -108,9 +109,9 @@ The script exits non-zero and prints Discord's error body:
 The server owner sets the bots up once and hands each token to the members who need it.
 
 1. In the Discord Developer Portal, each application's Bot page has **Public Bot** off, and its
-   Installation page sets the install link to **None** and keeps Guild Install only. The Reader
-   turns **Message Content Intent** on, or `content` and `embeds` come back empty. The Writer only
-   posts and leaves it off.
+   Installation page sets the install link to **None** and keeps Guild Install only. Both turn
+   **Message Content Intent** on, or `content` and `embeds` come back empty, since the Writer
+   reads too.
 2. Invite each bot with its own permissions. Never grant Administrator, which bypasses every
    channel's permission overrides.
    - Reader, View Channels and Read Message History:
