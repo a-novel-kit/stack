@@ -44,9 +44,10 @@ have posted some of a batch, so before retrying, list the thread's replies and r
 entries that are missing.
 
 The dispatch needs Write on the org's dispatcher repository: `a-novel/.github` for `a-novel`,
-`a-novel-kit/stack` for `a-novel-kit` (see [check-access](../../check-access/SKILL.md)). When the
-developer lacks it, tell them which repository it is and stop. Posting with `gh` would sign the
-reply as them, so it is no fallback.
+`a-novel-kit/stack` for `a-novel-kit`. Every tier team of the org holds it (see
+[check-access](../../check-access/SKILL.md)). A refused dispatch means the developer belongs to no
+team there: tell them so and stop. Posting with `gh` would sign the reply as them, so it is no
+fallback.
 
 > **`gh api …/pulls/<n>/comments/<id>/replies` is the trap.** It is the obvious REST call, it works,
 > and it posts as the **human**. There is no capability gap driving you to it — `bot-comment`

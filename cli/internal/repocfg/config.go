@@ -211,9 +211,10 @@ func LoadLabels() (*LabelsConfig, error) {
 	return loadTemplate[LabelsConfig](path.Join("governance", "labels.yaml"), "labels.yaml")
 }
 
-// TeamTier is one contributor tier in teams.yaml: a team with no repository
-// access, whose area teams hold Permission (a repository role such as push,
-// maintain or admin) on their class's repositories.
+// TeamTier is one contributor tier in teams.yaml: a team holding Write on its
+// org's bot-comment dispatcher alone, whose area teams hold Permission (a
+// repository role such as push, maintain or admin) on their class's
+// repositories.
 type TeamTier struct {
 	Name       string `yaml:"name"`
 	Permission string `yaml:"permission"`

@@ -60,8 +60,8 @@ stays visible.
 `bot-comment` workflow, in `a-novel/.github` or `a-novel-kit/stack`, with your
 own `gh` token, and that workflow (which alone holds the App keys) posts the
 comment and is watched to completion. No `.pem` ever lives on a dev machine; you
-need only `gh` + Write on that dispatcher repo, which not every developer holds
-(see `check-access`). The bot can only comment — PR
+need only `gh` + Write on that dispatcher repo, which every tier team of the org
+holds (see `check-access`). The bot can only comment — PR
 authoring/merge/close are impossible through it, and so is submitting a review,
 which `resolve-pr-feedback` posts with your own `gh` token.
 

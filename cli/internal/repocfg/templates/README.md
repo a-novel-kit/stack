@@ -81,8 +81,10 @@ cross-cutting signals that sort work within a board status.
 
 ## Contributor tiers (`teams.yaml`)
 
-Each tier in `teams.yaml` is an org team with no repository access:
-`developers` (push), `maintainers` (maintain) and `owners` (admin). Under each,
+Each tier in `teams.yaml` is an org team: `developers` (push), `maintainers`
+(maintain) and `owners` (admin). Its only own grant is Write on the org's
+bot-comment dispatcher (`repocfg.BotDispatchRepos`), which reaches every area
+team under it, so any member can post bot comments. Under each,
 `repo update` keeps one area team per repository class, `<tier>-<class>`, and
 grants it the tier's role on every repository of that class, so a new repository
 is covered the moment `repo create` classifies it. A person joins the area teams

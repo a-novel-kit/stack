@@ -1,5 +1,6 @@
-# Contributor tiers. Each tier is an org team with no repository access. Under
-# it, `repo update` keeps one area team per repository class, named
+# Contributor tiers. Each tier is an org team whose only repository grant is
+# Write on the org's bot-comment dispatcher, so every member can post bot
+# comments. Under it, `repo update` keeps one area team per repository class, named
 # `<tier>-<class>`, which holds the tier's role on every repository of that
 # class. A person joins the area teams they work in; membership is managed in
 # GitHub. Core holds Admin on every repository through its org role and is not a

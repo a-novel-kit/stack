@@ -28,9 +28,10 @@ Each role is a GitHub team per repository class: `service`, `platform`, `infra`,
 | Owner      | `owners-<class>`                        | Admin: ruleset bypass, `approve-pr` on their own pull requests, the `release` environment |
 | Core       | `core`, owner of both organizations     | Admin everywhere, org settings and teams, Bitwarden, `a-novel repo update`, Discord admin |
 
-A role covers its class's repositories only; elsewhere the member reads. Pull requests are for
-collaborators, so a developer opens them only where they can write, and a fork is refused. The stack
-repository is library class.
+A role covers its class's repositories only; elsewhere the member reads. Every tier also holds Write
+on its org's bot-comment dispatcher, `a-novel/.github` or `a-novel-kit/stack`, so any member posts
+bot comments. Pull requests are for collaborators, so a developer opens them only where they can
+write, and a fork is refused. The stack repository is library class.
 
 Write lets anyone approve and label, but `review-gate` counts an approval, or a privileged label
 such as `allow-dependency-change`, only from a maintainer, an admin or the [Agent] App. An agent never

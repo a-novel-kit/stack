@@ -7,7 +7,7 @@ Automated notes, such as an agent's review replies, post as the organization's b
 | `a-novel-kit` | `a-novel-kit/stack`   |
 | `a-novel`     | `a-novel/.github`     |
 
-Posting needs write access to the dispatcher repository; ask the team if you lack it.
+Posting needs write access to the dispatcher repository. Every member of the organization's teams holds it.
 
 ## Post a comment
 

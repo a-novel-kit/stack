@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
@@ -741,8 +742,9 @@ func applyDeploymentPolicies(op repocfg.Op) (string, error) {
 }
 
 // applyTeams reconciles a repo's tier-team grants. It creates a missing tier
-// or area team, the area team under its tier, and grants each area team its
-// role. It then removes the grant of any other team in a tier's namespace.
+// or area team, the area team under its tier, and grants each team its role. A
+// tier team's grant reaches all its area teams. It then removes the grant of
+// any other team in a tier's namespace.
 // Teams outside the tiers keep their grants. Core reaches every repo through
 // its org role, which no repository grant can remove.
 func applyTeams(org, repo string, op repocfg.Op) (string, error) {
@@ -755,9 +757,11 @@ func applyTeams(org, repo string, op repocfg.Op) (string, error) {
 	granted := make([]string, 0, len(op.Teams))
 	tiers := make([]string, 0, len(op.Teams))
 	for _, g := range op.Teams {
-		parentID, err := teams.ensure(g.Parent, "")
-		if err != nil {
-			return "", err
+		var parentID string
+		if g.Parent != "" {
+			if parentID, err = teams.ensure(g.Parent, ""); err != nil {
+				return "", err
+			}
 		}
 		if _, err := teams.ensure(g.Team, parentID); err != nil {
 			return "", err
@@ -767,7 +771,7 @@ func applyTeams(org, repo string, op repocfg.Op) (string, error) {
 			return "", fmt.Errorf("grant team %q: %w", g.Team, err)
 		}
 		granted = append(granted, g.Team)
-		tiers = append(tiers, g.Parent)
+		tiers = append(tiers, cmp.Or(g.Parent, g.Team))
 	}
 
 	removed, err := removeStrayTierGrants(org, repo, tiers, granted)

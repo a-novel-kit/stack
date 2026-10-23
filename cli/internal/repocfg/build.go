@@ -96,8 +96,9 @@ type Op struct {
 	Reviewers []string `json:"reviewers,omitempty"`
 }
 
-// TeamGrant is one area team's role on a repository. Team is the area team,
-// `<tier>-<class>`, nested under Parent, its tier team.
+// TeamGrant is one team's role on a repository. Team is an area team,
+// `<tier>-<class>`, nested under Parent, its tier team. A grant without Parent
+// goes to the tier team itself.
 type TeamGrant struct {
 	Team       string `json:"team"`
 	Parent     string `json:"parent"`
@@ -153,7 +154,7 @@ type Plan struct {
 // come before the rulesets that require their checks, and the prune comes last.
 func BuildPlan(t *RepoTarget) (*Plan, error) {
 	repoPath := fmt.Sprintf("repos/%s/%s", t.Org, t.Repo)
-	uniform, err := uniformOps(t.Class, repoPath)
+	uniform, err := uniformOps(t, repoPath)
 	if err != nil {
 		return nil, err
 	}
@@ -194,9 +195,17 @@ func settingsOps(c *ClassPreset, repoPath string) []Op {
 	return ops
 }
 
+// BotDispatchRepos maps each org to the repo hosting its bot-comment dispatcher
+// workflow. Each org has its own Agent App, whose key is a secret of the
+// dispatcher's governance environment, so each org has its own dispatcher.
+var BotDispatchRepos = map[string]string{
+	"a-novel-kit": "a-novel-kit/stack",
+	"a-novel":     "a-novel/.github",
+}
+
 // uniformOps provisions what every repo carries whatever its class:
 // CODEOWNERS, the label vocabulary, and the tier teams' grants.
-func uniformOps(c *ClassPreset, repoPath string) ([]Op, error) {
+func uniformOps(t *RepoTarget, repoPath string) ([]Op, error) {
 	// CODEOWNERS routes review requests automatically. It is written to
 	// .github/, which GitHub honors over a root copy, and apply removes any
 	// stray root file so a repo never carries two.
@@ -218,7 +227,15 @@ func uniformOps(c *ClassPreset, repoPath string) ([]Op, error) {
 	}
 	grants := make([]TeamGrant, 0, len(teams.Tiers))
 	for _, tier := range teams.Tiers {
-		grants = append(grants, TeamGrant{Team: tier.Name + "-" + string(c.Class), Parent: tier.Name, Permission: tier.Permission})
+		grants = append(grants, TeamGrant{Team: tier.Name + "-" + string(t.Class.Class), Parent: tier.Name, Permission: tier.Permission})
+	}
+	// Every member may post bot comments. A comment dispatches from this repo
+	// with the member's own token, which needs Write here, and a tier team's
+	// grant reaches all of its area teams.
+	if BotDispatchRepos[t.Org] == t.Org+"/"+t.Repo {
+		for _, tier := range teams.Tiers {
+			grants = append(grants, TeamGrant{Team: tier.Name, Permission: "push"})
+		}
 	}
 	return []Op{
 		{Method: http.MethodPut, Path: repoPath + "/contents/.github/CODEOWNERS", Content: codeowners},

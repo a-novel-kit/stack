@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/a-novel-kit/stack/cli/internal/repocfg"
 )
 
 // botRunPoll and botRunFinishTimeout pace and bound the wait for a dispatched
@@ -38,14 +40,6 @@ const (
 	// dispatches.
 	botMaxCommentsBytes = 50000
 )
-
-// botDispatchRepos maps each org to the repo hosting its bot-comment dispatcher
-// workflow. Each org has its own Agent App, whose key is a secret of the
-// dispatcher's governance environment, so each org has its own dispatcher.
-var botDispatchRepos = map[string]string{
-	orgAnovelKit: orgAnovelKit + "/stack",
-	orgAnovel:    orgAnovel + "/.github",
-}
 
 // botBatchItem is one comment in a `--batch` payload: a target number, the
 // markdown body, and an optional inline review-comment ID to reply to. The
@@ -139,7 +133,7 @@ func postBotComments(cmd *cobra.Command, args []string, o botCommentOpts) error 
 // validateBotOrgRepo checks the org is a configured dispatcher target and
 // the repo is a bare name. Shared by the single and batch paths.
 func validateBotOrgRepo(org, repo string) error {
-	if _, ok := botDispatchRepos[org]; !ok {
+	if _, ok := repocfg.BotDispatchRepos[org]; !ok {
 		return fmt.Errorf("bot-comment: org %q is not configured (known: %s, %s)", org, orgAnovel, orgAnovelKit)
 	}
 	if strings.TrimSpace(repo) == "" {
@@ -164,7 +158,7 @@ func runBotComment(cmd *cobra.Command, org, repo, number, body, replyTo string) 
 		formArgs = append(formArgs, "-f", "reply_to="+replyTo)
 	}
 	label := fmt.Sprintf("for %s/%s#%s", org, repo, number)
-	return dispatchBotComment(cmd, botDispatchRepos[org], label, formArgs...)
+	return dispatchBotComment(cmd, repocfg.BotDispatchRepos[org], label, formArgs...)
 }
 
 // runBotCommentBatch reads a JSON array of comments, splits it into payloads
@@ -178,7 +172,7 @@ func runBotCommentBatch(cmd *cobra.Command, org, repo, batchPath string) error {
 	if err != nil {
 		return fmt.Errorf("bot-comment: %w", err)
 	}
-	dispatchRepo := botDispatchRepos[org]
+	dispatchRepo := repocfg.BotDispatchRepos[org]
 	for i, chunk := range chunks {
 		payload, err := json.Marshal(chunk)
 		if err != nil {
