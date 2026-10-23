@@ -3,7 +3,8 @@ name: use-discord
 description: >
   Read and post on the A-Novel Discord server through the A-Novel Reader and Writer bots: message
   links, channels by name, history, threads, replies, and reactions. Load when the developer shares
-  a Discord link, asks what a channel says, or asks to post or answer there.
+  a Discord link, asks what a channel says, asks to post or answer there, or asks to answer the alert
+  feeds.
 ---
 
 # Use Discord
@@ -100,6 +101,28 @@ EOF
 
 Drop `message_reference` to post a new message; a thread takes posts through its id. The response
 is the posted message: give the developer its link, `https://discord.com/channels/<guild>/<channel>/<id>`.
+
+## Answer the alert feeds
+
+Each org's category holds three alert feeds: CI, dependencies and `security-audit`. A request to
+answer them covers the reactions. Each drafted reply still waits for the developer's yes.
+
+| Reaction | Meaning                                       |
+| -------- | --------------------------------------------- |
+| 👀       | Under investigation; remove it once you reply |
+| ✅       | A change fixed it                             |
+| ❌       | It was transient or needed no fix             |
+
+Reply to the alert with its cause and a link to the PR that fixed it. Link the fix itself, never the
+bump PRs that carried it. Add `"flags": 4` to the reply body to suppress link embeds.
+
+- A transient failure gets its explanation and no link.
+- An external cause links whatever already tracks it: a status-page incident, an upstream issue or a
+  release to watch. Never open an upstream issue yourself. GitHub lists its incidents at
+  `https://www.githubstatus.com/api/v2/incidents.json`; npm and Docker report on `status.npmjs.org`
+  and `dockerstatus.com`.
+- A dependency thread that already shows the bot's **Merged** or **Closed** post needs no reply.
+- A duplicate alert of the same run gets the reaction only.
 
 ## Handle errors
 
