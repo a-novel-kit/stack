@@ -15,7 +15,7 @@ repo-specific or downstream of a base table entry.
 | `generated-go`                | `go generate ./...` is up to date          | `pnpm generate:go`            | Forgot to run `pnpm generate:go` after proto/interface                       |
 | `lint-go`                     | `golangci-lint run` clean                  | `pnpm lint:go`                | New Go code violates style or has a bug                                      |
 | `lint-proto`                  | `buf lint` clean                           | `pnpm lint:proto`             | Proto file violates buf style                                                |
-| `lint-node`                   | `pnpm lint:ci` clean                       | `pnpm lint:ci`                | JS/TS code violates eslint/prettier                                          |
+| `lint-js`                     | `pnpm lint:ci` clean                       | `pnpm lint:ci`                | JS/TS code violates eslint/prettier                                          |
 | `test-go`                     | Go unit tests in `/internal`               | `a-novel test --type=go -y`   | Broken Go code or test                                                       |
 | `test-pkg`                    | Go integration tests in `/pkg/go`          | `a-novel test --type=go -y`   | gRPC contract mismatch OR flake                                              |
 | `test-pkg-js`                 | JS integration tests in `/pkg/js`          | `a-novel test --type=pnpm -y` | REST contract mismatch OR flake                                              |
@@ -35,5 +35,5 @@ repo-specific or downstream of a base table entry.
 of its own. Platforms skip their tests and `build-platform` the same way when `build-node` or
 `lint-types` fails.
 
-Check contexts are lane-suffixed (`test-go`, `lint-node`, …); `write-github-actions` owns that rule
+Check contexts are lane-suffixed (`test-go`, `lint-js`, …); `write-github-actions` owns that rule
 and the reasons for it. A repo not yet migrated may still emit a bare `test`.

@@ -63,7 +63,7 @@ node lane through `./node-actions/lint-node`, so nothing loads the edited manife
 surfaces the moment a consumer pins the new tag — which is how a `vars` reference in an input
 description took `merge-gate` offline across both orgs until the next patch. The workflows repo's
 `pnpm lint` now parses every composite manifest for these contexts
-(`.github/scripts/lint-action-manifests.mjs`), and the required `lint-node` job runs it; keep it
+(`.github/scripts/lint-action-manifests.mjs`), and the required `lint-js` job runs it; keep it
 passing rather than working around it.
 
 Caller **workflows** carry `${{ vars.* }}` and `${{ secrets.* }}` legally. Thread the value into the
@@ -269,12 +269,13 @@ health timeout, why _this_ job runs its binary twice. Reviewers get the general 
 
 ## Job names are check contexts
 
-A job's ID **is** its required-check context, so name it by lane: `test-go`, `lint-go`, `lint-node`,
-`lint-proto`, `generated-go`, and the `build-*` / `report-*` families. A bare verb like `test` breaks
+A job's ID **is** its required-check context, so name it by lane: `test-go`, `lint-go`, `lint-js`,
+`test-js`, `lint-proto`, `generated-go`, and the `build-*` / `report-*` families. A lane is named
+after what it checks, so the JS lane is `js`, as the Go lane is `go`. A bare verb like `test` breaks
 down in a repo holding both Go and JS, where two jobs would claim the name, and the discovery map in
 `cli/internal/repocfg/templates/checks.yaml` cannot tell which lane it belongs to. Some repos still
-emit a legacy bare `test`, and the node lane is split between `lint-node` and an older `lint-js`;
-new jobs use the lane form.
+emit a legacy bare `test`; new jobs use the lane form. Renaming a job changes its required check,
+which [the next section](#required-checks-and-rulesets) covers.
 
 A job must also not take the name of a check-run the [Agent] App posts. `merge-gate.yaml` and
 `epic-freeze.yaml` both name their job `evaluate` for that reason — the job is only the runner, and a
@@ -523,7 +524,7 @@ There is no local runner, so verification is reading plus CI.
 - **`uses: ./<group>/<action>` inside a composite action.** It resolves against whatever the consumer
   checked out. Reference the sibling by its pinned tag.
 - **A bare-verb job ID.** `test` collides across lanes and cannot be mapped to one; use `test-go` or
-  `test-node`.
+  `test-js`.
 - **A job named after an App-posted check.** `merge-gate` and `epic-freeze` are check-run names; a job
   of that name duplicates the context.
 - **A missing `permissions` block.** The job then inherits the repository default, which is wider than

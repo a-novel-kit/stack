@@ -29,7 +29,7 @@ pnpm lint:go    # catches any Go-level issues introduced by the SQL change
 
 **`pnpm format` is the one that matters for SQL.** The Go-only `pnpm format:go` does not touch
 `.sql`, so running just that after a SQL edit leaves indentation, comment, and whitespace drift
-in place. CI's `lint-node` stage runs `prettier --check` and fails on the unformatted file even
+in place. CI's `lint-js` job runs `prettier --check` and fails on the unformatted file even
 when Go lint is clean. Run `pnpm format` before pushing any `.sql` edit.
 
 Then invoke the **`write-go-tests` skill** to verify or update the DAO test for the changed
