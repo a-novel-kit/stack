@@ -6,7 +6,7 @@ Contents:
 
 - [Phase 2: Classify](#phase-2-classify)
 - [2.1 `generated-go` failure](#21-generated-go-failure)
-- [2.2 `lint-go` / `lint-proto` / `lint-node` failure](#22-lint-go--lint-proto--lint-node-failure)
+- [2.2 `lint-go` / `lint-proto` / `lint-js` failure](#22-lint-go--lint-proto--lint-js-failure)
 - [2.3 `test-go` (Go unit) failure](#23-test-go-go-unit-failure)
 - [2.4 `test-pkg` / `test-pkg-js` failure](#24-test-pkg--test-pkg-js-failure)
 - [2.5 `build-*` (Docker) failure](#25-build--docker-failure)
@@ -39,7 +39,7 @@ noticing after push. The "generated files belong in the same commit" guidance in
 `git-conventions` is a structure preference; the "never amend a pushed commit" rule is
 categorical and wins here.
 
-### 2.2 `lint-go` / `lint-proto` / `lint-node` failure
+### 2.2 `lint-go` / `lint-proto` / `lint-js` failure
 
 **Symptom**: linter reports specific files + line numbers.
 
@@ -47,7 +47,7 @@ categorical and wins here.
 until clean, then commit:
 
 ```bash
-pnpm lint:go        # or lint-proto / lint-node
+pnpm lint:go        # or lint:proto / lint:ci
 # edit flagged files
 pnpm lint:go        # re-run to confirm clean
 git add <files>

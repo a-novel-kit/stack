@@ -58,5 +58,5 @@ format:js`, and `lint` likewise. Each lane is a `:`-suffixed script; the bare
   node lane (`lint:ci` → `lint:js`, or `lint_action: "lint:prettier"`), never
   the bare `lint` umbrella. The per-language CI jobs (`lint-go`, `lint-proto`)
   invoke their tools directly, not through pnpm. When you turn a bare verb into
-  a Go-inclusive umbrella, re-point that repo's `lint-node` at the node lane in
+  a Go-inclusive umbrella, re-point that repo's `lint-js` job at the node lane in
   the same change or you red-build CI.

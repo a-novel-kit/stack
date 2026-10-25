@@ -234,7 +234,7 @@ remaining steps accurately. Include any unresolved findings from the Phase 1.2 s
 | `generated-go` | `pnpm generate:go` + follow-up commit |
 | `lint-go`      | `pnpm lint:go`                        |
 | `lint-proto`   | `pnpm lint:proto`                     |
-| `lint-node`    | `pnpm lint:ci`                        |
+| `lint-js`      | `pnpm lint:ci`                        |
 | `test-go`      | `a-novel test --type=go -y`           |
 | `test-pkg`     | `a-novel test --type=go -y`           |
 | `test-pkg-js`  | `a-novel test --type=pnpm -y`         |
