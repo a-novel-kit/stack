@@ -222,7 +222,6 @@ A trace already links its spans, so each fact is recorded once.
   (`fmt.Errorf("...: %w", err)`) keeps that mark, so compare a reported error with `errors.Is`, never
   `==`.
 - **Success records nothing.** Leave the status `Unset` and return the value directly.
-  `otel.ReportSuccess` and `otel.ReportSuccessNoContent` record nothing; omit them.
 - **A handled error is not a span error.** When an operation recovers and completes, such as a
   best-effort cleanup that failed, it records nothing: the child span that failed already holds it.
 - **A transport handler span fails only on a server fault**, as the OpenTelemetry HTTP and gRPC server
