@@ -4,7 +4,8 @@
 - [Retire protected resources](#retire-protected-resources): unlock, retire, forget, tainted
   replacements
 - [Read the live state](#read-the-live-state-before-trusting-the-code)
-- [Release contract](#release-contract), [Capacity caps](#capacity-caps),
+- [Release contract](#release-contract), [New log-based metrics](#new-log-based-metrics),
+  [Capacity caps](#capacity-caps),
   [Database and backup hosts](#database-and-backup-hosts), [Trust boundaries](#trust-boundaries),
   [Recovery](#recovery)
 - [Add a service](#add-a-service): the pull-request order, the first plan, native backups
@@ -118,6 +119,19 @@ pins in the same change.
    never part of a deploy.
 5. The pins the last apply deployed come from the plan's `output_changes.<output>.before`. The
    plan's `prior_state` already holds the new outputs, so it cannot tell a changed pin apart.
+
+## New log-based metrics
+
+Cloud Monitoring accepts a new log-based metric's type up to about ten minutes after the metric is
+created. An alert policy created in the same apply fails: a threshold condition answers 404, and a
+PromQL condition answers `400 … PromQL metric(s) are invalid`. `depends_on` cannot help, because the
+metric resource itself succeeds at once.
+
+- **A new log-based metric lands in its own pull request,** deployed before the one that adds the
+  alerts that query it. A renamed metric is a new metric.
+- **When the two must ship together,** expect the apply to fail on the alert policies. Ten minutes
+  after the metric was created, re-run the failed job:
+  `gh run rerun <run ID> --repo a-novel/infra --failed`. Everything else in that apply has landed.
 
 ## Capacity caps
 
