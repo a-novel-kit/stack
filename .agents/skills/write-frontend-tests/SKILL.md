@@ -187,6 +187,11 @@ affected instead of inventing a screenshot test.
   a live or production file. When the server caches what it reads, give each state its own
   `webServer` entry: entries start in order, so later ones run `node build` on the first entry's
   build. platform-studio's downtime journeys follow this pattern.
+- Make a compose service that a journey stops and starts, as the outage journeys stop
+  `authentication`, join a holder's network: `network_mode: service:<holder>`, where a
+  `registry.k8s.io/pause` holder publishes the ports. A restarted container otherwise gets a new
+  host interface, and Chromium fails the page then loading with `net::ERR_NETWORK_CHANGED`.
+  platform-template's `builds/compose.e2e.yaml` follows this pattern.
 - Capture traces/screenshots on failure where the existing runner supports them; do not commit
   transient artifacts.
 - Run at least the repository browser baseline for compatibility-sensitive behavior.

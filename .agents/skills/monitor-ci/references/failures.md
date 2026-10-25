@@ -11,6 +11,7 @@ Contents:
 - [2.4 `test-pkg` / `test-pkg-js` failure](#24-test-pkg--test-pkg-js-failure)
 - [2.5 `build-*` (Docker) failure](#25-build--docker-failure)
 - [2.6 `build-js` failure](#26-build-js-failure)
+- [2.7 `test-browser` failure](#27-test-browser-failure)
 
 ## Phase 2: Classify
 
@@ -190,3 +191,12 @@ causes:
 - TypeScript compile error after an API change
 - Missing export in `pkg/js/rest/index.ts`
 - Broken import path after a file rename
+
+### 2.7 `test-browser` failure
+
+**Symptom**: a platform's Playwright journeys fail against the compose stack.
+
+A page load that fails with `net::ERR_NETWORK_CHANGED`, 1–2 s after a journey restarted a compose
+service, is not a flake to rerun. The restart gave the container a new host interface. Make that
+service join a holder's network, as `write-frontend-tests` describes, on its own branch; a dependency
+PR that hit it heals on rebase.
