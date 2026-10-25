@@ -3,8 +3,8 @@ name: write-infra
 description: >
   Plan, change, review or operate a-novel/infra: OpenTofu roots and modules, the plan-on-PR and
   apply-on-merge pipeline, Google Cloud identities and networks, database and backup hosts, recovery
-  drills, and runbooks. Load for any change under that repository. Service code and migrations
-  belong to their service skills.
+  drills, and runbooks. Load for any change under that repository, and before running or handing
+  over any `gcloud` command. Service code and migrations belong to their service skills.
 ---
 
 # Maintain infrastructure
@@ -70,6 +70,12 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
   access ([check-access](../check-access/SKILL.md)). A useful read:
   `tofu plan -refresh=false -lock=false` with `GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)`.
   Without ops access, prove plans offline as [Change safety](references/change-safety.md) shows.
+- **Name every `gcloud` target explicitly,** in a command you run and in one you hand to the
+  developer: `--project`, and `--zone`, `--region` or `--location` whenever the command takes one,
+  as literal values. Never rely on the active `gcloud config`, a `CLOUDSDK_*` variable, or a shell
+  variable such as the runbooks' `$PROD` that the reader may not have set. A default left by other
+  work runs the command on the wrong project or instance. The values are the `*_project_id` inputs
+  and `database_zone` in `environments/production/foundation/terraform.tfvars`.
 - **Ops** hold read access, IAP SSH and secret-version rights, and the named operators run
   Authentication's maintenance job. Other developers hold none of them. Everything else goes
   through `deploy.yaml`, `downtime.yaml` for planned downtimes, `roll-database.yaml` for database
