@@ -268,8 +268,14 @@ Prefer proto's well-known types over raw primitives for common data shapes:
 | ----------------------------- | --------------------------------- | ----------------------------------- |
 | Arbitrary JSON payload        | `google/protobuf/any.proto`       | `google.protobuf.Any`               |
 | Timestamps                    | `google/protobuf/timestamp.proto` | `google.protobuf.Timestamp`         |
+| Durations                     | `google/protobuf/duration.proto`  | `google.protobuf.Duration`          |
 | Optional primitive (nullable) | `google/protobuf/wrappers.proto`  | `google.protobuf.StringValue`, etc. |
 | Empty request/response        | `google/protobuf/empty.proto`     | `google.protobuf.Empty`             |
+
+Carry an instant as a `Timestamp` and a length of time as a `Duration`. Both keep nanosecond
+precision. The generated Go reads them with `AsTime()` and `AsDuration()`, so a caller parses no
+RFC 3339 string and scales no float of seconds. A `Duration` carries its unit. Its field name takes
+none: `oldest_pending_age`, not `oldest_pending_age_seconds`.
 
 Example — importing and using Any (as in `claims_sign.proto`):
 
@@ -334,3 +340,4 @@ The rules above, as a checklist:
 - Importing `internal/handlers/protogen` from `internal/core` or `internal/dao`.
 - Running `pnpm generate:go` before `pnpm format:proto`.
 - Renaming a field in place instead of adding a replacement and staging the removal.
+- Carrying an instant as an RFC 3339 string, or a length of time as a number of seconds.
