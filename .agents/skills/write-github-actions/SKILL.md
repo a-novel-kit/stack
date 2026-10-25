@@ -106,8 +106,7 @@ runs:
 ```
 
 - Input names are `snake_case`, and every input carries a `description` — GitHub prints it and the
-  README catalog is transcribed from it by hand, so an inaccurate one propagates. (`go-actions/lint-go`
-  keeps a kebab-case `working-directory` from before the convention settled.)
+  README catalog is transcribed from it by hand, so an inaccurate one propagates.
 - Booleans travel as the strings `"true"` / `"false"`; there is no boolean input type for actions.
 - Every `run:` step declares `shell: bash` explicitly — a composite action has no default shell.
 - Pass values into a script through `env:` and read them as shell variables, rather than

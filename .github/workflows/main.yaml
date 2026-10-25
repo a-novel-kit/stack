@@ -45,7 +45,7 @@ jobs:
     steps:
       - uses: a-novel-kit/workflows/go-actions/lint-go@v1.78.0
         with:
-          working-directory: cli
+          working_directory: cli
 
   lint-js:
     runs-on: ubuntu-latest
