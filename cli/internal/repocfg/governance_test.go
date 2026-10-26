@@ -272,8 +272,8 @@ func TestRecoverPRsGovernance(t *testing.T) {
 // backports, and a backport merged into a release line cuts the patch. The cut
 // rides pull_request_target, the event GitHub runs from the default branch's
 // copy of the caller, names its line from the merged pull request's base, and
-// passes the release App's credentials, whose key only the callee's environment
-// resolves.
+// passes the release App's credentials and the Sentry token, which only the
+// callee's environment resolves.
 func TestHotfixGovernance(t *testing.T) {
 	t.Parallel()
 	var workflow struct {
@@ -352,6 +352,10 @@ func TestHotfixGovernance(t *testing.T) {
 	if cut.With["release_client_id"] != "${{ vars.RELEASE_BOT_CLIENT_ID }}" ||
 		cut.Secrets["release_private_key"] != "${{ secrets.RELEASE_BOT_PRIVATE_KEY }}" {
 		t.Errorf("cut release credentials = %q, %q, want the release App's", cut.With["release_client_id"], cut.Secrets["release_private_key"])
+	}
+	// The cut records the patch in Sentry, as a regular release's cut does.
+	if got := cut.Secrets["sentry_auth_token"]; got != "${{ secrets.SENTRY_AUTH_TOKEN }}" {
+		t.Errorf("cut sentry_auth_token = %q, want the release environment's SENTRY_AUTH_TOKEN", got)
 	}
 }
 
