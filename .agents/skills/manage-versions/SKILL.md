@@ -58,6 +58,13 @@ A release is cut **in CI**, not from a developer's working tree. An admin trigge
 - **The tag publishes.** The root tag runs `release.yaml` again, and that run builds and attests the
   images, attests and publishes the npm tarballs, and dispatches infra's `pin-release.yaml`.
 
+A repository with a Sentry project, whose slug is the repository's name, records each release there.
+The release is named `<repository>@X.Y.Z`, the version without its `v`, as the deployed service
+reports it. The `cut` job runs `publish-actions/sentry-release` right after `release-core`,
+with the Sentry organization token `SENTRY_AUTH_TOKEN` from the `release` environment. A
+`sentry-intake.yaml` caller boards the issues that Sentry's GitHub App opens. The workflows repo's
+`docs/migrations/v1.79.0.md` gives both callers.
+
 A repository that has not adopted the split yet releases in one job as the [Agent] bot; the
 workflows repo's `docs/migrations/v1.57.0.md` is the adoption guide.
 

@@ -135,6 +135,9 @@ res, err := handler.JwkGet(t.Context(), testCase.request)
 st, ok := status.FromError(err)
 require.True(t, ok, st.Code().String())
 require.Equal(t, testCase.expectStatus, st.Code(), "got %s (%v)", st.Code(), err)
+if testCase.expectCause != nil {
+    require.ErrorIs(t, err, testCase.expectCause)
+}
 require.Equal(t, testCase.expect, res)
 ```
 
@@ -146,6 +149,8 @@ require.Equal(t, testCase.expect, res)
   handlers add `"Success/Empty"` with the repeated field set explicitly
   (`expect: &protogen.JwkListResponse{Keys: []*protogen.Jwk{}}`) — `lo.Map` returns a non-nil
   empty slice, so `&protogen.JwkListResponse{}` (nil `Keys`) would fail the equality check.
+- A server-fault case sets `expectCause` to the error the service mock returns. `require.ErrorIs`
+  proves that `grpcf.Fault` kept it, since Sentry groups the fault by that cause.
 
 ### lib tests — pure unit tests
 

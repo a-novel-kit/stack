@@ -137,6 +137,35 @@ For your own account, or one that stays active, open **Security**:
 
 An ops account reads every production secret. When the attacker held one, or a machine signed in to `gcloud` with one, rotate the secrets with the infra [secrets runbook](https://github.com/a-novel/infra/blob/master/docs/runbooks/secrets.md#rotate-a-secret), and revoke each old value where it was issued. Start with the secrets that the [access log](https://github.com/a-novel/infra/blob/master/docs/runbooks/secrets.md#audit-access) shows the account reading. The database password waits for a planned downtime.
 
+### Rotate the Sentry keys
+
+Sentry issues two kinds of keys:
+
+| Key                                 | It lives in                                                              | It can                           |
+| ----------------------------------- | ------------------------------------------------------------------------ | -------------------------------- |
+| The organization token `release-ci` | Bitwarden, copied into each `release` environment as `SENTRY_AUTH_TOKEN` | record releases in every project |
+| A project's DSN                     | the service's `production-<service>-sentry-dsn` secret                   | send events to that project      |
+
+Rotate each key that leaked. Revoking the old key cuts the attacker off at once. Sentry then records no new release, or no event from the service, until the new key lands.
+
+1. For the organization token, open **Settings → Developer Settings → Organization Tokens** in Sentry. Revoke `release-ci`, create a new token with the same name, and store it in Bitwarden in place of the old one. Then set it in every repository whose `release` environment holds the token, pasting it at the prompt. `gh` names each one it sets:
+
+   ```bash
+   read -rs TOKEN
+   for ORG in a-novel a-novel-kit; do
+     gh repo list "$ORG" --limit 200 --json name --jq '.[].name' |
+       while read -r REPO; do
+         gh secret list --env release --repo "$ORG/$REPO" --json name \
+           --jq '.[].name' 2>/dev/null | grep -qx SENTRY_AUTH_TOKEN &&
+           printf '%s' "$TOKEN" | gh secret set SENTRY_AUTH_TOKEN \
+             --env release --repo "$ORG/$REPO"
+       done
+   done
+   unset TOKEN
+   ```
+
+2. For a DSN, open the project's **Settings → Client Keys (DSN)** in Sentry. Choose **Generate New Key**, then revoke the old key. Rotate the service's `production-<service>-sentry-dsn` with the infra [secrets runbook](https://github.com/a-novel/infra/blob/master/docs/runbooks/secrets.md#rotate-a-secret): add the new DSN as a version, then pin it in the root's `secret_versions.sentry-dsn`.
+
 ## Investigate
 
 Find everything the attacker did since `SINCE`. GitHub's audit log keeps 180 days of events, and Google Cloud keeps 400 days of admin activity. Older events are gone, so save every output in a folder of its own as you go:
