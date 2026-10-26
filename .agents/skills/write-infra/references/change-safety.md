@@ -78,8 +78,8 @@
   or member to order one creation: the edge then binds every later replacement.
 - **A newly enabled API's service agent may not exist yet.** Google creates it lazily, and Workflows
   refused the first workflow with `service agent does not exist`. Create it with
-  `google_project_service_identity`, the one resource on `google-beta`, and grant its `serviceAgent`
-  role before the resource that needs it, as `modules/project-shell` does.
+  `google_project_service_identity`, on `google-beta`, and grant its `serviceAgent` role before the
+  resource that needs it, as `modules/project-shell` does.
 
 ## Read the live state before trusting the code
 
@@ -225,6 +225,21 @@ metric resource itself succeeds at once.
   group, Google's ranges minus its Cloud customers', which `refresh-google-ranges.yaml` keeps
   current. A refused connection times out without a log, and a health probe can pass by luck, so
   prove an allowlist change with a real call from the workload, such as an email.
+- **A fresh Direct VPC egress instance waits for Cloud NAT.** Its first connection out can wait 30
+  seconds or more, as Google documents, while internal addresses answer at once. A warm service
+  never meets the wait, and a job always does. Give a job's outbound budgets room for it, inside its
+  task timeout: Authentication's maintenance job sends its mail within `SMTP_TIMEOUT = 300s`
+  (a-novel/infra#1123).
+- **DNS resolves only the allowlist.** The response policy `a-novel-dns-allowlist` resolves the
+  private zones, Compute Engine's internal names and the egress allowlist's hosts. Every other name
+  answers with a CNAME to `blocked.internal.` and no address, so no outside name server receives the
+  lookup (a-novel/infra#1016).
+  - A host joins both allowlists through its one `egress_allowlist` entry. Removing it deletes
+    rules, so that pull request needs the deletion label.
+  - A wildcard stops at any level that another rule names, as RFC 4592 wildcards do, so foundation
+    refuses every level above an allowed name. The bypass rules need `google-beta`.
+  - The `dns_query` logs show each lookup and its answer. A Cloud Run entry carries no source
+    address, so the logs name what was resolved, not which workload resolved it.
 - **Google API calls stay inside the `agora_production` perimeter,** a VPC Service Controls
   perimeter around the private and public-api projects, in foundation's `service-perimeter.tf`. Its
   spec runs in dry run until a-novel/infra#1042 enforces it.

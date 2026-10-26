@@ -141,12 +141,22 @@ API and what an event carries. A migrations binary reports nothing.
 - **golib captures the servers' faults:** a 5xx in `httpf.HandleError`, a gRPC call that ends with
   `Internal` or `Unavailable`, and a panic in a handler or under `otel.RecoverPanic`. A handler adds
   no capture of its own, and a handled 4xx condition is never captured.
+- **Work that outlives its request reports its own failure.** No handler sees it fail, so its owner
+  takes a report function from `cmd`, which captures each failure. Authentication's REST API wires
+  `MailDelivery`'s report to `sentryf.Capture`. A job that waits for the same work reports the result
+  in `main` instead, and passes no report.
 - **A job's `main` captures the job's failure** under the operation's name, such as
   `sentryf.Capture(ctx, "rotate-keys", err)`, before the deferred flush runs. A usage error, such as
   an unknown operation, captures nothing. Prove the capture with `sentryftest.Record(t)`. The
   recorder swaps the process-wide reporter, so that test runs serially.
-- **A job's event can be lost before its first network call.** A Cloud Run job with Direct VPC
-  egress can start without a network for a minute or more. A failure in that window captures its
-  event, but the flush times out and the event is lost. The Cloud Monitoring job-failure alert still
-  reports the failure, and a failure after the database connection reports normally. Production
-  runs the jobs with OpenTelemetry off, so their events carry no trace ID.
+- **A job waits up to a minute for its events at exit.** A Cloud Run job with Direct VPC egress
+  waits 30 seconds or more for Cloud NAT before its first connection out, while the database answers
+  at once. Its `main` therefore flushes within `config.SentryJobFlushTimeout`, a minute. A server
+  keeps `config.SentryFlushTimeout`, inside its platform's shutdown grace period.
+- **A server's drain ends 6 seconds after SIGTERM.** `env.TimeoutShutdownDefault` sets the REST and
+  gRPC shutdown budgets, so the 2-second Sentry and OpenTelemetry flushes that follow finish before
+  Cloud Run's SIGKILL at 10 seconds. Work still running when the drain ends is cut, and the server
+  reports it.
+- **An event sentry-go cannot send within 30 seconds is lost.** The Cloud Monitoring job-failure
+  alert still reports that job's failure. Production runs the jobs with OpenTelemetry off, so their
+  events carry no trace ID.
