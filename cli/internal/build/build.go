@@ -181,8 +181,23 @@ func runInEnv(ctx context.Context, t detect.Target, keep bool, runEnv []string, 
 // envDown tears e down on a detached context, so an aborted run still cleans
 // up. The podman-compose provider spells the volume flag in the singular.
 func envDown(ctx context.Context, e *detect.ComposeEnv, runEnv []string, out io.Writer) {
+	ctx = context.WithoutCancel(ctx)
 	_, _ = fmt.Fprint(out, "── env down ──\n")
-	_ = compose(context.WithoutCancel(ctx), out, runEnv, e, nil, "down", "--volume")
+	_ = compose(ctx, out, runEnv, e, nil, "down", "--volume")
+	untagImages(ctx, e)
+}
+
+// untagImages removes the tags of the images e built. A removed checkout then
+// leaves no tag behind, and `podman image prune` reclaims its images. The
+// untagged images stay in the store, and the next run's build reuses them as
+// cache.
+//
+// Each tag goes by its exact name. A bare `podman untag <image>` strips every
+// tag of the image, other checkouts' tags included.
+func untagImages(ctx context.Context, e *detect.ComposeEnv) {
+	for _, image := range e.Images {
+		_ = exec.CommandContext(ctx, "podman", "untag", image, image).Run()
+	}
 }
 
 // runCommand runs t's command in its own process group, writing its output to
@@ -482,12 +497,12 @@ func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
 	return conflicts
 }
 
-// TearDown removes one compose project's containers, volumes and orphans.
-// `-p <project> -f <file>` scopes it to that env. --remove-orphans also clears
-// containers the compose file no longer declares, such as after a profile
-// change, which a later `up` would collide with. `-t 10` gives Postgres ten
-// seconds for its shutdown checkpoint, which can pass 2s once migrations and
-// key rotation dirtied its buffers.
+// TearDown removes one compose project's containers, volumes and orphans, and
+// untags its images. `-p <project> -f <file>` scopes it to that env.
+// --remove-orphans also clears containers the compose file no longer declares,
+// such as after a profile change, which a later `up` would collide with.
+// `-t 10` gives Postgres ten seconds for its shutdown checkpoint, which can
+// pass 2s once migrations and key rotation dirtied its buffers.
 //
 // A failed `down` can leave a container that keeps the env's pod and network
 // alive, and the next run then cannot claim the project name. TearDown then
@@ -499,6 +514,7 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	var buf bytes.Buffer
 	err := compose(ctx, &buf, os.Environ(), &e, nil,
 		"down", "--volume", "--remove-orphans", "-t", "10")
+	untagImages(ctx, &e)
 	if err == nil {
 		return nil
 	}

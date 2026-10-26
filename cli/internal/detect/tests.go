@@ -109,6 +109,9 @@ func (f envFile) toEnv(dir string) *ComposeEnv {
 		if len(svc.DependsOn) > 0 {
 			env.Dependents = append(env.Dependents, name)
 		}
+		if svc.Build != nil {
+			env.Images = append(env.Images, "localhost/"+env.Project+"_"+name+":latest")
+		}
 		for _, mapping := range svc.Ports {
 			if port, _, ok := compose.HostPort(mapping); ok && !slices.Contains(env.Ports, port) {
 				env.Ports = append(env.Ports, port)

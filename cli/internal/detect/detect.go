@@ -112,6 +112,10 @@ type ComposeEnv struct {
 	// the order never relies on the compose provider's `depends_on` wait,
 	// which podman-compose 1.5 and setups without systemd do not honor.
 	Dependents []string
+	// Images lists the tags podman-compose gives the images the env builds,
+	// one `localhost/<project>_<service>:latest` per service with a `build:`
+	// section. The project name keeps each tag to this checkout.
+	Images []string
 }
 
 // ID is a stable, unique key for a target, used as a selection-map key and to

@@ -26,7 +26,7 @@ With the picker, several targets run at once. With `-y`, one runs at a time. `-j
 a-novel test -y -j 4
 ```
 
-Each checkout gets its own test databases, so runs in two repositories or two worktrees never meet. A second run in the same checkout stops while the first still uses them.
+Each checkout gets its own test databases, so runs in two repositories or two worktrees never meet. A second run in the same checkout stops while the first still uses them. A run untags the images it built once it ends: they stay as build cache, and `podman image prune` reclaims them.
 
 ## Lint, format and generate
 
