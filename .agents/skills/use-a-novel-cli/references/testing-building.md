@@ -9,7 +9,10 @@ Discovers every Go test target (`go test ./...` per module, scoped by
 `test`/`test:*` script in the working tree, lets you pick which to run via a TUI
 picker, runs the selection in parallel, and prints a pass/fail report with coverage and
 the full output of every failure. Test envs come up and down per-target, so independent
-envs run in parallel safely.
+envs run in parallel safely. Env names are unique per checkout, so runs in other repositories
+or worktrees never touch yours. A second run in the same checkout exits 1 with "env … is in
+use by another run of this checkout" while the first holds that env: wait for it, then rerun.
+Under `-y`, a run clears only its own checkout's leftovers from runs that have ended.
 
 A test process reaches its env's published database through both Postgres contracts,
 as a go-exec target does (see [service operations](services.md#host-processes-and-postgres)):

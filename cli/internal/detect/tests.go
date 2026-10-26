@@ -1,6 +1,8 @@
 package detect
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"maps"
 	"os"
 	"path/filepath"
@@ -72,25 +74,26 @@ func composeEnvs(dir string) []envFile {
 
 var nonProjectChar = regexp.MustCompile(`[^a-z0-9]+`)
 
-// composeProject builds a podman-safe (lowercase, [a-z0-9-]) project name from
-// a location and an env id. Ordinary layouts get one project per pair, so
-// concurrent test targets do not share one. Paths such as a/b and a-b, which
-// slug alike, would.
-func composeProject(rel, id string) string {
-	loc := rel
-	if loc == "." {
-		loc = "root"
-	}
+// composeProject builds a podman-safe (lowercase, [a-z0-9-]) project name for
+// env id of the module at the absolute path dir. The name of dir keeps it
+// readable, and a hash of dir tells apart two repositories, or two worktrees of
+// one, so their runs never share containers.
+//
+// A checkout keeps its names across runs, which lets the preflight find its own
+// leftovers and nothing else.
+func composeProject(dir, id string) string {
+	sum := sha256.Sum256([]byte(dir))
+	loc := filepath.Base(dir) + "-" + hex.EncodeToString(sum[:4])
 	slug := nonProjectChar.ReplaceAllString(strings.ToLower(loc+"-"+id), "-")
 	return "anovel-test-" + strings.Trim(slug, "-")
 }
 
-// toEnv describes the env file f as the runner needs it: its services, split
-// into dependency-free ones and dependents, the host ports to allocate, and every
-// variable it references. A file that does not parse lists nothing, and its env
-// comes up in one piece.
-func (f envFile) toEnv(rel string) *ComposeEnv {
-	env := &ComposeEnv{File: f.file, Project: composeProject(rel, f.id), ID: f.id}
+// toEnv describes the env file f of the module at dir as the runner needs it:
+// its services, split into dependency-free ones and dependents, the host ports
+// to allocate, and every variable it references. A file that does not parse
+// lists nothing, and its env comes up in one piece.
+func (f envFile) toEnv(dir string) *ComposeEnv {
+	env := &ComposeEnv{File: f.file, Project: composeProject(dir, f.id), ID: f.id}
 	raw, err := os.ReadFile(f.file)
 	if err != nil {
 		return env
@@ -155,7 +158,7 @@ func goTests(dir, rel string, envs []envFile) []Target {
 		// Postgres state the env stands up.
 		detail := "go test " + sel + "  ·  env " + filepath.Base(e.file)
 		target := goTarget(dir, rel, e.id, detail, testArg, "-count=1", sel)
-		target.Env = e.toEnv(rel)
+		target.Env = e.toEnv(dir)
 		targets = append(targets, target)
 	}
 
@@ -262,7 +265,7 @@ func pnpmTests(dir, rel string, envs []envFile) []Target {
 		for _, e := range envs {
 			if e.env == string(KindPnpm) &&
 				((s.name == testArg && len(e.path) == 0) || (s.name != testArg && strings.Join(e.path, ":") == want)) {
-				t.Env = e.toEnv(rel)
+				t.Env = e.toEnv(dir)
 				t.Detail += "  ·  env " + filepath.Base(e.file)
 				break
 			}

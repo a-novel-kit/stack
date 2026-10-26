@@ -379,18 +379,8 @@ func podmanOut(ctx context.Context, env []string, args ...string) (string, error
 	return strings.TrimSpace(out.String()), nil
 }
 
-// A Conflict is a compose project that already has containers on the host,
-// almost always left behind by an aborted run. Project names are deterministic,
-// so the same env always reclaims the same project.
-type Conflict struct {
-	Env        detect.ComposeEnv
-	Containers []string
-}
-
-// EnvConflicts returns the distinct env projects among targets that already
-// have containers, running or not. It is the preflight that catches a half-up
-// env left by an aborted command.
-func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
+// distinctEnvs returns the envs of targets, each project once.
+func distinctEnvs(targets []detect.Target) []detect.ComposeEnv {
 	seen := map[string]bool{}
 	var envs []detect.ComposeEnv
 	for _, t := range targets {
@@ -400,6 +390,74 @@ func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
 		seen[t.Env.Project] = true
 		envs = append(envs, *t.Env)
 	}
+	return envs
+}
+
+// ClaimEnvs locks the env of every target until the returned release runs, so
+// a second run of the same checkout stops instead of sharing or tearing down an
+// env in use. Each lock is a flock on a file named after the env's project. The
+// kernel drops it when the process ends, however it ends, so an env left by a
+// run that died holds none.
+func ClaimEnvs(targets []detect.Target) (func(), error) {
+	var held []*os.File
+	release := func() {
+		for _, f := range held {
+			_ = f.Close() // closing the file drops its lock
+		}
+	}
+
+	envs := distinctEnvs(targets)
+	if len(envs) == 0 {
+		return release, nil
+	}
+	dir := filepath.Join(os.TempDir(), "a-novel-test-envs")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("create env lock directory: %w", err)
+	}
+
+	for _, e := range envs {
+		f, err := lockEnv(dir, e)
+		if err != nil {
+			release()
+			return nil, err
+		}
+		held = append(held, f)
+	}
+	return release, nil
+}
+
+// lockEnv opens e's lock file in dir and flocks it without waiting. The lock
+// lasts until the returned file is closed.
+func lockEnv(dir string, e detect.ComposeEnv) (*os.File, error) {
+	f, err := os.OpenFile(filepath.Join(dir, e.Project+".lock"), os.O_CREATE|os.O_RDONLY, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open lock of env %s: %w", e.ID, err)
+	}
+
+	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if err == nil {
+		return f, nil
+	}
+	_ = f.Close()
+	if errors.Is(err, syscall.EWOULDBLOCK) {
+		return nil, fmt.Errorf("env %s is in use by another run of this checkout; retry once it ends", e.ID)
+	}
+	return nil, fmt.Errorf("lock env %s: %w", e.ID, err)
+}
+
+// A Conflict is a compose project that already has containers on the host,
+// left behind by an earlier run of the same checkout. Project names are fixed
+// per checkout, so the same env always reclaims the same project.
+type Conflict struct {
+	Env        detect.ComposeEnv
+	Containers []string
+}
+
+// EnvConflicts returns the distinct env projects among targets that already
+// have containers, running or not. It is the preflight that catches a half-up
+// env left by an aborted command.
+func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
+	envs := distinctEnvs(targets)
 	if len(envs) == 0 {
 		return nil
 	}

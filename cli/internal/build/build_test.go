@@ -250,6 +250,62 @@ func TestAllocPorts(t *testing.T) {
 	}
 }
 
+// TestClaimEnvs pins the claim that keeps two runs of one checkout off the same
+// env. A claim takes each env once, however many targets share it, and fails
+// while another run holds one of them. Release, and a failed claim, drop every
+// lock taken, so the next run claims them all.
+//
+// Not parallel: each case points TMPDIR, and so the lock directory, at a
+// directory of its own, leaving the machine's real locks alone.
+func TestClaimEnvs(t *testing.T) {
+	testCases := []struct {
+		name    string
+		envs    []string // the env of each target, empty for none
+		held    bool     // another run holds the last env
+		wantErr bool
+	}{
+		{name: "Success/NoEnv", envs: []string{""}},
+		{name: "Success/SharedEnvClaimedOnce", envs: []string{"go", "go"}},
+		{name: "Success/DistinctEnvs", envs: []string{"go.internal", "pnpm"}},
+		{name: "Error/InUseByAnotherRun", envs: []string{"go.internal", "pnpm"}, held: true, wantErr: true},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Setenv("TMPDIR", t.TempDir())
+			targets := make([]detect.Target, len(testCase.envs))
+			for i, id := range testCase.envs {
+				if id != "" {
+					targets[i].Env = &detect.ComposeEnv{Project: "anovel-test-x-" + id, ID: id}
+				}
+			}
+
+			releaseOther := func() {}
+			if testCase.held {
+				var err error
+				releaseOther, err = ClaimEnvs(targets[len(targets)-1:])
+				if err != nil {
+					t.Fatalf("other run's claim: %v", err)
+				}
+			}
+
+			release, err := ClaimEnvs(targets)
+			if (err != nil) != testCase.wantErr {
+				t.Fatalf("ClaimEnvs error = %v, want error %t", err, testCase.wantErr)
+			}
+			if err == nil {
+				release()
+			}
+			releaseOther()
+
+			again, err := ClaimEnvs(targets)
+			if err != nil {
+				t.Fatalf("claim after release: %v", err)
+			}
+			again()
+		})
+	}
+}
+
 // TestJob_GOMAXPROCSCap verifies a job injects GOMAXPROCS from its maxProcs
 // argument (the per-target CPU cap the parallel runner uses), and leaves it
 // untouched when maxProcs is 0 (the sequential path).
