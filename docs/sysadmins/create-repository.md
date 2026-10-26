@@ -52,6 +52,30 @@ rm "$KEY_FILE"
 
 The App keeps its other keys, so every other repository keeps releasing.
 
+## Connect it to Sentry
+
+A service reports its faults to a Sentry project of its own. Skip this section for any other repository.
+
+1. In Sentry, open **Projects → Create Project**. Choose the **Go** platform, and name the project exactly as the repository. Keep error monitoring alone, since traces go to Google Cloud.
+2. In the organization's **Settings → GitHub Apps**, configure **Sentry** and add the repository under **Repository access**. Sentry reads each release's commits through it.
+3. Copy the Sentry organization token `release-ci` from [Bitwarden](./bitwarden), and paste it at the prompt:
+
+   ```bash
+   gh secret set SENTRY_AUTH_TOKEN --env release --repo "$ORG/$NAME"
+   ```
+
+4. An infra pull request creates the service's DSN container, as the `write-infra` skill describes. Once it deploys, copy the DSN from the project's **Settings → Client Keys (DSN)**, and paste it at the prompt:
+
+   ```bash
+   SECRET="production-${NAME#service-}-sentry-dsn"
+   read -rs DSN
+   printf '%s' "$DSN" | gcloud secrets versions add "$SECRET" \
+     --project=a-novel-management-prod --data-file=-
+   unset DSN
+   ```
+
+   It prints `Created version [1]`, the version infra pins.
+
 ## Create its Discord role
 
 CI mentions a repository through its own role.
