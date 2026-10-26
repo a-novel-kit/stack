@@ -395,11 +395,20 @@ has deployed.
    - its `vpc_access` sends `ALL_TRAFFIC` from the egress subnet,
      `local.foundation.network.egress_subnet_id`, where Cloud NAT and the allowlist decide what
      leaves.
+   - a server a consumer waits on, directly or through another service, sets `cpu_idle = false`,
+     and the root's `tofu test` asserts it. That covers a public API and every server it calls.
+     sentry-go and OpenTelemetry send from background goroutines after the response, and
+     request-based billing gives an instance CPU only while it serves a request, starts or stops.
+     Under sparse traffic, a send can stall past its deadline, and the event is then lost.
+   - a server no consumer waits on, such as one a scheduler calls, keeps request-based billing and
+     sends its telemetry before each answer through golib's `httpf.SendTelemetry`. CPU between its
+     calls would only keep it billed, and frequent calls keep its instance alive around the clock.
 
 Cloud Run reserves a workload's egress-subnet addresses 16 at a time, so check that foundation's
 `egress_subnet_cidr` still fits every workload there. A subnet's range grows in place but never
-shrinks. A job there can start without a network for a minute or more, so an event it captures
-before its first network call is lost, and its job-failure alert alone reports that failure.
+shrinks. A job there can start without a network for a minute or more. golib gives each event
+`sentryf.SendTimeout`, 2 minutes, to leave, and the job's flush outlasts it, so an event captured
+before the network came up still arrives.
 
 Foundation's single `sentry_ingest_host` input names the ingest host that every DSN points to. A
 move to another Sentry organization changes that input and the DSNs, and nothing else here.

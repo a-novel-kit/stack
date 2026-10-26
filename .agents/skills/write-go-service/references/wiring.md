@@ -139,16 +139,20 @@ API and what an event carries. A migrations binary reports nothing.
 - **An empty `SENTRY_DSN` turns reporting off,** so local runs and tests need no Sentry. With a DSN,
   `Init` refuses a missing release or environment.
 - **golib captures the servers' faults:** a 5xx in `httpf.HandleError`, a gRPC call that ends with
-  `Internal` or `Unavailable`, and a panic in a handler or under `otel.RecoverPanic`. A handler adds
-  no capture of its own, and a handled 4xx condition is never captured.
+  `Internal` or `Unavailable`, a panic in a handler or under `otel.RecoverPanic`, and a drain past
+  its budget or a serve failure, which `httpf.Serve` and `grpcf.ListenAndServe` report as
+  `serve HTTP` or `serve gRPC`. A handler adds no capture of its own, and a handled 4xx condition is
+  never captured.
 - **Work that outlives its request reports its own failure.** No handler sees it fail, so its owner
   takes a report function from `cmd`, which captures each failure. Authentication's REST API wires
   `MailDelivery`'s report to `sentryf.Capture`. A job that waits for the same work reports the result
   in `main` instead, and passes no report.
 - **A job's `main` captures the job's failure** under the operation's name, such as
-  `sentryf.Capture(ctx, "rotate-keys", err)`, before the deferred flush runs. A usage error, such as
-  an unknown operation, captures nothing. Prove the capture with `sentryftest.Record(t)`. The
-  recorder swaps the process-wide reporter, so that test runs serially.
+  `sentryf.Capture(ctx, "rotate-keys", err)`, before the deferred flush runs. Its setup after
+  `sentryf.Init`, such as loading a key or connecting to the database, returns its error to that
+  capture rather than panicking past it. A usage error, such as an unknown operation, captures
+  nothing. Prove the capture with `sentryftest.Record(t)`. The recorder swaps the process-wide
+  reporter, so that test runs serially.
 - **A job outwaits golib's send timeout at exit.** A Cloud Run job with Direct VPC egress waits
   30 seconds or more for Cloud NAT before its first connection out, while the database answers at
   once. golib's reporter therefore gives each event `sentryf.SendTimeout`, 2 minutes, to leave. A
@@ -159,6 +163,11 @@ API and what an event carries. A migrations binary reports nothing.
   gRPC shutdown budgets, so the 2-second Sentry and OpenTelemetry flushes that follow finish before
   Cloud Run's SIGKILL at 10 seconds. Work still running when the drain ends is cut, and the server
   reports it.
+- **A server no consumer waits on sends its telemetry before it answers.** Billed per request, it
+  loses its CPU once it answers. Its `main` wraps the router with
+  `httpf.SendTelemetry(config.<Server>TelemetryTimeout)`, outside the router's tracing, so the
+  request's own span leaves too. The timeout fits inside the write timeout's slack after the request
+  deadline. GenAI's sweep does this; a server consumers wait on keeps CPU between requests instead.
 - **An event that cannot leave within `sentryf.SendTimeout` is lost.** The Cloud Monitoring
   job-failure alert still reports that job's failure. Production runs the jobs with OpenTelemetry
   off, so their events carry no trace ID.
