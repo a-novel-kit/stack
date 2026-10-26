@@ -148,5 +148,5 @@ API and what an event carries. A migrations binary reports nothing.
 - **A job's event can be lost before its first network call.** A Cloud Run job with Direct VPC
   egress can start without a network for a minute or more. A failure in that window captures its
   event, but the flush times out and the event is lost. The Cloud Monitoring job-failure alert still
-  reports the failure, and a failure after the database connection reports normally. Production runs the jobs with OpenTelemetry off, so their events carry no trace
-  ID.
+  reports the failure, and a failure after the database connection reports normally. Production
+  runs the jobs with OpenTelemetry off, so their events carry no trace ID.
