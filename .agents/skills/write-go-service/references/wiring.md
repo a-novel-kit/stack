@@ -153,6 +153,10 @@ API and what an event carries. A migrations binary reports nothing.
   waits 30 seconds or more for Cloud NAT before its first connection out, while the database answers
   at once. Its `main` therefore flushes within `config.SentryJobFlushTimeout`, a minute. A server
   keeps `config.SentryFlushTimeout`, inside its platform's shutdown grace period.
+- **A server's drain ends 6 seconds after SIGTERM.** `env.TimeoutShutdownDefault` sets the REST and
+  gRPC shutdown budgets, so the 2-second Sentry and OpenTelemetry flushes that follow finish before
+  Cloud Run's SIGKILL at 10 seconds. Work still running when the drain ends is cut, and the server
+  reports it.
 - **An event sentry-go cannot send within 30 seconds is lost.** The Cloud Monitoring job-failure
   alert still reports that job's failure. Production runs the jobs with OpenTelemetry off, so their
   events carry no trace ID.
