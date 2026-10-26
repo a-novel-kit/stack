@@ -163,6 +163,11 @@ API and what an event carries. A migrations binary reports nothing.
   gRPC shutdown budgets, so the 2-second Sentry and OpenTelemetry flushes that follow finish before
   Cloud Run's SIGKILL at 10 seconds. Work still running when the drain ends is cut, and the server
   reports it.
+- **A server no consumer waits on sends its telemetry before it answers.** Billed per request, it
+  loses its CPU once it answers. Its `main` wraps the router with
+  `httpf.SendTelemetry(config.<Server>TelemetryTimeout)`, outside the router's tracing, so the
+  request's own span leaves too. The timeout fits inside the write timeout's slack after the request
+  deadline. GenAI's sweep does this; a server consumers wait on keeps CPU between requests instead.
 - **An event that cannot leave within `sentryf.SendTimeout` is lost.** The Cloud Monitoring
   job-failure alert still reports that job's failure. Production runs the jobs with OpenTelemetry
   off, so their events carry no trace ID.

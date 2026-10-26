@@ -395,12 +395,14 @@ has deployed.
    - its `vpc_access` sends `ALL_TRAFFIC` from the egress subnet,
      `local.foundation.network.egress_subnet_id`, where Cloud NAT and the allowlist decide what
      leaves.
-   - a server that keeps an instance (`min_instance_count` of 1 or more) sets `cpu_idle = false`,
-     and the root's `tofu test` asserts it. sentry-go and OpenTelemetry send from background
-     goroutines after the response, and request-based billing gives an instance CPU only while it
-     serves a request, starts or stops. A kept instance may never stop, so its events would wait
-     for the next request. A server that scales to zero keeps request-based billing: an idle
-     instance stops within 15 minutes, and its shutdown flush sends what waited.
+   - a server a consumer waits on, directly or through another service, sets `cpu_idle = false`,
+     and the root's `tofu test` asserts it. That covers a public API and every server it calls.
+     sentry-go and OpenTelemetry send from background goroutines after the response, and
+     request-based billing gives an instance CPU only while it serves a request, starts or stops.
+     Under sparse traffic, a send can stall past its deadline, and the event is then lost.
+   - a server no consumer waits on, such as one a scheduler calls, keeps request-based billing and
+     sends its telemetry before each answer through golib's `httpf.SendTelemetry`. CPU between its
+     calls would only keep it billed, and frequent calls keep its instance alive around the clock.
 
 Cloud Run reserves a workload's egress-subnet addresses 16 at a time, so check that foundation's
 `egress_subnet_cidr` still fits every workload there. A subnet's range grows in place but never
