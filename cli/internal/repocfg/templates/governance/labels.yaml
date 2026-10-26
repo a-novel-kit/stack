@@ -73,6 +73,11 @@ ensure:
   - name: escalation
     color: "b60205"
     description: "Automated governance escalation (escalate action)."
+  # The sentry-intake workflow puts it on every issue Sentry's GitHub App opens from
+  # a Sentry issue, so one board filter shows the production faults waiting in Triage.
+  - name: sentry
+    color: "362d59"
+    description: Opened by Sentry's GitHub App from a Sentry issue
 retire:
   # The `Triage` board status holds this signal: a status is the action a task
   # needs, and labels only sort within a status.

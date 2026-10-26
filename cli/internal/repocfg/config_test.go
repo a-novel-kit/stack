@@ -127,6 +127,8 @@ func TestLoadLabels(t *testing.T) {
 	ensured := []string{
 		"append-only-override", "with-feature-env", "buf skip breaking",
 		"allow-screenshot-change", "allow-incomplete-translations", "allow-translation-drift",
+		// sentry-intake-run labels every issue Sentry's GitHub App opens.
+		"sentry",
 	}
 	for _, name := range ensured {
 		if named(name) < 0 {
