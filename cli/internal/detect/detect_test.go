@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -67,11 +68,82 @@ func TestEnvFileToEnv(t *testing.T) {
 			t.Parallel()
 			f := filepath.Join(t.TempDir(), "podman-compose.go.test.yaml")
 			mustWrite(t, f, testCase.yaml)
-			env := envFile{env: "go", file: f, id: "go"}.toEnv(".")
+			env := envFile{env: "go", file: f, id: "go"}.toEnv(filepath.Dir(f))
 			if !reflect.DeepEqual(env.Services, testCase.services) || !reflect.DeepEqual(env.Dependents, testCase.dependents) ||
 				!reflect.DeepEqual(env.Ports, testCase.ports) {
 				t.Errorf("toEnv = services %v, dependents %v, ports %v; want %v, %v, %v",
 					env.Services, env.Dependents, env.Ports, testCase.services, testCase.dependents, testCase.ports)
+			}
+		})
+	}
+}
+
+// TestComposeProject pins the env names that keep runs apart. One checkout
+// keeps its names across runs, while two repositories, two worktrees of one
+// repository, or two envs of one checkout never share one. Every name stays in
+// compose's project-name charset and starts with the directory it covers.
+func TestComposeProject(t *testing.T) {
+	t.Parallel()
+
+	validName := regexp.MustCompile(`^anovel-test-[a-z0-9]+(-[a-z0-9]+)*$`)
+
+	type env struct{ dir, id string }
+
+	testCases := []struct {
+		name  string
+		a, b  env
+		same  bool
+		wantA string // pattern a's name matches; empty skips the check
+	}{
+		{
+			name:  "SameCheckoutAcrossRuns",
+			a:     env{"/w/service-genai", "go.internal"},
+			b:     env{"/w/service-genai", "go.internal"},
+			same:  true,
+			wantA: `^anovel-test-service-genai-[0-9a-f]{8}-go-internal$`,
+		},
+		{
+			name: "TwoRepositories",
+			a:    env{"/w/service-genai", "go.internal"},
+			b:    env{"/w/service-template", "go.internal"},
+		},
+		{
+			name: "TwoWorktreesOfOneRepository",
+			a:    env{"/w/service-genai", "go.internal"},
+			b:    env{"/w/tmp/fix/service-genai", "go.internal"},
+		},
+		{
+			name: "TwoEnvsOfOneCheckout",
+			a:    env{"/w/service-genai", "go.internal"},
+			b:    env{"/w/service-genai", "go.pkg"},
+		},
+		{
+			name: "PathsThatSlugAlike",
+			a:    env{"/w/a-b/cli", "go"},
+			b:    env{"/w/a_b/cli", "go"},
+		},
+		{
+			name:  "UnsafeDirectoryName",
+			a:     env{"/w/My Repo.v2", "pnpm"},
+			b:     env{"/w/my-repo-v2", "pnpm"},
+			wantA: `^anovel-test-my-repo-v2-[0-9a-f]{8}-pnpm$`,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			a := composeProject(testCase.a.dir, testCase.a.id)
+			b := composeProject(testCase.b.dir, testCase.b.id)
+			for _, name := range []string{a, b} {
+				if !validName.MatchString(name) {
+					t.Errorf("composeProject = %q, outside the project-name charset", name)
+				}
+			}
+			if testCase.wantA != "" && !regexp.MustCompile(testCase.wantA).MatchString(a) {
+				t.Errorf("composeProject = %q, want a match for %s", a, testCase.wantA)
+			}
+			if (a == b) != testCase.same {
+				t.Errorf("composeProject = %q and %q, want same %t", a, b, testCase.same)
 			}
 		})
 	}

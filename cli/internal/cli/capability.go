@@ -137,6 +137,12 @@ func runCapability(cmd *cobra.Command, c capability, o capabilityOpts) error {
 	defer stop()
 	context.AfterFunc(ctx, stop)
 
+	release, err := build.ClaimEnvs(targets)
+	if err != nil {
+		return err
+	}
+	defer release()
+
 	interactive := !o.yes && stdoutIsTTY()
 	if err := preflight(ctx, c.name, targets, interactive && stdinIsTTY(), o.keep); err != nil {
 		return err
@@ -260,11 +266,13 @@ func withCoverage(targets []detect.Target) []detect.Target {
 	return targets
 }
 
-// preflight refuses to run on top of a test env left up by an aborted run. Both
-// answers to its prompt tear down only the conflicting projects; clean then
-// continues and abort stops. Without a terminal it cleans and continues, so CI
-// and piped runs self-heal. With keep, a leftover env is the point: the run
-// adopts its warm containers and data.
+// preflight refuses to run on top of a test env left up by an earlier run. The
+// caller holds every env's claim (see build.ClaimEnvs), so a conflicting env
+// belongs to this checkout and to a run that has ended, never to a live one.
+// Both answers to its prompt tear down only the conflicting projects; clean
+// then continues and abort stops. Without a terminal it cleans and continues,
+// so piped and agent runs self-heal. With keep, a leftover env is the point:
+// the run adopts its warm containers and data.
 func preflight(ctx context.Context, verb string, targets []detect.Target, canPrompt, keep bool) error {
 	conflicts := build.EnvConflicts(ctx, targets)
 	switch {
@@ -284,7 +292,7 @@ func preflight(ctx context.Context, verb string, targets []detect.Target, canPro
 		proceed = answer == "c" || answer == "clean"
 	} else {
 		fmt.Fprintln(os.Stderr, ui.Warn.Render("No prompt available — cleaning the stale environment "+
-			"(scoped to this project only) and continuing."))
+			"(scoped to this checkout only) and continuing."))
 	}
 	for _, c := range conflicts {
 		fmt.Fprintln(os.Stderr, ui.Muted.Render("  cleaning "+c.Env.ID+" …"))

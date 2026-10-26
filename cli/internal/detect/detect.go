@@ -88,9 +88,9 @@ type Target struct {
 type ComposeEnv struct {
 	// File is the absolute path to the compose YAML.
 	File string
-	// Project is the `podman compose -p` project name, one per env file in
-	// ordinary layouts, so parallel test targets do not collide on container or
-	// network names.
+	// Project is the `podman compose -p` project name, one per env file of a
+	// checkout, so parallel test targets and runs in other checkouts do not
+	// collide on container or network names.
 	Project string
 	// ID is the parsed identifier, e.g. "go.internal" or "pnpm".
 	ID string
