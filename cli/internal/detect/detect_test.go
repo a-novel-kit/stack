@@ -25,7 +25,8 @@ func mustWrite(t *testing.T, path, content string) {
 // TestEnvFileToEnv guards the classifier the phased env start relies on: a
 // service is a dependent, started in the second wave, when it declares a
 // depends_on block in either form. The host ports to allocate are the ${VAR}
-// host sides of port mappings, and a file that does not parse comes up in one
+// host sides of port mappings, a service with a build section names its image
+// after the checkout's project, and a file that does not parse comes up in one
 // piece.
 func TestEnvFileToEnv(t *testing.T) {
 	t.Parallel()
@@ -36,6 +37,7 @@ func TestEnvFileToEnv(t *testing.T) {
 		services   []string
 		dependents []string
 		ports      []string
+		built      []string // services whose image the env builds
 	}{
 		{
 			name: "MapAndListDependsOn",
@@ -46,6 +48,9 @@ func TestEnvFileToEnv(t *testing.T) {
   seed-x:
     depends_on: [postgres-x]
   service-x:
+    build:
+      context: ..
+      dockerfile: ./builds/x.Dockerfile
     depends_on:
       seed-x:
         condition: service_completed_successfully
@@ -54,6 +59,7 @@ func TestEnvFileToEnv(t *testing.T) {
 			services:   []string{"postgres-x", "seed-x", "service-x"},
 			dependents: []string{"seed-x", "service-x"},
 			ports:      []string{"POSTGRES_PORT", "REST_PORT"},
+			built:      []string{"service-x"},
 		},
 		{
 			name:     "DBOnlyNoDependents",
@@ -73,6 +79,13 @@ func TestEnvFileToEnv(t *testing.T) {
 				!reflect.DeepEqual(env.Ports, testCase.ports) {
 				t.Errorf("toEnv = services %v, dependents %v, ports %v; want %v, %v, %v",
 					env.Services, env.Dependents, env.Ports, testCase.services, testCase.dependents, testCase.ports)
+			}
+			var images []string
+			for _, service := range testCase.built {
+				images = append(images, "localhost/"+env.Project+"_"+service+":latest")
+			}
+			if !reflect.DeepEqual(env.Images, images) {
+				t.Errorf("toEnv images = %v, want %v", env.Images, images)
 			}
 		})
 	}

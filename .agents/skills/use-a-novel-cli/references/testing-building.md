@@ -13,6 +13,7 @@ envs run in parallel safely. Env names are unique per checkout, so runs in other
 or worktrees never touch yours. A second run in the same checkout exits 1 with "env … is in
 use by another run of this checkout" while the first holds that env: wait for it, then rerun.
 Under `-y`, a run clears only its own checkout's leftovers from runs that have ended.
+Teardown untags the images an env built, so removing a worktree needs no image cleanup.
 
 A test process reaches its env's published database through both Postgres contracts,
 as a go-exec target does (see [service operations](services.md#host-processes-and-postgres)):

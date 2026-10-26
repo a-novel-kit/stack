@@ -3,6 +3,7 @@ package build
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -222,6 +223,36 @@ func TestCompose(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 5*time.Second {
 		t.Fatalf("compose returned %s after the cancel: a child of podman outlived it", elapsed)
+	}
+}
+
+// TestEnvDown pins that teardown untags each image the env built by its exact
+// name. A bare `podman untag <image>` would also strip other checkouts' tags
+// on the same image.
+//
+// Not parallel: t.Setenv puts a stand-in podman first on PATH.
+func TestEnvDown(t *testing.T) {
+	bin := t.TempDir()
+	calls := filepath.Join(bin, "calls")
+	podman := fmt.Sprintf("#!/bin/sh\necho \"$*\" >> %q\n", calls)
+	if err := os.WriteFile(filepath.Join(bin, "podman"), []byte(podman), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	env := &detect.ComposeEnv{Project: "p", File: "f", Images: []string{"localhost/p_a:latest", "localhost/p_b:latest"}}
+	envDown(t.Context(), env, os.Environ(), io.Discard)
+
+	got, err := os.ReadFile(calls)
+	if err != nil {
+		t.Fatal(err)
+	}
+	//nolint:dupword // untag names each tag twice to drop that tag alone
+	want := "compose -p p -f f down --volume\n" +
+		"untag localhost/p_a:latest localhost/p_a:latest\n" +
+		"untag localhost/p_b:latest localhost/p_b:latest\n"
+	if string(got) != want {
+		t.Errorf("podman calls:\n%s\nwant:\n%s", got, want)
 	}
 }
 
