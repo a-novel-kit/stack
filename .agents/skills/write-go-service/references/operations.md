@@ -131,8 +131,7 @@ func (h *GrpcOrderCreate) OrderCreate(
         return nil, status.Error(codes.NotFound, "create order: user not found")
     }
     if err != nil {
-        _ = otel.ReportError(span, err)
-        return nil, status.Error(codes.Internal, "create order: internal error")
+        return nil, grpcf.Fault(codes.Internal, "create order: internal error", otel.ReportError(span, err))
     }
 
     return &protogen.OrderCreateResponse{OrderId: result.ID.String()}, nil
@@ -148,6 +147,9 @@ func NewGrpcOrderCreate(service GrpcOrderCreateService) *GrpcOrderCreate {
 - Map core sentinels to `codes.*` via `errors.Is` + `status.Error`. Inside `status.Error` /
   `status.Errorf` use `%v`, never `%w`: gRPC status errors don't support `errors.Unwrap`, so `%w`
   misleads. Keep status _messages_ generic enough not to leak DB/crypto detail.
+- Answer a server fault (`Internal`, `Unavailable`) with `grpcf.Fault(code, msg, cause)`. The caller
+  receives the status alone, and the fault keeps its cause for Sentry, which groups faults by it. A
+  bare `status.Error` wraps nothing and puts every fault of a method in one Sentry issue.
 - Convert proto↔core models **in the handler**. Never pass a proto type into the core layer.
 - Handler type names carry the `Grpc` prefix; the service interface mirrors it. File:
   `grpc.<entity><Operation>.go`.

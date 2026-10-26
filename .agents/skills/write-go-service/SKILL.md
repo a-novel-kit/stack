@@ -37,7 +37,8 @@ layer rules when testing its contract too; crossing layers requires each matchin
 
 - DAO operations or transaction ownership, including core/job transactions: [data access](references/data-access.md).
 - Core validation/orchestration or REST/gRPC handlers: [operations](references/operations.md).
-- Config, internal helpers, models, exported clients, or command wiring: [wiring](references/wiring.md).
+- Config, internal helpers, models, exported clients, command wiring, or Sentry error reporting:
+  [wiring](references/wiring.md).
 - REST routes, request bodies, rate limits, or costly operations: [request limits](references/request-limits.md).
 - New or changed DAO/core operations or handlers, and any other operation with a span:
   [telemetry](references/telemetry.md). Apply this to reviews even when the existing code lacks a span.

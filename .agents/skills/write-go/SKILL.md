@@ -226,9 +226,10 @@ A trace already links its spans, so each fact is recorded once.
   best-effort cleanup that failed, it records nothing: the child span that failed already holds it.
 - **A transport handler span fails only on a server fault**, as the OpenTelemetry HTTP and gRPC server
   conventions do. `golib/httpf.HandleError` marks the span for a 5xx and leaves a 4xx unset. A gRPC
-  handler calls `ReportError` before a server-fault code (`Internal`, `Unavailable`, `Unknown`,
-  `DataLoss`, `DeadlineExceeded`) and returns a client-error code (`InvalidArgument`, `NotFound`, …)
-  without it.
+  handler answers a server-fault code (`Internal`, `Unavailable`, `Unknown`, `DataLoss`,
+  `DeadlineExceeded`) with `grpcf.Fault(code, msg, otel.ReportError(span, err))`, which keeps the
+  reported error as the cause Sentry groups the fault by. It returns a client-error code
+  (`InvalidArgument`, `NotFound`, …) without a report.
 - **No span events.** OpenTelemetry is deprecating them, and a progress marker or exception event
   repeats what the span's status and duration already show.
 

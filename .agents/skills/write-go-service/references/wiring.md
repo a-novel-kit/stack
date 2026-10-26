@@ -98,7 +98,7 @@ Each `cmd/<name>/main.go` wires the full dependency graph and starts a server or
 
 ```
 1. Load config (env/yaml)
-2. Initialize observability (OpenTelemetry)
+2. Initialize observability (OpenTelemetry, then the Sentry reporter)
 3. Set up shared contexts (database connection, secrets)
 4. Construct DAO objects
 5. Construct service objects (inject DAOs via interfaces)
@@ -118,3 +118,35 @@ signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 <-quit
 server.GracefulStop()
 ```
+
+### Error reporting
+
+Each server and job reports its faults to Sentry through golib's
+[`sentryf`](https://pkg.go.dev/github.com/a-novel-kit/golib/sentryf), whose package docs hold the
+API and what an event carries. A migrations binary reports nothing.
+
+- **The reporter's config loads like any other setting.** `internal/config/env` reads
+  `Sentry = sentryf.LoadConfig(getEnv)`, so the service's prefix applies, and each binary's config
+  struct carries it as a `Sentry sentryf.Config` field.
+- **`main` installs the reporter right after OpenTelemetry,** before any work, and flushes it on
+  exit within a bounded timeout:
+
+  ```go
+  lo.Must0(sentryf.Init(cfg.Sentry))
+  defer sentryf.Flush(config.SentryFlushTimeout)
+  ```
+
+- **An empty `SENTRY_DSN` turns reporting off,** so local runs and tests need no Sentry. With a DSN,
+  `Init` refuses a missing release or environment.
+- **golib captures the servers' faults:** a 5xx in `httpf.HandleError`, a gRPC call that ends with
+  `Internal` or `Unavailable`, and a panic in a handler or under `otel.RecoverPanic`. A handler adds
+  no capture of its own, and a handled 4xx condition is never captured.
+- **A job's `main` captures the job's failure** under the operation's name, such as
+  `sentryf.Capture(ctx, "rotate-keys", err)`, before the deferred flush runs. A usage error, such as
+  an unknown operation, captures nothing. Prove the capture with `sentryftest.Record(t)`. The
+  recorder swaps the process-wide reporter, so that test runs serially.
+- **A job's event can be lost before its first network call.** A Cloud Run job with Direct VPC
+  egress can start without a network for a minute or more. A failure in that window captures its
+  event, but the flush times out and the event is lost. The Cloud Monitoring job-failure alert still
+  reports the failure, and a failure after the database connection reports normally. Production runs the jobs with OpenTelemetry off, so their events carry no trace
+  ID.

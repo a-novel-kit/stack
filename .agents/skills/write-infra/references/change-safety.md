@@ -9,6 +9,7 @@
   [Database and backup hosts](#database-and-backup-hosts), [Trust boundaries](#trust-boundaries),
   [Recovery](#recovery)
 - [Add a service](#add-a-service): the pull-request order, the first plan, native backups
+- [Report faults to Sentry](#report-faults-to-sentry): the DSN, the release name, the egress
 
 ## Prove the plan before review
 
@@ -354,3 +355,36 @@ deployed. a-novel/infra#785 is the worked example.
      the TLS certificates by hand.
   4. Foundation adds `native_backups.<service>` during the service's planned downtime. Then take a
      full backup and run a recovery drill.
+
+## Report faults to Sentry
+
+A workload reports its faults to Sentry once it holds three variables. Migrations and smoke checks
+hold none and report nothing. The change takes three pull requests, each merged once the one before
+has deployed.
+
+1. **Bootstrap creates the DSN container,** `production-<service>-sentry-dsn` with the contract
+   `SENTRY_DSN`. The same pull request grants each reporting workload's identity read on it, through
+   `service-runtime`'s `secrets` or the workload's `workloads` entry, and pins
+   `secret_versions.sentry-dsn`. Cloud Run checks a revision's secret access when it creates the
+   revision, and a fresh grant takes minutes to apply, so the grant deploys before anything mounts
+   the secret. Ops then add the project's DSN as version 1, as `docs/runbooks/secrets.md` shows.
+2. **Foundation admits the workload's identity** in `egress_allowlist["sentry"]`, the rule for
+   Sentry's ingest host.
+3. **The root wires each reporting workload:**
+   - `SENTRY_DSN` mounts the pinned `sentry-dsn` version;
+   - `SENTRY_ENVIRONMENT` is `production`;
+   - `SENTRY_RELEASE` is `<repository>@${trimprefix(local.images.<image>.tag, "v")}`, the name
+     release CI gives the release in Sentry, so it moves with every release pin. The root's
+     `tofu test` asserts that each reporting workload's value matches
+     `^<repository>@[0-9]+\.[0-9]+\.[0-9]+$`;
+   - its `vpc_access` sends `ALL_TRAFFIC` from the egress subnet,
+     `local.foundation.network.egress_subnet_id`, where Cloud NAT and the allowlist decide what
+     leaves.
+
+Cloud Run reserves a workload's egress-subnet addresses 16 at a time, so check that foundation's
+`egress_subnet_cidr` still fits every workload there. A subnet's range grows in place but never
+shrinks. A job there can start without a network for a minute or more, so an event it captures
+before its first network call is lost, and its job-failure alert alone reports that failure.
+
+Foundation's single `sentry_ingest_host` input names the ingest host that every DSN points to. A
+move to another Sentry organization changes that input and the DSNs, and nothing else here.
