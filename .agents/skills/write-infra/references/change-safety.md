@@ -461,7 +461,17 @@ creates it.
   rollout, so a Sentry API outage there would hold every release. `check-service-roots.sh` skips it
   as it skips foundation. The services job waits for it: it runs only when the root changes, so a
   release never waits on Sentry, while a key or organization change reaches the services in the
-  same deploy.
+  same deploy. The services still run when it fails, on the outputs it last applied. A deploy
+  re-runs every root changed since the last successful one, so `!failure()`, which counts every
+  ancestor job, would let one rejected Sentry change hold every release. `rollout` checks
+  `needs.services.result` for the same reason.
+- **Alerts post to Discord.** Each service has three metric monitors on its server spans
+  (`is_transaction:true`, on the `events_analytics_platform` dataset): failing share, p95 duration,
+  and telemetry stopped, a `count() < 1` over a window longer than the gap between its steady span
+  sources. Their thresholds are the root's `alerts` input. One `sentry_alert` posts every monitor's
+  issue to the channel in its `discord` input, through the Discord integration installed on the
+  server by hand. Each service also has a dashboard of the same spans plus its error events. A plan
+  sends none of these to Sentry's API, so the first apply is the test of a new field.
 - **Its token never reaches state or a plan.** The root reads it through the Google provider's
   ephemeral `google_secret_manager_secret_version`. The `tofu` action passes `TF_VAR_writer`, so
   plans read `production-sentry-plan-token`, the only one bootstrap lets `infra-plan` read, and only
