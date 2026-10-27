@@ -47,6 +47,10 @@
   own pull request first, then the change that uses it.
 - **A plan shows the state it read.** When pull requests merge and deploy close together, re-run a
   plan that shows an unexpected change before judging it: a deploy may have applied it meanwhile.
+- **A failed Cloud Run update still records its configuration in state.** The provider saves the
+  planned values when the wait fails, so a rerun plans no changes and passes, while the service
+  keeps serving its previous revision. After such a failure, fix the cause, then make sure the next
+  apply changes that resource, as a release pin does. A green rerun alone proves nothing.
 
 ## Retire protected resources
 
