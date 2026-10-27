@@ -111,8 +111,10 @@ browser SDK only once the visitor consents. Declare `PUBLIC_SENTRY_DSN` as a pub
 - The client `init` hook starts it without awaiting it, and `handleError` reports `unknown` errors.
 - The root layout feeds it `beforeNavigate`, and `afterNavigate` with `page.route.id`, since
   SvelteKit's first navigation carries no route. It renders uikit's `ConsentBanner` first in the
-  reading order, with the platform's wording, and opens it on mount while the visitor has not
-  answered. The shell's Privacy choices opens it again.
+  reading order, with the platform's wording, and shows it only while the device records no answer.
+- The answer lives in one reactive preference the root layout shares through a context. The
+  banner's visibility derives from it, and the account page's Privacy section changes it with a
+  `Switch`. The shell offers no consent entry.
 - The server hook writes the request's trace into `<meta name="sentry-trace">`, so the page load
   continues it, and same-origin requests carry a `traceparent` back.
 
