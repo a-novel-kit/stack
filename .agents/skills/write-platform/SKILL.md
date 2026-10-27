@@ -85,13 +85,15 @@ names a production resource, such as `DOWNTIME_URL`, is then live in a unit test
 offline unit project keeps the test from fetching it.
 
 Trace the server with SvelteKit's own spans and nodelib's setup. Enable
-`sveltekit({ tracing: { server: true } })`, declare `OTEL` and `GCLOUD_PROJECT_ID` in `src/env.ts`,
-and start `@a-novel-kit/nodelib-server/telemetry` from `src/instrumentation.server.ts`, flushing it
-on adapter-node's `sveltekit:shutdown` event. The setup mirrors golib's presets: it traces the
-global `fetch` into backend services, keeps every trace, and redacts query values from recorded
-URLs. Keep secrets in the query, never in a path segment, which is recorded as is. Browser spans are
-deferred: add them only once the browser calls services directly or runs significant work of its
-own.
+`sveltekit({ tracing: { server: true } })`, declare `OTEL` in `src/env.ts`, and start
+`@a-novel-kit/nodelib-server/telemetry` from `src/instrumentation.server.ts` with
+`untracedRoutes: ["/ping"]`, flushing it on adapter-node's `sveltekit:shutdown` event. The setup
+mirrors golib's OTLP preset: the deployment's standard `OTEL_EXPORTER_OTLP_*` variables pick the
+backend, and without an endpoint spans print to stdout. It traces the global `fetch` into backend
+services, keeps every trace even when the caller did not sample it, and redacts query values from
+recorded URLs. Keep secrets in the query, never in a path segment, which is recorded as is. Browser
+spans are deferred: add them only once the browser calls services directly or runs significant work
+of its own.
 
 ## Storybook-first delivery
 
@@ -175,8 +177,8 @@ service:
 - Refresh a rejected or expiring session at one server-owned boundary. Clear cookies only after a
   definitive authentication rejection; preserve them and expose a recoverable unavailable state on
   network, timeout, or downstream 5xx failures. Do not silently turn an outage into signed-out state.
-- A logout that only clears platform cookies is not token revocation. Describe it accurately and
-  plan a backend capability when revocation is required.
+- Logout revokes the session's refresh token through the service, then clears the cookies. A failed
+  revocation still clears them: the visitor asked to leave this browser signed out.
 - A short-code `GET` only parses a sanitized display model; it never verifies or consumes the code.
   Completion uses `POST` to the current URL so no hidden field duplicates the credential. Return
   `Cache-Control: no-store`, `Referrer-Policy: strict-origin`, and `X-Robots-Tag: noindex`. With
