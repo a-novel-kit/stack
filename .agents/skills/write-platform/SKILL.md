@@ -100,9 +100,24 @@ backend, and without an endpoint spans print to stdout. It traces the global `fe
 services, keeps every trace even when the caller did not sample it, and redacts query values from
 recorded URLs. Keep secrets in the query, never in a path segment, which is recorded as is. In
 production, the server spans go to the platform's own Sentry project, which the infra root wires as
-`write-infra` describes. Browser spans are deferred: add them only once the browser calls services
-directly or runs significant work of its own. Browser telemetry and `@sentry/sveltekit` also wait for
-counsel's ruling on consent ([a-novel/.github#399](https://github.com/a-novel/.github/issues/399)).
+`write-infra` describes.
+
+Report the browser through `@a-novel-kit/nodelib-browser/telemetry`, which downloads Sentry's
+browser SDK only once the visitor consents. Declare `PUBLIC_SENTRY_DSN` as a public variable in
+`src/env.ts`: without it, the browser reports nothing and asks nothing.
+
+- `src/lib/client/telemetry.ts` builds one `BrowserTelemetry`, released as `<repository>@<version>`
+  from the build's `version`, which the Vite configuration takes from `package.json`.
+- The client `init` hook starts it without awaiting it, and `handleError` reports `unknown` errors.
+- The root layout feeds it `beforeNavigate`, and `afterNavigate` with `page.route.id`, since
+  SvelteKit's first navigation carries no route. It renders uikit's `ConsentBanner` first in the
+  reading order, with the platform's wording, and opens it on mount while the visitor has not
+  answered. The shell's Privacy choices opens it again.
+- The server hook writes the request's trace into `<meta name="sentry-trace">`, so the page load
+  continues it, and same-origin requests carry a `traceparent` back.
+
+Add no other tracker, analytics or third-party script without a consent decision on the planning
+issue.
 
 ## Storybook-first delivery
 
