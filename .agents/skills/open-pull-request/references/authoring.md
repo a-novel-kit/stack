@@ -9,8 +9,8 @@ Contents:
 - [5.1 Choose the base branch](#51-choose-the-base-branch)
 - [5.2 Title](#52-title)
 - [5.3 Body](#53-body)
-- [5.4 Do NOT pass these flags](#54-do-not-pass-these-flags)
-- [5.5 Tracking stays on the issue](#55-tracking-stays-on-the-issue)
+- [5.4 Flags](#54-flags)
+- [5.5 Trace the PR to its planning issues](#55-trace-the-pr-to-its-planning-issues)
 - [5.6 Capture the PR URL](#56-capture-the-pr-url)
 - [Phase 6: Updating an Existing PR](#phase-6-updating-an-existing-pr)
 - [6.1 Mark ready the moment you want review (mandatory)](#61-mark-ready-the-moment-you-want-review-mandatory)
@@ -81,6 +81,10 @@ None.
 
 - [x] `a-novel test --type=go -y` passes
 - [ ] CI green
+
+## Tracking
+
+Closes a-novel/.github#412 · Epic a-novel/.github#405 · milestone "JSON keys: key revocation".
 EOF
 )"
 ```
@@ -89,15 +93,9 @@ Rules:
 
 - **Summary** is 1–3 bullets describing what changed _and why_. Readers see the diff; they
   need the intent.
-- **Linked issues — close a planning issue with the FULL cross-repo ref.** A PR implementing
-  a planning issue must close it in the body so merging advances the board. Planning issues
-  (Epic / Feature / Task) live in the org **`.github`** repos (`a-novel-kit/.github`,
-  `a-novel/.github`), so from another repo a bare `Closes #<n>` resolves to _this_ repo and
-  links **nothing** — the issue then freezes on the board (a Feature stuck at Backlog though
-  its PR merged). Use `Closes a-novel-kit/.github#<n>` (or `a-novel/.github#<n>`): only that
-  form lands in the PR's `closingIssuesReferences`, the sole signal `derive-status` reads to
-  move the issue's board **Status**. A Task filed in _this same_ repo keeps the bare
-  `Closes #<n>`.
+- **Tracking** names the Task the PR implements, its Epic and their milestone, as
+  [5.5](#55-trace-the-pr-to-its-planning-issues) describes. Only a PR with no planning issue
+  omits it.
 - **Layers changed** lists only the layers actually touched. Omit the section entirely if
   only one layer is affected and the title already conveys it.
 - **Breaking changes** is either `None.` or an itemized list with migration steps. Never
@@ -117,7 +115,10 @@ diff — file lists, mechanical renames, and "updated X to Y" bullets restate wh
 already shows. Exhaustive on decisions, silent on mechanics. The same bar applies to PR thread
 comments (`resolve-pr-feedback`), where prose may lean more technical.
 
-### 5.4 Do NOT pass these flags
+### 5.4 Flags
+
+Pass `--milestone` with the Task's milestone ([5.5](#55-trace-the-pr-to-its-planning-issues)).
+Leave out these flags:
 
 - `--assignee` / `--reviewer` — the `auto-assign-author` workflow handles assignees; the
   repo decides reviewers via its `CODEOWNERS` file (at repo root) or team routing. Manual
@@ -125,19 +126,41 @@ comments (`resolve-pr-feedback`), where prose may lean more technical.
   user asks for a specific person.
 - `--label` — downstream automation derives labels from the title's Conventional-Commits
   type. Add one manually only when the user requests it.
-- `--milestone` / project board / **Priority** / **Size** / tracking labels — a PR carries none of
-  them; the issue it closes does. See [Tracking stays on the issue](#55-tracking-stays-on-the-issue).
+- `--project` — a PR is never a board item (5.5).
 
-### 5.5 Tracking stays on the issue
+### 5.5 Trace the PR to its planning issues
 
-A PR is never a board item. The board tracks the planning issue a PR closes, and `derive-status`
-moves that issue's Status from the PR's events through the closing reference: In review when the
-PR is ready, Awaiting release when it merges. A correct `Closes` line (5.3) is therefore the PR's
-whole contribution to tracking.
+A PR carries its Task's milestone, and its Tracking section names the Task, the Epic and that
+milestone. A reader then traces the PR to its planning issues from the PR itself. Read all three
+from the Task:
 
-Do not add the PR to a board, and do not copy the issue's milestone, Priority, Size or tracking
-labels onto it. A second card per task drifts from the first, and nothing keeps the two in sync.
-Functional labels such as `epic:<N>` are different: `coordinate-landing` owns them.
+```bash
+gh issue view <n> --repo <org>/<repo> --json milestone,parent \
+  --jq '{milestone: .milestone.title, due: .milestone.dueOn, parent: .parent.url}'
+```
+
+The parent is the Epic, or a Feature whose own parent is the Epic.
+
+- **Milestone.** Pass `--milestone "<milestone>"` to `gh pr create`, or to `gh pr edit` on an open
+  PR. Each repository holds its own milestones. When the PR's repository has none of that name,
+  create one with the identical name and due date, as
+  [plan-feature](../../plan-feature/references/planning-issues.md) groups cross-repo work:
+  `gh api repos/<org>/<repo>/milestones -f title="<milestone>" -f due_on=<due>`. GitHub silently
+  drops a milestone set without Write on the repository. Read it back with
+  `gh pr view <n> --json milestone`.
+- **Full refs.** Write each issue as `<org>/<repo>#<n>`, even within one repository. A bare `#<n>`
+  resolves to the PR's own repository, so a planning issue in a `.github` repository goes unlinked
+  and freezes on the board.
+- **Closing keyword.** On a PR into the default branch, the Task ref reads `Closes <ref>`. The
+  keyword puts the Task in the PR's `closingIssuesReferences`, the sole signal `derive-status` reads
+  to move the Task's board Status: In review when the PR is ready, Awaiting release when it merges.
+  GitHub ignores closing keywords on a PR into any other base, such as a long-lived `v1` branch.
+  Such a PR writes `Task <ref>`, and its Tracking section is its only link to the Task.
+- **Board.** A PR is never a board item. Do not add it to a board, and do not copy the Task's
+  Priority, Size or tracking labels onto it. A second card per task drifts from the first, and
+  nothing keeps the two in sync.
+- **`epic:<N>` label.** Add it only for the Epic's atomic landing, which `coordinate-landing` owns;
+  only a maintainer can add it. The Epic ref in the Tracking section is the PR's link to its Epic.
 
 ### 5.6 Capture the PR URL
 

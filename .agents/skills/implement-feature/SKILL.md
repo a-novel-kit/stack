@@ -12,7 +12,7 @@ direction, review issues and PRs, complete tests for approved scope, then tighte
 This skill owns backend service layer decomposition and execution within those stages. Use
 `plan-feature` alongside a non-trivial draft; create its planning issues after draft agreement.
 
-For published work, link each PR to its Task with `Closes #<n>` or the full cross-repo reference.
+For published work, link each PR to its Task, Epic and milestone as `open-pull-request` describes.
 An Epic spanning repos also uses the membership and landing rules below. Frontend platforms use
 `write-platform` with `write-frontend` instead of this backend layer strategy.
 

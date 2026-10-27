@@ -174,8 +174,8 @@ and screenshot comparisons for client-side changes, followed by the final cleanu
   and ownership rather than backend layers.
 - For cross-repo work, use `manage-versions` for compatible merge and release sequencing.
 
-Name branches and commits per `git-conventions`. Link each PR to its Task with `Closes #<n>` (or
-the full cross-repo reference). Use `open-pull-request`, `monitor-ci`, and `resolve-pr-feedback` to
+Name branches and commits per `git-conventions`. Link each PR to its Task, Epic and milestone as
+`open-pull-request` describes. Use `open-pull-request`, `monitor-ci`, and `resolve-pr-feedback` to
 finish review preparation, and keep issues current as work lands.
 
 ---
