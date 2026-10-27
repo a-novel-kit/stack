@@ -94,14 +94,16 @@ with the existing type, hierarchy, dependency, board, and metadata conventions. 
 scope, acceptance criteria, and decisions established by the draft. Keep unresolved questions in
 issue discussions and reflect their impact on scope in the issue body.
 
-Draft PRs may now be opened with `open-pull-request`. Link the issues, describe the provisional
-parts, and identify coverage deferred to stage 3. Keep them draft while issue approval, test
-completion, or cleanup remains outstanding. Existing CI checks still run and must not be weakened.
+PRs may now be opened with `open-pull-request`. Link the issues, describe the provisional parts,
+and identify coverage deferred to stage 3. Mark a PR ready as soon as anyone other than you should
+look at it: a draft only backs up dirty, unfinished work, and nobody can approve one. Issue
+approval, test completion and cleanup gate the merge, not the ready flag. Existing CI checks still
+run and must not be weakened.
 
 Use `resolve-pr-feedback` for both issue and PR discussions. During active work, inspect both when
 resuming, after a meaningful revision or push, during CI waits, and before advancing stages or
 handing off. Read issue comments as well as PR conversation comments, reviews, and inline threads;
-neither surface substitutes for the other. Handle feedback on draft PRs within the authorized task.
+neither surface substitutes for the other. Handle feedback on open PRs within the authorized task.
 Do not create a background monitor unless requested.
 
 ## 3. Confirm approved scope, then complete test coverage
@@ -141,7 +143,7 @@ Keep cleanup within the agreed scope. If it changes observable behavior or the d
 decision to discussion and update the tests. Re-run checks affected by cleanup, inspect the final
 diff, and recheck issue and PR feedback before declaring readiness.
 
-Mark a PR ready only after applicable approval, coverage, visual review, and cleanup are complete.
-Use `monitor-ci` through its required conclusion. Hand off the verified result, relevant local
-review routes, developer review guidance, and any open issue discussions or limitations. Publishing
-a proposal and passing CI do not authorize merging or deploying it.
+Call a PR mergeable only after applicable approval, coverage, visual review, and cleanup are
+complete. Use `monitor-ci` through its required conclusion. Hand off the verified result, relevant
+local review routes, developer review guidance, and any open issue discussions or limitations.
+Publishing a proposal and passing CI do not authorize merging or deploying it.

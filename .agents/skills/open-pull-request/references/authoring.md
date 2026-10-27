@@ -13,7 +13,7 @@ Contents:
 - [5.5 Tracking stays on the issue](#55-tracking-stays-on-the-issue)
 - [5.6 Capture the PR URL](#56-capture-the-pr-url)
 - [Phase 6: Updating an Existing PR](#phase-6-updating-an-existing-pr)
-- [6.1 Flip a draft to ready the moment it qualifies (mandatory)](#61-flip-a-draft-to-ready-the-moment-it-qualifies-mandatory)
+- [6.1 Mark ready the moment you want review (mandatory)](#61-mark-ready-the-moment-you-want-review-mandatory)
 
 ## Phase 5: Create the PR
 
@@ -172,19 +172,19 @@ gh pr ready --undo
 When the change is code, push new commits instead — the PR updates automatically. Never
 close and re-open a PR to change its code; that loses review comments and CI history.
 
-### 6.1 Flip a draft to ready the moment it qualifies (mandatory)
+### 6.1 Mark ready the moment you want review (mandatory)
 
-A draft exists for a Phase 3 reason. **Every time you push to a draft PR, re-check whether that
-reason still holds** — status is not decided once at creation and forgotten. When the latest work
-makes the branch review-ready — approved issue scope, resolved blocking decisions, completed
-relevant tests and visual comparisons, final cleanup, and required layers/docs/dependencies — flip
-it in the same turn:
+A draft only backs up dirty, unfinished work
+([Phase 3](../SKILL.md#phase-3-decide-pr-status-ready-vs-draft)).
+**Every time you push to a draft PR, re-check whether anyone other than you should look at it
+now** — status is not decided once at creation and forgotten. When you want feedback, an audit or
+an approval, flip it in the same turn and list in the body what still gates the merge:
 
 ```bash
 gh pr ready
 ```
 
-**Never end a turn with review-ready work sitting in a draft PR.** If the branch is done and green
-and no Phase 3 reason still applies, the PR is ready — say so and run `gh pr ready`. Silently
-leaving it draft withholds it from the reviewer and stalls the task; waiting for the user to say
-"flip it" is the failure, not the courtesy.
+**Never ask for a review of a draft, and never end a turn with reviewable work in one.** GitHub
+refuses approvals on drafts, so the reviewer cannot act on it; waiting for the user to say "flip it"
+is the failure, not the courtesy. Ready does not mean mergeable: approval, the full relevant tests
+and the final cleanup still gate the merge.

@@ -12,7 +12,7 @@ This skill is the platform counterpart to `write-go-service`: `write-frontend` o
 rules, `write-svelte` owns framework mechanics, `write-frontend-tests` owns tests and stories, and
 this skill owns the terminal application's architecture. Load
 [develop-feature](../develop-feature/SKILL.md) for stage timing: run a local app and Storybook draft,
-agree on direction, review issues and draft PRs, complete approved-scope coverage, and tighten the
+agree on direction, review issues and PRs, complete approved-scope coverage, and tighten the
 result. Full state/test matrices below are completion gates, not prerequisites to exploring a draft.
 
 Load `plan-ui-design` before choosing a visual direction or interaction language. Load

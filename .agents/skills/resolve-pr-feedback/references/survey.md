@@ -27,8 +27,10 @@ Fields that matter:
 
 - **state**: OPEN / CLOSED / MERGED. Never act on non-OPEN PRs without confirmation — reopening a
   closed discussion is a different kind of decision.
-- **isDraft**: draft PRs and issues receive review in parallel. Address feedback within the already
-  authorized development task; draft status does not require fresh permission. A read-only survey
+- **isDraft**: a draft only backs up dirty, unfinished work, so it is not yet worth reviewing. A PR
+  waiting on someone else's review belongs in ready state (`open-pull-request` Phase 3); mark your
+  own ready before asking. Address feedback within the already authorized development task; draft
+  status does not require fresh permission. A read-only survey
   request remains read-only.
 - **reviewDecision**: APPROVED / CHANGES_REQUESTED / REVIEW_REQUIRED. Shapes Phase 5.
 - **baseRefName** / **headRefName**: land fixes as new commits on `headRefName`. Force-push with

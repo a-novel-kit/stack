@@ -8,7 +8,7 @@ description: >
 # Feature Implementation Workflow
 
 Load [develop-feature](../develop-feature/SKILL.md) for the lifecycle: draft locally, agree on the
-direction, review issues and draft PRs, complete tests for approved scope, then tighten the code.
+direction, review issues and PRs, complete tests for approved scope, then tighten the code.
 This skill owns backend service layer decomposition and execution within those stages. Use
 `plan-feature` alongside a non-trivial draft; create its planning issues after draft agreement.
 
@@ -187,8 +187,9 @@ a-novel test --type=go -y    # Go: DAO, services, handlers, lib + pkg/go
 a-novel test --type=pnpm -y  # pkg/js (containerised service env, auto-managed)
 ```
 
-Tests must pass before the branch is ready. A draft PR may still be awaiting the planned coverage
-expansion; describe that explicitly. Do not disable existing checks or mark failing work done.
+Tests must pass before the branch is mergeable. A PR under review may still be awaiting the
+planned coverage expansion; describe that explicitly. Do not disable existing checks or mark failing
+work done.
 
 ### 3.4 Commit
 
@@ -246,8 +247,9 @@ different Epic.
 controls. Applying a label needs triage rights, so the label is a permission-gated claim. Add it when
 you open the pull request.
 
-**Draft means not ready.** The gate reads draft state as your readiness signal, so a draft holds the
-whole Epic. Mark ready when the Task is genuinely done, not to start review.
+**A draft holds the whole Epic.** The gate waits until every member is ready for review and
+approved, so mark a member ready as soon as anyone other than you should look at it, as
+`open-pull-request` defines. Its approval, not the ready flag, says it may land.
 
 **`merge-gate` red usually is not about you.** It holds every member until _all_ of them are
 non-draft, approved and passing `review-gate`, across every repo, so a red gate most often means a

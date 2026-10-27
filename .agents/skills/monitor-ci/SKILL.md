@@ -195,7 +195,7 @@ hypothesis, (c) what has been tried, (d) why further attempts are not confidence
 - Push to an open PR → surface the all-green state and stop. Merging is a developer
   decision unless explicitly delegated (see Safety Rules).
 
-This report completes the CI check required by `open-pull-request` Phase 7. A draft may still
+This report completes the CI check required by `open-pull-request` Phase 7. A PR may still
 await scope approval, full relevant coverage, or cleanup under `develop-feature`; report those
 remaining steps accurately. Include any unresolved findings from the Phase 1.2 self-review.
 
