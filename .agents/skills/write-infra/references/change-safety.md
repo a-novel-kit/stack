@@ -438,6 +438,10 @@ OTLP/HTTP. Each root adds these variables to the reporting workloads' Sentry env
   `x-sentry-auth=sentry sentry_key=<public key>` with the DSN's public key. The Go exporter splits
   it on the first `=`, so the space is fine.
 - `OTEL_EXPORTER_OTLP_COMPRESSION` is `gzip`, and `OTEL_SERVICE_NAME` is the repository name.
+- `OTEL_RESOURCE_ATTRIBUTES` is `a_novel.workload=api` on a workload that serves requests, and
+  `a_novel.workload=job` on one a person or a schedule starts, a scheduler-called server included.
+  The root's `tofu test` asserts each workload's value. Sentry stores an OTLP resource attribute
+  under a `resource.` prefix, so it searches this one as `resource.a_novel.workload`.
 - `OTEL` is `true`. A service exports only when both `OTEL` and the endpoint are set.
 
 Egress needs no change, since the OTLP endpoints share the ingest host. The perimeter keeps
@@ -470,8 +474,11 @@ creates it.
   and telemetry stopped, a `count() < 1` over a window longer than the gap between its steady span
   sources. Their thresholds are the root's `alerts` input. One `sentry_alert` posts every monitor's
   issue to the channel in its `discord` input, through the Discord integration installed on the
-  server by hand. Each service also has a dashboard of the same spans plus its error events. A plan
-  sends none of these to Sentry's API, so the first apply is the test of a new field.
+  server by hand. Four dashboards cover every service, one per concern: requests, failing share,
+  p95 duration and error events. Each span widget draws one line per service, and requests and job
+  runs get a widget each, split on the workload label; the latency monitor reads requests only.
+  A plan sends none of these to Sentry's API, so the first apply is the test of a new field, and a
+  wrong search key shows only as empty widgets.
 - **Its token never reaches state or a plan.** The root reads it through the Google provider's
   ephemeral `google_secret_manager_secret_version`. The `tofu` action passes `TF_VAR_writer`, so
   plans read `production-sentry-plan-token`, the only one bootstrap lets `infra-plan` read, and only
