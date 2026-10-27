@@ -144,7 +144,7 @@ Sentry issues two kinds of keys:
 | Key                                 | It lives in                                                                                                        | It can                                       |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
 | The organization token `release-ci` | Bitwarden, copied as `SENTRY_AUTH_TOKEN` into each `release` environment and into infra's `production` environment | record releases and deploys in every project |
-| A project's DSN                     | the service's `production-<service>-sentry-dsn` secret                                                             | send events to that project                  |
+| A project's DSN                     | its first client key, which the infra Sentry root gives the services as a plain value                              | send events to that project                  |
 
 Rotate each key that leaked. Revoking the old key cuts the attacker off at once. Sentry then records no new release, or no event from the service, until the new key lands.
 
@@ -165,7 +165,13 @@ Rotate each key that leaked. Revoking the old key cuts the attacker off at once.
    unset TOKEN
    ```
 
-2. For a DSN, open the project's **Settings → Client Keys (DSN)** in Sentry. Choose **Generate New Key**, then revoke the old key. Rotate the service's `production-<service>-sentry-dsn` with the infra [secrets runbook](https://github.com/a-novel/infra/blob/master/docs/runbooks/secrets.md#rotate-a-secret): add the new DSN as a version, then pin it in the root's `secret_versions.sentry-dsn`.
+2. For a DSN, open the project's **Settings → Client Keys (DSN)** in Sentry. Choose **Generate New Key**, then delete the old key, so the new one is the project's first key. The Sentry root reads that key only when it applies, so an admin then starts a deploy of every root:
+
+   ```bash
+   gh workflow run deploy.yaml --repo a-novel/infra --ref master
+   ```
+
+   The Sentry root reads the new key, and the services, which wait for it, switch to the new DSN and OTLP header in the same deploy. Events sent between the deletion and their apply are lost.
 
 ## Investigate
 
