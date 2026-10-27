@@ -64,31 +64,7 @@ A service reports its faults, traces and logs to a Sentry project of its own. A 
    gh secret set SENTRY_AUTH_TOKEN --env release --repo "$ORG/$NAME"
    ```
 
-4. An infra pull request creates the service's DSN and OTLP header containers, as the `write-infra` skill describes. Once it deploys, sign in to `gcloud` first: a piped `gcloud secrets versions add` cannot prompt you to sign in again. Copy the DSN from the project's **Settings → Client Keys (DSN)**, and paste it at the prompt:
-
-   ```bash
-   SECRET="production-${NAME#service-}-sentry-dsn"
-   read -rs DSN
-   printf '%s' "$DSN" | gcloud secrets versions add "$SECRET" \
-     --project=a-novel-management-prod --data-file=-
-   unset DSN
-   ```
-
-   Then paste the DSN's public key, the part between `https://` and `@`. The command writes the header around it:
-
-   ```bash
-   SECRET="production-${NAME#service-}-sentry-otlp-headers"
-   read -rs KEY
-   printf 'x-sentry-auth=sentry sentry_key=%s' "$KEY" | gcloud secrets versions add "$SECRET" \
-     --project=a-novel-management-prod --data-file=-
-   unset KEY
-   ```
-
-   Each prints `Created version [1]`, the version infra pins. Add both before the pull request that pins them merges: a deploy that pins a missing version fails, and Cloud Run keeps the old revision.
-
-5. The service root's `sentry_project_id` input takes the project's ID, the number at the end of its DSN.
-
-[a-novel/infra#1154](https://github.com/a-novel/infra/issues/1154) moves steps 4 and 5 into code.
+The service's DSN, OTLP header and project ID need no copying: once step 1 has deployed, the service root reads them from the Sentry root, as the `write-infra` skill describes. A DSN is not a secret, so none of them goes to Secret Manager.
 
 ## Create its Discord role
 
