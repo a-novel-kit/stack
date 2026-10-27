@@ -489,15 +489,13 @@ Release CI creates each release when it cuts the tag, and records no deploy. Eac
 `deploy.yaml` records the release's `production` deploy once its root serves it, through
 `.github/scripts/sentry-deploys.mjs` on the `tofu` action's `plan` output.
 
-- **A root serves its releases** once every Cloud Run service the apply left unchanged reports, in
-  the state the plan refreshed, `terminal_condition` `CONDITION_SUCCEEDED` and a latest ready
-  revision equal to its latest created revision. The apply waited for each service it changed.
-  Neither a green job nor the plan's outputs prove a deploy: a failed update leaves its
-  configuration in state, and OpenTofu writes root outputs even when an apply fails.
+- **A root serves its releases once its `tofu` step succeeds,** and the step runs only then: the
+  plan rolls a failed service again, as the [release contract](#release-contract) describes. The
+  plan's outputs prove nothing, since OpenTofu writes root outputs even when an apply fails.
 - **Each release gets one deploy.** The script lists the release's deploys and records one only when
   `production` has none, so a deploy missed during a Sentry outage lands on the next merge.
-- **Nothing fails the deploy.** A Sentry error, a release Sentry lacks, a service stuck on a failed
-  revision or a missing token only warns.
+- **Nothing fails the deploy.** A Sentry error, a release Sentry lacks or a missing token only
+  warns.
 - **The token is `release-ci`,** the organization token release CI uses, set as `SENTRY_AUTH_TOKEN`
   in the `production` environment. Its claims name the organization and its region, so an
   organization move only swaps the token there and in each `release` environment.
