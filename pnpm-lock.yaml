@@ -168,7 +168,7 @@ importers:
     devDependencies:
       '@a-novel-kit/nodelib-config':
         specifier: ^2.0.0
-        version: 2.1.0(cb3431360796d045d9718b548c128e1a)
+        version: 2.2.1(cb3431360796d045d9718b548c128e1a)
       '@eslint/js':
         specifier: ^10.0.0
         version: 10.0.1(eslint@10.13.0(jiti@2.7.0))
@@ -211,15 +211,15 @@ importers:
 
 packages:
 
-  '@a-novel-kit/nodelib-config@2.1.0':
-    resolution: {integrity: sha512-1OzSN4mCdQ1zDL1Zdp+AhAHT5RKrjaKy/krBf1E9QYyPKwGQZHDGiaz1ctZIaeXYZdZ13EmA7S02A2cA5BoTIQ==, tarball: https://npm.pkg.github.com/download/@a-novel-kit/nodelib-config/2.1.0/a3b6c636fa31328bbfc2128df2c4eba0e22b79a0}
+  '@a-novel-kit/nodelib-config@2.2.1':
+    resolution: {integrity: sha512-L6/yiZlO2l6WKrGZllLgJw53sRbijhzJjkWYWaowiO//Gr7FzTFTBfVfhgg73TkXsIKia/FVau4kXUB0mq2ErQ==, tarball: https://npm.pkg.github.com/download/@a-novel-kit/nodelib-config/2.2.1/ae62f6d56434fad297ca0484eab776752994803e}
     engines: {node: '>=24.0.0', npm: '>=10.9.2'}
     hasBin: true
     peerDependencies:
       '@eslint/compat': ^2.1.1
       '@eslint/config-helpers': ^0.7.0
       '@eslint/js': ^10.0.1
-      '@storybook/addon-vitest': ^10.6.2
+      '@storybook/addon-vitest': ^10.6.3
       '@sveltejs/adapter-node': ^6.0.0
       '@sveltejs/kit': ^3.1.0
       '@trivago/prettier-plugin-sort-imports': ^6.0.2
@@ -227,11 +227,11 @@ packages:
       '@vitest/browser-playwright': ^5.0.5
       eslint: ^10.13.0
       eslint-config-prettier: ^10.1.8
-      eslint-plugin-storybook: ^10.6.2
+      eslint-plugin-storybook: ^10.6.3
       eslint-plugin-svelte: ^3.23.1
       estree-walker: ^3.0.3
       globals: ^17.13.0
-      i18next-cli: ^1.77.0
+      i18next-cli: ^1.80.0
       i18next-cli-plugin-svelte: ^2.4.1
       playwright: ^1.64.1
       prettier: ^3.9.10
@@ -239,11 +239,11 @@ packages:
       prettier-plugin-packagejson: ^2.5.20 || ^3.0.0
       prettier-plugin-sql: ^0.20.0
       prettier-plugin-svelte: ^4.1.1
-      storybook: ^10.6.2
+      storybook: ^10.6.3
       svelte: ^5.57.2
       typescript: ^6.0.3
-      typescript-eslint: ^8.71.2
-      vite: ^8.3.4
+      typescript-eslint: ^8.72.0
+      vite: ^8.3.5
       vitest: ^5.0.5
 
   '@adobe/css-tools@4.5.0':
@@ -3457,7 +3457,7 @@ packages:
 
 snapshots:
 
-  '@a-novel-kit/nodelib-config@2.1.0(cb3431360796d045d9718b548c128e1a)':
+  '@a-novel-kit/nodelib-config@2.2.1(cb3431360796d045d9718b548c128e1a)':
     dependencies:
       '@eslint/compat': 2.1.1(eslint@10.13.0(jiti@2.7.0))
       '@eslint/config-helpers': 0.7.0
