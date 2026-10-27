@@ -71,9 +71,16 @@ work does not use a backend service's layer-by-layer branch stack.
 
 ## Rendering and configuration
 
-Use `@sveltejs/adapter-node` and SSR as the default. Opt a private route family out with
-`export const ssr = false` only when its browser-only behavior is deliberate and tested; never
-disable SSR globally to hide unsafe module initialization or a hydration bug.
+Keep the server to security, and give everything else to the browser. The server holds the session
+cookies, refreshes tokens, checks authorization and CSRF, and makes every call that needs a
+credential. Heavy screens, workflow state and the composition of service results run in the
+browser, so one small, always-on server carries many visitors. A product feature that adds server
+work needs a security reason.
+
+Use `@sveltejs/adapter-node` and SSR as the default for the shell, public pages and the forms that
+must work without JavaScript. Opt a private route family out with `export const ssr = false` when it
+is a heavy browser application, such as an editor, and its browser-only behavior is deliberate and
+tested; never disable SSR globally to hide unsafe module initialization or a hydration bug.
 
 Read secrets and privileged endpoints only from SvelteKit's server-only environment modules. Expose
 an explicitly public value through the framework's `PUBLIC_` contract only when it is safe to ship
