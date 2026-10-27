@@ -89,3 +89,18 @@ One user action is one trace, from the platform's server to the last service it 
   span that runs the work links to it with `trace.WithLinks` rather than taking it as parent, which
   would stretch the original trace across the work's lifetime. Skip the link when the work runs in
   the creating trace. `service-genai`'s `core.GenerationCheck` is the reference.
+
+## Export
+
+The servers export over golib's `otelpresets.OTLP`, configured by the standard `OTEL_EXPORTER_OTLP_*`
+and `OTEL_SERVICE_NAME` variables. The preset sets no exporter option of its own, so the backend
+changes with the variables alone. `service-template`'s `internal/config` is the reference.
+
+- **Pick every preset from one flag.** `exportsOTLP` holds when `OTEL` and `OTEL_EXPORTER_OTLP_ENDPOINT`
+  are both set. It chooses `LogOTel`, `GRPCOTel` and a nil request logger together. A logger that
+  checked the endpoint alone would write into the disabled provider of a job without `OTEL`.
+- **Read `OTEL_*` without the service's prefix.** The SDK reads them unprefixed, so the endpoint the
+  service checks is the one its exporter uses.
+- **Leave the liveness path untraced** with `UntracedPaths`. The probe then opens no trace, the
+  handler's own span included.
+- **Write no request or call log.** The server span records each request and call.
