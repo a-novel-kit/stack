@@ -91,9 +91,11 @@ Trace the server with SvelteKit's own spans and nodelib's setup. Enable
 mirrors golib's OTLP preset: the deployment's standard `OTEL_EXPORTER_OTLP_*` variables pick the
 backend, and without an endpoint spans print to stdout. It traces the global `fetch` into backend
 services, keeps every trace even when the caller did not sample it, and redacts query values from
-recorded URLs. Keep secrets in the query, never in a path segment, which is recorded as is. Browser
-spans are deferred: add them only once the browser calls services directly or runs significant work
-of its own.
+recorded URLs. Keep secrets in the query, never in a path segment, which is recorded as is. In
+production, the server spans go to the platform's own Sentry project, which the infra root wires as
+`write-infra` describes. Browser spans are deferred: add them only once the browser calls services
+directly or runs significant work of its own. Browser telemetry and `@sentry/sveltekit` also wait for
+counsel's ruling on consent ([a-novel/.github#399](https://github.com/a-novel/.github/issues/399)).
 
 ## Storybook-first delivery
 
