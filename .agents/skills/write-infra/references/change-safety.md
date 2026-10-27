@@ -380,19 +380,17 @@ deployed. a-novel/infra#785 is the worked example.
 
 A workload reports its faults to Sentry once it holds three variables. Migrations and smoke checks
 hold none and report nothing. The service's Sentry project comes first: add its repository to the
-Sentry root's `projects`, as [The Sentry root](#the-sentry-root) describes. The rest takes three pull
+Sentry root's `projects`, as [The Sentry root](#the-sentry-root) describes, and merge that alone. A
+service root cannot read an output the Sentry root has not applied. The rest takes two pull
 requests, each merged once the one before has deployed.
 
-1. **Bootstrap creates the DSN container,** `production-<service>-sentry-dsn` with the contract
-   `SENTRY_DSN`. The same pull request grants each reporting workload's identity read on it, through
-   `service-runtime`'s `secrets` or the workload's `workloads` entry, and pins
-   `secret_versions.sentry-dsn`. Cloud Run checks a revision's secret access when it creates the
-   revision, and a fresh grant takes minutes to apply, so the grant deploys before anything mounts
-   the secret. Ops then add the project's DSN as version 1, as `docs/runbooks/secrets.md` shows.
-2. **Foundation admits the workload's identity** in `egress_allowlist["sentry"]`, the rule for
+1. **Foundation admits the workload's identity** in `egress_allowlist["sentry"]`, the rule for
    Sentry's ingest host.
-3. **The root wires each reporting workload:**
-   - `SENTRY_DSN` mounts the pinned `sentry-dsn` version;
+2. **The root wires each reporting workload.** It reads the Sentry root's
+   `services["<repository>"]` output into `local.sentry` through `terraform_remote_state`, the way it
+   reads foundation's outputs, and sets:
+   - `SENTRY_DSN` to `local.sentry.dsn`, a plain value. A DSN is not a secret: Sentry documents it
+     as safe to expose, and its public key only lets a sender submit events;
    - `SENTRY_ENVIRONMENT` is `production`;
    - `SENTRY_RELEASE` is `<repository>@${trimprefix(local.images.<image>.tag, "v")}`, the name
      release CI gives the release in Sentry, so it moves with every release pin. The root's
@@ -410,6 +408,9 @@ requests, each merged once the one before has deployed.
      sends its telemetry before each answer through golib's `httpf.SendTelemetry`. CPU between its
      calls would only keep it billed, and frequent calls keep its instance alive around the clock.
 
+   Its tests mock the Sentry root's state with an `override_data` on
+   `data.terraform_remote_state.sentry`.
+
 Cloud Run reserves a workload's egress-subnet addresses 16 at a time, so check that foundation's
 `egress_subnet_cidr` still fits every workload there. A subnet's range grows in place but never
 shrinks. A job there can start without a network for a minute or more. golib gives each event
@@ -419,48 +420,56 @@ before the network came up still arrives.
 ### Send traces and logs to Sentry
 
 The workloads that report to Sentry also export their traces and logs to the same project over
-OTLP/HTTP. Each root adds four variables to the reporting workloads' Sentry env:
+OTLP/HTTP. Each root adds these variables to the reporting workloads' Sentry env:
 
 - `OTEL_EXPORTER_OTLP_ENDPOINT` is
-  `https://${local.foundation.sentry_ingest_host}/api/${var.sentry_project_id}/integration/otlp`,
-  from foundation's output and the root's `sentry_project_id` input. The SDK appends `/v1/traces`
-  and `/v1/logs`.
-- `OTEL_EXPORTER_OTLP_HEADERS` mounts `production-<service>-sentry-otlp-headers` at a pinned
-  version. It holds `x-sentry-auth=sentry sentry_key=<public key>`, with the DSN's public key.
+  `https://${local.foundation.sentry_ingest_host}/api/${local.sentry.project_id}/integration/otlp`,
+  from foundation's and the Sentry root's outputs. The SDK appends `/v1/traces` and `/v1/logs`.
+- `OTEL_EXPORTER_OTLP_HEADERS` is `local.sentry.otlp_headers`, a plain
+  `x-sentry-auth=sentry sentry_key=<public key>` with the DSN's public key. The Go exporter splits
+  it on the first `=`, so the space is fine.
 - `OTEL_EXPORTER_OTLP_COMPRESSION` is `gzip`, and `OTEL_SERVICE_NAME` is the repository name.
 - `OTEL` is `true`. A service exports only when both `OTEL` and the endpoint are set.
 
-The header container follows the DSN's steps: its grant deploys before anything mounts it, and ops
-add version 1 before the pin merges. Egress needs no change, since the OTLP endpoints share the
-ingest host. The perimeter keeps restricting the Telemetry and Cloud Trace APIs, so no workload can
-export to another project's.
+Egress needs no change, since the OTLP endpoints share the ingest host. The perimeter keeps
+restricting the Telemetry and Cloud Trace APIs, so no workload can export to another project's.
 
 Foundation's single `sentry_ingest_host` input names the ingest host that every DSN and OTLP
-endpoint points to. A move to another Sentry organization changes that input, each root's
-`sentry_project_id`, the DSN and OTLP header versions, and the Sentry root, as
-[The Sentry root](#the-sentry-root) describes.
+endpoint points to. A move to another Sentry organization changes that input and the Sentry root,
+in one pull request after the old resources are forgotten, as [The Sentry root](#the-sentry-root)
+describes.
 
 ### The Sentry root
 
 `environments/production/sentry` manages the Sentry organization through the community
 `jianyuan/sentry` provider: the projects and their spike protection, then the alerts and dashboards.
+It outputs `services[<repository>] = { project_id, dsn, otlp_headers }`, read from each project's
+first client key by the `sentry_key` data source. A new project's key is read in the apply that
+creates it.
 
 - **It applies only when it changes,** in `deploy.yaml`'s own `sentry` job after bootstrap, never in
   the services matrix. Every service root applies on every merge, and a failed one stops the
   rollout, so a Sentry API outage there would hold every release. `check-service-roots.sh` skips it
-  as it skips foundation.
+  as it skips foundation. The services job waits for it: it runs only when the root changes, so a
+  release never waits on Sentry, while a key or organization change reaches the services in the
+  same deploy.
 - **Its token never reaches state or a plan.** The root reads it through the Google provider's
   ephemeral `google_secret_manager_secret_version`. The `tofu` action passes `TF_VAR_writer`, so
   plans read `production-sentry-plan-token`, the only one bootstrap lets `infra-plan` read, and only
   deploys read `production-sentry-deploy-token`. Both are Sentry internal-integration tokens:
   organization tokens have fixed CI permissions and cannot manage projects.
   `docs/runbooks/secrets.md` lists their permissions.
-- **Mocked providers cannot import,** so its tests set `adopt_projects = false`. Drop the variable
-  and its `import` blocks once they have applied.
+- **Mocked providers cannot import,** so a root that adopts existing resources gates its `import`
+  blocks behind a variable its tests turn off, and drops both once applied. A mocked plan also
+  defers the key reads, since the projects are still to create, so its tests cannot assert the
+  output; the service roots' tests check it from the reading side.
 - **The provider drops a missing project from state, but reports a missing spike protection as an
   error.** A move to another organization therefore takes two pull requests. The first forgets the
-  old resources with `removed` blocks set to `destroy = false`. The second sets `organization`,
-  `base_url`, the token versions and `adopt_projects = false`, and creates the new resources.
-  Deleting the resource blocks alone would delete the old projects and their history.
+  old resources and key reads with `removed` blocks set to `destroy = false`, and freezes the
+  `services` output as literals of the old values, so the services keep planning. The second sets
+  foundation's `sentry_ingest_host` with the root's `organization`, `base_url` and token versions,
+  and restores the resources: one deploy then applies foundation, the Sentry root and the services
+  in that order. Deleting the resource blocks alone would delete the old projects and their
+  history.
 - **The provider is pre-1.0,** so Renovate's updates wait for a review: a minor release can break,
   as `sentry_issue_alert` did when `sentry_alert` replaced it.
