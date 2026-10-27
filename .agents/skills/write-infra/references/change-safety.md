@@ -447,9 +447,10 @@ OTLP/HTTP. Each root adds these variables to the reporting workloads' Sentry env
 Egress needs no change, since the OTLP endpoints share the ingest host. The perimeter keeps
 restricting the Telemetry and Cloud Trace APIs, so no workload can export to another project's.
 
-A platform sends its server spans only: its root sets these variables, egress and `cpu_idle` like a
-service's, but no `SENTRY_*` variable. No Sentry SDK runs in a platform, and browser telemetry waits
-for counsel's ruling on consent ([a-novel/.github#399](https://github.com/a-novel/.github/issues/399)).
+A platform's server sends its spans over OTLP: its root sets these variables, egress and `cpu_idle`
+like a service's, but no `SENTRY_*` variable, since no Sentry SDK runs on the server. The root also
+sets `PUBLIC_SENTRY_DSN` to its project's DSN, which the browser's SDK reads once the visitor
+consents.
 nodelib-server reads the same variables, `OTEL_RESOURCE_ATTRIBUTES` included, since v2.2.1.
 
 Foundation's single `sentry_ingest_host` input names the ingest host that every DSN and OTLP
