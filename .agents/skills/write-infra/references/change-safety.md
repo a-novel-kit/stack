@@ -410,5 +410,25 @@ shrinks. A job there can start without a network for a minute or more. golib giv
 `sentryf.SendTimeout`, 2 minutes, to leave, and the job's flush outlasts it, so an event captured
 before the network came up still arrives.
 
-Foundation's single `sentry_ingest_host` input names the ingest host that every DSN points to. A
-move to another Sentry organization changes that input and the DSNs, and nothing else here.
+### Send traces and logs to Sentry
+
+The workloads that report to Sentry also export their traces and logs to the same project over
+OTLP/HTTP. Each root adds four variables to the reporting workloads' Sentry env:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` is
+  `https://${local.foundation.sentry_ingest_host}/api/${var.sentry_project_id}/integration/otlp`,
+  from foundation's output and the root's `sentry_project_id` input. The SDK appends `/v1/traces`
+  and `/v1/logs`.
+- `OTEL_EXPORTER_OTLP_HEADERS` mounts `production-<service>-sentry-otlp-headers` at a pinned
+  version. It holds `x-sentry-auth=sentry sentry_key=<public key>`, with the DSN's public key.
+- `OTEL_EXPORTER_OTLP_COMPRESSION` is `gzip`, and `OTEL_SERVICE_NAME` is the repository name.
+- `OTEL` is `true`. A service exports only when both `OTEL` and the endpoint are set.
+
+The header container follows the DSN's steps: its grant deploys before anything mounts it, and ops
+add version 1 before the pin merges. Egress needs no change, since the OTLP endpoints share the
+ingest host. The perimeter keeps restricting the Telemetry and Cloud Trace APIs, so no workload can
+export to another project's.
+
+Foundation's single `sentry_ingest_host` input names the ingest host that every DSN and OTLP
+endpoint points to. A move to another Sentry organization changes that input, each root's
+`sentry_project_id`, and the DSN and OTLP header versions, and nothing else here.
