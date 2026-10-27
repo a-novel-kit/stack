@@ -19,7 +19,8 @@ relevant tests and the final cleanup gate the merge, not the ready flag
 history rules. Never push to `master`/`main` without explicit consent (`git-conventions`).
 
 Every PR in this repo follows the same contract: Conventional-Commits title, structured
-body, correct base, and no manual reviewer/assignee assignment (workflows handle that).
+body, correct base, its Task's milestone, and no manual reviewer/assignee assignment (workflows
+handle that).
 
 ---
 
@@ -273,14 +274,15 @@ Do not merge — merges are a developer decision unless explicitly delegated.
   the completion report, not durable GitHub metadata.
 - **Handing off completed UI work without Storybook beside the PR and task links.** The final report
   needs a freshly verified direct Storybook link; see `write-frontend`.
-- **Manual reviewer/assignee flags.** Automation handles these (5.4); tracking metadata
-  stays on the issue the PR closes (5.5).
+- **Manual reviewer/assignee flags.** Automation handles these (5.4).
+- **A PR without its Task's milestone or Tracking section.** The reader then cannot trace the PR to
+  its Task and Epic (5.5).
 - **`--force` without `--lease`.** Always `--force-with-lease` after a rebase.
 - **Missing `BREAKING CHANGE:` footer.** If any commit on the branch is breaking, the PR
   body's Breaking Changes section must list it. Mismatches between commits and PR body are
   bugs — readers trust the body.
 - **Bare `Closes #<n>` for a planning issue in a `.github` repo.** It links nothing, so the
-  issue freezes on the board. Use `Closes a-novel-kit/.github#<n>` (5.3).
+  issue freezes on the board. Use `Closes a-novel-kit/.github#<n>` (5.5).
 - **PR title that does not match the primary commit scope.** If the branch is `feat/dao/*`,
   the PR title scope should be `dao`, not `services`.
 - **Linking the wrong base branch on a stacked PR.** If the parent is already merged, rebase
@@ -300,7 +302,7 @@ Do not merge — merges are a developer decision unless explicitly delegated.
 | Check for existing PR               | `gh pr view --json number,state,url`                                                                       |
 | Create ready PR                     | `gh pr create --title "..." --body "$(cat <<'EOF' ... )"`                                                  |
 | Create draft PR                     | `gh pr create --draft --title ...`                                                                         |
-| Close a cross-repo planning issue   | PR body: `Closes a-novel-kit/.github#<n>` (see 5.3)                                                        |
+| Trace the PR to its Task and Epic   | `gh pr create --milestone "<Task milestone>"`, body `## Tracking` with full refs (see 5.5)                 |
 | Stacked PR (base is another branch) | `gh pr create --base feat/<parent-area>/... ...`                                                           |
 | Update title on existing PR         | `gh pr edit --title "..."`                                                                                 |
 | Flip draft → ready                  | `gh pr ready`                                                                                              |
