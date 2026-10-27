@@ -190,14 +190,15 @@ Follow [develop-feature](../develop-feature/SKILL.md): during local drafting, ke
 checkpoint commits local until the developer agrees on the direction, unless they explicitly
 requested publication. A local commit is not itself a reason to push.
 
-After that agreement, pushing a feature branch and opening a draft PR within the authorized scope
-need no repeated permission. Use `open-pull-request` for the checks appropriate to the stage. Clear,
+After that agreement, pushing a feature branch and opening a PR within the authorized scope need
+no repeated permission. Use `open-pull-request` for the checks appropriate to the stage. Clear,
 small tasks can take the shorter path defined by `develop-feature`.
 
-Draft PRs can receive review while their planning issues are still being discussed. Preserve review
+PRs can receive review while their planning issues are still being discussed. Preserve review
 history, keep scope and deferred coverage visible, and follow the normal history-rewrite rules.
-Mark ready after issue scope is approved and testing and cleanup are complete. Never treat a draft
-as exempt from repository safeguards or push directly to `master`/`main` without explicit consent.
+Mark a PR ready as soon as anyone other than you should look at it, as `open-pull-request` defines;
+issue scope approval, testing and cleanup gate the merge. Never treat a draft as exempt from
+repository safeguards or push directly to `master`/`main` without explicit consent.
 
 ---
 

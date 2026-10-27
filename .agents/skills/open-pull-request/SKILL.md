@@ -9,11 +9,13 @@ description: >
 
 Load [develop-feature](../develop-feature/SKILL.md) before publishing. Keep an exploratory draft
 local until direction agreement, unless publication was explicitly requested. After agreement,
-feature-branch pushes and draft PRs within scope need no repeated permission. Clear, simple tasks
-may take the shorter path defined there.
+feature-branch pushes and PRs within scope need no repeated permission. Clear, simple tasks may
+take the shorter path defined there.
 
-Issue discussion and draft-PR review can run together. Keep the PR draft while scope approval,
-full relevant tests, or final cleanup remain outstanding. Drafts follow repository safeguards and
+**Ready means ready for review, not ready to merge.** A draft only backs up dirty, unfinished
+work; mark a PR ready as soon as anyone other than you should look at it. Scope approval, the full
+relevant tests and the final cleanup gate the merge, not the ready flag
+([Phase 3](#phase-3-decide-pr-status-ready-vs-draft)). Every PR follows repository safeguards and
 history rules. Never push to `master`/`main` without explicit consent (`git-conventions`).
 
 Every PR in this repo follows the same contract: Conventional-Commits title, structured
@@ -29,8 +31,8 @@ update an open PR rather than recreating it.
 - Before creating or editing a PR, or changing draft/ready status,
   read [authoring and metadata](references/authoring.md).
 - After every push to an existing draft PR, recheck its draft reason using the
-  [readiness rule](references/authoring.md#61-flip-a-draft-to-ready-the-moment-it-qualifies-mandatory).
-  Mark it ready in the same turn once all applicable completion gates pass.
+  [readiness rule](references/authoring.md#61-mark-ready-the-moment-you-want-review-mandatory).
+  Mark it ready in the same turn once you want it reviewed.
 - Before a final code/issue handoff, read [the session recap contract](references/handoff.md).
   Include every outstanding session item and, when the operator is an admin of the repository,
   each PR's admin-only approval command after review.
@@ -86,11 +88,11 @@ user before rewriting history.
 
 ### 1.4 Validate for the current stage
 
-**Draft PR:** run focused existing checks and the lint/build checks needed to validate the changed
-path. Describe new regression coverage deferred until issue scope approval. Do not demand the full
-test suite to publish an agreed draft, disable CI, or weaken existing assertions.
+**Opening for review:** run focused existing checks and the lint/build checks needed to validate the
+changed path. Describe new regression coverage deferred until issue scope approval. Do not demand
+the full test suite to publish agreed work, disable CI, or weaken existing assertions.
 
-**Ready PR:** after scope approval, complete and run the full relevant regression suite, review
+**Before merge:** after scope approval, complete and run the full relevant regression suite, review
 coverage, and finish code cleanup. Client-side changes include affected Playwright tests and
 reviewed screenshot comparisons. Run applicable lint, type, test, and build checks; skip targets
 the change cannot affect. CI confirms local verification.
@@ -190,16 +192,17 @@ parent first and make sure its PR is open.
 
 ## Phase 3: Decide PR Status (Ready vs. Draft)
 
-Open a **draft** after direction agreement when any of these remain:
+The status tells peers what deserves their attention:
 
-- Issue scope approval or a blocking design discussion.
-- Full relevant test coverage, Playwright/screenshot verification, or final cleanup.
-- A required layer, documentation, or stacked dependency still being completed.
-- An explicit developer request for draft/WIP or early directional review.
+- **Draft:** pushed only so the work is not lost. It is dirty and unfinished, and looking at it is
+  useless for now.
+- **Ready for review:** anyone other than you may look at it now, for feedback, an audit or an
+  approval. GitHub refuses approvals on drafts, so a PR waiting on the developer is ready.
 
-Review feedback on the issue and the draft PR in parallel with `resolve-pr-feedback`. Draft does
-not mean feedback should wait. Open **ready for review** only once the applicable
-`develop-feature` completion gates pass. Clear, finished work need not be held in draft.
+Open the PR ready, or mark it ready the moment someone else should look. It need not be ready to
+merge: list what still gates the merge in the body, such as issue scope approval, a blocking design
+discussion, deferred test coverage or Playwright/screenshot verification, final cleanup, or a
+stacked dependency. Review feedback on the issue and the PR in parallel with `resolve-pr-feedback`.
 
 ```bash
 gh pr create --draft ...   # draft
@@ -240,8 +243,8 @@ the CI watch to a reported conclusion before closing out.
 
 While CI runs, inspect both linked issue discussions and PR feedback with `resolve-pr-feedback`.
 Use the wait windows for a self-review of the branch's diff (`monitor-ci` Phase 1.2); full coverage
-and readiness still depend on the current `develop-feature` stage. Green CI on a draft does not
-approve its scope or complete the task. If no checks apply or are configured, report that accurately.
+and merge readiness still depend on the current `develop-feature` stage. Green CI does not approve
+a PR's scope or complete the task. If no checks apply or are configured, report that accurately.
 
 Do not merge — merges are a developer decision unless explicitly delegated.
 
@@ -251,8 +254,10 @@ Do not merge — merges are a developer decision unless explicitly delegated.
 
 - **Publishing before draft agreement.** Local checkpoint commits stay local unless publication
   was explicitly requested. After agreement, do not ask again for already-authorized publication.
-- **Treating a green draft as ready.** Scope approval, full relevant coverage, visual verification,
-  and final cleanup must be complete before the ready transition.
+- **Holding reviewable work in draft.** A draft is only a backup of dirty, unfinished work. Once
+  anyone else should look at the PR, mark it ready: nobody can approve a draft.
+- **Treating ready as mergeable.** Scope approval, full relevant coverage, visual verification, and
+  final cleanup gate the merge; list the remaining ones in the PR body.
 - **Ending a code/issue turn without the recap table.** Close with the Phase 8 table linking
   everything still outstanding this session, with the admin-only approval command, when the
   operator may run it, inside each open PR's row rather than in adjacent prose.
@@ -261,7 +266,7 @@ Do not merge — merges are a developer decision unless explicitly delegated.
 - **Treating "PR opened" as task-done.** Carry `monitor-ci` through to CI green or an
   escalated/blocked state (Phase 7).
 - **Skipping stage-appropriate verification.** Apply 1.4, keep existing checks intact, and record
-  deferred coverage on drafts; the formatter is not the linter.
+  deferred coverage in the PR body; the formatter is not the linter.
 - **Opening a PR from master.** Branch first, then PR.
 - **Closing and re-creating a PR to "fix" the title.** Use `gh pr edit --title` instead.
 - **Putting a local Storybook link in a PR body.** Local review URLs are session-scoped and belong in

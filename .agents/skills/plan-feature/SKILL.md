@@ -154,12 +154,13 @@ and dependencies. Reuse existing issues. Keep the body concise and current; move
 into issue discussions with a recommendation, consequences, and the expertise needed to resolve
 them. Agreement on direction does not close unresolved scope questions.
 
-### 5. Review issues and draft PRs in parallel
+### 5. Review issues and PRs in parallel
 
-Draft PRs may accompany the issues now. Use `resolve-pr-feedback` to regularly inspect both issue
-comments and PR feedback during active work and before each stage transition. Fold accepted
-decisions into issue bodies and implementation. Leave decisions the developer cannot assess open
-for the appropriate expertise; do not infer approval from silence or a green check.
+PRs may accompany the issues now, ready for review as `open-pull-request` defines. Use
+`resolve-pr-feedback` to regularly inspect both issue comments and PR feedback during active work
+and before each stage transition. Fold accepted decisions into issue bodies and implementation.
+Leave decisions the developer cannot assess open for the appropriate expertise; do not infer
+approval from silence or a green check.
 
 ### 6. Confirm approved scope and finish
 
