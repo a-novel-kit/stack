@@ -10,7 +10,8 @@
   [Recovery](#recovery)
 - [Add a service](#add-a-service): the pull-request order, the first plan, native backups
 - [Report faults to Sentry](#report-faults-to-sentry): the DSN, the release name, the egress, the
-  OTLP export, [the Sentry root](#the-sentry-root) and its tokens and organization moves
+  OTLP export, [the Sentry root](#the-sentry-root) and its tokens and organization moves, and
+  [each release's deploy](#sentry-deploys)
 
 ## Prove the plan before review
 
@@ -473,3 +474,22 @@ creates it.
   history.
 - **The provider is pre-1.0,** so Renovate's updates wait for a review: a minor release can break,
   as `sentry_issue_alert` did when `sentry_alert` replaced it.
+
+### Sentry deploys
+
+Release CI creates each release when it cuts the tag, and records no deploy. Each service job of
+`deploy.yaml` records the release's `production` deploy once its root serves it, through
+`.github/scripts/sentry-deploys.mjs` on the `tofu` action's `plan` output.
+
+- **A root serves its releases** once every Cloud Run service the apply left unchanged reports, in
+  the state the plan refreshed, `terminal_condition` `CONDITION_SUCCEEDED` and a latest ready
+  revision equal to its latest created revision. The apply waited for each service it changed.
+  Neither a green job nor the plan's outputs prove a deploy: a failed update leaves its
+  configuration in state, and OpenTofu writes root outputs even when an apply fails.
+- **Each release gets one deploy.** The script lists the release's deploys and records one only when
+  `production` has none, so a deploy missed during a Sentry outage lands on the next merge.
+- **Nothing fails the deploy.** A Sentry error, a release Sentry lacks, a service stuck on a failed
+  revision or a missing token only warns.
+- **The token is `release-ci`,** the organization token release CI uses, set as `SENTRY_AUTH_TOKEN`
+  in the `production` environment. Its claims name the organization and its region, so an
+  organization move only swaps the token there and in each `release` environment.

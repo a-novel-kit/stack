@@ -141,14 +141,14 @@ An ops account reads every production secret. When the attacker held one, or a m
 
 Sentry issues two kinds of keys:
 
-| Key                                 | It lives in                                                              | It can                           |
-| ----------------------------------- | ------------------------------------------------------------------------ | -------------------------------- |
-| The organization token `release-ci` | Bitwarden, copied into each `release` environment as `SENTRY_AUTH_TOKEN` | record releases in every project |
-| A project's DSN                     | the service's `production-<service>-sentry-dsn` secret                   | send events to that project      |
+| Key                                 | It lives in                                                                                                        | It can                                       |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| The organization token `release-ci` | Bitwarden, copied as `SENTRY_AUTH_TOKEN` into each `release` environment and into infra's `production` environment | record releases and deploys in every project |
+| A project's DSN                     | the service's `production-<service>-sentry-dsn` secret                                                             | send events to that project                  |
 
 Rotate each key that leaked. Revoking the old key cuts the attacker off at once. Sentry then records no new release, or no event from the service, until the new key lands.
 
-1. For the organization token, open **Settings → Developer Settings → Organization Tokens** in Sentry. Revoke `release-ci`, create a new token with the same name, and store it in Bitwarden in place of the old one. Then set it in every repository whose `release` environment holds the token, pasting it at the prompt. `gh` names each one it sets:
+1. For the organization token, open **Settings → Developer Settings → Organization Tokens** in Sentry. Revoke `release-ci`, create a new token with the same name, and store it in Bitwarden in place of the old one. Then set it in every repository whose `release` environment holds the token, and in infra's `production` environment, pasting it at the prompt. `gh` names each one it sets:
 
    ```bash
    read -rs TOKEN
@@ -161,6 +161,7 @@ Rotate each key that leaked. Revoking the old key cuts the attacker off at once.
              --env release --repo "$ORG/$REPO"
        done
    done
+   printf '%s' "$TOKEN" | gh secret set SENTRY_AUTH_TOKEN --env production --repo a-novel/infra
    unset TOKEN
    ```
 
