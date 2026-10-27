@@ -54,7 +54,7 @@ The App keeps its other keys, so every other repository keeps releasing.
 
 ## Connect it to Sentry
 
-A service reports its faults, traces and logs to a Sentry project of its own. A platform skips this section until counsel rules on browser telemetry ([a-novel/.github#399](https://github.com/a-novel/.github/issues/399)), and so does every other repository.
+A service reports its faults, traces and logs to a Sentry project of its own. A platform sends its server traces only, so it takes step 1 and skips the others: it runs no Sentry SDK, and browser telemetry waits for counsel's ruling on consent ([a-novel/.github#399](https://github.com/a-novel/.github/issues/399)). Every other repository skips this section.
 
 1. An infra pull request adds the repository to `projects` in `environments/production/sentry/terraform.tfvars`. Its deploy creates the Sentry project, named after the repository, with spike protection. Never create a project by hand: the Sentry root owns them all.
 2. In the organization's **Settings → GitHub Apps**, configure **Sentry** and add the repository under **Repository access**. Sentry reads each release's commits through it.
