@@ -54,9 +54,9 @@ The App keeps its other keys, so every other repository keeps releasing.
 
 ## Connect it to Sentry
 
-A service reports its faults to a Sentry project of its own. Skip this section for any other repository.
+A service reports its faults, traces and logs to a Sentry project of its own. A platform skips this section until counsel rules on browser telemetry ([a-novel/.github#399](https://github.com/a-novel/.github/issues/399)), and so does every other repository.
 
-1. In Sentry, open **Projects → Create Project**. Choose the **Go** platform, and name the project exactly as the repository. Keep error monitoring alone, since traces go to Google Cloud.
+1. An infra pull request adds the repository to `projects` in `environments/production/sentry/terraform.tfvars`. Its deploy creates the Sentry project, named after the repository, with spike protection. Never create a project by hand: the Sentry root owns them all.
 2. In the organization's **Settings → GitHub Apps**, configure **Sentry** and add the repository under **Repository access**. Sentry reads each release's commits through it.
 3. Copy the Sentry organization token `release-ci` from [Bitwarden](./bitwarden), and paste it at the prompt:
 
@@ -64,7 +64,7 @@ A service reports its faults to a Sentry project of its own. Skip this section f
    gh secret set SENTRY_AUTH_TOKEN --env release --repo "$ORG/$NAME"
    ```
 
-4. An infra pull request creates the service's DSN container, as the `write-infra` skill describes. Once it deploys, copy the DSN from the project's **Settings → Client Keys (DSN)**, and paste it at the prompt:
+4. An infra pull request creates the service's DSN and OTLP header containers, as the `write-infra` skill describes. Once it deploys, sign in to `gcloud` first: a piped `gcloud secrets versions add` cannot prompt you to sign in again. Copy the DSN from the project's **Settings → Client Keys (DSN)**, and paste it at the prompt:
 
    ```bash
    SECRET="production-${NAME#service-}-sentry-dsn"
@@ -74,7 +74,21 @@ A service reports its faults to a Sentry project of its own. Skip this section f
    unset DSN
    ```
 
-   It prints `Created version [1]`, the version infra pins.
+   Then paste the DSN's public key, the part between `https://` and `@`. The command writes the header around it:
+
+   ```bash
+   SECRET="production-${NAME#service-}-sentry-otlp-headers"
+   read -rs KEY
+   printf 'x-sentry-auth=sentry sentry_key=%s' "$KEY" | gcloud secrets versions add "$SECRET" \
+     --project=a-novel-management-prod --data-file=-
+   unset KEY
+   ```
+
+   Each prints `Created version [1]`, the version infra pins. Add both before the pull request that pins them merges: a deploy that pins a missing version fails, and Cloud Run keeps the old revision.
+
+5. The service root's `sentry_project_id` input takes the project's ID, the number at the end of its DSN.
+
+[a-novel/infra#1154](https://github.com/a-novel/infra/issues/1154) moves steps 4 and 5 into code.
 
 ## Create its Discord role
 

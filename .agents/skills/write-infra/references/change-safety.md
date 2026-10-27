@@ -9,7 +9,8 @@
   [Database and backup hosts](#database-and-backup-hosts), [Trust boundaries](#trust-boundaries),
   [Recovery](#recovery)
 - [Add a service](#add-a-service): the pull-request order, the first plan, native backups
-- [Report faults to Sentry](#report-faults-to-sentry): the DSN, the release name, the egress
+- [Report faults to Sentry](#report-faults-to-sentry): the DSN, the release name, the egress, the
+  OTLP export, [the Sentry root](#the-sentry-root) and its tokens and organization moves
 
 ## Prove the plan before review
 
@@ -378,8 +379,9 @@ deployed. a-novel/infra#785 is the worked example.
 ## Report faults to Sentry
 
 A workload reports its faults to Sentry once it holds three variables. Migrations and smoke checks
-hold none and report nothing. The change takes three pull requests, each merged once the one before
-has deployed.
+hold none and report nothing. The service's Sentry project comes first: add its repository to the
+Sentry root's `projects`, as [The Sentry root](#the-sentry-root) describes. The rest takes three pull
+requests, each merged once the one before has deployed.
 
 1. **Bootstrap creates the DSN container,** `production-<service>-sentry-dsn` with the contract
    `SENTRY_DSN`. The same pull request grants each reporting workload's identity read on it, through
@@ -435,4 +437,30 @@ export to another project's.
 
 Foundation's single `sentry_ingest_host` input names the ingest host that every DSN and OTLP
 endpoint points to. A move to another Sentry organization changes that input, each root's
-`sentry_project_id`, and the DSN and OTLP header versions, and nothing else here.
+`sentry_project_id`, the DSN and OTLP header versions, and the Sentry root, as
+[The Sentry root](#the-sentry-root) describes.
+
+### The Sentry root
+
+`environments/production/sentry` manages the Sentry organization through the community
+`jianyuan/sentry` provider: the projects and their spike protection, then the alerts and dashboards.
+
+- **It applies only when it changes,** in `deploy.yaml`'s own `sentry` job after bootstrap, never in
+  the services matrix. Every service root applies on every merge, and a failed one stops the
+  rollout, so a Sentry API outage there would hold every release. `check-service-roots.sh` skips it
+  as it skips foundation.
+- **Its token never reaches state or a plan.** The root reads it through the Google provider's
+  ephemeral `google_secret_manager_secret_version`. The `tofu` action passes `TF_VAR_writer`, so
+  plans read `production-sentry-plan-token`, the only one bootstrap lets `infra-plan` read, and only
+  deploys read `production-sentry-deploy-token`. Both are Sentry internal-integration tokens:
+  organization tokens have fixed CI permissions and cannot manage projects.
+  `docs/runbooks/secrets.md` lists their permissions.
+- **Mocked providers cannot import,** so its tests set `adopt_projects = false`. Drop the variable
+  and its `import` blocks once they have applied.
+- **The provider drops a missing project from state, but reports a missing spike protection as an
+  error.** A move to another organization therefore takes two pull requests. The first forgets the
+  old resources with `removed` blocks set to `destroy = false`. The second sets `organization`,
+  `base_url`, the token versions and `adopt_projects = false`, and creates the new resources.
+  Deleting the resource blocks alone would delete the old projects and their history.
+- **The provider is pre-1.0,** so Renovate's updates wait for a review: a minor release can break,
+  as `sentry_issue_alert` did when `sentry_alert` replaced it.
