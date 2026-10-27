@@ -104,11 +104,19 @@ pins in the same change.
      repeats when they come back, as on a revert or a cleared downtime. The plan policy exempts
      that replacement.
    - **A failed execution still records its token,** so the next plan shows nothing to do. Every
-     plan runs `.github/scripts/rerun-failed-jobs.mjs`, which reads each token job's last
+     plan runs `.github/scripts/rerun-failed-workloads.mjs`, which reads each token job's last
      execution from the Cloud Run v2 API and re-plans with `-replace` on the token source of one
      that failed. The provider does not expose the execution's status.
 2. Traffic is `TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST`. Cloud Run routes to a revision only after its
    startup probe passes.
+   - **A failed revision still records its template,** and the previous revision keeps serving. So
+     every service's template carries a `revision-token` annotation set from its own
+     `terraform_data`, a new service's included. The same script reads each service's
+     `terminal_condition` from the refreshed plan, and replaces the token source of one in
+     `CONDITION_FAILED`, so the deploy rolls the template again and fails until it serves.
+   - **A successful apply therefore means every Cloud Run service of the root serves its
+     template.** The apply waits for each service it changes, and a failed unchanged one would
+     have been rolled again.
 3. Post-deploy checks run one script, `modules/smoke-check/smoke.sh`:
    - each private service's `smoke-check` module runs it in `grpc` mode, as the service's smoke
      identity, on every new gRPC image, script or identity, which are triggers, and again once a
