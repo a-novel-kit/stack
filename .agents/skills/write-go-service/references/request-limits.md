@@ -40,8 +40,8 @@ one:
 - per target account, keyed by the email in the body, case-folded, when the route sends mail or
   checks a password. Many callers cannot then gang up on one mailbox or account.
 
-Every limit is configuration, like a timeout or a size: an environment variable with its default
-in `env.go`, never a number in a middleware. A rate is an `httpf.Rate`, written `<requests>/<window>`
+Every rate or concurrency limit is configuration, like a timeout: an environment variable with its
+default in `env.go`, never a number in a middleware. A rate is an `httpf.Rate`, written `<requests>/<window>`
 (`3/5m`) in its variable and in its default: `config.Must(httpf.ParseRate("3/5m"))` writes the
 default, and `config.LoadEnv` reads the variable with `httpf.ParseRate`. Name each policy once in the
 service's limits file, built on `httpf.Limits.By` with a caller key or `httpf.BodyKeyRate` for a

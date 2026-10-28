@@ -38,6 +38,15 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
   (`go-playground/validator` via a package-level `validate` instance, with a shared
   `ErrInvalidRequest` sentinel); otherwise plain conditional checks. Reject blank required strings,
   zero-value identifiers, out-of-range values, and values outside a known set.
+- **Validate first.** `validate.Struct` runs before anything derives a value from the request, so
+  later code may assume the tags hold. A list's `Limit` is `validate:"min=0,max=N"`, and only zero
+  takes the default page size; a negative limit fails instead of falling back to it.
+- **A cap on a request field is a validator tag**, never a config value or a hand-written check.
+  `validate:"required,max=2097152"` caps a `json.RawMessage` at 2 MiB, and `validate:"max=500"` caps
+  a slice. When no built-in tag expresses the rule, register a custom one on the package's
+  `validate` instance with `RegisterValidation`, as `notblank` is. A cap the schema already holds
+  reuses its value and needs no setting of its own. Rate and concurrency limits stay configuration
+  (see [request limits](request-limits.md)).
 - **DAO/sub-service sentinels travel up** — return them wrapped with `%w` so handlers can match
   with `errors.Is`. The service may re-export a DAO sentinel as its own (`core.ErrXxx`) when
   the handler needs to map it (see Common Pitfalls).
@@ -88,7 +97,7 @@ func (h *RestUserList) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    httpf.SendJSON(ctx, w, span, lo.Map(users, loadUserMap))
+    httpf.SendJSON(ctx, w, span, lo.Map(users, func(user *core.User, _ int) User { return loadUser(user) }))
 }
 
 func NewRestUserList(service RestUserListService, logger logging.Log) *RestUserList {

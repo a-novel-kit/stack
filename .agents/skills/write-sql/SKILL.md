@@ -548,6 +548,39 @@ Generate UUIDs with `uuid.NewV7`, and default the column to `uuidv7()`. A UUIDv7
 creation time, so inserts land at the end of the primary key index. A UUIDv7 reveals when its row
 was created; keep `uuid.New` for an ID whose creation time must stay private.
 
+### Integrity Constraints
+
+The schema keeps rows consistent with each other. The request's own rules, such as a length or an
+owner, stay with the service's validator and ownership check.
+
+A row that references siblings under one parent stores the parent's ID and reaches each sibling
+through a composite foreign key. Each referenced table holds a `UNIQUE (parent_id, id)` key for it:
+
+```sql
+CREATE TABLE layers (
+  id uuid PRIMARY KEY NOT NULL DEFAULT uuidv7(),
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  -- …
+  CONSTRAINT layers_project_id_id_key UNIQUE (project_id, id)
+);
+
+-- scenes holds the same key, scenes_project_id_id_key.
+CREATE TABLE cells (
+  project_id uuid NOT NULL,
+  scene_id uuid NOT NULL,
+  layer_id uuid NOT NULL,
+  -- …
+  PRIMARY KEY (scene_id, layer_id),
+  -- Both keys carry the project, so a cell's scene and layer exist and share its project.
+  CONSTRAINT cells_scene_fkey FOREIGN KEY (project_id, scene_id) REFERENCES scenes (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT cells_layer_fkey FOREIGN KEY (project_id, layer_id) REFERENCES layers (project_id, id) ON DELETE CASCADE
+);
+```
+
+A write to `cells` then proves its scene and its layer exist in its project, with no read before
+it. Name every constraint whose violation the DAO maps to a sentinel, since the DAO matches the
+name. A list of a project's cells then filters on `project_id` alone.
+
 ### Indexes
 
 - Index every column used in a `WHERE` clause of a frequent query.
@@ -607,6 +640,8 @@ The rules above, as a pre-push checklist:
 - A list that reads a whole set at once, even one the schema caps, or a client list whose total
   comes from a separate count query.
 - A renumbering that reads every row instead of shifting a range in SQL.
+- A read before a write to prove a referenced row exists in the same parent, which a composite
+  foreign key proves in the write itself.
 - Omitting `--bun:split` between statements that must commit in order.
 - Creating a materialized view without the unique index `REFRESH ... CONCURRENTLY` requires.
 - Dropping objects out of reverse creation order in a down migration.
