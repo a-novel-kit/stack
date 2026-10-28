@@ -35,7 +35,8 @@ Keep the architecture, interface, and security rules in this entry point active.
 editing, or reviewing service behavior, read each reference matching an affected layer. Read the
 layer rules when testing its contract too; crossing layers requires each matching reference.
 
-- DAO operations or transaction ownership, including core/job transactions: [data access](references/data-access.md).
+- DAO operations, constraint violations, ownership checks or transaction ownership, including
+  core/job transactions: [data access](references/data-access.md).
 - Core validation/orchestration or REST/gRPC handlers: [operations](references/operations.md).
 - Config, internal helpers, models, exported clients, command wiring, or Sentry error reporting:
   [wiring](references/wiring.md).
@@ -203,7 +204,8 @@ func NewUserSearch(dao UserSearchDao) *UserSearch {
   do; this is a deliberate project standard that trades that for consistency. Follow it.
 - The method signature is `(ctx context.Context, request *XxxRequest) (Result, error)` — `Result`
   is a struct pointer, slice, or named type, never a bare primitive, so fields can be added later
-  without breaking callers.
+  without breaking callers. A yes-or-no check, such as an existence or ownership DAO, returns
+  `bool`: its answer never grows a field.
 - **Exceptions in handlers**: gRPC method signatures are protoc-generated; REST handlers implement
   `ServeHTTP(w, r)`. Both are accepted exceptions to the `Exec` shape.
 - Service and DAO types are **stateless after construction** — every field is set by `New*` and

@@ -211,7 +211,38 @@ When a type has both an interface and a concrete implementation, **document the 
 that is what users read. The implementation doc serves maintainers: keep it terse, or omit it when the
 interface doc already covers everything. Never duplicate the same explanation across both.
 
-### 5. Package-level documentation
+### 5. Data structs
+
+Every data struct groups its fields by category: table bindings, requests, models, pages and
+transport types alike. Identifiers come first, then the fields that place or classify the entity,
+then its content, then metadata such as timestamps. A blank line separates the groups. Document
+each field whose name leaves its meaning open; leave common fields, such as `ID` or `UpdatedAt`,
+bare.
+
+```go
+// Layer is one row of a project's Scenes Composer: one kind of information followed across scenes.
+type Layer struct {
+	bun.BaseModel `bun:"table:layers,alias:layers"`
+
+	ID uuid.UUID `bun:"id,pk,type:uuid"`
+	// ProjectID is the project the layer belongs to.
+	ProjectID uuid.UUID `bun:"project_id,type:uuid"`
+
+	// Position orders the project's layers, from 0.
+	Position int `bun:"position"`
+	// Kind names the content schema the layer's cells follow.
+	Kind string `bun:"kind"`
+
+	// Name labels the layer's row in the composer.
+	Name string `bun:"name"`
+	// Description says what the layer records.
+	Description string `bun:"description"`
+
+	UpdatedAt time.Time `bun:"updated_at"`
+}
+```
+
+### 6. Package-level documentation
 
 When a package's purpose isn't self-evident, add a package-level doc comment explaining its
 **architectural role**: where it sits in the codebase, what layer it belongs to, and how it relates to

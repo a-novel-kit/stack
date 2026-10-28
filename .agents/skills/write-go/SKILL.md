@@ -188,6 +188,21 @@ says what the data is:
 
 ---
 
+## Parameters
+
+A function takes only the parameters it uses. Where a callback signature asks for more, such as
+`lo.Map`'s index, wrap the call in a closure instead of adding the parameter to the function:
+
+```go
+// WRONG — the index exists only to match lo.Map.
+func newCell(entity *dao.Cell, _ int) *Cell { … }
+
+// CORRECT
+cells := lo.Map(rows, func(row *dao.CellListRow, _ int) *Cell { return newCell(&row.Cell) })
+```
+
+---
+
 ## Error handling
 
 - **Lowercase, no trailing punctuation.** Errors get wrapped and read mid-sentence:
@@ -369,6 +384,7 @@ stdlib pitfalls that reached `master` once, each with the fix that held.
 - **Suppressing span reporting for an error.** Every span'd layer reports every error it returns — no
   identity-keyed `reportUnexpected` helper, no bare `return nil, ErrXxx` from a layer with a span.
 - **`new(T)` in a constructor.** Use `&T{}`.
+- **A parameter added only to fit a callback's signature.** Wrap the call in a closure.
 - **snake_case or run-together multi-word file names.** camelCase.
 - **Discarding an error without `_ =` and a why-comment.**
 - **Shadowing an imported package name with a local variable.** Rename the variable.
