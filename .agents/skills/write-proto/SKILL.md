@@ -114,6 +114,13 @@ Managed mode injects `option go_package` automatically — do **not** add `optio
 `package` statements to `.proto` files manually. A manual one conflicts with the managed-mode
 settings or produces a duplicate declaration.
 
+**`buf.gen.docs.yaml`** converts the protos into the gRPC document of the service's API reference,
+the Scalar page each service deploys to GitHub Pages. `publish-docs` runs it on `master`, and a
+`jq` step names the document, stamps the `package.json` version, and drops the Connect headers and
+per-field titles the converter adds. Nothing it writes is committed. The converter describes
+Connect-style HTTP calls that a grpc-go server does not answer, so `openapi.html` hides test
+requests and code samples for that document.
+
 ---
 
 ## File Structure
@@ -172,8 +179,9 @@ able to detect "not set". Never assign 0 to a meaningful value.
 
 ## Comments
 
-Document every `service`, `rpc`, `message`, and `field`. Comments go immediately above the
-element, using `//` (single-line) or `/* */` (multi-line):
+Document every `service`, `rpc`, `message`, and `field`. The API reference shows these comments to
+every team that calls the service. Comments go immediately above the element, using `//`
+(single-line) or `/* */` (multi-line):
 
 ```proto
 // JwkGetService returns a public JSON Web Key by its key ID.
