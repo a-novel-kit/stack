@@ -47,15 +47,15 @@ so committing it is safe (see [Badge Catalog](badges.md#badge-catalog)).
 Ask the user which of these apply. Each flag turns a section of README/CONTRIBUTING on or
 off:
 
-| Flag               | What it enables                                                     |
-| ------------------ | ------------------------------------------------------------------- |
-| `has-grpc`         | gRPC compose examples + `grpcurl` interaction snippets              |
-| `has-rest`         | REST compose examples + `curl` interaction snippets                 |
-| `has-standalone`   | Standalone (all-in-one) image in addition to split images           |
-| `has-go-client`    | `pkg/go` usage example in README, Go client section in CONTRIBUTING |
-| `has-js-client`    | `pkg/js` usage example in README, JS client section in CONTRIBUTING |
-| `has-openapi-docs` | Link to GitHub Pages docs in README + redocly/scalar mention        |
-| `has-cron-jobs`    | Scheduled-job section (like rotate-keys) in CONTRIBUTING            |
+| Flag               | What it enables                                                               |
+| ------------------ | ----------------------------------------------------------------------------- |
+| `has-grpc`         | gRPC compose examples + `grpcurl` interaction snippets                        |
+| `has-rest`         | REST compose examples + `curl` interaction snippets                           |
+| `has-standalone`   | Standalone (all-in-one) image in addition to split images                     |
+| `has-go-client`    | `pkg/go` usage example in README, Go client section in CONTRIBUTING           |
+| `has-js-client`    | `pkg/js` usage example in README, JS client section in CONTRIBUTING           |
+| `has-openapi-docs` | Link the API reference on GitHub Pages in the README; it covers REST and gRPC |
+| `has-cron-jobs`    | Scheduled-job section (like rotate-keys) in CONTRIBUTING                      |
 
 When an input is unknown or the user declines to provide it, insert an HTML TODO comment
 (see [Handling Missing Values](#phase-3-handling-missing-values)) rather than guessing or leaving
