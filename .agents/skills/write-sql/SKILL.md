@@ -171,17 +171,47 @@ CREATE TABLE scenes (
 );
 ```
 
-A write that renumbers positions shifts a range in SQL instead of reading every row. This update
-opens a gap at `?1`, which the deferred unique key allows until commit:
+A write that renumbers positions shifts a range in SQL instead of reading every row. The client
+sends the target position, and the statement that shifts clamps it, so no count is read before the
+write. `LEAST(?1, count(*))` turns a position past the end into an append. This insert shifts the
+scenes from there on and fills the gap in one statement, which the deferred unique key allows until
+commit:
 
 ```sql
-UPDATE scenes
-SET
-  position = position + 1
-WHERE
-  project_id = ?0
-  AND position >= ?1;
+WITH
+  start AS (
+    SELECT
+      LEAST(?1, count(*))::integer AS position
+    FROM
+      scenes
+    WHERE
+      project_id = ?0
+  ),
+  shifted AS (
+    UPDATE scenes
+    SET
+      position = scenes.position + 1
+    FROM
+      start
+    WHERE
+      scenes.project_id = ?0
+      AND scenes.position >= start.position
+  )
+INSERT INTO
+  scenes (id, project_id, position, title)
+SELECT
+  ?2,
+  ?0,
+  start.position,
+  ?3
+FROM
+  start
+RETURNING
+  *;
 ```
+
+A move clamps its target to `count(*) - 1`, the last place, and shifts the rows between the old and
+the new position by one toward the old one.
 
 A write past the range breaks the check. Its DAO joins that violation to a sentinel, such as
 `ErrSceneInsertFull`, so the core can refuse the request.
@@ -640,6 +670,7 @@ The rules above, as a pre-push checklist:
 - A list that reads a whole set at once, even one the schema caps, or a client list whose total
   comes from a separate count query.
 - A renumbering that reads every row instead of shifting a range in SQL.
+- A count read before a write to clamp a position, which `LEAST` does in the shifting statement.
 - A read before a write to prove a referenced row exists in the same parent, which a composite
   foreign key proves in the write itself.
 - Omitting `--bun:split` between statements that must commit in order.

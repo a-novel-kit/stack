@@ -151,6 +151,10 @@ layer/role prefixes (`pg.*`, `rest.*`, `grpc.*`, `*.config.go`, `common.go`, …
   its generator chose, such as protobuf's `GetId`.
 - **Don't shadow imported package names** (`json`, `http`, `context`, `errors`, `time`, …).
   Rename the variable.
+- **A zero value is a `var` declaration**: `var position int`, not `position := 0`. `:=` introduces
+  a value computed on the spot.
+- **A default takes the name of the field it fills**, then `Default`: `LayerListLimitDefault` fills
+  `LayerListRequest.Limit`. A synonym, as in `LayerListDefaultSize`, gives one value two terms.
 
 ### Constructors
 
