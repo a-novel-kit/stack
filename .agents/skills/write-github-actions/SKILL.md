@@ -213,6 +213,9 @@ fills from Bitwarden. A job that reads one names `environment: {name: governance
 a job calling a reusable workflow passes the secret by name, and the called job names the
 environment. The release App's key lives only in the `release` environment. A repository with a
 Sentry project keeps `SENTRY_AUTH_TOKEN` there too, for the release step `manage-versions` describes.
+A platform's tag build reads its source-map upload key, set by hand, from a `sourcemaps` environment.
+`repo update` opens it on the same refs as `governance`, with no reviewer, so a release still waits
+for one approval: the cut's.
 
 Add a `concurrency` group with `cancel-in-progress: true` only where a superseded run's result is
 worthless, such as a lint-only workflow. Anything that releases or deploys must run to completion.
@@ -571,6 +574,12 @@ There is no local runner, so verification is reading plus CI.
   copy. The coverage uploads in `test-go`, `test-node` and `test-playwright` set it.
 - **Interpolating an input straight into a `run:` script.** Bind it through `env:` so the value cannot
   be read as shell syntax.
+- **A cached image build that a secret should change.** `build-actions/docker` restores the layer
+  cache that default-branch pushes write, and BuildKit leaves secrets out of cache keys. The cut
+  pushes a release commit to `master` with its tag, so the tag's build can reuse master's layer of
+  the same tree, built without the secret, and skip the step the secret drives without failing. A
+  release build whose secret changes what a step does, such as a platform's source-map upload, sets
+  `cache: "false"`.
 - **A `pnpm <script>` step in an action without reconciling the lockfile first.** pnpm 11's
   verify-deps pre-run hook spawns a _frozen_ `pnpm install` ahead of the script and aborts
   `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` whenever an earlier step (e.g. `pnpm audit --fix=override`)

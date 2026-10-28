@@ -274,10 +274,10 @@ func securityOps(c *ClassPreset, repoPath string) []Op {
 	}
 }
 
-// environmentOps writes the release and governance environments the repo's
-// workflows use. They open only on refs a ruleset guards: the default branch,
-// and release lines and version tags where the tags rulesets limit who creates
-// them. A feature branch's workflow never unlocks them.
+// environmentOps writes the release, governance and sourcemaps environments the
+// repo's workflows use. They open only on refs a ruleset guards: the default
+// branch, and release lines and version tags where the tags rulesets limit who
+// creates them. A feature branch's workflow never unlocks them.
 func environmentOps(t *RepoTarget, repoPath string) []Op {
 	policies := []DeploymentPolicy{{Name: t.DefaultBranch, Type: "branch"}}
 	if t.Class.Rulesets.Tags {
@@ -300,6 +300,12 @@ func environmentOps(t *RepoTarget, repoPath string) []Op {
 	if len(governance.Secrets) > 0 {
 		ops = append(ops, environmentWrites(repoPath, "governance", policies)...)
 		ops = append(ops, Op{Path: repoPath + "/environments/governance/secrets", Governance: &governance})
+	}
+	// A platform's tag build reads its source-map upload key, set by hand, from
+	// the sourcemaps environment. No reviewer gates it, so a release still takes
+	// one approval: the cut's.
+	if slices.Contains(t.Discovered.Environments, "sourcemaps") {
+		ops = append(ops, environmentWrites(repoPath, "sourcemaps", policies)...)
 	}
 	return ops
 }

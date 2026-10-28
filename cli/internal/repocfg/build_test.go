@@ -494,6 +494,66 @@ func TestBuildPlanProtectsReleaseEnvironment(t *testing.T) {
 	}
 }
 
+// TestBuildPlanProvisionsSourceMapsEnvironment pins where a platform's source-map
+// upload key lives: a repo whose workflows name the sourcemaps environment gets
+// it, opened to the refs the release environment admits, with no reviewer, so
+// the tag build that reads the key waits for nobody. Any other repo gets none.
+func TestBuildPlanProvisionsSourceMapsEnvironment(t *testing.T) {
+	t.Parallel()
+	base := "repos/a-novel/example/environments/sourcemaps"
+	master := DeploymentPolicy{Name: "master", Type: "branch"}
+	unlocked := map[string]any{"deployment_branch_policy": map[string]any{"protected_branches": false, "custom_branch_policies": true}}
+	testCases := []struct {
+		name         string
+		environments []string
+		tags         bool
+		want         []Op
+	}{
+		{
+			name: "Named", environments: []string{"release", "sourcemaps"}, tags: true,
+			want: []Op{
+				{Method: http.MethodPut, Path: base, Body: unlocked},
+				{Method: http.MethodPut, Path: base + "/deployment-branch-policies", Body: []DeploymentPolicy{
+					master, {Name: "release/v*", Type: "branch"}, {Name: "v*", Type: "tag"},
+				}},
+			},
+		},
+		{
+			name: "WithoutTagRulesets", environments: []string{"sourcemaps"},
+			want: []Op{
+				{Method: http.MethodPut, Path: base, Body: unlocked},
+				{Method: http.MethodPut, Path: base + "/deployment-branch-policies", Body: []DeploymentPolicy{master}},
+			},
+		},
+		{name: "NotNamed", environments: []string{"release"}, tags: true},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			plan, err := BuildPlan(&RepoTarget{
+				Org: "a-novel", Repo: "example", DefaultBranch: "master",
+				Class: &ClassPreset{Class: ClassPlatform, Rulesets: ClassRulesets{Tags: testCase.tags}},
+				OrgProfile: &OrgProfile{Org: "a-novel", Bots: map[string]int64{
+					"agent": 3549319, "publish": 1718144, "dependencies": 1718123, "release": 5307879,
+				}},
+				Discovered: &Discovered{Environments: testCase.environments},
+			})
+			if err != nil {
+				t.Fatalf("BuildPlan: %v", err)
+			}
+			var got []Op
+			for _, op := range plan.Ops {
+				if strings.HasPrefix(op.Path, base) {
+					got = append(got, op)
+				}
+			}
+			if !reflect.DeepEqual(got, testCase.want) {
+				t.Errorf("sourcemaps ops = %#v, want %#v", got, testCase.want)
+			}
+		})
+	}
+}
+
 // TestBuildPlanGrantsTierTeams pins how access follows a repo's class: each
 // tier's area team for that class holds the tier's role, and the op names the
 // complete set, so apply can remove any other tier team's grant. On the org's
