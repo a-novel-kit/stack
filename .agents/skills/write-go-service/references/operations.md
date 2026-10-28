@@ -68,18 +68,21 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
   }
   ```
 
-- **A create, a delete and a content write take a list** of at most 100 items,
-  `validate:"required,min=1,max=100,dive"`, and apply all of it or none, as `SceneCreate`,
-  `SceneDelete` and `CellWrite` do. One item is a list of one, so each operation has one route and
-  no separate batch route. The client chooses how much each request carries, and balances bandwidth
-  and load itself. A list of IDs adds `unique` before `dive`; a list of items that must not collide
-  gets a custom tag, such as `uniquecells`. A delete compares how many rows its DAO deleted with how
-  many IDs it named, and a miss returns not-found inside the transaction, which rolls the whole
-  delete back. `write-sql`'s [batch writes](../../write-sql/SKILL.md#batch-writes) give the
-  statements.
+- **Every write has a single and a batch operation.** A create, an update, a delete and a content
+  write each come twice, singular for one item and plural for a batch: `SceneCreate` and
+  `ScenesCreate`, `SceneUpdate` and `ScenesUpdate`, `SceneDelete` and `ScenesDelete`, `CellWrite`
+  and `CellsWrite`. Each has its own DAO (`PgSceneInsert` and `PgScenesInsert`), handler and route.
+  A move stays single. The client chooses how much each request carries, and balances bandwidth and
+  load itself. A batch takes at most 100 items, `validate:"required,min=1,max=100,dive"`, and
+  applies all of them or none. A list of IDs adds `unique` before `dive`, a list of items that carry
+  an ID adds `unique=ID`, and a list keyed by a pair gets a custom tag, such as `uniquecells`. A
+  batch delete or update compares how many rows its DAO returned with how many IDs it named, and
+  answers not-found on a miss. The delete counts inside its transaction, so the miss rolls it back.
+  The update writes nothing on a miss and needs no transaction. `write-sql`'s
+  [batch writes](../../write-sql/SKILL.md#batch-writes) give the statements.
 
   ```go
-  deleted, err := service.dao.Exec(ctx, &dao.SceneDeleteRequest{ProjectID: request.ProjectID, IDs: request.IDs})
+  deleted, err := service.dao.Exec(ctx, &dao.ScenesDeleteRequest{ProjectID: request.ProjectID, IDs: request.IDs})
   if err != nil {
       return fmt.Errorf("delete scenes: %w", err)
   }
@@ -90,19 +93,23 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
   }
   ```
 
+- **A write never echoes large content back.** It returns only what the client lacks. The client
+  sent a cell's content, so a cell write answers `WrittenCell{SceneID, LayerID, UpdatedAt}`, and its
+  upsert returns those columns alone.
 - **Each operation does one job.** Project creation inserts the project and the layers every
-  project must hold, and no scene. The client adds the first scenes through the scene create next,
-  as it adds any later one.
+  project must hold, and no scene. The client adds the first scenes through `ScenesCreate` next, as
+  it adds any later one.
 - **DAO/sub-service sentinels travel up** — return them wrapped with `%w` so handlers can match
   with `errors.Is`. The service may re-export a DAO sentinel as its own (`core.ErrXxx`) when
   the handler needs to map it (see Common Pitfalls).
 - **Remap a miss only where a request can cause it.** Once a preflight proves a row exists, a later
-  miss of that row is a plain error. The ownership check runs before the project lock, and the
-  kind read runs before the layer delete, so neither the lock nor the delete maps its not-found
-  sentinel again. Only a concurrent delete could reach that path, and a 500 answers it.
+  miss of that row is a plain error. The kind read runs before the layer delete, so the delete does
+  not map its not-found sentinel again. Only a concurrent delete could reach that path, and a 500
+  answers it.
 - **A preflight repeated across services becomes a helper** in the layer's `common.go`. It takes the
   dependency and an options struct, and opens its own span, as every core function that takes a
-  context does (see [telemetry](telemetry.md)). The ownership check is one, and each service still
+  context does (see [telemetry](telemetry.md)). The ownership check is one, and `lockOwnedProject`
+  has the same shape around the lock (see [ownership](data-access.md#ownership)). Each service still
   declares its own DAO interface, which satisfies the helper's:
 
   ```go
@@ -232,8 +239,11 @@ func NewRestUserList(service RestUserListService, logger logging.Log) *RestUserL
   Telemetry).
 - Conventional short names `w` / `r`. JSON in via `json.NewDecoder(r.Body)` or `gorilla/schema` for
   query params; out via the project's `httpf.SendJSON`.
-- **A list of UUIDs in the query needs a converter.** A delete names its rows with a repeated `id`
-  parameter, decoded into `[]uuid.UUID`. gorilla/schema decodes a single `uuid.UUID` through its
+- **A single write and its batch take their own routes**, with the same methods: `POST`, `PUT` and
+  `DELETE /v1/scene` act on one scene, and the same methods on `/v1/scenes` on a batch.
+  `GET /v1/scenes` stays the list, and a move keeps its own route, `POST /v1/scene/move`.
+- **A list of UUIDs in the query needs a converter.** A batch delete names its rows with a repeated
+  `id` parameter, decoded into `[]uuid.UUID`. gorilla/schema decodes a single `uuid.UUID` through its
   `UnmarshalText`, but fails a slice of them with "converter not found", so every request carrying
   the parameter answers 400. `rest.decoder.go` registers one on the package decoder:
 

@@ -123,7 +123,11 @@ convention and is not substituted by bun's `NewRaw`. Never build SQL by concaten
   ```
 
   `RETURNING *` gives the caller the full row (including server-generated timestamps) in a
-  single round-trip. The Go caller passes the result directly to `Scan(ctx, entity)`.
+  single round-trip. The Go caller passes the result directly to `Scan(ctx, entity)`. A write
+  whose operation returns less names its columns instead: the cell upsert ends with
+  `RETURNING scene_id, layer_id, updated_at`, since the client sent the content (see
+  `write-go-service`'s
+  [operations](../write-go-service/references/operations.md#core-layer-internalcore)).
 
 ### Bounded reads
 
@@ -201,9 +205,8 @@ CREATE TABLE scenes (
 A write that renumbers positions shifts a range in SQL instead of reading every row. The client
 sends the target position, and the statement that shifts clamps it, so no count is read before the
 write. `LEAST(?1, count(*))` turns a position past the end into an append. This insert shifts the
-scenes from there on by the number of new ones and fills the gap in one statement, which the
-deferred unique key allows until commit. `WITH ORDINALITY` numbers the new scenes from 1 in the
-order the client sent them:
+scenes from there on and fills the gap in one statement, which the deferred unique key allows until
+commit:
 
 ```sql
 WITH
@@ -218,7 +221,7 @@ WITH
   shifted AS (
     UPDATE scenes
     SET
-      position = scenes.position + cardinality(ARRAY[?2]::uuid[])
+      position = scenes.position + 1
     FROM
       start
     WHERE
@@ -228,12 +231,11 @@ WITH
 INSERT INTO
   scenes (id, project_id, position, title)
 SELECT
-  data.id,
+  ?2,
   ?0,
-  start.position + (data.position - 1)::integer,
-  data.title
+  start.position,
+  ?3
 FROM
-  unnest(ARRAY[?2]::uuid[], ARRAY[?3]::text[]) WITH ORDINALITY AS data (id, title, position),
   start
 RETURNING
   *;
@@ -254,14 +256,17 @@ test for exactly one row reads two unexpected matches as none.
 
 ### Batch writes
 
-A create, a delete or a content write takes a list (see `write-go-service`'s
-[operations](../write-go-service/references/operations.md#core-layer-internalcore)) and applies it
-in one statement: one round trip, and all of it or none. Pass each column of the list as
+A batch operation (see `write-go-service`'s
+[operations](../write-go-service/references/operations.md#core-layer-internalcore)) applies its
+list in one statement: one round trip, and all of it or none. Pass each column of the list as
 `bun.List(values)` inside a typed array, `ARRAY[?1]::uuid[]`: bun expands the values into the array,
 and the cast types it. The statement returns at most one row per item, so the list cap bounds it
 and `RETURNING` takes no `LIMIT`.
 
-An insert or an upsert zips its column arrays with `unnest`, which reads them side by side as rows:
+An insert or an upsert zips its column arrays with `unnest`, which reads them side by side as rows.
+A batch insert of ordered rows also clamps its start as the single insert above does, shifts the
+other rows by `cardinality(ARRAY[?2]::uuid[])`, and numbers its rows from 1 in request order with
+`unnest(…) WITH ORDINALITY` (`pg.scenesInsert.sql`). The batch cell upsert:
 
 ```sql
 INSERT INTO
@@ -279,11 +284,55 @@ SET
   content = EXCLUDED.content,
   updated_at = EXCLUDED.updated_at
 RETURNING
-  *;
+  scene_id,
+  layer_id,
+  updated_at;
 ```
 
-A delete matches its IDs with `= ANY` and closes every gap it leaves in the same statement: each
-later row moves up by the number of deleted rows before it. The parts of one `WITH` share a
+A batch update applies only when the parent holds every row it names, so it needs no transaction. A
+CTE counts the named rows the parent holds, and the `UPDATE` matches nothing unless that count
+equals the list's length. The core still compares the rows returned with the list to answer
+not-found:
+
+```sql
+WITH
+  data AS (
+    SELECT
+      *
+    FROM
+      unnest(ARRAY[?1]::uuid[], ARRAY[?2]::text[]) AS data (id, title)
+  ),
+  held AS (
+    SELECT
+      count(*) AS count
+    FROM
+      scenes
+      JOIN data ON data.id = scenes.id
+    WHERE
+      scenes.project_id = ?0
+  )
+UPDATE scenes
+SET
+  title = data.title,
+  updated_at = ?3
+FROM
+  data,
+  held
+WHERE
+  scenes.project_id = ?0
+  AND scenes.id = data.id
+  AND held.count = (
+    SELECT
+      count(*)
+    FROM
+      data
+  )
+RETURNING
+  scenes.*;
+```
+
+A batch delete matches its IDs with `= ANY` and closes every gap it leaves in the same statement:
+each later row moves up by the number of deleted rows before it. The parts of one `WITH` share a
 snapshot, so the `UPDATE` still sees the rows the `DELETE` removes and skips them by ID. An ID the
 parent does not hold deletes nothing and raises no error, which is why the core counts the rows
 returned.

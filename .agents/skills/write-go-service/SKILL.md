@@ -142,6 +142,7 @@ types prefixed `Http` are legacy; rename them when they come into scope (see Act
 | Kind                                       | Pattern                                | Example                                   |
 | ------------------------------------------ | -------------------------------------- | ----------------------------------------- |
 | Operation interface + struct               | `<Entity><Operation>`                  | `UserSearch`, `OrderCreate`               |
+| Batch operation, at every layer            | `<Entities><Operation>`, plural        | `ScenesCreate`, `PgScenesInsert`          |
 | DAO dependency interface (in core)         | `<Entity><Operation>Dao`               | `UserSearchDao`, `JwkSelectDao`           |
 | Service dependency interface (in handlers) | `<Protocol><Entity><Operation>Service` | `RestJwkGetService`, `GrpcJwkListService` |
 | Service dependency interface (in core)     | `<Entity><Operation>Service<Role>`     | `JwkSearchServiceExtract`                 |
