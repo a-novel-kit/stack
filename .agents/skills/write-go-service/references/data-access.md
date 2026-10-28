@@ -81,9 +81,9 @@ is a transaction only when a caller opened one.
   value directly. See [Telemetry](telemetry.md).
 - **Entity types** (bun models) go in their own `pg.<entity>.go` file, separate from the operations
   that use them.
-- **A check reads only the column it needs.** It gets a DAO of its own that returns that column.
-  `PgLayerKind` runs `SELECT kind FROM layers WHERE project_id = ?0 AND id = ?1` and returns the
-  kind string. A whole-layer select there would read every column only to compare one.
+- **A check reads only the columns it needs.** It gets a DAO of its own that returns them.
+  `PgLayerKind` returns `{ID, Kind, Count}` for each layer a delete names. A whole-layer select
+  there would read every column only to compare the kind.
 
 ### Constraint violations
 
@@ -184,10 +184,10 @@ func (dao *PgProjectOwned) Exec(ctx context.Context, request *ProjectOwnedReques
 
 The core runs it through the `checkProjectOwnership` helper (see
 [operations](operations.md#core-layer-internalcore)), after validation and before any other DAO
-call. On false it returns not-found, so a caller learns nothing about rows it cannot reach. Never
-read a whole parent row only to compare its owner. A read that needs the row anyway, such as a
-project get, compares the owner inline.
-Collaboration will widen who may act on a row, and that rule then changes in the ownership DAO
+call. On false it returns not-found, so a caller learns nothing about rows it cannot reach. Every
+operation checks ownership this way, a read that needs the parent row anyway included: `ProjectGet`
+runs the helper, then selects the project by ID alone, and never compares the owner of the row it
+read. Collaboration will widen who may act on a row, and that rule then changes in the ownership DAO
 alone.
 
 ---
