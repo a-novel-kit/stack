@@ -159,8 +159,9 @@ The parent is the Epic, or a Feature whose own parent is the Epic.
 - **Board.** A PR is never a board item. Do not add it to a board, and do not copy the Task's
   Priority, Size or tracking labels onto it. A second card per task drifts from the first, and
   nothing keeps the two in sync.
-- **`epic:<N>` label.** Add it only for the Epic's atomic landing, which `coordinate-landing` owns;
-  only a maintainer can add it. The Epic ref in the Tracking section is the PR's link to its Epic.
+- **`epic:<N>` label.** Leave it off. A maintainer applies it to switch on the Epic's atomic
+  landing, which `coordinate-landing` owns. The Epic ref in the Tracking section is the PR's link to
+  its Epic.
 
 ### 5.6 Capture the PR URL
 

@@ -244,8 +244,9 @@ Two pieces in the same repo belong to the same Task; work that cannot land concu
 different Epic.
 
 **Membership is the `epic:<N>` label on the pull request** — not the `Closes` keyword, which the author
-controls. Applying a label needs triage rights, so the label is a permission-gated claim. Add it when
-you open the pull request.
+controls. Applying a label needs triage rights, so the label is a permission-gated claim. Open the pull
+request without it and ask a maintainer to apply it, as `coordinate-landing` describes. The Tracking
+section that `open-pull-request` describes links the pull request to its Epic.
 
 **A draft holds the whole Epic.** The gate waits until every member is ready for review and
 approved, so mark a member ready as soon as anyone other than you should look at it, as
