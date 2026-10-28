@@ -218,8 +218,8 @@ dispatches each repo's `release.yaml` with `dry_run=true` and cuts nothing), the
 ### Cross-repo hotfix
 
 A bug on a released line that spans several repos is **not** a special "hotfix train" — it is a
-**standard Epic, run fast**: label the fix PRs `epic:<N>`, let the merge-gate land them atomically, and
-release with the release train. There is deliberately **no cross-repo hotfix orchestrator** — the Epic
+**standard Epic, run fast**: a maintainer labels the fix PRs `epic:<N>`, the merge-gate lands them
+atomically, and the release train releases them. There is deliberately **no cross-repo hotfix orchestrator** — the Epic
 machinery already gives atomicity plus a coordinated release. The _single-repo_ hotfix path
 (`hotfix.yaml`: fix on the default branch → backport into `release/vX.Y` → cut on merge) and its vocabulary live in
 `manage-versions`.
@@ -252,7 +252,7 @@ version-recovery decision tree.
 
 ```
 plan-feature (creates the Epic + Task sub-issues)
-   └─ implement-feature (per-repo branches, one PR per Task, each labelled epic:<N>)
+   └─ implement-feature (per-repo branches, one PR per Task; a maintainer labels each epic:<N>)
         └─ THE SAGA (this skill): merge-gate lands the set atomically (INV-1)
              ├─ partial landing → epic-freeze recovers, or epic-rollback undoes (human-approved)
              ├─ manage-versions: publish-before-rollout · expand→contract · landing-failed runbook
