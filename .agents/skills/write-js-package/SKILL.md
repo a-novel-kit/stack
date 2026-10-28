@@ -139,7 +139,7 @@ Function signatures, from `service-template`'s `item.ts`:
 
 ```typescript
 export async function itemGet(api: TemplateApi, id: string): Promise<Item>;
-export async function itemList(api: TemplateApi, limit?: number, after?: string): Promise<Item[]>;
+export async function itemList(api: TemplateApi, limit?: number, offset?: number): Promise<Item[]>;
 ```
 
 A domain file may also hold schemas and constants the other domains share rather than a resource of
@@ -215,11 +215,8 @@ documentation. Include:
 - A note on error conditions (what HTTP status causes a throw), if the function can fail on a specific HTTP status.
 
 ```typescript
-/**
- * Lists Items newest first, 100 at most when limit is omitted. Pass the id of the last Item received
- * as after to read the next page.
- */
-export async function itemList(api: TemplateApi, limit?: number, after?: string): Promise<Item[]>;
+/** Lists Items; returns the first 100 from the start when limit and offset are omitted. */
+export async function itemList(api: TemplateApi, limit?: number, offset?: number): Promise<Item[]>;
 ```
 
 Do not repeat what is already clear from the type signature alone (e.g., "takes a string and
@@ -267,8 +264,7 @@ describe("itemGet", () => {
 
 describe("itemList", () => {
   it("returns a list of items", async () => { ... });
-  it("returns at most limit items", async () => { ... });
-  it("continues after the given item", async () => { ... });
+  it("respects limit and offset", async () => { ... });
 });
 ```
 

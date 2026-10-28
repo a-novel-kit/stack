@@ -128,14 +128,33 @@ convention and is not substituted by bun's `NewRaw`. Never build SQL by concaten
 ### Bounded reads
 
 Every query that can return more than one row ends with an explicit `LIMIT`. An unbounded query
-loads the whole set into the service's memory. A multi-row read is either capped by the schema or
-paged.
+loads the whole set into the service's memory. No read assumes one page holds a whole set.
 
-A set small enough to read whole, and that callers need whole, is capped by the schema. Scenes and
-layers qualify, since a move or a delete rewrites every position. A check holds the position column
-to a range, and a unique key on the parent and the position allows one row per position. The parent
-then holds at most as many rows as the range holds positions. The query's `LIMIT` is that number,
-written in the SQL, and the caller passes no limit.
+A list returned to a client pages with `limit` and `offset`, in the set's natural order, such as
+`position`. The same query returns the total as `count(*) OVER () AS total` on each row. Window
+functions run before `LIMIT` and `OFFSET`, so the total counts every match, and the client pages
+from that one query. The core caps the limit. An empty page has no row to carry the total, so it
+reports a total of 0.
+
+```sql
+SELECT
+  *,
+  count(*) OVER () AS total
+FROM
+  scenes
+WHERE
+  project_id = ?0
+ORDER BY
+  position
+LIMIT
+  ?1
+OFFSET
+  ?2;
+```
+
+A schema cap bounds what a parent may hold. A check holds the position column to a range, and a
+unique key on the parent and the position allows one row per position. The cap does not make the
+set small enough to read at once, so its lists still page.
 
 ```sql
 -- Migration: the range and the unique key cap a project at 500 scenes.
@@ -146,41 +165,28 @@ CREATE TABLE scenes (
     position >= 0
     AND position < 500
   ),
-  -- A reorder rewrites every position in one statement, so uniqueness is checked at commit.
+  -- A shift moves positions in one statement, so uniqueness is checked at commit.
   CONSTRAINT scenes_project_id_position_key UNIQUE (project_id, position)
   DEFERRABLE INITIALLY DEFERRED
 );
 ```
 
+A write that renumbers positions shifts a range in SQL instead of reading every row. This update
+opens a gap at `?1`, which the deferred unique key allows until commit:
+
 ```sql
--- pg.sceneList.sql: the position check caps a project at 500 scenes, so this returns every one.
-SELECT
-  *
-FROM
-  scenes
+UPDATE scenes
+SET
+  position = position + 1
 WHERE
   project_id = ?0
-ORDER BY
-  position
-LIMIT
-  500;
+  AND position >= ?1;
 ```
 
-An insert past the range breaks the check. Its DAO joins that violation to a sentinel, such as
+A write past the range breaks the check. Its DAO joins that violation to a sentinel, such as
 `ErrSceneInsertFull`, so the core can refuse the request.
 
-A query that must return the whole set never takes its limit from configuration. Lowering the
-setting below what a parent already holds truncates the read without an error, and a later reorder
-then rewrites only part of the set.
-
-Every other multi-row read pages, above all one returned to a client. The caller passes a limit and
-a keyset cursor on a stable key, never an `OFFSET`, and loops until a page comes back short. A page
-returned to a client also carries the total count of the set, so the client knows how far it has to
-fetch.
-
-A list pages by ID, as [Primary Keys](#primary-keys) shows. A composite key compares rows, such as
-`(scene_id, layer_id) > (?1, ?2)`, and orders by the same columns. A sweep also repeats until a
-batch comes back short, and its `ORDER BY` puts the most urgent rows first.
+A sweep repeats until a batch comes back short, and its `ORDER BY` puts the most urgent rows first.
 
 Fetch related rows in the same query, with a join or `= ANY(?0)`, never one query per parent row.
 
@@ -539,26 +545,8 @@ integers leak row counts and make client-side ID generation impossible. Generate
 before the INSERT so the caller always has the ID without a database round-trip.
 
 Generate UUIDs with `uuid.NewV7`, and default the column to `uuidv7()`. A UUIDv7 starts with its
-creation time, so inserts land at the end of the primary key index, and a list pages by ID through
-that index:
-
-```sql
-SELECT
-  *
-FROM
-  items
-WHERE
-  id < ?1
-ORDER BY
-  id DESC
-LIMIT
-  ?0;
-```
-
-The caller passes the last ID of the previous page, or `uuid.Max` for the first one. A deleted
-cursor still marks its place, so no row repeats or goes missing. Never page with `OFFSET`: it reads
-and discards every row it skips. A UUIDv7 reveals when its row was created; keep `uuid.New` for an
-ID whose creation time must stay private.
+creation time, so inserts land at the end of the primary key index. A UUIDv7 reveals when its row
+was created; keep `uuid.New` for an ID whose creation time must stay private.
 
 ### Indexes
 
@@ -616,10 +604,9 @@ The rules above, as a pre-push checklist:
 - Reading from `keys` instead of `active_keys`.
 - Omitting `RETURNING *` on a mutating query whose row the caller needs.
 - A multi-row query without a `LIMIT`, or one query per parent row.
-- A whole-set read that is neither paged nor capped by the schema, such as one query whose limit
-  comes from configuration.
-- A schema cap on a set too large to read whole, or a page returned to a client without the total
-  count of the set.
+- A list that reads a whole set at once, even one the schema caps, or a client list whose total
+  comes from a separate count query.
+- A renumbering that reads every row instead of shifting a range in SQL.
 - Omitting `--bun:split` between statements that must commit in order.
 - Creating a materialized view without the unique index `REFRESH ... CONCURRENTLY` requires.
 - Dropping objects out of reverse creation order in a down migration.

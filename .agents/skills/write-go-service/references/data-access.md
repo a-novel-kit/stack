@@ -70,6 +70,16 @@ is a transaction only when a caller opened one.
 - **Entity types** (bun models) go in their own `pg.<entity>.go` file, separate from the operations
   that use them.
 
+### Ownership
+
+The DAO takes no owner. A select, update or delete matches the primary key alone, as in
+`DELETE FROM layers WHERE id = ?0`. A list by owner, such as a user's projects, still filters by
+owner, since that filter is what the query asks for.
+
+The core checks ownership before the DAO call. It reads the parent, compares its `owner_id` with the
+caller, and returns not-found on a mismatch, so a caller learns nothing about rows it cannot reach.
+Collaboration will widen who may act on a row, and that rule then changes in the core alone.
+
 ---
 
 ## Transaction scoping
