@@ -276,6 +276,12 @@ directory, put that exact directory on `PATH` before running global config comma
 private-registry credentials as BuildKit secrets, remove temporary registry config in the same
 layer, and prove the final image contains neither credential nor build-only tooling.
 
+adapter-node records each client file's size, SHA-256 ETag and precompressed sizes in
+`build/adapter-node.js` when it copies the client output. A file changed after `vite build` is
+served with a stale length and ETag, and a file deleted from `build/` stays listed. Change client
+code only while bundling, in a Vite plugin, and remove build-only files such as source maps from
+`.svelte-kit/output/client` before the adapter copies it.
+
 Expose two distinct probes:
 
 - `GET /ping` is cheap liveness and has no downstream dependency. The container `HEALTHCHECK` uses
