@@ -139,16 +139,16 @@ Function signatures, from `service-template`'s `item.ts`:
 
 ```typescript
 export async function itemGet(api: TemplateApi, id: string): Promise<Item>;
-export async function itemList(api: TemplateApi, limit?: number, offset?: number): Promise<Item[]>;
+export async function itemList(api: TemplateApi, limit?: number, offset?: number): Promise<ItemPage>;
 ```
 
 A domain file may also hold schemas and constants the other domains share rather than a resource of
 its own — `service-authentication` keeps its field bounds in `const.ts` and the validators built
 from them in `form.ts`.
 
-**Response validation**: pass the response schema as the second argument to `api.fetch`, wrapped in
-`z.array(...)` for a list endpoint. Omit it only where the service defines no shape to validate,
-such as the healthcheck map.
+**Response validation**: pass the response schema as the second argument to `api.fetch`. A paged
+list passes a page schema, such as `ItemPageSchema`, which holds `z.array(ItemSchema)` beside the
+total. Omit it only where the service defines no shape to validate, such as the healthcheck map.
 
 **URL construction**: use `URLSearchParams` for query parameters — never interpolate parameters
 directly into URL strings.
@@ -215,8 +215,8 @@ documentation. Include:
 - A note on error conditions (what HTTP status causes a throw), if the function can fail on a specific HTTP status.
 
 ```typescript
-/** Lists Items; returns the first 100 from the start when limit and offset are omitted. */
-export async function itemList(api: TemplateApi, limit?: number, offset?: number): Promise<Item[]>;
+/** Lists a page of Items newest first, with their total; 100 at most when limit is omitted. */
+export async function itemList(api: TemplateApi, limit?: number, offset?: number): Promise<ItemPage>;
 ```
 
 Do not repeat what is already clear from the type signature alone (e.g., "takes a string and
@@ -263,8 +263,9 @@ describe("itemGet", () => {
 });
 
 describe("itemList", () => {
-  it("returns a list of items", async () => { ... });
-  it("respects limit and offset", async () => { ... });
+  it("returns a page of items with their total", async () => { ... });
+  it("pages newest first by offset", async () => { ... });
+  it("returns an empty page past the end", async () => { ... });
 });
 ```
 
@@ -315,7 +316,7 @@ A list endpoint whose assertions loop over the response must first assert that t
 records:
 
 ```typescript
-const items = await itemList(api);
+const { items } = await itemList(api);
 expect(items.length).toBeGreaterThan(0);
 for (const item of items) {
   expect(item.id).toBeTruthy();
