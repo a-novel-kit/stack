@@ -152,6 +152,33 @@ OFFSET
   ?2;
 ```
 
+`WHERE` runs before window functions, though, so a count over rows the query then filters out sits
+in a subquery. `PgLayerKind` counts each kind's layers across the project, then keeps the layers a
+delete names. Its `LIMIT` is the number of IDs, the most rows it can match:
+
+```sql
+SELECT
+  *
+FROM
+  (
+    SELECT
+      id,
+      kind,
+      count(*) OVER (
+        PARTITION BY
+          kind
+      )::integer AS count
+    FROM
+      layers
+    WHERE
+      project_id = ?0
+  ) AS kinds
+WHERE
+  id = ANY (ARRAY[?1]::uuid[])
+LIMIT
+  ?2;
+```
+
 A schema cap bounds what a parent may hold. A check holds the position column to a range, and a
 unique key on the parent and the position allows one row per position. The cap does not make the
 set small enough to read at once, so its lists still page.
@@ -174,8 +201,9 @@ CREATE TABLE scenes (
 A write that renumbers positions shifts a range in SQL instead of reading every row. The client
 sends the target position, and the statement that shifts clamps it, so no count is read before the
 write. `LEAST(?1, count(*))` turns a position past the end into an append. This insert shifts the
-scenes from there on and fills the gap in one statement, which the deferred unique key allows until
-commit:
+scenes from there on by the number of new ones and fills the gap in one statement, which the
+deferred unique key allows until commit. `WITH ORDINALITY` numbers the new scenes from 1 in the
+order the client sent them:
 
 ```sql
 WITH
@@ -190,7 +218,7 @@ WITH
   shifted AS (
     UPDATE scenes
     SET
-      position = scenes.position + 1
+      position = scenes.position + cardinality(ARRAY[?2]::uuid[])
     FROM
       start
     WHERE
@@ -200,11 +228,12 @@ WITH
 INSERT INTO
   scenes (id, project_id, position, title)
 SELECT
-  ?2,
+  data.id,
   ?0,
-  start.position,
-  ?3
+  start.position + (data.position - 1)::integer,
+  data.title
 FROM
+  unnest(ARRAY[?2]::uuid[], ARRAY[?3]::text[]) WITH ORDINALITY AS data (id, title, position),
   start
 RETURNING
   *;
@@ -222,6 +251,79 @@ Fetch related rows in the same query, with a join or `= ANY(?0)`, never one quer
 
 An existence check needs a single row. It ends with `LIMIT 1`, and its caller tests for any row. A
 test for exactly one row reads two unexpected matches as none.
+
+### Batch writes
+
+A create, a delete or a content write takes a list (see `write-go-service`'s
+[operations](../write-go-service/references/operations.md#core-layer-internalcore)) and applies it
+in one statement: one round trip, and all of it or none. Pass each column of the list as
+`bun.List(values)` inside a typed array, `ARRAY[?1]::uuid[]`: bun expands the values into the array,
+and the cast types it. The statement returns at most one row per item, so the list cap bounds it
+and `RETURNING` takes no `LIMIT`.
+
+An insert or an upsert zips its column arrays with `unnest`, which reads them side by side as rows:
+
+```sql
+INSERT INTO
+  cells (project_id, scene_id, layer_id, content, updated_at)
+SELECT
+  ?0,
+  data.scene_id,
+  data.layer_id,
+  data.content::jsonb,
+  ?4
+FROM
+  unnest(ARRAY[?1]::uuid[], ARRAY[?2]::uuid[], ARRAY[?3]::text[]) AS data (scene_id, layer_id, content)
+ON CONFLICT (scene_id, layer_id) DO UPDATE
+SET
+  content = EXCLUDED.content,
+  updated_at = EXCLUDED.updated_at
+RETURNING
+  *;
+```
+
+A delete matches its IDs with `= ANY` and closes every gap it leaves in the same statement: each
+later row moves up by the number of deleted rows before it. The parts of one `WITH` share a
+snapshot, so the `UPDATE` still sees the rows the `DELETE` removes and skips them by ID. An ID the
+parent does not hold deletes nothing and raises no error, which is why the core counts the rows
+returned.
+
+```sql
+WITH
+  deleted AS (
+    DELETE FROM scenes
+    WHERE
+      project_id = ?0
+      AND id = ANY (ARRAY[?1]::uuid[])
+    RETURNING
+      *
+  ),
+  shifted AS (
+    UPDATE scenes
+    SET
+      position = scenes.position - (
+        SELECT
+          count(*)
+        FROM
+          deleted
+        WHERE
+          deleted.position < scenes.position
+      )::integer
+    WHERE
+      scenes.project_id = ?0
+      AND scenes.id <> ALL (ARRAY[?1]::uuid[])
+      AND scenes.position > (
+        SELECT
+          min(position)
+        FROM
+          deleted
+      )
+  )
+SELECT
+  *
+FROM
+  deleted;
+```
 
 ### Read vs Write Targets
 

@@ -205,8 +205,7 @@ func NewUserSearch(dao UserSearchDao) *UserSearch {
 - The method signature is `(ctx context.Context, request *XxxRequest) (Result, error)` — `Result`
   is a struct pointer, slice, or named type, never a bare primitive, so fields can be added later
   without breaking callers. A check returns its one answer bare, since that answer never grows a
-  field: an existence or ownership DAO returns `bool`, and a DAO that reads one column for a check,
-  such as `PgLayerKind`, returns that column's type.
+  field: an existence or ownership DAO returns `bool`.
 - **Exceptions in handlers**: gRPC method signatures are protoc-generated; REST handlers implement
   `ServeHTTP(w, r)`. Both are accepted exceptions to the `Exec` shape.
 - Service and DAO types are **stateless after construction** — every field is set by `New*` and

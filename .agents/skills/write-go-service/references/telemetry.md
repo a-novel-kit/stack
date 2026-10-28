@@ -12,8 +12,10 @@ operation's span: write-go's [declarations rule](../../write-go/SKILL.md#declara
 keeps it a closure.
 
 The `a-novel-must-open-span` semgrep rule requires that span in every function of the dao, core and
-handlers layers that takes a context. `internal/lib` is tooling rather than a layer, so its functions
-open no span: the layer that calls one reports its errors on its own span.
+handlers layers that takes a context. A helper of those layers that does work takes the context for
+its span even when it needs it for nothing else: `newIDs` only generates UUIDv7s, yet opens
+`core.newIDs` and reports a failed `uuid.NewV7` there. `internal/lib` is tooling rather than a layer,
+so its functions open no span: the layer that calls one reports its errors on its own span.
 
 ```go
 ctx, span := otel.Tracer().Start(ctx, "dao.PgUserSelect")
