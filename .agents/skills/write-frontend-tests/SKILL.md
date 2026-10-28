@@ -198,7 +198,8 @@ affected instead of inventing a screenshot test.
 
 Before a repository first compares its screenshots against Drive reference batches, read
 [Subscribe a repository to Drive visual tests](references/drive-subscription.md) for its identities,
-folders, variables and seeding order.
+folders, variables and seeding order. Read its recovery section when master's `test-browser` keeps
+failing on screenshot changes that merged pull requests already approved.
 
 A Vitest browser project, such as uikit's Storybook stories, compares its screenshots against Drive
 reference batches through `node-actions/test-playwright` with `runner: vitest`. The workflows repo's
