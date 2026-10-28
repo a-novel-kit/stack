@@ -269,10 +269,12 @@ the final image. Follow `write-dockerfiles` for implementation details.
 
 Build the real container in CI, not only the Node artifact. Run the frozen install inside the exact
 image and keep its Node pin compatible with every locked dependency engine; a floating host CI
-runtime can hide a stale image pin. When Corepack/pnpm configures a global binary directory, put
-that exact directory on `PATH` before running global config commands. Pass private-registry
-credentials as BuildKit secrets, remove temporary registry config in the same layer, and prove the
-final image contains neither credential nor build-only tooling.
+runtime can hide a stale image pin. Node.js 25 and later ship no Corepack, so install the pnpm
+release `packageManager` pins with `npm install --global --ignore-scripts "pnpm@<version>"`; keep
+`pnpm@` literal, or hadolint cannot see the pin (DL3016). When pnpm configures a global binary
+directory, put that exact directory on `PATH` before running global config commands. Pass
+private-registry credentials as BuildKit secrets, remove temporary registry config in the same
+layer, and prove the final image contains neither credential nor build-only tooling.
 
 Expose two distinct probes:
 
