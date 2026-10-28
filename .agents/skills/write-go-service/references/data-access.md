@@ -185,10 +185,31 @@ func (dao *PgProjectOwned) Exec(ctx context.Context, request *ProjectOwnedReques
 The core runs it through the `checkProjectOwnership` helper (see
 [operations](operations.md#core-layer-internalcore)), after validation and before any other DAO
 call. On false it returns not-found, so a caller learns nothing about rows it cannot reach. Every
-operation checks ownership this way, a read that needs the parent row anyway included: `ProjectGet`
-runs the helper, then selects the project by ID alone, and never compares the owner of the row it
-read. Collaboration will widen who may act on a row, and that rule then changes in the ownership DAO
-alone.
+operation that does not lock the project checks ownership this way, a read that needs the parent
+row anyway included: `ProjectGet` runs the helper, then selects the project by ID alone, and never
+compares the owner of the row it read.
+
+A write that locks the project, to renumber its scenes or layers, checks ownership in the lock.
+`PgProjectLock` takes the owner too and returns the same `bool`, and the core runs it first in the
+transaction, through `lockOwnedProject`:
+
+```sql
+-- pg.projectLock.sql
+SELECT
+  1
+FROM
+  projects
+WHERE
+  id = ?0
+  AND owner_id = ?1
+FOR UPDATE;
+```
+
+The lock stays a statement of its own, before the write. A statement reads the data as it stood when
+the statement started, so a lock taken inside the write would wait for a concurrent change, then
+still read the rows from before it.
+
+Collaboration will widen who may act on a row, and that rule then changes in these two DAOs alone.
 
 ---
 

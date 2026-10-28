@@ -115,9 +115,9 @@ stays client-orchestrated.
 
 Use this escalation ladder; stop at the first shape that fully meets the proof above:
 
-1. Independent server primitives composed by the client. A Go service's create, delete and content
-   write already take a bounded list (see `write-go-service`'s operations), so many rows need no
-   step-2 batch.
+1. Independent server primitives composed by the client. A Go service's creates, updates, deletes
+   and content writes already have a bounded batch operation beside the single one (see
+   `write-go-service`'s operations), so many rows need no step-2 batch.
 2. A projection, bulk read, or bounded batch for a measured network problem.
 3. One domain transaction or custom method for an invariant that spans calls.
 4. A durable server job or saga for work that outlives the client or requires coordinated recovery.
