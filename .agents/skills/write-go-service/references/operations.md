@@ -40,7 +40,15 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
   zero-value identifiers, out-of-range values, and values outside a known set.
 - **Validate first.** `validate.Struct` runs before anything derives a value from the request, so
   later code may assume the tags hold. A list's `Limit` is `validate:"min=0,max=N"`, and only zero
-  takes the default page size; a negative limit fails instead of falling back to it.
+  takes the default page size; a negative limit fails instead of falling back to it. The default
+  goes straight into the request field, with no local copy:
+
+  ```go
+  if request.Limit == 0 {
+      request.Limit = SceneListLimitDefault
+  }
+  ```
+
 - **A cap on a request field is a validator tag**, never a config value or a hand-written check.
   `validate:"required,max=2097152"` caps a `json.RawMessage` at 2 MiB, and `validate:"max=500"` caps
   a slice. When no built-in tag expresses the rule, register a custom one on the package's
@@ -50,6 +58,64 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
 - **DAO/sub-service sentinels travel up** — return them wrapped with `%w` so handlers can match
   with `errors.Is`. The service may re-export a DAO sentinel as its own (`core.ErrXxx`) when
   the handler needs to map it (see Common Pitfalls).
+- **Remap a miss only where a request can cause it.** Once a preflight proves a row exists, a later
+  miss of that row is a plain error. The ownership check runs before the project lock, and the
+  kind read runs before the layer delete, so neither the lock nor the delete maps its not-found
+  sentinel again. Only a concurrent delete could reach that path, and a 500 answers it.
+- **A preflight repeated across services becomes a helper** in the layer's `common.go`. It takes the
+  dependency and an options struct, and opens its own span, as every core function that takes a
+  context does (see [telemetry](telemetry.md)). The ownership check is one, and each service still
+  declares its own DAO interface, which satisfies the helper's:
+
+  ```go
+  // projectOwnerDao checks that a user owns a project.
+  type projectOwnerDao interface {
+      Exec(ctx context.Context, request *dao.ProjectOwnedRequest) (bool, error)
+  }
+
+  type projectOwnershipOpts struct {
+      projectID uuid.UUID
+      ownerID   uuid.UUID
+  }
+
+  func checkProjectOwnership(ctx context.Context, daoOwner projectOwnerDao, opts projectOwnershipOpts) error {
+      ctx, span := otel.Tracer().Start(ctx, "core.checkProjectOwnership")
+      defer span.End()
+
+      owned, err := daoOwner.Exec(ctx, &dao.ProjectOwnedRequest{ID: opts.projectID, OwnerID: opts.ownerID})
+      if err != nil {
+          return otel.ReportError(span, err)
+      }
+
+      if !owned {
+          return otel.ReportError(span, ErrProjectNotFound)
+      }
+
+      return nil
+  }
+  ```
+
+- **A rule over a set of values reads one table.** `requiredLayers` maps the kind of each layer
+  every project holds to the name a new project gives it. Project creation seeds one layer per
+  entry, in sorted kind order since Go randomizes map iteration, and a delete of any of them answers
+  one generic `ErrRequiredLayer`. A check against one hard-coded kind, with a sentinel named after
+  it, turns the next kind into a hunt through every file that tested the first.
+
+  ```go
+  var requiredLayers = map[string]string{
+      LayerKindManuscript: "Manuscript",
+  }
+
+  if _, required := requiredLayers[kind]; required {
+      return nil, otel.ReportError(span, fmt.Errorf("%w: %s", ErrRequiredLayer, kind))
+  }
+  ```
+
+- **The client owns positions.** A create or a move of an ordered row takes the target position the
+  client sends, never an anchor such as `after`. The client keeps its order in sync, so the core
+  reads no neighbor to place the row. A position past the end appends on create and moves the row
+  last on move. The DAO clamps it in the statement that shifts the other rows (see `write-sql`'s
+  [bounded reads](../../write-sql/SKILL.md#bounded-reads)).
 - Services reach DAOs **only** through the local interfaces they declare. Configuration is injected
   as a **concrete config struct**: it is static and never needs mocking.
 
