@@ -159,6 +159,10 @@ API and what an event carries. A migrations binary reports nothing.
   job's `main` flushes within `config.SentryJobFlushTimeout`, set to
   `sentryf.SendTimeout + time.Minute`. A server keeps `config.SentryFlushTimeout`, inside its
   platform's shutdown grace period.
+- **A job flushes its telemetry within `config.OtelJobFlushTimeout`,** one minute, through
+  `config.OtelJobPresetDefault`. A job often ends within milliseconds, so every span and log leaves
+  in that exit flush. The OpenTelemetry SDK gives the spans, then the logs, 30 seconds each. A
+  server keeps `config.OtelFlushTimeout`, 2 seconds.
 - **A server's drain ends 6 seconds after SIGTERM.** `env.TimeoutShutdownDefault` sets the REST and
   gRPC shutdown budgets, so the 2-second Sentry and OpenTelemetry flushes that follow finish before
   Cloud Run's SIGKILL at 10 seconds. Work still running when the drain ends is cut, and the server
@@ -169,5 +173,4 @@ API and what an event carries. A migrations binary reports nothing.
   request's own span leaves too. The timeout fits inside the write timeout's slack after the request
   deadline. GenAI's sweep does this; a server consumers wait on keeps CPU between requests instead.
 - **An event that cannot leave within `sentryf.SendTimeout` is lost.** The Cloud Monitoring
-  job-failure alert still reports that job's failure. Production runs the jobs with OpenTelemetry
-  off, so their events carry no trace ID.
+  job-failure alert still reports that job's failure.
