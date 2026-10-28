@@ -88,7 +88,7 @@ LIMIT
 ```
 
 ```go
-tx.NewRaw(jwkSearchQuery, request.Usage, KeysMaxBatchSize).Scan(ctx, &entities)
+tx.NewRaw(jwkSearchQuery, request.Usage, request.Limit).Scan(ctx, &entities)
 ```
 
 Never use PostgreSQL's native `$1`, `$2`, ... syntax in DAO files — that is the `pgx` driver
@@ -127,9 +127,55 @@ convention and is not substituted by bun's `NewRaw`. Never build SQL by concaten
 
 ### Bounded reads
 
-Every query that can return more than one row ends with an explicit `LIMIT` bound to a parameter.
-The caller passes the limit. A sweep repeats until a batch comes back short, and its `ORDER BY`
-puts the most urgent rows first. An unbounded query loads the whole set into the service's memory.
+Every query that can return more than one row ends with an explicit `LIMIT`. An unbounded query
+loads the whole set into the service's memory. A read of a whole set, such as every scene of a
+project, takes one of two forms:
+
+- **Paged.** The caller passes a limit and a cursor, and loops until a page comes back short. A list
+  pages by ID, as [Primary Keys](#primary-keys) shows. A sweep also repeats until a batch comes
+  back short, and its `ORDER BY` puts the most urgent rows first. Page every set that has no bound
+  in the domain.
+- **Capped by the schema.** A check holds a position column to a range, and a unique key on the
+  parent and the position allows one row per position. The parent then holds at most as many rows
+  as the range holds positions. The query's `LIMIT` is that number, written in the SQL, and the
+  caller passes no limit. Cap a set the domain keeps small and the code needs whole, such as the
+  scenes a reorder rewrites.
+
+```sql
+-- Migration: the range and the unique key cap a project at 500 scenes.
+CREATE TABLE scenes (
+  id uuid PRIMARY KEY NOT NULL DEFAULT uuidv7(),
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  position integer NOT NULL CONSTRAINT scenes_position_check CHECK (
+    position >= 0
+    AND position < 500
+  ),
+  -- A reorder rewrites every position in one statement, so uniqueness is checked at commit.
+  CONSTRAINT scenes_project_id_position_key UNIQUE (project_id, position)
+  DEFERRABLE INITIALLY DEFERRED
+);
+```
+
+```sql
+-- pg.sceneList.sql: the position check caps a project at 500 scenes, so this returns every one.
+SELECT
+  *
+FROM
+  scenes
+WHERE
+  project_id = ?0
+ORDER BY
+  position
+LIMIT
+  500;
+```
+
+An insert past the range breaks the check. Its DAO joins that violation to a sentinel, such as
+`ErrSceneInsertFull`, so the core can refuse the request.
+
+A query that must return the whole set never takes its limit from configuration. Lowering the
+setting below what a parent already holds truncates the read without an error, and a later reorder
+then rewrites only part of the set.
 
 Fetch related rows in the same query, with a join or `= ANY(?0)`, never one query per parent row.
 
@@ -565,6 +611,8 @@ The rules above, as a pre-push checklist:
 - Reading from `keys` instead of `active_keys`.
 - Omitting `RETURNING *` on a mutating query whose row the caller needs.
 - A multi-row query without a `LIMIT`, or one query per parent row.
+- A whole-set read that is neither paged nor capped by the schema, such as one query whose limit
+  comes from configuration.
 - Omitting `--bun:split` between statements that must commit in order.
 - Creating a materialized view without the unique index `REFRESH ... CONCURRENTLY` requires.
 - Dropping objects out of reverse creation order in a down migration.
