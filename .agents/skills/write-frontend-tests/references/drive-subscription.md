@@ -1,7 +1,8 @@
 # Subscribe a repository to Drive visual tests
 
 Read this reference when routed here by [write-frontend-tests](../SKILL.md): before a repository
-compares its screenshots against Drive reference batches for the first time. Run its steps in order.
+compares its screenshots against Drive reference batches for the first time, or when its master
+reference freezes. Run the subscription steps in order.
 
 The adoption guides in a-novel-kit/workflows cover the repository's wiring: `docs/migrations/v1.33.0.md`
 for Playwright journeys, plus `v1.64.0.md` for a Vitest browser project. This runbook provides the
@@ -63,3 +64,17 @@ steps the developer cannot run to their holder.
    3. Delete the seed with `gh variable delete VISUAL_SEED_SHA --repo <owner>/<repo>`.
    4. Re-run `test-browser` once more. The first reference is live once its `visual-comparison`
       status reads `matched:<seed sha>`.
+
+## Recover a frozen reference
+
+A master reference is frozen when master's `test-browser` fails on screenshot changes that merged
+pull requests already approved, and every re-run fails the same way. A commit without a pull request
+between the reference and master's head causes it, such as an admin's direct push. A workflows
+release older than the fix for a-novel-kit/workflows#685 also freezes it when a release is cut during
+an approved change's master run.
+
+1. Have the Workspace owner trash the current reference, the `playwright-<run>-<attempt>.tar` batch in
+   `<slug>/ci/references`.
+2. Set `VISUAL_SEED_SHA` to master's head commit, as in step 4.
+3. Seed from that commit as step 5 describes. Drive can list a trashed batch for about ten minutes, and
+   a re-run that still finds it fails on the same drift. Re-run `test-browser` until one passes.
