@@ -53,6 +53,10 @@
   planned values when the wait fails, so a rerun plans no changes and passes, while the service
   keeps serving its previous revision. After such a failure, fix the cause, then make sure the next
   apply changes that resource, as a release pin does. A green rerun alone proves nothing.
+- **A `kubernetes_manifest` whose wait hits a request deadline reaches no state.** When `wait` ends
+  on `context deadline exceeded` instead of `timed out waiting on conditions`, the object exists in
+  the cluster, but the next plan neither sees nor deletes it. Resources that `depends_on` it never
+  reach state either (a-novel/infra#1229).
 
 ## Retire protected resources
 
@@ -86,6 +90,9 @@
   refused the first workflow with `service agent does not exist`. Create it with
   `google_project_service_identity`, on `google-beta`, and grant its `serviceAgent` role before the
   resource that needs it, as `modules/project-shell` does.
+- **A new `google_project_iam_custom_role` cannot be granted in the apply that creates it.** For a
+  short while, a grant of it fails with `does not exist in the resource's hierarchy`. Re-run the
+  failed deploy job, and the grant succeeds (a-novel/infra#1226).
 
 ## Read the live state before trusting the code
 
@@ -154,6 +161,11 @@ metric resource itself succeeds at once.
   one caps each revision, so a rollout can exceed it.
 - **Every project that runs Cloud Run has a CPU and a memory quota** in foundation's `cost_cap`. The
   quota is the hard ceiling.
+- **GKE node boot disks and the databases' volumes share one SSD quota.** The nodes' pd-balanced
+  boot disks and the PersistentVolumes all count against the region's `SSD_TOTAL_GB`, 500 GB by
+  default. Size them together. A replica whose volume cannot be provisioned leaves its database
+  never `Ready`. Foundation's `cost_cap` raises the quota through a Cloud Quotas preference, which
+  takes effect only once Google grants it.
 - **A service's postcondition checks its cap against the quota:** maximum instances plus one
   rollout instance, times its CPU, must fit. A plan that raises the cap fails until foundation
   raises the quota.
@@ -214,6 +226,11 @@ metric resource itself succeeds at once.
   `app-password` in one pull request, merged during a planned downtime, which rolls the host.
 - **pgBackRest owns backup expiry.** Never add age-based deletion to a backup bucket. Never delete
   WAL to free space.
+- **CloudNativePG's Barman Cloud plugin needs `GOOGLE_CLOUD_PROJECT`.** Under Workload Identity, its
+  sidecar gets a token but no project. Cloud Storage's client then refuses to start with
+  `Project was not passed and could not be determined from the environment`, so WAL archiving never
+  begins. Set the variable to the bucket's project in the `ObjectStore`'s
+  `spec.instanceSidecarConfiguration.env` (a-novel/infra#1231).
 
 ## Trust boundaries
 
