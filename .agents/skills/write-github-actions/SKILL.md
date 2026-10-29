@@ -299,6 +299,11 @@ never reports it. An admin merges that pull request past the stale context, then
 `a-novel repo update` from up-to-date master. Coverage gates nothing: no ruleset requires a Codecov
 status.
 
+The `retired-lines` ruleset freezes the `v<N>` branches of past majors. Discovery reads the major
+from the default branch's root `package.json`, and the ruleset covers `v0` to `v<major-1>`: only
+admins create, update or delete them, and nobody force-pushes. A `v<N>` branch at or above that major
+develops a coming major and stays open, and a repository at major 0 carries no `retired-lines`.
+
 The `release-lines` ruleset requires the same set on `release/vX.Y` branches. A backport runs those
 checks from its line's own workflow files, so a check added after the line's tag never reports there
 and an admin merges past it (`manage-versions`).

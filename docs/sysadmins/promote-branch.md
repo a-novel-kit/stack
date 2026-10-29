@@ -39,7 +39,7 @@ gh api -X PATCH "repos/$ORG/$NAME" -f default_branch=master \
   --jq .default_branch
 ```
 
-Rulesets that target the default branch follow it to `master`. The old line keeps only the rules for every branch, such as the commit-message check.
+Rulesets that target the default branch follow it to `master`. The old line keeps only the rules for every branch, such as the commit-message check. It freezes once `master` releases a later major: the next [settings apply](./repositories#apply) locks every `v<N>` branch below the major in `master`'s root `package.json`.
 
 ## Delete the new line
 
