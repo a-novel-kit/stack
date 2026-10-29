@@ -51,8 +51,12 @@ chore/skills/feature-workflow
 docs/pkg/update-client-examples
 ```
 
-Branch names are lowercase kebab-case only. No underscores, no slashes inside a segment, no version
-numbers unless it's a release branch.
+Branch names are lowercase kebab-case only. No underscores and no slashes inside a segment. A working
+branch carries no version number. Only the two kinds of long-lived line do:
+
+- `release/vX.Y` holds a released minor and its backports.
+- `v<N>` develops major N until it replaces `master`. The line it replaces keeps its own `v<N>` name,
+  and the `retired-lines` ruleset freezes it once `master` releases a later major.
 
 ---
 
