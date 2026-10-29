@@ -135,7 +135,7 @@ When you work with a backup, point `user.signingkey` at its signing key instead.
 ## Duties
 
 - **Manage members:** [add](./add-member), [promote](./promote-member) and [offboard](./offboard-member) them.
-- **Manage repositories:** [create](./create-repository) them and apply their settings with [`repo update`](./repositories).
+- **Manage repositories:** [create](./create-repository) them, apply their settings with [`repo update`](./repositories), and [promote a branch](./promote-branch) to `master`.
 - **Operate production:** follow the [infra runbooks](https://github.com/a-novel/infra/tree/master/docs/runbooks).
 - **Answer a compromise:** when an account, a key or a token leaks, [cut the attacker off and recover](./respond-to-compromise).
 
