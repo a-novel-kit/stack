@@ -116,8 +116,8 @@ rendered by an older template, and the current code would push a flag its pinned
 understand. Compare the planned diff with the image or binary that will consume it, and fix the
 pins in the same change.
 
-Cloud Logging holds only the cluster's system components, never its workloads' logs. A failed
-cluster deploy's `Describe the databases` step prints each database's unmet conditions, stuck pods
+Foundation's cluster sends only its system components' logs to Cloud Logging, so workload logs stay
+in the cluster. A failed cluster deploy's `Describe the databases` step prints each database's unmet conditions, stuck pods
 and last warnings. To read further, open a draft pull request whose `plan-cluster` job reads the
 pods, their logs and the custom resources from the API server as the plan identity. Close it
 unmerged once read (a-novel/infra#1246, #1251).
