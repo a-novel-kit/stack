@@ -69,6 +69,7 @@ export default defineConfig({
           { text: "Bitwarden", link: "/sysadmins/bitwarden" },
           { text: "Configure repositories", link: "/sysadmins/repositories" },
           { text: "Create a repository", link: "/sysadmins/create-repository" },
+          { text: "Promote a branch", link: "/sysadmins/promote-branch" },
           { text: "Add a member", link: "/sysadmins/add-member" },
           { text: "Promote a member", link: "/sysadmins/promote-member" },
           { text: "Offboard a member", link: "/sysadmins/offboard-member" },
