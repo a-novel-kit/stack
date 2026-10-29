@@ -204,6 +204,9 @@ go mod tidy
   so B builds against the latest A.
 - B's CI goes **red on a pseudo-version pin** where the org enforces "released versions only", as it
   should: that is the signal B is not yet mergeable. See the ordering rule.
+- **Only a draft pins a pseudo-version.** A ready PR never pins an internal library to a commit,
+  since a reviewer may approve and merge it. Before marking B ready, ask the developer to cut A's
+  release, then re-pin B to the tag. Do not mark B ready on the pseudo-version and ask afterwards.
 
 ---
 
@@ -359,8 +362,9 @@ not on step 1.
 When a change spans repos:
 
 - [ ] Identify the dependency direction (who imports/consumes whom) and order the work bottom-up.
-- [ ] On the consumer branch, pin to the dependency's **commit SHA** while developing
-      (`go get module@<sha>`, then `go mod tidy`) — never a `replace`, never `@branch`.
+- [ ] On the consumer branch, pin to the dependency's **commit SHA** while its PR is a draft
+      (`go get module@<sha>`, then `go mod tidy`) — never a `replace`, never `@branch`. Before
+      marking it ready, ask the developer to cut the dependency's release and pin the tag.
 - [ ] Breaking a shared contract? Stage it (add → deprecate → migrate → remove); the current PR is
       the _additive_ step only.
 - [ ] For any breaking change to a public symbol, **`grep -rn` the whole workspace** (`app/` _and_
