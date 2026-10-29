@@ -59,6 +59,13 @@ Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub
   imports, and a root's tests plan its real `terraform.tfvars`. Add tests for a root only after its
   imports are removed. In a root that already has tests, gate the import behind a variable its tests
   set to `false`, or do without it.
+- **A `check` block asserts only what the next deploy can satisfy.** The plan policy fails a plan on
+  any check that reports `fail` or `error`, so a check on operational state, such as backup age,
+  blocks the deploy that fixes it. Alert on that state instead (a-novel/infra#1233). A check's data
+  sources hold two more traps:
+  - a data source that reads a CRD's kind errors on a fresh cluster, so the root never installs the
+    add-on that defines the kind;
+  - `kubernetes_resources` without `namespace` reads only `default`.
 - **Mocks need realistic values.** Service-account `email`, `member` and `name` must be well-formed,
   or provider validation fails. A data-source mock cannot override a non-computed field such as
   `name`.
@@ -103,6 +110,11 @@ Run the whole gate the way CI does:
 
 - **The shell is zsh, and it does not word-split.** `set -- $pair` receives one argument. Use arrays,
   or `gh … --field Name --value V`.
+- **Read a command's output into a variable before a `[ … ]` test uses it.** A substitution inside
+  the test escapes `set -e`, as
+  [write-bash-scripts](../../write-bash-scripts/SKILL.md#common-pitfalls) warns. The tofu action's
+  re-run guard read a failed `gh api` call as an empty commit, and refused the re-run as superseded
+  (a-novel/infra#1250).
 - **GitHub's stock Terraform `.gitignore` ignores `*.tfvars`.** Re-include `terraform.tfvars`.
 - **`git rm` and `git mv` stage immediately.** Unstage everything before committing a logical subset
   with explicit paths.
