@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -30,6 +31,10 @@ const rulesetTags = "tags"
 
 // rulesetReleaseLines is the name of the release/vX.Y branch ruleset.
 const rulesetReleaseLines = "release-lines"
+
+// rulesetRetiredLines is the name of the ruleset that freezes the v<N> branches
+// of past majors.
+const rulesetRetiredLines = "retired-lines"
 
 // APIBypassActor is one bypass-actor entry in the GitHub rulesets API request body.
 type APIBypassActor struct {
@@ -422,8 +427,9 @@ func pagesOp(c *ClassPreset, repoPath string) Op {
 // prunes every other one.
 //
 // The master ruleset gates exactly the discovered checks, set wholesale.
-// commit-messages governs the same branch, so it ships alongside master.
-// Release lines take master's checks, and exist wherever releases are tagged.
+// commit-messages governs the same branch, so it ships alongside master, and so
+// does retired-lines once the default branch has moved past major 0. Release
+// lines take master's checks, and exist wherever releases are tagged.
 func rulesetOps(t *RepoTarget, repoPath string) ([]Op, error) {
 	c := t.Class
 	wanted := []struct {
@@ -433,6 +439,7 @@ func rulesetOps(t *RepoTarget, repoPath string) ([]Op, error) {
 	}{
 		{rulesetMaster, c.Rulesets.Master, t.Discovered.Checks},
 		{"commit-messages", c.Rulesets.Master, nil},
+		{rulesetRetiredLines, c.Rulesets.Master && t.Discovered.Major > 0, nil},
 		{"require-approval", c.Rulesets.RequireApproval, nil},
 		{rulesetTags, c.Rulesets.Tags, nil},
 		{rulesetReleaseLines, c.Rulesets.Tags, t.Discovered.Checks},
@@ -467,6 +474,9 @@ func rulesetOp(name string, t *RepoTarget, checks []CheckRef) (Op, error) {
 	if err != nil {
 		return Op{}, err
 	}
+	if name == rulesetRetiredLines {
+		spec.Conditions.RefName.Include = retiredLines(t.Discovered.Major)
+	}
 	// The code_quality rule belongs only on classes that opt into it; a
 	// docs or workflows repo has no code to gate.
 	if !t.Class.CodeQuality {
@@ -493,6 +503,16 @@ func rulesetOp(name string, t *RepoTarget, checks []CheckRef) (Op, error) {
 		Path:        fmt.Sprintf("repos/%s/%s/rulesets", t.Org, t.Repo),
 		Body:        body,
 	}, nil
+}
+
+// retiredLines names the branch of every major below major: v0 to v<major-1>.
+// A v<N> branch at or above major develops a coming major and stays open.
+func retiredLines(major int) []string {
+	refs := make([]string, 0, major)
+	for n := range major {
+		refs = append(refs, "refs/heads/v"+strconv.Itoa(n))
+	}
+	return refs
 }
 
 // BuildRuleset turns a ruleset template + org + discovered checks into the

@@ -10,7 +10,7 @@ import (
 // TestDiscover covers the main.yaml-based discovery: required checks are the
 // always set plus every main.yaml job, minus the report-* and master-only
 // exclusions. A repo without a main.yaml (e.g. docs/meta) yields just the
-// always set.
+// always set. The major comes from the root package.json, 0 without a version.
 func TestDiscover(t *testing.T) {
 	t.Parallel()
 
@@ -25,9 +25,12 @@ func TestDiscover(t *testing.T) {
 	testCases := []struct {
 		name             string
 		mainYAML         string
+		packageJSON      string
 		want             []string
 		wantSecrets      []string
 		wantEnvironments []string
+		wantMajor        int
+		wantErr          bool
 	}{
 		{name: "Success/NoMainYaml", want: []string{"check-dependencies", "epic-freeze", "merge-gate", "review-gate"}},
 		{
@@ -58,6 +61,18 @@ jobs:
 			wantEnvironments: []string{"github-pages", "release"},
 		},
 		{
+			name:        "Success/PackageVersion",
+			packageJSON: `{"name": "example", "version": "2.6.0"}`,
+			want:        []string{"check-dependencies", "epic-freeze", "merge-gate", "review-gate"},
+			wantMajor:   2,
+		},
+		{
+			name:        "Success/PackageWithoutVersion",
+			packageJSON: `{"name": "example"}`,
+			want:        []string{"check-dependencies", "epic-freeze", "merge-gate", "review-gate"},
+		},
+		{name: "Error/PackageVersionNotSemver", packageJSON: `{"version": "two"}`, wantErr: true},
+		{
 			name: "Success/SecretNamedInComment",
 			mainYAML: `
 # secrets.HEAD_TOKEN once signed the release.
@@ -86,7 +101,18 @@ jobs:
 					panic(err)
 				}
 			}
+			if testCase.packageJSON != "" {
+				if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(testCase.packageJSON), 0o600); err != nil {
+					panic(err)
+				}
+			}
 			d, err := Discover(root, cc)
+			if testCase.wantErr {
+				if err == nil {
+					t.Fatal("Discover: want an error")
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("Discover: %v", err)
 			}
@@ -110,6 +136,9 @@ jobs:
 			}
 			if !slices.Equal(d.Environments, testCase.wantEnvironments) {
 				t.Errorf("environments = %v, want %v", d.Environments, testCase.wantEnvironments)
+			}
+			if d.Major != testCase.wantMajor {
+				t.Errorf("major = %d, want %d", d.Major, testCase.wantMajor)
 			}
 		})
 	}

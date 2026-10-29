@@ -227,6 +227,52 @@ func TestBuildPlanGovernsReleaseLines(t *testing.T) {
 	}
 }
 
+// TestBuildPlanLocksRetiredLines pins the retired lines: a governed repo whose
+// default branch releases major 2 freezes v0 and v1 for everyone but admins,
+// and a repo still at major 0 carries no retired-lines ruleset.
+func TestBuildPlanLocksRetiredLines(t *testing.T) {
+	t.Parallel()
+
+	planAt := func(class *ClassPreset, major int) *Plan {
+		plan, err := BuildPlan(&RepoTarget{
+			Org: "a-novel-kit", Repo: "example", DefaultBranch: "master", Class: class,
+			OrgProfile: &OrgProfile{Org: "a-novel-kit"},
+			Discovered: &Discovered{Major: major},
+		})
+		if err != nil {
+			t.Fatalf("BuildPlan: %v", err)
+		}
+		return plan
+	}
+
+	governed := &ClassPreset{Rulesets: ClassRulesets{Master: true}}
+	if rulesetBody(planAt(governed, 0), rulesetRetiredLines) != nil {
+		t.Error("a repo at major 0 carries the retired-lines ruleset")
+	}
+	if rulesetBody(planAt(&ClassPreset{}, 2), rulesetRetiredLines) != nil {
+		t.Error("an ungoverned class carries the retired-lines ruleset")
+	}
+
+	ruleset := rulesetBody(planAt(governed, 2), rulesetRetiredLines)
+	if ruleset == nil {
+		t.Fatal("a repo at major 2 lacks the retired-lines ruleset")
+	}
+	refs := ruleset.Conditions["ref_name"].(map[string]any)
+	if want := []string{"refs/heads/v0", "refs/heads/v1"}; !slices.Equal(refs["include"].([]string), want) {
+		t.Errorf("include = %v, want %v", refs["include"], want)
+	}
+	if slices.ContainsFunc(ruleset.BypassActors, func(a APIBypassActor) bool { return a.ActorType == "Integration" }) {
+		t.Errorf("bypass actors = %+v, want admins only", ruleset.BypassActors)
+	}
+	rules := make([]string, 0, len(ruleset.Rules))
+	for _, r := range ruleset.Rules {
+		rules = append(rules, r.Type)
+	}
+	if want := []string{"creation", "update", "deletion", "non_fast_forward"}; !slices.Equal(rules, want) {
+		t.Errorf("rules = %v, want %v", rules, want)
+	}
+}
+
 // TestBuildPlanPrunesUnknownRulesets pins the invariant that makes repo config
 // derived: the plan names the complete set of rulesets a repo may carry, and
 // apply deletes everything else. A ruleset is removed by dropping it from the

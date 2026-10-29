@@ -2,13 +2,18 @@ package repocfg
 
 import (
 	"cmp"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
+	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 )
 
@@ -23,17 +28,21 @@ type CheckRef struct {
 }
 
 // Discovered is what a repo's working tree shows: the required checks for the
-// master ruleset, and the secrets and environments its workflows use.
+// master ruleset, the secrets and environments its workflows use, and the
+// major version it releases.
 type Discovered struct {
 	Checks []CheckRef
 	// Secrets are the secret names the repo's workflows reference, sorted.
 	Secrets []string
 	// Environments are the deployment environments its jobs name, sorted.
 	Environments []string
+	// Major is the major of the version in the root package.json, which every
+	// release bumps. A repo without a version reads as major 0.
+	Major int
 }
 
-// Discover computes a repo's required checks and the secrets and environments
-// its workflows use.
+// Discover computes a repo's required checks, the secrets and environments
+// its workflows use, and its major version.
 //
 // Required checks are the `always` set plus every job declared in the repo's
 // .github/workflows/main.yaml, minus cc.Exclude. The job's name, or its id, is
@@ -59,7 +68,39 @@ func Discover(repoPath string, cc *ChecksConfig) (*Discovered, error) {
 	if d.Secrets, d.Environments, err = workflowUses(filepath.Join(repoPath, ".github", "workflows")); err != nil {
 		return nil, err
 	}
+	if d.Major, err = packageMajor(filepath.Join(repoPath, "package.json")); err != nil {
+		return nil, err
+	}
 	return d, nil
+}
+
+// packageMajor reads the major of the version in the package.json at path. A
+// missing file or version reads as 0, and a version that is not semver is an
+// error.
+func packageMajor(path string) (int, error) {
+	content, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("read %s: %w", path, err)
+	}
+
+	var pkg struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(content, &pkg); err != nil {
+		return 0, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if pkg.Version == "" {
+		return 0, nil
+	}
+
+	major := semver.Major("v" + pkg.Version)
+	if major == "" {
+		return 0, fmt.Errorf("%s: version %q is not semver", path, pkg.Version)
+	}
+	return strconv.Atoi(strings.TrimPrefix(major, "v"))
 }
 
 // uniqueChecks sorts checks by context and keeps the first check of each
