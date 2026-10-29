@@ -55,8 +55,17 @@
   apply changes that resource, as a release pin does. A green rerun alone proves nothing.
 - **A `kubernetes_manifest` whose wait hits a request deadline reaches no state.** When `wait` ends
   on `context deadline exceeded` instead of `timed out waiting on conditions`, the object exists in
-  the cluster, but the next plan neither sees nor deletes it. Resources that `depends_on` it never
-  reach state either (a-novel/infra#1229).
+  the cluster but not in state, and the resources that `depends_on` it are never created. The next
+  apply then fails creating it. Adopt it through an `import` block whose `for_each` reads a set
+  input, as the cluster root's `adopted_databases` does, and empty the input once the import has
+  applied. The root's tests leave it empty, since
+  [mocked providers cannot import](tooling-and-tests.md#tests-that-earn-their-place)
+  (a-novel/infra#1229, #1247, #1248).
+- **A `kubernetes_manifest` lists in `computed_fields` every map that its operator's webhook
+  fills.** The provider plans a map with exactly the keys the manifest sets. A key the webhook adds
+  fails the apply with `Provider produced inconsistent result after apply`. The list replaces the
+  provider's default, so keep `metadata.labels` and `metadata.annotations` in it: the databases add
+  CloudNativePG's `spec.postgresql.parameters` beside them (a-novel/infra#1249).
 
 ## Retire protected resources
 
@@ -93,6 +102,12 @@
 - **A new `google_project_iam_custom_role` cannot be granted in the apply that creates it.** For a
   short while, a grant of it fails with `does not exist in the resource's hierarchy`. Re-run the
   failed deploy job, and the grant succeeds (a-novel/infra#1226).
+- **Artifact Registry's VPC-SC setting `depends_on` a repository in its location.** A location has
+  no setting until the project holds a repository there, so the first apply in a new region
+  answered 404 (a-novel/infra#1230, #1233).
+- **Cloud Scheduler's first jobs in a new region can fail with
+  `Error 409: Failed to perform tenant project creation`.** Google is still creating its tenant
+  project for that region. Re-run the failed deploy job (a-novel/infra#1230).
 
 ## Read the live state before trusting the code
 
@@ -100,6 +115,12 @@ Production can differ from `master` even when drift is clean. One example: a VM'
 rendered by an older template, and the current code would push a flag its pinned loader does not
 understand. Compare the planned diff with the image or binary that will consume it, and fix the
 pins in the same change.
+
+Foundation's cluster sends only its system components' logs to Cloud Logging, so workload logs stay
+in the cluster. A failed cluster deploy's `Describe the databases` step prints each database's unmet conditions, stuck pods
+and last warnings. To read further, open a draft pull request whose `plan-cluster` job reads the
+pods, their logs and the custom resources from the API server as the plan identity. Close it
+unmerged once read (a-novel/infra#1246, #1251).
 
 ## Release contract
 
@@ -226,11 +247,22 @@ metric resource itself succeeds at once.
   `app-password` in one pull request, merged during a planned downtime, which rolls the host.
 - **pgBackRest owns backup expiry.** Never add age-based deletion to a backup bucket. Never delete
   WAL to free space.
-- **CloudNativePG's Barman Cloud plugin needs `GOOGLE_CLOUD_PROJECT`.** Under Workload Identity, its
-  sidecar gets a token but no project. Cloud Storage's client then refuses to start with
-  `Project was not passed and could not be determined from the environment`, so WAL archiving never
-  begins. Set the variable to the bucket's project in the `ObjectStore`'s
-  `spec.instanceSidecarConfiguration.env` (a-novel/infra#1231).
+- **A backup bucket keeps Object Versioning beside its retention policy.** Retention refuses to
+  replace a live object, and versioning lets the replaced version turn noncurrent and stay retained.
+  pgBackRest rewrites its info files, and Barman rewrites `backup.info` from `STARTED` to `DONE`
+  (a-novel/infra#1252).
+- **CloudNativePG's Barman Cloud plugin needs three permissions beyond object access,** which
+  bootstrap's `barmanWriter` grants per bucket:
+  - `storage.buckets.get`: `barman-cloud-wal-archive --test` reads the bucket before archiving. It
+    counts any API error as lost connectivity, so a 403 exits 2;
+  - `storage.multipartUploads.create` and `.abort`: base backups upload through Cloud Storage's XML
+    multipart API, and WAL as single objects. Without them, WAL archives while every base backup
+    fails with a 403 (a-novel/infra#1248, #1252).
+- **Check the cluster's DNS first when Barman reports `Project was not passed` or exits with
+  status 4.** Its sidecar takes the Workload Identity project and token from
+  `metadata.google.internal`, so a [DNS policy fault](#trust-boundaries) shows here first. A
+  `GOOGLE_CLOUD_PROJECT` variable moves the failure to the token without curing it
+  (a-novel/infra#1247).
 
 ## Trust boundaries
 
@@ -271,6 +303,11 @@ metric resource itself succeeds at once.
     refuses every level above an allowed name. The bypass rules need `google-beta`.
   - The `dns_query` logs show each lookup and its answer. A Cloud Run entry carries no source
     address, so the logs name what was resolved, not which workload resolved it.
+- **The cluster's default-deny policies admit DNS to the `kube-system` pods whose `k8s-app` is
+  `kube-dns` or `node-local-dns`.** GKE Standard turns NodeLocal DNSCache on by default since
+  1.34.1-gke.3720000: each node's `node-local-dns` pod answers the queries sent to kube-dns'
+  address. A peer that admits only `kube-dns` times out every lookup with `Errno -3`. The cluster
+  root's test requires both values (a-novel/infra#1247).
 - **Google API calls stay inside the `agora_production` perimeter,** a VPC Service Controls
   perimeter around the private and public-api projects, in foundation's `service-perimeter.tf`. Its
   spec runs in dry run until a-novel/infra#1042 enforces it.
