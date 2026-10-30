@@ -273,9 +273,6 @@ func securityOps(c *ClassPreset, repoPath string) []Op {
 		// nothing until a maintainer approves it.
 		{Method: http.MethodPut, Path: repoPath + "/actions/permissions/workflow", Body: workflowPermissions},
 		{Method: http.MethodPut, Path: repoPath + "/actions/permissions/fork-pr-contributor-approval", Body: forkApproval},
-		// A published release keeps its tag and assets: no key that bypasses
-		// the tags ruleset can move a released tag to other code.
-		{Method: http.MethodPut, Path: repoPath + "/immutable-releases"},
 	}
 }
 

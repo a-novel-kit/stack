@@ -98,9 +98,6 @@ func (r *planRun) apply(op repocfg.Op) (string, string, error) {
 	case strings.HasSuffix(op.Path, "/vulnerability-alerts"):
 		detail, err := applyToggle(op)
 		return "Dependabot alerts", detail, err
-	case strings.HasSuffix(op.Path, "/immutable-releases"):
-		detail, err := applyToggle(op)
-		return "immutable releases", detail, err
 	case strings.HasSuffix(op.Path, "/pages"):
 		detail, err := applyPages(op)
 		return "pages", detail, err
@@ -643,8 +640,7 @@ func applyPages(op repocfg.Op) (string, error) {
 }
 
 // applyToggle reconciles a setting with a bodyless enable/disable endpoint,
-// such as Dependabot alerts or immutable releases. Both operations are safe to
-// repeat.
+// such as Dependabot alerts. Both operations are safe to repeat.
 func applyToggle(op repocfg.Op) (string, error) {
 	if op.Method != http.MethodPut && op.Method != http.MethodDelete {
 		return "", fmt.Errorf("unsupported %s method %q", path.Base(op.Path), op.Method)
