@@ -312,6 +312,9 @@ func NewGrpcOrderCreate(service GrpcOrderCreateService) *GrpcOrderCreate {
 - Answer a server fault (`Internal`, `Unavailable`) with `grpcf.Fault(code, msg, cause)`. The caller
   receives the status alone, and the fault keeps its cause for Sentry, which groups faults by it. A
   bare `status.Error` wraps nothing and puts every fault of a method in one Sentry issue.
+- Answer `Unavailable` only for a call that did not run: in-cluster callers retry it on another pod.
+  A handler that has had an effect answers `Internal`, as
+  [request limits](request-limits.md#grpc) explains.
 - Convert proto↔core models **in the handler**. Never pass a proto type into the core layer.
 - Handler type names carry the `Grpc` prefix; the service interface mirrors it. File:
   `grpc.<entity><Operation>.go`.
