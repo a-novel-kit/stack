@@ -22,11 +22,11 @@ integrations:
 # needed, and nothing off-repo can stall it.
 always:
   # merge-gate: the single "may this PR merge?" gate, posted by the [Agent] App
-  # from the merge-gate.yaml workflow.
+  # from the gates.yaml workflow.
   - { context: "merge-gate", integration: agent }
   # epic-freeze: the partial-landing detector's check. It succeeds by default
   # and fails on a PR whose Epic landed partially, posted by the [Agent] App
-  # from epic-freeze.yaml and the sweep.
+  # from gates.yaml and the sweep.
   - { context: "epic-freeze", integration: agent }
   # check-dependencies: holds a person's dependency manifest change until a
   # reviewer adds the allow-dependency-change label, posted by Actions from
@@ -35,7 +35,7 @@ always:
   - { context: "check-dependencies", integration: actions }
   # review-gate: a person's pull request needs a maintainer's or admin's approval,
   # and a privileged label counts only when one of them applied it, posted by the
-  # [Agent] App from review-gate.yaml and, for Dependabot, auto-approve-dependabot.yaml.
+  # [Agent] App from gates.yaml and, for Dependabot, auto-approve-dependabot.yaml.
   - { context: "review-gate", integration: agent }
 
 # main.yaml jobs are required by default, except those matching these rules:

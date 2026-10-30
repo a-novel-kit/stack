@@ -92,6 +92,11 @@ func TestDependabotGovernance(t *testing.T) {
 	if _, ok := workflow.On["status"]; !ok {
 		t.Error("auto-approve must trigger on status to approve once renovate/stability-days turns green")
 	}
+	// Only the Dependabot job reads a CI completion, so every other branch's CI starts no run.
+	completion, _ := workflow.On["workflow_run"].(map[string]any)
+	if branches, _ := completion["branches"].([]any); !slices.Equal(branches, []any{"dependabot/**"}) {
+		t.Errorf("auto-approve workflow_run branches = %v, want only dependabot/**", branches)
+	}
 	job := workflow.Jobs["auto-approve"]
 	// The engine reads the release age, and each first-party version's release proof, with this token.
 	want := map[string]string{"statuses": "read", "contents": "read", "attestations": "read", "packages": "read"}
@@ -396,13 +401,13 @@ func TestCheckDependenciesGovernance(t *testing.T) {
 	}
 }
 
-// TestReviewGateGovernance pins the review-gate caller: it runs from the default
-// branch, re-evaluates on every event that can change the verdict (reviews and merge
-// groups through pr-relay), runs under an id clear of the check the App posts, runs
-// one evaluation at a time since nothing re-posts the check, and leaves Dependabot
-// to the CI-completion job, which gates its pull requests against the same
-// privileged labels.
-func TestReviewGateGovernance(t *testing.T) {
+// TestGatesGovernance pins the gates caller: it runs from the default branch,
+// re-evaluates on every event that can change a verdict (reviews and merge groups
+// through pr-relay), runs under an id clear of the checks the App posts, runs one
+// evaluation per pull request at a time since nothing re-posts the checks, runs
+// each gate whatever another concluded, and leaves Dependabot to the CI-completion
+// job, which gates its pull requests against the same privileged labels.
+func TestGatesGovernance(t *testing.T) {
 	t.Parallel()
 	type step struct {
 		ID   string            `yaml:"id"`
@@ -419,47 +424,65 @@ func TestReviewGateGovernance(t *testing.T) {
 				Workflows []string `yaml:"workflows"`
 			} `yaml:"workflow_run"`
 		} `yaml:"on"`
-		Concurrency struct {
-			Group            string `yaml:"group"`
-			CancelInProgress bool   `yaml:"cancel-in-progress"`
-		} `yaml:"concurrency"`
 		Jobs map[string]struct {
-			If          string            `yaml:"if"`
+			Concurrency struct {
+				Group            string `yaml:"group"`
+				CancelInProgress bool   `yaml:"cancel-in-progress"`
+			} `yaml:"concurrency"`
 			Permissions map[string]string `yaml:"permissions"`
 			Steps       []step            `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
-	loadWorkflow(t, "review-gate.yaml", &workflow)
-	if got := strings.Join(workflow.On.PullRequestTarget.Types, ","); got != "opened,reopened,synchronize,labeled,unlabeled" {
-		t.Errorf("review-gate pull_request_target types = %q", got)
+	loadWorkflow(t, "gates.yaml", &workflow)
+	wantTypes := "opened,reopened,synchronize,labeled,unlabeled,ready_for_review,converted_to_draft,closed"
+	if got := strings.Join(workflow.On.PullRequestTarget.Types, ","); got != wantTypes {
+		t.Errorf("gates pull_request_target types = %q, want %q", got, wantTypes)
 	}
 	if !slices.Equal(workflow.On.WorkflowRun.Workflows, []string{"pr-relay"}) {
-		t.Errorf("review-gate workflow_run = %v, want pr-relay, which carries reviews and merge groups", workflow.On.WorkflowRun.Workflows)
+		t.Errorf("gates workflow_run = %v, want pr-relay, which carries reviews and merge groups", workflow.On.WorkflowRun.Workflows)
 	}
-	if workflow.Concurrency.CancelInProgress || !strings.Contains(workflow.Concurrency.Group, "github.event.pull_request.number") ||
-		!strings.Contains(workflow.Concurrency.Group, "github.event.workflow_run.pull_requests[0].number") {
-		t.Errorf("concurrency = %+v, want a per-pull-request group across both triggers that queues runs without cancelling a running one", workflow.Concurrency)
-	}
-	if _, ok := workflow.Jobs["review-gate"]; ok {
-		t.Error("a review-gate job would collide with the check the App posts")
+	for _, check := range []string{"merge-gate", "epic-freeze", "review-gate"} {
+		if _, ok := workflow.Jobs[check]; ok {
+			t.Errorf("a %s job would collide with the check the App posts", check)
+		}
 	}
 	job, ok := workflow.Jobs["evaluate"]
 	if !ok {
 		t.Fatal("evaluate job missing")
 	}
-	if !strings.Contains(job.If, "vars.DEPENDABOT_SECURITY_LOGIN") || !maps.Equal(job.Permissions, map[string]string{"pull-requests": "read"}) ||
-		len(job.Steps) != 2 {
-		t.Errorf("evaluate job = %+v, want the Dependabot skip, pull-requests read for relay-context, and two steps", job)
+	if group := job.Concurrency.Group; job.Concurrency.CancelInProgress || !strings.Contains(group, "github.event.pull_request.number") ||
+		!strings.Contains(group, "github.event.workflow_run.pull_requests[0].number") {
+		t.Errorf("concurrency = %+v, want a per-pull-request group across both triggers that queues runs without cancelling a running one", job.Concurrency)
 	}
-	relay, gate := job.Steps[0], job.Steps[1]
-	if relay.ID != "relay" || !strings.HasPrefix(relay.Uses, "a-novel-kit/workflows/generic-actions/relay-context@") ||
+	if want := map[string]string{"contents": "read", "pull-requests": "read", "issues": "read"}; !maps.Equal(job.Permissions, want) {
+		t.Errorf("evaluate permissions = %v, want %v for relay-context and derive-status", job.Permissions, want)
+	}
+	if relay := job.Steps[0]; relay.ID != "relay" || !strings.HasPrefix(relay.Uses, "a-novel-kit/workflows/generic-actions/relay-context@") ||
 		relay.If != "github.event_name == 'workflow_run'" {
 		t.Errorf("first step = %+v, want relay-context on workflow_run only", relay)
 	}
-	if !strings.HasPrefix(gate.Uses, "a-novel-kit/workflows/generic-actions/review-gate@") || gate.With["privileged_labels"] == "" ||
-		gate.With["event"] != "${{ steps.relay.outputs.event || github.event_name }}" ||
+	gates := map[string]step{}
+	for _, action := range []string{"merge-gate", "enable-auto-merge", "detect-partial-landing", "review-gate", "derive-status"} {
+		i := slices.IndexFunc(job.Steps, func(s step) bool {
+			return strings.HasPrefix(s.Uses, "a-novel-kit/workflows/generic-actions/"+action+"@")
+		})
+		if i < 0 {
+			t.Fatalf("evaluate does not run %s", action)
+		}
+		gate := job.Steps[i]
+		if !strings.HasPrefix(gate.If, "${{ !cancelled() && ") {
+			t.Errorf("%s if = %q, want it to run whatever another gate concluded", action, gate.If)
+		}
+		// derive-status writes no check, so it serves Dependabot's own events too.
+		if action != "derive-status" && !strings.Contains(gate.If, "github.actor != vars.DEPENDABOT_SECURITY_LOGIN") {
+			t.Errorf("%s if = %q, want Dependabot's own events left to the CI-completion job", action, gate.If)
+		}
+		gates[action] = gate
+	}
+	gate := gates["review-gate"]
+	if gate.With["privileged_labels"] == "" || gate.With["event"] != "${{ steps.relay.outputs.event || github.event_name }}" ||
 		gate.With["head_sha"] != "${{ steps.relay.outputs.head_sha || github.event.pull_request.head.sha }}" {
-		t.Fatalf("evaluate step = %+v, want review-gate fed by relay-context, with its privileged labels", gate)
+		t.Fatalf("review-gate step = %+v, want review-gate fed by relay-context, with its privileged labels", gate)
 	}
 
 	var dependabot struct {
@@ -474,7 +497,7 @@ func TestReviewGateGovernance(t *testing.T) {
 	}
 	ci := dependabot.Jobs["dependabot"].Steps[i]
 	if ci.With["privileged_labels"] != gate.With["privileged_labels"] {
-		t.Errorf("Dependabot privileged labels = %q, want review-gate.yaml's %q", ci.With["privileged_labels"], gate.With["privileged_labels"])
+		t.Errorf("Dependabot privileged labels = %q, want gates.yaml's %q", ci.With["privileged_labels"], gate.With["privileged_labels"])
 	}
 	if ci.With["pull_request_number"] == "" || ci.With["head_sha"] == "" {
 		t.Errorf("Dependabot review-gate inputs = %v, want the pull request number and head its event lacks", ci.With)
@@ -518,7 +541,7 @@ func TestPRRelayGovernance(t *testing.T) {
 		t.Error("pr-relay must name no secret: a pull request's own copy of it runs")
 	}
 
-	agentWorkflows := []string{"merge-gate.yaml", "review-gate.yaml", "epic-freeze.yaml", "derive-status.yaml", "recover-prs.yaml", "auto-approve-dependabot.yaml"}
+	agentWorkflows := []string{"gates.yaml", "recover-prs.yaml", "auto-approve-dependabot.yaml"}
 	for _, name := range agentWorkflows {
 		var workflow struct {
 			On map[string]struct {
@@ -536,31 +559,24 @@ func TestPRRelayGovernance(t *testing.T) {
 			t.Errorf("%s does not run on pull_request_target", name)
 		}
 	}
-	relayedWorkflows := []string{"merge-gate.yaml", "review-gate.yaml", "epic-freeze.yaml", "derive-status.yaml"}
-	for _, name := range relayedWorkflows {
-		var workflow struct {
-			On map[string]struct {
-				Workflows []string `yaml:"workflows"`
-			} `yaml:"on"`
-		}
-		loadWorkflow(t, name, &workflow)
-		if !slices.Equal(workflow.On["workflow_run"].Workflows, []string{"pr-relay"}) {
-			t.Errorf("%s workflow_run = %v, want pr-relay", name, workflow.On["workflow_run"].Workflows)
-		}
+	var gates struct {
+		On map[string]struct {
+			Workflows []string `yaml:"workflows"`
+		} `yaml:"on"`
+	}
+	loadWorkflow(t, "gates.yaml", &gates)
+	if !slices.Equal(gates.On["workflow_run"].Workflows, []string{"pr-relay"}) {
+		t.Errorf("gates workflow_run = %v, want pr-relay", gates.On["workflow_run"].Workflows)
 	}
 }
 
 // TestFeatureEnvGovernance pins how long with-feature-env lasts: until the next
-// push. The removal runs on GITHUB_TOKEN, which triggers no new run, and treats
-// a label an earlier push already removed as done.
+// push. The removal rides the run check-dependencies already starts on a push,
+// runs on GITHUB_TOKEN, which triggers no new run, and treats a label an earlier
+// push already removed as done.
 func TestFeatureEnvGovernance(t *testing.T) {
 	t.Parallel()
 	var workflow struct {
-		On struct {
-			PullRequest struct {
-				Types []string `yaml:"types"`
-			} `yaml:"pull_request"`
-		} `yaml:"on"`
 		Jobs map[string]struct {
 			If          string            `yaml:"if"`
 			Permissions map[string]string `yaml:"permissions"`
@@ -570,13 +586,10 @@ func TestFeatureEnvGovernance(t *testing.T) {
 			} `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
-	loadWorkflow(t, "feature-env.yaml", &workflow)
-	if got := strings.Join(workflow.On.PullRequest.Types, ","); got != "synchronize" {
-		t.Errorf("feature-env pull_request types = %q, want synchronize", got)
-	}
+	loadWorkflow(t, "check-dependencies.yaml", &workflow)
 	job := workflow.Jobs["revoke-feature-env"]
-	if job.If != "contains(github.event.pull_request.labels.*.name, 'with-feature-env')" {
-		t.Errorf("revoke-feature-env if = %q, want the with-feature-env label", job.If)
+	if job.If != "github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'with-feature-env')" {
+		t.Errorf("revoke-feature-env if = %q, want a push to a pull request carrying the with-feature-env label", job.If)
 	}
 	if job.Permissions["pull-requests"] != "write" || job.Env["GH_TOKEN"] != "${{ github.token }}" {
 		t.Errorf("revoke-feature-env = %v / %v, want pull-requests: write through GITHUB_TOKEN", job.Permissions, job.Env)
@@ -863,25 +876,20 @@ func TestNotifyGovernance(t *testing.T) {
 			t.Errorf("notify %s permissions = %v, want actions: read", job, workflow.Jobs[job].Permissions)
 		}
 	}
-	// A review runs a pull request's own copy of a workflow, so notify-reviews posts it from pr-relay.
+	// A review runs a pull request's own copy of a workflow, so gates.yaml posts it from pr-relay.
 	if workflow.On.PullRequestReview != nil {
 		t.Error("notify runs on pull_request_review, which runs a pull request's own copy with the Agent key")
 	}
-	var reviews struct {
-		On struct {
-			WorkflowRun struct {
-				Workflows []string `yaml:"workflows"`
-			} `yaml:"workflow_run"`
-		} `yaml:"on"`
+	var gates struct {
 		Jobs map[string]struct {
 			If   string `yaml:"if"`
 			Uses string `yaml:"uses"`
 		} `yaml:"jobs"`
 	}
-	loadWorkflow(t, "notify-reviews.yaml", &reviews)
-	if !slices.Equal(reviews.On.WorkflowRun.Workflows, []string{"pr-relay"}) || len(reviews.Jobs) != 1 ||
-		reviews.Jobs["review"].If != "github.event.workflow_run.event == 'pull_request_review'" ||
-		!strings.HasPrefix(reviews.Jobs["review"].Uses, "a-novel-kit/workflows/.github/workflows/notify-pr-run.yaml@") {
-		t.Errorf("notify-reviews = %+v, want one job posting relayed reviews through notify-pr-run", reviews)
+	loadWorkflow(t, "gates.yaml", &gates)
+	review := gates.Jobs["notify-review"]
+	if review.If != "github.event.workflow_run.event == 'pull_request_review'" ||
+		!strings.HasPrefix(review.Uses, "a-novel-kit/workflows/.github/workflows/notify-pr-run.yaml@") {
+		t.Errorf("gates notify-review = %+v, want relayed reviews posted through notify-pr-run", review)
 	}
 }

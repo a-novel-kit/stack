@@ -56,7 +56,7 @@ hand: the `CI_WEBHOOK`, `RELEASES_WEBHOOK`, `REVIEWS_WEBHOOK` and
 `<org>/<repo>` to its role id. The `BWS_READ_TOKEN` governance secret and the
 `BWS_SERVER_URL` variable resolve a GitHub account to the Discord user it
 pings. A missing webhook skips the post; a person or repository missing from
-its map posts without that ping. Reviews post from `notify-reviews.yaml`, which follows
+its map posts without that ping. Reviews post from `gates.yaml`, which follows
 `pr-relay.yaml`'s runs: a review runs a pull request's own copy of a workflow, so
 the Agent key cannot be read on that event.
 

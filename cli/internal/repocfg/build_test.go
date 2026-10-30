@@ -105,20 +105,27 @@ func TestBuildPlanProvisions(t *testing.T) {
 		{name: "LockPR", plan: bare, method: http.MethodDelete, path: "/lock-pr.yaml"},
 		{name: "Notify", plan: bare, method: http.MethodPut, path: "/notify.yaml", content: "notify-ci-run.yaml@"},
 		{name: "AutoAssignAuthor", plan: bare, method: http.MethodPut, path: "/auto-assign-author.yaml", content: "generic-actions/assign-bot@"},
+		// One run per pull request event carries every gate.
+		{name: "Gates", plan: master, method: http.MethodPut, path: "/gates.yaml", content: "generic-actions/merge-gate@", gated: true},
+		{name: "MergeGate", plan: bare, method: http.MethodDelete, path: "/merge-gate.yaml"},
+		{name: "EpicFreeze", plan: bare, method: http.MethodDelete, path: "/epic-freeze.yaml"},
+		{name: "ReviewGate", plan: bare, method: http.MethodDelete, path: "/review-gate.yaml"},
+		{name: "DeriveStatus", plan: bare, method: http.MethodDelete, path: "/derive-status.yaml"},
+		{name: "NotifyReviews", plan: bare, method: http.MethodDelete, path: "/notify-reviews.yaml"},
+		{name: "FeatureEnv", plan: bare, method: http.MethodDelete, path: "/feature-env.yaml"},
 		// Factorized callers reference the reusable *-run.yaml engine, not the action.
-		{name: "MergeGate", plan: master, method: http.MethodPut, path: "/merge-gate.yaml", content: "merge-gate-run.yaml@", gated: true},
 		{name: "ReleaseTrain", plan: master, method: http.MethodPut, path: "/release-train.yaml", content: "release-train-run.yaml@"},
 		{name: "Hotfix", plan: master, method: http.MethodPut, path: "/hotfix.yaml", content: "backport-run.yaml@"},
 		{name: "EpicRollback", plan: master, method: http.MethodPut, path: "/epic-rollback.yaml", content: "epic-rollback-run.yaml@", gated: true},
 		// Already-thin callers still call the action directly.
 		{name: "ApprovePR", plan: master, method: http.MethodPut, path: "/approve-pr.yaml", content: "generic-actions/approve-pr@", gated: true},
-		{name: "DeriveStatus", plan: master, method: http.MethodPut, path: "/derive-status.yaml", content: "generic-actions/derive-status@", gated: true},
 		{name: "RecoverPRs", plan: master, method: http.MethodPut, path: "/recover-prs.yaml", content: "generic-actions/enable-auto-merge@", gated: true},
 		{
 			name: "CheckDependencies", plan: master, method: http.MethodPut, path: "/check-dependencies.yaml",
 			content: "generic-actions/check-dependencies@", gated: true,
 		},
-		{name: "FeatureEnv", plan: master, method: http.MethodPut, path: "/feature-env.yaml", content: "labels/with-feature-env", gated: true},
+		// A push removes the with-feature-env label in the run check-dependencies already starts.
+		{name: "FeatureEnvRevocation", plan: master, method: http.MethodPut, path: "/check-dependencies.yaml", content: "labels/with-feature-env", gated: true},
 		{name: "AutoApprove", plan: approval, method: http.MethodPut, path: "/auto-approve-dependabot.yaml", content: "auto-approve-dependabot-run.yaml@", gated: true},
 		// GitHub Code Quality bills per active committer and per AI credit, so it follows the class flag.
 		{name: "CodeQuality/Off", plan: bare, method: http.MethodPatch, path: "/code-quality/setup", body: map[string]any{"state": "not-configured"}},
