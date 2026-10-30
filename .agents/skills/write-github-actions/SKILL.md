@@ -31,7 +31,7 @@ the work sets an output and every later step carries an `if:` on it (`generic-ac
 threads a `halted` output that way).
 
 A **reusable workflow** (`.github/workflows/<name>-run.yaml`, triggered by `workflow_call`) packages
-whole jobs with their own `permissions` and `secrets:` block. `merge-gate-run.yaml` is one: each
+whole jobs with their own `permissions` and `secrets:` block. `auto-approve-dependabot-run.yaml` is one: each
 governed repo ships a thin caller so the engine lives in one place. Inside a reusable workflow, `./`
 resolves against the **caller's** checkout, so its nested actions must be remote-pinned.
 
@@ -225,11 +225,20 @@ newer run cancels the older one, which could otherwise post a stale screenshot v
 every other run gets a group of its own and finishes. Cancel only where a newer head supersedes the
 run, since a push moves the merge box to the new head. A cancelled job on the current head stays red
 there, because the merge box shows each workflow's newest run. A gate that events on one head
-re-trigger, such as `review-gate` on labels and reviews, queues with `cancel-in-progress: false`: its
+re-trigger, such as `gates.yaml` on labels and reviews, queues with `cancel-in-progress: false`: its
 runs never overlap, so the last one reads the latest state, and a newer event replaces the waiting run
 before it starts. A workflow-level group on a workflow that
 triggers on `labeled`, as that one does, can strand a pull request's required checks; `monitor-ci`
 covers the [diagnosis and recovery](../monitor-ci/references/dependency-prs.md#stranded-required-checks).
+
+Each workflow an event matches starts a run of its own, and during a GitHub incident every run
+waits in the same queue. Governance runs already far outnumber CI runs, so a new job joins the
+workflow that answers its event: `check-dependencies.yaml` carries the `with-feature-env`
+revocation. Checks that share a trigger run as steps of one job, as in `gates.yaml`, each with
+`if: ${{ !cancelled() && … }}` so a failing gate leaves the others posting. A `workflow_run`
+trigger that only some branches need lists them under `branches:`, since a job's `if:` still
+starts the run. A required check that Actions posts keeps a workflow whose runs never skip it:
+a newer run on the same head that skips the job reports `skipped`, which passes.
 
 ---
 
@@ -280,9 +289,9 @@ down in a repo holding both Go and JS, where two jobs would claim the name, and 
 emit a legacy bare `test`; new jobs use the lane form. Renaming a job changes its required check,
 which [the next section](#required-checks-and-rulesets) covers.
 
-A job must also not take the name of a check-run the [Agent] App posts. `merge-gate.yaml` and
-`epic-freeze.yaml` both name their job `evaluate` for that reason — the job is only the runner, and a
-same-named job would collide with the App's check.
+A job must also not take the name of a check-run the [Agent] App posts. `gates.yaml` names its job
+`evaluate` for that reason — the job is only the runner, and a same-named job would collide with the
+App's check.
 
 ---
 
@@ -343,7 +352,7 @@ a later push. `check-append-only` removes its label only when the step gets
 `with-feature-env` follows the same rule to publish rather than waive. `build-actions/docker` tags
 an image only on a push to the default branch, a release, or a pull request carrying the label,
 which gets the moving `pr-<N>` tag; every other build is pushed by digest alone for the jobs of its
-run. The managed `feature-env.yaml` removes the label on the next push, so the tag keeps naming the
+run. The managed `check-dependencies.yaml` removes the label on the next push, so the tag keeps naming the
 last head someone labeled. A repo's `main.yaml` must trigger on `labeled` for the label to build.
 
 Services and platforms (`clean_images: true`) also get the managed `clean-images.yaml`, which deletes
@@ -385,7 +394,7 @@ the tiers rest on gates rather than roles.
 `review-gate`, required
 everywhere, needs an approval of the head from a maintainer, an admin or the [Agent] App, and counts
 a privileged label only when one of them applied it last; the list of privileged labels lives in the
-`review-gate.yaml` template, mirrored by the Dependabot job's step. A dispatch-only workflow that
+`gates.yaml` template, mirrored by the Dependabot job's step. A dispatch-only workflow that
 must stay with admins or maintainers runs `generic-actions/require-role` first: it checks
 `github.triggering_actor`, because `github.actor` still names the original dispatcher on a re-run,
 and the role name, because the legacy permission field reports Maintain as `write`. Another workflow
@@ -423,10 +432,9 @@ default-branch push, so every class sets `code_quality: false` and `repo update`
 whose `service` ruleset checks their layered layout. A repository that no semgrep ruleset fits carries
 no `lint-semgrep` job.
 
-The governance workflows (`merge-gate.yaml`, `epic-freeze.yaml`, `derive-status.yaml`,
-`release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`, `epic-rollback.yaml`, `recover-prs.yaml`,
-`check-dependencies.yaml`, `feature-env.yaml`, `clean-images.yaml`, `review-gate.yaml`, `pr-relay.yaml`,
-`auto-approve-dependabot.yaml`, `lock-closed.yaml`, `notify.yaml`, `notify-reviews.yaml`, `auto-assign-author.yaml`) are rendered from
+The governance workflows (`gates.yaml`, `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`,
+`epic-rollback.yaml`, `recover-prs.yaml`, `check-dependencies.yaml`, `clean-images.yaml`, `pr-relay.yaml`,
+`auto-approve-dependabot.yaml`, `lock-closed.yaml`, `notify.yaml`, `auto-assign-author.yaml`) are rendered from
 `cli/internal/repocfg/templates/governance/`
 and carry a "Managed by `a-novel repo update`" banner. Edit the template in the stack repo; a change to
 the copy in a repo is overwritten. What those workflows mean is `coordinate-landing`'s subject.

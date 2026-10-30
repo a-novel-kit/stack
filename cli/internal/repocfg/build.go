@@ -371,18 +371,24 @@ func workflowOps(c *ClassPreset, repoPath string) ([]Op, error) {
 	// The master ruleset gates merges, and these workflows run that gate.
 	if c.Rulesets.Master {
 		w.put(
-			"merge-gate.yaml",
-			"epic-freeze.yaml",
+			"gates.yaml", // runs merge-gate, epic-freeze, review-gate and derive-status in one run per event
 			"approve-pr.yaml",
-			"derive-status.yaml",
 			"epic-rollback.yaml",
 			"recover-prs.yaml",        // re-arms pull requests the merge queue drops on a timeout
 			"check-dependencies.yaml", // posts a check the master ruleset requires
-			"feature-env.yaml",        // removes the with-feature-env label a push made stale
-			"review-gate.yaml",        // posts a check the master ruleset requires
 			"pr-relay.yaml",           // carries review and merge-queue events to the gates on the default branch
 		)
 	}
+	// gates.yaml absorbed each gate's own workflow and notify-reviews.yaml, and
+	// check-dependencies.yaml absorbed feature-env.yaml.
+	w.drop(
+		"merge-gate.yaml",
+		"epic-freeze.yaml",
+		"derive-status.yaml",
+		"review-gate.yaml",
+		"notify-reviews.yaml",
+		"feature-env.yaml",
+	)
 	// A class without the tags ruleset deletes the release callers, so a class
 	// change leaves no release mechanics behind.
 	if c.Rulesets.Master && c.Rulesets.Tags {
@@ -397,8 +403,6 @@ func workflowOps(c *ClassPreset, repoPath string) ([]Op, error) {
 	w.drop("lock-pr.yaml")
 	// Every repo reports its default-branch failures and its releases to Discord.
 	w.put("notify.yaml")
-	// Reviews run a pull request's own workflow copy, so they post from pr-relay's runs.
-	w.put("notify-reviews.yaml")
 	// Only classes whose images no deployment pins by digest delete the images nothing names.
 	if c.CleanImages {
 		w.put("clean-images.yaml")
