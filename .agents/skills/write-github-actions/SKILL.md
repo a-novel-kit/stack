@@ -119,8 +119,8 @@ runs:
   `go install <module>@v<version>`, which builds the source Go's checksum database recorded, as
   `scan-secrets` and `refresh-apko-locks` do. The step sets `GOPROXY: "https://proxy.golang.org|direct"`:
   `go install` never retries, and the pipe sends any proxy error to the origin, which the checksum
-  database still checks. A downloaded binary takes a caller `sha256` input on the
-  line after `version` and passes `sha256sum --check` before it runs, and a datasource in the base
+  database still checks. Every Go action step that fetches modules sets it too. A downloaded binary
+  takes a caller `sha256` input on the line after `version` and passes `sha256sum --check` before it runs, and a datasource in the base
   Renovate preset moves the hash with the version
   ([release files pinned by hash](references/renovate-presets.md#release-files-pinned-by-hash)). A
   container image runs by digest: the caller pins `version: "<tag>@sha256:<digest>"`, as for

@@ -75,11 +75,13 @@ maximum supported`. A tool's indirect `golang.org/x/tools` cannot read the new c
   Bump the preset; Renovate then closes the PR, or adds the image once it exists.
 - **Docker Hub `429` or `504`, or a Sigstore `tlog` 404.** External and transient: rerun within the
   flake budget.
-- **A `go install` step, such as `scan-secrets`, fails with `read "https://proxy.golang.org/…":
-stream error … INTERNAL_ERROR`.** The Go module proxy dropped a download. From workflows v1.76.0
-  the step falls back to the module's origin (`write-github-actions`); on an older pin, rerun within
-  the flake budget. In a merge group it drops the PR as `failed_checks`, which `recover-prs.yaml`
-  leaves alone: `gh pr merge <n> --repo <r>` queues it again.
+- **A Go step fails with `read "https://proxy.golang.org/…": stream error … INTERNAL_ERROR`.** The
+  Go module proxy dropped a download. The `go install` steps, such as `scan-secrets`, fall back to
+  the module's origin from workflows v1.76.0, and the Go actions (`test-go`, `lint-go`,
+  `generate-go`) from a-novel-kit/workflows#697 (`write-github-actions`). On an older pin, or in a
+  Dockerfile's `go mod download` during a `build-*` job, rerun within the flake budget. In a merge
+  group it drops the PR as `failed_checks`, which `recover-prs.yaml` leaves alone:
+  `gh pr merge <n> --repo <r>` queues it again.
 - **`build-*` fails with `no match for platform in manifest`.** Docker Hub created the tag before
   its images, and Renovate bumped to it: `hub.docker.com/v2/repositories/library/<image>/tags/<tag>`
   lists no `images`. On 2026-10-21 node `24.22.1` stayed empty for hours. Nothing in the repository
