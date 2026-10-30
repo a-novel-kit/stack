@@ -47,7 +47,6 @@ func TestRepoCreateInfraDefaultsPublicAndBootstrapsBeforeRulesets(t *testing.T) 
 	wantCalls := []string{
 		"repo create a-novel/infra --public",
 		"api -X PUT repos/a-novel/infra/vulnerability-alerts",
-		"api -X PUT repos/a-novel/infra/immutable-releases",
 		"api -X DELETE repos/a-novel/infra/pages",
 		`"context":"epic-freeze"`,
 		`"context":"merge-gate"`,
