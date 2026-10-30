@@ -1,11 +1,25 @@
 # Request limits
 
 Read this reference when routed here by [write-go-service](../SKILL.md). Its rules apply to every
-REST route a service adds or changes, and to any costly operation.
+REST route and gRPC method a service adds or changes, and to any costly operation.
 
 Every service bounds what one caller can consume, in its own code, so the limits are reviewed with
 the routes they guard. golib's `httpf` carries the standard setup: `NewRouter` applies the body
 limit and the trusted visitor IP, and `Limits` builds the rate limits.
+
+## Decide on every route and method
+
+Each route or method you add or change gets one of these, decided with the code it guards:
+
+- **Standard only:** reads and cheap writes. The router's per-visitor rate (REST) or the server's
+  call cap (gRPC) covers them.
+- **Strict limits:** a route that issues tokens, checks a password or sends email, as
+  [Strict limits](#strict-limits) describes.
+- **Costly:** a route or method that calls a paid provider or spends heavy CPU or memory: a strict
+  per-caller rate and a concurrency gate on REST ([Costly routes](#costly-routes)), a method cap on
+  gRPC ([gRPC](#grpc)).
+- **Retune:** a limit that legitimate traffic hits changes its default in `env.go`, with the reason
+  beside it. Never remove a limit to make a test pass: turn the stack's limits off instead.
 
 ## Standard limits
 
@@ -67,11 +81,33 @@ Excess calls wait for a slot rather than exhaust the instance.
 
 ## Counters
 
-Counters live in memory, so each instance counts on its own. A service whose strict limits must be
+Counters live in memory, so each instance counts on its own, a pod on the cluster. A service whose strict limits must be
 exact runs on one instance. Needing a second is the trigger to move the counters to a shared store,
 Valkey on Google Cloud.
 
 ## gRPC
 
-Internal gRPC servers rely on IAM and internal ingress, Cloud Run's concurrency cap and grpc-go's
-4 MiB message default. A per-user cap on a costly RPC belongs in core, where the user is known.
+gRPC servers are internal. Only our services call them, each proving its identity with a service
+token, and network policies admit only declared callers. Per-caller rate limits therefore stay at
+the edge, on the REST routes that see visitors, and a per-user cap on a costly RPC belongs in core,
+where the user is known. A gRPC server bounds its calls in flight, per instance, and keeps grpc-go's
+4 MiB message default.
+
+- **Server cap.** `grpcf.NewCallLimit`, from `GRPC_MAX_CONCURRENT_CALLS`, caps the calls one
+  instance runs at once, health checks aside. Size it so the cap times one call's peak memory fits
+  the container's memory limit; infra sets it beside `GOMEMLIMIT`. Pass the `CallLimit` to
+  `grpcf.NewServer` as an extra option.
+- **Method cap.** `grpcf.MethodCallLimit(fullMethod, limit)` gives one method a cap of its own,
+  inside the server's, as a route's rate limit adds to the router's. Add one when a method costs far
+  more than its neighbours, such as a paid provider call or a large payload, so its calls cannot fill
+  the server and starve cheap ones like a status poll. Each cap is configuration like a rate: an
+  environment variable with its default in `env.go`, and the `CallLimit` built once in the server's
+  wiring file, never a literal in `main`.
+- **Refusal.** A full server or method refuses a call with `UNAVAILABLE` before reading it.
+  In-cluster callers retry `UNAVAILABLE` on the next pod through golib's service config, so a
+  refusal moves the call rather than failing it.
+- **The retry rule.** `UNAVAILABLE` means the call did not run. A handler that has had an effect, a
+  write, a paid call or an email, answers another code, or the caller's retry runs the effect twice.
+- **Scaling.** A service whose calls mostly wait, so CPU never shows its load, serves the cap's
+  gauge on a metrics port of its own (`CallLimit` is an `http.Handler`), and infra scales it on its
+  calls in flight (a-novel/.github#536).

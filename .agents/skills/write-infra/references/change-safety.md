@@ -192,6 +192,10 @@ metric resource itself succeeds at once.
   raises the quota.
 - **A service with in-memory rate limits** keeps the instance count its limits assume. Raising it
   is a design change, not a tuning one.
+- **A gRPC workload's call cap** (`GRPC_MAX_CONCURRENT_CALLS`) sits beside its `GOMEMLIMIT` in the
+  cluster root, so a change to one is reviewed with the other: the cap times one call's peak memory
+  fits the memory limit. `cluster-workload` makes a gRPC workload's Service headless, so callers
+  balance their calls across its pods; an HTTP workload keeps its ClusterIP.
 
 ## Database and backup hosts
 
