@@ -180,6 +180,10 @@ Rules:
   `:focus-within` state while focus remains on the native child; suppress hover treatments that obscure
   focus or invalid state. Keep open lists bounded by a configurable maximum block size with overflow
   scrolling, disabled options, and an explicit empty selection when the contract permits it.
+- Keep every button inside a field ghost only: no border, ring or glow in any state, just its icon,
+  a background and a color. The field already outlines the control, and a second outline inside it
+  reads as a separate control. Only the keyboard focus outline stays. Build such buttons from uikit's
+  internal `FieldButton`, as the PasswordInput toggle and the Combobox trigger do.
 - Share surface, option-row, spacing, radius, and elevation tokens across listbox, menu, and popover
   families while preserving each widget's distinct selection and keyboard model.
 - Keep interactive target size at least the WCAG 2.2 AA minimum; use a larger touch target where the
