@@ -126,6 +126,14 @@ Run the whole gate the way CI does:
 - **A plan that runs during a deploy reads half-applied state.** It shows a just-merged change as
   still to create, and template updates in roots the pull request never touched. Wait for the
   `deploy.yaml` runs to finish, then re-run the pull request's checks before comparing the plan.
+- **A lost answer to the state lock's write leaves the job's own lock.** OpenTofu's GCS backend
+  creates `default.tflock` only if none exists, and Google's client retries a write whose answer it
+  lost. When the lost write had succeeded, the retry fails on the lock it created: tofu reports the
+  lock as held, by its own runner, and never releases it. The tofu action releases a lock whose
+  `Who` is its own runner, by its ID, and retries the plan (a-novel/infra#1341). Never widen that to
+  other writers: anyone else's lock may belong to a live run, and a cancelled deploy's goes through
+  infra's `docs/runbooks/state.md`. One tofu attempt can retry for minutes, so the plan's retry
+  window starts at the first failure.
 - **A quota ceiling below recent usage passes the plan and fails the apply.** Google refuses it
   (`QUOTA_DECREASE_BELOW_USAGE`), and the deploy stops at foundation until a revert merges. Its
   "recent usage" outlasts the 10-minute average the quota pages describe: Cloud Run CPU was still
