@@ -12,13 +12,13 @@ even ones you reported turns ago, until they are actually resolved.
 
 Each row's identifier is an **inline markdown link** to the PR or issue, so the target is one click
 away. Every PR row also carries its approval handoff in a dedicated **Admin-only approval (after
-review)** column; use an em dash for non-PR rows. A minimal shape:
+review)** column; leave it empty for non-PR rows. A minimal shape:
 
 ```markdown
 | Item                                    | State           | Needs               | Admin-only approval (after review)                                                                                                                                   |
 | --------------------------------------- | --------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [#321](https://github.com/…/321)        | Ready, CI green | Your review → merge | `gh workflow run approve-pr.yaml --repo a-novel/service-authentication --ref master --field pull_request=https://github.com/a-novel/service-authentication/pull/321` |
-| [.github#432](https://github.com/…/432) | Task, blocked   | Decide ownership    | —                                                                                                                                                                    |
+| [.github#432](https://github.com/…/432) | Task, blocked   | Decide ownership    |                                                                                                                                                                      |
 ```
 
 Drop the table only when the turn touched no code or issues at all (a pure question). If nothing
@@ -34,7 +34,7 @@ For every open PR in the recap, put a copy-pasteable command **inside that PR's 
 the admin who opened it, a member of `owners-<class>` or core, record their approval through the
 repo's `approve-pr` workflow after reviewing the PR. Fill it only when the operator opened the PR and
 `gh api repos/<org>/<repo> --jq .permissions.admin` prints `true` (see
-[check-access](../../check-access/SKILL.md)). Otherwise put an em dash there, and the Needs cell
+[check-access](../../check-access/SKILL.md)). Otherwise leave that cell empty, and the Needs cell
 names a maintainer's review:
 
 ```bash

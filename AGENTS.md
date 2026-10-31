@@ -32,6 +32,11 @@ on paste, so `…/pull/12; done` arrives as `…/pull/12\; done` and fails to pa
 holding `[]`, `?` or `*`, list loop items literally, and quote every expansion: zsh neither splits
 an unquoted `$VAR` into words nor passes an unmatched glob through.
 
+Write no em dash (—) in anything you produce: interface text, documentation, comments, commits,
+issues, pull requests and replies. It spends width for nothing and reads as machine-written. Use a
+period, a colon, a comma or parentheses instead. A page title separates the page from the brand
+with `|`, and an empty table cell stays empty.
+
 Prefer the smallest complete solution: fewer instructions for a reader to hold, fewer moving parts,
 and clear, idiomatic control flow. Preserve required behavior and the project's architecture,
 dependency policy, security, and testing standards. Simplify the whole affected path before
