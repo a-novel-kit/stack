@@ -196,6 +196,12 @@ metric resource itself succeeds at once.
   cluster root, so a change to one is reviewed with the other: the cap times one call's peak memory
   fits the memory limit. `cluster-workload` makes a gRPC workload's Service headless, so callers
   balance their calls across its pods; an HTTP workload keeps its ClusterIP.
+- **A service whose calls mostly wait scales on its calls in flight, beside CPU.** CPU stays low
+  on its full pods. `cluster-workload`'s `scaling_gauge` reads the pods' `grpc_server_calls_in_flight`
+  on their metrics port through an `AutoscalingMetric`. The autoscaler keeps it at 60% of
+  `GRPC_MAX_CONCURRENT_CALLS` per pod, Cloud Run's default target, and CPU at 70%. It absorbs
+  bursts only: `replicas.max` times the call cap bounds the calls the service runs at once, and so
+  the load it sends downstream.
 
 ## Database and backup hosts
 
