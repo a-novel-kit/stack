@@ -277,13 +277,13 @@ metric resource itself succeeds at once.
   - State holds no secret values, because those are added outside OpenTofu.
 - **Only admins bypass the rulesets.** A merge to `master` deploys production, and every bot
   reaches it through a pull request. The Agent and Dependencies keys live only in each repository's
-  `governance` environment, filled from Bitwarden by `a-novel repo update`. That environment admits
-  the default branch, plus guarded release lines and tags. Every repository's default-branch
-  workflows can read the keys, so no bot may push `master` directly. The `infra` class sets
-  `rulesets.admins_only`. A bot's pull request merges alone only as a release pin, a version update
-  Renovate armed, or a refresh of Google's service ranges to exactly what Google publishes. A pin
-  deploys only an image of an immutable Release the release App published, built by that tag's own
-  run.
+  `governance` environment, which the GitHub root's secret sync fills from Secret Manager. That
+  environment admits the default branch, plus guarded release lines and tags. Every repository's
+  default-branch workflows can read the keys, so no bot may push `master` directly. The `infra`
+  class sets `rulesets.admins_only`. A bot's pull request merges alone only as a release pin, a
+  version update Renovate armed, or a refresh of Google's service ranges to exactly what Google
+  publishes. A pin deploys only an image of an immutable Release the release App published, built by
+  that tag's own run.
 - **Internet egress leaves through Cloud NAT, past the egress allowlist.** A rule names a host by
   FQDN only when every client resolves it alike, as Cloudflare's anycast does for `api.openai.com`.
   The firewall admits only the addresses its own lookup returned, and Google's domains answer each
@@ -426,8 +426,8 @@ deployed. a-novel/infra#785 is the worked example.
 - **The new root's first plan fails.** OpenTofu's GCS backend creates a missing state under a lock
   even with `-lock=false`, and the plan identity only reads the state bucket, so
   `storage.objects.create` is denied on `<root>/default.tflock`. The deploy creates the state on
-  merge. `plan-<root>` is not a required check until `a-novel repo update`, and plan jobs skip the
-  merge queue, so the failure blocks nothing. List `a-novel repo update` in the handoff.
+  merge. `plan-<root>` becomes a required check only once the GitHub root reads the merged
+  `main.yaml`, and plan jobs skip the merge queue, so the failure blocks nothing.
 - **The database host scripts are shared.** `modules/database-runtime`'s `startup.sh` and
   `shutdown.sh` read the service, port and database name from foundation's template metadata
   (`agora-database-service`, `agora-database-port`, `agora-database-name`), so a new service changes

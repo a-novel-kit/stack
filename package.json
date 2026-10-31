@@ -13,9 +13,8 @@
     "preinstall": "npx only-allow pnpm",
     "lint": "pnpm lint:symlinks && pnpm lint:stylecheck && pnpm lint:eslint",
     "lint:eslint": "eslint .",
-    "lint:stylecheck": "prettier --check . --config prettier.config.ts && pnpm lint:templates",
-    "lint:symlinks": "node scripts/check-symlinks.js",
-    "lint:templates": "prettier --check --no-config --no-editorconfig cli/internal/repocfg/templates"
+    "lint:stylecheck": "prettier --check . --config prettier.config.ts",
+    "lint:symlinks": "node scripts/check-symlinks.js"
   },
   "devDependencies": {
     "@a-novel-kit/nodelib-config": "^2.0.0",

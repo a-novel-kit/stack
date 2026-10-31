@@ -71,23 +71,6 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Keep the a-novel-kit/workflows action pins in the repocfg governance caller templates current. Renovate's built-in github-actions manager scans only .github/workflows/, and `a-novel repo update` deploys these templates fleet-wide.",
-      "managerFilePatterns": ["cli/internal/repocfg/templates/governance/**"],
-      "matchStrings": ["a-novel-kit/workflows/[^@\\s]+@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
-      "depNameTemplate": "a-novel-kit/workflows",
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "description": "Keep the third-party actions in the repocfg templates pinned to their release commit. They run beside the Agent App's key, so a moved tag must not change what runs; the built-in github-actions manager never scans these templates.",
-      "managerFilePatterns": ["cli/internal/repocfg/templates/governance/**"],
-      "matchStrings": [
-        "uses: (?<depName>[\\w.-]+/[\\w.-]+)@(?<currentDigest>[0-9a-f]{40}) # (?<currentValue>v\\d+\\.\\d+\\.\\d+)"
-      ],
-      "datasourceTemplate": "github-tags"
-    },
-    {
-      "customType": "regex",
       "description": "Keep the nvm installer URL in the developer guide on nvm's latest release. The guide pins it because nvm publishes its installer per tag.",
       "managerFilePatterns": ["docs/**/*.md"],
       "matchStrings": ["raw\\.githubusercontent\\.com/nvm-sh/nvm/(?<currentValue>v\\d+\\.\\d+\\.\\d+)/install\\.sh"],

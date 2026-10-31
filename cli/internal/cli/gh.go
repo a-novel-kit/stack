@@ -48,17 +48,6 @@ func ghRun(stdin string, args ...string) (string, error) {
 
 func gh(args ...string) (string, error) { return ghRun("", args...) }
 
-// ghJSON runs `gh api -X <method> <path> --input -` with body marshalled to
-// JSON on stdin.
-func ghJSON(method, path string, body any) error {
-	raw, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-	_, err = ghRun(string(raw), "api", "-X", method, path, "--input", "-")
-	return err
-}
-
 // ghError folds a failed gh run's output into err. gh prints the HTTP status
 // on stderr and GitHub's JSON error on stdout; only the JSON's errors list
 // names the field GitHub rejected, so a JSON stdout joins the message.
@@ -98,27 +87,9 @@ func hasHTTPStatus(err error, code int) bool {
 	return errContains(err, "("+status+")") || errContains(err, "gh: "+status)
 }
 
-func isNotFound(err error) bool      { return hasHTTPStatus(err, http.StatusNotFound) }
-func isRateLimited(err error) bool   { return errContains(err, "rate limit") }
-func isSignoffLocked(err error) bool { return errContains(err, "signoff", "enforced") }
-func isWorkflowScope(err error) bool { return errContains(err, "workflow", "scope") }
-
-// isEmptyRepo reports GitHub's 409 for a repository with no commits yet, where
-// a branch-ref read answers "Git Repository is empty.".
-func isEmptyRepo(err error) bool { return errContains(err, "git repository is empty") }
+func isNotFound(err error) bool    { return hasHTTPStatus(err, http.StatusNotFound) }
+func isRateLimited(err error) bool { return errContains(err, "rate limit") }
 
 func isAlreadyExists(err error) bool {
 	return hasHTTPStatus(err, http.StatusConflict) || errContains(err, "already exists")
-}
-
-// isStaleHead reports the typed STALE_DATA error createCommitOnBranch returns
-// when the branch tip no longer matches expectedHeadOid.
-func isStaleHead(out string, err error) bool {
-	return err != nil && (strings.Contains(out, "STALE_DATA") || errContains(err, "expected branch to point to"))
-}
-
-// firstLine is s up to its first newline.
-func firstLine(s string) string {
-	line, _, _ := strings.Cut(s, "\n")
-	return line
 }

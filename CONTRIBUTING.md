@@ -45,7 +45,6 @@ cli/
     ├── detect/                    working-tree discovery of test and build targets
     ├── build/                     a detected target as a job: env, compose up/down, deadline
     ├── jobs/                      bounded parallel job runner with live progress
-    ├── repocfg/                   GitHub repo config templates and the plan they build
     ├── tui/                       Bubble Tea TUI
     ├── ui/                        picker, live job view and report for every batch command
     ├── setup/                     `core setup` bootstrap
@@ -57,21 +56,20 @@ cli/
 
 ### Parallel jobs
 
-`test`, `build`, `core sync` and `repo update --all` hand their work to one runner, `internal/jobs`. At most `--jobs` units run at once, each with its output captured. On a terminal, each finished job prints one status line above a live view of the running jobs. Without a terminal, each job prints a line as it starts and as it finishes, so output never interleaves.
+`test`, `build` and `core sync` hand their work to one runner, `internal/jobs`. At most `--jobs` units run at once, each with its output captured. On a terminal, each finished job prints one status line above a live view of the running jobs. Without a terminal, each job prints a line as it starts and as it finishes, so output never interleaves.
 
 A report closes the run. It prints, in order:
 
-- the full output of every failed job, or of every repository for `repo update --all`, as the audit trail of its writes;
+- the full output of every failed job, or of every repository `core sync` could not bring up to date;
 - coverage, for tests;
 - the summary, last, so it is on screen when the command returns.
 
 The default limit follows what bounds the work:
 
-| Command             | Jobs at once                                                                                            |
-| ------------------- | ------------------------------------------------------------------------------------------------------- |
-| `test`, `build`     | A quarter of the CPUs, at least two, behind the picker; one at a time with `-y` or without a terminal.  |
-| `core sync`         | One repository per CPU.                                                                                 |
-| `repo update --all` | Six repositories, under GitHub's secondary rate limit. A rate-limited `gh` call retries after a minute. |
+| Command         | Jobs at once                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------------ |
+| `test`, `build` | A quarter of the CPUs, at least two, behind the picker; one at a time with `-y` or without a terminal. |
+| `core sync`     | One repository per CPU.                                                                                |
 
 ### Key invariants
 

@@ -78,7 +78,7 @@ under `a-novel publish` is `stamp`, the doc-version helper `prepublish:doc` call
 `use-a-novel-cli`).
 
 **Who can cut a release is enforced server-side**, by rulesets and the environment that
-`a-novel repo update` reconciles:
+a-novel/infra's GitHub root manages:
 
 1. **The `master` ruleset** restricts who can push the version-bump commit.
 2. **The `tags` ruleset** restricts who can create a tag. A tag is the release decision: it starts

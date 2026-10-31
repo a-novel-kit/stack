@@ -135,7 +135,7 @@ When you work with a backup, point `user.signingkey` at its signing key instead.
 ## Duties
 
 - **Manage members:** [add](./add-member), [promote](./promote-member) and [offboard](./offboard-member) them.
-- **Manage repositories:** [create](./create-repository) them, apply their settings with [`repo update`](./repositories), and [promote a branch](./promote-branch) to `master`.
+- **Manage repositories:** [create](./create-repository) and [configure](./repositories) them, and [promote a branch](./promote-branch) to `master`.
 - **Operate production:** follow the [infra runbooks](https://github.com/a-novel/infra/tree/master/docs/runbooks).
 - **Answer a compromise:** when an account, a key or a token leaks, [cut the attacker off and recover](./respond-to-compromise).
 
@@ -153,6 +153,6 @@ Each organization has its own Agent App. It posts the [bot comments](/cli/bot-co
    ```
 
 2. Store the App's client ID as the organization Actions variable `AGENT_BOT_CLIENT_ID`.
-3. Generate a private key, and store it as `AGENT_BOT_PRIVATE_KEY` in the organization's project of [Bitwarden](./bitwarden), `a-novel` or `a-novel-kit`. Delete the downloaded file.
-4. [Apply the settings](./repositories#apply) with `--all`, which copies the key into each repository's governance environment.
+3. Generate a private key, and add it as a version of `production-github-governance-<org>-AGENT_BOT_PRIVATE_KEY`, as infra's [Governance secrets](https://github.com/a-novel/infra/blob/master/docs/runbooks/secrets.md#governance-secrets) runbook describes. Delete the downloaded file.
+4. Bump the key's pin in a-novel/infra, in a pull request. Its deploy copies the key into each repository's governance environment.
 5. Comment on a scratch pull request to check.

@@ -91,9 +91,9 @@ In the [Bitwarden web app](https://vault.bitwarden.eu), open **Secrets Manager �
 
 ### Core: close their Bitwarden access
 
-1. Under **Secrets Manager → Machine accounts**, open the account behind `repo update` and revoke their access token.
-2. Remove them under **Admin Console → Members**.
-3. Rotate every secret of the `a-novel` and `a-novel-kit` projects, since they could read them all. Replace each value with a new one from its source, then [apply the settings](./repositories#apply) with `--all`, which copies the new values to every repository. Delete each old App key or token only after that run.
+1. Remove them under **Admin Console → Members**.
+2. Rotate every secret of the `a-novel` and `a-novel-kit` projects, since they could read them all. Replace each value with a new one from its source.
+3. Rotate the governance keys, as infra's [Governance secrets](https://github.com/a-novel/infra/blob/master/docs/runbooks/secrets.md#governance-secrets) runbook describes. Its deploy copies the new values to every repository. Delete each old App key only after that deploy.
 
 ### Ops: remove their production access
 

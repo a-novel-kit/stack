@@ -1,42 +1,11 @@
 # Configure repositories
 
-Repository settings are code: [templates](https://github.com/a-novel-kit/stack/tree/master/cli/internal/repocfg/templates) in the stack define them for every repository. `a-novel repo update` applies them and reverts manual changes, so change settings through the templates. Anyone can preview; applying takes admin rights.
+Repository settings are code. The [GitHub root](https://github.com/a-novel/infra/tree/master/environments/production/github) in a-novel/infra holds every repository of both organizations, with its settings, team access, labels, rulesets, environments and secret access. Its next apply reverts a manual change, so change settings through it.
 
-## Preview
+## Change a setting
 
-From the repository's default branch:
+Edit the repository's entry under `repositories` in `environments/production/github/terraform.tfvars`, or its class in `main.tf` to change every repository of that class. Open a pull request: its `plan-github` check shows the change, and the merge's deploy applies it.
 
-```bash
-REPO_DIR=~/git-projects/a-novel/app/service-json-keys
-cd "$REPO_DIR"
-a-novel repo update --dry-run
-```
+## Follow the code
 
-## Apply
-
-Granting organization secrets needs the `admin:org` scope; add it for the run only:
-
-```bash
-gh auth refresh -h github.com -s admin:org
-a-novel repo update
-gh auth refresh -h github.com --remove-scopes admin:org
-```
-
-Without the scope, `a-novel repo update` stops before it changes anything and prints the command that grants it.
-
-`--all` covers the whole workspace, and skips checkouts off their default branch or with uncommitted changes:
-
-```bash
-a-novel repo update --all --dry-run
-a-novel repo update --all
-```
-
-Template changes apply without a rebuild, except a new field, which needs `a-novel install` first.
-
-## Store the Bitwarden token
-
-Store the [Bitwarden](./bitwarden#configure) access token once; `repo update` reads it from there:
-
-```bash
-a-novel secrets set BWS_ACCESS_TOKEN
-```
+Required checks, environments and secret access follow each repository's workflows on its default branch, so nothing needs running. Within 10 minutes of a merge that changes them, the root's sweep applies the new set, as infra's [Repository config](https://github.com/a-novel/infra/blob/master/docs/architecture.md#repository-config) describes.

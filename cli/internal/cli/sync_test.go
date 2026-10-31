@@ -97,7 +97,7 @@ func TestUpdateRepo(t *testing.T) {
 }
 
 // TestSyncJobs pins that --allow and --ignore name a repo by its full or its
-// bare name, as `repo update --all --exclude` does, and that --ignore wins.
+// bare name, and that --ignore wins.
 func TestSyncJobs(t *testing.T) {
 	t.Parallel()
 

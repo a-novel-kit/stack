@@ -77,7 +77,8 @@ Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub
 - **Every `main.yaml` job ID is a required check.**
   - Matrix jobs and reusable-workflow jobs report different context names, so give each root its
     own `plan-<root>` job that calls the composite action.
-  - Renaming or removing a job needs an admin-bypass merge, then `a-novel repo update` on `master`.
+  - Renaming or removing a job needs an admin-bypass merge. The GitHub root's sweep then requires
+    the new set within 10 minutes.
 - **Local actions use GitHub's `$/.github/actions/<name>` self-repository syntax.** The repository's
   actionlint config ignores its false positive; zizmor prefers it.
 - **Third-party actions are pinned to their release commit,** as `owner/repo@<sha> # vX.Y.Z`, like

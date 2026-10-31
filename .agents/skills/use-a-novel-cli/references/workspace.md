@@ -78,7 +78,7 @@ as the first action in the new workspace, so later test/build/run commands have
 something to operate on.
 
 **`workspace-repos.yaml` at the workspace root is the whitelist** — the single
-source of truth for which repos exist locally, read at runtime by both
-`core sync` and `repo update --all`. Add a repo by editing that file; no rebuild,
+source of truth for which repos exist locally, read at runtime by
+`core sync`. Add a repo by editing that file; no rebuild,
 no code change. Do not restate its contents anywhere (this doc used to name six
 repos and went stale as the list grew); read the file.

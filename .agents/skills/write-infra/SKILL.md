@@ -38,6 +38,7 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 | `environments/production/foundation` | Projects, VPC, firewall, perimeter, database hosts, shared IAM, budget, alerts |
 | `environments/production/<service>`  | One service: Cloud Run services and jobs, backup repository, alerts            |
 | `environments/production/sentry`     | Sentry projects, spike protection, alerts and dashboards                       |
+| `environments/production/github`     | Both organizations' repositories, with their rulesets, teams and environments  |
 | `environments/recovery`              | One manual disaster-recovery drill host per disposable project                 |
 | `modules/`                           | Only code with two callers or one shared invariant                             |
 
@@ -97,6 +98,12 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 - Making a workload report its faults to Sentry: read
   [Report faults to Sentry](references/change-safety.md#report-faults-to-sentry).
 - Workflows, tests, linting or tooling: read [Tooling and tests](references/tooling-and-tests.md).
+- Creating, archiving or configuring a repository, or changing its rulesets, teams, labels,
+  environments or secret access: edit the GitHub root, as infra's
+  [Repository config](https://github.com/a-novel/infra/blob/master/docs/architecture.md#repository-config)
+  describes. A repository is an entry of its `terraform.tfvars`, and its class sets the rest. A
+  scoped secret joins that file only after an admin switches the org secret to selected
+  repositories: one still visible to every repository fails each grant with HTTP 409.
 - Admitting a repository to the Drive visual-test identities: follow
   [Subscribe a repository to Drive visual tests](../write-frontend-tests/references/drive-subscription.md),
   whose later steps run after the merge.
@@ -107,7 +114,7 @@ Prove a refactor is a no-op before review. Report each root's expected plan in t
 imports, in-place changes and deletions, with the reason for each. Separate stages that need the
 deletion or downtime label from those that do not. Stack them when they depend on one another. In the handoff,
 list what must be done by hand and who holds it: the label (a maintainer), then the admin-bypass
-merge after a required-check rename, GitHub settings and `a-novel repo update` (core).
+merge after a required-check rename and the GitHub settings the root does not manage (core).
 
 `master` requires an approval the author's account cannot give. When the user is an admin of
 a-novel/infra and opened the pull request, they review, then record it with
