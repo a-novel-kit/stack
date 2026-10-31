@@ -185,9 +185,9 @@ rhetorical label ("Why this matters:", "Note:"); keep the plain word order, sinc
 inversion, or a cleft makes the reader unpack a sentence before reading it. Load and apply that section
 here, including its anti-tautology check for headings, prose, and examples.
 
-What project docs add: two short sentences beat one long one spliced together. Avoid the em-dash that
-cuts a sentence in half, and the enumeration that only restates what you just wrote. Get the
-conjunction comma right — put one before and, but, or so only when a full clause with its own subject
+What project docs add: two short sentences beat one long one spliced together. Write no em dash
+(AGENTS.md), and no enumeration that only restates what you just wrote. Get the conjunction comma
+right: put one before and, but, or so only when a full clause with its own subject
 follows ("the board runs itself, and you barely notice it"), never before a compound predicate sharing
 the subject ("easier to write and far easier to review"); "so" meaning "therefore" takes the comma, a
 restrictive "because" does not. When a draft feels dense, revise for plainness before shipping: the
