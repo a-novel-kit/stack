@@ -1,8 +1,8 @@
 ---
 name: use-a-novel-cli
 description: >
-  Operate a-novel for tests, builds, releases, services, workspace/repository management, and
-  secrets. Always load alongside skills that test, build, release, or start/stop services.
+  Operate a-novel for tests, builds, releases, services, workspace management, and secrets. Always
+  load alongside skills that test, build, release, or start/stop services.
 ---
 
 # Use the `a-novel` CLI
@@ -16,7 +16,6 @@ a-novel
 ├── test          standalone — runs Go + pnpm tests in the working tree
 ├── build         standalone — builds Go binaries, pnpm bundles, Podman images
 ├── publish       standalone — release doc helpers (releases themselves run in CI)
-├── repo          standalone — GitHub repo config, rulesets, required checks
 ├── core          daemon control (start, setup, kill, status, prepare-reinstall)
 ├── run           daemon-backed verbs (services + targets)
 ├── secrets       standalone — local encrypted secrets, injected into child envs
@@ -47,7 +46,8 @@ Read this entry point once, then load only the references for the operations you
 The selected reference is required before executing its commands.
 
 - Tests, builds, or release doc stamping: [testing and building](references/testing-building.md).
-- Repository templates, rulesets, or required checks: [repository configuration](references/repositories.md).
+- Repository settings, rulesets, or required checks: no command manages them. a-novel/infra's GitHub
+  root does, as `write-infra` describes.
   Agents use the dry-run path; repository writes are core's.
 - Starting, stopping, inspecting, or clearing a service: [service operations](references/services.md).
 - Daemon, stacks, workspace sync, or bot comments: [workspace operations](references/workspace.md).
@@ -97,8 +97,8 @@ jobs and scripts drive it like this:
   discovered target, sequentially unless `-j` sets a limit (CI-safe). Both fall
   back to that path with no TTY, but pass `-y` explicitly — it states intent and
   survives a stray PTY. Pair with `--dry-run` to inspect the target list first.
-- **Batch commands print one line per job.** `test`, `build`, `core sync` and
-  `repo update --all` share a parallel runner. Without a TTY, each job prints a
+- **Batch commands print one line per job.** `test`, `build` and `core sync`
+  share a parallel runner. Without a TTY, each job prints a
   line as it starts and as it finishes, never interleaved, and a report with the
   full output of every failure closes the run.
 

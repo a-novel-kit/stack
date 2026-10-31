@@ -39,7 +39,7 @@ gh api -X PATCH "repos/$ORG/$NAME" -f default_branch=master \
   --jq .default_branch
 ```
 
-Rulesets that target the default branch follow it to `master`. The old line keeps only the rules for every branch, such as the commit-message check. It freezes once `master` releases a later major: the next [settings apply](./repositories#apply) locks every `v<N>` branch below the major in `master`'s root `package.json`.
+Rulesets that target the default branch follow it to `master`. The old line keeps only the rules for every branch, such as the commit-message check. It freezes once `master` releases a later major: the GitHub root then [locks](./repositories#follow-the-code) every `v<N>` branch below the major in `master`'s root `package.json`.
 
 ## Delete the new line
 
@@ -70,9 +70,9 @@ git switch -C master origin/master
 
 Ask every contributor with a checkout of the repository to run the same commands.
 
-## Apply the settings
+## Wait for the required checks
 
-The `master` ruleset still requires the jobs in the old line's `main.yaml`. A pull request blocks on each job the new line dropped. [Apply the settings](./repositories#apply) from the checkout you just reset.
+The `master` ruleset still requires the jobs in the old line's `main.yaml`, until the GitHub root [reads the new one](./repositories#follow-the-code) within 10 minutes. Until then, a pull request blocks on each job the new line dropped.
 
 ## Run Renovate
 

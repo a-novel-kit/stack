@@ -65,6 +65,3 @@ This step needs the [Bitwarden web app](https://vault.bitwarden.eu).
 
 1. Invite them under **Admin Console → Members**, with Secrets Manager access.
 2. Under **Secrets Manager → Projects**, open `a-novel`, `a-novel-kit` and `github-discord-map` in turn and give them write access on the **People** tab.
-3. Under **Secrets Manager → Machine accounts**, open the account behind `repo update`. Create an access token named after them and hand it over privately.
-
-They [store the token](./repositories#store-the-bitwarden-token) on their machine. A token per person lets an offboarding revoke only theirs.

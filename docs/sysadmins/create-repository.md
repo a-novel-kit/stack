@@ -1,31 +1,33 @@
 # Create a repository
 
-A new repository takes its settings from its class, joins the workspace and gets its own Discord role. Creating one takes owner rights on its organization.
+A new repository takes its settings from its class, joins the workspace and gets its own Discord role. Creating one is a pull request to a-novel/infra. The release App and the Discord role take owner rights on its organization.
 
 ## Set the repository
 
-The name sets the class: `service-*` for a service, `platform-*` for a platform, and a library for most other names. A [class override](https://github.com/a-novel-kit/stack/tree/master/cli/internal/repocfg/templates#classesclassyaml-and-reposorg_repoyaml) in the stack sets any other class.
+Later steps read its organization and name:
 
 ```bash
 ORG=a-novel
 NAME=service-example
 ```
 
-## Create it
+## Declare it
 
-Services and platforms start from their template. Use `platform-template` for a platform, and leave `--template` out for anything else.
+Add the repository to `repositories` in a-novel/infra's `environments/production/github/terraform.tfvars`, in a pull request. Its class sets its settings: `service`, `platform`, `library`, `workflows`, `meta` or `infra`. Topics help outsiders find it: start with `agora-storyverse`, then add its language, kind and domain.
 
-```bash
-gh auth refresh -h github.com -s admin:org
-a-novel repo create "$ORG" "$NAME" --template service-template
-gh auth refresh -h github.com --remove-scopes admin:org
+```hcl
+"a-novel/service-example" = {
+  class       = "service"
+  description = "Says what the service does, in one sentence."
+  topics      = ["agora-storyverse", "go", "golang", "microservice"]
+}
 ```
 
-A repository without a template starts without CI or Renovate. The `write-github-actions` skill describes both, so an agent can add them.
+The merge's deploy creates the repository, with its settings, team access and labels. A service or a platform starts from its template repository, `service-template` or `platform-template`. Any other class starts empty, without CI, Renovate or the governance workflows. The `write-github-actions` skill describes all three, so an agent can add them.
 
 ## Install the release App
 
-A repository that releases needs its organization's release App, `AnovelBot[Release]` or `AnovelKitBot[Release]`. Its rulesets fail with HTTP 422 until then. In the organization's **Settings → GitHub Apps**, configure the App and add the repository under **Repository access**.
+A repository that releases needs its organization's release App, `AnovelBot[Release]` or `AnovelKitBot[Release]`. In the organization's **Settings → GitHub Apps**, configure the App and add the repository under **Repository access**. Do it before a workflow naming the `release` environment reaches the default branch: the rulesets that follow name the App, and GitHub refuses them with HTTP 422 until it is installed.
 
 ## Add it to the workspace
 
@@ -36,13 +38,11 @@ git -C ~/git-projects/a-novel pull --ff-only
 a-novel core sync
 ```
 
-Then [apply its settings](./repositories#apply) from its new checkout, under `app/` or `kit/`.
-
-`repo create` configures the repository before it holds any workflow, so it creates no environment. Until the settings are applied again, every governance check fails on a missing key. Apply them as soon as a checkout holds the first `main.yaml` and `release.yaml`, even on its pull request branch. Discovery reads the working tree, so one run creates the `governance` and `release` environments and requires the new jobs.
+The repository has no ruleset until its default branch holds `.github/workflows/main.yaml`, so its first workflows merge without required checks. Within 10 minutes of that merge, the GitHub root's sweep gives it its rulesets and environments, and copies the governance keys its workflows name. Until then, every governance check fails on a missing key.
 
 ## Give it the release key
 
-The release workflow signs in as the release App with a key that only the repository's `release` environment holds. Once the settings created that environment, open the App's settings in the organization, generate a key under **Private keys**, and set it:
+The release workflow signs in as the release App with a key that only the repository's `release` environment holds. Once the sweep created that environment, open the App's settings in the organization, generate a key under **Private keys**, and set it:
 
 ```bash
 KEY_FILE=~/Downloads/anovelkitbot-release.2026-10-22.private-key.pem
@@ -86,11 +86,3 @@ gh auth refresh -h github.com --remove-scopes admin:org
 ```
 
 `gh variable get` prints the map, the new repository included. Give its role to the repository's admins, as in [Promote a member](./promote-member#give-the-repository-roles).
-
-## Tag it
-
-Topics help outsiders find the repository. Start with `agora-storyverse`, then add its language, kind and domain:
-
-```bash
-gh repo edit "$ORG/$NAME" --add-topic agora-storyverse,go,golang,microservice
-```

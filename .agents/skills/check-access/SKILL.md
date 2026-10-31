@@ -26,7 +26,7 @@ Each role is a GitHub team per repository class: `service`, `platform`, `infra`,
 | Ops        | `developers-infra` and a Google account | Production: `gcloud` reads, OpenTofu state, IAP SSH, secret versions                      |
 | Maintainer | `maintainers-<class>`                   | Maintain: approvals that `review-gate` counts                                             |
 | Owner      | `owners-<class>`                        | Admin: ruleset bypass, `approve-pr` on their own pull requests, the `release` environment |
-| Core       | `core`, owner of both organizations     | Admin everywhere, org settings and teams, Bitwarden, `a-novel repo update`, Discord admin |
+| Core       | `core`, owner of both organizations     | Admin everywhere, org settings and teams, Bitwarden, Discord admin                        |
 
 A role covers its class's repositories only; elsewhere the member reads. Every tier also holds Write
 on its org's bot-comment dispatcher, `a-novel/.github` or `a-novel-kit/stack`, so any member posts
@@ -39,8 +39,8 @@ applies a privileged label: it records a reviewer's decision.
 
 Core hands some access out one by one, whatever the role:
 
-- Tokens in `a-novel secrets`: `BWS_ACCESS_TOKEN` (core only), `DISCORD_READER_TOKEN`,
-  `DISCORD_WRITER_TOKEN`, and the service secrets a repository's `.a-novel/secrets.yaml` declares.
+- Tokens in `a-novel secrets`: `DISCORD_READER_TOKEN`, `DISCORD_WRITER_TOKEN`, and the service
+  secrets a repository's `.a-novel/secrets.yaml` declares.
 - Write on an organization's project board, granted per project.
 - A planned downtime, which core schedules.
 

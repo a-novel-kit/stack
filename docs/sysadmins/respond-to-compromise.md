@@ -85,27 +85,24 @@ done
 gh auth refresh -h github.com --remove-scopes admin:org
 ```
 
-### Revoke the Bitwarden tokens
+### Close the Bitwarden sessions
 
-Each core member keeps a token for `repo update` on their machine. The token opens every secret of the `a-novel` and `a-novel-kit` Bitwarden projects, the Agent and Dependencies App keys included. In the [Bitwarden web app](https://vault.bitwarden.eu):
-
-1. Under **Secrets Manager → Machine accounts**, open the account behind `repo update` and revoke the token of the compromised machine. When you cannot tell which token leaked, revoke them all, then [give each core member a new one](./promote-member#open-bitwarden-to-them).
-2. For your own account, open **Settings → My account → Danger zone** and choose **Deauthorize sessions**. Then change your master password.
+A Bitwarden session opens every secret of the `a-novel` and `a-novel-kit` projects. In the [Bitwarden web app](https://vault.bitwarden.eu), open **Settings → My account → Danger zone** and choose **Deauthorize sessions**. Then change your master password.
 
 ### Rotate the App keys
 
 Each organization has three Apps whose private keys act on every repository:
 
-| App          | Its key lives in                                       | Its key can                                              |
-| ------------ | ------------------------------------------------------ | -------------------------------------------------------- |
-| Agent        | Bitwarden, copied into each `governance` environment   | post the required checks, approve bot changes            |
-| Dependencies | Bitwarden, copied into each `governance` environment   | open pull requests that need no approval                 |
-| Release      | each releasing repository's `release` environment only | write `master`, release lines and tags past the rulesets |
+| App          | Its key lives in                                          | Its key can                                              |
+| ------------ | --------------------------------------------------------- | -------------------------------------------------------- |
+| Agent        | Secret Manager, copied into each `governance` environment | post the required checks, approve bot changes            |
+| Dependencies | Secret Manager, copied into each `governance` environment | open pull requests that need no approval                 |
+| Release      | each releasing repository's `release` environment only    | write `master`, release lines and tags past the rulesets |
 
-Rotate each key that leaked. A leaked Bitwarden token leaked the Agent and Dependencies keys.
+Rotate each key that leaked.
 
 1. In the organization's **Settings → Developer settings → GitHub Apps**, choose **Edit** next to the App. Under **Private keys**, generate a new key, then delete the old one. Deleting the old key cuts the attacker off at once. The App fails until its new key lands.
-2. For Agent and Dependencies, store the new key in the organization's Bitwarden project under its name, `AGENT_BOT_PRIVATE_KEY` or `DEPENDENCY_BOT_PRIVATE_KEY`. After a leaked Bitwarden token, replace every other secret of both projects as well, as [offboarding](./offboard-member#core-close-their-bitwarden-access) does. Then [apply the settings](./repositories#apply) with `--all`, which copies the new values into every repository.
+2. For Agent and Dependencies, add the new key as a version of its secret and bump its pin, as infra's [Governance secrets](https://github.com/a-novel/infra/blob/master/docs/runbooks/secrets.md#governance-secrets) runbook describes. Its deploy copies the new key into every repository. After a leaked Bitwarden session, replace every secret of both projects as well, as [offboarding](./offboard-member#core-close-their-bitwarden-access) does.
 3. For Release, set the new key in every repository of the organization that has a `release` environment. `gh` names each one it sets. Run it once per organization, with that organization's key:
 
    ```bash
@@ -213,13 +210,12 @@ audit protected_branch.policy_override \
   tee bypasses.tsv
 ```
 
-Three shapes are routine:
+Two shapes are routine:
 
-| Ref                                   | Skipped rules                                                          | Last column    | Routine when                                                 |
-| ------------------------------------- | ---------------------------------------------------------------------- | -------------- | ------------------------------------------------------------ |
-| `refs/heads/master`                   | `merge_queue`                                                          | a pull request | an admin merged a pull request you know                      |
-| `refs/heads/master`                   | `required_status_checks`, `merge_queue`, `review_policy_not_satisfied` | a commit       | the commit is a `ci: sync managed config` from `repo update` |
-| `refs/tags/v*`, plus a version commit | none on the tag                                                        | a commit       | the release App made it during a release you know            |
+| Ref                                   | Skipped rules   | Last column    | Routine when                                      |
+| ------------------------------------- | --------------- | -------------- | ------------------------------------------------- |
+| `refs/heads/master`                   | `merge_queue`   | a pull request | an admin merged a pull request you know           |
+| `refs/tags/v*`, plus a version commit | none on the tag | a commit       | the release App made it during a release you know |
 
 Read a commit's message:
 
@@ -298,7 +294,7 @@ for ACTION in environment repo org team repository_ruleset hook \
 done | tee changes.tsv
 ```
 
-Each secret or variable change, environment or ruleset edit, new member, webhook, App or token grant needs an owner you know. [Apply the settings](./repositories#apply) with `--all` to undo unknown changes to the rulesets and environments, which the templates define. Undo every other change by hand.
+Each secret or variable change, environment or ruleset edit, new member, webhook, App or token grant needs an owner you know. The GitHub root restores the settings, rulesets and environments it manages at its next apply, and its daily drift check lists what changed. A ruleset made by hand stays until a pull request carrying `allow-resource-deletion` prunes it. Undo every other change by hand.
 
 Drop the scope once the GitHub queries are done:
 
@@ -413,7 +409,6 @@ Enrol a replacement for a lost security key as in [GitHub with a security key](.
 On the clean machine, set up each credential the attacker could have taken:
 
 - [Sign `gh` in](/dependencies/github#sign-in) and recreate your [packages token](/dependencies/node#configure).
-- [Store your new Bitwarden token](./repositories#store-the-bitwarden-token).
 - Give each ID that `a-novel secrets ls` lists a new value from its source, with `a-novel secrets set`.
 - [Sign `gcloud` in](./gcloud#configure), both logins.
 - Recreate the infra [GitHub dispatch tokens](https://github.com/a-novel/infra/blob/master/docs/runbooks/secrets.md#github-dispatch-tokens).

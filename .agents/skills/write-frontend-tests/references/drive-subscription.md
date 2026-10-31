@@ -9,9 +9,9 @@ for Playwright journeys, plus `v1.64.0.md` for a Vitest browser project. This ru
 identities, folders and variables those guides consume, and the order that creates the first reference.
 
 Most steps need more than a developer holds: an infra pull request and its `visual_tests` output
-(ops), the Drive shares (the Workspace owner), repository variables and `a-novel repo update`
-(core). Check each with [check-access](../../check-access/SKILL.md) before its step, and hand the
-steps the developer cannot run to their holder.
+(ops), the Drive shares (the Workspace owner) and repository variables (core). Check each with
+[check-access](../../check-access/SKILL.md) before its step, and hand the steps the developer cannot
+run to their holder.
 
 1. **Admit the repository in a-novel/infra.** Add an entry to `visual_test_repositories` in
    `bootstrap/visual-tests.tf`: a slug of 2 to 11 characters, the repository, and its numeric ID from
@@ -40,8 +40,8 @@ steps the developer cannot run to their holder.
    pull request's own run included. A wiring pull request that folds a required job into
    `test-browser`, as uikit's did with `test-storybook`, follows the
    [required-checks rule](../../write-github-actions/SKILL.md#required-checks-and-rulesets) for a
-   removed job. The `a-novel repo update` it ends with also creates the `allow-screenshot-change` label.
-4. **Set the repository variables.** `a-novel repo update` leaves repository variables alone, so set
+   removed job. The GitHub root already provisions the `allow-screenshot-change` label.
+4. **Set the repository variables.** The GitHub root leaves repository variables alone, so set
    each one with `gh variable set <name> --repo <owner>/<repo> --body '<value>'`. The identity values
    come from step 1's `visual_tests` output, under `repositories.<slug>.identities`.
 

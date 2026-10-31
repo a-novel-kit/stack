@@ -208,14 +208,14 @@ so a moved upstream tag would run new code there on the next release.
 
 `vars.*` and `secrets.*` belong here. The bot client ids are org variables: `AGENT_BOT_CLIENT_ID`
 for governance work, `DEPENDENCY_BOT_CLIENT_ID` for the node lane and the audit fix. Their private
-keys and `BWS_READ_TOKEN` are secrets of each repo's `governance` environment, which `repo update`
-fills from Bitwarden. A job that reads one names `environment: {name: governance, deployment: false}`;
-a job calling a reusable workflow passes the secret by name, and the called job names the
-environment. The release App's key lives only in the `release` environment. A repository with a
-Sentry project keeps `SENTRY_AUTH_TOKEN` there too, for the release step `manage-versions` describes.
-A platform's tag build reads its source-map upload key, set by hand, from a `sourcemaps` environment.
-`repo update` opens it on the same refs as `governance`, with no reviewer, so a release still waits
-for one approval: the cut's.
+keys and `BWS_READ_TOKEN` are secrets of each repo's `governance` environment, which a-novel/infra's
+GitHub root fills from Secret Manager. A job that reads one names
+`environment: {name: governance, deployment: false}`; a job calling a reusable workflow passes the
+secret by name, and the called job names the environment. The release App's key lives only in the
+`release` environment. A repository with a Sentry project keeps `SENTRY_AUTH_TOKEN` there too, for
+the release step `manage-versions` describes. A platform's tag build reads its source-map upload
+key, set by hand, from a `sourcemaps` environment. The GitHub root opens it on the same refs as
+`governance`, with no reviewer, so a release still waits for one approval: the cut's.
 
 Add a `concurrency` group with `cancel-in-progress: true` only where a superseded run's result is
 worthless, such as a lint-only workflow. Anything that releases or deploys must run to completion.
@@ -270,8 +270,8 @@ gate is required and red. Never gate on a `report-*` job, a master-only job, or 
 that can skip it, such as `lint-translations`: its skip would pass every job behind it.
 
 Rewiring `needs:` is safe against the ruleset: required checks derive from the **job list** in
-`main.yaml` (see below), not from the graph, so cutting an edge never changes a check context and
-never needs `a-novel repo update`. Adding or removing a job does.
+`main.yaml` (see below), not from the graph, so cutting an edge never changes a check context.
+Adding or removing a job does.
 
 Sequencing decisions are the skill's job, not the workflow's — do not restate this rationale as a
 comment in a `main.yaml`. Comment what is specific to that file: why _this_ postgres needs a longer
@@ -284,8 +284,7 @@ health timeout, why _this_ job runs its binary twice. Reviewers get the general 
 A job's ID **is** its required-check context, so name it by lane: `test-go`, `lint-go`, `lint-js`,
 `test-js`, `lint-proto`, `generated-go`, and the `build-*` / `report-*` families. A lane is named
 after what it checks, so the JS lane is `js`, as the Go lane is `go`. A bare verb like `test` breaks
-down in a repo holding both Go and JS, where two jobs would claim the name, and the discovery map in
-`cli/internal/repocfg/templates/checks.yaml` cannot tell which lane it belongs to. Some repos still
+down in a repo holding both Go and JS, where two jobs would claim the name. Some repos still
 emit a legacy bare `test`; new jobs use the lane form. Renaming a job changes its required check,
 which [the next section](#required-checks-and-rulesets) covers.
 
@@ -297,16 +296,18 @@ App's check.
 
 ## Required checks and rulesets
 
-`cli/internal/repocfg/templates/checks.yaml` decides which jobs gate the default branch. The
-required set is the `always` list plus every job declared in the repo's `.github/workflows/main.yaml`,
-minus two exclusions: IDs starting with `report-` (reporting and post-merge jobs), and jobs whose
-`if:` restricts them to master, since a job that never runs on a PR cannot gate one.
+a-novel/infra's GitHub root decides which jobs gate the default branch, as its
+[Repository config](https://github.com/a-novel/infra/blob/master/docs/architecture.md#repository-config)
+describes. The required set is `merge-gate`, `epic-freeze`, `review-gate` and `check-dependencies`,
+plus every job declared in the repo's `.github/workflows/main.yaml`, minus two exclusions: IDs
+starting with `report-` (reporting and post-merge jobs), and jobs whose `if:` restricts them to
+master, since a job that never runs on a PR cannot gate one.
 
-Adding a job to `main.yaml` therefore adds a required check on the next `a-novel repo update`.
-Renaming or removing one leaves its old context required, and the pull request making that change
-never reports it. An admin merges that pull request past the stale context, then runs
-`a-novel repo update` from up-to-date master. Coverage gates nothing: no ruleset requires a Codecov
-status.
+Adding a job to `main.yaml` therefore adds a required check once it reaches the default branch: the
+root's sweep reads changed workflows every 10 minutes. Renaming or removing one leaves its old
+context required, and the pull request making that change never reports it. An admin merges that
+pull request past the stale context, and the next sweep requires the new set. Coverage gates
+nothing: no ruleset requires a Codecov status.
 
 The `retired-lines` ruleset freezes the `v<N>` branches of past majors. Discovery reads the major
 from the default branch's root `package.json`, and the ruleset covers `v0` to `v<major-1>`: only
@@ -317,10 +318,10 @@ The `release-lines` ruleset requires the same set on `release/vX.Y` branches. A 
 checks from its line's own workflow files, so a check added after the line's tag never reports there
 and an admin merges past it (`manage-versions`).
 
-The rulesets themselves are static YAML under `templates/rulesets/`, with the required-check list and
-the bypass actors injected by the CLI. `a-novel repo update` applies them; `use-a-novel-cli` covers
-the command. The templates are the whole configuration: a ruleset or setting changed in the UI is
-reverted on the next reconcile.
+The rulesets themselves are code in the GitHub root, which fills in each repository's required
+checks and bypass actors. The root is the whole configuration: its next apply reverts a setting
+changed in the UI, and a pull request carrying `allow-resource-deletion` prunes a ruleset made there
+(`write-infra`).
 
 `commit-messages` checks the subject of every commit on every branch, except the merge queue's
 `gh-readonly-queue/**`, against Conventional Commits. A squash merge lands with the PR title as its
@@ -337,7 +338,8 @@ Two GitHub constraints shape the bypass lists:
   in, GitHub rejects it with HTTP 422, "Actor Dependabot integration must be part of the ruleset
   source or owner organization". The release App, a bypass actor on every repo whose workflows
   name the `release` environment, is installed on selected repositories, so a new releasing repo
-  joins its installation in the org settings before its first `repo update`.
+  joins its installation in the org settings before a workflow naming `release` reaches its
+  default branch.
 
 **A bypass label approves one PR head.** A label that waives a check (`allow-screenshot-change`,
 `allow-incomplete-translations`, `allow-translation-drift`, `append-only-override`, `allow-dependency-change`, infra's
@@ -373,10 +375,11 @@ together with the manifests and attestations they reference. `build-actions/clea
 provenance attestation supplies the ref instead (`refs/pull/<N>/merge`). Infra does not set the flag,
 since it pins its tool images by digest. A deleted version can be restored for 30 days.
 
-`repo update` also owns the Actions security settings: a read-only workflow token that never
+The GitHub root also owns the Actions security settings: a read-only workflow token that never
 approves a pull request, maintainer approval for every outside contributor's fork run, and access
-to the org's `scoped_secrets`. A repo can read a scoped secret only once one of its workflows names
-it and a reconcile has run, so a new `secrets.X` reference ships with an `a-novel repo update`.
+to the org's `scoped_secrets`. A repo can read a scoped secret only once one of its default-branch
+workflows names it and the sweep has run, so a pull request adding a `secrets.X` reference reads it
+empty.
 
 Pull requests are for collaborators: every class sets `features.pull_requests: collaborators_only`,
 and outsiders use issues and discussions. GitHub Apps count as collaborators there, so Renovate and
@@ -386,7 +389,7 @@ review ("Issue is locked"), which would block the approval bot. An outsider's co
 conversation is moderated by hand, and a bot that must comment on a closed one reopens it first.
 
 Write access is split by tier. Developers hold Write, maintainers Maintain and owners Admin, each
-through a `<tier>-<class>` area team that `repo update` grants from `teams.yaml`. Each tier team
+through a `<tier>-<class>` area team that the GitHub root grants. Each tier team
 also holds Write on its org's bot-comment dispatcher, so every member can post bot comments. That
 Write also opens the dispatcher repo's branches, issues and other workflows to every member, which
 is settled: the gates below hold there too. Anyone with Write can approve, label and dispatch, so
@@ -413,11 +416,11 @@ reads the pull request's current head through the API. A job on these triggers n
 runs pull request code.
 
 From November 2, 2026, GitHub blocks `pull_request_target` on a public repository that no Actions
-event policy covers. Each org therefore holds one org-level policy, `allow-all-events`, which targets
-every repository and allows every event the policies API lists. It only lifts that default block.
-An event policy is an allowlist, so never narrow it to the events in use: the next new trigger would
-stay blocked until someone edits the org's settings. `repo update` does not manage it; an org admin
-recreates it with `POST /orgs/{org}/actions/policies`.
+event policy covers. Each org therefore holds one org-level policy, `allow-all-events`, which
+targets every repository and allows every event the policies API lists. It only lifts that default
+block. An event policy is an allowlist, so never narrow it to the events in use: the next new
+trigger would stay blocked until someone edits the org's settings. The GitHub root does not manage
+it; an org admin recreates it with `POST /orgs/{org}/actions/policies`.
 
 The `governance` environment is what makes that hold for any copy of a workflow. It admits the
 default branch, plus `release/v*` lines and `v*` tags where the tags rulesets guard them, and
@@ -426,20 +429,20 @@ before its first step, so a branch that brings back an old workflow reads no key
 
 The enterprise subscription is the only spend. Standard runners on public repos and the free security
 features cost nothing; GitHub Code Quality bills per active committer and per AI credit on every
-default-branch push, so every class sets `code_quality: false` and `repo update` keeps it off.
-`repo update` also keeps CodeQL's default setup off and provisions no CodeQL workflow. The
+default-branch push, so the GitHub root keeps it off on every repository, with CodeQL's default
+setup, and no repository carries a CodeQL workflow. The
 `scan-secrets` and `lint-workflows` jobs do the static analysis. The services add `lint-semgrep`,
 whose `service` ruleset checks their layered layout. A repository that no semgrep ruleset fits carries
 no `lint-semgrep` job.
 
 The governance workflows (`gates.yaml`, `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`,
-`epic-rollback.yaml`, `recover-prs.yaml`, `check-dependencies.yaml`, `clean-images.yaml`, `pr-relay.yaml`,
-`auto-approve-dependabot.yaml`, `lock-closed.yaml`, `notify.yaml`, `auto-assign-author.yaml`) are rendered from
-`cli/internal/repocfg/templates/governance/`
-and carry a "Managed by `a-novel repo update`" banner. Edit the template in the stack repo; a change to
-the copy in a repo is overwritten. What those workflows mean is `coordinate-landing`'s subject.
-A rendered file must pass every repo's prettier, at width 120 in the fleet and 80 in infra, so write
-a list that outgrows 80 columns as a block sequence; `pnpm lint:templates` checks the narrow width.
+`epic-rollback.yaml`, `recover-prs.yaml`, `check-dependencies.yaml`, `clean-images.yaml`,
+`pr-relay.yaml`, `auto-approve-dependabot.yaml`, `lock-closed.yaml`, `notify.yaml`,
+`auto-assign-author.yaml`) live in each repository, which owns its copies, its `.github/CODEOWNERS`
+too. A new repository gets them from its class's template repository, or copies them from a sibling
+when it starts empty. A change that concerns every repository lands in each copy, one pull request
+per repository. A copy may still open with a "Managed by" banner naming the retired command: delete
+it when you edit the file. What those workflows mean is `coordinate-landing`'s subject.
 
 Two of them keep dependency PRs moving without a person. `auto-approve-dependabot.yaml` approves the
 bots' PRs, withholding approval while `renovate/stability-days` is pending; its `status` trigger
@@ -557,10 +560,10 @@ There is no local runner, so verification is reading plus CI.
   repo to the same tag.
 - **A `run:` step in a composite action without `shell: bash`.** The step fails to load; composite
   actions have no default shell.
-- **Editing a governance workflow in a service repo.** It carries a managed-by banner and is
-  regenerated. Edit `cli/internal/repocfg/templates/governance/`.
-- **Adding a `main.yaml` job without reconciling the ruleset.** The job runs but gates nothing until
-  `a-novel repo update` runs.
+- **Fixing one copy of a governance workflow.** Each repository owns its copy, so a fix every
+  repository needs lands in each one.
+- **Expecting a new `main.yaml` job to gate its own pull request.** It gates nothing until the
+  GitHub root's sweep reads it from the default branch.
 - **Another bot's branch under `renovate/`.** Renovate prunes the branches under its prefix that its
   configuration does not produce, and closes their PRs. The Dependencies App's own PRs use
   `chore/deps/`, which `notify.yaml` watches like Renovate's branches.

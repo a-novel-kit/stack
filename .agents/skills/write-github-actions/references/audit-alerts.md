@@ -85,12 +85,10 @@ A routine shape gets an ignore rule in the `ignore:` JSON list of the org's `.gi
   the action.
 - The run's step summary counts what each rule hid. Delete a rule that keeps matching nothing.
 
-`a-novel repo update` writes the managed governance files straight to `master` through the admin's
-GitHub CLI token, past the merge queue, the checks and the review. A rule hides that shape: kushuh,
-an OAuth token, a GitHub CLI user agent and the three override codes. A token lifted from the
-admin's machine can therefore write `master` unseen, while everything else it touches still alerts.
-Two more rules hide the admin CLI's environment and team grants, and `repo update`'s ruleset
-reconciles. An admin action outside those shapes, such as a member added in the browser, alerts.
+The admin's GitHub CLI still sets an environment's secrets by hand, such as a release key, as the
+guide's runbooks do. One rule hides that shape: kushuh, an OAuth token, a GitHub CLI user agent and
+an `environment.*` action. Everything else the admin's token touches alerts, a push past the merge
+queue or a ruleset change included, and so does an admin action in the browser.
 
 ## Reading an alert
 
@@ -98,13 +96,13 @@ An alert reads as two lines. The first names the action, the actor and the targe
 branch and the override codes. The second names the repositories, the earliest time, the token
 type and a short label for the user agent:
 
-| Label                                          | Means                                                           |
-| ---------------------------------------------- | --------------------------------------------------------------- |
-| `Chrome on Linux`, `Safari on iOS`             | A person in a browser                                           |
-| `GitHub CLI v2.102.0`                          | The GitHub CLI, the admin's tool for `repo update` and runbooks |
-| `Go-http-client/2.0`, `curl/8.5.0`, `octokit…` | A script, through a known library or tool                       |
-| `terraform-provider-github/6.6.0`              | Any other client, by its first product token                    |
-| `unrecognized agent`                           | An agent with no product token at its start                     |
+| Label                                          | Means                                         |
+| ---------------------------------------------- | --------------------------------------------- |
+| `Chrome on Linux`, `Safari on iOS`             | A person in a browser                         |
+| `GitHub CLI v2.102.0`                          | The GitHub CLI, the admin's tool for runbooks |
+| `Go-http-client/2.0`, `curl/8.5.0`, `octokit…` | A script, through a known library or tool     |
+| `terraform-provider-github/6.6.0`              | Any other client, by its first product token  |
+| `unrecognized agent`                           | An agent with no product token at its start   |
 
 The label copies at most 60 product-token characters from the agent, so no client-written text
 renders as a link. The audit log, which the post links, keeps the raw value, and the ignore rules
