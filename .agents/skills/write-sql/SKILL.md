@@ -543,28 +543,64 @@ accidental re-application is worse than surfacing it as an error.
 
 ### pg_cron Scheduled Jobs
 
-A job's command calls a function the same migration defines, so a later release changes the job by
-replacing the function, the schema census snapshots it, and a test calls it. Schedule it only where
-pg_cron is installed: the databases `postgrestest.RunDBTest` clones have no `cron` schema, so a bare
-`cron.schedule` fails every data-access test. PL/pgSQL resolves `cron.*` only when the guarded
-statement runs, and scheduling an existing name replaces its job. The paired down migration
-unschedules it by the same name, the same way:
+A service's jobs live in one file, `internal/models/migrations/cron/jobs.sql`, embedded as
+`migrations.Jobs`. The migrations command runs it after the migrations, on every run. A database
+import keeps the migration history but leaves pg_cron's jobs out: pg_cron's row-level security
+hides them from a dump by any role but a superuser. A job that only a migration schedules is gone
+after an import. Change a job's schedule or command in the file, never in a new migration. The
+`cron/` directory keeps the file out of the append-only check on the migrations' `*.sql`.
+
+A job's command calls a function a migration defines, so a release changes the job's work by
+replacing the function, the schema census snapshots it, and a test calls it.
+
+The file runs only where pg_cron is installed. The databases `postgrestest.RunDBTest` clones have no
+`cron` schema, and PL/pgSQL resolves `cron.*` only when the guarded statement runs. Scheduling a
+name again replaces the role's own job of that name. A job another role owns, such as one a database
+host hands to the service's role, keeps its owner and takes the definition through `cron.alter_job`.
+Only a superuser sees that job and may call `alter_job`. PostgreSQL checks the privilege when it
+plans the statement, even when no row matches, so the call sits behind a check only a superuser
+passes:
 
 ```sql
--- up
 DO $$
+DECLARE
+  definition record;
 BEGIN
-  IF EXISTS (SELECT FROM pg_extension WHERE extname = 'pg_cron') THEN
-    PERFORM cron.schedule(
-      'service-genai-purge-settled',
-      '* * * * *',
-      format('SELECT %I.purge_settled_generations()', current_schema())
-    );
+  IF NOT EXISTS (SELECT FROM pg_extension WHERE extname = 'pg_cron') THEN
+    RETURN;
   END IF;
+
+  FOR definition IN
+    SELECT * FROM (
+      VALUES
+        (
+          'service-genai-purge-settled',
+          '10 seconds',
+          format('SELECT %I.purge_settled_generations()', current_schema())
+        )
+    ) AS jobs (name, schedule, command)
+  LOOP
+    IF EXISTS (SELECT FROM cron.job WHERE jobname = definition.name AND username <> current_user) THEN
+      PERFORM cron.alter_job(jobid, schedule => definition.schedule, command => definition.command)
+      FROM cron.job
+      WHERE jobname = definition.name AND username <> current_user;
+    ELSE
+      PERFORM cron.schedule(definition.name, definition.schedule, definition.command);
+    END IF;
+  END LOOP;
 END
 $$;
+```
 
--- down
+Name the loop record anything but `job`: in a query on `cron.job`, `job.schedule` is ambiguous with
+the table's own column. Test the file with `postgrestest.RunTransactionalTest`, whose database has
+pg_cron and whose rollback leaves its jobs as they were. Cover a superuser and a non-superuser
+database owner, since only the owner meets row-level security and the `alter_job` privilege.
+
+To retire a job, delete it from the file and unschedule it in a migration, before any migration
+drops the function it calls:
+
+```sql
 DO $$
 BEGIN
   IF EXISTS (SELECT FROM pg_extension WHERE extname = 'pg_cron') THEN
@@ -831,6 +867,7 @@ The rules above, as a pre-push checklist:
 - `varchar(n)` over `text`, bare `timestamp` over `timestamp(0) with time zone`, `NOW()` over
   `CURRENT_TIMESTAMP`.
 - Generic pg_cron job names that collide across services.
-- A bare `cron.schedule` in a migration, which fails in the test clones that lack pg_cron.
+- A pg_cron job scheduled in a migration instead of the jobs file, which a database import loses.
+- A `cron.*` call outside the `pg_extension` guard, which fails in the test clones that lack pg_cron.
 - A plain `CREATE INDEX`, a constraint added without `NOT VALID`, or a table rewrite on a populated
   live table.
