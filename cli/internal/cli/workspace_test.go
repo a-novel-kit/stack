@@ -143,7 +143,7 @@ func TestRepoEntryListed(t *testing.T) {
 }
 
 // TestRepoEntryDir pins where each repository checks out under the workspace
-// root, the routing sync, repo update --all and --sandbox share.
+// root, which the routing sync and --sandbox share.
 func TestRepoEntryDir(t *testing.T) {
 	t.Parallel()
 

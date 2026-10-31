@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -320,4 +322,10 @@ func batchError(b ui.Batch) error {
 // usageError marks a bad invocation, exit status 2.
 func usageError(err error) error {
 	return &ExitError{Code: exitUsage, Err: err}
+}
+
+// readAnswer reads one line of in, trimmed and lowercased.
+func readAnswer(in io.Reader) string {
+	line, _ := bufio.NewReader(in).ReadString('\n')
+	return strings.ToLower(strings.TrimSpace(line))
 }

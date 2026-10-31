@@ -36,11 +36,7 @@ func TestMain(m *testing.M) {
 }
 
 // Failures the stubbed gh returns, worded as gh reports them.
-var (
-	errGHNotFound       = errors.New("gh: Not Found (HTTP 404)")
-	errGHBadCredentials = errors.New("gh: Bad credentials (HTTP 401)")
-	errGHEmptyRepo      = errors.New("gh: Git Repository is empty. (HTTP 409)")
-)
+var errGHNotFound = errors.New("gh: Not Found (HTTP 404)")
 
 // swap sets *p to v for the test and restores it on cleanup. A test that swaps
 // a package-level seam cannot run in parallel.
@@ -52,44 +48,16 @@ func swap[T any](t *testing.T, p *T, v T) {
 }
 
 // stubGH routes every gh call through respond, which sees the args joined with
-// any stdin payload, and records each call.
-func stubGH(t *testing.T, respond func(call string) (string, error)) *[]string {
+// any stdin payload.
+func stubGH(t *testing.T, respond func(call string) (string, error)) {
 	t.Helper()
-	var calls []string
 	swap(t, &ghStdin, func(stdin string, args ...string) (string, error) {
 		call := strings.Join(args, " ")
 		if stdin != "" {
 			call += " " + stdin
 		}
-		calls = append(calls, call)
 		return respond(call)
 	})
-	return &calls
-}
-
-// fakeGH stubs gh with the canned output of a matcher the call contains, or ""
-// when none matches.
-func fakeGH(t *testing.T, responses map[string]string) *[]string {
-	t.Helper()
-	return stubGH(t, func(call string) (string, error) {
-		for substr, out := range responses {
-			if strings.Contains(call, substr) {
-				return out, nil
-			}
-		}
-		return "", nil
-	})
-}
-
-// countCalls counts the recorded gh calls containing substr.
-func countCalls(calls []string, substr string) int {
-	n := 0
-	for _, call := range calls {
-		if strings.Contains(call, substr) {
-			n++
-		}
-	}
-	return n
 }
 
 // runCmd executes cmd with args and returns its combined output.

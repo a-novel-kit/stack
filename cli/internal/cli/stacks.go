@@ -495,3 +495,11 @@ func checkoutBlocker(c checkout) string {
 	}
 	return ""
 }
+
+// confirm prints prompt and reads a yes/no answer; only an explicit y/yes
+// returns true, so a bare Enter is a safe "no".
+func confirm(cmd *cobra.Command, prompt string) bool {
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s [y/N] ", prompt)
+	answer := readAnswer(cmd.InOrStdin())
+	return answer == "y" || answer == "yes"
+}

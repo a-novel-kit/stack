@@ -48,9 +48,6 @@ a-novel
 │   ├── sync                          clone or fast-forward the workspace repositories
 │   ├── stacks (new / list / prune)   extra workspaces
 │   └── bot-comment <org> <repo> [<n>]  comment as the organization bot
-├── repo
-│   ├── create <org> <name>           create a repository and apply its class settings
-│   └── update                        reconcile a repository's settings (--all: every one)
 ├── install                           rebuild and reinstall the CLI, keeping services up
 ├── claude                            launch Claude Code from the stack root
 ├── publish stamp <prefix> <file>     refresh vX.Y.Z references in documentation
