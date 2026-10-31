@@ -109,5 +109,6 @@ where the user is known. A gRPC server bounds its calls in flight, per instance,
 - **The retry rule.** `UNAVAILABLE` means the call did not run. A handler that has had an effect, a
   write, a paid call or an email, answers another code, or the caller's retry runs the effect twice.
 - **Scaling.** A service whose calls mostly wait, so CPU never shows its load, serves the cap's
-  gauge on a metrics port of its own (`CallLimit` is an `http.Handler`), and infra scales it on its
-  calls in flight (a-novel/.github#536).
+  gauge, `grpc_server_calls_in_flight`, on a metrics server of its own at `METRICS_PORT`
+  (`CallLimit` is an `http.Handler`). Infra scales the service on its calls in flight, as
+  `write-infra` describes (a-novel/.github#536).

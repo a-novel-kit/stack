@@ -85,6 +85,12 @@ its connection, so consumers trace without wiring of their own and never add a s
 `traceparent` carries its trace ID: without the handler each server starts a new trace, and no
 other check notices.
 
+A client whose requests can exceed 256 KiB also raises gRPC's retry buffer to its receive limit,
+with `grpc.MaxRetryRPCBufferSize` beside `grpc.MaxCallRecvMsgSize` in its default call options.
+gRPC keeps 256 KiB of a call for a retry by default. A larger call, once sent, is never retried, so
+golib's in-cluster connection cannot move it to another pod when a full server refuses it. The
+connection holds each request in memory until the server begins its answer.
+
 Every package the client imports joins each consumer's binary and runs its initialization there.
 The client imports no `core` or `dao` package. A type it shares with the service, such as the
 claims of a token, lives in a leaf package under `internal/models`. Check the closure with
