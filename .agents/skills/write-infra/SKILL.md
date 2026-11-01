@@ -51,7 +51,8 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
   deploy checks after each apply that admission still refuses what it must. Never propose a project
   per service.
 - **Inputs live in each root's committed `terraform.tfvars`.** Secret values never do: ops add them
-  with `gcloud`.
+  with `gcloud`, and External Secrets generates those the cluster chooses itself, as
+  [Trust boundaries](references/change-safety.md#trust-boundaries) describes.
 - **Images are pinned** as `ghcr.io/…:tag@sha256:…`. Every plan verifies each release image it
   changes: its release tag's own run built it, the release App published that tag as an immutable
   GitHub Release, and its version is not below the one deployed. The cluster's deploy then copies
