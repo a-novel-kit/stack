@@ -6,31 +6,26 @@
 
 ## Native first
 
-Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub Actions.
+Before writing code, check OpenTofu, the providers, Kubernetes, its operators and GitHub Actions.
 
-| Need                          | Native answer                                                   |
-| ----------------------------- | --------------------------------------------------------------- |
-| Run migrations before traffic | job `run_execution_token` and `depends_on`                      |
-| Gate traffic on readiness     | Cloud Run startup probe and `LATEST` traffic                    |
-| Cross-root values             | `terraform_remote_state` on the producing root's outputs        |
-| Deletion gate                 | a jq filter over `tofu show -json`, plus the PR label           |
-| Image provenance and copy     | `gh attestation verify`; `skopeo copy --all --preserve-digests` |
-| Serialize deploys             | a workflow `concurrency` group with `cancel-in-progress: false` |
-| Freeze production             | `gh workflow disable deploy.yaml`                               |
+| Need                          | Native answer                                                       |
+| ----------------------------- | ------------------------------------------------------------------- |
+| Run migrations before traffic | a Job named after its image, `wait_for_completion` and `depends_on` |
+| Gate traffic on readiness     | the Deployment's startup and readiness probes, and its rollout wait |
+| Cross-root values             | `terraform_remote_state` on the producing root's outputs            |
+| Deletion gate                 | a jq filter over `tofu show -json`, plus the PR label               |
+| Image provenance and copy     | `gh attestation verify`; `skopeo copy --all --preserve-digests`     |
+| Serialize deploys             | a workflow `concurrency` group with `cancel-in-progress: false`     |
+| Freeze production             | `gh workflow disable deploy.yaml`                                   |
 
 - **Inline workflow steps** call `tofu`, `gh`, `gcloud`, `jq` and `curl` directly.
-- **A shared step sequence** becomes a repository composite action:
-  - `.github/actions/tofu` plans, enforces the policy, copies images and applies;
-  - `.github/actions/health` checks production health with the shared
-    `modules/smoke-check/smoke.sh`, which the caller checks out, and the ID token it passes;
-  - `.github/actions/roll` moves a service's hosts onto their applied configuration.
-- **Service roots are found on disk.** `deploy.yaml` applies and rolls out each one through a
-  matrix, and `drift.yaml` checks each one. Only what GitHub cannot derive is listed by hand: a
-  root's `plan-<root>` required check and its `roll-database.yaml` option, which
-  `check-service-roots.sh` enforces.
-- **Go** is reserved for programs that run on hosts. **Bash** runs the host scripts, and the
-  workflow steps that mostly call `tofu`, `gh`, `gcloud`, `skopeo` or `jq`. `smoke.sh` is POSIX `sh`,
-  since it also runs inside the services' Alpine images.
+- **A shared step sequence** becomes a repository composite action: `.github/actions/tofu` plans,
+  enforces the policy, copies images and applies.
+- **Service roots are found on disk.** `deploy.yaml` applies each one through a matrix, and
+  `drift.yaml` checks each one. Only what GitHub cannot derive is listed by hand: a root's
+  `plan-<root>` required check, which `check-service-roots.sh` enforces.
+- **Bash** runs the workflow steps that mostly call `tofu`, `gh`, `gcloud`, `skopeo` or `jq`.
+  `smoke.sh` is POSIX `sh`, since it runs inside each service's own image.
 - **Workflow rules that can stop or misdeploy production live in tested scripts:** zero-dependency
   `.mjs` modules in `.github/scripts`, run with the runner's Node. They hold the downtime window and
   its announcements, the release pins and the release provenance check. Pure exported functions
@@ -47,7 +42,7 @@ Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub
 - **Test the committed production inputs,** because `tofu test` auto-loads `terraform.tfvars`. Mock
   providers, `override_data` the remote state, and assert security contracts:
   - no external IP;
-  - internal-only ingress;
+  - no load balancer outside the platforms' Gateways;
   - numeric secret versions;
   - digest-pinned images;
   - deny-all egress below the allows;
@@ -69,8 +64,9 @@ Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub
 - **Mocks need realistic values.** Service-account `email`, `member` and `name` must be well-formed,
   or provider validation fails. A data-source mock cannot override a non-computed field such as
   `name`.
-- **Go tests** cover only the host programs. `tests/backup` runs inside the real database image,
-  offline, for the cases this repository owns.
+- **The deploy proves admission live.** After each cluster apply, `Check admission` sends the
+  fixtures in the cluster root's `tests/admission` as dry runs: each refused one must fail on Pod
+  Security or an admission policy, and each admitted one must pass.
 
 ## Required checks and workflows
 
@@ -85,7 +81,7 @@ Before writing code, check OpenTofu, the provider, Cloud Run, systemd and GitHub
   everywhere in the fleet (`write-github-actions`). Here a moved tag would run whatever it points to
   with the production identity.
 - **Only jobs that ship nothing may reuse state from other runs.** Lint and test jobs may restore
-  the caches `master` runs save: `lint-repository` lints through the shared `go-actions/lint-go`. A
+  the caches `master` runs save: `validate-opentofu` restores TFLint's plugin cache. A
   job that builds, publishes or deploys what reaches production restores nothing, so its build
   state lives and dies with the job.
 - **Label events re-run the whole workflow.** Never skip non-plan jobs on label events: a later
@@ -105,7 +101,7 @@ Run the whole gate the way CI does:
 - zizmor with the fleet config (`kit/workflows/security-actions/lint-workflows/zizmor.yml`);
 - shellcheck through `koalaman/shellcheck`;
 - Prettier and the Renovate validator through `npx`;
-- `go test` and golangci-lint through `go tool -modfile=golangci-lint.mod`.
+- `node --test '.github/scripts/*.test.mjs'` and `.github/scripts/check-service-roots.sh`.
 
 ## Known traps
 
@@ -122,8 +118,6 @@ Run the whole gate the way CI does:
 - **Provider v8 returns `retention_policy.retention_period` as a string,** so compare with
   `tonumber()`.
 - **`format()` errors when its string has no verb but receives arguments.**
-- **Cloud Run v2 `uri` is the hashed `*.a.run.app` URL.** Read it from a data source rather than
-  copying it.
 - **A plan that runs during a deploy reads half-applied state.** It shows a just-merged change as
   still to create, and template updates in roots the pull request never touched. Wait for the
   `deploy.yaml` runs to finish, then re-run the pull request's checks before comparing the plan.
@@ -137,15 +131,13 @@ Run the whole gate the way CI does:
   window starts at the first failure.
 - **A quota ceiling below recent usage passes the plan and fails the apply.** Google refuses it
   (`QUOTA_DECREASE_BELOW_USAGE`), and the deploy stops at foundation until a revert merges. Its
-  "recent usage" outlasts the 10-minute average the quota pages describe: Cloud Run CPU was still
-  refused 1.5 hours after an instance cap cut usage. Set a new ceiling at the current peak and keep
-  it; bound actual usage with instance caps instead.
+  "recent usage" outlasts the 10-minute average the quota pages describe: a CPU ceiling was still
+  refused 1.5 hours after usage fell. Set a new ceiling at the current peak and keep it; bound actual
+  usage with the node pool's maximum and the namespaces' budgets instead.
 - **A workload identity provider's display name is capped at 32 characters,** and only the apply
   checks it. Bootstrap's test enforces the limit.
 - **Cloud Workflows refuses environment variable names that begin with `GOOGLE` or `WORKFLOWS`,**
   and only the apply checks it. Bootstrap's test enforces the rule.
-- **An alert condition with `evaluation_missing_data` needs a non-zero `duration`.** The plan
-  passes, and Cloud Monitoring refuses the apply with a 400.
 - **`gcloud` asks before cancelling or deleting, and nobody answers in CI.** Set
   `CLOUDSDK_CORE_DISABLE_PROMPTS: "1"` on the step and pass `--quiet`. A test stub that accepts every
   call hides the prompt, so make stubs refuse an unconfirmed call.

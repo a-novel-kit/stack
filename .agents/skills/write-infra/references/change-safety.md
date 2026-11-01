@@ -4,21 +4,17 @@
 - [Retire protected resources](#retire-protected-resources): unlock, retire, forget, tainted
   replacements
 - [Read the live state](#read-the-live-state-before-trusting-the-code)
-- [Release contract](#release-contract), [New log-based metrics](#new-log-based-metrics),
-  [Capacity caps](#capacity-caps),
-  [Database and backup hosts](#database-and-backup-hosts), [Trust boundaries](#trust-boundaries),
-  [Recovery](#recovery)
-- [Add a service](#add-a-service): the pull-request order, the first plan, native backups
-- [Report faults to Sentry](#report-faults-to-sentry): the DSN, the release name, the egress, the
-  OTLP export, [the Sentry root](#the-sentry-root) and its tokens and organization moves, and
-  [each release's deploy](#sentry-deploys)
+- [Release contract](#release-contract), [Capacity caps](#capacity-caps),
+  [Planned downtimes](#planned-downtimes), [Databases and backups](#databases-and-backups),
+  [Trust boundaries](#trust-boundaries), [Recovery](#recovery)
+- [Add a service](#add-a-service): the pull-request order, the first plan
 
 ## Prove the plan before review
 
 - **Pure refactors must plan to zero changes.** Locally, run
   `tofu plan -refresh=false -lock=false` against the real backend. It compares code with state
   without calling the APIs, so it works under a human account that cannot read the workload
-  projects.
+  project.
 - **Data sources the account cannot read** go in a scratch copy, stubbed with the literal value
   from state. Never stub them in the committed code.
 - **Without backend access,** diff `tofu test -verbose` between an `origin/master` export
@@ -41,12 +37,12 @@
 - **Grants that served retired tooling** are better adopted and then deleted under the label than
   left behind as unmanaged orphans.
 - **Changing an IAM binding's condition replaces the binding.** Its expression, title and
-  description are all force-new, so the plan deletes the binding and needs the label. To grant a
-  role on one more invocation class, add a second binding conditioned on that class: it plans as an
-  addition, as `foundation_maintenance_updates` did in a-novel/infra#962.
-- **Service roots read foundation's applied outputs.** A new foundation output must deploy before a
-  service root reads it, or the service plans fail on a missing attribute. Ship the output in its
-  own pull request first, then the change that uses it.
+  description are all force-new, so the plan deletes the binding and needs the label. To widen a
+  conditioned grant, add a second binding with the new condition: it plans as an addition.
+- **The cluster root reads foundation's applied outputs.** A new foundation output, or a new key in
+  one such as a platform's edge, must deploy before the cluster root reads it, or the cluster's plan
+  fails on a missing attribute. Ship the output in its own pull request first, then the change that
+  uses it.
 - **Roots also read each other's committed `terraform.tfvars`,** through
   `provider::terraform::decode_tfvars`: the cluster root reads every service root's pins and
   foundation's principals, Grafana reads foundation's node pool and the cluster's databases, and
@@ -55,10 +51,6 @@
   `environments/recovery*` included (a-novel/infra#1408).
 - **A plan shows the state it read.** When pull requests merge and deploy close together, re-run a
   plan that shows an unexpected change before judging it: a deploy may have applied it meanwhile.
-- **A failed Cloud Run update still records its configuration in state.** The provider saves the
-  planned values when the wait fails, so a rerun plans no changes and passes, while the service
-  keeps serving its previous revision. After such a failure, fix the cause, then make sure the next
-  apply changes that resource, as a release pin does. A green rerun alone proves nothing.
 - **A `kubernetes_manifest` whose wait hits a request deadline reaches no state.** When `wait` ends
   on `context deadline exceeded` instead of `timed out waiting on conditions`, the object exists in
   the cluster but not in state, and the resources that `depends_on` it are never created. The next
@@ -101,10 +93,9 @@
   apply.** Revoking could run first and turn the deletion into a 403. The grant goes with the
   resource.
 - **A green plan does not prove the writer's permissions.** Plans run as the read-only identity,
-  and an apply also polls each long-running operation. Operations carry no tags, so the writer's
-  tag-conditioned roles never cover `run.operations.get`; it lives on an unconditional read role.
-  When the writer starts managing a new resource type, or takes an action it never took before,
-  add the permissions in foundation first.
+  and an apply also polls each long-running operation, which takes a permission of its own. When
+  the writer starts managing a new resource type, or takes an action it never took before, add the
+  permissions in foundation first.
 - **An `ignore_changes` entry can hide a missing permission.** Removing it makes OpenTofu call the
   APIs that set that attribute, which it never called before. a-novel/infra#1370 stopped ignoring a
   Scheduler job's `paused`, and the next deploy failed on `cloudscheduler.jobs.pause`
@@ -125,7 +116,7 @@
 - **A newly enabled API's service agent may not exist yet.** Google creates it lazily, and Workflows
   refused the first workflow with `service agent does not exist`. Create it with
   `google_project_service_identity`, on `google-beta`, and grant its `serviceAgent` role before the
-  resource that needs it, as `modules/project-shell` does.
+  resource that needs it, as bootstrap does for Cloud Scheduler's.
 - **Artifact Registry's VPC-SC setting `depends_on` a repository in its location.** A location has
   no setting until the project holds a repository there, so the first apply in a new region
   answered 404 (a-novel/infra#1230, #1233).
@@ -135,90 +126,78 @@
 
 ## Read the live state before trusting the code
 
-Production can differ from `master` even when drift is clean. One example: a VM's boot metadata was
-rendered by an older template, and the current code would push a flag its pinned loader does not
-understand. Compare the planned diff with the image or binary that will consume it, and fix the
-pins in the same change.
+Production can differ from `master` even when drift is clean. Compare the planned diff with the
+image or binary that will consume it, and fix the pins in the same change.
 
 Foundation's cluster sends only its system components' logs to Cloud Logging, so workload logs stay
-in the cluster. A failed cluster deploy's `Describe the databases` step prints each database's unmet conditions, stuck pods
-and last warnings. To read further, open a draft pull request whose `plan-cluster` job reads the
-pods, their logs and the custom resources from the API server as the plan identity. Close it
-unmerged once read (a-novel/infra#1246, #1251).
+in the cluster and reach Grafana through Alloy. A failed cluster deploy's `Describe the databases`
+step prints each database's unmet conditions, stuck pods and last warnings. To read further, open a
+draft pull request whose `plan-cluster` job reads the pods, their logs and the custom resources from
+the API server as the plan identity. Close it unmerged once read (a-novel/infra#1246, #1251).
 
 ## Release contract
 
-1. Migrations run during apply through the job's `run_execution_token`. The Cloud Run service
-   `depends_on` that job.
-   - **A token must never repeat.** Cloud Run names an execution after its job and token, and
-     refuses a name it has used: the apply waits on "already exists" until it times out.
-   - **Derive it from a `terraform_data` its inputs replace,** never from the inputs alone. A hash
-     repeats when they come back, as on a revert or a cleared downtime. The plan policy exempts
-     that replacement.
-   - **A failed execution still records its token,** so the next plan shows nothing to do. Every
-     plan runs `.github/scripts/rerun-failed-workloads.mjs`, which reads each token job's last
-     execution from the Cloud Run v2 API and re-plans with `-replace` on the token source of one
-     that failed. The provider does not expose the execution's status.
-2. Traffic is `TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST`. Cloud Run routes to a revision only after its
-   startup probe passes.
-   - **A failed revision still records its template,** and the previous revision keeps serving. So
-     every service's template carries a `revision-token` annotation set from its own
-     `terraform_data`, a new service's included. The same script reads each service's
-     `terminal_condition` from the refreshed plan, and replaces the token source of one in
-     `CONDITION_FAILED`, so the deploy rolls the template again and fails until it serves.
-   - **A successful apply therefore means every Cloud Run service of the root serves its
-     template.** The apply waits for each service it changes, and a failed unchanged one would
-     have been rolled again.
-3. Post-deploy checks run one script, `modules/smoke-check/smoke.sh`:
-   - each private service's `smoke-check` module runs it in `grpc` mode, as the service's smoke
-     identity, on every new gRPC image, script or identity, which are triggers, and again once a
-     downtime clears;
-   - the `health` action runs it in `http` mode on Authentication's `/v2/healthcheck`, after each
-     deploy and from `drift.yaml`, with the ID token its caller passes as `id_token`;
-   - it retries every five seconds for two minutes, since a fresh invoker grant takes that long to
-     apply, then prints the last exit code and answer. A deadline, not an attempt count, bounds it,
-     so slow attempts cannot outlast the job;
+1. **Each release image is pinned once,** by `tag@digest` in its service root's `terraform.tfvars`,
+   the database image included. The cluster root reads every pin, and its deploy copies each into
+   the service's `a-novel-<service>` repository before it applies. Foundation's `releases` set keeps
+   those repositories beside the cluster, in `europe-west9`, and the nodes only read them.
+   Foundation applies before the cluster, so a new repository exists before its first copy. A
+   release without a database change keeps the reproducible digest and plans nothing for the
+   database (a-novel/infra#1408).
+   - The `a-novel-images` admission policy admits only images from the workload project's Artifact
+     Registry, pinned by digest, in every namespace the cluster root manages.
+2. **Migrations run once per image and lineage, before the service rolls.** The migrations Job's
+   name ends with its image digest and a hash of `backup_server_name`. The apply waits for it to
+   complete, and the service's workloads `depends_on` it. A finished Job stays as its record. A
+   failed one fails the deploy and stays tainted, so the next deploy runs it again.
+3. **A pod serves only once its probes pass.** `cluster-workload` gives a pod a minute to start,
+   then routes calls to it only while its readiness probe answers. The apply waits for each
+   rollout, which keeps previous pods serving until new ones are ready, so a release that never
+   becomes ready fails the deploy without an outage.
+4. **Post-deploy checks run one script, `modules/smoke-check/smoke.sh`,** in each service's own
+   image, as the namespace's `smoke` identity, with the service token the kubelet projects for the
+   service's audience:
+   - a smoke Job is named after everything its pod runs, so a new image, script or setting runs it
+     once. The deploy waits on it, and a failed Job fails the deploy;
+   - a health CronJob runs the same check every five minutes, so a failing service shows as failed
+     Jobs;
+   - GenAI's provider check makes one real OpenAI call for each revision `genai_provider_check`
+     names;
+   - the script retries every five seconds for two minutes, then prints the last exit code and
+     answer. A deadline, not an attempt count, bounds it, so slow attempts cannot outlast the job;
    - it skips once a planned downtime has started, and re-tests the start when it fails, since a
-     check begun just before `start` fails when the services stop.
-4. Nothing rolls a release back. A pull request that lowers a pinned version fails its plan, so a
+     check begun just before `start` fails when the services stop. Clearing the downtime runs the
+     Job again.
+5. Nothing rolls a release back. A pull request that lowers a pinned version fails its plan, so a
    bad release is fixed forward, through a hotfix when the service's `master` carries unreleased
    work (`manage-versions`). Migrations stay backward compatible; data rollback is a recovery,
    never part of a deploy.
    - **A release pin that merges while a branch is open turns the branch's pins into downgrades.**
      The branch's plans then fail with `… lowers <image> from <version>`. Rebase the branch onto
      `master`.
-5. The pins the last apply deployed come from the plan's `output_changes.<output>.before`. The
+6. The pins the last apply deployed come from the plan's `output_changes.image_copies.before`. The
    plan's `prior_state` already holds the new outputs, so it cannot tell a changed pin apart.
-
-## New log-based metrics
-
-Cloud Monitoring accepts a new log-based metric's type up to about ten minutes after the metric is
-created. An alert policy created in the same apply fails: a threshold condition answers 404, and a
-PromQL condition answers `400 … PromQL metric(s) are invalid`. `depends_on` cannot help, because the
-metric resource itself succeeds at once.
-
-- **A new log-based metric lands in its own pull request,** deployed before the one that adds the
-  alerts that query it. A renamed metric is a new metric.
-- **When the two must ship together,** expect the apply to fail on the alert policies. Ten minutes
-  after the metric was created, re-run the failed job:
-  `gh run rerun <run ID> --repo a-novel/infra --failed`. Everything else in that apply has landed.
 
 ## Capacity caps
 
-- **Every Cloud Run service sets a service-level `scaling.max_instance_count`.** The revision-level
-  one caps each revision, so a rollout can exceed it.
-- **Every project that runs Cloud Run has a CPU and a memory quota** in foundation's `cost_cap`. The
-  quota is the hard ceiling.
+- **The node pool bounds the cluster.** It runs between foundation's `cluster.min_nodes` and
+  `max_nodes`, and the autoscaler adds a node only when pods cannot be placed. Two nodes still hold
+  every pod's requests if the third is lost (a-novel/infra#1326). Capacity that stays is a decision,
+  which Grafana prompts.
+- **Each service runs inside its namespace's budget,** the cluster root's `service_budgets`: the
+  CPU and memory its pods request, and how many run. Together the budgets fit the node pool at its
+  maximum. A change that raises a workload's replicas or requests checks its budget, which covers a
+  rollout's surge pod, the database's two instances and the jobs. A quota on requests refuses a
+  container that sets none, so the namespace's limit range gives each one a small request.
+- **Foundation's `cost_cap` sets the CPU quota,** the hard ceiling only Google raises, above the
+  node pool's maximum. Growth past it starts with a quota request.
 - **GKE node boot disks and the databases' volumes share one SSD quota.** The nodes' pd-balanced
   boot disks and the PersistentVolumes all count against the region's `SSD_TOTAL_GB`, 500 GB by
   default. Size them together. A replica whose volume cannot be provisioned leaves its database
   never `Ready`. Foundation's `cost_cap` raises the quota through a Cloud Quotas preference, which
   takes effect only once Google grants it.
-- **A service's postcondition checks its cap against the quota:** maximum instances plus one
-  rollout instance, times its CPU, must fit. A plan that raises the cap fails until foundation
-  raises the quota.
-- **A service with in-memory rate limits** keeps the instance count its limits assume. Raising it
-  is a design change, not a tuning one.
+- **A service with in-memory rate limits** keeps the pod count its limits assume: Authentication
+  runs one pod. Raising it is a design change, not a tuning one.
 - **A gRPC workload's call cap** (`GRPC_MAX_CONCURRENT_CALLS`) sits beside its `GOMEMLIMIT` in the
   cluster root, so a change to one is reviewed with the other: the cap times one call's peak memory
   fits the memory limit. `cluster-workload` makes a gRPC workload's Service headless, so callers
@@ -226,24 +205,16 @@ metric resource itself succeeds at once.
 - **A service whose calls mostly wait scales on its calls in flight, beside CPU.** CPU stays low
   on its full pods. `cluster-workload`'s `scaling_gauge` reads the pods' `grpc_server_calls_in_flight`
   on their metrics port through an `AutoscalingMetric`. The autoscaler keeps it at 60% of
-  `GRPC_MAX_CONCURRENT_CALLS` per pod, Cloud Run's default target, and CPU at 70%. It absorbs
-  bursts only: `replicas.max` times the call cap bounds the calls the service runs at once, and so
-  the load it sends downstream.
+  `GRPC_MAX_CONCURRENT_CALLS` per pod, and CPU at 70%. It absorbs bursts only: `replicas.max` times
+  the call cap bounds the calls the service runs at once, and so the load it sends downstream.
 
-## Database and backup hosts
+## Planned downtimes
 
-- **The host groups use an `OPPORTUNISTIC` update policy.** Merging a template, image or TLS change
-  restarts nothing.
-- **Database host changes wait for a planned downtime.** Any byte change under
-  `modules/database-runtime/files/`, and any reordering of its `local.files`, replaces the host
-  template. `policy.jq`
-  flags a database host's template replacement or group update, which is not a deletion. Its pull request needs
-  `allow-downtime`, and `DOWNTIME` must list `service-<service>.database` with a `start` already
-  passed. Ask for a full backup before the downtime starts.
 - **Planned downtimes come only from the admin-only `downtime.yaml`,** which writes `DOWNTIME`. A
   full deploy applies it once the run ends, but only when the run's `downtime` job succeeded: a run
-  that failed before writing deploys nothing. Listed services refuse work from `start` until
-  someone clears it; `end` only informs users.
+  that failed before writing deploys nothing. The cluster root gives each listed service's
+  workloads `DOWNTIME_START`, and they refuse work from `start` until someone clears it; `end` only
+  informs users.
 - **A downtime's GKE maintenance exclusion lands only when foundation applies.** The exclusion
   holds node upgrades through the window. When a merge lands while the downtime's full deploy waits
   behind another deploy, the merge's deploy replaces it, and applies foundation only when
@@ -253,52 +224,37 @@ metric resource itself succeeds at once.
   "Expected back" shows the in-progress color, whatever change it announces.
 - **Users see a downtime whenever a deploy can enforce one.** Any deploy applies `DOWNTIME`, so a
   schedule publishes `downtime.json` before writing it, and a clear deletes it before publishing.
-- **The deploy's `rollout` job rolls hosts from observed state, not the diff,** so a cancelled or
-  force-merged deploy loses nothing:
-  - a database host off its group's target rolls only during its service's downtime, once the
-    service's serving revision carries the downtime's start, after a snapshot of its data disk.
-    Until then the deploy warns "rollout pending", or fails when the service missed the downtime.
-    It restarts in place or is replaced; the stateful disk and IP stay. The rollout then waits up
-    to 10 minutes for the new boot's `agora/database-release` guest attribute to read `healthy`.
-    A stable group proves only that the VM runs: a startup that failed closed leaves PostgreSQL
-    stopped;
-  - a backup repository VM restarts when its `config` label differs from `running-config`, after
-    its database host;
-  - `roll-database.yaml` forces both, whatever the downtime.
-- **Each rollout's snapshot is kept 14 days,** labelled `role=pre-rollout`. It is recovery data,
-  never an undo: a faulty host change is fixed forward by a new pull request
-  (`docs/runbooks/database.md`). The data disk still ignores its source snapshot, so a disk ever
-  recreated from one plans no replacement.
-- **Each release image is pinned once,** by `tag@digest` in its service root's `terraform.tfvars`,
-  the database image included. The cluster root reads every pin, and its deploy copies each into the
-  service's `a-novel-<service>` repository. Foundation's `releases` set keeps those repositories
-  beside the cluster, in `europe-west9`, and the nodes only read them. Foundation applies before the
-  cluster, so a new repository exists before its first copy. A release without a database change
-  keeps the reproducible digest and plans nothing for the database (a-novel/infra#1408).
+- **A PostgreSQL major upgrade waits for its service's downtime.** CloudNativePG upgrades the major
+  in place, with every instance stopped until `pg_upgrade` ends. `policy.jq` flags a change of the
+  database's `imageCatalogRef.major`: its pull request needs `allow-downtime`, and `DOWNTIME` must
+  list `service-<service>.database` with a `start` already passed. A deploy applies it only once
+  that downtime has started. Ask for a full backup before the downtime starts.
+
+## Databases and backups
+
+- **Each service's database is a CloudNativePG Cluster** in its namespace: a primary and a replica
+  on separate nodes, archiving WAL to the service's Barman bucket. The deploy waits until both
+  instances serve and WAL reaches Barman.
 - **A new database image rolls the database by switchover,** with no planned downtime: the service's
   `ImageCatalog` changes, and CloudNativePG restarts the replica on it, then hands the primary over.
   The switchover breaks every connection to the old primary, so the calls in flight fail. At low
   traffic one failed call per service crosses the failing-share threshold, which fires for about ten
   minutes with GenAI's faults alert, then resolves alone. Check that the failures stopped instead of
   silencing the alerts (a-novel/infra#1408).
-- **`host-credentials` is pinned once,** in foundation's `host_credentials_image`, as the
-  `tag@digest` `publish-rollout-verifier.yaml` published. Deploy verifies it against that workflow
-  and copies it into each service's tooling repository; the hosts and the service roots derive the
-  digest reference. A new pin is a database host change.
-- **Each backup repository VM keeps a reserved address,** taken from foundation's
-  `native_backups.<service>.repository_ip`, the same value its database host trusts.
-- **Services connect as `<database>_app`,** which owns schema `public` without superuser rights.
-  Each boot of the host converges that role and hands it what a superuser created. The owner
-  `<database>` has no password and logs in only through the host's local socket, so a leaked
-  service password reaches no shell.
-- **A database password rotation** bumps foundation's `app_password_version` and the service's
-  `app-password` in one pull request, merged during a planned downtime, which rolls the host.
-- **pgBackRest owns backup expiry.** Never add age-based deletion to a backup bucket. Never delete
-  WAL to free space.
+- **`backup_server_name` names every database's lineage,** the name it archives under in its
+  bucket. A new name recreates every database empty, rolls their clients and runs the migrations
+  again. Never change it to repair one database.
+- **Services connect as `app`,** the database's owner, with the credentials CloudNativePG generates
+  in the `database-app` Secret. A client's pods read the password at start, so they roll with each
+  new lineage. They verify the server as `database-rw.<service>.svc` against a CA the cluster root
+  issues through cert-manager: CloudNativePG's own CA renews every few months, and a running
+  service loads its trusted roots once.
+- **Barman owns backup expiry,** at 14 days of base backups and the WAL they need. Never add
+  age-based deletion to a backup bucket. Never delete WAL to free space. A daily base backup runs
+  from the replica, and each new lineage starts with one.
 - **A backup bucket keeps Object Versioning beside its retention policy.** Retention refuses to
   replace a live object, and versioning lets the replaced version turn noncurrent and stay retained.
-  pgBackRest rewrites its info files, and Barman rewrites `backup.info` from `STARTED` to `DONE`
-  (a-novel/infra#1252).
+  Barman rewrites `backup.info` from `STARTED` to `DONE` (a-novel/infra#1252).
 - **CloudNativePG's Barman Cloud plugin needs three permissions beyond object access,** which
   bootstrap's `barmanWriter` grants per bucket:
   - `storage.buckets.get`: `barman-cloud-wal-archive --test` reads the bucket before archiving. It
@@ -316,8 +272,8 @@ metric resource itself succeeds at once.
 
 - **Pull-request plans run the candidate's code and providers with the read-only identity.**
   - GitHub issues no OIDC token to fork pull requests.
-  - Renovate delays OpenTofu and provider updates by 7 days (6 hours for patches) to bound a
-    compromised release.
+  - Renovate delays OpenTofu, provider and cluster add-on updates by 7 days (6 hours for OpenTofu
+    and provider patches) to bound a compromised release.
   - State holds no secret values, because those are added outside OpenTofu.
 - **Only admins bypass the rulesets.** A merge to `master` deploys production, and every bot
   reaches it through a pull request. The Agent and Dependencies keys live only in each repository's
@@ -328,19 +284,20 @@ metric resource itself succeeds at once.
   version update Renovate armed, or a refresh of Google's service ranges to exactly what Google
   publishes. A pin deploys only an image of an immutable Release the release App published, built by
   that tag's own run.
-- **Internet egress leaves through Cloud NAT, past the egress allowlist.** A rule names a host by
-  FQDN only when every client resolves it alike, as Cloudflare's anycast does for `api.openai.com`.
-  The firewall admits only the addresses its own lookup returned, and Google's domains answer each
-  client location with another frontend: an FQDN rule for `smtp-relay.gmail.com` dropped most of
-  Authentication's mail (a-novel/infra#1033). Match Google's hosts with the `google-services` address
-  group, Google's ranges minus its Cloud customers', which `refresh-google-ranges.yaml` keeps
-  current. A refused connection times out without a log, and a health probe can pass by luck, so
-  prove an allowlist change with a real call from the workload, such as an email.
-- **A fresh Direct VPC egress instance waits for Cloud NAT.** Its first connection out can wait 30
-  seconds or more, as Google documents, while internal addresses answer at once. A warm service
-  never meets the wait, and a job always does. Give a job's outbound budgets room for it, inside its
-  task timeout: Authentication's maintenance job sends its mail within `SMTP_TIMEOUT = 300s`
-  (a-novel/infra#1123).
+- **Internet egress leaves through Cloud NAT, past two allowlists.** Firewall rules see the node,
+  never the pod, so foundation's `egress_allowlist` lets every node reach each listed host. The
+  cluster root's `internet_egress` then admits each host only for the pods that call it, through an
+  `FQDNNetworkPolicy`, which matches the addresses the pods' own lookups return. A new host joins
+  both. The providers' own allowlists, such as the Workspace SMTP relay's, name foundation's
+  `cluster_nat_address`.
+  - A firewall rule names a host by FQDN only when every client resolves it alike, as Cloudflare's
+    anycast does for `api.openai.com`. The firewall admits only the addresses its own lookup
+    returned, and Google's domains answer each client location with another frontend: an FQDN rule
+    for `smtp-relay.gmail.com` dropped most of Authentication's mail (a-novel/infra#1033). Match
+    Google's hosts with the `google-services` address group, Google's ranges minus its Cloud
+    customers', which `refresh-google-ranges.yaml` keeps current.
+  - A refused connection times out without a log, and a health probe can pass by luck, so prove an
+    allowlist change with a real call from the workload, such as an email.
 - **DNS resolves only the allowlist.** The response policy `a-novel-dns-allowlist` resolves the
   private zones, Compute Engine's internal names and the egress allowlist's hosts. Every other name
   answers with a CNAME to `blocked.internal.` and no address, so no outside name server receives the
@@ -349,46 +306,41 @@ metric resource itself succeeds at once.
     rules, so that pull request needs the deletion label.
   - A wildcard stops at any level that another rule names, as RFC 4592 wildcards do, so foundation
     refuses every level above an allowed name. The bypass rules need `google-beta`.
-  - The `dns_query` logs show each lookup and its answer. A Cloud Run entry carries no source
-    address, so the logs name what was resolved, not which workload resolved it.
+  - The `dns_query` logs show each lookup and its answer. Lookups reach Cloud DNS through the
+    cluster's DNS caches, so the logs name what was resolved, not which pod resolved it.
 - **The cluster's default-deny policies admit DNS to the `kube-system` pods whose `k8s-app` is
   `kube-dns` or `node-local-dns`.** GKE Standard turns NodeLocal DNSCache on by default since
   1.34.1-gke.3720000: each node's `node-local-dns` pod answers the queries sent to kube-dns'
   address. A peer that admits only `kube-dns` times out every lookup with `Errno -3`. The cluster
   root's test requires both values (a-novel/infra#1247).
-- **Google API calls stay inside the `agora_production` perimeter,** a VPC Service Controls
-  perimeter around the private and public-api projects, in foundation's `service-perimeter.tf`. Its
-  spec runs in dry run until a-novel/infra#1042 enforces it.
-  - Its restricted services are every API either project enables, plus Secret Manager, and their VPC
-    reaches only those. A pull request that enables an API adds it to the list, or foundation's
-    test fails.
-  - CI's three identities and the operators enter from any source. Any identity inside may call
-    Secret Manager and Cloud Storage in management, and only there. A new call that crosses the
-    perimeter needs a rule in the same pull request.
-  - IAP's tunnel and Cloud Run's `run.app` invocations reach the perimeter without the caller's
-    identity, so no identity rule admits them. The tunnel stays unrestricted, and a service with
-    ingress `all` skips the invocation check.
-  - Each project's `cloudaudit.googleapis.com/policy` log holds the violations, and in dry run the
-    calls the spec would refuse. Prove a perimeter change with a real call: from a database host, a
-    read of a public bucket outside logs one.
+- **Google API calls stay inside the `a_novel_production` perimeter,** a VPC Service Controls
+  perimeter around the workload project, in foundation's `service-perimeter.tf`. It enforces its
+  status. Its dry-run spec repeats the status, so to try a rule before enforcing it, add it to the
+  spec alone.
+  - Its restricted services are every API the project enables, plus Secret Manager and the APIs
+    GKE's nodes call, and its VPC reaches only those. A pull request that enables an API adds it to
+    the list, or foundation's test fails.
+  - CI's deploy and plan identities and the operators enter from any source. Any identity inside
+    may call Secret Manager and Cloud Storage in management, and only there. A new call that
+    crosses the perimeter needs a rule in the same pull request.
+  - Each project's `cloudaudit.googleapis.com/policy` log holds the refused calls, and the calls a
+    spec-only rule would refuse. Prove a perimeter change with a real call from a workload.
   - Management stays outside, since its Workflows call Discord and GitHub, which Workflows inside a
     perimeter cannot reach.
-- **Organization guardrails are set by hand,** from the setup runbook: the private project's Cloud
-  Run policies, `run.allowedVPCEgress` on both workload projects, the plan identity's deny policy,
-  and the access policy with its two grants. Organization Administrator holds none of their roles,
-  so an admin first grants themselves Access Context Manager Admin, Organization Policy
-  Administrator or Deny Admin. `gcloud` bills a user's calls to their configured project, which
-  needs each API it calls enabled.
-- **The writer's federation condition** pins `deploy.yaml`, `roll-database.yaml` and
-  `recovery.yaml` on `master` behind the `production` environment. Changing it is a bootstrap change, applied by the last trusted
+- **Organization guardrails are set by hand,** from the setup runbook: the plan identity's deny
+  policy, and the access policy with its two grants. Organization Administrator holds none of their
+  roles, so an admin first grants themselves Access Context Manager Admin or Deny Admin. `gcloud`
+  bills a user's calls to their configured project, which needs each API it calls enabled.
+- **The writer's federation condition** pins `deploy.yaml` and `recovery.yaml` on `master` behind
+  the `production` environment. Changing it is a bootstrap change, applied by the last trusted
   workflow before a new one depends on it.
 - **`infra-downtime` trusts only `downtime.yaml` on `master`.** It starts, lists and cancels the
   `downtime-announcements` executions. Workflows grants that project-wide, so it could start
   `github-dispatch` too, which therefore refuses any workflow its schedules do not list. Both
   `downtime.yaml` jobs gate on the admin role, since "Re-run this job" skips the first one.
-- **`infra-health` trusts only `drift.yaml` on `master`, never a pull request.** It can read and
-  invoke Authentication's REST service, for the scheduled health check, and nothing else. Pull
-  requests can mint the read-only identity, so that identity never calls a service.
+- **The read-only identity reads the cluster, never its Secrets.** Pull requests can mint it, so
+  it holds `container.viewer`, which leaves Secrets out, and calls no service. Helm keeps its
+  release records in ConfigMaps for that reason, and no release's values hold a secret.
 - **The `github-dispatch` clock holds the only GitHub credentials in Google Cloud:** one
   fine-grained token per org, limited to Actions on that org's `.github` repo, which only
   `github-dispatcher` reads. `github-dispatch-clock` holds `workflows.invoker`, which Workflows grants
@@ -402,224 +354,64 @@ metric resource itself succeeds at once.
   and call logs keep call results, so a workflow that reads a secret pins
   `call_log_level = "LOG_NONE"` and `execution_history_level = "EXECUTION_HISTORY_BASIC"`.
   Bootstrap's test checks both for every workflow it deploys.
-- **A service that trusts a forwarded visitor header requires IAM.** Its invokers are only the
-  platform and the health checks after each deploy and from drift, which send an ID token for the
-  service's custom audience.
-- **Only named humans run a maintenance job.** Authentication's `agora-authentication-maintenance`
-  is the model (a-novel/infra#961, #962):
-  - the service root defines it with a pinned image and no `run_execution_token`. Its stored
-    definition names no operation, since the image's default only prints help, and it never
-    retries, so a failed run returns to the operator;
-  - foundation tags it `maintenance`. The deploy identity may update jobs of that class, so a
-    release moves the image, but never runs them;
-  - the principals in `authentication_maintenance_principals` hold
-    `roles/run.jobsExecutorWithOverrides` on that class alone, because only an execution's argument
-    overrides name the operation. `run.viewer` and `logging.viewer` let them follow the run;
-  - `docs/runbooks/setup.md` gives the `gcloud run jobs execute … --args=…` command.
+- **A service admits only the callers its `SERVICE_TOKEN_CALLERS` lists.** Each call carries a
+  service token: a Kubernetes service-account token the kubelet projects for the callee's audience,
+  which the service verifies against the cluster's issuer. Its network policy admits the same pods.
+  A service that trusts a forwarded visitor header, as Authentication trusts `X-Client-IP`, lists
+  only the platforms and its smoke check.
+- **Only named humans run a maintenance Job.** Authentication's `maintenance` CronJob is the model:
+  - its template never runs on its own: it is suspended, and its image's default only prints help.
+    It never retries, so a failed run returns to the operator;
+  - the principals in foundation's `authentication_maintenance_principals` reach the control plane
+    and read logs, and the cluster root's RBAC lets them create Jobs in the namespace and follow
+    their pods;
+  - an admission policy keeps every field of such a Job as the template sets it, but the
+    container's arguments, which name the operation;
+  - the setup runbook gives the command.
 - **Inventory IAM by principal and resource:**
-  - each workload runs as its own identity and reads only the secrets it mounts: the runtime
-    account is the main server's, and `service-runtime`'s `workloads` map creates one account per
-    job, sweep or smoke check;
-  - database and repository hosts pull only their service's images. `service-runtime` grants the
-    database host's pull, so a host without native backups pulls too. Genai lost its database for
-    over an hour on 2026-10-18 when that grant lived in the backup module;
-  - humans get no write access in workload projects; the named operators only run the maintenance
-    job.
+  - each workload runs as its own Kubernetes service account and mounts no API token, only the
+    service tokens of the services it calls;
+  - each namespace's `secrets` account reads only its service's secrets in management, through
+    External Secrets and Workload Identity, and its database writes only its own Barman bucket;
+  - the nodes run as `a-novel-cluster-nodes`, which pulls images and writes the nodes' own logs and
+    metrics, and nothing else;
+  - humans get no write access in the workload project. The database operators read the services'
+    namespaces through Kubernetes' built-in `view` role, never their Secrets, and the named operators
+    only run the maintenance Jobs.
 
 ## Recovery
 
-Restores go into a disposable `a-novel-recovery-<id>` project, never production. `recovery.yaml`
-plans or applies the drill host from one JSON input; the runbook covers project creation, the
-temporary grants, the restore units and cleanup. A successful backup proves nothing until a drill
-restores it and its SQL checks pass.
+Restores go into a disposable `a-novel-recovery-<id>` project, never production. `recovery.yaml`'s
+cluster drill builds a throwaway cluster there, restores the listed services' databases from their
+Barman buckets with production's committed pins, runs each database's SQL checks, then destroys the
+cluster whatever the outcome. The runbook covers project creation, the temporary grants and
+cleanup. A successful backup proves nothing until a drill restores it and its SQL checks pass.
 
 ## Add a service
 
-A private service with a database ships in six pull requests, each merged once the previous one has
-deployed. a-novel/infra#785 is the worked example.
+A service ships in two pull requests, the second merged once the first has deployed and its secret
+values are in. a-novel/infra#1404 is the worked example for a platform.
 
-1. **Bootstrap** creates the secret containers. Add version 1 of each value before a later step pins
-   it: the database host reads the application role's `app-password` at boot.
-2. **The service root starts with its pins,** plus its `plan-<root>` job, and the service joins
-   foundation's `releases` set, which creates its `a-novel-<service>` repository.
-   `deploy.yaml` and `drift.yaml` find the root on disk; `lint-repository` names what is missing.
-   The cluster root's deploy copies every pin into that repository before it applies, the database
-   image included.
-3. **Foundation adds the database host.** A new host starts at its target template, so it needs no
-   downtime.
-4. **The root creates its jobs without a `run_execution_token` and its services without invokers.**
-   Name every Cloud Run service that writes to its database in the roll action: the host rolls only
-   once all of them have taken the downtime. The rollout skips a service until its host exists.
-5. **Foundation binds the workloads' invocation tags,** grants the scheduler and creates the
-   schedules.
-6. **The root sets the execution tokens and grants its invokers.** A private gRPC service adds its
-   `smoke-check` module here: the module grants its invoker and runs its job at once.
+1. **Bootstrap** creates the secret containers, and the Barman bucket of a service with a database
+   (`cluster_databases`). Add version 1 of each secret value by hand: the cluster's External
+   Secrets waits for it.
+2. **One pull request runs the service:**
+   - its root holds its pins and secret versions, and `main.yaml` gains its `plan-<root>` job.
+     `deploy.yaml` and `drift.yaml` find the root on disk; `lint-repository` names what is missing;
+   - the service joins foundation's `releases` set, which creates its `a-novel-<service>`
+     repository;
+   - the cluster root adds its namespace, budget, database with its queries, secrets and
+     `release_roles`, its workloads through `cluster-workload` with their network policies, and its
+     smoke and health checks. Each service it calls lists it in `SERVICE_TOKEN_CALLERS`;
+   - a new internet host joins foundation's `egress_allowlist` and the cluster root's
+     `internet_egress`;
+   - Grafana covers it, as [Grafana coverage](grafana.md) describes.
 
-- **In the private project, the deploy identity can create a workload but not run it.**
-  `infraFoundationPrivateProvisioning` grants creating Cloud Run services and jobs and Cloud
-  Scheduler jobs, binding tags to them and reading both back, without a condition: neither API
-  supports resource-name conditions, and no tag exists before creation. Updating, running and
-  invoking need the invocation tag foundation binds in step 5.
-- **Step 5 binds tags and creates schedules,** which no pull-request plan can prove:
-  - a binding also takes `tagUser` on the tag value, which `foundation_application_tags` grants;
-    the project's `tagAdmin` does not include it;
-  - the provider resumes every Cloud Scheduler job it creates, which takes
-    `cloudscheduler.jobs.enable`. `infraFoundationScheduler` holds it, with the `delete` that
-    replaces a schedule whose creation failed.
+- **A platform's public edge goes first.** Its address and certificate live in foundation's
+  `platform_hosts`, and the cluster root reads them as an output. The certificate waits on the
+  domain's DNS records, which the output lists (a-novel/infra#1393).
 - **The new root's first plan fails.** OpenTofu's GCS backend creates a missing state under a lock
   even with `-lock=false`, and the plan identity only reads the state bucket, so
   `storage.objects.create` is denied on `<root>/default.tflock`. The deploy creates the state on
   merge. `plan-<root>` becomes a required check only once the GitHub root reads the merged
   `main.yaml`, and plan jobs skip the merge queue, so the failure blocks nothing.
-- **The database host scripts are shared.** `modules/database-runtime`'s `startup.sh` and
-  `shutdown.sh` read the service, port and database name from foundation's template metadata
-  (`agora-database-service`, `agora-database-port`, `agora-database-name`), so a new service changes
-  neither. Any change to them is a [database host change](#database-and-backup-hosts) for every
-  service.
-- **Native backups enroll after the first deploy.** Until then, the roll action skips the missing
-  repository VM. Each step needs the one before:
-  1. `host-credentials`, `native-restore` and the recovery SQL accept the service. Publish them,
-     then pin `host-credentials`, a database host change for every service.
-  2. The root's `backup-repository` module creates `agora-pgbr-<service>` and the repository VM.
-  3. Bootstrap adds the pgBackRest bucket, roles and TLS secrets, which bind that account. Then add
-     the TLS certificates by hand.
-  4. Foundation adds `native_backups.<service>` during the service's planned downtime. Then take a
-     full backup and run a recovery drill.
-
-## Report faults to Sentry
-
-A workload reports its faults to Sentry once it holds three variables. Migrations and smoke checks
-hold none and report nothing. The service's Sentry project comes first: add its repository to the
-Sentry root's `projects`, as [The Sentry root](#the-sentry-root) describes, and merge that alone. A
-service root cannot read an output the Sentry root has not applied. The rest takes two pull
-requests, each merged once the one before has deployed.
-
-1. **Foundation admits the workload's identity** in `egress_allowlist["sentry"]`, the rule for
-   Sentry's ingest host.
-2. **The root wires each reporting workload.** It reads the Sentry root's
-   `services["<repository>"]` output into `local.sentry` through `terraform_remote_state`, the way it
-   reads foundation's outputs, and sets:
-   - `SENTRY_DSN` to `local.sentry.dsn`, a plain value. A DSN is not a secret: Sentry documents it
-     as safe to expose, and its public key only lets a sender submit events;
-   - `SENTRY_ENVIRONMENT` is `production`;
-   - `SENTRY_RELEASE` is `<repository>@${trimprefix(local.images.<image>.tag, "v")}`, the name
-     release CI gives the release in Sentry, so it moves with every release pin. The root's
-     `tofu test` asserts that each reporting workload's value matches
-     `^<repository>@[0-9]+\.[0-9]+\.[0-9]+$`;
-   - its `vpc_access` sends `ALL_TRAFFIC` from the egress subnet,
-     `local.foundation.network.egress_subnet_id`, where Cloud NAT and the allowlist decide what
-     leaves.
-   - a server a consumer waits on, directly or through another service, sets `cpu_idle = false`,
-     and the root's `tofu test` asserts it. That covers a public API and every server it calls.
-     sentry-go and OpenTelemetry send from background goroutines after the response, and
-     request-based billing gives an instance CPU only while it serves a request, starts or stops.
-     Under sparse traffic, a send can stall past its deadline, and the event is then lost.
-   - a server no consumer waits on, such as one a scheduler calls, keeps request-based billing and
-     sends its telemetry before each answer through golib's `httpf.SendTelemetry`. CPU between its
-     calls would only keep it billed, and frequent calls keep its instance alive around the clock.
-
-   Its tests mock the Sentry root's state with an `override_data` on
-   `data.terraform_remote_state.sentry`.
-
-Cloud Run reserves a workload's egress-subnet addresses 16 at a time, so check that foundation's
-`egress_subnet_cidr` still fits every workload there. A subnet's range grows in place but never
-shrinks. A job there can start without a network for a minute or more. golib gives each event
-`sentryf.SendTimeout`, 2 minutes, to leave, and the job's flush outlasts it, so an event captured
-before the network came up still arrives.
-
-### Send traces and logs to Sentry
-
-The workloads that report to Sentry also export their traces and logs to the same project over
-OTLP/HTTP. Each root adds these variables to the reporting workloads' Sentry env:
-
-- `OTEL_EXPORTER_OTLP_ENDPOINT` is
-  `https://${local.foundation.sentry_ingest_host}/api/${local.sentry.project_id}/integration/otlp`,
-  from foundation's and the Sentry root's outputs. The SDK appends `/v1/traces` and `/v1/logs`.
-- `OTEL_EXPORTER_OTLP_HEADERS` is `local.sentry.otlp_headers`, a plain
-  `x-sentry-auth=sentry sentry_key=<public key>` with the DSN's public key. The Go exporter splits
-  it on the first `=`, so the space is fine.
-- `OTEL_EXPORTER_OTLP_COMPRESSION` is `gzip`, and `OTEL_SERVICE_NAME` is the repository name.
-- `OTEL_RESOURCE_ATTRIBUTES` is `a_novel.workload=api` on a workload that serves requests, and
-  `a_novel.workload=job` on one a person or a schedule starts, a scheduler-called server included.
-  The root's `tofu test` asserts each workload's value. Sentry stores an OTLP resource attribute
-  under a `resource.` prefix, so it searches this one as `resource.a_novel.workload`.
-- `OTEL` is `true`. A service exports only when both `OTEL` and the endpoint are set.
-
-Egress needs no change, since the OTLP endpoints share the ingest host. The perimeter keeps
-restricting the Telemetry and Cloud Trace APIs, so no workload can export to another project's.
-
-A platform's server sends its spans over OTLP: its root sets these variables, egress and `cpu_idle`
-like a service's, but no `SENTRY_*` variable, since no Sentry SDK runs on the server. The root also
-sets `PUBLIC_SENTRY_DSN` to its project's DSN, which the browser's SDK reads once the visitor
-consents.
-nodelib-server reads the same variables, `OTEL_RESOURCE_ATTRIBUTES` included, since v2.2.1.
-
-Foundation's single `sentry_ingest_host` input names the ingest host that every DSN and OTLP
-endpoint points to. A move to another Sentry organization changes that input and the Sentry root,
-in one pull request after the old resources are forgotten, as [The Sentry root](#the-sentry-root)
-describes.
-
-### The Sentry root
-
-`environments/production/sentry` manages the Sentry organization through the community
-`jianyuan/sentry` provider: the projects and their spike protection, then the alerts and dashboards.
-It outputs `services[<repository>] = { project_id, dsn, otlp_headers }`, read from each project's
-first client key by the `sentry_key` data source. A new project's key is read in the apply that
-creates it.
-
-- **It applies only when it changes,** in `deploy.yaml`'s own `sentry` job after bootstrap, never in
-  the services matrix. Every service root applies on every merge, and a failed one stops the
-  rollout, so a Sentry API outage there would hold every release. `check-service-roots.sh` skips it
-  as it skips foundation. The services job waits for it: it runs only when the root changes, so a
-  release never waits on Sentry, while a key or organization change reaches the services in the
-  same deploy. The services still run when it fails, on the outputs it last applied. A deploy
-  re-runs every root changed since the last successful one, so `!failure()`, which counts every
-  ancestor job, would let one rejected Sentry change hold every release. `rollout` checks
-  `needs.services.result` for the same reason.
-- **Alerts post to Discord.** Each service has three metric monitors on its server spans
-  (`is_transaction:true`, on the `events_analytics_platform` dataset): failing share, p95 duration,
-  and telemetry stopped, a `count() < 1` over a window longer than the gap between its steady span
-  sources. Their thresholds are the root's `alerts` input. One `sentry_alert` posts every monitor's
-  issue to the channel in its `discord` input, through the Discord integration installed on the
-  server by hand. Four dashboards cover every service, one per concern: requests, failing share,
-  p95 duration and error events. Each span widget draws one line per service, and requests and job
-  runs get a widget each, split on the workload label; the latency monitor reads requests only.
-  A plan sends none of these to Sentry's API, so the first apply is the test of a new field, and a
-  wrong search key shows only as empty widgets.
-- **Its token never reaches state or a plan.** The root reads it through the Google provider's
-  ephemeral `google_secret_manager_secret_version`. The `tofu` action passes `TF_VAR_writer`, so
-  plans read `production-sentry-plan-token`, the only one bootstrap lets `infra-plan` read, and only
-  deploys read `production-sentry-deploy-token`. Both are Sentry internal-integration tokens:
-  organization tokens have fixed CI permissions and cannot manage projects.
-  `docs/runbooks/secrets.md` lists their permissions.
-- **Mocked providers cannot import,** so a root that adopts existing resources gates its `import`
-  blocks behind a variable its tests turn off, and drops both once applied. A mocked plan also
-  defers the key reads, since the projects are still to create, so its tests cannot assert the
-  output; the service roots' tests check it from the reading side.
-- **The provider drops a missing project from state, but reports a missing spike protection as an
-  error.** A move to another organization therefore takes two pull requests. The first forgets the
-  old resources and key reads with `removed` blocks set to `destroy = false`, and freezes the
-  `services` output as literals of the old values, so the services keep planning. The second sets
-  foundation's `sentry_ingest_host` with the root's `organization`, `base_url` and token versions,
-  and restores the resources: one deploy then applies foundation, the Sentry root and the services
-  in that order. Deleting the resource blocks alone would delete the old projects and their
-  history.
-- **The provider is pre-1.0,** so Renovate's updates wait for a review: a minor release can break,
-  as `sentry_issue_alert` did when `sentry_alert` replaced it.
-
-### Sentry deploys
-
-Release CI creates each release when it cuts the tag, and records no deploy. Each service job of
-`deploy.yaml` records the release's `production` deploy once its root serves it, through
-`.github/scripts/sentry-deploys.mjs` on the `tofu` action's `plan` output.
-
-- **A root serves its releases once its `tofu` step succeeds,** and the step runs only then: the
-  plan rolls a failed service again, as the [release contract](#release-contract) describes. The
-  plan's outputs prove nothing, since OpenTofu writes root outputs even when an apply fails.
-- **Each release gets one deploy.** The script lists the release's deploys and records one only when
-  `production` has none, so a deploy missed during a Sentry outage lands on the next merge.
-- **Nothing fails the deploy.** A Sentry error, a release Sentry lacks or a missing token only
-  warns.
-- **The token is `release-ci`,** the organization token release CI uses, set as `SENTRY_AUTH_TOKEN`
-  in the `production` environment. Its claims name the organization and its region, so an
-  organization move only swaps the token there and in each `release` environment.

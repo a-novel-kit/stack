@@ -7,10 +7,17 @@ in the same train.
 
 ## What covers a workload by itself
 
+The cluster root's `telemetry_env` points each workload's OTLP export at Alloy's receiver, inside the
+cluster and without credentials. `OTEL_SERVICE_NAME` is the repository's name, and
+`OTEL_RESOURCE_ATTRIBUTES` sets `a_novel.workload` to `api` on a workload that serves requests and
+to `job` on one a schedule starts. Alloy alone reaches Grafana Cloud, through its own egress.
+
 Alloy gives each server span and root span an outcome, `a_novel.outcome` (fault, transient,
-expected, ok), and derives span metrics from them. The Errors and Performance dashboards group those
-metrics by `service_name`, so a workload joins them once it exports spans. Health reads its
-namespace: pods, restarts, requests and budget.
+expected, ok), and derives span metrics from them. A failed span of either kind is a fault unless
+its status code marks it transient. golib names the fault's `error.type`, which the faults and new
+fault alerts group by. The Errors and
+Performance dashboards group those metrics by `service_name`, so a workload joins them once it
+exports spans. Health reads its namespace: pods, restarts, requests and budget.
 
 The request span carries the useful split. golib's `httpf` and nodelib's SvelteKit hook name it after
 the route and record the status code. A server that names its spans otherwise folds every route into
