@@ -216,6 +216,10 @@ service:
 - Refresh a rejected or expiring session at one server-owned boundary. Clear cookies only after a
   definitive authentication rejection; preserve them and expose a recoverable unavailable state on
   network, timeout, or downstream 5xx failures. Do not silently turn an outage into signed-out state.
+- Accounts come only from waitlist invitations while the platform earns nothing: a visitor asks for
+  an invitation, an operator invites the address, and the invitation link creates the account with a
+  password. Until the waitlist is retired, add no other way to create one, through a form, a service
+  call or an identity provider such as Google. "Create an account" opens the invitation request.
 - Logout revokes the session's refresh token through the service, then clears the cookies. A failed
   revocation still clears them: the visitor asked to leave this browser signed out.
 - A short-code `GET` only parses a sanitized display model; it never verifies or consumes the code.
