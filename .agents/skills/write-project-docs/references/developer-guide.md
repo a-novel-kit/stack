@@ -61,6 +61,8 @@ Write assertive, short sentences, one idea each, and trust the reader with what 
 - Shell profile edits target `$HOME/.$(basename "$SHELL")rc`, which covers zsh and bash.
 - Use the distribution's package when its version meets the floor, checked on
   [Repology](https://repology.org); otherwise the vendor's own channel, with one line saying why.
+  pnpm is the exception: every distribution installs it with npm, unpinned. npm serves the latest
+  release, while a lagging distribution pnpm rewrites `pnpm-lock.yaml` as it switches to the pin.
 - A pinned version in a command needs a Renovate manager in the stack's `renovate.json`, as the nvm
   installer URL has.
 - Keep a code line within about 78 characters where the command allows: the content column shows no
