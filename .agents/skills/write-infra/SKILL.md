@@ -95,6 +95,8 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 
 - Adding a service, or changing resources, state layout, releases, database hosts or recovery:
   read [Change safety](references/change-safety.md).
+- Adding a service or a platform, or a release that changes the spans, tables or promises Grafana
+  reads: read [Grafana coverage](references/grafana.md).
 - Making a workload report its faults to Sentry: read
   [Report faults to Sentry](references/change-safety.md#report-faults-to-sentry).
 - Workflows, tests, linting or tooling: read [Tooling and tests](references/tooling-and-tests.md).
