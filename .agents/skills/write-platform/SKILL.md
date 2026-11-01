@@ -102,6 +102,13 @@ recorded URLs. Keep secrets in the query, never in a path segment, which is reco
 production, the server spans go to the platform's own Sentry project, which the infra root wires as
 `write-infra` describes.
 
+The server `handle` hook names SvelteKit's request span, `sveltekit.handle.root`, after its route
+ID, as `GET /(studio)/account`. A request that matched no route keeps the method alone, so a path
+never names a span. The hook also records the response's `http.response.status_code` and marks a
+5xx response as an error. Span metrics split the traffic by that name and class each request by
+the code and the span status, and SvelteKit renders a failing load as a 500 page without failing
+the span.
+
 Report the browser through `@a-novel-kit/nodelib-browser/telemetry`, which downloads Sentry's
 browser SDK only once the visitor consents. Declare `PUBLIC_SENTRY_DSN` as a public variable in
 `src/env.ts`: without it, the browser reports nothing and asks nothing.
