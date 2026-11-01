@@ -68,8 +68,9 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 
 ## Authority
 
-- **Agents never apply, dispatch production workflows or change IAM by hand.** Push a branch and let
-  the pull request plan it.
+- **Agents never apply, dispatch or re-run production workflows, or change IAM by hand.** Push a
+  branch and let the pull request plan it. A failed deploy job that needs a re-run goes to the
+  developer as `gh run rerun <run ID> --repo a-novel/infra --failed`.
 - **Use `gcloud` only for reads,** and only when the user allows it in the session and holds ops
   access ([check-access](../check-access/SKILL.md)). A useful read:
   `tofu plan -refresh=false -lock=false` with `GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)`.
@@ -103,7 +104,12 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
   [Repository config](https://github.com/a-novel/infra/blob/master/docs/architecture.md#repository-config)
   describes. A repository is an entry of its `terraform.tfvars`, and its class sets the rest. A
   scoped secret joins that file only after an admin switches the org secret to selected
-  repositories: one still visible to every repository fails each grant with HTTP 409.
+  repositories: one still visible to every repository fails each grant with HTTP 409. Each plan of
+  the root spends the Plan App's hourly API budget, which every pull request shares, so
+  `plan-github` plans only a pull request that changes the root (a-novel/infra#1380). Count the
+  calls a new data source makes. `github_repository_file` pages through each file's commit
+  history, so discovery reads files through `github_rest_api`, about 400 calls a plan
+  (a-novel/infra#1385).
 - Admitting a repository to the Drive visual-test identities: follow
   [Subscribe a repository to Drive visual tests](../write-frontend-tests/references/drive-subscription.md),
   whose later steps run after the merge.
@@ -112,9 +118,11 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 
 Prove a refactor is a no-op before review. Report each root's expected plan in the pull request:
 imports, in-place changes and deletions, with the reason for each. Separate stages that need the
-deletion or downtime label from those that do not. Stack them when they depend on one another. In the handoff,
-list what must be done by hand and who holds it: the label (a maintainer), then the admin-bypass
-merge after a required-check rename and the GitHub settings the root does not manage (core).
+deletion or downtime label from those that do not. Stack them when they depend on one another. A
+stacked pull request plans only after its parent merges,
+[on its next push or reopen](references/change-safety.md#trust-boundaries). In the handoff, list
+what must be done by hand and who holds it: the label (a maintainer), then the admin-bypass merge
+after a required-check rename and the GitHub settings the root does not manage (core).
 
 `master` requires an approval the author's account cannot give. When the user is an admin of
 a-novel/infra and opened the pull request, they review, then record it with
