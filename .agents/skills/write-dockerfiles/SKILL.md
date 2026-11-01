@@ -149,6 +149,10 @@ footprint.
 Every image that serves traffic must have a `HEALTHCHECK`. Write its `CMD` in exec form, as below:
 hadolint rejects the shell form (DL3025), and each tool already exits non-zero when the check fails.
 
+Kubernetes ignores `HEALTHCHECK`, which serves the local stacks. Infra's smoke and health checks
+run `modules/smoke-check/smoke.sh` in the service's own image, with the same `grpcurl` or BusyBox
+`wget`, so the runtime image keeps that tool and a POSIX `sh`.
+
 ### gRPC healthcheck
 
 Use `grpcurl` against the standard `grpc.health.v1.Health/Check` endpoint:
@@ -177,9 +181,8 @@ any Alpine-based image and serves the same purpose at zero size cost.
 ### Database healthcheck
 
 Use the `pg_isready` utility, already present in the PostgreSQL base image. Give it the configured
-role and database through `sh -c`. By default it connects as the OS user, and infra's hosts trust
-local connections, so the server checks that role at once. A missing role or database then logs a
-`FATAL` line on every probe:
+role and database through `sh -c`. By default it connects as the OS user, and a role or database
+that does not exist makes the server log a failed connection on every probe:
 
 ```dockerfile
 HEALTHCHECK --interval=1s --timeout=5s --retries=10 --start-period=1s \
@@ -198,12 +201,16 @@ They run to completion and exit.
 
 ## Database Image
 
-Every service with a database ships the same image recipe, which infra's database hosts and backup
-repositories run: signed Wolfi packages assembled by apko, plus pgBackRest built from its
-checksum-verified upstream release. Copy `builds/database.Dockerfile` and `builds/database.apko.yaml`
-from `service-json-keys`, then add the service's own packages and init SQL. Infra relies on what the
-recipe preserves: UID/GID 999, `PGDATA=/var/lib/postgresql/18/docker`, the upstream
-`docker-entrypoint.sh`, `bash`, `pg_isready`, and `pgbackrest` on the `PATH`.
+Every service with a database ships the same image recipe: signed Wolfi packages assembled by apko,
+plus pgBackRest built from its checksum-verified upstream release. Copy `builds/database.Dockerfile`
+and `builds/database.apko.yaml` from `service-json-keys`, then add the service's own packages and
+init SQL.
+
+Production runs the image under CloudNativePG, whose instance manager replaces the entrypoint and
+whose Barman Cloud plugin takes the backups. Infra relies on UID/GID 999, the PostgreSQL binaries
+on the `PATH`, and the extension packages. The local stacks and tests rely on the rest:
+`PGDATA=/var/lib/postgresql/18/docker`, the upstream `docker-entrypoint.sh`, the init SQL, `bash`
+and `pg_isready`.
 
 - **Pin service packages in the apko manifest** (`postgresql-18=18.6-r5`, `pg_cron-18=1.6.8-r0`).
   The shared Renovate preset tracks every `name=version` line; base libraries stay unpinned.
@@ -214,15 +221,17 @@ recipe preserves: UID/GID 999, `PGDATA=/var/lib/postgresql/18/docker`, the upstr
 - **pg_cron needs `cron.use_background_workers = on`.** By default a job logs in over TCP without a
   password, and SCRAM authentication rejects it, so every run fails with `connection failed`. Set
   `cron.database_name` from `POSTGRES_DB` in an entrypoint wrapper, and only for the `postgres`
-  command: infra also runs the image with other commands.
+  command. CloudNativePG skips the entrypoint, so infra's cluster root sets both settings on the
+  database, and a new extension's server settings join them there.
 - **A Wolfi data directory is not portable from the Debian image.** Moving between them needs a fresh
   volume, or a logical dump and restore.
-- **Installing pgBackRest does not activate backups.** Keep the entrypoint, extensions,
-  authentication and archive settings unless the task changes them.
+- **Keep the entrypoint, extensions, authentication and archive settings** unless the task changes
+  them.
 - **Test the normal entrypoint**, init scripts, authentication and persistent volumes, not only an
   overridden command. A green build or restore test does not prove the image free of advisories.
 - **Paths carry the PostgreSQL major** (`PGDATA`, `/usr/share/postgresql18/`): check them, and every
-  extension's compatibility, when changing the major.
+  extension's compatibility, when changing the major. Infra's cluster root names the major too, and
+  its change waits for a planned downtime.
 
 **Executable files**: use `COPY --chmod=755` when copying shell scripts or other executables into
 the image. It sets the executable bit in a single instruction and avoids a separate `RUN chmod +x`

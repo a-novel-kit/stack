@@ -99,8 +99,7 @@ mirrors golib's OTLP preset: the deployment's standard `OTEL_EXPORTER_OTLP_*` va
 backend, and without an endpoint spans print to stdout. It traces the global `fetch` into backend
 services, keeps every trace even when the caller did not sample it, and redacts query values from
 recorded URLs. Keep secrets in the query, never in a path segment, which is recorded as is. In
-production, the server spans go to the platform's own Sentry project, which the infra root wires as
-`write-infra` describes.
+production, the server spans go to Grafana through the cluster's Alloy, as `write-infra` describes.
 
 The server `handle` hook names SvelteKit's request span, `sveltekit.handle.root`, after its route
 ID, as `GET /(studio)/account`. A request that matched no route keeps the method alone, so a path
@@ -113,26 +112,19 @@ A new platform, or a change to its routes, form actions or the services it calls
 Grafana coverage in infra, as `write-infra`'s [Grafana coverage](../write-infra/references/grafana.md)
 describes.
 
-Report the browser through `@a-novel-kit/nodelib-browser/telemetry`, which downloads Sentry's
-browser SDK only once the visitor consents. Declare `PUBLIC_SENTRY_DSN` as a public variable in
-`src/env.ts`: without it, the browser reports nothing and asks nothing.
+The browser reports nothing. Production gives no platform a browser telemetry destination, so the
+consent-gated `@a-novel-kit/nodelib-browser/telemetry` stays off and asks nothing. Grafana Faro
+replaces it (a-novel/.github#517). Until then, keep its consent preference as it is:
 
-- `src/lib/client/telemetry.ts` builds one `BrowserTelemetry`, released as `<repository>@<version>`
-  from the build's `version`, which the Vite configuration takes from `package.json`.
-- The client `init` hook starts it without awaiting it, and `handleError` reports `unknown` errors.
-- The root layout feeds it `beforeNavigate`, and `afterNavigate` with `page.route.id`, since
-  SvelteKit's first navigation carries no route. It renders uikit's `ConsentBanner` first in the
-  reading order, with the platform's wording, and shows it only while the device records no answer.
+- The root layout renders uikit's `ConsentBanner` first in the reading order, with the platform's
+  wording, and shows it only while the device records no answer.
 - The answer lives in one reactive preference the root layout shares through a context. The
   banner's visibility derives from it, and a public `/privacy` page changes it with a `Switch`.
   The browser keeps the answer per site, so every platform has its own page, open without signing
   in. The shell links it only while the platform collects browser telemetry, and no other screen
   repeats the switch.
-- The server hook writes the request's trace into `<meta name="sentry-trace">`, so the page load
-  continues it, and same-origin requests carry a `traceparent` back.
 
-Add no other tracker, analytics or third-party script without a consent decision on the planning
-issue.
+Add no tracker, analytics or third-party script without a consent decision on the planning issue.
 
 ## Storybook-first delivery
 
@@ -208,9 +200,10 @@ service:
   spend one.
 - Send every service call through one wrapped `fetch`. It forwards the visitor's IP in
   `X-Client-IP`, read with `event.getClientAddress()` (adapter-node's `ADDRESS_HEADER` and
-  `XFF_DEPTH` behind a proxy). On Cloud Run it also adds the platform's Google ID token in
-  `X-Serverless-Authorization`. Services rate-limit by that visitor; without it, every visitor
-  shares the platform's budget.
+  `XFF_DEPTH` behind a proxy). It also sends the platform's service token in
+  `X-Service-Authorization`, read from `SERVICE_TOKEN_PATH` on every call, since the kubelet
+  replaces the file before the token expires. Services rate-limit by that visitor; without it,
+  every visitor shares the platform's budget.
 - Map a service's `429` to a too-many-attempts message. It is neither an outage nor a signed-out
   state.
 - Refresh a rejected or expiring session at one server-owned boundary. Clear cookies only after a
