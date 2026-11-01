@@ -45,6 +45,8 @@ layer rules when testing its contract too; crossing layers requires each matchin
 - New or changed DAO/core operations or handlers, and any other operation with a span:
   [telemetry](references/telemetry.md). Apply this to reviews even when the existing code lacks a span.
   Every operation that fails reports its error on its own span.
+- A new service, or a change to the spans, tables or promises it exposes: its Grafana coverage in
+  infra, as `write-infra`'s [Grafana coverage](../write-infra/references/grafana.md) describes.
 - Tests, regression coverage, or test review: [layer test patterns](references/testing.md), alongside
   `write-go-tests`. DAO integration tests and generated mocks remain required where applicable.
 

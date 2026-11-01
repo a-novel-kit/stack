@@ -140,6 +140,10 @@ Propose the approach and evaluate it against five lenses, every time:
   target user better (simpler, fewer steps, more ergonomic), propose it. A technically elegant
   feature that doesn't fit how people work is the wrong feature.
 
+A new service or platform, or a change to what one stores or promises, also names how production
+proves it works: the numbers its Grafana tab shows and the promises that need an alert, as
+`write-infra`'s [Grafana coverage](../write-infra/references/grafana.md) describes.
+
 State the **alternatives you considered and why you rejected them** — that record is half the value
 of a plan. Where the design needs a new dependency or an internal implementation, invoke
 `choose-dependency`. Where it spans repos or breaks a published contract, capture the dependency

@@ -103,3 +103,7 @@ A repository posts its pull requests and its issues to channels of its own. Unti
    ```
 
 The next pull request event posts to the new reviews channel.
+
+## Watch it in Grafana
+
+A service or a platform joins Grafana's Errors, Health and Performance dashboards on its first deploy. Its alert thresholds and its tab on the Services dashboard come in an infra pull request, as infra's [contributing guide](https://github.com/a-novel/infra/blob/master/CONTRIBUTING.md#rules) describes.
