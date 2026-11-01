@@ -120,8 +120,10 @@ browser SDK only once the visitor consents. Declare `PUBLIC_SENTRY_DSN` as a pub
   SvelteKit's first navigation carries no route. It renders uikit's `ConsentBanner` first in the
   reading order, with the platform's wording, and shows it only while the device records no answer.
 - The answer lives in one reactive preference the root layout shares through a context. The
-  banner's visibility derives from it, and the account page's Privacy section changes it with a
-  `Switch`. The shell offers no consent entry.
+  banner's visibility derives from it, and a public `/privacy` page changes it with a `Switch`.
+  The browser keeps the answer per site, so every platform has its own page, open without signing
+  in. The shell links it only while the platform collects browser telemetry, and no other screen
+  repeats the switch.
 - The server hook writes the request's trace into `<meta name="sentry-trace">`, so the page load
   continues it, and same-origin requests carry a `traceparent` back.
 
