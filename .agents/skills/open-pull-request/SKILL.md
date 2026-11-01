@@ -10,7 +10,9 @@ description: >
 Load [develop-feature](../develop-feature/SKILL.md) before publishing. Keep an exploratory draft
 local until direction agreement, unless publication was explicitly requested. After agreement,
 feature-branch pushes and PRs within scope need no repeated permission. Clear, simple tasks may
-take the shorter path defined there.
+take the shorter path defined there. That freedom stops at the `a-novel` and `a-novel-kit`
+organizations: never open a PR or an issue on another repository
+([working principles](../../../AGENTS.md)).
 
 **Ready means ready for review, not ready to merge.** A draft only backs up dirty, unfinished
 work; mark a PR ready as soon as anyone other than you should look at it. Scope approval, the full

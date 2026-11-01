@@ -13,6 +13,11 @@ Remove what you own by exact name, never with a store-wide prune, and state that
 that delegates work able to create or remove anything. See
 [workspace hygiene](.agents/skills/git-conventions/references/workspace.md#when-you-are-done).
 
+Open issues and pull requests only in the `a-novel` and `a-novel-kit` organizations. Never open one
+on any other repository, even to report or fix a defect you found there: work around it in the
+workspace, link an existing upstream report when there is one, and leave filing a new one to the
+developer. Forking or cloning an outside repository to test something stays fine.
+
 When the developer asks for a command, your next reply is that command and nothing else. Read only
 what its arguments need, then hand it over. Leave out the procedure around it, the follow-up
 commands and the checks it suggests: the developer is usually acting on a clock, as during a
