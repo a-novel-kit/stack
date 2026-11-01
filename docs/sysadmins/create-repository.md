@@ -1,6 +1,6 @@
 # Create a repository
 
-A new repository takes its settings from its class, joins the workspace and gets its own Discord role. Creating one is a pull request to a-novel/infra. The release App and the Discord role take owner rights on its organization.
+A new repository takes its settings from its class, joins the workspace and gets its own Discord role and channels. Creating one is a pull request to a-novel/infra. The release App, the Discord role and the channels take owner rights on its organization and on the Discord server.
 
 ## Set the repository
 
@@ -88,3 +88,18 @@ gh auth refresh -h github.com --remove-scopes admin:org
 ```
 
 `gh variable get` prints the map, the new repository included. Give its role to the repository's admins, as in [Promote a member](./promote-member#give-the-repository-roles).
+
+## Create its Discord channels
+
+A repository posts its pull requests and its issues to channels of its own. Until it has them, both go to the organization's `github-reviews` and `github-issues`.
+
+1. In Discord, create `<name>-reviews` in the organization's **Pull Requests** category and `<name>-issues` in its **Issues** category, so each takes the category's permissions.
+2. On each channel, open **Edit Channel → Integrations → Webhooks → New Webhook**, then **Copy Webhook URL**.
+3. Add each webhook to its map. The reviews map is the organization secret `REVIEWS_WEBHOOKS`, and the issues map is the `.github` repository's `ISSUES_WEBHOOKS`; both are JSON from `<org>/<name>` to the webhook. A secret cannot be read back, so each map is set whole: gather every entry from **Server Settings → Integrations → Webhooks**, add the new one, then paste the map at each prompt:
+
+   ```bash
+   gh secret set REVIEWS_WEBHOOKS --org "$ORG" --visibility all
+   gh secret set ISSUES_WEBHOOKS --repo "$ORG/.github"
+   ```
+
+The next pull request event posts to the new reviews channel.
