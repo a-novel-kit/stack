@@ -98,8 +98,8 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 
 ## Route the work
 
-- Adding a service, or changing resources, state layout, releases, databases, network policies or
-  recovery: read [Change safety](references/change-safety.md).
+- Adding a service, or changing resources, state layout, releases, databases, network policies,
+  service TLS or recovery: read [Change safety](references/change-safety.md).
 - Adding a service or a platform, or a release that changes the spans, tables or promises Grafana
   reads: read [Grafana coverage](references/grafana.md).
 - Workflows, tests, linting or tooling: read [Tooling and tests](references/tooling-and-tests.md).

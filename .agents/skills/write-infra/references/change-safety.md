@@ -367,6 +367,23 @@ the API server as the plan identity. Close it unmerged once read (a-novel/infra#
   which the service verifies against the cluster's issuer. Its network policy admits the same pods.
   A service that trusts a forwarded visitor header, as Authentication trusts `X-Client-IP`, lists
   only the platforms and its smoke check.
+- **A service API serves only TLS, from the services CA.** Passwords, codes and tokens cross the
+  cluster, and RFC 6749 requires TLS on Authentication's token endpoint (a-novel/.github#552).
+  cert-manager's `services` issuer signs each API a certificate for its in-cluster host, such as
+  `grpc.json-keys.svc`, which the cluster root's `service_tls` lists. The workload's `tls` input
+  serves it on 8443 through golib's `*_TLS_*` variables, and golib reloads it at each renewal.
+  - A caller mounts the `services-ca` ConfigMap, which trust-manager copies into every service
+    namespace, through the workload's `service_ca` input. Go reads it through `SSL_CERT_DIR`, Node
+    through `NODE_EXTRA_CA_CERTS`, and grpcurl and BusyBox wget through `SSL_CERT_FILE`. OpenSSL
+    skips a `SSL_CERT_DIR` file that is not named after its hash.
+  - A Go service dials another through `grpcf.ServiceTokenCredentialsProvider` with `TLS` set,
+    which a variable of its own enables, as Authentication's `SERVICE_JSON_KEYS_TLS` does.
+  - The kubelet's gRPC probe speaks only plaintext, so `cluster-workload` probes a TLS gRPC server
+    by TCP on its port. grpcurl cannot probe it: it resolves each method through server reflection,
+    which the service-token interceptor refuses (a-novel/infra#1438).
+  - A live API moves to TLS in two deploys. `*_PLAINTEXT_PORT` keeps plaintext beside TLS while
+    each caller moves, ordered after its server and the policies that admit it. The next deploy
+    closes the port.
 - **Only named humans run a maintenance Job.** Authentication's `maintenance` CronJob is the model:
   - its template never runs on its own: it is suspended, and its image's default only prints help.
     It never retries, so a failed run returns to the operator;
@@ -410,7 +427,8 @@ values are in. a-novel/infra#1404 is the worked example for a platform.
      repository;
    - the cluster root adds its namespace, budget, database with its queries, secrets and
      `release_roles`, its workloads through `cluster-workload` with their network policies, and its
-     smoke and health checks. Each service it calls lists it in `SERVICE_TOKEN_CALLERS`;
+     smoke and health checks. An API it serves joins `service_tls`. Each service it calls lists it in
+     `SERVICE_TOKEN_CALLERS`;
    - a new internet host joins foundation's `egress_allowlist` and the cluster root's
      `internet_egress`;
    - Grafana covers it, as [Grafana coverage](grafana.md) describes.
