@@ -66,6 +66,11 @@
   fails the apply with `Provider produced inconsistent result after apply`. The list replaces the
   provider's default, so keep `metadata.labels` and `metadata.annotations` in it: the databases add
   CloudNativePG's `spec.postgresql.parameters` beside them (a-novel/infra#1249).
+- **A Kubernetes Job's pod template is immutable, and an updated Job never runs again.** An input
+  that must re-run a Job goes in the Job's name, so that a change replaces the Job: the cluster
+  root's migrations Job ends its name with a hash of the database lineage, after its image digest
+  (a-novel/infra#1376). A template annotation, as the servers carry for the lineage, plans as an
+  in-place update that Kubernetes refuses.
 
 ## Retire protected resources
 
@@ -75,9 +80,14 @@
 - **One instance of a protected `for_each`:** `moved` it to an address outside the configuration,
   plus a `removed` block (`destroy = true`, or `false` to forget). `prevent_destroy` stays on the
   other instances.
-- **That move drops the instance's dependency edges.** Its grants no longer wait for it, so a
-  service account can be deleted before the grants that name it. Remove an identity's grants in
-  the apply before the identity.
+- **That move drops the instance's dependency edges.** The resources that reference it no longer
+  wait for it: a service account can be deleted before the grants that name it, and an Artifact
+  Registry repository before its IAM members (a-novel/infra#1391). Destroy the dependents first, in
+  an earlier pull request.
+- **An Artifact Registry repository deleted before its grants blocks the root.** The provider drops
+  a resource from state on a 404, but Artifact Registry answers 403 for a missing repository.
+  Every refresh of those grants then fails, under a `removed` block too, and only a `tofu state rm`
+  of each grant, by ops, frees the root (a-novel/infra#1394).
 - **IAM writes fail for a few minutes after a service account is deleted** with
   `Deleted member '…?uid=…' is not deleted`. The deletion is still propagating: wait about ten
   minutes, then re-run the failed jobs.
@@ -89,6 +99,17 @@
   tag-conditioned roles never cover `run.operations.get`; it lives on an unconditional read role.
   When the writer starts managing a new resource type, or takes an action it never took before,
   add the permissions in foundation first.
+- **An `ignore_changes` entry can hide a missing permission.** Removing it makes OpenTofu call the
+  APIs that set that attribute, which it never called before. a-novel/infra#1370 stopped ignoring a
+  Scheduler job's `paused`, and the next deploy failed on `cloudscheduler.jobs.pause`
+  (a-novel/infra#1377). Before removing one, check the writer's role for those calls.
+- **A permission granted in an apply may not hold yet later in that apply.** IAM takes seconds to
+  minutes to propagate, and OpenTofu calls the next API at once. a-novel/infra#1377 added
+  `cloudscheduler.jobs.pause` to the writer's role, and the deploy's pause, 1.5 seconds later, was
+  refused. A new `google_project_iam_custom_role` likewise fails a grant in the apply that creates
+  it, with `does not exist in the resource's hierarchy` (a-novel/infra#1226). Expect the deploy to
+  fail once, and hand the developer the re-run of its failed jobs. Add no `depends_on` for this:
+  it orders the calls, and waits for no propagation.
 - **A resource whose creation failed halfway is tainted, and its replacement destroys it first.**
   OpenTofu orders that destroy before an update to any resource its state recorded as a dependency
   at creation, whatever the configuration says now. A permission granted in the same change through
@@ -99,9 +120,6 @@
   refused the first workflow with `service agent does not exist`. Create it with
   `google_project_service_identity`, on `google-beta`, and grant its `serviceAgent` role before the
   resource that needs it, as `modules/project-shell` does.
-- **A new `google_project_iam_custom_role` cannot be granted in the apply that creates it.** For a
-  short while, a grant of it fails with `does not exist in the resource's hierarchy`. Re-run the
-  failed deploy job, and the grant succeeds (a-novel/infra#1226).
 - **Artifact Registry's VPC-SC setting `depends_on` a repository in its location.** A location has
   no setting until the project holds a repository there, so the first apply in a new region
   answered 404 (a-novel/infra#1230, #1233).
@@ -160,6 +178,9 @@ unmerged once read (a-novel/infra#1246, #1251).
    bad release is fixed forward, through a hotfix when the service's `master` carries unreleased
    work (`manage-versions`). Migrations stay backward compatible; data rollback is a recovery,
    never part of a deploy.
+   - **A release pin that merges while a branch is open turns the branch's pins into downgrades.**
+     The branch's plans then fail with `… lowers <image> from <version>`. Rebase the branch onto
+     `master`.
 5. The pins the last apply deployed come from the plan's `output_changes.<output>.before`. The
    plan's `prior_state` already holds the new outputs, so it cannot tell a changed pin apart.
 
@@ -217,6 +238,11 @@ metric resource itself succeeds at once.
   full deploy applies it once the run ends, but only when the run's `downtime` job succeeded: a run
   that failed before writing deploys nothing. Listed services refuse work from `start` until
   someone clears it; `end` only informs users.
+- **A downtime's GKE maintenance exclusion lands only when foundation applies.** The exclusion
+  holds node upgrades through the window. When a merge lands while the downtime's full deploy waits
+  behind another deploy, the merge's deploy replaces it, and applies foundation only when
+  foundation changed. Check that foundation applied after the downtime was written. Otherwise an
+  admin dispatches `deploy.yaml`, which applies every root, before `start`.
 - **A downtime post's color follows its headline.** Once `start` has passed, every post that reads
   "Expected back" shows the in-progress color, whatever change it announces.
 - **Users see a downtime whenever a deploy can enforce one.** Any deploy applies `DOWNTIME`, so a
@@ -358,7 +384,8 @@ metric resource itself succeeds at once.
   version and bumping `github_dispatch_token_versions`.
 - **The read-only identity trusts only pull requests into `master`.** A stacked pull request's plans
   fail with `rejected by the attribute condition`. Once its parent merges, GitHub retargets it to
-  `master`; rebase it onto `master` to drop the parent's squashed commit, and its plans run.
+  `master` through an `edited` event, which `main.yaml` ignores. Rebase it onto `master` to drop
+  the parent's squashed commit, then push: a push runs its plans, and so does a reopen.
 - **Cloud Workflows can record what a workflow reads.** Detailed execution history keeps variables
   and call logs keep call results, so a workflow that reads a secret pins
   `call_log_level = "LOG_NONE"` and `execution_history_level = "EXECUTION_HISTORY_BASIC"`.
