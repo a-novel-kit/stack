@@ -65,6 +65,6 @@ Ops sign in to Google Cloud with an `agorastoryverse.com` account. The ops organ
 Production access is code in [a-novel/infra](https://github.com/a-novel/infra). Add `user:<their address>` to two lists in a pull request:
 
 - `operator_principals` in `bootstrap/terraform.tfvars`, for the management plane and recovery.
-- `database_operator_principals` in `environments/production/foundation/terraform.tfvars`, for the database hosts and workload logs.
+- `database_operator_principals` in `environments/production/foundation/terraform.tfvars`, for the services' namespaces on the cluster and the workload project's logs.
 
 The merge applies both. They then set up the [Google Cloud CLI](./gcloud) and [OpenTofu](./opentofu).

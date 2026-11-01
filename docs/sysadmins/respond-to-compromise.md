@@ -132,43 +132,7 @@ For your own account, or one that stays active, open **Security**:
 
 ### Rotate the production secrets
 
-An ops account reads every production secret. When the attacker held one, or a machine signed in to `gcloud` with one, rotate the secrets with the infra [secrets runbook](https://github.com/a-novel/infra/blob/master/docs/runbooks/secrets.md#rotate-a-secret), and revoke each old value where it was issued. Start with the secrets that the [access log](https://github.com/a-novel/infra/blob/master/docs/runbooks/secrets.md#audit-access) shows the account reading. The database password waits for a planned downtime.
-
-### Rotate the Sentry keys
-
-Sentry issues two kinds of keys:
-
-| Key                                 | It lives in                                                                                                        | It can                                       |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
-| The organization token `release-ci` | Bitwarden, copied as `SENTRY_AUTH_TOKEN` into each `release` environment and into infra's `production` environment | record releases and deploys in every project |
-| A project's DSN                     | its first client key, which the infra Sentry root gives the services as a plain value                              | send events to that project                  |
-
-Rotate each key that leaked. Revoking the old key cuts the attacker off at once. Sentry then records no new release, or no event from the service, until the new key lands.
-
-1. For the organization token, open **Settings → Developer Settings → Organization Tokens** in Sentry. Revoke `release-ci`, create a new token with the same name, and store it in Bitwarden in place of the old one. Then set it in every repository whose `release` environment holds the token, and in infra's `production` environment, pasting it at the prompt. `gh` names each one it sets:
-
-   ```bash
-   read -rs TOKEN
-   for ORG in a-novel a-novel-kit; do
-     gh repo list "$ORG" --limit 200 --json name --jq '.[].name' |
-       while read -r REPO; do
-         gh secret list --env release --repo "$ORG/$REPO" --json name \
-           --jq '.[].name' 2>/dev/null | grep -qx SENTRY_AUTH_TOKEN &&
-           printf '%s' "$TOKEN" | gh secret set SENTRY_AUTH_TOKEN \
-             --env release --repo "$ORG/$REPO"
-       done
-   done
-   printf '%s' "$TOKEN" | gh secret set SENTRY_AUTH_TOKEN --env production --repo a-novel/infra
-   unset TOKEN
-   ```
-
-2. For a DSN, open the project's **Settings → Client Keys (DSN)** in Sentry. Choose **Generate New Key**, then delete the old key, so the new one is the project's first key. The Sentry root reads that key only when it applies, so an admin then starts a deploy of every root:
-
-   ```bash
-   gh workflow run deploy.yaml --repo a-novel/infra --ref master
-   ```
-
-   The Sentry root reads the new key, and the services, which wait for it, switch to the new DSN and OTLP header in the same deploy. Events sent between the deletion and their apply are lost.
+An ops account reads every production secret. When the attacker held one, or a machine signed in to `gcloud` with one, rotate the secrets with the infra [secrets runbook](https://github.com/a-novel/infra/blob/master/docs/runbooks/secrets.md#rotate-a-secret), and revoke each old value where it was issued. Start with the secrets that the [access log](https://github.com/a-novel/infra/blob/master/docs/runbooks/secrets.md#audit-access) shows the account reading.
 
 ## Investigate
 
