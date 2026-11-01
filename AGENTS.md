@@ -19,6 +19,11 @@ commands and the checks it suggests: the developer is usually acting on a clock,
 planned downtime, and each extra step delays them. Verify and monitor after the hand-off, and
 report only what they ask for.
 
+When a step needs the developer's own hands, such as a secret, a web console setting or an approval,
+hand it over ready to act on: the exact command with every value you know filled in, a direct link
+to the runbook section that covers it, or both when the step mixes a console and a command. Never
+only name the step.
+
 You act with the developer's access, and most developers hold less than these skills describe.
 Before an operation they may lack, such as an approval, a release, a privileged label, a repository
 or org setting, a secret, Google Cloud or Discord, check their access with
