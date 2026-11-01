@@ -150,7 +150,7 @@ require.Equal(t, testCase.expect, res)
   (`expect: &protogen.JwkListResponse{Keys: []*protogen.Jwk{}}`) — `lo.Map` returns a non-nil
   empty slice, so `&protogen.JwkListResponse{}` (nil `Keys`) would fail the equality check.
 - A server-fault case sets `expectCause` to the error the service mock returns. `require.ErrorIs`
-  proves that `grpcf.Fault` kept it, since Sentry groups the fault by that cause.
+  proves that `grpcf.Fault` kept it, since the server span's `error.type` names that cause's type.
 
 ### lib tests — pure unit tests
 

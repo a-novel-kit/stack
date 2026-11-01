@@ -247,7 +247,7 @@ A trace already links its spans, so each fact is recorded once.
   conventions do. `golib/httpf.HandleError` marks the span for a 5xx and leaves a 4xx unset. A gRPC
   handler answers a server-fault code (`Internal`, `Unavailable`, `Unknown`, `DataLoss`,
   `DeadlineExceeded`) with `grpcf.Fault(code, msg, otel.ReportError(span, err))`, which keeps the
-  reported error as the cause Sentry groups the fault by. It returns a client-error code
+  reported error as the cause the server span's `error.type` names. It returns a client-error code
   (`InvalidArgument`, `NotFound`, …) without a report.
 - **No span events.** OpenTelemetry is deprecating them, and a progress marker or exception event
   repeats what the span's status and duration already show.
