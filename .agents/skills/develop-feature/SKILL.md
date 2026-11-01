@@ -41,6 +41,27 @@ Reuse agreement and authorization already given; do not ask the developer to app
 decision again. Proportionate validation and a final cleanup pass still apply to the shorter path.
 An explicit request to publish or create an issue can advance that action within its stated scope.
 
+## Keep the work moving
+
+The developer waits on whatever you block on, so keep each step busy:
+
+- Ask every design question you can foresee in your first exchange. One that surfaces after green
+  CI costs a rework and another CI round.
+- Start dependent work once the contract it consumes is settled, not once that contract ships.
+  Build against the unreleased dependency as `manage-versions` shows, keep that PR a draft, and
+  re-pin to the release before marking it ready: the release gates the merge, not the start.
+- While a check, a review, a release or another session runs, prepare the next step: the PR body,
+  the next branch, a follow-up PR. To resume when a merge or a release lands, start one background
+  command that ends then, such as
+  `until gh release view vX.Y.Z --repo <org>/<repo> >/dev/null 2>&1; do sleep 60; done`.
+- Batch independent reads into one command or parallel tool calls: every round trip re-reads the
+  whole conversation.
+- Hand a large implementation that follows a long discussion to a fresh session or subagent with a
+  written brief. A context near its limit slows every step and compacts mid-task.
+- When you split work across sessions or subagents, write the shared background to a file once and
+  pass its path, put everything already known in each brief before starting it, give each its own
+  output folder, and fold each report in as it lands.
+
 ## 1. Draft locally and lead the discussion
 
 - Read the affected path, existing behavior, and constraints. Use `plan-feature` for non-trivial
@@ -104,7 +125,8 @@ Use `resolve-pr-feedback` for both issue and PR discussions. During active work,
 resuming, after a meaningful revision or push, during CI waits, and before advancing stages or
 handing off. Read issue comments as well as PR conversation comments, reviews, and inline threads;
 neither surface substitutes for the other. Handle feedback on open PRs within the authorized task.
-Do not create a background monitor unless requested.
+Do not create a recurring monitor unless requested; a background wait that ends on its own, such
+as the CI watch of `monitor-ci`, is not one.
 
 ## 3. Confirm approved scope, then complete test coverage
 

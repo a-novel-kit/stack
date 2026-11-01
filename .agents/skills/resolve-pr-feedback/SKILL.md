@@ -183,8 +183,8 @@ Resolve the thread.
 
 ### 4.1 Commit per `git-conventions`
 
-One logical unit per commit. Pick the commit type that matches the change itself, not the reviewer's
-category:
+One commit per review round, holding all of that round's fixes: each signed commit costs a key
+touch. Type it by the round's main change, not the reviewer's category:
 
 - Reviewer asked for a test → `test(<scope>): ...`
 - Reviewer asked for a doc or description clarification → `docs(<scope>): ...`

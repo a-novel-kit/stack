@@ -192,6 +192,10 @@ affected instead of inventing a screenshot test.
   `registry.k8s.io/pause` holder publishes the ports. A restarted container otherwise gets a new
   host interface, and Chromium fails the page then loading with `net::ERR_NETWORK_CHANGED`.
   platform-template's `builds/compose.e2e.yaml` follows this pattern.
+- Serve another platform's production image over plain http with
+  `PROTOCOL_HEADER: x-forwarded-proto` on its container, and send `X-Forwarded-Proto: http` from the
+  journeys' browser (Playwright `extraHTTPHeaders`). adapter-node otherwise assumes https, and
+  SvelteKit then rejects every form post to that platform as cross-site.
 - Capture traces/screenshots on failure where the existing runner supports them; do not commit
   transient artifacts.
 - Run at least the repository browser baseline for compatibility-sensitive behavior.
