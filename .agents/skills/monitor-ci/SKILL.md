@@ -65,7 +65,7 @@ Wait with one command that ends when the checks do, started with the Bash tool's
 `run_in_background=true`:
 
 ```bash
-timeout 40m gh pr checks <pr> --repo <org>/<repo> --watch --fail-fast --interval 10
+timeout 40m gh pr checks <pr> --repo <org>/<repo> --required --watch --interval 10
 # No PR yet: watch the run itself
 timeout 40m gh run watch <run-id> --repo <org>/<repo> --exit-status
 ```
@@ -75,6 +75,10 @@ one command costs nothing; polling from the model re-reads the whole conversatio
 So never sleep and re-check across turns, never wait in the foreground, and never hand-write a
 loop with a fixed number of rounds.
 
+- Watch only the required checks, to the end. `review-gate` fails until a reviewer approves, so
+  `--fail-fast` would stop at the first poll, and the full list lets you fix every failure in one
+  round. Read the output: a lone `review-gate` failure means CI is green and the PR awaits review.
+  Pipe nothing after the watch, so its exit status stays its own.
 - Set the `timeout` to about twice the repository's usual run. When it fires, read
   `gh pr checks` once: a check still pending after the others completed is stuck, so report it
   rather than wait on it.
@@ -225,7 +229,7 @@ remaining steps accurately. Include any unresolved findings from the Phase 1.2 s
 | Read only failed-step logs of one job | `gh run view <run-id> --log-failed --job <job-id>`                                  |
 | Narrow noisy logs                     | `... \| tail -n 200` or `... \| grep -E "FAIL\|Error" \| head -n 50`                |
 | Rerun failed jobs only (flake retry)  | `gh run rerun <run-id> --failed`                                                    |
-| Wait for in-progress run              | Background `timeout 40m gh pr checks <pr> --watch --fail-fast --interval 10`        |
+| Wait for in-progress run              | Background `timeout 40m gh pr checks <pr> --required --watch --interval 10`         |
 
 | CI Job         | Local fix target                      |
 | -------------- | ------------------------------------- |
