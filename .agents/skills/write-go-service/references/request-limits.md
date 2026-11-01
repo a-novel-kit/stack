@@ -81,9 +81,21 @@ Excess calls wait for a slot rather than exhaust the instance.
 
 ## Counters
 
-Counters live in memory, so each pod counts on its own. A service whose strict limits must be exact
-runs one pod. Needing a second is the trigger to move the counters to a shared store, Valkey on
-Google Cloud.
+- **The standard limit always counts in each pod,** and so does every concurrency gate. N pods give
+  a visitor N times `REST_RATE_LIMIT`, and run N times `ARGON2_MAX_CONCURRENT` hashes at once.
+- **`httpf.Limits` counts through a shared store when the service names one** (golib v0.60.0).
+  `REST_RATE_LIMIT_STORE_ADDR` (`host:port`), `REST_RATE_LIMIT_STORE_USERNAME` and
+  `REST_RATE_LIMIT_STORE_PASSWORD` point it at a Valkey or Redis server, so every pod shares each
+  strict limit's budget. An empty address keeps the counters in the process. The keys name the
+  route and the caller, so each service needs a store of its own.
+- **A store that fails a command, or takes over 100 ms to answer, sends the limit back to counting
+  in the pod** until the store answers again. Each budget then counts once per pod, and every
+  request counted that way carries `rate_limit.local=true` on its server span. The store never
+  refuses a request.
+- **The store's ACL user needs only `MGET`, `MULTI`, `INCRBY`, `EXPIRE`, `EXEC` and `PING` on
+  `httprate:*` keys.** The client logs in with `HELLO` alone, which needs no grant.
+- **A service whose strict limits must be exact runs one pod until it counts through a store.**
+  Authentication's store runs in its own namespace (a-novel/.github#550).
 
 ## gRPC
 

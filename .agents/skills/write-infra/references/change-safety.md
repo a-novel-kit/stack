@@ -196,8 +196,10 @@ the API server as the plan identity. Close it unmerged once read (a-novel/infra#
   default. Size them together. A replica whose volume cannot be provisioned leaves its database
   never `Ready`. Foundation's `cost_cap` raises the quota through a Cloud Quotas preference, which
   takes effect only once Google grants it.
-- **A service with in-memory rate limits** keeps the pod count its limits assume: Authentication
-  runs one pod. Raising it is a design change, not a tuning one.
+- **A service whose rate limits count in each pod** keeps the pod count its limits assume:
+  Authentication runs one pod until it counts through its store, as
+  [request limits](../../write-go-service/references/request-limits.md#counters) describes. Raising
+  it is a design change, not a tuning one.
 - **A gRPC workload's call cap** (`GRPC_MAX_CONCURRENT_CALLS`) sits beside its `GOMEMLIMIT` in the
   cluster root, so a change to one is reviewed with the other: the cap times one call's peak memory
   fits the memory limit. `cluster-workload` makes a gRPC workload's Service headless, so callers
@@ -341,6 +343,12 @@ the API server as the plan identity. Close it unmerged once read (a-novel/infra#
 - **The read-only identity reads the cluster, never its Secrets.** Pull requests can mint it, so
   it holds `container.viewer`, which leaves Secrets out, and calls no service. Helm keeps its
   release records in ConfigMaps for that reason, and no release's values hold a secret.
+- **A secret the cluster chooses itself comes from External Secrets' `Password` generator,** never
+  from an OpenTofu `random_password`. An `ExternalSecret` with `refreshPolicy: CreatedOnce` writes
+  it once into a Secret, so neither state nor a plan holds the value. A `random_password` sits in
+  state, which pull requests read, and a `kubernetes_secret_v1` fails every plan's refresh, since
+  the plan identity cannot read it. Authentication's counter store is the model: one generator's
+  `secretKeys` gives each ACL user a password of its own (a-novel/infra#1421).
 - **The `github-dispatch` clock holds the only GitHub credentials in Google Cloud:** one
   fine-grained token per org, limited to Actions on that org's `.github` repo, which only
   `github-dispatcher` reads. `github-dispatch-clock` holds `workflows.invoker`, which Workflows grants
