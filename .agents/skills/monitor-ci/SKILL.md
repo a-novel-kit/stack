@@ -22,7 +22,8 @@ the budget runs out, stop and escalate.
 ## Choose the next action
 
 1. Identify the current branch/PR commit and its actual checks. Use the observation loop below.
-2. If checks are pending, review the diff once and inspect available feedback while waiting.
+2. If checks are pending, start the background watch (Phase 1.2) and inspect available feedback
+   while it runs.
 3. For a failure, read the failed step and the matching section of
    [failure diagnosis](references/failures.md) before choosing a fix or retry.
 4. Use [the service job map](references/job-map.md) when interpreting an unfamiliar service job;
@@ -50,7 +51,7 @@ gh run list --branch "$(git rev-parse --abbrev-ref HEAD)" --limit 1 \
 
 Possible states:
 
-- `queued` / `in_progress` / `pending` → wait and re-check (Phase 1.2)
+- `queued` / `in_progress` / `pending` → start the background watch (Phase 1.2)
 - `completed` + `success` → done, hand off to the developer; a PR still `BLOCKED` with required
   checks shown as "Expected" has [stranded required checks](references/dependency-prs.md#stranded-required-checks)
 - `completed` + `failure` → classify and fix (Phase 2)
@@ -58,25 +59,38 @@ Possible states:
 - `completed` + `skipped` → a job it `needs:` failed or skipped, so fix that job; on a green
   run, only jobs with an `if:` skip
 
-### 1.2 Polling pattern — do NOT use `gh run watch`
+### 1.2 Wait in one background watch
 
-`gh run watch` blocks the terminal until the run finishes, which in a Claude session blocks the
-whole turn and burns context on a 10+ minute run.
-
-Use the Bash tool's `run_in_background` parameter for a short wait, then re-check:
+Wait with one command that ends when the checks do, started with the Bash tool's
+`run_in_background=true`:
 
 ```bash
-# Keep verification responsive; the next status check should happen quickly.
-sleep 5
+timeout 40m gh pr checks <pr> --repo <org>/<repo> --required --watch --interval 10
+# No PR yet: watch the run itself
+timeout 40m gh run watch <run-id> --repo <org>/<repo> --exit-status
 ```
 
-Run that with `run_in_background=true`, then on the next turn issue `gh pr checks` (or the
-`gh run list` command above) to get the updated state. Repeat until the run is `completed`.
+Its exit resumes you, so no model turn runs until there is a result to read. Polling inside that
+one command costs nothing; polling from the model re-reads the whole conversation at every check.
+So never sleep and re-check across turns, never wait in the foreground, and never hand-write a
+loop with a fixed number of rounds.
 
-#### Use the wait window for a self-review
+- Watch only the required checks, to the end. `review-gate` fails until a reviewer approves, so
+  `--fail-fast` would stop at the first poll, and the full list lets you fix every failure in one
+  round. Read the output: a lone `review-gate` failure means CI is green and the PR awaits review.
+  Pipe nothing after the watch, so its exit status stays its own.
+- Set the `timeout` to about twice the repository's usual run. When it fires, read
+  `gh pr checks` once: a check still pending after the others completed is stuck, so report it
+  rather than wait on it.
+- A merged or closed PR ends the wait: stop the watch and report the result.
+- While it runs, do the next work: the PR body, issue and PR feedback with `resolve-pr-feedback`,
+  the next branch or follow-up of the task. End the turn once nothing else is left; the watch's
+  exit resumes it.
 
-Spend the wait reviewing your own work, so issues are caught and fixed before a reviewer sees
-them. While a background wait is in flight, read the branch's own diff and check it critically:
+#### Review your diff before pushing
+
+Review your own diff once before the first push: a defect found after the push costs another CI
+round. Read the branch's own diff and check it critically:
 
 ```bash
 git diff master...HEAD          # or the stacked parent branch
@@ -88,24 +102,12 @@ that don't report (see the every-span'd-layer rule), naming/layering drift from 
 `write-*` skill, and
 anything the PR body claims but the diff doesn't do.
 
-- A clear defect is fixed like any CI finding (Phase 3): local-verify, follow-up commit,
-  push. The push starts a fresh run, so the self-review and the CI loop converge.
+- Fix a clear defect before the push; one found later is fixed like any CI finding (Phase 3).
 - Something arguable (a design trade-off, a deferred concern) is surfaced, not silently
   rewritten: note it and raise it in the final CI report so the user decides.
 
-Do the self-review once per branch, not on every poll; after a fix commit re-review only
-the new diff. Keep it scoped to `git diff` — this reviews the change, not the whole repo.
-
-Rule of thumb for sleep durations:
-
-- First check after push: `5s` — short jobs (lint, generated-go) often complete by then
-- Still in progress: `5s` — keep verification responsive and catch failures quickly
-- Known long wait (test-pkg-js after cold image pulls): `10s` — a small backoff, not a reason to
-  block the turn for a minute or more
-
-Prefer `5s` polling for CI status checks. If the same run remains unchanged across several
-polls, back off to `10s`; do not default to `30s`, `90s`, or longer sleeps. A short poll is
-especially important when the next action depends on verification completing.
+Review once per branch; after a fix commit, re-review only the new diff. Keep it scoped to
+`git diff`: this reviews the change, not the whole repo.
 
 ### 1.3 Get the failing run details
 
@@ -227,7 +229,7 @@ remaining steps accurately. Include any unresolved findings from the Phase 1.2 s
 | Read only failed-step logs of one job | `gh run view <run-id> --log-failed --job <job-id>`                                  |
 | Narrow noisy logs                     | `... \| tail -n 200` or `... \| grep -E "FAIL\|Error" \| head -n 50`                |
 | Rerun failed jobs only (flake retry)  | `gh run rerun <run-id> --failed`                                                    |
-| Wait for in-progress run              | Bash `sleep 5` with `run_in_background=true`, then re-check                         |
+| Wait for in-progress run              | Background `timeout 40m gh pr checks <pr> --required --watch --interval 10`         |
 
 | CI Job         | Local fix target                      |
 | -------------- | ------------------------------------- |

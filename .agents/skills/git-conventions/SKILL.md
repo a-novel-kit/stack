@@ -83,8 +83,11 @@ EOF
 
 - **A commit is its subject line.** Add a body only when it says something the subject and the
   diff cannot — see [Body](references/commits.md#body).
-- **One logical unit per commit.** A DAO file + its test = one commit; a migration file = one
-  commit. Never combine DAO + service in a single commit.
+- **One signed commit per pull request.** Each signature costs the developer a key touch, and the
+  squash merge lands one commit anyway. While you work, commit checkpoints unsigned
+  (`git -c commit.gpgsign=false commit`); before the first push, squash them into one signed
+  commit (`git reset --soft <base>`, then commit). Each later review round adds one commit. The
+  branch is the logical unit: `implement-feature` cuts one per layer.
 - **Stage explicit paths — never `git add -A` / `git add .`.** These checkouts keep sibling
   worktrees under an untracked `tmp/` (see [Before you start](references/workspace.md#before-you-start)). A blanket add
   stages each `tmp/wt-*` as an embedded-repo **gitlink** — a bogus submodule ref that rides your
@@ -165,9 +168,16 @@ GIT_SSH_COMMAND='ssh -o ControlMaster=auto -o ControlPath=~/.ssh/a-novel-%C -o C
 Prefix it rather than export it: an exported `GIT_SSH_COMMAND` makes the CLI skip its own sharing,
 which keeps a sync under GitHub's limit of ten sessions per connection.
 
-A signature shares nothing: every signed commit or tag asks for its own touch. Put a batch of commits
-in one script, run it where the developer sees its terminal, and warn them before it starts, because
-git hides ssh-keygen's "Confirm user presence" prompt until it fails. Commits nobody asked to sign
+A signature shares nothing: every signed commit or tag asks for its own touch, and a rebase signs
+every commit it replays again. So keep each pull request to one signed commit, as the rules above
+say, and put every signing step in one script: the fetch, a rebase only when
+[workspace hygiene](references/workspace.md#before-you-start) calls for one, the commit and the
+push. Master then cannot move between your check and the signatures. Check the script first,
+because one that fails after the developer approved it costs a second approval: run `bash -n` on
+it, and its unsigned steps (the fetch, `git merge-tree`, `git add -n`) in your own shell. Give any
+rebase in it `GIT_EDITOR=true`. Run it where the developer sees its terminal, and warn them before
+it starts, because git hides ssh-keygen's "Confirm user presence" prompt until it fails. Once the
+call returns, read the terminal with a wait of a few seconds at most. Commits nobody asked to sign
 must not reach the key: scratch repositories and test suites that commit inherit `commit.gpgsign`,
 so run them with `-c commit.gpgsign=false` or `GIT_CONFIG_GLOBAL=/dev/null`.
 

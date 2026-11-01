@@ -114,6 +114,13 @@ a-novel test -y                 # everything (final pre-push validation)
 a-novel build --type=go -y      # Go binaries
 a-novel build --type=pnpm -y    # pnpm build
 a-novel build --type=podman -y  # images — only if you touched builds/ or what they copy
+
+# 4. SEMGREP, when the repo's CI runs lint-semgrep (the services), from the repo root.
+#    <version> is the tag@digest its lint-semgrep job pins. From a git worktree, also mount the
+#    main checkout's .git at its own path.
+podman run --rm -v "$PWD:/src:ro,z" -w /src \
+  -v "<workspace>/kit/workflows/security-actions/lint-semgrep/rules:/rules:ro,z" \
+  "docker.io/semgrep/semgrep:<version>" semgrep --config=/rules/service.yaml --metrics=off --error /src
 ```
 
 **Lint is not formatting.** `gofmt` / `gofumpt` / `gci` (and `pnpm format:go`) only check
@@ -241,13 +248,15 @@ complete only once you have reported one of:
   condition hit, with the failing job(s), root-cause hypothesis, and what was tried
   surfaced to the user (per `monitor-ci` Phase 4).
 
-Never end the turn at "PR opened, CI running" — that leaves the result unverified. Carry
-the CI watch to a reported conclusion before closing out.
+Start `monitor-ci`'s background watch (Phase 1.2) and keep working while it runs. Once only its
+result is left, you may end the turn: the watch's exit resumes you, and you report then. Never
+close out without that report.
 
-While CI runs, inspect both linked issue discussions and PR feedback with `resolve-pr-feedback`.
-Use the wait windows for a self-review of the branch's diff (`monitor-ci` Phase 1.2); full coverage
-and merge readiness still depend on the current `develop-feature` stage. Green CI does not approve
-a PR's scope or complete the task. If no checks apply or are configured, report that accurately.
+While CI runs, inspect both linked issue discussions and PR feedback with `resolve-pr-feedback`,
+and prepare the task's next step. Review the branch's diff before pushing (`monitor-ci` Phase 1.2).
+Full coverage and merge readiness still depend on the current `develop-feature` stage. Green CI does
+not approve a PR's scope or complete the task. If no checks apply or are configured, report that
+accurately.
 
 Do not merge — merges are a developer decision unless explicitly delegated.
 

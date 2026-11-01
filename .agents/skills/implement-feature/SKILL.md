@@ -119,6 +119,10 @@ the smallest unit that:
 Skip layers that are not affected. A feature that only adds a new service method and handler may
 start at step 4.
 
+The order is for dependencies, not scheduling. Once the contract a later layer consumes is settled,
+such as the proto or the OpenAPI spec, write that layer in parallel, in a sibling worktree or with a
+subagent: OpenAPI + pkg/js need not wait for the handlers' tests.
+
 **When a single branch is enough**: the feature touches one layer (or the coupled OpenAPI + pkg/js
 pair, which always moves as one unit), creates no migration, and changes no proto. Improvement rounds
 (multi-layer bug fixes, test additions, doc updates, code cleanup) with no user-facing behavior
@@ -191,15 +195,14 @@ Tests must pass before the branch is mergeable. A PR under review may still be a
 planned coverage expansion; describe that explicitly. Do not disable existing checks or mark failing
 work done.
 
+On a stack of layer branches, build each branch and run its focused tests, then run the full
+affected suites once, on the top branch, before pushing the stack. CI runs them on every pull
+request.
+
 ### 3.4 Commit
 
-Follow `git-conventions`. One commit per logical unit within the branch:
-
-- Migration file → one commit
-- DAO file + its test → one commit
-- Service file + its test → one commit
-- Handler file + its test + mock update → one commit
-- `openapi.yaml` + pkg/js changes → one commit (they always change together)
+Follow `git-conventions`: the branch is the logical unit and lands as one signed commit, with its
+tests and generated files.
 
 ```bash
 git add <specific files>
