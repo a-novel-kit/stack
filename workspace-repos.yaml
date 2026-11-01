@@ -18,6 +18,7 @@ repos:
   - a-novel/service-template
   - a-novel/platform-template
   - a-novel/platform-studio
+  - a-novel/platform-account
   - a-novel/service-json-keys
   - a-novel/service-authentication
   - a-novel/service-narrative-engine
