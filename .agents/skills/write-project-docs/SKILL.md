@@ -44,8 +44,8 @@ Name Agora only in those products and in the copy their users read, such as page
 Everything else is A-Novel in prose and `a-novel` in identifiers.
 
 A few names predate the rule and stay: the Agora logo, the `agora-storyverse` Google Cloud project,
-the `agorastoryverse.com` Workspace domain and social handles, and the `agora-` production resource
-IDs until their migration lands. The
+the `agorastoryverse.com` Workspace domain and social handles, and two names in infra: the `agora`
+value of its `application` label and the `agora-production` DNS policy. The
 [taxonomy](https://github.com/a-novel/.github/blob/master/docs/taxonomy.md#a-novel-and-agora) holds
 the rule for every reader.
 

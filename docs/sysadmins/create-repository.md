@@ -54,20 +54,6 @@ rm "$KEY_FILE"
 
 The App keeps its other keys, so every other repository keeps releasing.
 
-## Connect it to Sentry
-
-A service reports its faults, traces and logs to a Sentry project of its own. A platform takes step 1 and skips the others: its server traces and its visitors' consented browser telemetry need no token. Every other repository skips this section.
-
-1. An infra pull request adds the repository to `projects` in `environments/production/sentry/terraform.tfvars`. Its deploy creates the Sentry project, named after the repository, with spike protection. Never create a project by hand: the Sentry root owns them all.
-2. In the organization's **Settings → GitHub Apps**, configure **Sentry** and add the repository under **Repository access**. Sentry reads each release's commits through it.
-3. Copy the Sentry organization token `release-ci` from [Bitwarden](./bitwarden), and paste it at the prompt:
-
-   ```bash
-   gh secret set SENTRY_AUTH_TOKEN --env release --repo "$ORG/$NAME"
-   ```
-
-The service's DSN, OTLP header and project ID need no copying: once step 1 has deployed, the service root reads them from the Sentry root, as the `write-infra` skill describes. A DSN is not a secret, so none of them goes to Secret Manager.
-
 ## Create its Discord role
 
 CI mentions a repository through its own role.

@@ -23,7 +23,7 @@ Each role is a GitHub team per repository class: `service`, `platform`, `infra`,
 | Role       | Team                                    | Adds                                                                                      |
 | ---------- | --------------------------------------- | ----------------------------------------------------------------------------------------- |
 | Developer  | `developers-<class>`                    | Write: push branches, open pull requests, label, dispatch workflows, re-run jobs          |
-| Ops        | `developers-infra` and a Google account | Production: `gcloud` reads, OpenTofu state, IAP SSH, secret versions                      |
+| Ops        | `developers-infra` and a Google account | Production: `gcloud` reads, OpenTofu state, the services' namespaces, secret versions     |
 | Maintainer | `maintainers-<class>`                   | Maintain: approvals that `review-gate` counts                                             |
 | Owner      | `owners-<class>`                        | Admin: ruleset bypass, `approve-pr` on their own pull requests, the `release` environment |
 | Core       | `core`, owner of both organizations     | Admin everywhere, org settings and teams, Bitwarden, Discord admin                        |

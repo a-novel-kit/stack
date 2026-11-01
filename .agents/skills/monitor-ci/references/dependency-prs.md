@@ -48,7 +48,6 @@ Read the PR's timeline (`RemovedFromMergeQueueEvent.reason`) before acting.
 | Approval withheld: a first-party version has no release proof                            | No release built it, or its npm release predates attested publishing                    | No Release from the release App means an incident: approve nothing and tell core. Otherwise a maintainer reviews and approves.         |
 | Approval withheld: Renovate left it off auto-merge                                       | Its preset sets `automerge: false`, such as a major, or a person disarmed it            | Review the update; a maintainer or an admin approves it.                                                                               |
 | infra release pin `DIRTY`                                                                | A merge edited a line next to its pins                                                  | The next push to `master` rebuilds it. To rebuild it now, send its dispatch again (infra `docs/runbooks/deployments.md`).              |
-| infra `plan-<root>` asks for `allow-downtime` for a service the PR does not touch        | The plan ran while that service's deploy applied its database hosts                     | Once that deploy's `foundation` job finishes, re-run the failed job.                                                                   |
 | A release has no infra release pin                                                       | Its `deploy` job failed, or the release predates the job                                | Re-run the release's `deploy` job, or send the dispatch by hand.                                                                       |
 | Red                                                                                      | See [failure diagnosis](failures.md) and the classes below                              | Fix on master; Renovate's rebase carries it.                                                                                           |
 | Red and stale, every member pending the age gate, in a repo whose only JS update is pnpm | Zombie: Renovate skips the branch while every update is pending                         | Close it with `--delete-branch`; a fresh PR follows.                                                                                   |
@@ -86,12 +85,9 @@ maximum supported`. A tool's indirect `golang.org/x/tools` cannot read the new c
   its images, and Renovate bumped to it: `hub.docker.com/v2/repositories/library/<image>/tags/<tag>`
   lists no `images`. On 2026-10-21 node `24.22.1` stayed empty for hours. Nothing in the repository
   fixes it: once that tag lists `amd64`, dispatch `renovate.yaml` on each repository to rebase the PR.
-- **infra `scan-infrastructure` (Trivy) reports a CVE in an indirect Go module.** Renovate's
-  `[security]` PR fixes it once the repo's preset enables OSV alerts; otherwise bump the module by hand.
-- **infra `plan-*` asks for `allow-downtime`.** A service release with a new database digest changes
-  its database host's template, so it merges only during that service's planned downtime, with the
-  label. A release without a database change keeps the digest and plans nothing for the hosts. Core
-  schedules the downtime, and a maintainer or an admin applies the label.
+- **An infra release pin never needs `allow-downtime`.** A new database image rolls by switchover.
+  Only a PostgreSQL major upgrade, a hand-written change to the cluster root, waits for a planned
+  downtime, as `write-infra` describes.
 
 ### Stranded required checks
 

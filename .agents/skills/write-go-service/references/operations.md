@@ -310,8 +310,9 @@ func NewGrpcOrderCreate(service GrpcOrderCreateService) *GrpcOrderCreate {
   `status.Errorf` use `%v`, never `%w`: gRPC status errors don't support `errors.Unwrap`, so `%w`
   misleads. Keep status _messages_ generic enough not to leak DB/crypto detail.
 - Answer a server fault (`Internal`, `Unavailable`) with `grpcf.Fault(code, msg, cause)`. The caller
-  receives the status alone, and the fault keeps its cause for Sentry, which groups faults by it. A
-  bare `status.Error` wraps nothing and puts every fault of a method in one Sentry issue.
+  receives the status alone, and the fault keeps its cause: the server span's `error.type` names its
+  innermost type, which Grafana's fault alerts group by. A bare `status.Error` wraps nothing and
+  gives every fault of a method the same type.
 - Answer `Unavailable` only for a call that did not run: in-cluster callers retry it on another pod.
   A handler that has had an effect answers `Internal`, as
   [request limits](request-limits.md#grpc) explains.

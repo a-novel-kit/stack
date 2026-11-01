@@ -104,7 +104,7 @@ Each `cmd/<name>/main.go` wires the full dependency graph and starts a server or
 
 ```
 1. Load config (env/yaml)
-2. Initialize observability (OpenTelemetry, then the Sentry reporter)
+2. Initialize observability (OpenTelemetry)
 3. Set up shared contexts (database connection, secrets)
 4. Construct DAO objects
 5. Construct service objects (inject DAOs via interfaces)
@@ -125,58 +125,36 @@ signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 server.GracefulStop()
 ```
 
-### Error reporting
+### Fault reporting
 
-Each server and job reports its faults to Sentry through golib's
-[`sentryf`](https://pkg.go.dev/github.com/a-novel-kit/golib/sentryf), whose package docs hold the
-API and what an event carries. A migrations binary reports nothing.
+A fault reaches Grafana as a failed span: Alloy counts a failed server span or root span as a
+fault, and golib's [`otel`](https://pkg.go.dev/github.com/a-novel-kit/golib/otel) names its type on
+that span as `error.type`, which the fault alerts group by. `write-infra`'s
+[Grafana coverage](../../write-infra/references/grafana.md) holds the rest. A migrations binary
+records none.
 
-- **The reporter's config loads like any other setting.** `internal/config/env` reads
-  `Sentry = sentryf.LoadConfig(getEnv)`, so the service's prefix applies, and each binary's config
-  struct carries it as a `Sentry sentryf.Config` field.
-- **`main` installs the reporter right after OpenTelemetry,** before any work, and flushes it on
-  exit within a bounded timeout:
-
-  ```go
-  lo.Must0(sentryf.Init(cfg.Sentry))
-  defer sentryf.Flush(config.SentryFlushTimeout)
-  ```
-
-- **An empty `SENTRY_DSN` turns reporting off,** so local runs and tests need no Sentry. With a DSN,
-  `Init` refuses a missing release or environment.
-- **golib captures the servers' faults:** a 5xx in `httpf.HandleError`, a gRPC call that ends with
-  `Internal` or `Unavailable`, a panic in a handler or under `otel.RecoverPanic`, and a drain past
-  its budget or a serve failure, which `httpf.Serve` and `grpcf.ListenAndServe` report as
-  `serve HTTP` or `serve gRPC`. A handler adds no capture of its own, and a handled 4xx condition is
-  never captured.
-- **Work that outlives its request reports its own failure.** No handler sees it fail, so its owner
-  takes a report function from `cmd`, which captures each failure. Authentication's REST API wires
-  `MailDelivery`'s report to `sentryf.Capture`. A job that waits for the same work reports the result
-  in `main` instead, and passes no report.
-- **A job's `main` captures the job's failure** under the operation's name, such as
-  `sentryf.Capture(ctx, "rotate-keys", err)`, before the deferred flush runs. Its setup after
-  `sentryf.Init`, such as loading a key or connecting to the database, returns its error to that
-  capture rather than panicking past it. A usage error, such as an unknown operation, captures
-  nothing. Prove the capture with `sentryftest.Record(t)`. The recorder swaps the process-wide
-  reporter, so that test runs serially.
-- **A job outwaits golib's send timeout at exit.** A Cloud Run job with Direct VPC egress waits
-  30 seconds or more for Cloud NAT before its first connection out, while the database answers at
-  once. golib's reporter therefore gives each event `sentryf.SendTimeout`, 2 minutes, to leave. A
-  job's `main` flushes within `config.SentryJobFlushTimeout`, set to
-  `sentryf.SendTimeout + time.Minute`. A server keeps `config.SentryFlushTimeout`, inside its
-  platform's shutdown grace period.
+- **golib records the servers' faults:** a 5xx in `httpf.HandleError`, a gRPC call that ends with
+  `Internal` or `Unavailable`, and a panic in a handler or under `otel.RecoverPanic`, which also
+  logs the panic's type and stack at error level. A handler adds no record of its own, and a
+  handled 4xx condition is never one.
+- **A serve failure or a drain past its budget** returns from `httpf.Serve` or
+  `grpcf.ListenAndServe`, and `main` exits with it. A failure while serving restarts the pod, which
+  Grafana's Health dashboard counts.
+- **Work that outlives its request records its own failure.** No server span sees it fail, so each
+  run is the root of its own trace, `trace.WithNewRoot()`, and a failure sets
+  `otel.ReportError(span, err)` and `span.SetAttributes(otel.ErrorType(err))` on that root, as
+  golib's `worker.Poll` does. A job that waits for the same work records the result on the job's
+  root instead.
+- **A job's root span carries the job's failure.** Its `run` starts the span, then records the
+  failure on it the same way before returning it to `main`, which exits non-zero after the deferred
+  flush, so the Kubernetes Job fails too. Its setup, such as loading a key or connecting to the
+  database, runs under that span and returns its error rather than panicking past it. A usage
+  error, such as an unknown operation, records nothing.
 - **A job flushes its telemetry within `config.OtelJobFlushTimeout`,** one minute, through
   `config.OtelJobPresetDefault`. A job often ends within milliseconds, so every span and log leaves
   in that exit flush. The OpenTelemetry SDK gives the spans, then the logs, 30 seconds each. A
   server keeps `config.OtelFlushTimeout`, 2 seconds.
 - **A server's drain ends 6 seconds after SIGTERM.** `env.TimeoutShutdownDefault` sets the REST and
-  gRPC shutdown budgets, so the 2-second Sentry and OpenTelemetry flushes that follow finish before
-  Cloud Run's SIGKILL at 10 seconds. Work still running when the drain ends is cut, and the server
-  reports it.
-- **A server no consumer waits on sends its telemetry before it answers.** Billed per request, it
-  loses its CPU once it answers. Its `main` wraps the router with
-  `httpf.SendTelemetry(config.<Server>TelemetryTimeout)`, outside the router's tracing, so the
-  request's own span leaves too. The timeout fits inside the write timeout's slack after the request
-  deadline. GenAI's sweep does this; a server consumers wait on keeps CPU between requests instead.
-- **An event that cannot leave within `sentryf.SendTimeout` is lost.** The Cloud Monitoring
-  job-failure alert still reports that job's failure.
+  gRPC shutdown budgets, so the 2-second OpenTelemetry flush that follows finishes well inside the
+  pod's 30-second termination grace period. Work still running when the drain ends is cut, and the
+  server returns an error wrapping `context.DeadlineExceeded`.

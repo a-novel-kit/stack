@@ -38,7 +38,7 @@ layer rules when testing its contract too; crossing layers requires each matchin
 - DAO operations, constraint violations, ownership checks or transaction ownership, including
   core/job transactions: [data access](references/data-access.md).
 - Core validation/orchestration or REST/gRPC handlers: [operations](references/operations.md).
-- Config, internal helpers, models, exported clients, command wiring, or Sentry error reporting:
+- Config, internal helpers, models, exported clients, command wiring, or fault reporting:
   [wiring](references/wiring.md).
 - REST routes, gRPC methods, request bodies, rate limits, call caps, or costly operations:
   [request limits](references/request-limits.md).

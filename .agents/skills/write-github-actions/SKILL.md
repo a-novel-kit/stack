@@ -212,9 +212,8 @@ keys and `BWS_READ_TOKEN` are secrets of each repo's `governance` environment, w
 GitHub root fills from Secret Manager. A job that reads one names
 `environment: {name: governance, deployment: false}`; a job calling a reusable workflow passes the
 secret by name, and the called job names the environment. The release App's key lives only in the
-`release` environment. A repository with a Sentry project keeps `SENTRY_AUTH_TOKEN` there too, for
-the release step `manage-versions` describes. A platform's tag build reads its source-map upload
-key, set by hand, from a `sourcemaps` environment. The GitHub root opens it on the same refs as
+`release` environment. A platform's tag build reads its source-map upload key, set by hand, from a
+`sourcemaps` environment. The GitHub root opens it on the same refs as
 `governance`, with no reviewer, so a release still waits for one approval: the cut's.
 
 Add a `concurrency` group with `cancel-in-progress: true` only where a superseded run's result is

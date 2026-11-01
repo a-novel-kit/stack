@@ -2,9 +2,10 @@
 name: write-infra
 description: >
   Plan, change, review or operate a-novel/infra: OpenTofu roots and modules, the plan-on-PR and
-  apply-on-merge pipeline, Google Cloud identities and networks, database and backup hosts, recovery
-  drills, and runbooks. Load for any change under that repository, and before running or handing
-  over any `gcloud` command. Service code and migrations belong to their service skills.
+  apply-on-merge pipeline, Google Cloud identities and networks, the production cluster with its
+  workloads and databases, recovery drills, and runbooks. Load for any change under that repository,
+  and before running or handing over any `gcloud` command. Service code and migrations belong to
+  their service skills.
 ---
 
 # Maintain infrastructure
@@ -23,46 +24,48 @@ Infrastructure only moves forward, and no procedure or workflow undoes a change.
 fixed by a new pull request, which may revert it, and a bad release by a hotfix. Damaged data goes
 back through recovery. Where a fix is slow, speed up the hotfix path rather than adding an undo.
 
-Keep it that way. Prefer OpenTofu, provider features and native GitHub Actions over custom code.
-Custom code exists only for software that runs **on the VMs**, the TLS loader and the restore worker,
-and for the workflow rules that can stop or misdeploy production, in tested `.github/scripts`.
+Keep it that way. Prefer OpenTofu, provider features, Kubernetes and its operators, and native
+GitHub Actions over custom code. Custom code exists only for the workflow rules that can stop or
+misdeploy production, in tested `.github/scripts`, and for the health check every service shares,
+`modules/smoke-check/smoke.sh`.
 
 Load `prefer-small-solutions` throughout, `write-github-actions` for workflows, `plan-feature` for
 architecture, and `choose-dependency` before adding a tool. Prose follows `document-code`.
 
 ## The repository
 
-| Path                                 | Owns                                                                           |
-| ------------------------------------ | ------------------------------------------------------------------------------ |
-| `bootstrap/`                         | Management project: state bucket, CI identities and trust, secret containers   |
-| `environments/production/foundation` | Projects, VPC, firewall, perimeter, database hosts, shared IAM, budget, alerts |
-| `environments/production/<service>`  | One service's release pins and secret versions, which the cluster root reads   |
-| `environments/production/sentry`     | Sentry projects, spike protection, alerts and dashboards                       |
-| `environments/production/github`     | Both organizations' repositories, with their rulesets, teams and environments  |
-| `environments/recovery`              | One manual disaster-recovery drill host per disposable project                 |
-| `modules/`                           | Only code with two callers or one shared invariant                             |
+| Path                                 | Owns                                                                               |
+| ------------------------------------ | ---------------------------------------------------------------------------------- |
+| `bootstrap/`                         | Management project: state bucket, CI identities and trust, secrets, Barman buckets |
+| `environments/production/foundation` | Workload project, cluster and node pool, network, egress, perimeter, budget        |
+| `environments/production/cluster`    | Namespaces, add-ons, admission, workloads, databases, network policies             |
+| `environments/production/<service>`  | One service's release pins and secret versions, which the cluster root reads       |
+| `environments/production/grafana`    | Grafana Cloud's alerts and dashboards                                              |
+| `environments/production/github`     | Both organizations' repositories, with their rulesets, teams and environments      |
+| `environments/recovery-*`            | The recovery drill: a throwaway cluster, then the databases it restores            |
+| `modules/`                           | Only code with two callers or one shared invariant                                 |
 
-- **Projects are one per trust zone, and the zone's services share it.** An organization holds a
-  limited number of Google Cloud projects, and raising that quota is a slow request to Google.
-  Services keep apart inside a zone through their own identities, image repositories, network tags,
-  database hosts and secrets. Never propose a project per service: audits treat the shared zone
-  project, its quota pool and its project-wide log writing as settled.
+- **Production is one workload project and one cluster, and Kubernetes keeps the services apart.**
+  Each service's namespace runs under Pod Security's restricted level, two admission policies and
+  default-deny network policies, with its own service accounts, budget, database and secrets. The
+  deploy checks after each apply that admission still refuses what it must. Never propose a project
+  per service.
 - **Inputs live in each root's committed `terraform.tfvars`.** Secret values never do: ops add them
   with `gcloud`.
 - **Images are pinned** as `ghcr.io/…:tag@sha256:…`. Every plan verifies each release image it
   changes: its release tag's own run built it, the release App published that tag as an immutable
-  GitHub Release, and its version is not below the one deployed. Deploy then copies the images to
-  Artifact Registry with `skopeo --preserve-digests`.
+  GitHub Release, and its version is not below the one deployed. The cluster's deploy then copies
+  them to Artifact Registry with `skopeo --preserve-digests`.
 - **Releases pin themselves.** Once all its images are published, a service or platform release
   dispatches `pin-release.yaml` through the shared `publish-actions/deploy-release` action. That
   opens their pull request as the Dependencies App, so it merges like a Renovate update. Renovate
   leaves `ghcr.io/a-novel/**` alone.
 - **Bot pull requests merge alone only when they are safe to.** The auto-approver runs strict here:
   a release pin, or an update Renovate itself put on auto-merge that only moves versions. Renovate
-  arms every minor and patch update except OpenTofu's and the Google and Sentry providers', and a
-  plan needing `allow-downtime` or `allow-resource-deletion` still holds it for a maintainer. Those
-  three, majors, a moved action tag, and anything else a bot opens wait for a maintainer's or an
-  admin's review on GitHub.
+  arms every minor and patch update except OpenTofu's and the Google providers', and a plan needing
+  `allow-downtime` or `allow-resource-deletion` still holds it for a maintainer. OpenTofu and Google
+  provider updates, majors, a moved action tag, and anything else a bot opens wait for a
+  maintainer's or an admin's review on GitHub.
 - **Secrets are pinned** as numeric versions.
 - **The docs** are in `docs/ops-basics.md`, `docs/architecture.md` and `docs/runbooks/`.
 
@@ -79,27 +82,25 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
   developer: `--project`, and `--zone`, `--region` or `--location` whenever the command takes one,
   as literal values. Never rely on the active `gcloud config`, a `CLOUDSDK_*` variable, or a shell
   variable such as the runbooks' `$PROD` that the reader may not have set. A default left by other
-  work runs the command on the wrong project or instance. The values are the `*_project_id` inputs
-  and `database_zone` in `environments/production/foundation/terraform.tfvars`.
-- **Ops** hold read access, IAP SSH and secret-version rights, and the named operators run
-  Authentication's maintenance job. Other developers hold none of them. Everything else goes
-  through `deploy.yaml`, `downtime.yaml` for planned downtimes, `roll-database.yaml` for database
-  hosts, or `recovery.yaml` for drills.
+  work runs the command on the wrong project or cluster. The values are the `*_project_id`,
+  `cluster_region` and `cluster.zones` inputs in `environments/production/foundation/terraform.tfvars`.
+- **Ops** hold read access, to the project and to the services' namespaces but never their
+  Secrets, and secret-version rights. The named operators run Authentication's maintenance Jobs.
+  Other developers hold none of them. Everything else goes through `deploy.yaml`, `downtime.yaml`
+  for planned downtimes, or `recovery.yaml` for drills.
 - **Write runbook commands for the identity that actually runs them.** A command ops cannot run
   belongs in a workflow.
 - **Deleting, replacing or forgetting a resource, or weakening its protection,** needs the
   `allow-resource-deletion` label on the pull request, applied by a maintainer or an admin.
-- **Changing a database host's template or group configuration** needs the `allow-downtime` label,
-  applied the same way, and that service's planned downtime, scheduled by core, in progress.
+- **A PostgreSQL major upgrade** needs the `allow-downtime` label, applied the same way, and that
+  service's planned downtime, scheduled by core, in progress.
 
 ## Route the work
 
-- Adding a service, or changing resources, state layout, releases, database hosts or recovery:
-  read [Change safety](references/change-safety.md).
+- Adding a service, or changing resources, state layout, releases, databases, network policies or
+  recovery: read [Change safety](references/change-safety.md).
 - Adding a service or a platform, or a release that changes the spans, tables or promises Grafana
   reads: read [Grafana coverage](references/grafana.md).
-- Making a workload report its faults to Sentry: read
-  [Report faults to Sentry](references/change-safety.md#report-faults-to-sentry).
 - Workflows, tests, linting or tooling: read [Tooling and tests](references/tooling-and-tests.md).
 - Creating, archiving or configuring a repository, or changing its rulesets, teams, labels,
   environments or secret access: edit the GitHub root, as infra's

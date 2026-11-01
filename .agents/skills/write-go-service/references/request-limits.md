@@ -81,9 +81,9 @@ Excess calls wait for a slot rather than exhaust the instance.
 
 ## Counters
 
-Counters live in memory, so each instance counts on its own, a pod on the cluster. A service whose strict limits must be
-exact runs on one instance. Needing a second is the trigger to move the counters to a shared store,
-Valkey on Google Cloud.
+Counters live in memory, so each pod counts on its own. A service whose strict limits must be exact
+runs one pod. Needing a second is the trigger to move the counters to a shared store, Valkey on
+Google Cloud.
 
 ## gRPC
 
