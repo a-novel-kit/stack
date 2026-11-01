@@ -195,7 +195,22 @@ affected instead of inventing a screenshot test.
 - Serve another platform's production image over plain http with
   `PROTOCOL_HEADER: x-forwarded-proto` on its container, and send `X-Forwarded-Proto: http` from the
   journeys' browser (Playwright `extraHTTPHeaders`). adapter-node otherwise assumes https, and
-  SvelteKit then rejects every form post to that platform as cross-site.
+  SvelteKit then rejects every form post to that platform as cross-site. The account platform also
+  names an `https` issuer, which its clients refuse.
+- Run Authentication in a platform's stack with the callers production gives it.
+  service-authentication's `service-token-issuer` image stands in for the cluster's issuer, which
+  Authentication trusts through `SERVICE_TOKEN_ISSUER`, `SERVICE_TOKEN_AUDIENCE` and
+  `SERVICE_TOKEN_CALLERS`. A Playwright global setup draws the platform's token from the issuer into
+  the file `SERVICE_TOKEN_PATH` names. Fixtures call Authentication through a `fetch` that adds a
+  caller's token from the issuer in `X-Service-Authorization`.
+- Run the account platform's image in a client's stack, with a token drawn from the issuer at
+  start, and register the client in `OAUTH_CLIENTS` on the address of the journeys' server. The
+  account platform's own stack registers a stub client instead, whose callback the test serves and
+  whose code the test exchanges. platform-studio's `builds/compose.e2e.yaml` and
+  `tests/e2e/service-token.ts` follow this pattern.
+- A `page.route` handler sees only the first URL of a redirect chain. To alter a later step, walk
+  the chain with `page.request.get(url, { maxRedirects: 0 })`, read each `location`, and open the
+  altered URL with `page.goto`. platform-studio's failed-exchange journey forges its code this way.
 - Capture traces/screenshots on failure where the existing runner supports them; do not commit
   transient artifacts.
 - Run at least the repository browser baseline for compatibility-sensitive behavior.
