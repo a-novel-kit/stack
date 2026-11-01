@@ -4,7 +4,7 @@
 
 ## Install
 
-The third command prints the minimum Node.js version. Skip to [Configure](#configure) if pnpm answers and Node.js meets that minimum:
+The third command prints the minimum Node.js version. Skip to [Configure](#configure) if pnpm prints 11.20 or newer and Node.js meets that minimum:
 
 ```bash
 node --version
@@ -36,9 +36,11 @@ npm install --global pnpm
 ```
 
 == openSUSE
+The distribution's pnpm is too old. Install it with npm into `~/.local/bin`, which openSUSE adds to the `PATH` when you log in:
 
 ```bash
-sudo zypper install -y nodejs-default npm-default pnpm
+sudo zypper install -y nodejs-default npm-default
+npm install --global --prefix ~/.local pnpm
 ```
 
 == Arch
@@ -63,7 +65,7 @@ winget install --id pnpm.pnpm -e
 
 ::::
 
-Any recent pnpm works: each repository pins its version, and pnpm switches to it.
+Each repository pins its pnpm version, and pnpm switches to it. pnpm 11 releases before 11.20 rewrite `pnpm-lock.yaml` as they switch.
 
 ## Configure
 
