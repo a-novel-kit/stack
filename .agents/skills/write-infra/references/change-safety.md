@@ -47,6 +47,12 @@
 - **Service roots read foundation's applied outputs.** A new foundation output must deploy before a
   service root reads it, or the service plans fail on a missing attribute. Ship the output in its
   own pull request first, then the change that uses it.
+- **Roots also read each other's committed `terraform.tfvars`,** through
+  `provider::terraform::decode_tfvars`: the cluster root reads every service root's pins and
+  foundation's principals, Grafana reads foundation's node pool and the cluster's databases, and
+  `recovery-database` reads the cluster's databases and each service root's database pin. No output
+  shows these reads. Before removing or renaming an input, grep the whole repository for its name,
+  `environments/recovery*` included (a-novel/infra#1408).
 - **A plan shows the state it read.** When pull requests merge and deploy close together, re-run a
   plan that shows an unexpected change before judging it: a deploy may have applied it meanwhile.
 - **A failed Cloud Run update still records its configuration in state.** The provider saves the
@@ -263,12 +269,18 @@ metric resource itself succeeds at once.
   never an undo: a faulty host change is fixed forward by a new pull request
   (`docs/runbooks/database.md`). The data disk still ignores its source snapshot, so a disk ever
   recreated from one plans no replacement.
-- **Database images are pinned** by `tag@digest` in foundation and in the service root. Both pins
-  copy the image into the service's `agora-<service>-private-production`, the only repository its
-  host pulls PostgreSQL from. The hosts use the digest alone, so the pins ride with the service's
-  release pull request: a release without a database change keeps the reproducible digest and plans
-  nothing. A new digest replaces the host template, so that release merges during a planned
-  downtime.
+- **Each release image is pinned once,** by `tag@digest` in its service root's `terraform.tfvars`,
+  the database image included. The cluster root reads every pin, and its deploy copies each into the
+  service's `a-novel-<service>` repository. Foundation's `releases` set keeps those repositories
+  beside the cluster, in `europe-west9`, and the nodes only read them. Foundation applies before the
+  cluster, so a new repository exists before its first copy. A release without a database change
+  keeps the reproducible digest and plans nothing for the database (a-novel/infra#1408).
+- **A new database image rolls the database by switchover,** with no planned downtime: the service's
+  `ImageCatalog` changes, and CloudNativePG restarts the replica on it, then hands the primary over.
+  The switchover breaks every connection to the old primary, so the calls in flight fail. At low
+  traffic one failed call per service crosses the failing-share threshold, which fires for about ten
+  minutes with GenAI's faults alert, then resolves alone. Check that the failures stopped instead of
+  silencing the alerts (a-novel/infra#1408).
 - **`host-credentials` is pinned once,** in foundation's `host_credentials_image`, as the
   `tag@digest` `publish-rollout-verifier.yaml` published. Deploy verifies it against that workflow
   and copies it into each service's tooling repository; the hosts and the service roots derive the
@@ -428,13 +440,11 @@ deployed. a-novel/infra#785 is the worked example.
 
 1. **Bootstrap** creates the secret containers. Add version 1 of each value before a later step pins
    it: the database host reads the application role's `app-password` at boot.
-2. **The service root starts with its `runtime` module alone,** its workloads' identities
-   included, plus its `plan-<root>` job and `roll-database.yaml` option, and foundation's
-   `service_release_zones` entry and quotas. `deploy.yaml` and `drift.yaml` find the root on disk;
-   `lint-repository` names what is missing. The deploy copies a root's `image_copies` into Artifact
-   Registry before it applies, into the repositories `service-runtime` creates. Foundation copies
-   the database image into the service's `agora-<service>-private-production`, so it pins that
-   image only once this step has deployed.
+2. **The service root starts with its pins,** plus its `plan-<root>` job, and the service joins
+   foundation's `releases` set, which creates its `a-novel-<service>` repository.
+   `deploy.yaml` and `drift.yaml` find the root on disk; `lint-repository` names what is missing.
+   The cluster root's deploy copies every pin into that repository before it applies, the database
+   image included.
 3. **Foundation adds the database host.** A new host starts at its target template, so it needs no
    downtime.
 4. **The root creates its jobs without a `run_execution_token` and its services without invokers.**

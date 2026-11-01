@@ -36,7 +36,7 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 | ------------------------------------ | ------------------------------------------------------------------------------ |
 | `bootstrap/`                         | Management project: state bucket, CI identities and trust, secret containers   |
 | `environments/production/foundation` | Projects, VPC, firewall, perimeter, database hosts, shared IAM, budget, alerts |
-| `environments/production/<service>`  | One service: Cloud Run services and jobs, backup repository, alerts            |
+| `environments/production/<service>`  | One service's release pins and secret versions, which the cluster root reads   |
 | `environments/production/sentry`     | Sentry projects, spike protection, alerts and dashboards                       |
 | `environments/production/github`     | Both organizations' repositories, with their rulesets, teams and environments  |
 | `environments/recovery`              | One manual disaster-recovery drill host per disposable project                 |
