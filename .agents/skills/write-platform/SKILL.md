@@ -82,6 +82,13 @@ must work without JavaScript. Opt a private route family out with `export const 
 is a heavy browser application, such as an editor, and its browser-only behavior is deliberate and
 tested; never disable SSR globally to hide unsafe module initialization or a hydration bug.
 
+adapter-node 6 reads no `ORIGIN` at run time. The Vite config passes
+`paths: { origin: process.env.ORIGIN }`, so a build for a known address, such as nodelib's
+Playwright server, bakes its origin in. The published image derives the origin from each request's
+`Host`, over https unless `PROTOCOL_HEADER` names a header. Production's load balancer ends TLS, so
+https holds there. SvelteKit's CSRF check and `event.url` both read that origin, and a sign-in builds
+its redirect URI from `event.url`.
+
 Read secrets and privileged endpoints only from SvelteKit's server-only environment modules. Expose
 an explicitly public value through the framework's `PUBLIC_` contract only when it is safe to ship
 in source. A secret-shaped `VITE_*` variable is a build failure, not runtime configuration.
@@ -213,8 +220,9 @@ service:
   an invitation, an operator invites the address, and the invitation link creates the account with a
   password. Until the waitlist is retired, add no other way to create one, through a form, a service
   call or an identity provider such as Google. "Create an account" opens the invitation request.
-- Logout revokes the session's refresh token through the service, then clears the cookies. A failed
-  revocation still clears them: the visitor asked to leave this browser signed out.
+- Logout ends the session through the service, then clears the cookies. The session spans every
+  platform, so each one finds it ended on its next request. A failed revocation still clears the
+  cookies: the visitor asked to leave this browser signed out.
 - A short-code `GET` only parses a sanitized display model; it never verifies or consumes the code.
   Completion uses `POST` to the current URL so no hidden field duplicates the credential. Return
   `Cache-Control: no-store`, `Referrer-Policy: strict-origin`, and `X-Robots-Tag: noindex`. With
@@ -229,6 +237,42 @@ service:
 
 Progressive enhancement is required for essential authentication forms. JavaScript may improve
 focus, pending state, and modal behavior, but it must not become the only path to submit or recover.
+
+### Sign in through the account platform
+
+The account platform, `account.storyverse.fr`, is the only platform that asks for a password. It
+serves every sign-in, registration and account form: the sign-in dialog, the waitlist, account
+creation from an invitation, password reset and email changes. Every other platform is a client: it
+signs people in through the account platform with the OAuth 2.0 authorization code grant and PKCE
+S256 ([RFC 6749 §4.1](https://www.rfc-editor.org/rfc/rfc6749#section-4.1),
+[RFC 7636](https://www.rfc-editor.org/rfc/rfc7636)), which Authentication serves. A client's shell
+keeps only these account controls:
+
+- A sign-in link to its own `/auth/sign-in?returnTo=<page>`.
+- A registration link to the account platform's `/?auth=register`, which requests an invitation.
+- Once signed in, a link that opens the account platform in a new tab, and the logout form.
+
+Infra registers every platform but the account platform in Authentication's client registry. The
+platform's name is its client ID, and `/auth/callback` on its host is its one redirect URI. The
+client serves three routes, as platform-studio's `src/lib/server/auth/sign-in.ts` does:
+
+1. `/auth/sign-in` is a page whose server load draws a `state` and a PKCE verifier, keeps them with a
+   same-origin `returnTo` in a 10-minute `HttpOnly` cookie scoped to the callback path, and
+   redirects to the account platform's `/authorize`. A page renders `+error.svelte`, so a refusal
+   such as a planned downtime shows the maintenance page.
+2. `/auth/callback` reads a response parameter only when it is given once. It refuses the response
+   before any service call unless `state` matches the cookie and `iss` is the account platform's
+   origin ([RFC 9207](https://www.rfc-editor.org/rfc/rfc9207)). It exchanges the code with its
+   verifier and redirect URI through the typed client, then redirects to `returnTo` with
+   `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. The code then leaves the address
+   bar and reaches no referrer.
+3. `/auth/sign-in/failed?returnTo=<page>` is the signed-out page a failed sign-in lands on, with a
+   retry. `temporarily_unavailable`, `server_error` and outages read as unavailable, a `429` as too
+   many attempts, and any other refusal as rejected.
+
+A person already signed in on the account platform comes back signed in without a form. The
+client's end-to-end stack runs the account platform, and its journeys sign in through it, as
+`write-frontend-tests` describes.
 
 ## Localization
 
