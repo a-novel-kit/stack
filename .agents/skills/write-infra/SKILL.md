@@ -100,8 +100,8 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 
 - Adding a service, or changing resources, state layout, releases, databases, network policies,
   service TLS or recovery: read [Change safety](references/change-safety.md).
-- Adding a service or a platform, or a release that changes the spans, tables or promises Grafana
-  reads: read [Grafana coverage](references/grafana.md).
+- Adding a service or a platform, scraping a chart's metrics, or a release that changes the spans,
+  tables or promises Grafana reads: read [Grafana coverage](references/grafana.md).
 - Workflows, tests, linting or tooling: read [Tooling and tests](references/tooling-and-tests.md).
 - Creating, archiving or configuring a repository, or changing its rulesets, teams, labels,
   environments or secret access: edit the GitHub root, as infra's
