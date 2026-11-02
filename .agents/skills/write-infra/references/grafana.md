@@ -52,6 +52,19 @@ one line.
    or a queue's oldest wait, gets a rule in `alerts.tf`'s `data_rules`, linked to its panel through
    `dashboard` and `panel`. Add its row and its bullet to infra's `docs/runbooks/alerts.md`.
 
+## Scrape a chart's metrics
+
+Alloy scrapes Prometheus metrics through the k8s-monitoring chart's `annotationAutodiscovery`, in the
+namespaces the cluster root lists there. The feature keeps only pods annotated
+`k8s.grafana.com/scrape: "true"`. A chart's own `prometheus.io/*` annotations make no target, so its
+metrics never reach Grafana. Every alert rule maps NoData to OK, so a rule on the missing series
+reads healthy.
+
+Annotate the pod through the chart's `podAnnotations` with `k8s.grafana.com/scrape` and
+`k8s.grafana.com/metrics.portName`, as a-novel/infra#1453 does for cert-manager's controller.
+Without the port name, autodiscovery makes one target per declared container port, and a port the
+network policy blocks reads down.
+
 ## Keep it current
 
 A release that renames a span, an attribute, a route, a table or a column updates the panels,
