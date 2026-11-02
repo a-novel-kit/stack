@@ -235,7 +235,7 @@ or instruction to find an earlier link does not replace it.
 ## Localization language register
 
 - Use the formal address form for static text when a language distinguishes registers (`vous` in French, `usted` in Spanish).
-- Use the language’s conventional action-label form for buttons, links, and other controls. A French control speaks for the reader, as an infinitive in the first person: `M’inscrire`, `Créer mon compte`. Other text names the reader’s things with `votre` and says who acts, never an impersonal `Impossible de…`.
+- Use the language’s conventional action-label form for buttons, links, and other controls. A French control whose action is about the reader (signing up, signing in or out, their account and its details) speaks for them in the first person: `M’inscrire`, `Changer mon mot de passe`. A control that works the interface keeps the plain infinitive, even on the reader’s data: `Afficher le mot de passe`. Other text names the reader’s things with `votre` and says who acts, never an impersonal `Impossible de…`.
 - Put no space before a colon in French (`Fin prévue:`), against standard French typography: a
   product ruling, enforced by uikit's catalog test. It applies to every catalog, page title and test
   expectation.
