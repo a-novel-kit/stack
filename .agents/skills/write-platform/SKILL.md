@@ -286,13 +286,13 @@ names, validation messages, titles, and metadata use message keys; logs and prot
 - Keep the preset's framework extraction fixture in nodelib. Platform stories and tests exercise
   real product copy and translated UI states; they do not duplicate a generic toolchain fixture.
 - Use formal address forms in static text when a locale distinguishes them (`vous` in French,
-  `usted` in Spanish). Use each language's conventional action-label form for controls. A French
-  control whose action is about the reader (signing up, signing in or out, their account and its
-  details) speaks for them in the first person: `M’inscrire`, `Me connecter`,
-  `Changer mon mot de passe`. A control that works the interface keeps the plain infinitive, even
-  on the reader's data: `Afficher le mot de passe`, `Fermer la fenêtre`. Other text names the
-  reader's things with `votre` and says who acts (`Nous n’avons pas pu vérifier votre session.`),
-  never an impersonal `Impossible de vérifier la session.`
+  `usted` in Spanish). Use each language's conventional action-label form for controls. A control
+  whose action is about the reader (signing up, signing in or out, their account and its details)
+  speaks in the reader's voice: `M’inscrire`, `Me connecter`, `Changer mon mot de passe`. A
+  control that works the interface keeps the plain form, even on the reader's data:
+  `Afficher le mot de passe`, `Fermer la fenêtre`. Other text names the reader's things as theirs
+  and says who acts (`Nous n’avons pas pu vérifier votre session.`), never an impersonal
+  `Impossible de vérifier la session.`
 - Support plurals and contextual variants through the selected message format, not key
   concatenation or runtime grammar.
 - Treat the source locale as authoritative. CI compiles messages and fails for missing, invalid, or
