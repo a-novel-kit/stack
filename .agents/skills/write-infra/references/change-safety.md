@@ -196,10 +196,20 @@ the API server as the plan identity. Close it unmerged once read (a-novel/infra#
   default. Size them together. A replica whose volume cannot be provisioned leaves its database
   never `Ready`. Foundation's `cost_cap` raises the quota through a Cloud Quotas preference, which
   takes effect only once Google grants it.
-- **A service whose rate limits count in each pod** keeps the pod count its limits assume:
-  Authentication runs one pod until it counts through its store, as
-  [request limits](../../write-go-service/references/request-limits.md#counters) describes. Raising
-  it is a design change, not a tuning one.
+- **Every long-running workload runs two pods or more and can autoscale.** A lost pod, a lost node
+  or a drain then leaves it serving. A workload's `replicas` set `min` to 2 or more and `max` above
+  `min` (a-novel/infra#1459). Authentication's counter store and Alloy keep one pod each: Valkey
+  replication is deferred, and Alloy is the cluster's single collector.
+- **`cluster-workload` sets a Deployment's pod count only when it creates the Deployment.** After
+  that, the count moves only through the autoscaler, which the module adds when `max` exceeds `min`.
+  `{ min = 2, max = 2 }` therefore leaves an existing workload at its old count. On a one-pod
+  workload, the disruption budget that `min` adds then blocks every drain of the pod's node. Raise
+  an existing workload with `max` above `min`: its autoscaler lifts the count to `min` at once.
+- **More pods raise every limit that counts in the pod.** Those limits guard each pod's own
+  resources, so they hold at any pod count. Authentication counts its strict limits through its own
+  counter store, so it runs 2 to 3 pods. A new limit that must hold across pods is a design change:
+  it needs a store of the service's own, as
+  [request limits](../../write-go-service/references/request-limits.md#counters) describes.
 - **A gRPC workload's call cap** (`GRPC_MAX_CONCURRENT_CALLS`) sits beside its `GOMEMLIMIT` in the
   cluster root, so a change to one is reviewed with the other: the cap times one call's peak memory
   fits the memory limit. `cluster-workload` makes a gRPC workload's Service headless, so callers

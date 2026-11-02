@@ -81,8 +81,10 @@ Excess calls wait for a slot rather than exhaust the instance.
 
 ## Counters
 
-- **The standard limit always counts in each pod,** and so does every concurrency gate. N pods give
-  a visitor N times `REST_RATE_LIMIT`, and run N times `ARGON2_MAX_CONCURRENT` hashes at once.
+- **A limit that guards a pod's own resources always counts in that pod,** even when the service
+  names a store: the router's per-visitor rate, each concurrency gate and the gRPC call cap. N pods
+  give a visitor N times `REST_RATE_LIMIT`, run N times `ARGON2_MAX_CONCURRENT` hashes at once, and
+  let a caller hold N times `REST_MAX_STREAMS_PER_CALLER` streams on the narrative engine.
 - **`httpf.Limits` counts through a shared store when the service names one** (golib v0.60.0).
   `REST_RATE_LIMIT_STORE_ADDR` (`host:port`), `REST_RATE_LIMIT_STORE_USERNAME` and
   `REST_RATE_LIMIT_STORE_PASSWORD` point it at a Valkey or Redis server, so every pod shares each
@@ -95,7 +97,8 @@ Excess calls wait for a slot rather than exhaust the instance.
 - **The store's ACL user needs only `MGET`, `MULTI`, `INCRBY`, `EXPIRE`, `EXEC` and `PING` on
   `httprate:*` keys.** The client logs in with `HELLO` alone, which needs no grant.
 - **A service whose strict limits must be exact runs one pod until it counts through a store.**
-  Authentication's store runs in its own namespace (a-novel/.github#550).
+  Authentication counts through its own store, in its own namespace, and runs several pods
+  (a-novel/.github#550). A store is only for a limit that must hold across pods.
 
 ## gRPC
 
