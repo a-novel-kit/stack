@@ -112,6 +112,9 @@ structure, and motion from the subject's actual world rather than from a generic
   budget: which role may dominate, which role may support, and which regions stay neutral.
 - Define a boundary hierarchy before drawing containers: spacing and alignment, tonal or opacity
   shift, elevation, then a visible border only when the boundary itself carries meaning.
+- Give light a source and a temperature. Decide where it falls from and how the field's temperature
+  sets off the surfaces placed on it. One source reads as a place; several read as decoration. Keep
+  light and texture off surfaces whose text contrast must stay measurable.
 - Make hierarchy encode meaning. Do not add numbering, charts, badges, cards, glass, gradients, pills,
   or motion unless each communicates something true.
 - Correct for optical weight when geometry appears misaligned, especially for asymmetric icons and
