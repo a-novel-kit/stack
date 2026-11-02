@@ -219,7 +219,9 @@ service:
 - Accounts come only from waitlist invitations while the platform earns nothing: a visitor asks for
   an invitation, an operator invites the address, and the invitation link creates the account with a
   password. Until the waitlist is retired, add no other way to create one, through a form, a service
-  call or an identity provider such as Google. "Create an account" opens the invitation request.
+  call or an identity provider such as Google. "Register" ("S’inscrire" in French) opens the
+  invitation request on every platform. Only the account platform's page for a dead invitation link
+  says "Request an invitation", which matches its offer to request a new one.
 - Logout ends the session through the service, then clears the cookies. The session spans every
   platform, so each one finds it ended on its next request. A failed revocation still clears the
   cookies: the visitor asked to leave this browser signed out.
