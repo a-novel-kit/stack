@@ -97,7 +97,24 @@ func Run(ctx context.Context, opts Options) error {
 // listen binds the daemon's unix socket at socketPath, refusing when another
 // daemon answers there and removing a stale socket file, the recovery path
 // after `kill -9`.
+//
+// The check, the removal and the bind hold a lock beside the socket. Two
+// daemons starting at once, as two new shells start them, would otherwise both
+// find the path free, and the second would remove the socket the first just
+// bound: both then run, one of them unreachable. The lock ends with the bind,
+// so a daemon still draining its streams after closing its listener never holds
+// up the next one.
 func listen(socketPath string) (net.Listener, error) {
+	// The parent is normally an existing /run/user/<uid> or the /tmp fallback;
+	// this only creates one when XDG_RUNTIME_DIR points somewhere unusual.
+	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
+		return nil, fmt.Errorf("mkdir socket parent: %w", err)
+	}
+	unlock, err := lockFile(socketPath + ".lock")
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	// A responsive listener means another daemon already owns this socket.
 	// Reporting it here names the socket and the command that frees it.
 	if isLive(socketPath) {
@@ -107,11 +124,6 @@ func listen(socketPath string) (net.Listener, error) {
 		if err := os.Remove(socketPath); err != nil {
 			return nil, fmt.Errorf("remove stale socket %s: %w", socketPath, err)
 		}
-	}
-	// The parent is normally an existing /run/user/<uid> or the /tmp fallback;
-	// this only creates one when XDG_RUNTIME_DIR points somewhere unusual.
-	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
-		return nil, fmt.Errorf("mkdir socket parent: %w", err)
 	}
 	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
@@ -183,6 +195,21 @@ func serve(ctx context.Context, ln net.Listener, srv *server.Server) error {
 		return fmt.Errorf("shutdown: %w", err)
 	}
 	return nil
+}
+
+// lockFile takes an exclusive flock on the file at path, waiting while another
+// process holds it, and returns its release. The kernel drops the lock when the
+// process ends, however it ends.
+func lockFile(path string) (func(), error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDONLY, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open lock %s: %w", path, err)
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("lock %s: %w", path, err)
+	}
+	return func() { _ = f.Close() }, nil
 }
 
 // isLive reports whether the socket at path is bound by a responsive daemon. A

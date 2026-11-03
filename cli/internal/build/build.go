@@ -201,7 +201,7 @@ func untagImages(ctx context.Context, e *detect.ComposeEnv) {
 // runCommand runs t's command in its own process group, writing its output to
 // out, and kills the group when ctx ends.
 func runCommand(ctx context.Context, t detect.Target, runEnv []string, out io.Writer) error {
-	cmd := exec.Command(t.Cmd, t.Args...)
+	cmd := exec.CommandContext(ctx, t.Cmd, t.Args...)
 	cmd.Dir = t.Dir
 	cmd.Env = runEnv
 	cmd.Stdout = out
@@ -209,14 +209,11 @@ func runCommand(ctx context.Context, t detect.Target, runEnv []string, out io.Wr
 	// Own process group so a timeout or abort kills the whole tree (pnpm → sh →
 	// node, go test → compiled bins). Killing only the direct child leaves Wait
 	// blocked on a grandchild's inherited pipe, and the deadline is never
-	// enforced.
+	// enforced. WaitDelay bounds the wait for a descendant that left the group.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	stop := context.AfterFunc(ctx, func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) })
-	defer stop()
-	return cmd.Wait()
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = 5 * time.Second
+	return cmd.Run()
 }
 
 // repoRoot is the repository root of a target, which holds its secrets

@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -49,6 +51,18 @@ func (e *ExitError) Error() string {
 }
 
 func (e *ExitError) Unwrap() error { return e.Err }
+
+// exitStatus is the status a shell reports for a finished child: its exit code,
+// or 128 plus the signal number when a signal ended it. POSIX.1-2024 XCU 2.8.2
+// "Exit Status for Commands" asks for a value above 128, and the common shells
+// report 128 plus the signal. ExitCode reports -1 then, which os.Exit turns
+// into 255.
+func exitStatus(err *exec.ExitError) int {
+	if ws, ok := err.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+		return 128 + int(ws.Signal())
+	}
+	return err.ExitCode()
+}
 
 // NewRoot builds the root a-novel command with every subcommand attached.
 func NewRoot() *cobra.Command {

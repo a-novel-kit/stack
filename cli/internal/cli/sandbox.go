@@ -90,11 +90,10 @@ func childExit(ctx context.Context, err error) error {
 	if !errors.As(err, &exitErr) {
 		return err
 	}
-	code := exitErr.ExitCode()
-	if code < 0 && ctx.Err() != nil {
-		code = exitAborted
+	if exitErr.ExitCode() < 0 && ctx.Err() != nil {
+		return &ExitError{Code: exitAborted}
 	}
-	return &ExitError{Code: code}
+	return &ExitError{Code: exitStatus(exitErr)}
 }
 
 // runSandbox clones a temporary stack, populates it with `core sync`, and runs

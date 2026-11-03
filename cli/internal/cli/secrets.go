@@ -214,7 +214,7 @@ func execWithSecrets(cmd *cobra.Command, envPairs, argv []string) error {
 	if err := child.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return &ExitError{Code: exitErr.ExitCode()}
+			return &ExitError{Code: exitStatus(exitErr)}
 		}
 		return fmt.Errorf("secrets exec: %w", err)
 	}

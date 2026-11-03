@@ -226,6 +226,26 @@ func TestCompose(t *testing.T) {
 	}
 }
 
+// TestRunCommand pins that a cancelled target returns once its wait delay
+// passes, even while a process that left its group holds the output pipe.
+func TestRunCommand(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	// The detached shell writes the first line once it has left the group, so
+	// the cancel lands while it holds the pipe.
+	tgt := detect.Target{Dir: t.TempDir(), Cmd: "sh", Args: []string{"-c", "setsid sh -c 'echo started; exec sleep 20' &\nwait\n"}}
+	start := time.Now()
+	if err := runCommand(ctx, tgt, os.Environ(), cancelOnWrite{cancel}); err == nil {
+		t.Fatal("runCommand succeeded after its context was cancelled")
+	}
+	if elapsed := time.Since(start); elapsed > 15*time.Second {
+		t.Fatalf("runCommand returned %s after the cancel: a detached child held it", elapsed)
+	}
+}
+
 // TestEnvDown pins that teardown untags each image the env built by its exact
 // name. A bare `podman untag <image>` would also strip other checkouts' tags
 // on the same image.
