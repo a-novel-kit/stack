@@ -226,8 +226,8 @@ changes them.
 - **Fields are wells.** A field is a translucent darkening of the island it sits in
   (`--color-surface-sunken`), with no border: only focus and errors outline it, and a transparent
   border keeps it outlined in forced-colors mode (`--color-field-border`). Fields always sit inside
-  an island, never on the canvas, and stand one step taller than buttons (`--field-height-{sm,md,lg}`)
-  so typed text has room.
+  an island, never on the canvas, and share the button heights, so a borderless field keeps the
+  same visual weight as the action beside it.
 - **Navigation is a vertical rail.** Every app uses the same shell: a collapsible rail on wide
   screens, a header and a fullscreen drawer on narrow ones, sharing one navigation surface.
 - **Focus without noise.** A dialog focuses itself when it opens, so no control lights its focus
