@@ -134,7 +134,9 @@ func (o *execOutput) pump(r io.Reader, stream anovelv1.LogStream) {
 	}
 }
 
-// execExitCode maps a [exec.Cmd.Wait] error onto the child's exit status.
+// execExitCode maps a [exec.Cmd.Wait] error onto the child's exit status. A
+// child a signal ended reports 128 plus the signal number, as a shell does
+// (POSIX.1-2024 XCU 2.8.2), so the CLI exits with it instead of 255.
 //
 // A non-nil error that is not an [exec.ExitError] comes from a spawn or IO
 // failure, where the child's status was never obtained. That error is returned
@@ -147,6 +149,10 @@ func execExitCode(waitErr error) (int32, error) {
 	var exitErr *exec.ExitError
 	if !errors.As(waitErr, &exitErr) {
 		return 0, waitErr
+	}
+
+	if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+		return int32(128 + ws.Signal()), nil
 	}
 
 	return int32(exitErr.ExitCode()), nil

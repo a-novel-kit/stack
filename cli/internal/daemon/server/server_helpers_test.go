@@ -121,6 +121,8 @@ func TestExecExitCode(t *testing.T) {
 	}{
 		{"clean exit", nil, 0, false},
 		{"non-zero exit", runExit(3), 3, false},
+		// A signal ends the child as a shell reports it: 128 + SIGTERM.
+		{"signal", exec.Command("sh", "-c", "kill -TERM $$").Run(), 143, false},
 		// Not an *exec.ExitError: the child's status was never obtained.
 		{"wait failure", errors.New("pipe closed"), 0, true},
 	}

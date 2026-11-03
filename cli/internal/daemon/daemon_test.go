@@ -104,6 +104,36 @@ func TestServe(t *testing.T) {
 	}
 }
 
+// TestListen pins that daemons starting at once bind the socket once: every
+// other start finds it taken and refuses, and the socket stays the winner's.
+func TestListen(t *testing.T) {
+	t.Parallel()
+
+	const starts = 8
+	path := filepath.Join(t.TempDir(), "daemon.sock")
+	listeners := make([]net.Listener, starts)
+	errs := make([]error, starts)
+	var wg sync.WaitGroup
+	for i := range starts {
+		wg.Go(func() { listeners[i], errs[i] = listen(path) })
+	}
+	wg.Wait()
+
+	var bound int
+	for i, ln := range listeners {
+		if errs[i] == nil {
+			bound++
+			t.Cleanup(func() { _ = ln.Close() })
+		}
+	}
+	if bound != 1 {
+		t.Fatalf("%d starts bound the socket, want 1: %v", bound, errs)
+	}
+	if !isLive(path) {
+		t.Fatal("the bound socket is gone")
+	}
+}
+
 // TestReplayCheckpoint pins that startup consumes the reinstall checkpoint
 // whatever it holds. An unusable checkpoint left on disk refuses every later
 // install with "checkpoint already present".
