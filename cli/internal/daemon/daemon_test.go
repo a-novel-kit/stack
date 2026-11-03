@@ -170,3 +170,30 @@ func TestReplayCheckpoint(t *testing.T) {
 		})
 	}
 }
+
+// TestLockFile pins that the lock beside the socket never follows a symlink: on
+// the /tmp fallback, another user could plant one there.
+func TestLockFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	if err := os.WriteFile(target, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "daemon.sock.lock")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	if unlock, err := lockFile(link); err == nil {
+		unlock()
+		t.Fatal("lockFile followed a symlink")
+	}
+
+	unlock, err := lockFile(filepath.Join(dir, "own.lock"))
+	if err != nil {
+		t.Fatalf("lockFile on a fresh path: %v", err)
+	}
+	unlock()
+}

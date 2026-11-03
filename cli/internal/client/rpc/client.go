@@ -38,6 +38,10 @@ func New(socketPath string) *Client {
 			// discarded, and so are the scheme and host of the URL handed
 			// to connect-rpc, since every call dials the same socket.
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				// A socket another user created could answer as the daemon.
+				if err := paths.CheckOwner(socketPath); err != nil {
+					return nil, err
+				}
 				return (&net.Dialer{Timeout: 2 * time.Second}).DialContext(ctx, "unix", socketPath)
 			},
 		},

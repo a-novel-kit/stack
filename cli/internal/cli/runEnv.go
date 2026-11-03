@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -13,6 +14,9 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/client/rpc"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
+
+// shellName matches a POSIX shell variable name, the only key `export` takes.
+var shellName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // envOpts holds the flags of `run env`.
 type envOpts struct {
@@ -64,8 +68,26 @@ func printEnv(cmd *cobra.Command, service string, o envOpts) error {
 	}
 	// --only filters client-side, so it applies to every format.
 	unmatched := func(e *anovelv1.EnvEntry) bool { return !matchGlob(o.only, e.GetKey()) }
-	renderEnv(cmd.OutOrStdout(), slices.DeleteFunc(resp.GetEntries(), unmatched), o.format)
+	entries := slices.DeleteFunc(resp.GetEntries(), unmatched)
+
+	// The shell output is meant for eval, so an entry that would break out of
+	// its line never reaches it, whatever the daemon sent.
+	unprintable := func(e *anovelv1.EnvEntry) bool {
+		if printableEnv(e) {
+			return false
+		}
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "skip env entry %q of %q/%q: not a shell variable\n", e.GetKey(), e.GetStack(), e.GetService())
+		return true
+	}
+	renderEnv(cmd.OutOrStdout(), slices.DeleteFunc(entries, unprintable), o.format)
 	return nil
+}
+
+// printableEnv reports whether e prints as one shell line: its key is a shell
+// variable name, and its stack and service, which head their group as a
+// comment, hold no line break.
+func printableEnv(e *anovelv1.EnvEntry) bool {
+	return shellName.MatchString(e.GetKey()) && !strings.ContainsAny(e.GetStack()+e.GetService(), "\r\n")
 }
 
 // renderEnv writes the env entries in the requested format. shell is

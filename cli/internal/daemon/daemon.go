@@ -115,6 +115,10 @@ func listen(socketPath string) (net.Listener, error) {
 		return nil, err
 	}
 	defer unlock()
+	// A socket another user created is neither a daemon of ours nor ours to remove.
+	if err := paths.CheckOwner(socketPath); err != nil {
+		return nil, fmt.Errorf("check socket: %w (point XDG_RUNTIME_DIR at a private directory)", err)
+	}
 	// A responsive listener means another daemon already owns this socket.
 	// Reporting it here names the socket and the command that frees it.
 	if isLive(socketPath) {
@@ -200,10 +204,23 @@ func serve(ctx context.Context, ln net.Listener, srv *server.Server) error {
 // lockFile takes an exclusive flock on the file at path, waiting while another
 // process holds it, and returns its release. The kernel drops the lock when the
 // process ends, however it ends.
+//
+// The file sits beside the socket, in /tmp on the fallback path, so it opens
+// without following a symlink and must belong to this user: a lock file another
+// user planted could otherwise be held forever.
 func lockFile(path string) (func(), error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDONLY, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDONLY|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open lock %s: %w", path, err)
+	}
+	info, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("stat lock %s: %w", path, err)
+	}
+	if !paths.OwnedByUser(info) {
+		_ = f.Close()
+		return nil, fmt.Errorf("lock %s: %w", path, paths.ErrForeignOwner)
 	}
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
 		_ = f.Close()

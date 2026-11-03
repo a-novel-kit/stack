@@ -1,10 +1,13 @@
 package paths
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // Socket returns the absolute path of the daemon's Unix domain socket. It
@@ -24,6 +27,39 @@ func Socket() string {
 		}
 	}
 	return fmt.Sprintf("/tmp/a-novel-%d.sock", uid)
+}
+
+// ErrForeignOwner reports a file another user created at a path the daemon and its clients use. The
+// /tmp fallback of [Socket] is shared by every local user, so a socket or lock file found there is
+// trusted only when this user owns it.
+var ErrForeignOwner = errors.New("owned by another user")
+
+// CheckOwner fails with [ErrForeignOwner] when path exists and belongs to another user. It reads the
+// path itself, not a symlink's target, so a link another user planted fails too. A missing path
+// passes: nothing answers there yet.
+func CheckOwner(path string) error {
+	info, err := os.Lstat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", path, err)
+	}
+	if !OwnedByUser(info) {
+		return fmt.Errorf("%s: %w", path, ErrForeignOwner)
+	}
+	return nil
+}
+
+// OwnedByUser reports whether info, from os.Lstat or File.Stat, belongs to the current user.
+func OwnedByUser(info fs.FileInfo) bool {
+	return ownedBy(info, os.Getuid())
+}
+
+// ownedBy reports whether info belongs to uid. A FileInfo without a unix owner belongs to no one.
+func ownedBy(info fs.FileInfo, uid int) bool {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return ok && int(stat.Uid) == uid
 }
 
 // State is $XDG_STATE_HOME/a-novel/ (default ~/.local/state/a-novel/).
