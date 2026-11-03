@@ -214,8 +214,13 @@ Every state has one canonical owner:
 - **Local storage** owns non-sensitive, device-local preferences and recoverable user-specific
   drafts. Namespace and version keys, migrate or discard unknown versions, and read them only behind
   an SSR-safe client adapter.
-- **Server session cookies** own authentication credentials. Use `HttpOnly`, `Secure` in production,
-  and an intentional `SameSite` policy; tokens never enter browser storage or serialized load data.
+- **Server session cookies** own authentication credentials. Name each one with the `__Host-`
+  prefix, which the browser accepts only with `Secure`, `Path=/` and no `Domain`
+  ([RFC 6265bis §4.1.3.2](https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-rfc6265bis#section-4.1.3.2)),
+  so a sibling host cannot plant a session. Add `HttpOnly` and an intentional `SameSite` policy.
+  Chromium, which runs the browser tests, accepts them from `localhost` and `127.0.0.1` over plain
+  http, so local stacks keep working. Renaming a cookie signs everyone out once. Tokens never enter
+  browser storage or serialized load data.
 - **Component memory** owns transient interaction and form input that should not survive navigation.
 
 Do not duplicate one state across URL, storage, and component memory. Decide whether a URL change
@@ -264,6 +269,15 @@ service:
   call or an identity provider such as Google. "Register" ("M’inscrire" in French) opens the
   invitation request on every platform. Only the account platform's page for a dead invitation link
   says "Request an invitation", which matches its offer to request a new one.
+- A response rendered with a session belongs to its visitor alone: the request hook sends
+  `Cache-Control: private, no-store` whenever the session cookies are present
+  ([RFC 9111 §5.2.2.5](https://www.rfc-editor.org/rfc/rfc9111#section-5.2.2.5)). Every response also
+  refuses framing with `X-Frame-Options: DENY` and `frame-ancestors 'none'`
+  ([RFC 9700 §4.16](https://www.rfc-editor.org/rfc/rfc9700#section-4.16)).
+- The minimum password length stays 4, as ruled, and is never raised. Every new-password field
+  (account creation, reset, change) shows a hint recommending at least 15 characters, the
+  [NIST SP 800-63B-4](https://pages.nist.gov/800-63-4/sp800-63b.html) guidance for a password used
+  alone. The hint is advice the visitor may ignore, never a validation error.
 - Logout ends the session through the service, then clears the cookies. The session spans every
   platform, so each one finds it ended on its next request. A failed revocation still clears the
   cookies: the visitor asked to leave this browser signed out.
@@ -298,16 +312,17 @@ keeps only these account controls:
 
 Infra registers every platform but the account platform in Authentication's client registry. The
 platform's name is its client ID, and `/auth/callback` on its host is its one redirect URI. The
-client serves three routes, as platform-studio's `src/lib/server/auth/sign-in.ts` does:
+client serves three routes, as platform-studio's `src/routes/auth/sign-in.server.ts` does:
 
 1. `/auth/sign-in` is a page whose server load draws a `state` and a PKCE verifier, keeps them with a
-   same-origin `returnTo` in a 10-minute `HttpOnly` cookie scoped to the callback path, and
+   same-origin `returnTo` in a 10-minute `__Host-` cookie, and
    redirects to the account platform's `/authorize`. A page renders `+error.svelte`, so a refusal
    such as a planned downtime shows the maintenance page.
 2. `/auth/callback` reads a response parameter only when it is given once. It refuses the response
    before any service call unless `state` matches the cookie and `iss` is the account platform's
    origin ([RFC 9207](https://www.rfc-editor.org/rfc/rfc9207)). It exchanges the code with its
-   verifier and redirect URI through the typed client, then redirects to `returnTo` with
+   verifier and redirect URI through the typed client, then redirects to `returnTo`, checked again
+   since a planted cookie could name another site, with
    `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. The code then leaves the address
    bar and reaches no referrer.
 3. `/auth/sign-in/failed?returnTo=<page>` is the signed-out page a failed sign-in lands on, with a
