@@ -7,7 +7,8 @@
 - [Release contract](#release-contract), [Capacity caps](#capacity-caps),
   [Planned downtimes](#planned-downtimes), [Databases and backups](#databases-and-backups),
   [Trust boundaries](#trust-boundaries), [Recovery](#recovery)
-- [Add a service](#add-a-service): the pull-request order, the first plan
+- [Add a service](#add-a-service): the pull-request order, the service's contracts, the first pins
+  and plan
 
 ## Prove the plan before review
 
@@ -425,7 +426,9 @@ cleanup. A successful backup proves nothing until a drill restores it and its SQ
 ## Add a service
 
 A service ships in two pull requests, the second merged once the first has deployed and its secret
-values are in. a-novel/infra#1404 is the worked example for a platform.
+values are in. Infra's [new-service runbook](https://github.com/a-novel/infra/blob/master/docs/runbooks/new-service.md)
+gives the whole order and who acts on each step. a-novel/infra#1481 is the worked example for a
+service, and a-novel/infra#1404 for a platform.
 
 1. **Bootstrap** creates the secret containers, and the Barman bucket of a service with a database
    (`cluster_databases`). Add version 1 of each secret value by hand: the cluster's External
@@ -446,6 +449,13 @@ values are in. a-novel/infra#1404 is the worked example for a platform.
 - **A platform's public edge goes first.** Its address and certificate live in foundation's
   `platform_hosts`, and the cluster root reads them as an output. The certificate waits on the
   domain's DNS records, which the output lists (a-novel/infra#1393).
+- **The service meets the cluster's contracts before its release.** It serves and dials TLS, as
+  [Trust boundaries](#trust-boundaries) describes, and checks its callers' service tokens. A release
+  that dials plaintext reaches no other service: narrative-engine v1.0.0 needed
+  a-novel/service-narrative-engine#1053 before it could run.
+- **The first pins are written by hand.** `pin-release.yaml` skips a repository infra pins no image
+  of, so the first release opens no pull request. Read each image's digest from the registry for
+  the service root's `terraform.tfvars`. Later releases pin themselves.
 - **The new root's first plan fails.** OpenTofu's GCS backend creates a missing state under a lock
   even with `-lock=false`, and the plan identity only reads the state bucket, so
   `storage.objects.create` is denied on `<root>/default.tflock`. The deploy creates the state on
