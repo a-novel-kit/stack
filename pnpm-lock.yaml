@@ -168,7 +168,7 @@ importers:
     devDependencies:
       '@a-novel-kit/nodelib-config':
         specifier: ^2.0.0
-        version: 2.4.0(4b3abc8d4183fdcd0ba048ca6bc59374)
+        version: 2.4.3(4b3abc8d4183fdcd0ba048ca6bc59374)
       '@eslint/js':
         specifier: ^10.0.0
         version: 10.0.1(eslint@10.14.0(jiti@2.7.0))
@@ -211,8 +211,8 @@ importers:
 
 packages:
 
-  '@a-novel-kit/nodelib-config@2.4.0':
-    resolution: {integrity: sha512-D8e/UbuMim33A7RgxsvEvNPNZGkUfzt0pgxmf5HMNGGX6+F8MZdqU02hy+xs4104T4Il1fNHxNF/6uppCqxkXg==, tarball: https://npm.pkg.github.com/download/@a-novel-kit/nodelib-config/2.4.0/9a506c987eaa05ac7ab1a107e5f4963f8ba9acdd}
+  '@a-novel-kit/nodelib-config@2.4.3':
+    resolution: {integrity: sha512-UXb/FK0N+tiY1/+2gTqpwjCBwUq69TSNVcX4RnBoXDV5Q4+vifFQNpD+tErF/5UkhnYd+cdYjkEysIn+AeaITQ==, tarball: https://npm.pkg.github.com/download/@a-novel-kit/nodelib-config/2.4.3/47823aa918919c4c0e536253c7bb0719c60ac621}
     engines: {node: '>=24.0.0', npm: '>=10.9.2'}
     hasBin: true
     peerDependencies:
@@ -220,18 +220,18 @@ packages:
       '@eslint/config-helpers': ^0.7.0
       '@eslint/js': ^10.0.1
       '@storybook/addon-vitest': ^10.6.5
-      '@sveltejs/adapter-node': ^6.0.0
-      '@sveltejs/kit': ^3.1.0
+      '@sveltejs/adapter-node': ^6.0.1
+      '@sveltejs/kit': ^3.1.1
       '@trivago/prettier-plugin-sort-imports': ^6.0.2
       '@types/node': ^26.6.6
       '@vitest/browser-playwright': ^5.0.5
-      eslint: ^10.13.0
+      eslint: ^10.14.0
       eslint-config-prettier: ^10.1.8
       eslint-plugin-storybook: ^10.6.5
       eslint-plugin-svelte: ^3.23.1
       estree-walker: ^3.0.3
       globals: ^17.13.0
-      i18next-cli: ^1.80.5
+      i18next-cli: ^1.80.7
       i18next-cli-plugin-svelte: ^2.4.1
       playwright: ^1.64.1
       prettier: ^3.9.10
@@ -3260,7 +3260,7 @@ packages:
 
 snapshots:
 
-  '@a-novel-kit/nodelib-config@2.4.0(4b3abc8d4183fdcd0ba048ca6bc59374)':
+  '@a-novel-kit/nodelib-config@2.4.3(4b3abc8d4183fdcd0ba048ca6bc59374)':
     dependencies:
       '@eslint/compat': 2.1.1(eslint@10.14.0(jiti@2.7.0))
       '@eslint/config-helpers': 0.7.0
