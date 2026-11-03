@@ -196,31 +196,43 @@ Rules:
 ## The A-Novel visual direction
 
 Design rules lead and code follows: each rule names what the eye should read, then the token or
-contract that delivers it. The thesis is a writer's room at night: the canvas stays cool and quiet,
-the work sits on warm surfaces, and one lamp makes the room feel lived in. Keep the canonical brand,
-pressure, and signal colors stable unless the brief explicitly changes them.
+contract that delivers it. The thesis is a writer's room at night: a quiet blue-black field, lit
+slate surfaces, and one colored lamp in the corner. Warmth means a calm, relaxing read, not warmer
+neutrals. Keep the canonical brand, pressure, and signal colors stable unless the brief explicitly
+changes them.
 
-- **Temperature.** The canvas is a cool blue-black. Neutrals carry the signal hue at a low chroma,
-  so every island, border, and text placed on the canvas reads warm against it. Tune lightness for
-  contrast and hue or chroma for temperature, so a temperature change never moves a contrast pair.
-- **One light.** One lamp per screen, in the top-start corner, with a quadratic falloff
-  (`--fill-canvas`). Paint it on the root `html` element only. Axe reports color contrast as
-  incomplete for text over any background image, gradient, or overlapping layer, so a lamp, grain,
-  or pattern on a surface that carries text switches the automated contrast gate off there.
-- **Light from above.** Raised surfaces catch the light on their top edge. The shadow tokens carry
-  `--shadow-edge-light`, so elevation needs no border.
+- **Contrast through elevation.** Neutrals stay blue-gray. The canvas sits near black, and each
+  raised surface steps lighter, so islands stand clear of the field without borders.
+- **Depth from light, never bevels.** Texture and depth come from gradients, glow, and
+  transparency. A raised surface has a hairline ring and a soft sheen fading down its face
+  (`--shadow-ring`, `--shadow-sheen`, carried by `--shadow-{sm,md,lg}`). Never draw a bright top
+  line, a dark bottom line, or an embossed edge: skeuomorphism reads dated.
+- **One lit action per view.** The primary action has a slight gradient that lightens toward the
+  top and a soft underglow in its own color (`--gradient-action-primary`,
+  `--shadow-action-primary`), with no transparency. Every other action stays flat. A short form sits
+  in a compact dialog (`Dialog size="sm"`) and stretches its submit (`FormActions align="stretch"`).
+  Secondary journeys become quiet links: a recovery link on the label row (`Field labelActions`), a
+  journey switch as one footer line. Never stack ghost buttons under a form.
+- **One lamp per app.** A radial light in the top-start corner, scaled to the viewport, tells
+  people which app they are in, as JetBrains IDEs tint their toolbar with a project color. Each app
+  sets `--color-lamp` on its root element: Studio's ember, Account's violet
+  (`--color-lamp-{ember,violet}`). The canvas carries it (`--fill-canvas`), and so does the
+  navigation it crosses (`--fill-navigation`), fixed to the viewport so the two line up.
+- **Effects never hide contrast.** Axe reports color contrast as incomplete for text over any
+  background image, gradient, or overlapping layer, so measure the brightest point of every lit
+  surface by hand and record the ratio beside its token. Paint face light with inset shadows, which
+  axe ignores. Keep grain and patterns off surfaces that carry text.
 - **Wells darken.** A field or sunken region is a translucent darkening of its backdrop
-  (`--color-surface-sunken`), so it keeps the temperature of the surface it is cut into. An opaque
-  warm dark reads brown on the cool canvas.
-- **Density follows the pointer.** Controls sit on a 4px grid at 32, 36, and 44px, and a coarse
-  pointer adds `space-1` to each. Small and medium buttons set their label in the small text size;
-  a label as large as body text makes a form button read oversized.
+  (`--color-surface-sunken`), so it keeps the tone of the surface it is cut into.
+- **Navigation is a vertical rail.** Every app uses the same shell: a collapsible rail on wide
+  screens, a header and a fullscreen drawer on narrow ones, sharing one navigation surface.
+- **Focus without noise.** A dialog focuses itself when it opens, so no control lights its focus
+  ring until the reader moves; keyboard focus stays visible everywhere else.
+- **Compact controls.** Controls sit on a 4px grid at 28, 32, and 40px, and a coarse pointer adds
+  `space-1` to each. Small and medium buttons set their label in the small text size. Empty space
+  inside a button reads as bulk; keep its padding tight and its target large through height alone.
 - **Weight marks action.** A label names one control, so it stays regular. Bold is kept for actions
   and group names.
-- **One primary action per view.** A short form sits in a compact dialog (`Dialog size="sm"`) and
-  stretches its submit (`FormActions align="stretch"`). Secondary journeys become quiet links where
-  they apply: a recovery link on the label row (`Field labelActions`), a journey switch as one
-  footer line. Never stack ghost buttons under a form.
 
 ## Refinement passes
 
