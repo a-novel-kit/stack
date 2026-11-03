@@ -36,9 +36,9 @@ type GoExecCheckpoint struct {
 	Env []string `json:"env"`
 }
 
-// Write serializes cp to paths.ReinstallCheckpoint() and fsyncs it, writing to a temporary file and
-// renaming so a crash never leaves a corrupt checkpoint. It stamps the schema
-// and timestamp itself.
+// Write serializes cp to paths.ReinstallCheckpoint() and fsyncs it, writing to
+// a temporary file and renaming so a crash never leaves a corrupt checkpoint.
+// It stamps the schema and timestamp itself.
 func Write(cp Checkpoint) error {
 	cp.Schema = SchemaVersion
 	cp.WrittenAt = time.Now()
@@ -72,9 +72,9 @@ func Write(cp Checkpoint) error {
 }
 
 // Read returns the checkpoint at paths.ReinstallCheckpoint(), or (nil, nil)
-// when none exists, the common case at a fresh start. A malformed file or an unknown schema is an
-// error. The daemon logs it and discards the checkpoint, so the handoff
-// degrades to "containers survive, go-exec targets are lost".
+// when none exists, the common case at a fresh start. A malformed file or an
+// unknown schema is an error. The daemon logs it and discards the checkpoint,
+// so the handoff degrades to "containers survive, go-exec targets are lost".
 func Read() (*Checkpoint, error) {
 	path := paths.ReinstallCheckpoint()
 	data, err := os.ReadFile(path)
