@@ -69,7 +69,8 @@ func listServices(cmd *cobra.Command, o psOpts) error {
 	if !o.watch {
 		return nil
 	}
-	handle := func(ev *anovelv1.WatchResponse) { encodeEvent(out, ev) }
+	enc := json.NewEncoder(out)
+	handle := func(ev *anovelv1.WatchResponse) { encodeEvent(enc, ev) }
 	if !o.jsonOut {
 		repaint, wait := coalesce(func(ev *anovelv1.WatchResponse) { repaintPs(ctx, c, out, o, ev) })
 		defer wait()

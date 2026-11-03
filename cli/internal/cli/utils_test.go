@@ -47,16 +47,11 @@ func swap[T any](t *testing.T, p *T, v T) {
 	t.Cleanup(func() { *p = orig })
 }
 
-// stubGH routes every gh call through respond, which sees the args joined with
-// any stdin payload.
+// stubGH routes every gh call through respond, which sees the args joined.
 func stubGH(t *testing.T, respond func(call string) (string, error)) {
 	t.Helper()
-	swap(t, &ghStdin, func(stdin string, args ...string) (string, error) {
-		call := strings.Join(args, " ")
-		if stdin != "" {
-			call += " " + stdin
-		}
-		return respond(call)
+	swap(t, &ghExec, func(args ...string) (string, error) {
+		return respond(strings.Join(args, " "))
 	})
 }
 

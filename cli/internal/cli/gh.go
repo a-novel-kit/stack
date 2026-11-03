@@ -11,17 +11,14 @@ import (
 	"time"
 )
 
-// ghStdin is runGH, a package var so tests intercept every GitHub call without
+// ghExec is runGH, a package var so tests intercept every GitHub call without
 // a live `gh`.
-var ghStdin = runGH
+var ghExec = runGH
 
-// runGH runs `gh` with optional stdin and returns stdout; on failure it folds
-// gh's output into the error (see ghError).
-func runGH(stdin string, args ...string) (string, error) {
+// runGH runs `gh` and returns stdout; on failure it folds gh's output into the
+// error (see ghError).
+func runGH(args ...string) (string, error) {
 	c := exec.Command("gh", args...)
-	if stdin != "" {
-		c.Stdin = strings.NewReader(stdin)
-	}
 	var out, errb bytes.Buffer
 	c.Stdout, c.Stderr = &out, &errb
 	if err := c.Run(); err != nil {
@@ -34,19 +31,17 @@ func runGH(stdin string, args ...string) (string, error) {
 // which concurrent repo runs can trip. GitHub asks for at least a minute.
 var rateLimitWait = time.Minute
 
-// ghRun is ghStdin, retried twice after a secondary-rate-limit rejection. The
+// gh runs ghExec, retried twice after a secondary-rate-limit rejection. The
 // limit rejects a request before acting on it, so a retried write is safe.
-func ghRun(stdin string, args ...string) (string, error) {
+func gh(args ...string) (string, error) {
 	for attempt := 1; ; attempt++ {
-		out, err := ghStdin(stdin, args...)
+		out, err := ghExec(args...)
 		if attempt == 3 || !isRateLimited(err) {
 			return out, err
 		}
 		time.Sleep(rateLimitWait)
 	}
 }
-
-func gh(args ...string) (string, error) { return ghRun("", args...) }
 
 // ghError folds a failed gh run's output into err. gh prints the HTTP status
 // on stderr and GitHub's JSON error on stdout; only the JSON's errors list

@@ -103,7 +103,7 @@ func dockerfileRequiredSecretIDs(path string) []string {
 // required, or "" for any other mount.
 func requiredSecretID(mount string) string {
 	var id string
-	secret, required := false, false
+	var secret, required bool
 	for _, option := range strings.Split(mount, ",") {
 		switch {
 		case option == "type=secret":

@@ -19,7 +19,7 @@ func mustWriteFile(t *testing.T, path, content string) {
 	}
 }
 
-func TestDetect(t *testing.T) {
+func TestBuilds(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -61,9 +61,9 @@ func TestDetect(t *testing.T) {
 				mustWriteFile(t, filepath.Join(root, name), content)
 			}
 
-			targets, err := detect.Detect(root)
+			targets, err := detect.Builds(root)
 			if err != nil {
-				t.Fatalf("Detect() error = %v", err)
+				t.Fatalf("Builds() error = %v", err)
 			}
 			podmanTargets := make([]detect.Target, 0, len(targets))
 			for _, target := range targets {
@@ -72,15 +72,15 @@ func TestDetect(t *testing.T) {
 				}
 			}
 			if len(podmanTargets) != 1 {
-				t.Fatalf("Detect() Podman targets = %d, want 1", len(podmanTargets))
+				t.Fatalf("Builds() Podman targets = %d, want 1", len(podmanTargets))
 			}
 
 			target := podmanTargets[0]
 			if target.Name != testCase.expectName {
-				t.Errorf("Detect() name = %q, want %q", target.Name, testCase.expectName)
+				t.Errorf("Builds() name = %q, want %q", target.Name, testCase.expectName)
 			}
 			if target.Detail != testCase.expectTag(root) {
-				t.Errorf("Detect() tag = %q, want %q", target.Detail, testCase.expectTag(root))
+				t.Errorf("Builds() tag = %q, want %q", target.Detail, testCase.expectTag(root))
 			}
 
 			expectArgs := []string{"build", "--format", "docker"}
@@ -89,7 +89,7 @@ func TestDetect(t *testing.T) {
 			}
 			expectArgs = append(expectArgs, "-f", testCase.expectFile, "-t", testCase.expectTag(root), ".")
 			if !reflect.DeepEqual(target.Args, expectArgs) {
-				t.Errorf("Detect() args = %v, want %v", target.Args, expectArgs)
+				t.Errorf("Builds() args = %v, want %v", target.Args, expectArgs)
 			}
 		})
 	}

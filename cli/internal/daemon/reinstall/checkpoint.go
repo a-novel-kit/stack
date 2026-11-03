@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -35,20 +36,18 @@ type GoExecCheckpoint struct {
 	Env []string `json:"env"`
 }
 
-// Path returns the canonical checkpoint location.
-func Path() string { return paths.ReinstallCheckpoint() }
-
-// Write serializes cp to Path() and fsyncs it, writing to a temporary file and
+// Write serializes cp to paths.ReinstallCheckpoint() and fsyncs it, writing to a temporary file and
 // renaming so a crash never leaves a corrupt checkpoint. It stamps the schema
 // and timestamp itself.
 func Write(cp Checkpoint) error {
 	cp.Schema = SchemaVersion
 	cp.WrittenAt = time.Now()
-	dir := filepath.Dir(Path())
+	path := paths.ReinstallCheckpoint()
+	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
-	tmp := Path() + ".tmp"
+	tmp := path + ".tmp"
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", tmp, err)
@@ -66,37 +65,38 @@ func Write(cp Checkpoint) error {
 	if err := f.Close(); err != nil {
 		return fmt.Errorf("close: %w", err)
 	}
-	if err := os.Rename(tmp, Path()); err != nil {
+	if err := os.Rename(tmp, path); err != nil {
 		return fmt.Errorf("rename: %w", err)
 	}
 	return nil
 }
 
-// Read returns the checkpoint at Path(), or (nil, nil) when none exists, the
-// common case at a fresh start. A malformed file or an unknown schema is an
+// Read returns the checkpoint at paths.ReinstallCheckpoint(), or (nil, nil)
+// when none exists, the common case at a fresh start. A malformed file or an unknown schema is an
 // error. The daemon logs it and discards the checkpoint, so the handoff
 // degrades to "containers survive, go-exec targets are lost".
 func Read() (*Checkpoint, error) {
-	data, err := os.ReadFile(Path())
+	path := paths.ReinstallCheckpoint()
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("read %s: %w", Path(), err)
+		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 	var cp Checkpoint
 	if err := json.Unmarshal(data, &cp); err != nil {
-		return nil, fmt.Errorf("decode %s: %w", Path(), err)
+		return nil, fmt.Errorf("decode %s: %w", path, err)
 	}
 	if cp.Schema != SchemaVersion {
-		return nil, fmt.Errorf("%s has schema %d, want %d", Path(), cp.Schema, SchemaVersion)
+		return nil, fmt.Errorf("%s has schema %d, want %d", path, cp.Schema, SchemaVersion)
 	}
 	return &cp, nil
 }
 
 // Delete removes the checkpoint. Idempotent.
 func Delete() error {
-	if err := os.Remove(Path()); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(paths.ReinstallCheckpoint()); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	return nil
@@ -105,7 +105,7 @@ func Delete() error {
 // Exists reports whether the checkpoint file is present. Status uses it to
 // surface "reinstall pending".
 func Exists() bool {
-	_, err := os.Stat(Path())
+	_, err := os.Stat(paths.ReinstallCheckpoint())
 	return err == nil
 }
 

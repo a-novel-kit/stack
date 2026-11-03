@@ -127,7 +127,7 @@ func startDaemon(w io.Writer, opts Options) bool {
 // edited rc only loads in future shells, so the hint also suggests sourcing it
 // for completion in the current one.
 func printNextStep(w io.Writer, daemonStarted, rcEdited bool, rcPath string) {
-	_, _ = fmt.Fprintln(w, "")
+	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintln(w, "Setup complete.")
 	switch {
 	case daemonStarted:

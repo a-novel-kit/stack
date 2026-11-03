@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-// TestGhRun pins the retry around GitHub's secondary rate limit: a rejected
+// TestGh pins the retry around GitHub's secondary rate limit: a rejected
 // call is retried, up to three attempts, and any other failure is not.
-func TestGhRun(t *testing.T) {
-	// Not parallel: swaps the package-level ghStdin seam.
+func TestGh(t *testing.T) {
+	// Not parallel: swaps the package-level ghExec seam.
 	rateLimited := errors.New("gh: You have exceeded a secondary rate limit (HTTP 403)")
 	testCases := []struct {
 		name      string
@@ -31,7 +31,7 @@ func TestGhRun(t *testing.T) {
 				}
 				return "ok", nil
 			})
-			_, err := ghRun("", "api", "repos/o/r")
+			_, err := gh("api", "repos/o/r")
 			if (err != nil) != testCase.wantErr {
 				t.Errorf("err = %v, wantErr %v", err, testCase.wantErr)
 			}

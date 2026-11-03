@@ -382,7 +382,7 @@ func (r *Runner) waitInfraHealthy(ctx context.Context, svc *discovery.Service, t
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(1 * time.Second):
+		case <-time.After(time.Second):
 		}
 	}
 

@@ -17,8 +17,9 @@ func (s *Server) ListVolumes(_ context.Context, req *anovelv1.ListVolumesRequest
 	if err != nil {
 		return nil, err
 	}
-	out := &anovelv1.ListVolumesResponse{}
-	for _, v := range volumes.List(svc) {
+	listed := volumes.List(svc)
+	out := &anovelv1.ListVolumesResponse{Volumes: make([]*anovelv1.Volume, 0, len(listed))}
+	for _, v := range listed {
 		out.Volumes = append(out.Volumes, volumeToProto(v))
 	}
 	return out, nil

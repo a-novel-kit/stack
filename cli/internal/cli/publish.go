@@ -82,7 +82,7 @@ func stampTargets(patterns []string, prefix, version string) (int, int, error) {
 		return 0, 0, err
 	}
 
-	total := 0
+	var total int
 
 	for _, f := range files {
 		count, err := stampFile(f, re, version)

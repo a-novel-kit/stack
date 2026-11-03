@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/spf13/cobra"
 
@@ -63,7 +64,7 @@ func execBeside(cmd *cobra.Command, ref entityRef, argv []string) error {
 		if ev.GetStream() == anovelv1.LogStream_LOG_STREAM_STDERR {
 			w = cmd.ErrOrStderr()
 		}
-		_, _ = fmt.Fprintln(w, ev.GetLine())
+		_, _ = io.WriteString(w, ev.GetLine()+"\n")
 	}
 	return execResult(exitCode)
 }

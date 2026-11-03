@@ -138,7 +138,7 @@ func TestChunkBotComments(t *testing.T) {
 // TestRunSucceeded pins that the run's own conclusion decides, waiting while it
 // is unfinished: gh run watch can stop before a run that goes on to succeed.
 func TestRunSucceeded(t *testing.T) {
-	// Not parallel: swaps the package-level ghStdin seam and the poll pacing.
+	// Not parallel: swaps the package-level ghExec seam and the poll pacing.
 	swap(t, &botRunPoll, time.Millisecond)
 	swap(t, &botRunFinishTimeout, 50*time.Millisecond)
 	testCases := []struct {

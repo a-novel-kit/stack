@@ -44,11 +44,11 @@ the stream.`,
 // JSON line or as text, until the command's context ends.
 func watchPhases(cmd *cobra.Command, o watchOpts) error {
 	out := cmd.OutOrStdout()
-	write := printEvent
+	handle := func(ev *anovelv1.WatchResponse) { printEvent(out, ev) }
 	if o.jsonOut {
-		write = encodeEvent
+		enc := json.NewEncoder(out)
+		handle = func(ev *anovelv1.WatchResponse) { encodeEvent(enc, ev) }
 	}
-	handle := func(ev *anovelv1.WatchResponse) { write(out, ev) }
 	return watchEvents(cmd.Context(), rpc.New(""), o.scope.selector(), o.service, o.target, handle)
 }
 
@@ -76,16 +76,27 @@ func printEvent(w io.Writer, ev *anovelv1.WatchResponse) {
 	_, _ = fmt.Fprintf(w, "%s  %s\n", ev.GetTs().AsTime().Format("15:04:05.000"), ev.GetDescription())
 }
 
+// watchEvent is the JSON line of a state event. Its fields stay in alphabetical
+// order, the key order the command has always printed.
+type watchEvent struct {
+	Description string `json:"description"`
+	NewPhase    string `json:"new_phase"`
+	OldPhase    string `json:"old_phase"`
+	Service     string `json:"service"`
+	Stack       string `json:"stack"`
+	TargetID    string `json:"target_id"`
+	Ts          string `json:"ts"`
+}
+
 // encodeEvent writes a state event as one JSON line.
-func encodeEvent(w io.Writer, ev *anovelv1.WatchResponse) {
-	event := map[string]any{
-		"ts":          ev.GetTs().AsTime().Format(time.RFC3339Nano),
-		stackLabel:    ev.GetStack(),
-		"service":     ev.GetService(),
-		"target_id":   ev.GetTargetId(),
-		"old_phase":   ev.GetOldPhase().String(),
-		"new_phase":   ev.GetNewPhase().String(),
-		"description": ev.GetDescription(),
-	}
-	_ = json.NewEncoder(w).Encode(event)
+func encodeEvent(enc *json.Encoder, ev *anovelv1.WatchResponse) {
+	_ = enc.Encode(watchEvent{
+		Description: ev.GetDescription(),
+		NewPhase:    ev.GetNewPhase().String(),
+		OldPhase:    ev.GetOldPhase().String(),
+		Service:     ev.GetService(),
+		Stack:       ev.GetStack(),
+		TargetID:    ev.GetTargetId(),
+		Ts:          ev.GetTs().AsTime().Format(time.RFC3339Nano),
+	})
 }

@@ -271,11 +271,7 @@ func chunkBotComments(items []botBatchItem, maxBytes int) ([][]botBatchItem, err
 // given form inputs (-f key=value, beyond the shared nonce), waits for the
 // resulting run by nonce, and watches it to completion.
 func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs ...string) error {
-	nonce, err := newNonce()
-	if err != nil {
-		return fmt.Errorf("bot-comment: generate nonce: %w", err)
-	}
-
+	nonce := newNonce()
 	dispatchArgs := []string{"workflow", commandRun, botWorkflowFile, "--repo", dispatchRepo, "-f", "nonce=" + nonce}
 	if _, err := gh(append(dispatchArgs, formArgs...)...); err != nil {
 		return fmt.Errorf("bot-comment: dispatch to %s failed: %w", dispatchRepo, err)
@@ -366,10 +362,8 @@ func runWithNonce(listing, nonce string) int64 {
 
 // newNonce returns a short random hex token used to correlate a dispatch
 // with its run (via the run-name) and to dedupe the comment.
-func newNonce() (string, error) {
+func newNonce() string {
 	b := make([]byte, 8)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
+	_, _ = rand.Read(b) // never fails: it crashes the program instead
+	return hex.EncodeToString(b)
 }

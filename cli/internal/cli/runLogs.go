@@ -116,8 +116,5 @@ func printLogLine(w io.Writer, ln *anovelv1.StreamLogsResponse) {
 	if ln.GetStream() == anovelv1.LogStream_LOG_STREAM_STDERR {
 		tag = "err"
 	}
-	_, _ = fmt.Fprintf(w, "%s %s %s\n",
-		ln.GetTs().AsTime().Format("15:04:05.000"),
-		tag,
-		ln.GetLine())
+	_, _ = io.WriteString(w, ln.GetTs().AsTime().Format("15:04:05.000")+" "+tag+" "+ln.GetLine()+"\n")
 }

@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -155,7 +156,7 @@ func streamFileToClient(ctx context.Context, path string, send func(*anovelv1.St
 // partial final line.
 func streamLines(ctx context.Context, r io.Reader, send func(*anovelv1.StreamLogsResponse) error, filter anovelv1.LogStream, path string) error {
 	reader := bufio.NewReader(r)
-	lineNo := 0
+	var lineNo int
 	for {
 		// A client that went away is not a failure, so the snapshot just stops.
 		select {
@@ -164,7 +165,7 @@ func streamLines(ctx context.Context, r io.Reader, send func(*anovelv1.StreamLog
 		default:
 		}
 		lineNo++
-		raw, readErr := reader.ReadString('\n')
+		raw, readErr := reader.ReadBytes('\n')
 		if err := emitLogLine(send, filter, raw, lineNo); err != nil {
 			return err
 		}
@@ -182,13 +183,13 @@ func streamLines(ctx context.Context, r io.Reader, send func(*anovelv1.StreamLog
 // be decoded has no stream to match on, and a viewer that filters it away is
 // back to a log that looks complete. Its timestamp is the read time, since the
 // record carries none, and clients render it in receive order.
-func emitLogLine(send func(*anovelv1.StreamLogsResponse) error, filter anovelv1.LogStream, raw string, lineNo int) error {
-	trimmed := strings.TrimRight(raw, "\r\n")
-	if trimmed == "" {
+func emitLogLine(send func(*anovelv1.StreamLogsResponse) error, filter anovelv1.LogStream, raw []byte, lineNo int) error {
+	trimmed := bytes.TrimRight(raw, "\r\n")
+	if len(trimmed) == 0 {
 		return nil
 	}
 	var ln logs.Line
-	if err := json.Unmarshal([]byte(trimmed), &ln); err != nil {
+	if err := json.Unmarshal(trimmed, &ln); err != nil {
 		marker := &anovelv1.StreamLogsResponse{
 			Ts:     timestamppb.Now(),
 			Stream: anovelv1.LogStream_LOG_STREAM_STDERR,
