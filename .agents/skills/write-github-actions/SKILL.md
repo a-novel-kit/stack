@@ -226,9 +226,12 @@ run, since a push moves the merge box to the new head. A cancelled job on the cu
 there, because the merge box shows each workflow's newest run. A gate that events on one head
 re-trigger, such as `gates.yaml` on labels and reviews, queues with `cancel-in-progress: false`: its
 runs never overlap, so the last one reads the latest state, and a newer event replaces the waiting run
-before it starts. A workflow-level group on a workflow that
-triggers on `labeled`, as that one does, can strand a pull request's required checks; `monitor-ci`
-covers the [diagnosis and recovery](../monitor-ci/references/dependency-prs.md#stranded-required-checks).
+before it starts. A cancelling group on a workflow that also triggers on `labeled` gives each label
+event's run a group of its own, as infra's `main.yaml` does by appending
+`${{ endsWith(github.event.action, 'labeled') && format('-{0}', github.run_id) || '' }}` to its group.
+A pull request takes its labels in the second it opens, and GitHub can admit those runs to a shared
+group out of order, which cancels the newest run and strands the required checks; `monitor-ci` covers
+the [diagnosis and recovery](../monitor-ci/references/dependency-prs.md#stranded-required-checks).
 
 Each workflow an event matches starts a run of its own, and during a GitHub incident every run
 waits in the same queue. Governance runs already far outnumber CI runs, so a new job joins the

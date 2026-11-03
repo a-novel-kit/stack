@@ -361,8 +361,9 @@ the API server as the plan identity. Close it unmerged once read (a-novel/infra#
   the plan identity cannot read it. Authentication's counter store is the model: one generator's
   `secretKeys` gives each ACL user a password of its own (a-novel/infra#1421).
 - **The `github-dispatch` clock holds the only GitHub credentials in Google Cloud:** one
-  fine-grained token per org, limited to Actions on that org's `.github` repo, which only
-  `github-dispatcher` reads. `github-dispatch-clock` holds `workflows.invoker`, which Workflows grants
+  fine-grained token per org, limited to Actions on the repositories its schedules list, `infra`
+  included, which only `github-dispatcher` reads. Each dispatch runs as the token's owner, and
+  `require-role` reads that account's role, so an admin's token passes infra's admin gates. `github-dispatch-clock` holds `workflows.invoker`, which Workflows grants
   project-wide, so it could start any management-project execution. Rotate a token by adding a
   version and bumping `github_dispatch_token_versions`.
 - **The read-only identity trusts only pull requests into `master`.** A stacked pull request's plans
