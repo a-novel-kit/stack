@@ -132,6 +132,16 @@ lost. When CI is backlogged:
 - Wait on background tasks with `TaskStop` or `[b]racket` patterns, never a bare `pkill -f`, which
   matches the calling shell.
 
+A wait for a bot PR to land, such as a bump a release needs, ends when its `state` is `MERGED`, not
+when its checks finish. The merge group runs after them, and a `failed_checks` drop leaves the PR
+open and green with nothing to queue it again: service-authentication#1791 left the queue on
+2026-11-03 and merged only once queued again by hand. Watch the state in one background command,
+and classify the PR in the table above if it times out:
+
+```bash
+timeout 60m sh -c 'until [ "$(gh pr view <n> --repo <r> --json state --jq .state)" = MERGED ]; do sleep 120; done'
+```
+
 ## Verify what landed
 
 A merged title is not evidence: Renovate retitles a PR whose branch it skipped.

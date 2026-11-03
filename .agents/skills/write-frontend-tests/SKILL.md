@@ -208,6 +208,12 @@ affected instead of inventing a screenshot test.
   account platform's own stack registers a stub client instead, whose callback the test serves and
   whose code the test exchanges. platform-studio's `builds/compose.e2e.yaml` and
   `tests/e2e/service-token.ts` follow this pattern.
+- A change to a platform's shell or pages can break the sibling journeys that drive its published
+  image, and they fail only when that image's pin moves. Search every other platform's `tests/e2e/`
+  for each accessible name you move or remove, and fix the journeys that reach it in a pull request
+  that also bumps their pin. platform-account v1.2 moved its "Agora apps" list into the rail, and
+  Studio's sign-in journey, still clicking the removed button, broke Renovate's account image bump
+  until platform-studio#439.
 - A `page.route` handler sees only the first URL of a redirect chain. To alter a later step, walk
   the chain with `page.request.get(url, { maxRedirects: 0 })`, read each `location`, and open the
   altered URL with `page.goto`. platform-studio's failed-exchange journey forges its code this way.

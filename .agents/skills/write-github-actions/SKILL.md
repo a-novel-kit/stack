@@ -589,6 +589,12 @@ There is no local runner, so verification is reading plus CI.
   copy. The coverage uploads in `test-go`, `test-node` and `test-playwright` set it.
 - **Interpolating an input straight into a `run:` script.** Bind it through `env:` so the value cannot
   be read as shell syntax.
+- **A startup requirement added to one smoke run.** `build-actions/docker` starts the image it built
+  with `run_args` and pushes it only once its healthcheck passes. A service runs that smoke run in
+  `main.yaml` and again in `release.yaml`, which pull-request CI never runs. When a binary starts to
+  require a setting, grep every workflow for its Dockerfile and update each `run_args`: json-keys
+  v2.15.1 and genai v0.8.5 were tagged without a gRPC image, since only `main.yaml` passed the
+  `SERVICE_ISSUER_OPTIONAL` opt-out of the new `SERVICE_TOKEN_ISSUER` check.
 - **A cached image build that a secret should change.** `build-actions/docker` restores the layer
   cache that default-branch pushes write, and BuildKit leaves secrets out of cache keys. The cut
   pushes a release commit to `master` with its tag, so the tag's build can reuse master's layer of
