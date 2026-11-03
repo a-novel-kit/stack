@@ -211,19 +211,23 @@ changes them.
   top and a soft underglow in its own color (`--gradient-action-primary`,
   `--shadow-action-primary`), with no transparency. Every other action stays flat. A short form sits
   in a compact dialog (`Dialog size="sm"`) and stretches its submit (`FormActions align="stretch"`).
-  Secondary journeys become quiet links: a recovery link on the label row (`Field labelActions`), a
-  journey switch as one footer line. Never stack ghost buttons under a form.
+  Secondary journeys become quiet text buttons (`Button variant="text"`): colored text at rest, a
+  soft box on hover. A recovery action sits on the label row (`Field labelActions`), a journey
+  switch is one footer line. Never stack ghost buttons under a form.
 - **One lamp per app.** A radial light in the top-start corner, scaled to the viewport, tells
   people which app they are in, as JetBrains IDEs tint their toolbar with a project color. Each app
-  sets `--color-lamp` on its root element: Studio's ember, Account's violet
+  sets `--color-lamp` on its root element: Account's ember, Studio's violet
   (`--color-lamp-{ember,violet}`). The canvas carries it (`--fill-canvas`), and so does the
   navigation it crosses (`--fill-navigation`), fixed to the viewport so the two line up.
 - **Effects never hide contrast.** Axe reports color contrast as incomplete for text over any
   background image, gradient, or overlapping layer, so measure the brightest point of every lit
   surface by hand and record the ratio beside its token. Paint face light with inset shadows, which
   axe ignores. Keep grain and patterns off surfaces that carry text.
-- **Wells darken.** A field or sunken region is a translucent darkening of its backdrop
-  (`--color-surface-sunken`), so it keeps the tone of the surface it is cut into.
+- **Fields are wells.** A field is a translucent darkening of the island it sits in
+  (`--color-surface-sunken`), with no border: only focus and errors outline it, and a transparent
+  border keeps it outlined in forced-colors mode (`--color-field-border`). Fields always sit inside
+  an island, never on the canvas, and stand one step taller than buttons (`--field-height-{sm,md,lg}`)
+  so typed text has room.
 - **Navigation is a vertical rail.** Every app uses the same shell: a collapsible rail on wide
   screens, a header and a fullscreen drawer on narrow ones, sharing one navigation surface.
 - **Focus without noise.** A dialog focuses itself when it opens, so no control lights its focus
