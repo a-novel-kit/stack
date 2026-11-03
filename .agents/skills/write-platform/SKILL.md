@@ -165,6 +165,10 @@ replaces it (a-novel/.github#517). Until then, keep its consent preference as it
   The browser keeps the answer per site, so every platform has its own page, open without signing
   in. The shell links it only while the platform collects browser telemetry, and no other screen
   repeats the switch.
+- The account platform is the exception: privacy is one of its account tabs, `/account/privacy`,
+  beside the account's own settings such as location consent, and the tab holds the switch. Its
+  `/privacy` stays public for logged-out visitors and sends logged-in ones to the tab, and its rail
+  lists no Privacy entry.
 
 Add no tracker, analytics or third-party script without a consent decision on the planning issue.
 
