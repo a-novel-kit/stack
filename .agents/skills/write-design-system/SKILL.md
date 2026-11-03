@@ -233,6 +233,10 @@ changes them.
   screens, a header and a fullscreen drawer on narrow ones, sharing one navigation surface.
 - **Focus without noise.** A dialog focuses itself when it opens, so no control lights its focus
   ring until the reader moves; keyboard focus stays visible everywhere else.
+- **Repeated spacing.** Space inside and between elements uses a few repeated steps: 4, 8, 12, 16,
+  24, and 32px (`--space-{1,2,3,4,6,8}`), with 48 and 64 for page layout. Fields sit 16px apart and
+  form actions 32px below the last field. The in-between steps (`--space-1-5`, `--space-5`) only
+  size dense details such as a badge, and a negative margin only lets a hover box overhang its row.
 - **Compact controls.** Controls sit on a 4px grid at 28, 32, and 40px, and a coarse pointer adds
   `space-1` to each. Small and medium buttons set their label in the small text size. Empty space
   inside a button reads as bulk; keep its padding tight and its target large through height alone.
