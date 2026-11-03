@@ -38,19 +38,54 @@ not a general-purpose client library. Apply this ownership split before adding c
 Consume released kit packages through documented public exports. Do not publish app code or keep a
 platform-local copy of a generic helper, preset, visual primitive, or Storybook default.
 
-Keep responsibilities explicit:
+### What you see, where it lives
 
-- `src/routes/` owns URLs, layouts, server loads, form actions, redirects, and HTTP endpoints.
-- `src/lib/ui/` owns app-specific pure screen and shell compositions. It may depend on uikit, but
-  not on route globals, storage, cookies, environment secrets, or live network clients.
-- `src/lib/application/` owns pure workflow state, URL codecs, commands, and orchestration contracts.
-- `src/lib/client/` owns browser adapters such as preference persistence and history integration.
-- `src/lib/server/` owns sessions, privileged backend clients, environment configuration, and
-  server-only policy. Nothing browser-reachable imports it.
+A platform has two layers, as a service has handlers, core and dao. `src/routes/` mirrors the URL:
+each directory is a path segment or a route group, and holds everything only its routes use.
+`src/lib/` holds what the whole app shares, split by where the code runs and named by concern, never
+by route. To find anything on screen, open the directory of its URL and walk up toward
+`src/routes/`; past the root, look in `src/lib/`.
 
-Use the nearest established equivalent when a repository already has a coherent structure; do not
-rename working boundaries merely to match these directory names. Dependencies point inward: routes
-and adapters compose pure application/UI code, never the reverse.
+Place each file in the deepest directory that holds every route using it. A route group `(name)`
+holds at least one route and exists to share a layout or code among them, so a directory that holds
+no route is never a group. Every platform follows this table:
+
+| What you see                                           | Where it lives                                                                                                   |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| The page at `/a/b`                                     | `src/routes/…/a/b/+page.svelte`, which only builds the controller and sets the document title                    |
+| What that page renders                                 | `screen.svelte` beside it, one per directory                                                                     |
+| Its state and transitions                              | `controller.svelte.ts` beside it                                                                                 |
+| A dialog or panel inside that screen                   | `<part>.svelte` beside the screen, its controller in the same `controller.svelte.ts`                             |
+| What the page loads and the forms it submits           | `+page.server.ts`, which holds the load and actions unless several routes share them                             |
+| A frame around several pages: shell, rail, banner      | the directory holding them: `+layout.svelte`, `+layout.server.ts`, `screen.svelte`, `controller.svelte.ts`       |
+| The index page of a framed directory                   | a group named for that page, as `(app)/(home)/`, so its screen keeps a directory of its own                      |
+| The error page                                         | `error-screen.svelte` beside its `+error.svelte`                                                                 |
+| An address with no page: callback, logout, probe       | `+server.ts`; a `+page.server.ts` whose load redirects when a refusal must render the error page                 |
+| One screen several routes render                       | the group holding them, as `ext/(short-code)/screen.svelte`                                                      |
+| Code the routes under one directory share              | that directory: `<concern>.ts`, or `<concern>.server.ts` for server code the route files export                  |
+| A component routes across the app render               | `src/lib/ui/<Name>.svelte`, its context in `src/lib/ui/<concern>.svelte.ts`                                      |
+| App-wide pure logic: URL codecs, forms, view types     | `src/lib/application/<concern>/`                                                                                 |
+| App-wide browser adapters: storage, telemetry          | `src/lib/client/`                                                                                                |
+| Sessions, service clients, configuration, downtime     | `src/lib/server/<concern>/`, which nothing browser-reachable imports                                             |
+| Visible text                                           | `src/lib/i18n/locales/<locale>/common.yaml`, under a top-level key named for the screen or component showing it  |
+| Stories and docs                                       | `<file>.stories.svelte` and `<file>.mdx` beside the component; `story.svelte` when stories share a fixed harness |
+| Tests                                                  | beside the file and named after it: `screen.svelte.test.ts`, `controller.test.ts`, `page.server.test.ts`         |
+| Server code driven across routes with one real session | `request.test.ts` in the deepest directory holding those routes                                                  |
+| A journey across pages in a browser                    | `tests/e2e/<journey>.spec.ts`                                                                                    |
+
+SvelteKit reserves the `+` prefix, so the test of `+page.server.ts` is `page.server.test.ts` and the
+test of `+server.ts` is `server.test.ts`. It also reads a bare route-file name such as
+`error.svelte` as a missing prefix, hence `error-screen.svelte`. A route test may mock the
+authentication context, so the request suite, which drives loads, actions and endpoints through the
+real session with only `fetch` stubbed, keeps a file of its own. Files in a route directory keep
+SvelteKit's lowercase names; components in `src/lib/ui/` are PascalCase.
+
+SvelteKit refuses to bundle a `*.server.ts` module or anything under `src/lib/server/` for the
+browser, so server-only code always sits behind one of the two. Dependencies point inward:
+`src/lib/` never imports from `src/routes/`, and a route imports only from its own directory, the
+directories above it, and `src/lib/`. Screens, their parts and `src/lib/ui/` import no route globals
+(`$app/state`, `$app/navigation`), storage, cookies, environment secrets, or network clients; the
+route files and adapters bring those in.
 
 `a-novel/platform-template` is the shortcut to start a new platform, so it tracks the platforms'
 conventions. A change that sets or changes a convention in a platform ships with the matching
@@ -154,10 +189,17 @@ deterministic, and incapable of contacting real services. Route files translate 
 framework results into the same controller contracts the stories exercise.
 
 For each routed screen or layout, keep `screen.svelte` and `controller.svelte.ts` beside the SvelteKit
-route files. `screen.svelte` is the pure UI component and accepts one screen controller.
-`controller.svelte.ts` contains pure reactive state and semantic transitions without rendering or DOM
-access. `+page.svelte` or `+layout.svelte` performs only final wiring plus route-owned metadata such as
-the document title. Do not add a connector component that merely renders the screen.
+route files, as [the layout table](#what-you-see-where-it-lives) places them. `screen.svelte` is the
+pure UI component and accepts one screen controller. `controller.svelte.ts` contains pure reactive
+state and semantic transitions without rendering or DOM access. `+page.svelte` or `+layout.svelte`
+performs only final wiring plus route-owned metadata such as the document title. Do not add a
+connector component that merely renders the screen.
+
+A screen renders from its props and its controller alone. The wiring reads the app's contexts, such
+as the planned downtime or the telemetry preference, and passes their values through the controller.
+The localization context is the one context a screen reads itself. A story then reaches every state
+with a fixed controller, and a state it cannot reach that way is hidden state to move into the
+controller.
 
 Import shared Storybook preview, theme, decorators, and test defaults from uikit's development
 package. Keep a local Storybook entrypoint only for product-specific context and story discovery; do
