@@ -203,10 +203,11 @@ changes them.
 
 - **Contrast through elevation.** Neutrals stay blue-gray. The canvas sits near black, and each
   raised surface steps lighter, so islands stand clear of the field without borders.
-- **Depth from light, never bevels.** Texture and depth come from gradients, glow, and
-  transparency. A raised surface has a hairline ring and a soft sheen fading down its face
-  (`--shadow-ring`, `--shadow-sheen`, carried by `--shadow-{sm,md,lg}`). Never draw a bright top
-  line, a dark bottom line, or an embossed edge: skeuomorphism reads dated.
+- **Depth from light, never bevels.** Texture and depth come from the lamp, glow, and
+  transparency. A raised surface stays flat: a hairline ring and a soft shadow give it its shape
+  (`--shadow-ring`, carried by `--shadow-{sm,md,lg}`), and the lamp gives the page its volume. Never
+  draw a bright top line, a dark bottom line, an embossed edge, or a gradient face: skeuomorphism
+  reads dated.
 - **One lit action per view.** The primary action has a slight gradient that lightens toward the
   top and a soft underglow in its own color (`--gradient-action-primary`,
   `--shadow-action-primary`), with no transparency. Every other action stays flat. A short form sits
@@ -221,8 +222,8 @@ changes them.
   navigation it crosses (`--fill-navigation`), fixed to the viewport so the two line up.
 - **Effects never hide contrast.** Axe reports color contrast as incomplete for text over any
   background image, gradient, or overlapping layer, so measure the brightest point of every lit
-  surface by hand and record the ratio beside its token. Paint face light with inset shadows, which
-  axe ignores. Keep grain and patterns off surfaces that carry text.
+  surface by hand and record the ratio beside its token. Keep grain and patterns off surfaces that
+  carry text.
 - **Fields are wells.** A field is a translucent darkening of the island it sits in
   (`--color-surface-sunken`), with no border: only focus and errors outline it, and a transparent
   border keeps it outlined in forced-colors mode (`--color-field-border`). Fields always sit inside
