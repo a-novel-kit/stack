@@ -433,6 +433,9 @@ API credentials in Storybook.
 - Keyboard, focus, narrow layout, long copy, reduced motion, and automated accessibility checks pass.
 - Every form sits on an island, a uikit `Card` or a `Dialog`, never on the page canvas: fields are
   borderless wells and vanish there ([write-design-system](../write-design-system/SKILL.md#the-a-novel-visual-direction)).
+- Every failure, refusal, or warning renders in a toned feedback box (`Alert`, `InlineMessage`, or a
+  page-level `StatusState`), never as plain text
+  ([write-design-system](../write-design-system/SKILL.md#the-a-novel-visual-direction)).
 - Static catalogs are the sole declaration of visible messages; app, Storybook, and tests use the
   same request- or tree-scoped localization provider.
 - URL codecs round-trip and invalid parameters normalize predictably; persisted preferences are

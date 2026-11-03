@@ -229,6 +229,12 @@ changes them.
   border keeps it outlined in forced-colors mode (`--color-field-border`). Fields always sit inside
   an island, never on the canvas, and share the button heights, so a borderless field keeps the
   same visual weight as the action beside it.
+- **Failures sit in a feedback box.** A message that reports a failure, a refusal, or something the
+  reader must act on renders in a toned feedback component, never as plain text: an `Alert` inside a
+  section, an `InlineMessage` beside a control, a `StatusState` when it replaces the page. The tone,
+  icon, and accent bar carry its meaning at a glance; plain secondary text stays for neutral
+  descriptions. A stored state rather than fresh feedback, such as a pending change, takes
+  `role="note"` so it is not announced again.
 - **Navigation is a vertical rail.** Every app uses the same shell: a collapsible rail on wide
   screens, a header and a fullscreen drawer on narrow ones, sharing one navigation surface.
 - **Focus without noise.** A dialog focuses itself when it opens, so no control lights its focus
