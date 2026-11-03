@@ -46,7 +46,11 @@ constraints; stop when further alternatives would not affect the decision.
    a direct platform call would bypass.
 3. **Use standard or native behavior.** Check the language, standard library, framework, and
    supported platform before writing custom machinery. Verify unfamiliar APIs against supported
-   versions. Compare semantics, not just the happy-path output.
+   versions. Compare semantics, not just the happy-path output. A thin helper built on the native
+   types, such as `chi` routing plain `net/http` handlers, counts as native. When a published
+   specification defines the behavior, such as an RFC, a WHATWG or W3C standard, or OpenID Connect,
+   implement every requirement it states exactly, name the section in the nearest doc comment, and
+   record a deliberate deviation with its reason.
 4. **Resolve a real dependency decision.** Follow
    [choose-dependency](../choose-dependency/SKILL.md) when adding/replacing a package or weighing
    build versus buy. A tiny stable helper may belong locally; a mature subsystem may justify a
@@ -78,6 +82,10 @@ security, and performance win every conflict.
 - **Push required complexity down.** An entry point reads as an overview of named steps. The tricky
   algorithm, the edge cases, and the optimization live in a leaf function the reader opens only when
   needed. Moving complexity down does not reduce it; it clears the reader's main path.
+- **Inline a pass-through wrapper.** A function that only calls another one, renames it, or relabels
+  its error adds a frame to every stack trace and a hop to every reading, for nothing a reader needs.
+  Make the call where it is used. Keep a helper when it owns an invariant, a policy, or a multi-step
+  body repeated across callers.
 
 ## Keep simple code fast
 
@@ -107,6 +115,9 @@ add their own traps: [write-go](../write-go/SKILL.md#performance-traps),
 - **A copy inside a loop.** Spreading an accumulator (`{ ...acc, [key]: value }`) or appending to a
   Go string with `+=` rebuilds the whole value on every turn, which is O(n²). Mutate a local
   accumulator or use a builder.
+- **An intermediate collection.** A list built only to be joined, encoded, or walked once is
+  allocated, grown, and then copied again into the real result. Write into the final destination
+  instead: a string builder, the response writer, a streaming encoder.
 - **A round trip per item.** One query, API call, or command per element, or per tick of a poll
   loop, is the N+1 pattern. Batch the call, join the query, or fetch the list once. Two parallel
   steps of one request that ask a backend the same question are the same trap; share the answer.
@@ -123,6 +134,11 @@ add their own traps: [write-go](../write-go/SKILL.md#performance-traps),
 - **Work that outlives its owner.** A goroutine, timer, ticker, listener, observer, interval, or
   subscription needs an exit tied to its owner's lifetime. Server module state shared by every
   request must not grow per request.
+
+Weigh each trap by how often the code runs. A package-level value, a constant table, or setup that
+runs once at startup keeps its clearest form, such as a join or a format call: its cost is paid once,
+its maintenance on every read. The builder, the preallocation, and the streaming write belong in
+code that runs per request, per item, or per render.
 
 ## Prove the simplification
 

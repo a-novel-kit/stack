@@ -324,6 +324,43 @@ handler disagree, fix the spec (or the handler if it is wrong), but never let th
 
 ## Response Design
 
+### Status codes
+
+Pick each code by its [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110#name-status-codes) meaning
+and send the headers that meaning requires. Handlers, platform routes and specs all follow this
+table:
+
+| Outcome                                     | Code          | Required headers                      |
+| ------------------------------------------- | ------------- | ------------------------------------- |
+| A read, or an action that returns a body    | `200`         |                                       |
+| Created an addressable resource             | `201`         | `Location` naming it                  |
+| Accepted work that finishes later           | `202`         | `Location` of a status resource       |
+| Succeeded with nothing to return            | `204`         | no body                               |
+| Conditional `GET` on an unchanged resource  | `304`         | the `ETag` and `Cache-Control` of 200 |
+| Redirect after a `POST` (POST/redirect/GET) | `303`         | `Location`                            |
+| Moved, temporarily or for good, method kept | `307` / `308` | `Location`                            |
+| Missing or invalid credentials              | `401`         | `WWW-Authenticate`                    |
+| Authenticated but not allowed               | `403`         |                                       |
+| Method not served on this path              | `405`         | `Allow`                               |
+| Write conflicts with the current state      | `409`         |                                       |
+| `If-Match` or `If-Unmodified-Since` failed  | `412`         |                                       |
+| Rate limited                                | `429`         | `Retry-After`                         |
+
+- **Never `301` or `302`.** A client may turn a redirected `POST` into a `GET` on either, so the
+  method depends on the client. `303`, `307` and `308` state it. A redirect answering a request
+  that carried credentials uses `303`, never `307`, which reposts them
+  ([RFC 9700 §4.12](https://www.rfc-editor.org/rfc/rfc9700#section-4.12)).
+- **Another user's resource is `404`.** Answering `403` confirms the resource exists.
+- **Cache what is public and stable.** A public read that changes rarely, such as a JWKS, sends
+  `Cache-Control` and an `ETag`, and answers `If-None-Match` with `304`. `http.ServeContent` does the
+  conditional part once the `ETag` header is set.
+- **`1xx` comes from the stack.** Go's server sends `100 Continue` itself when a handler first reads
+  a body sent with `Expect: 100-continue`; never write it by hand. `103 Early Hints` suits an HTML
+  page whose critical assets are known before its body; confirm the load balancer forwards it first.
+- **A changed `2xx` is breaking.** Fixing a published route's success code waits for a planned major
+  (see [Breaking vs Non-Breaking Changes](#breaking-vs-non-breaking-changes)). Adding a required
+  header such as `WWW-Authenticate` or `Allow` is not.
+
 ### Error responses
 
 Use specific 4xx responses only for error conditions the handler explicitly checks and
