@@ -244,6 +244,12 @@ rule — all of which apply here. The service-specific additions:
 - **Transport boundaries.** REST is public — anything in a REST response may reach an end user or
   be logged by an intermediary; return only what the client is entitled to. gRPC is internal —
   route all external traffic through REST, never expose gRPC directly.
+- **A security gate never turns itself off on empty configuration.** An unset issuer, caller list
+  or key stops the process at startup, and only an explicit opt-out that production never sets
+  starts it without the gate. json-keys' gRPC server refuses to start without
+  `SERVICE_TOKEN_ISSUER` unless `SERVICE_ISSUER_OPTIONAL` is true, which only its standalone gRPC
+  image and the CI smoke runs set, and a table test of `cmd/grpc`'s `newServer` covers the three
+  cases.
 
 ---
 

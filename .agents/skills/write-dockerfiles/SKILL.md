@@ -417,3 +417,13 @@ Always exclude:
   one fewer layer.
 - **A `USER` by name.** hadolint rejects it (DL3066), since a runtime cannot verify that a name is
   not root. Use the numeric IDs: `USER 1000:1000` is the `node` user of the Node.js images.
+- **An `ARG` or `ENV` name that reads as a secret.** Two linters guess secrets from the name, in any
+  case. BuildKit's `SecretsUsedInArgOrEnv` flags a whole `_`-separated segment `apikey`, `auth`,
+  `credential`, `credentials`, `key`, `password`, `pword`, `passwd`, `psw`, `secret` or `token`,
+  unless another segment is `public`, `file` or `version`. hadolint 2.15's DL3064 flags a name
+  holding `api_key`, `client_key`, `password`, `private_key`, `privatekey`, `secret`, `token` or
+  `username` anywhere, or one of its listed names such as `AWS_ACCESS_KEY_ID`, unless it ends in
+  `_FILE`. Name a setting that holds no secret so it passes both, never with a `check=skip` or a
+  hadolint ignore, which would also hide a real secret added later. `SERVICE_TOKEN_ISSUER_OPTIONAL`
+  failed both and `SERVICE_TOKENS_OPTIONAL` still failed DL3064, so the standalone images set
+  `SERVICE_ISSUER_OPTIONAL`.

@@ -28,8 +28,8 @@ the budget runs out, stop and escalate.
    [failure diagnosis](references/failures.md) before choosing a fix or retry.
 4. Use [the service job map](references/job-map.md) when interpreting an unfamiliar service job;
    the current repository workflow is the source of truth.
-5. For a sweep of Renovate or Dependabot PRs, read [dependency PRs](references/dependency-prs.md)
-   before classifying or landing them.
+5. For a sweep of Renovate or Dependabot PRs, or a wait for one to merge, read
+   [dependency PRs](references/dependency-prs.md) before classifying or landing them.
 6. Re-run the affected verification, preserve history, and observe the new commit. Stop at green
    or the escalation conditions below; green CI does not authorize a merge.
 
