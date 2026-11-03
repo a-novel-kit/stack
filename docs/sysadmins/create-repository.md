@@ -25,11 +25,22 @@ Add the repository to `repositories` in a-novel/infra's `environments/production
 
 The merge's deploy creates the repository, with its settings, team access and labels. A service or a platform starts from its template repository, `service-template` or `platform-template`. Any other class starts empty, without CI, Renovate or the governance workflows. The `write-github-actions` skill describes all three, so an agent can add them.
 
-GitHub gives a new repository the organization's default labels, so the root fails to create its own labels of the same names, with `already_exists`. Import them in a second pull request, as [a-novel/infra#1379](https://github.com/a-novel/infra/pull/1379) does, and drop the import once it applied.
+GitHub gives a new repository the organization's default labels, and Renovate adds `dependencies` with its first pull requests. The root then fails to create its own labels of the same names, with `already_exists`. Import every name the failed apply lists in a second pull request, as [a-novel/infra#1379](https://github.com/a-novel/infra/pull/1379) does, and drop the import once it applied.
 
 ## Install the release App
 
-A repository that releases needs its organization's release App, `AnovelBot[Release]` or `AnovelKitBot[Release]`. In the organization's **Settings → GitHub Apps**, configure the App and add the repository under **Repository access**. Do it as soon as the deploy has created the repository. Its rulesets name the App, and GitHub refuses them with HTTP 422 until it is installed. A repository made from a template holds `main.yaml` from the start, so the next apply already creates them, and the GitHub root fails until the install.
+A repository that releases needs its organization's release App, `AnovelBot[Release]` or `AnovelKitBot[Release]`. Do it as soon as the deploy has created the repository. Its rulesets name the App, and GitHub refuses them with HTTP 422 until it is installed. A repository made from a template holds `main.yaml` from the start, so the next apply already creates them, and the GitHub root fails until the install.
+
+Add the repository to the App's installation:
+
+```bash
+INSTALLATION=$(gh api "orgs/$ORG/installations" \
+  --jq '.installations[] | select(.app_slug | endswith("-release")) | .id')
+REPO_ID=$(gh api "repos/$ORG/$NAME" --jq .id)
+gh api -X PUT "user/installations/$INSTALLATION/repositories/$REPO_ID"
+```
+
+If GitHub refuses the call, open the organization's **Settings → GitHub Apps**, configure the App, and add the repository under **Repository access**.
 
 ## Add it to the workspace
 
