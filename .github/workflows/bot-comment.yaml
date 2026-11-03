@@ -69,14 +69,17 @@ jobs:
     steps:
       # Validate before minting a token, so a malformed manual dispatch fails
       # early. The checks cover what the GitHub API cannot report meaningfully:
-      # the token's repository scope, the nonce format and the batch shape. The
-      # API reports per-comment errors at post time, so the rules never drift
-      # from GitHub's. A malformed batch may post partially, and a re-dispatch
-      # posts the rest, since the markers skip what already landed.
+      # the token's repository scope, the nonce format, the batch shape and the
+      # comment targets that become API path segments. The API reports
+      # per-comment errors at post time, so the rules never drift from GitHub's.
+      # A malformed batch may post partially, and a re-dispatch posts the rest,
+      # since the markers skip what already landed.
       - name: Validate inputs
         env:
           REPO: ${{ inputs.repo }}
           NONCE: ${{ inputs.nonce }}
+          NUMBER: ${{ inputs.number }}
+          REPLY_TO: ${{ inputs.reply_to }}
           COMMENTS: ${{ inputs.comments }}
         run: |
           set -euo pipefail
@@ -102,6 +105,21 @@ jobs:
           # anything else.
           if [ -n "$COMMENTS" ] && ! printf '%s' "$COMMENTS" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
             echo "::error::comments must be a non-empty JSON array"
+            exit 1
+          fi
+          # Each number and reply_to becomes a segment of the API path, so each
+          # must be a bare positive integer. The single form is checked as the
+          # one-item batch the post step builds from it. \A and \z anchor the
+          # whole value, where $ would also match before a trailing newline.
+          if [ -n "$COMMENTS" ]; then
+            items="$COMMENTS"
+          else
+            items=$(jq -cn --arg n "$NUMBER" --arg r "$REPLY_TO" '[{number: $n, reply_to: $r}]')
+          fi
+          if ! printf '%s' "$items" | jq -e 'all(.[];
+            (.number | tostring | test("\\A[1-9][0-9]*\\z"))
+            and ((.reply_to // "") | tostring | test("\\A([1-9][0-9]*)?\\z")))' >/dev/null 2>&1; then
+            echo "::error::every number must be a positive integer, and every reply_to empty or a positive integer"
             exit 1
           fi
 
