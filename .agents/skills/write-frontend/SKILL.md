@@ -127,6 +127,9 @@ or instruction to find an earlier link does not replace it.
 - Treat API, URL, storage, message, and DOM data as untrusted at runtime even when TypeScript types it.
 - Catch `unknown`; preserve the original cause when translating errors. Never silently discard a
   rejected promise.
+- Arrays and objects travel by reference, and `sort`, `reverse`, `splice` and `fill` mutate in place.
+  On data the function does not own, use `toSorted`, `toReversed`, `toSpliced` and `with`, and copy
+  with `structuredClone`, never a `JSON.parse(JSON.stringify(…))` round trip.
 - Keep a declaration out of the statement it feeds. A long literal inside an `if`, `switch`, loop
   header or call argument becomes a named constant declared just before the statement. A
   configuration object passed to its factory, as in `defineConfig({…})`, keeps its idiomatic form.
@@ -166,6 +169,11 @@ or instruction to find an earlier link does not replace it.
 - Keep controllers mockable and composable through structural contracts: inject collaborators, compose
   child controllers, and derive views of shared state without creating a second state owner. A plain
   typed object with fixed state and no-op transitions must be a valid replacement.
+- Build every rendered state from static values. With fixed props and a fixed-state controller, a
+  story reaches each state of the matrix, edge cases included, with no timer, fetch, `play` function
+  or user event. Only DOM mechanics the user drives stay outside, such as focus, the caret, typing in
+  progress and scroll. A state a story cannot reach that way is hidden state: move it into the
+  controller.
 - Unit-test controller transitions without rendering. Test the component boundary for DOM semantics,
   accessibility behavior, and rejected transitions.
 

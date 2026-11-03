@@ -101,6 +101,9 @@ Load `write-frontend-tests` for tests or stories and `write-design-system` for u
 
 - Put secrets, privileged calls, and server-only dependencies in server-only modules and server load
   functions/actions. Never import them through a module reachable by browser code.
+- A form action or any other `POST` redirects with `303`; a load redirects with `307`, or `308` for
+  a permanent move. Never `301` or `302` (see `write-openapi`'s
+  [status codes](../write-openapi/SKILL.md#status-codes)).
 - Use framework `load`, form actions, error, and redirect contracts rather than duplicating routing
   or request lifecycle logic in components.
 - An `error()` thrown from a `+server.ts` endpoint skips `+error.svelte`: SvelteKit answers with

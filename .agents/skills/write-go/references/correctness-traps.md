@@ -1,7 +1,7 @@
 # Correctness traps
 
 Read this reference when routed here by [write-go](../SKILL.md). Its rules apply to the selected
-work. Each rule names a pull request that fixed one instance of the trap.
+work. A rule that once reached `master` names the pull request that fixed it.
 
 Contents:
 
@@ -17,6 +17,16 @@ Contents:
   read and write is a fatal error that `recover` cannot catch. Clone every map and slice the copy
   exposes, with `maps.Clone` and `slices.Clone`, while the lock is still held
   (a-novel-kit/stack#786).
+- **A map or slice argument aliases the caller's.** A map value refers to its table and a slice
+  shares its backing array, so a function that writes into one, or a struct that keeps one it
+  received, changes what the caller holds, with no pointer in sight. Clone with `maps.Clone` or
+  `slices.Clone` at the boundary that keeps or mutates it.
+- **`append` on a subslice overwrites its parent.** `head := s[:n]` keeps the capacity of `s`, so
+  `append(head, x)` writes into `s[n]`. Cap the subslice with a full slice expression, `s[:n:n]`,
+  or clone it before appending.
+- **`range` hands out copies.** `for _, v := range items` copies each element: a write to `v` never
+  reaches the slice, and a large struct is copied on every turn. Index the slice
+  (`items[i].Status = …`) to change an element or to avoid the copy.
 - **A check and its act in two critical sections.** Two callers both pass the check before either
   acts, so both start the same work. Check and record the claim under one lock, so a concurrent
   caller finds the claim. When the work itself is long, such as a `compose up`, hold a per-key lock

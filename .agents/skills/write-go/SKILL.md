@@ -222,6 +222,28 @@ errors.Join(err, ErrUserNotFound)` — so callers keep both identities.
 - **Wrap with context and `%w`**: `fmt.Errorf("search users: %w", err)`. Always `%w`, never
   `%v`, so callers keep `errors.Is` / `errors.As` identity. The message chain should let a reader
   trace the call path.
+- **Wrap at the call site.** A helper that runs one call and relabels its error is a
+  [pass-through wrapper](../prefer-small-solutions/SKILL.md#shape-the-code-for-a-scanning-reader):
+  the label belongs where the call happens.
+
+  ```go
+  // WRONG: one more frame to step through, for a label.
+  func marshalJSON(v any, cause string) ([]byte, error) {
+  	out, err := json.Marshal(v)
+  	if err != nil {
+  		return nil, fmt.Errorf("marshal(%s): %w", cause, err)
+  	}
+
+  	return out, nil
+  }
+
+  // CORRECT
+  payload, err := json.Marshal(claims)
+  if err != nil {
+  	return nil, fmt.Errorf("marshal claims: %w", err)
+  }
+  ```
+
 - **Never silently discard an error.** If one truly can be dropped, write `_ = ...` with a
   comment saying why.
 
@@ -350,8 +372,31 @@ every language shares. Go adds these:
   `GODEBUG=inittrace=1` prints each package's init time and allocations.
 - **A goroutine per item.** An unbounded fan-out has no ceiling on memory or open connections. Use
   `errgroup.Group` with `SetLimit`.
-- **A slice grown to a known size.** Allocate it with `make([]T, 0, len(source))` so `append` never
-  reallocates.
+- **`append` into a slice without capacity.** Each time the backing array fills, `append`
+  allocates a larger one and copies every element. When the final length is known, allocate once:
+  `make([]T, len(source))` assigned by index, or `make([]T, 0, len(source))` when a filter may drop
+  items.
+- **A slice built to be joined.** Collecting parts into a `[]string` for `strings.Join` allocates the
+  slice, grows it, and copies every part a second time. Write the parts into a `strings.Builder`,
+  with `Grow` first when the length is easy to bound:
+
+  ```go
+  var sb strings.Builder
+
+  sb.WriteString(base)
+
+  for _, segment := range segments {
+  	sb.WriteByte('/')
+  	sb.WriteString(url.PathEscape(segment))
+  }
+
+  return sb.String()
+  ```
+
+- **A value encoded through an intermediate.** `json.Marshal` then `w.Write` holds the whole payload
+  before sending it, and every `[]byte(s)` or `string(b)` conversion copies the data. Encode into the
+  destination, as `golib/httpf.SendJSONStatus` does with `json.NewEncoder(w)`, and keep one
+  representation from read to write.
 - **A body read whole.** `io.ReadAll` on an untrusted request or response body has no ceiling. Wrap
   the body in `http.MaxBytesReader` or `io.LimitReader` first.
 - **A pipe abandoned by an early return.** The writer of an `io.Pipe` or a `cmd.StdoutPipe` blocks
@@ -367,6 +412,9 @@ every language shares. Go adds these:
 
 `time.After` inside a loop is not a leak on Go 1.23 and later: the runtime collects an unreferenced
 timer. Do not replace it with a `Ticker` for that reason; a ticker changes the pacing.
+
+Package-level variables, constant tables, and startup code keep `strings.Join`, `fmt.Sprintf`, and
+`+`. They run once, so a builder there costs readability and saves nothing.
 
 ---
 
@@ -391,4 +439,6 @@ stdlib pitfalls that reached `master` once, each with the fix that held.
 - **A parameter added only to fit a callback's signature.** Wrap the call in a closure.
 - **snake_case or run-together multi-word file names.** camelCase.
 - **Discarding an error without `_ =` and a why-comment.**
+- **A helper that only relabels one call's error.** Wrap at the call site.
+- **A `[]string` built for one `strings.Join` in per-request code.** Write into a `strings.Builder`.
 - **Shadowing an imported package name with a local variable.** Rename the variable.
