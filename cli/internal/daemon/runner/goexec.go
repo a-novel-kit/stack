@@ -90,7 +90,7 @@ func (r *Runner) watchGoExec(inst *Instance, cmd *exec.Cmd, logWriter *logs.Writ
 	err := cmd.Wait()
 	_ = logWriter.Close()
 	reason := anovelv1.ExitReason_EXIT_REASON_SUCCESS
-	msg := ""
+	var msg string
 	if err != nil {
 		msg = err.Error()
 		reason = anovelv1.ExitReason_EXIT_REASON_CRASHED

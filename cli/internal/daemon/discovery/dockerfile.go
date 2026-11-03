@@ -34,7 +34,7 @@ func dockerfileHasHealthcheck(path string) bool {
 		// until the logical line ends.
 		if strings.HasSuffix(trimmed, "\\") {
 			logical.WriteString(strings.TrimSuffix(trimmed, "\\"))
-			logical.WriteString(" ")
+			logical.WriteByte(' ')
 			continue
 		}
 		logical.WriteString(trimmed)

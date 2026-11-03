@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -489,7 +490,7 @@ func suggestCommands(prefix string) []string {
 
 // countRunning counts the service's targets in the running phase.
 func countRunning(svc *anovelv1.Service) int {
-	n := 0
+	var n int
 	for _, t := range svc.GetTargets() {
 		if t.GetPhase() == anovelv1.Phase_PHASE_RUNNING {
 			n++
@@ -511,7 +512,7 @@ func serviceTargetsLine(svc *anovelv1.Service) string {
 	if running > 0 {
 		dot = styleSuccess.Render("●")
 	}
-	return dot + fmt.Sprintf(" %d/%d targets", running, total)
+	return dot + " " + strconv.Itoa(running) + "/" + strconv.Itoa(total) + " targets"
 }
 
 // serviceInfraLine is the per-service "X/Y infra" row in the nav block. It is
@@ -526,7 +527,7 @@ func serviceInfraLine(svc *anovelv1.Service) string {
 	if healthy > 0 {
 		dot = styleSuccess.Render("●")
 	}
-	return dot + fmt.Sprintf(" %d/%d infra", healthy, total)
+	return dot + " " + strconv.Itoa(healthy) + "/" + strconv.Itoa(total) + " infra"
 }
 
 // countInfraHealthy returns (healthy, total) across a service's infra entries.
@@ -535,7 +536,7 @@ func serviceInfraLine(svc *anovelv1.Service) string {
 // health counts as not ready.
 func countInfraHealthy(svc *anovelv1.Service) (int, int) {
 	total := len(svc.GetInfra())
-	healthy := 0
+	var healthy int
 	for _, in := range svc.GetInfra() {
 		if in.GetPhase() != anovelv1.Phase_PHASE_RUNNING {
 			continue

@@ -211,7 +211,7 @@ func pruneStacks(cmd *cobra.Command, args []string, all bool, opts pruneOpts) er
 		_, _ = fmt.Fprintln(out, "no prunable stacks (the default stack is never pruned)")
 		return nil
 	}
-	failed := 0
+	var failed int
 	for _, st := range targets {
 		if err := pruneOne(ctx, c, cmd, st, opts); err != nil {
 			_, _ = fmt.Fprintf(out, "  ✗ %s: %v\n", st.GetName(), err)

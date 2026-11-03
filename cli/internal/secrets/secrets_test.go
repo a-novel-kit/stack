@@ -2,6 +2,10 @@ package secrets_test
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -73,6 +77,40 @@ func TestStore(t *testing.T) {
 		}
 		if bytes.Equal(write(), write()) {
 			t.Fatal("two writes of the same value produced identical ciphertext — nonce not random")
+		}
+	})
+
+	t.Run("ReadsNonceThenCiphertext", func(t *testing.T) {
+		// A store sealed by hand as `nonce || ciphertext`, the layout every
+		// release writes, opens.
+		t.Setenv("XDG_DATA_HOME", t.TempDir())
+		if _, err := secrets.Init(); err != nil {
+			t.Fatalf("init: %v", err)
+		}
+		root := paths.SecretsRoot()
+		key, err := os.ReadFile(filepath.Join(root, "key"))
+		if err != nil {
+			t.Fatalf("read key: %v", err)
+		}
+		block, err := aes.NewCipher(key)
+		if err != nil {
+			t.Fatalf("cipher: %v", err)
+		}
+		gcm, err := cipher.NewGCM(block)
+		if err != nil {
+			t.Fatalf("gcm: %v", err)
+		}
+		plain, err := json.Marshal(map[string]string{"k": "v"})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		nonce := make([]byte, gcm.NonceSize())
+		_, _ = rand.Read(nonce) // never fails: it crashes the program instead
+		if err := os.WriteFile(filepath.Join(root, "store.enc"), gcm.Seal(nonce, nonce, plain, nil), 0o600); err != nil {
+			t.Fatalf("write store: %v", err)
+		}
+		if got, ok := openStore(t, nil).Get("k"); !ok || got != "v" {
+			t.Fatalf("get k = %q, %v; want %q, true", got, ok, "v")
 		}
 	})
 

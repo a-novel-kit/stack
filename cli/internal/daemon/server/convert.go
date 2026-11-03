@@ -41,6 +41,9 @@ func (s *Server) serviceToProto(svc *discovery.Service, infraStates map[string]r
 		Name:            svc.Name,
 		Stack:           svc.Stack,
 		ComposeFilePath: svc.ComposePath,
+		Targets:         make([]*anovelv1.Target, 0, len(svc.Targets)),
+		Infra:           make([]*anovelv1.Infra, 0, len(svc.Infra)),
+		Volumes:         make([]*anovelv1.Volume, 0, len(svc.Volumes)),
 	}
 	for _, t := range svc.Targets {
 		var inst *runner.Instance

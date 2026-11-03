@@ -1,7 +1,9 @@
 package setup
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,10 +147,10 @@ func serializeStacks(stk []stacks.Stack) string {
 //   - malformed markers → refuse with a clear message
 func upsertRCBlock(rcPath, blockContent string) (string, bool, error) {
 	// A missing file is created with just the block.
-	existing := ""
+	var existing string
 	if data, err := os.ReadFile(rcPath); err == nil {
 		existing = string(data)
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return "", false, fmt.Errorf("read %s: %w", rcPath, err)
 	}
 

@@ -31,7 +31,8 @@ func RenderTopology(s *Service) string {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n", s.Name)
+	b.WriteString(s.Name)
+	b.WriteByte('\n')
 	for i, r := range rows {
 		prefix := "├─"
 		if i == len(rows)-1 {

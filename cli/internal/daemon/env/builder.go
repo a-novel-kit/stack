@@ -2,7 +2,6 @@ package env
 
 import (
 	"cmp"
-	"fmt"
 	"maps"
 	"net/url"
 	"os"
@@ -376,7 +375,7 @@ func (b *Builder) resolveOne(varName, owner string, services []string, allocate 
 		// derived vars are local when the owner is the current target's;
 		// otherwise they carry the owner's service prefix so the consumer can
 		// reach them.
-		prefix := ""
+		var prefix string
 		if resOwner != owner {
 			prefix = ServicePrefix(resOwner) + "_"
 		}
@@ -416,7 +415,7 @@ func mergePortRefs(env map[string]string, ports []string) map[string]string {
 	out := make(map[string]string, len(env)+len(ports))
 	maps.Copy(out, env)
 	for i, p := range ports {
-		out[fmt.Sprintf("__port_%d", i)] = p
+		out["__port_"+strconv.Itoa(i)] = p
 	}
 	return out
 }

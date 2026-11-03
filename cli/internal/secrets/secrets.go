@@ -60,12 +60,9 @@ func initAt(root string) (bool, error) {
 		return false, fmt.Errorf("secrets: create %s: %w", root, err)
 	}
 	key := make([]byte, keyLen)
-	if _, err := rand.Read(key); err != nil {
-		return false, fmt.Errorf("secrets: generate key: %w", err)
-	}
+	_, _ = rand.Read(key) // never fails: it crashes the program instead
 	// O_EXCL makes creating the key and checking for it one step, so of two
-	// concurrent first runs exactly one writes a key. The key is drawn first, so
-	// a failed draw leaves no empty key file behind.
+	// concurrent first runs exactly one writes a key.
 	f, err := os.OpenFile(filepath.Join(root, keyFile), os.O_WRONLY|os.O_CREATE|os.O_EXCL, fileMode)
 	if errors.Is(err, fs.ErrExist) {
 		return false, nil // key already exists — never overwrite
@@ -171,27 +168,20 @@ func encrypt(key, plain []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, fmt.Errorf("secrets: generate nonce: %w", err)
-	}
-	// Seal appends the ciphertext to nonce, yielding nonce||ciphertext.
-	return gcm.Seal(nonce, nonce, plain, nil), nil
+	return gcm.Seal(nil, nil, plain, nil), nil
 }
 
-// decrypt splits `nonce || ciphertext` and opens it with AES-256-GCM. A
-// tampered blob (wrong tag) fails here.
+// decrypt opens `nonce || ciphertext` with AES-256-GCM. A tampered blob (wrong
+// tag) fails here.
 func decrypt(key, blob []byte) ([]byte, error) {
 	gcm, err := newGCM(key)
 	if err != nil {
 		return nil, err
 	}
-	ns := gcm.NonceSize()
-	if len(blob) < ns {
+	if len(blob) < gcm.Overhead() {
 		return nil, errors.New("secrets: store is corrupt (truncated)")
 	}
-	nonce, ciphertext := blob[:ns], blob[ns:]
-	plain, err := gcm.Open(nil, nonce, ciphertext, nil)
+	plain, err := gcm.Open(nil, nil, blob, nil)
 	if err != nil {
 		// gcm.Open's error doesn't leak plaintext; wrap it generically.
 		return nil, errors.New("secrets: decrypt failed (wrong key or tampered store)")
@@ -199,13 +189,15 @@ func decrypt(key, blob []byte) ([]byte, error) {
 	return plain, nil
 }
 
-// newGCM builds an AES-256-GCM AEAD from a 32-byte key.
+// newGCM builds an AES-256-GCM AEAD from a 32-byte key. It draws a random
+// 96-bit nonce for each Seal and prepends it to the ciphertext, the
+// `nonce || ciphertext` layout of the store file.
 func newGCM(key []byte) (cipher.AEAD, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("secrets: init cipher: %w", err)
 	}
-	gcm, err := cipher.NewGCM(block)
+	gcm, err := cipher.NewGCMWithRandomNonce(block)
 	if err != nil {
 		return nil, fmt.Errorf("secrets: init GCM: %w", err)
 	}

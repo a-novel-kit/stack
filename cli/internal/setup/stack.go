@@ -30,7 +30,7 @@ func bootstrapStack(s stacks.Stack, prompter Prompter) (string, string) {
 		return statusRefused, "path exists at " + s.Path + " but is not a git repo for " + stackRemoteURL
 	case statErr == nil:
 		return statusRefused, "path " + s.Path + " exists and is not a directory"
-	case !os.IsNotExist(statErr):
+	case !errors.Is(statErr, fs.ErrNotExist):
 		return statusRefused, "stat failed: " + statErr.Error()
 	}
 

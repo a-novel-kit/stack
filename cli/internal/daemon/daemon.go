@@ -142,7 +142,7 @@ func replayCheckpoint(ctx context.Context, run *runner.Runner) {
 	if cp == nil {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "reinstall: replaying %d go-exec target(s) from %s\n", len(cp.GoExec), reinstall.Path())
+	fmt.Fprintf(os.Stderr, "reinstall: replaying %d go-exec target(s) from %s\n", len(cp.GoExec), paths.ReinstallCheckpoint())
 	for _, gx := range cp.GoExec {
 		if err := run.Relaunch(ctx, gx.TargetID, gx.Env); err != nil {
 			fmt.Fprintf(os.Stderr, "reinstall: relaunch %s failed: %v\n", gx.TargetID, err)

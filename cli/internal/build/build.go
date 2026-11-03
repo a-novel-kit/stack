@@ -107,13 +107,11 @@ const (
 func formatEnvBlock(kv []string) string {
 	type pair struct{ k, v string }
 	pairs := make([]pair, 0, len(kv))
-	maxK := 0
+	var maxK int
 	for _, e := range kv {
 		k, v, _ := strings.Cut(e, "=")
 		pairs = append(pairs, pair{k, v})
-		if len(k) > maxK {
-			maxK = len(k)
-		}
+		maxK = max(maxK, len(k))
 	}
 	slices.SortFunc(pairs, func(a, b pair) int { return strings.Compare(a.k, b.k) })
 	var b strings.Builder
@@ -557,7 +555,7 @@ func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect
 		}
 	}
 
-	waveNum := 0
+	var waveNum int
 	for _, wave := range [][]string{infra, dependents} {
 		if len(wave) == 0 {
 			continue

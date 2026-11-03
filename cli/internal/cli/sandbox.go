@@ -31,7 +31,7 @@ type sandboxSystem struct {
 // SandboxArgs removes a leading --sandbox flag and reports whether the
 // invocation needs an ephemeral stack.
 func SandboxArgs(args []string) ([]string, bool, error) {
-	found := false
+	var found bool
 	for index, arg := range args {
 		if arg == "--" {
 			break

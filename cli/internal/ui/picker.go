@@ -118,7 +118,7 @@ func (p picker) View() tea.View {
 	b.WriteString(para("Everything is selected by default. Toggle what to "+p.verb+
 		", then press enter. Group headings toggle the whole kind.", w) + "\n\n")
 
-	count := 0
+	var count int
 	for i, row := range p.rows {
 		cursor := "  "
 		if i == p.cursor {

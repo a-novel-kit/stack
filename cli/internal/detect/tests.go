@@ -13,7 +13,7 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/shared/compose"
 )
 
-// DetectTests is the test-suite counterpart of [Detect].
+// Tests is the test-suite counterpart of [Builds].
 //
 //   - A Go module gets one target per builds/podman-compose.go[.<path>].test.yaml
 //     file, scoped to that path (`go test ./<path>/...`) with the compose env
@@ -26,7 +26,7 @@ import (
 // The env filename convention is `podman-compose.<id>.test.yaml` where <id>
 // is the environment ("go"/"pnpm") followed by the dotted test path it covers
 // ("go.internal", "go.pkg", "pnpm"); a bare env id covers the whole suite.
-func DetectTests(root string) ([]Target, error) {
+func Tests(root string) ([]Target, error) {
 	return walk(root, func(dir, rel string) []Target {
 		envs := composeEnvs(dir)
 		return slices.Concat(goTests(dir, rel, envs), pnpmTests(dir, rel, envs))

@@ -14,6 +14,7 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/daemon/reinstall"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/runner"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/server"
+	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
 // rebindingListener wraps the daemon's listener. Its Close binds a fresh
@@ -123,10 +124,10 @@ func TestReplayCheckpoint(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Setenv("XDG_STATE_HOME", t.TempDir())
 			if testCase.content != "" {
-				if err := os.MkdirAll(filepath.Dir(reinstall.Path()), 0o700); err != nil {
+				if err := os.MkdirAll(filepath.Dir(paths.ReinstallCheckpoint()), 0o700); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.WriteFile(reinstall.Path(), []byte(testCase.content), 0o600); err != nil {
+				if err := os.WriteFile(paths.ReinstallCheckpoint(), []byte(testCase.content), 0o600); err != nil {
 					t.Fatal(err)
 				}
 			}

@@ -164,9 +164,9 @@ func skipDir(absRoot, path, name string, ignored map[string]struct{}) bool {
 	return false
 }
 
-// Detect walks root and returns every build target found, sorted by kind, then
+// Builds walks root and returns every build target found, sorted by kind, then
 // directory, then name.
-func Detect(root string) ([]Target, error) {
+func Builds(root string) ([]Target, error) {
 	return walk(root, func(dir, rel string) []Target {
 		return slices.Concat(detectGo(dir, rel), detectPnpm(dir, rel), detectPodman(dir, rel))
 	})

@@ -14,6 +14,7 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/reinstall"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/runner"
+	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -67,7 +68,7 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *anovelv1.PrepareReinstal
 	}
 	time.AfterFunc(shutdownDelay, s.stop)
 	return &anovelv1.PrepareReinstallResponse{
-		CheckpointPath:    reinstall.Path(),
+		CheckpointPath:    paths.ReinstallCheckpoint(),
 		GoExecTargetCount: int32(len(cp.GoExec)),
 	}, nil
 }

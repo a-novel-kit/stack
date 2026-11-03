@@ -38,7 +38,7 @@ var (
 	testCapability = capability{
 		name:   "test",
 		looks:  "a go.mod (Go tests) or a package.json with test* scripts (pnpm)",
-		detect: detect.DetectTests,
+		detect: detect.Tests,
 		short:  "Run Go and pnpm tests, spinning up their podman-compose envs",
 		long: `Discovers a Go test target per module and every pnpm "test"/"test:*" script
 under the working directory, lets you pick which to run, runs them in parallel
@@ -59,7 +59,7 @@ sequentially unless --jobs says otherwise.`,
 	buildCapability = capability{
 		name:   "build",
 		looks:  "a go.mod (Go), a package.json with build* scripts (pnpm), or a root Dockerfile / builds/*.Dockerfile (Podman)",
-		detect: detect.Detect,
+		detect: detect.Builds,
 		short:  "Build Go modules, pnpm scripts and Podman images",
 		long: `Discovers a Go module per go.mod, every pnpm "build"/"build:*" script, a root
 Dockerfile and each builds/*.Dockerfile under the working directory, lets you
@@ -163,7 +163,7 @@ func runCapability(cmd *cobra.Command, c capability, o capabilityOpts) error {
 	limit := jobLimit(o.jobs, interactive)
 	// Concurrent go-test targets split the cores between them; a lone target
 	// keeps the whole machine.
-	procs := 0
+	var procs int
 	if limit > 1 {
 		procs = max(1, runtime.NumCPU()/limit)
 	}
@@ -205,7 +205,7 @@ func detectTargets(c capability, o capabilityOpts) ([]detect.Target, error) {
 		targets = withCoverage(targets)
 	}
 	if len(targets) == 0 {
-		scope := ""
+		var scope string
 		if kinds != nil {
 			scope = " matching --type"
 		}

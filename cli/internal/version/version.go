@@ -6,7 +6,7 @@ import (
 
 // Version is the version a release build injects at link time. Left empty, it
 // makes String fall back to the build info.
-var Version = ""
+var Version string
 
 // fallback is returned when neither ldflags nor build metadata yield anything
 // usable.
