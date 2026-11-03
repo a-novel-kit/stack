@@ -31,16 +31,19 @@ GitHub gives a new repository the organization's default labels, and Renovate ad
 
 A repository that releases needs its organization's release App, `AnovelBot[Release]` or `AnovelKitBot[Release]`. Do it as soon as the deploy has created the repository. Its rulesets name the App, and GitHub refuses them with HTTP 422 until it is installed. A repository made from a template holds `main.yaml` from the start, so the next apply already creates them, and the GitHub root fails until the install.
 
-Add the repository to the App's installation:
+In the organization's **Settings → GitHub Apps**, configure the App and add the repository under **Repository access**.
+
+The command version needs a personal access token: GitHub refuses `gh`'s own sign-in on this endpoint. Create a classic one with the `repo` scope in the browser, under **Settings → Developer settings → Personal access tokens → Tokens (classic)**, paste it at the prompt, and delete it afterwards:
 
 ```bash
 INSTALLATION=$(gh api "orgs/$ORG/installations" \
   --jq '.installations[] | select(.app_slug | endswith("-release")) | .id')
 REPO_ID=$(gh api "repos/$ORG/$NAME" --jq .id)
-gh api -X PUT "user/installations/$INSTALLATION/repositories/$REPO_ID"
+read -rs PAT
+GH_TOKEN=$PAT gh api -X PUT \
+  "user/installations/$INSTALLATION/repositories/$REPO_ID"
+unset PAT
 ```
-
-If GitHub refuses the call, open the organization's **Settings → GitHub Apps**, configure the App, and add the repository under **Repository access**.
 
 ## Add it to the workspace
 
