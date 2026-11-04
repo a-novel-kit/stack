@@ -154,9 +154,11 @@ A new platform, or a change to its routes, form actions or the services it calls
 Grafana coverage in infra, as `write-infra`'s [Grafana coverage](../write-infra/references/grafana.md)
 describes.
 
-The browser reports nothing. Production gives no platform a browser telemetry destination, so the
-consent-gated `@a-novel-kit/nodelib-browser/telemetry` stays off and asks nothing. Grafana Faro
-replaces it (a-novel/.github#517). Until then, keep its consent preference as it is:
+The browser reports to Grafana Faro through the consent-gated
+`@a-novel-kit/nodelib-browser/telemetry`, and only once the visitor accepts. Each platform's Faro app
+lives in infra's Grafana root, and the cluster hands its collector URL to the platform as
+`PUBLIC_FARO_URL`. A build without it reports nothing and asks nothing. The CSP's `connect-src` names
+the stack's collector origin, which a `'self'` default refuses. The consent works this way:
 
 - The root layout renders uikit's `ConsentBanner` first in the reading order, with the platform's
   wording, and shows it only while the device records no answer.
