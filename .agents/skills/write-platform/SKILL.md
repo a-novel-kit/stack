@@ -252,6 +252,14 @@ service:
   so a context built per call asks the authentication service once per load, and once more in an
   action. Keep one authentication context per request in a `WeakMap` keyed by `event.cookies`, which
   every hook, action and load of a request shares. A cookie write discards the cached check.
+- Ask Authentication's `GET /v2/session` at most once per five minutes per visitor. A
+  `__Host-<platform>_session_checked` cookie with `Max-Age=300` marks its last check, written after
+  every successful check, refresh or sign-in. While it is present, the server verifies the access
+  token offline with nodelib-server's `createJwtVerifier`, against the `auth` keys JSON keys' REST
+  API serves at `JSON_KEYS_SERVICE_URL`. Any doubt falls back to `GET /v2/session`. The cookie needs
+  no signature: a forged one only trusts the token until it expires, as every offline verifier
+  does. Authentication refuses an ended session wherever it issues something, so the window changes
+  only what a platform shows.
 - Create an anonymous service session lazily, only when an anonymous protected operation needs it.
   An ordinary page load must not mint a token merely to render signed-out UI. Keep its cookie until
   the token expires: a visitor gets only a few anonymous tokens, and a browser restart must not
@@ -283,8 +291,8 @@ service:
   [NIST SP 800-63B-4](https://pages.nist.gov/800-63-4/sp800-63b.html) guidance for a password used
   alone. The hint is advice the visitor may ignore, never a validation error.
 - Logout ends the session through the service, then clears the cookies. The session spans every
-  platform, so each one finds it ended on its next request. A failed revocation still clears the
-  cookies: the visitor asked to leave this browser signed out.
+  platform, so each one finds it ended at its next check, within five minutes. A failed revocation
+  still clears the cookies: the visitor asked to leave this browser signed out.
 - A short-code `GET` only parses a sanitized display model; it never verifies or consumes the code.
   Completion uses `POST` to the current URL so no hidden field duplicates the credential. Return
   `Cache-Control: no-store`, `Referrer-Policy: strict-origin`, and `X-Robots-Tag: noindex`. With
