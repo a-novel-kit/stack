@@ -118,6 +118,14 @@ Run the whole gate the way CI does:
 - **Provider v8 returns `retention_policy.retention_period` as a string,** so compare with
   `tonumber()`.
 - **`format()` errors when its string has no verb but receives arguments.**
+- **A backend that reads a variable needs it on every tofu command,** `state list` and `output`
+  included, not only `init`, `plan`, `apply` and `destroy`. Without it, tofu stops with "Failed to
+  request input from user for variable". Pass it once as `TF_VAR_<name>` for the whole workflow,
+  as `recovery.yaml` does, rather than a `-var-file` flag each call must repeat (a-novel/infra#1494).
+- **Kubernetes turns `$$` into `$` in a container's `command` and `args`,** and expands `$(NAME)`
+  from the container's environment. SQL handed to `psql --command` there quotes a block with a
+  tag, `DO $check$ … $check$`, as the drill's check does (a-novel/infra#1504). `smoke.sh` holds no
+  `$$` for the same reason.
 - **A plan that runs during a deploy reads half-applied state.** It shows a just-merged change as
   still to create, and template updates in roots the pull request never touched. Wait for the
   `deploy.yaml` runs to finish, then re-run the pull request's checks before comparing the plan.
