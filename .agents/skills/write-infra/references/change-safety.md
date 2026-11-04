@@ -70,6 +70,10 @@
   root's migrations Job ends its name with a hash of the database lineage, after its image digest
   (a-novel/infra#1376). A template annotation, as the servers carry for the lineage, plans as an
   in-place update that Kubernetes refuses.
+- **A pull request that narrows the plan identity cannot prove itself,** since its plans run before
+  it applies. Grant the narrower roles to a temporary identity first, plan every root as it from a
+  draft pull request that never merges, then move the plan identity onto them
+  (a-novel/infra#1512, #1513, #1532).
 
 ## Retire protected resources
 
@@ -133,8 +137,10 @@ image or binary that will consume it, and fix the pins in the same change.
 Foundation's cluster sends only its system components' logs to Cloud Logging, so workload logs stay
 in the cluster and reach Grafana through Alloy. A failed cluster deploy's `Describe the databases`
 step prints each database's unmet conditions, stuck pods and last warnings. To read further, open a
-draft pull request whose `plan-cluster` job reads the pods, their logs and the custom resources from
-the API server as the plan identity. Close it unmerged once read (a-novel/infra#1246, #1251).
+draft pull request whose `plan-cluster` job reads the pods and the custom resources from the API
+server as the plan identity. Close it unmerged once read (a-novel/infra#1246, #1251). The plan
+identity reads no pod logs (a-novel/infra#1532): they stay in Grafana, and the database operators
+read them on the cluster.
 
 ## Release contract
 
@@ -352,8 +358,9 @@ the API server as the plan identity. Close it unmerged once read (a-novel/infra#
   `github-dispatch` too, which therefore refuses any workflow its schedules do not list. Both
   `downtime.yaml` jobs gate on the admin role, since "Re-run this job" skips the first one.
 - **The read-only identity reads the cluster, never its Secrets.** Pull requests can mint it, so
-  it holds `container.viewer`, which leaves Secrets out, and calls no service. Helm keeps its
-  release records in ConfigMaps for that reason, and no release's values hold a secret.
+  it holds `container.viewer`, which leaves Secrets and pod logs out, and calls no service. Helm
+  keeps its release records in ConfigMaps for that reason, and no release's values hold a secret. It
+  holds no basic role: Viewer reads pod logs, and no deny policy can refuse a GKE permission.
 - **A secret the cluster chooses itself comes from External Secrets' `Password` generator,** never
   from an OpenTofu `random_password`. An `ExternalSecret` with `refreshPolicy: CreatedOnce` writes
   it once into a Secret, so neither state nor a plan holds the value. A `random_password` sits in
