@@ -142,6 +142,12 @@ Run the whole gate the way CI does:
   "recent usage" outlasts the 10-minute average the quota pages describe: a CPU ceiling was still
   refused 1.5 hours after usage fell. Set a new ceiling at the current peak and keep it; bound actual
   usage with the node pool's maximum and the namespaces' budgets instead.
+- **GKE's Gateway controller refuses values the Gateway API accepts,** such as a `RequestRedirect`
+  with 308 (`GWCER104`: 301 or 302 only). One refused route freezes its whole Gateway: the apply
+  succeeds and the load balancer keeps its last good config, so nothing changed on that Gateway, its
+  routes or its policies goes live (a-novel/infra#1537). `Gateway refused` fires while it lasts.
+  After a Gateway change, check that alert stays quiet, then read the live result, such as a
+  response header or a backend service's `timeoutSec`.
 - **A workload identity provider's display name is capped at 32 characters,** and only the apply
   checks it. Bootstrap's test enforces the limit.
 - **Cloud Workflows refuses environment variable names that begin with `GOOGLE` or `WORKFLOWS`,**
