@@ -74,7 +74,7 @@ queries and grants that read it, in the same train:
 - a query on a renamed column fails, and `cnpg_errors_total{errorUserQueries}` names it;
 - a grant on a dropped column fails `database_grants`, and with it the deploy.
 
-## Dashboard traps
+## Dashboard and alert traps
 
 - **Transformations take the v2 shape,** with the transformer in `group`:
   `{kind: "Transformation", group: "merge", spec: {options: {}}}`. Grafana stores the v1 shape,
@@ -91,3 +91,8 @@ queries and grants that read it, in the same train:
 - **Read back what Grafana stored.** Post the spec to
   `/apis/dashboard.grafana.app/v2/namespaces/<stack namespace>/dashboards?dryRun=All` and compare the
   returned spec with the source. After the deploy, read each panel's frames and display names live.
+- **Loki indexes only the `service_name` and `k8s_*` labels.** `job`, `level` and `reason` are
+  structured metadata: a stream selector on them returns nothing, without an error. Filter them
+  after it, as `{service_name="integrations/kubernetes/eventhandler"} | level="Warning"`.
+- **A logs alert asks Loki for an instant value** with `queryType: "instant"`, or Loki answers a
+  range no rule can fire on. Try a new rule's exact model with `POST /api/v1/eval` first.
