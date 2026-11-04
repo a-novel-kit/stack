@@ -201,6 +201,11 @@ state and semantic transitions without rendering or DOM access. `+page.svelte` o
 performs only final wiring plus route-owned metadata such as the document title. Do not add a
 connector component that merely renders the screen.
 
+The wiring passes route inputs, such as load data, form results and the URL, to the controller as
+getters, and the controller derives its model from them; a part the visitor edits until the next
+input is a writable `$derived`. Unit tests compile Svelte for the server, where an assignment never
+resets, so a browser test covers that reset.
+
 A screen renders from its props and its controller alone. The wiring reads the app's contexts, such
 as the planned downtime or the telemetry preference, and passes their values through the controller.
 The localization context is the one context a screen reads itself. A story then reaches every state
