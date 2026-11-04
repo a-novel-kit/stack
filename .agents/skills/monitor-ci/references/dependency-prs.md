@@ -92,10 +92,11 @@ maximum supported`. A tool's indirect `golang.org/x/tools` cannot read the new c
 ### Stranded required checks
 
 A pull request fires one event per label. Renovate opens its PR and then adds two labels, so a
-`main.yaml` that triggers on `labeled` starts three runs on one head within seconds. Where that
-workflow has a `concurrency` group, as infra's and platform-studio's do, GitHub can admit the runs to
-it in an order other than their creation order. The run created last can then be cancelled while
-still pending, with no jobs, after an older run went green (a-novel/infra#857).
+`main.yaml` that triggers on `labeled` starts three runs on one head within seconds. Where those
+runs share a `concurrency` group, as platform-studio's do, GitHub can admit them to it in an order
+other than their creation order. The run created last can then be cancelled, pending with no jobs or
+running, by an older one (a-novel/infra#857, #1474). Infra's `main.yaml` gives each label event's
+run a group of its own (a-novel/infra#1506).
 
 The merge box reads only the newest run of each workflow on the head. It shows every required check
 as "Expected — Waiting for status to be reported", and the PR stays `BLOCKED`. `gh pr checks` and
