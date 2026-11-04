@@ -109,8 +109,7 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
   describes. A repository is an entry of its `terraform.tfvars`, and its class sets the rest.
   Creating one takes steps the root cannot: follow the stack's
   [create-repository runbook](../../../docs/sysadmins/create-repository.md). Hand the developer its
-  release App install, ready to run, before the creating PR merges, and plan the second PR that
-  imports the labels GitHub and Renovate already created. A
+  release App install, ready to run, before the creating PR merges. A
   scoped secret joins that file only after an admin switches the org secret to selected
   repositories: one still visible to every repository fails each grant with HTTP 409. Each plan of
   the root spends the Plan App's hourly API budget, which every pull request shares, so

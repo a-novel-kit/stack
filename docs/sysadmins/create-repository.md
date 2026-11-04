@@ -25,7 +25,7 @@ Add the repository to `repositories` in a-novel/infra's `environments/production
 
 The merge's deploy creates the repository, with its settings, team access and labels. A service or a platform starts from its template repository, `service-template` or `platform-template`. Any other class starts empty, without CI, Renovate or the governance workflows. The `write-github-actions` skill describes all three, so an agent can add them.
 
-GitHub gives a new repository the organization's default labels, and Renovate adds `dependencies` with its first pull requests. The root then fails to create its own labels of the same names, with `already_exists`. Import every name the failed apply lists in a second pull request, as [a-novel/infra#1379](https://github.com/a-novel/infra/pull/1379) does, and drop the import once it applied.
+Both organizations keep no default repository labels, so the deploy creates every label itself, `dependencies` included, before Renovate's first pull request. GitHub copies an organization's default labels into each new repository, where the root fails to create its own labels of the same names, with `already_exists`. When an apply fails that way, defaults came back: delete them under the organization's **Settings → Repository → Repository defaults → Repository labels**, import every name the failed apply lists in a second pull request, as [a-novel/infra#1379](https://github.com/a-novel/infra/pull/1379) does, and drop the import once it applied.
 
 ## Install the release App
 
