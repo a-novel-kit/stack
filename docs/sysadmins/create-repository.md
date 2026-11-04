@@ -13,12 +13,12 @@ NAME=service-example
 
 ## Declare it
 
-Add the repository to `repositories` in a-novel/infra's `environments/production/github/terraform.tfvars`, in a pull request. Its class sets its settings: `service`, `platform`, `library`, `workflows`, `meta` or `infra`. Topics help outsiders find it: start with `agora-storyverse`, then add its language, kind and domain.
+Add the repository to `repositories` in a-novel/infra's `environments/production/github/terraform.tfvars`, in a pull request. Its class sets its settings: `service`, `platform`, `library`, `workflows`, `meta` or `infra`. The description names its role in one sentence, never the contents that will change: "The public profile of Agora users.", not the fields a profile holds today. Topics help outsiders find it: start with `agora-storyverse`, then add its language, kind and domain.
 
 ```hcl
 "a-novel/service-example" = {
   class       = "service"
-  description = "Says what the service does, in one sentence."
+  description = "Names the service's role, in one sentence."
   topics      = ["agora-storyverse", "go", "golang", "microservice"]
 }
 ```
