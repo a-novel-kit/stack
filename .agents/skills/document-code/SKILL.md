@@ -69,6 +69,9 @@ Everything else is noise. In particular:
 - **Nothing the code already says.** If reading the surrounding lines answers the question, the
   comment restates; delete it. `depends_on` already shows ordering — only the _why_ of a
   surprising dependency is comment-worthy.
+- **No list of what the code may grow.** A comment that enumerates the members of an open set, such
+  as the fields a profile holds or the settings a cookie keeps, goes stale with the next one. Name
+  the set, as "the visitor's public profile", and let the code list the members.
 - **No external dependencies.** A comment must stay meaningful from the git history alone. Never
   reference a PR, review thread, or temporary plan document. The one exception: linking an issue
   for a patch or temporary workaround, where the issue _is_ the tracking artifact. Write it as the

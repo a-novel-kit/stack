@@ -248,6 +248,8 @@ or instruction to find an earlier link does not replace it.
   product ruling, enforced by uikit's catalog test. It applies to every catalog, page title and test
   expectation.
 - Apply the same distinction to accessible names and Storybook states.
+- Never list the options a reader can see, change or pick, as in "your username and picture": name
+  the whole, as "this information". A new option then needs no copy change, and nothing goes stale.
 
 ## Security and privacy
 

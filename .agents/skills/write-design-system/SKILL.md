@@ -236,7 +236,14 @@ changes them.
   descriptions. A stored state rather than fresh feedback, such as a pending change, takes
   `role="note"` so it is not announced again.
 - **Navigation is a vertical rail.** Every app uses the same shell: a collapsible rail on wide
-  screens, a header and a fullscreen drawer on narrow ones, sharing one navigation surface.
+  screens, a header one control tall and a fullscreen drawer on narrow ones, sharing one navigation
+  surface. The links of one group touch, as in most productivity apps. A `Separator`, inset like
+  the links, sets groups apart, and the account and the logout sit in separate groups so a click
+  never lands on the wrong one. The top and bottom groups stay 32px apart. Every link opens in the
+  same tab, between Agora apps included: a reader who wants another tab asks their browser.
+- **Selection in amber.** Selected text reads amber on a translucent blue veil
+  (`--color-selection-{text,surface}`), a pair no other state uses. Buttons, tabs and menus are not
+  selectable.
 - **Focus without noise.** A dialog focuses itself when it opens, so no control lights its focus
   ring until the reader moves; keyboard focus stays visible everywhere else.
 - **Repeated spacing.** Space inside and between elements uses a few repeated steps: 4, 8, 12, 16,

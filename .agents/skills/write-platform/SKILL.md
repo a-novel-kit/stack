@@ -87,6 +87,10 @@ directories above it, and `src/lib/`. Screens, their parts and `src/lib/ui/` imp
 (`$app/state`, `$app/navigation`), storage, cookies, environment secrets, or network clients; the
 route files and adapters bring those in.
 
+The shell keeps its phone header and the maintenance banner stuck to the top of the workspace, and
+sets `--shell-sticky-top` to their height. A page's own sticky part, such as a tab bar, sits there,
+under them.
+
 `a-novel/platform-template` is the shortcut to start a new platform, so it tracks the platforms'
 conventions. A change that sets or changes a convention in a platform ships with the matching
 `platform-template` change, in a pull request opened alongside it.
@@ -163,7 +167,7 @@ the stack's collector origin, which a `'self'` default refuses. The consent work
 - The root layout renders uikit's `ConsentBanner` first in the reading order, with the platform's
   wording, and shows it only while the device records no answer.
 - One answer covers every Agora app. The browser keeps it in a cookie on the domain every platform
-  shares, which infra hands each platform as `PUBLIC_CONSENT_DOMAIN`, and nodelib's
+  shares, which infra hands each platform as `PUBLIC_PLATFORM_DOMAIN`, and nodelib's
   `consentDomain` option writes it there. The root layout's server load reads the cookie, so the
   page renders the answer from the start and never flashes another one.
 - The answer lives in one reactive preference the root layout shares through a context. The
@@ -225,9 +229,13 @@ Every state has one canonical owner:
 
 - **Path and search parameters** own shareable, navigation-relevant UI state. Centralize codecs,
   validate every value, choose deliberate defaults, and preserve unrelated parameters.
-- **Local storage** owns non-sensitive, device-local preferences and recoverable user-specific
-  drafts. Namespace and version keys, migrate or discard unknown versions, and read them only behind
-  an SSR-safe client adapter.
+- **Shared preference cookies** own a setting every Agora app shares on a device, such as the
+  collapsed navigation rail. `@a-novel-kit/nodelib-browser/preferences` writes each one on
+  `PUBLIC_PLATFORM_DOMAIN`, and the layout's server load reads it, so the first paint shows the
+  setting and nothing flickers into place.
+- **Local storage** owns non-sensitive preferences of one app and recoverable user-specific drafts.
+  Namespace and version keys, migrate or discard unknown versions, and read them only behind an
+  SSR-safe client adapter.
 - **Server session cookies** own authentication credentials. Name each one with the `__Host-`
   prefix, which the browser accepts only with `Secure`, `Path=/` and no `Domain`
   ([RFC 6265bis §4.1.3.2](https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-rfc6265bis#section-4.1.3.2)),
@@ -330,7 +338,7 @@ keeps only these account controls:
 
 - A sign-in link to its own `/auth/sign-in?returnTo=<page>`.
 - A registration link to the account platform's `/?auth=register`, which requests an invitation.
-- Once signed in, a link that opens the account platform in a new tab, and the logout form. The
+- Once signed in, a link that opens the account platform in the same tab, and the logout form. The
   link shows the visitor's username and picture, which the platform reads from the profile service
   and loads from the account platform's public picture route. Without the profile, it falls back to
   the email handle and initials, so the profile service stays out of the platform's readiness.
