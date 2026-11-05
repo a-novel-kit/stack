@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/a-novel-kit/stack/master/package.js
 The distribution's Node.js is too old; use [nvm](https://github.com/nvm-sh/nvm):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.41.0/install.sh | bash
 . "$HOME/.nvm/nvm.sh"
 nvm install node
 npm install --global pnpm
@@ -29,7 +29,7 @@ npm install --global pnpm
 Use [nvm](https://github.com/nvm-sh/nvm):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.41.0/install.sh | bash
 . "$HOME/.nvm/nvm.sh"
 nvm install node
 npm install --global pnpm
