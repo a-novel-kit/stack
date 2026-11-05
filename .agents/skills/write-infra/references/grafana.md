@@ -94,5 +94,7 @@ queries and grants that read it, in the same train:
 - **Loki indexes only the `service_name` and `k8s_*` labels.** `job`, `level` and `reason` are
   structured metadata: a stream selector on them returns nothing, without an error. Filter them
   after it, as `{service_name="integrations/kubernetes/eventhandler"} | level="Warning"`.
-- **A logs alert asks Loki for an instant value** with `queryType: "instant"`, or Loki answers a
-  range no rule can fire on. Try a new rule's exact model with `POST /api/v1/eval` first.
+- **A logs alert asks Loki for an instant value**, or Loki answers a range no rule can fire on. Set
+  `queryType: "instant"` in the model and `query_type = "instant"` on the query: Grafana copies the
+  first onto the second when it saves a rule, so one alone rewrites the rule on every plan
+  (a-novel/infra#1570). Try a new rule's exact model with `POST /api/v1/eval` first.
