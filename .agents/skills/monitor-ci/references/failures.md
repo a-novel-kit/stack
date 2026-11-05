@@ -150,6 +150,11 @@ gh run rerun <run-id> --failed
 If the same job fails twice with the same transport-level symptom, stop treating it as a
 flake and investigate as real.
 
+A rerun tests the commit its run started on. On a pull request that is the merge commit GitHub
+built then, so a rerun never picks up a fix that landed on the base branch since. Rebase and push
+instead, and wait for the base's own post-merge jobs, such as a visual reference refresh, to finish
+first.
+
 **If the failure is real** (assertion mismatch, wrong status code, unexpected field):
 
 1. Reproduce locally — these suites need a running service:
