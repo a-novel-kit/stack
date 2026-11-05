@@ -12,6 +12,7 @@ Contents:
 - [2.5 `build-*` (Docker) failure](#25-build--docker-failure)
 - [2.6 `build-js` failure](#26-build-js-failure)
 - [2.7 `test-browser` failure](#27-test-browser-failure)
+- [2.8 `publish-docs` failure](#28-publish-docs-failure)
 
 ## Phase 2: Classify
 
@@ -205,3 +206,21 @@ A page load that fails with `net::ERR_NETWORK_CHANGED`, 1–2 s after a journey 
 service, is not a flake to rerun. The restart gave the container a new host interface. Make that
 service join a holder's network, as `write-frontend-tests` describes, on its own branch; a dependency
 PR that hit it heals on rebase.
+
+### 2.8 `publish-docs` failure
+
+**Symptom**: `actions/deploy-pages` reports `Current status: updating_pages` for 10 minutes, then
+`Timeout reached, aborting!`. GitHub Pages stalled on that one site while other repositories
+deployed in the same minutes (service-narrative-engine and service-authentication, 2026-11-05).
+Rerun the failed job within the flake budget.
+
+A plain rerun fails in seconds with `Multiple artifacts named "github-pages" were unexpectedly
+found`: artifacts belong to the run, not to an attempt, so every earlier attempt's upload is still
+there. Delete the run's `github-pages` artifacts before each rerun:
+
+```bash
+gh api "repos/<org>/<repo>/actions/runs/<run-id>/artifacts" \
+  --jq '.artifacts[] | select(.name=="github-pages") | .id' |
+  while read -r id; do gh api -X DELETE "repos/<org>/<repo>/actions/artifacts/$id"; done
+gh run rerun <run-id> --repo <org>/<repo> --failed
+```
