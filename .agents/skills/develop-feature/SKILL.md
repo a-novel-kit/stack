@@ -48,8 +48,9 @@ The developer waits on whatever you block on, so keep each step busy:
 - Ask every design question you can foresee in your first exchange. One that surfaces after green
   CI costs a rework and another CI round.
 - Start dependent work once the contract it consumes is settled, not once that contract ships.
-  Build against the unreleased dependency as `manage-versions` shows, keep that PR a draft, and
-  re-pin to the release before marking it ready: the release gates the merge, not the start.
+  Build against the unreleased dependency as `manage-versions` shows and keep that PR a draft. Once
+  the dependency releases, Renovate brings it to `master` and the branch rebases on it before it
+  turns ready: the release gates the merge, not the start.
 - While a check, a review, a release or another session runs, prepare the next step: the PR body,
   the next branch, a follow-up PR. To resume when a merge or a release lands, start one background
   command that ends then, such as

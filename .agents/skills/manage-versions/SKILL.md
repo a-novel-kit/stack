@@ -34,10 +34,11 @@ footer) and `implement-feature` (the layered-branch workflow these cross-repo pl
   reproducible from `go.mod` alone.
 - **Renovate keeps consumers current.** After a dependency releases, Renovate opens a PR in each
   consumer bumping the pin and running the configured post-upgrade tasks (`go mod tidy`, regenerate
-  proto, …). In the _normal_ flow you never hand-edit a dependency pin. The manual dance below is
-  only for an **in-flight** cross-repo change that cannot wait for a release plus the next Renovate
-  cycle. Production is the exception: a service or platform release pins its own images in infra,
-  through infra's `pin-release.yaml`.
+  proto, …). A released version reaches a consumer's `master` only through Renovate, a feature
+  branch waiting on it included, as
+  [bring a release through Renovate](#bring-a-release-through-renovate) shows. Only a draft's
+  pseudo-version pin, below, is ever written by hand. Production is the exception: a service or
+  platform release pins its own images in infra, through infra's `pin-release.yaml`.
 - **Docker-image pins** in CI / compose files follow the same rule: pin a concrete `vX.Y.Z` (or
   `${{ github.ref_name }}` for the repo's own image), never `latest` or a branch.
 
@@ -196,7 +197,8 @@ go mod tidy
   should: that is the signal B is not yet mergeable. See the ordering rule.
 - **Only a draft pins a pseudo-version.** A ready PR never pins an internal library to a commit,
   since a reviewer may approve and merge it. Before marking B ready, ask the developer to cut A's
-  release, then re-pin B to the tag. Do not mark B ready on the pseudo-version and ask afterwards.
+  release, bring it to B's `master` through Renovate, and drop the pseudo-version commit as B
+  rebases. Do not mark B ready on the pseudo-version and ask afterwards.
 
 ---
 
@@ -209,14 +211,36 @@ with a pseudo-version pin bakes a non-release into production: unreproducible fr
 to Renovate, and a landmine once the source commit is gone. **A pseudo-version pin is safe only
 during in-flight development, never at merge time.** So:
 
-**Hard rule: the dependency PR merges and releases before the consumer PR merges; the consumer
-re-pins to the released tag first.**
+**Hard rule: the dependency PR merges and releases before the consumer PR merges, and the release
+reaches the consumer's `master` through Renovate first.**
 
 1. **Merge A's PR** (the dependency change) to A's `master`. The release workflow tags `vX.Y.Z`
    and publishes it.
-2. **In B's branch, re-pin to the release**: `go get github.com/a-novel-kit/golib@vX.Y.Z`
-   (or `@latest`), `go mod tidy`, commit (`chore(deps): bump golib to vX.Y.Z`). B's CI goes green.
-3. **Merge B's PR.** Now production is fully on released versions.
+2. **Bring the release to B's `master`** through Renovate, as the next section describes.
+3. **Rebase B's branch on `master`** and drop its pseudo-version commit. B's diff now holds only the
+   feature, and its CI goes green on the released version.
+4. **Merge B's PR.** Now production is fully on released versions.
+
+### Bring a release through Renovate
+
+A feature branch never pins a release itself. Renovate merges bumps on every consumer all day, so a
+pin commit in a feature branch conflicts with each one that touches the same lines. It also asks the
+feature's reviewer to acknowledge a dependency change, with `allow-dependency-change`, and mixes a
+version bump into a feature diff.
+
+1. **Dispatch Renovate** in each consumer once the release exists:
+   `gh workflow run renovate.yaml --repo <org>/<consumer>`. Wait for its bump PR.
+2. **Let a green bump PR land.** Its auto-merge queues it.
+3. **Fix a red bump PR on its own branch.** When the release needs a code migration, such as a
+   visual change a consumer's tests pin, push only that migration onto Renovate's branch, right
+   after its last rebase. The push withholds the auto-approval, so the PR needs a maintainer's
+   approval. Keep everything else for the feature branch.
+4. **Rebase the feature branch on `master`** once every bump has merged. It carries the leftovers:
+   the feature, without a pin or a lockfile change. A rebase conflict with the migration means the
+   feature repeated it; keep `master`'s side.
+
+It takes longer than a pin in the feature branch, but nothing conflicts, the feature needs no
+dependency label, and each review reads one kind of change.
 
 For a pnpm consumer, a fresh first-party release installs at once: every workspace exempts the
 `@a-novel` and `@a-novel-kit` scopes from pnpm's `minimumReleaseAge`, since the release proof stands
@@ -232,22 +256,22 @@ lockfile (`git checkout --ours`), then run `pnpm install`. Exempt only the versi
 only while installing. Restore the commit's workspace file, and pass `--frozen-lockfile` before
 continuing. The policy relaxation never reaches a commit.
 
-If B's change is itself a dependency of a repo C, repeat: A → release → B re-pins → B releases →
-C re-pins → C merges. Stacked dependency chains merge bottom-up.
+If B's change is itself a dependency of a repo C, repeat: A → release → Renovate bumps B → B
+releases → Renovate bumps C → C merges. Stacked dependency chains merge bottom-up.
 
 **Write the order down** so it can't get lost — in B's PR description, and/or as `TaskCreate`
 entries:
 
 ```
 1. golib#NNN  (adds X)                  → merge → release v0.20.32
-2. service-foo#MMM  (uses X)            → re-pin golib → v0.20.32, then merge
+2. service-foo#MMM  (uses X)            → Renovate bumps golib to v0.20.32, rebase, then merge
 3. (if needed) golib#PPP  (removes old X) → after #2 ships → release v0.21.0
 ```
 
 > Edge case — A is `golib`, which has no separate "release PR" and releases on tag: dispatch A's
 > release workflow once its PR merges. Don't merge B until that tag exists and B is pinned to it. If
 > you cannot dispatch it, hand off: "golib#NNN is merged; needs a release tag before
-> service-foo#MMM can land — re-pin and merge once `vX.Y.Z` is out."
+> service-foo#MMM can land: dispatch Renovate there once `vX.Y.Z` is out."
 
 ---
 
@@ -317,8 +341,8 @@ removal step. Catch it now, not then.
    which keeps working unchanged. Release this (a `feat:`, _not_ a breaking change — nothing broke
    yet). Mark the old path `// Deprecated: use NewThing` so consumers and pkg.go.dev see it.
 2. **Migrate every consumer to the new path.** One PR per consumer (drawn from the step-0 list),
-   each re-pinning to the release from step 1 (per the merge-order rule), each releasing once
-   green. Tick consumers off the list as their PRs land; an empty list means step 3 is safe.
+   each rebased on the Renovate bump that brings the release from step 1 (per the merge-order
+   rule), each releasing once green. Tick consumers off the list as their PRs land; an empty list means step 3 is safe.
 3. **Remove the old path.** Once _every_ consumer is off it, a follow-up PR in the dependency deletes
    the old symbol/field/endpoint/column. _This_ is the breaking change, now safe because nothing uses
    the old path. Release it (a major bump for a graduated package / `pkg/go`; for a service's
@@ -354,16 +378,18 @@ When a change spans repos:
 - [ ] Identify the dependency direction (who imports/consumes whom) and order the work bottom-up.
 - [ ] On the consumer branch, pin to the dependency's **commit SHA** while its PR is a draft
       (`go get module@<sha>`, then `go mod tidy`) — never a `replace`, never `@branch`. Before
-      marking it ready, ask the developer to cut the dependency's release and pin the tag.
+      marking it ready, ask the developer to cut the dependency's release, then rebase on
+      Renovate's bump to it.
 - [ ] Breaking a shared contract? Stage it (add → deprecate → migrate → remove); the current PR is
       the _additive_ step only.
 - [ ] For any breaking change to a public symbol, **`grep -rn` the whole workspace** (`app/` _and_
       `kit/`) for consumers before writing the dependency PR, and paste the file list into the PR
       description under "Consumer migration follow-ups".
 - [ ] Write the merge order in the PR description and/or `TaskCreate`.
-- [ ] Merge the dependency PR → wait for its release tag → re-pin the consumer to the released
-      version (`chore(deps): bump … to vX.Y.Z`, `go mod tidy`) → confirm CI green → merge the
-      consumer. Repeat up the chain.
+- [ ] Merge the dependency PR → wait for its release tag → dispatch Renovate in the consumer and
+      land its bump, with only a migration pushed onto it when red → rebase the consumer branch on
+      `master`, without a pin of its own → confirm CI green → merge the consumer. Repeat up the
+      chain.
 - [ ] Never merge a PR whose `go.mod` (or Docker-image pin) points at a pseudo-version, a branch,
       or `latest`.
 
@@ -379,8 +405,8 @@ than rewritten history.
 
 | Symptom                                                 | What happened                                                                          | Do this                                                                                                                                                                                        |
 | ------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Consumer PR red on **"released versions only"**         | Its `go.mod` still pins a pseudo-version (a dependency commit SHA), not a released tag | Wait for the dependency to release, re-pin the consumer to the released `vX.Y.Z`, push. Never merge on a pseudo-version.                                                                       |
-| **Dependency released, consumer stuck** in the Epic set | Publish-before-rollout half-done: dep shipped, consumer not re-pinned/merged           | Re-pin the consumer to the released tag; the merge-gate lands it with the set. The dep's release is immutable — roll forward, don't roll back.                                                 |
+| Consumer PR red on **"released versions only"**         | Its `go.mod` still pins a pseudo-version (a dependency commit SHA), not a released tag | Wait for the dependency to release, land Renovate's bump to `vX.Y.Z`, rebase the consumer, push. Never merge on a pseudo-version.                                                              |
+| **Dependency released, consumer stuck** in the Epic set | Publish-before-rollout half-done: dep shipped, consumer not bumped/merged              | Dispatch Renovate in the consumer and rebase it on the bump; the merge-gate lands it with the set. The dep's release is immutable: roll forward, don't roll back.                              |
 | An Epic **partially landed**                            | INV-1 violated — a member left the queue                                               | The sweep freezes the survivors and rolls a landable stray forward within grace. If it can't land, fix it, or (last resort) `epic-rollback` the landed subset. See `coordinate-landing`.       |
 | A **bad version shipped** (released, then found broken) | A release is immutable — you can't un-publish                                          | Roll **forward**: cut a patch that reverts the change, or `epic-rollback` the Epic (it lands compensating reverts and _re-releases_). Never delete a published tag a consumer may already pin. |
 | The **release train left a repo un-released**           | A dispatch/approval failed mid-train                                                   | Re-dispatch the train — it resumes from live tags and re-cuts only the unshipped. A parked run (release-env approval) is pending; approve it, then re-dispatch to record the receipt.          |
@@ -391,19 +417,20 @@ commits and then re-releasing — never by rewriting a tag.
 
 ## Common pitfalls
 
-- **`replace` directive for a local/branch dependency.** Pin to a commit SHA instead, then re-pin to
-  the released tag before merging.
+- **`replace` directive for a local/branch dependency.** Pin to a commit SHA instead, then rebase on
+  Renovate's bump to the released tag before merging.
 - **Merging a consumer on a pseudo-version pin.** The pin must be a released `vX.Y.Z` at merge time;
   the red "released versions only" check is telling you the truth.
-- **Merging the consumer before the dependency is released.** Dependency PR → release → consumer
-  re-pins → consumer merges, in that order.
+- **Merging the consumer before the dependency is released.** Dependency PR → release → Renovate
+  bumps the consumer → the consumer rebases and merges, in that order.
 - **One PR that flips a public API / proto / endpoint / column old → new.** Stage it, so there is
   always a both-work window.
 - **`BREAKING CHANGE:` footer on the additive step.** It goes on the removal step (step 3).
 - **A major bump used as a shortcut.** It signals "old path removed"; it does not excuse skipping
   the consumer migration.
-- **Hand-editing a dependency pin in the normal flow.** Renovate bumps consumers after a release;
-  the manual re-pin is only for an in-flight cross-repo change.
+- **A release pinned in a feature branch.** It conflicts with every Renovate merge on the same
+  lines and asks the feature's reviewer for a dependency label. Dispatch Renovate and rebase on its
+  bump instead, as [bring a release through Renovate](#bring-a-release-through-renovate) shows.
 - **Forgetting the chain.** A consumer that is itself a dependency continues the dance one level up;
   write the whole order down.
 - **Skipping the step-0 consumer grep.** A consumer found after step 3 shipped is a broken build, or

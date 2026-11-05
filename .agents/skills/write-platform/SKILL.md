@@ -101,8 +101,9 @@ fixtures stay with the shared package; product catalogs, route models, and workf
 platform.
 
 When a missing piece is reusable, plan and release it from the owning kit repository first: visual
-contracts go to uikit, while runtime helpers and tooling presets go to nodelib. Then pin the exact
-release in the platform and remove any superseded local implementation. Do not grow either a private
+contracts go to uikit, while runtime helpers and tooling presets go to nodelib. Then dispatch the
+platform's Renovate, which brings the release to `master`, rebase the platform branch on it, and
+remove any superseded local implementation. Do not grow either a private
 design system or a private client-infrastructure library inside the app.
 
 Decompose branches and PRs by one user-visible capability or one application boundary. Platform

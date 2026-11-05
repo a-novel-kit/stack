@@ -52,8 +52,11 @@ Read the PR's timeline (`RemovedFromMergeQueueEvent.reason`) before acting.
 | Red                                                                                      | See [failure diagnosis](failures.md) and the classes below                              | Fix on master; Renovate's rebase carries it.                                                                                           |
 | Red and stale, every member pending the age gate, in a repo whose only JS update is pnpm | Zombie: Renovate skips the branch while every update is pending                         | Close it with `--delete-branch`; a fresh PR follows.                                                                                   |
 
-Never push to a bot branch. The push withholds the auto-approval, Renovate force-pushes over it on
-the next rebase, and the operator who pushed cannot approve it.
+Push to a bot branch only the migration a red bump needs to pass, as
+[manage-versions](../../manage-versions/SKILL.md#bring-a-release-through-renovate) describes.
+The push withholds the auto-approval and the operator who pushed cannot approve it, so a maintainer
+does. Push it right after Renovate's last rebase, and land the PR before the next one. Any other fix
+goes to `master`.
 
 Recurring red classes:
 
