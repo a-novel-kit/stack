@@ -256,10 +256,14 @@ read them on the cluster.
   instances serve and WAL reaches Barman.
 - **A new database image rolls the database by switchover,** with no planned downtime: the service's
   `ImageCatalog` changes, and CloudNativePG restarts the replica on it, then hands the primary over.
-  The switchover breaks every connection to the old primary, so the calls in flight fail. At low
-  traffic one failed call per service crosses the failing-share threshold, which fires for about ten
-  minutes with GenAI's faults alert, then resolves alone. Check that the failures stopped instead of
-  silencing the alerts (a-novel/infra#1408).
+  The switchover breaks every connection to the old primary, so the calls in flight fail with
+  PostgreSQL's 57P01 or 57P03, which Alloy counts as transient (a-novel/infra#1556). At low traffic
+  one failed call per service crosses the failing-share threshold, which fires for about ten minutes,
+  then resolves alone. A faults alert during a switchover is a real fault. Check that the failures
+  stopped instead of silencing the alerts (a-novel/infra#1408).
+- **No account promotes a database by hand,** core's included: Kubernetes refuses even a read of
+  CloudNativePG's `Cluster` objects to people. A switchover comes only from a database change or
+  GKE's node upgrades, so never hand over `kubectl cnpg promote` (a-novel/infra#1195).
 - **`backup_server_name` names every database's lineage,** the name it archives under in its
   bucket. A new name recreates every database empty, rolls their clients and runs the migrations
   again. Never change it to repair one database.
