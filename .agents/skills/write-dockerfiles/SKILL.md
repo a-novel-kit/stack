@@ -216,6 +216,9 @@ and `pg_isready`.
   The shared Renovate preset tracks every `name=version` line; base libraries stay unpinned.
 - **Extensions come from Wolfi packages.** Find the exact release in Wolfi's `APKINDEX` before
   pinning. Only pgBackRest is source-built, in a discarded stage, so compilers never reach the runtime.
+- **Release downloads retry.** The packages stage fetches apko and pgBackRest with
+  `curl -fsSL --retry 5 --retry-all-errors`: GitHub's release downloads answer 5xx now and then, and
+  BusyBox `wget` never retries. The pinned checksums still decide what the image uses.
 - **Server settings an extension needs at init** go in `postgresql.conf.sample`
   (`/usr/share/postgresql18/`), which initdb copies: the server that runs the init SQL has them too.
 - **pg_cron needs `cron.use_background_workers = on`.** By default a job logs in over TCP without a

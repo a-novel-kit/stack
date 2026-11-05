@@ -83,6 +83,11 @@ digest. Other third-party images stay on tags. Publishers rebuild image tags as 
 digest update carries no review signal: the digest review rule leaves out the `docker` datasource,
 and the update merges on its own.
 
+Only one manager may read a pinned line. A repository's own regex manager that also matches a
+`version:` line but not its digest wins the replacement, so the update moves the tag and keeps the
+old digest, and the job runs the old image under the new label (a-novel/infra#1551). A repository
+manager matches only what the base preset does not read, such as a prefixed `tflint_version`.
+
 A release without a timestamp cannot pass the gate: under the default `minimumReleaseAgeBehaviour:
 timestamp-required` Renovate never creates its branch. GHCR and MCR images, lockfile maintenance,
 and the images and runners a workflow names have none. Neither do Docker Hub's large official
