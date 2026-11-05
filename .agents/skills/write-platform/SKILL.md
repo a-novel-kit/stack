@@ -162,15 +162,18 @@ the stack's collector origin, which a `'self'` default refuses. The consent work
 
 - The root layout renders uikit's `ConsentBanner` first in the reading order, with the platform's
   wording, and shows it only while the device records no answer.
+- One answer covers every Agora app. The browser keeps it in a cookie on the domain every platform
+  shares, which infra hands each platform as `PUBLIC_CONSENT_DOMAIN`, and nodelib's
+  `consentDomain` option writes it there. The root layout's server load reads the cookie, so the
+  page renders the answer from the start and never flashes another one.
 - The answer lives in one reactive preference the root layout shares through a context. The
-  banner's visibility derives from it, and a public `/privacy` page changes it with a `Switch`.
-  The browser keeps the answer per site, so every platform has its own page, open without signing
-  in. The shell links it only while the platform collects browser telemetry, and no other screen
-  repeats the switch.
-- The account platform is the exception: privacy is one of its account tabs, `/account/privacy`,
-  beside the account's own settings such as location consent, and the tab holds the switch. Its
-  `/privacy` stays public for logged-out visitors and sends logged-in ones to the tab, and its rail
-  lists no Privacy entry.
+  banner's visibility derives from it once the page runs in the browser, and a `/privacy` page
+  changes it with a `Switch`. No other screen repeats the switch.
+- A logged-in visitor changes the answer from their account's privacy tab, `/account/privacy`,
+  beside the account's own settings such as location consent. Every platform's `/privacy` stays
+  public for logged-out visitors and sends logged-in ones to that tab. The shell lists Privacy under
+  the sign-in links, only for a visitor who is not logged in and only while the platform collects
+  browser telemetry.
 
 Add no tracker, analytics or third-party script without a consent decision on the planning issue.
 
@@ -327,7 +330,10 @@ keeps only these account controls:
 
 - A sign-in link to its own `/auth/sign-in?returnTo=<page>`.
 - A registration link to the account platform's `/?auth=register`, which requests an invitation.
-- Once signed in, a link that opens the account platform in a new tab, and the logout form.
+- Once signed in, a link that opens the account platform in a new tab, and the logout form. The
+  link shows the visitor's username and picture, which the platform reads from the profile service
+  and loads from the account platform's public picture route. Without the profile, it falls back to
+  the email handle and initials, so the profile service stays out of the platform's readiness.
 
 Infra registers every platform but the account platform in Authentication's client registry. The
 platform's name is its client ID, and `/auth/callback` on its host is its one redirect URI. The

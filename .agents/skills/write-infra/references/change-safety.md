@@ -461,6 +461,9 @@ service, and a-novel/infra#1404 for a platform.
 - **A platform's public edge goes first.** Its address and certificate live in foundation's
   `platform_hosts`, and the cluster root reads them as an output. The certificate waits on the
   domain's DNS records, which the output lists (a-novel/infra#1393).
+- **A platform joins the cluster root's `platforms`.** The list grants it what every platform shares:
+  the calls to Authentication, JSON Keys' public keys and profile, and the shared settings, such as
+  the consent domain. Only a service some platforms call is listed by hand.
 - **The service meets the cluster's contracts before its release.** It serves and dials TLS, as
   [Trust boundaries](#trust-boundaries) describes, and checks its callers' service tokens. A release
   that dials plaintext reaches no other service: narrative-engine v1.0.0 needed
