@@ -2,7 +2,7 @@
   "name": ".github",
   "version": "1.42.4",
   "private": true,
-  "license": "AGPL-3.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "docs:build": "vitepress build docs",
