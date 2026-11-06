@@ -618,7 +618,8 @@ The database image creates the extension in its init SQL, which runs before the 
 
 A migration runs while the previous release still serves and long requests are in flight. The
 migrations job gives up a lock wait after 3 seconds and retries the file, and a server whose sessions
-set a `lock_timeout` fails a write that waits longer instead of delaying it. Keep any lock that blocks
+set a `lock_timeout` fails a write that waits longer instead of delaying it. In production the job
+ends a run after 40 minutes (`write-infra`), so a file's work fits in that. Keep any lock that blocks
 writes on a populated table under a second or two:
 
 - **Build an index concurrently, alone in its file.** A file runs as one implicit transaction, which
@@ -642,6 +643,12 @@ writes on a populated table under a second or two:
   lock.
 - **Backfill in batches, outside the migration.** One `UPDATE` over a table holds every row lock it
   takes until it commits.
+- **Drop only what nothing reads, in any repository.** The release that stops naming a column or
+  table deploys everywhere before the release that drops it, whose migrations run while the previous
+  release still serves. Infra reads columns too: each service's database metrics
+  (`environments/production/cluster/queries/<service>.yaml`) and their grants (`<service>.sql`), which
+  run again after every migrations run. A `GRANT` naming a dropped column fails the deploy, so remove
+  the column from both first (a-novel/infra#1597).
 
 A table that stays small, such as one purged within hours, can take a plain statement: judge by the
 size it reaches in production, not by its size today.
@@ -812,6 +819,20 @@ name. A list of a project's cells then filters on `project_id` alone.
 
 - For `ORDER BY` columns on tables that will grow large, index the sort column to avoid
   sequential scans.
+- **Give the planner a bound it can see.** A value a subquery computes, such as
+  `(SELECT uuidv7(interval '-27 hours'))`, is known only at run time, so the planner assumes it
+  matches a third of the rows and may scan the whole table. A stable expression is folded at
+  planning: `now()` is one, while the volatile `uuidv7()` can never be an index condition. For a
+  uuidv7 key, build the lowest uuidv7 of an instant from `now()`, as infra's GenAI usage metrics do
+  (a-novel/infra#1600):
+
+  ```sql
+  generation_id >= (
+    lpad(to_hex((extract(epoch FROM now() - interval '27 hours') * 1000)::bigint), 12, '0')
+    || '70008000000000000000'
+  )::uuid
+  ```
+
 - Unique indexes serve double duty as uniqueness constraints. Prefer them over `UNIQUE` column
   constraints when the index needs to be added after the table is created, or when `IF NOT EXISTS`
   semantics are needed.
