@@ -70,6 +70,12 @@
   root's migrations Job ends its name with a hash of the database lineage, after its image digest
   (a-novel/infra#1376). A template annotation, as the servers carry for the lineage, plans as an
   in-place update that Kubernetes refuses.
+- **A Job the apply waits on ends before the wait does.** Its `active_deadline_seconds` stays below
+  its `timeouts.create`. A Job that outlives the wait stays tainted and running, and the next
+  deploy's replacement, which the plan policy counts as harmless, deletes it with `Foreground`
+  propagation and kills its pod mid-run. Every wait also fits under an hour: the kubernetes provider
+  reaches the cluster with one Google access token per apply. The migrations Job gives a migration
+  40 minutes under a 45-minute wait, in a 60-minute cluster job (a-novel/infra#1596).
 - **A pull request that narrows the plan identity cannot prove itself,** since its plans run before
   it applies. Grant the narrower roles to a temporary identity first, plan every root as it from a
   draft pull request that never merges, then move the plan identity onto them
