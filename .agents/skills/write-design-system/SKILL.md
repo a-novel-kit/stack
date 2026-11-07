@@ -204,10 +204,14 @@ changes them.
 - **Contrast through elevation.** Neutrals stay blue-gray. The canvas sits near black, and each
   raised surface steps lighter, so islands stand clear of the field without borders.
 - **Depth from light, never bevels.** Texture and depth come from the lamp, glow, and
-  transparency. A raised surface stays flat: a hairline ring and a soft shadow give it its shape
-  (`--shadow-ring`, carried by `--shadow-{sm,md,lg}`), and the lamp gives the page its volume. Never
-  draw a bright top line, a dark bottom line, an embossed edge, or a gradient face: skeuomorphism
-  reads dated.
+  transparency. A raised surface stays flat: a hairline ring gives it its shape (`--shadow-ring`,
+  carried by `--shadow-{sm,md,lg}`), and the lamp gives the page its volume. Never draw a bright top
+  line, a dark bottom line, an embossed edge, or a gradient face: skeuomorphism reads dated.
+- **Cards are frosted glass.** A raised card is a light veil with a backdrop blur
+  (`--color-surface-island-glass`), so the lamp shines through it as it lights the navigation. A
+  card inside a card stands on it: opaque (`--color-surface-island-strong`), with a small shadow
+  for volume (`--shadow-sm`). Options of one kind sit as cards inside one card, as Account's
+  credentials hold a card per way to log in.
 - **One lit action per view.** The primary action has a slight gradient that lightens toward the
   top and a soft underglow in its own color (`--gradient-action-primary`,
   `--shadow-action-primary`), with no transparency. Every other action stays flat. A short form sits
@@ -218,8 +222,21 @@ changes them.
 - **One lamp per app.** A radial light in the top-start corner, scaled to the viewport, tells
   people which app they are in, as JetBrains IDEs tint their toolbar with a project color. Each app
   sets `--color-lamp` on its root element: Account's ember, Studio's violet
-  (`--color-lamp-{ember,violet}`). The canvas carries it (`--fill-canvas`), and so does the
-  navigation it crosses (`--fill-navigation`), fixed to the viewport so the two line up.
+  (`--color-lamp-{ember,violet}`). iOS ignores a fixed background, so the canvas paints its light
+  (`--fill-canvas`) on a layer fixed to the viewport behind the page, never on an element that
+  scrolls. Navigation stays in the viewport's corner, so the light it carries (`--fill-navigation`)
+  lines up in every browser. Anything else lets the canvas's light through instead of painting its
+  own: frosted cards, and sticky bars that blur what scrolls under them.
+- **A sticky bar frosts and overhangs.** A page's sticky part, such as a tab bar, has no fill: a
+  backdrop blur frosts what scrolls under it, so at rest it is the canvas, lamp included. It
+  overhangs its column by the hairline ring (`--border-width-thin`) on each side, so the ring of a
+  card as wide as the column never shows past its edges.
+- **Glows never meet a clip.** A container that clips or scrolls leaves a lit control's glow room
+  inside it. A padded card clips nothing, and a dialog's body scrolls out to the dialog's sides and
+  bottom, so only the dialog's own edge cuts a glow or a focus ring.
+- **Motion eases, never performs.** Dialogs fade in and rise a little, and play it back on close;
+  the rail's width eases between its two states. Each takes `--duration-normal`, which reduced
+  motion sets to zero, and a browser without the transition simply switches.
 - **Effects never hide contrast.** Axe reports color contrast as incomplete for text over any
   background image, gradient, or overlapping layer, so measure the brightest point of every lit
   surface by hand and record the ratio beside its token. Keep grain and patterns off surfaces that
