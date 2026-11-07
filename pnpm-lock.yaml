@@ -173,7 +173,7 @@ importers:
     devDependencies:
       '@a-novel-kit/nodelib-config':
         specifier: ^2.0.0
-        version: 2.9.0(9fa7839bc9dfc7b43ee3b99510ce8ae4)
+        version: 2.10.0(9fa7839bc9dfc7b43ee3b99510ce8ae4)
       '@eslint/js':
         specifier: ^10.0.0
         version: 10.0.1(eslint@10.14.0(jiti@2.7.0))
@@ -216,8 +216,8 @@ importers:
 
 packages:
 
-  '@a-novel-kit/nodelib-config@2.9.0':
-    resolution: {integrity: sha512-+Q2lGU7gO6TmiMIyP6xotn3dnZOU7vlCYW+gQFPsxjj5g7GEd03IS4NH9q9Tja7MwYC4QkyBthIwJ1a4CXPCIA==, tarball: https://npm.pkg.github.com/download/@a-novel-kit/nodelib-config/2.9.0/c6fd728365eefde7a3815ec7017d2fbec29324da}
+  '@a-novel-kit/nodelib-config@2.10.0':
+    resolution: {integrity: sha512-Rb0BUfY844ZFR5Trbj3v3iRzF/Qjfl9l9/jV2EyHSezUPjODr4ZEiQDgbAA2DPIhnF7DbIXd3Iatvb0JLePJdw==, tarball: https://npm.pkg.github.com/download/@a-novel-kit/nodelib-config/2.10.0/4fb3a80f9b089fcc95b135492c31df68675ebb6c}
     engines: {node: '>=24.0.0', npm: '>=10.9.2'}
     hasBin: true
     peerDependencies:
@@ -233,10 +233,10 @@ packages:
       eslint: ^10.14.0
       eslint-config-prettier: ^10.1.8
       eslint-plugin-storybook: ^10.6.5
-      eslint-plugin-svelte: ^3.23.1
+      eslint-plugin-svelte: ^3.24.0
       estree-walker: ^3.0.3
       globals: ^17.14.0
-      i18next-cli: ^1.82.1
+      i18next-cli: ^1.82.4
       i18next-cli-plugin-svelte: ^2.5.0
       playwright: ^1.64.1
       prettier: ^3.9.10
@@ -3117,7 +3117,7 @@ packages:
 
 snapshots:
 
-  '@a-novel-kit/nodelib-config@2.9.0(9fa7839bc9dfc7b43ee3b99510ce8ae4)':
+  '@a-novel-kit/nodelib-config@2.10.0(9fa7839bc9dfc7b43ee3b99510ce8ae4)':
     dependencies:
       '@eslint/compat': 2.1.1(eslint@10.14.0(jiti@2.7.0))
       '@eslint/config-helpers': 0.7.0
