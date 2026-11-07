@@ -89,7 +89,9 @@ route files and adapters bring those in.
 
 The shell keeps its phone header and the maintenance banner stuck to the top of the workspace, and
 sets `--shell-sticky-top` to their height. A page's own sticky part, such as a tab bar, sits there,
-under them.
+under them, frosted and overhanging its column as
+[write-design-system](../write-design-system/SKILL.md#the-a-novel-visual-direction) describes. The
+root layout paints the canvas color on `html` and the lamp on a fixed `html::before` layer.
 
 `a-novel/platform-template` is the shortcut to start a new platform, so it tracks the platforms'
 conventions. A change that sets or changes a convention in a platform ships with the matching
@@ -231,9 +233,12 @@ Every state has one canonical owner:
 - **Path and search parameters** own shareable, navigation-relevant UI state. Centralize codecs,
   validate every value, choose deliberate defaults, and preserve unrelated parameters.
 - **Shared preference cookies** own a setting every Agora app shares on a device, such as the
-  collapsed navigation rail. `@a-novel-kit/nodelib-browser/preferences` writes each one on
-  `PUBLIC_PLATFORM_DOMAIN`, and the layout's server load reads it, so the first paint shows the
-  setting and nothing flickers into place.
+  collapsed navigation rail or the language. `@a-novel-kit/nodelib-browser/preferences` names each
+  one and keeps it on `PUBLIC_PLATFORM_DOMAIN`, and the server reads it, so the first paint shows
+  the setting and nothing flickers into place. A setting a control toggles, as the rail, is written
+  by the browser. A setting saved with a form is written by the form's action, so it works without
+  JavaScript: the account's Preferences tab saves the language, and every platform's request hook
+  reads it before `Accept-Language`.
 - **Local storage** owns non-sensitive preferences of one app and recoverable user-specific drafts.
   Namespace and version keys, migrate or discard unknown versions, and read them only behind an
   SSR-safe client adapter.
