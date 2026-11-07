@@ -27,6 +27,7 @@ inputs from Phase 1 before writing the file; an unresolved `{{…}}` in the outp
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/{{repo-path}})
 ![GitHub repo file or directory count](https://img.shields.io/github/directory-file-count/{{repo-path}})
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/{{repo-path}})
+[![License: RPL-1.5](https://img.shields.io/badge/license-RPL--1.5-blue)](LICENSE)
 
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/{{repo-path}}/{{main-workflow-file}})
 [![codecov](https://codecov.io/gh/{{repo-path}}/graph/badge.svg)](https://codecov.io/gh/{{repo-path}}) <!-- TODO(project-docs): if this repo requires a tokenized Codecov badge, append `?token=<codecov-graph-token>` to the badge URL above using the value from codecov.io/gh/{{repo-path}}/settings > Badge -->

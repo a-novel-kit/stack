@@ -44,11 +44,14 @@ whose CI uploads coverage.
 
 | Repo type                | Tech badges (in order)                                                       | Codecov? |
 | ------------------------ | ---------------------------------------------------------------------------- | -------- |
-| Go service (`service-*`) | go-mod version · file count · code size · CI status                          | yes      |
+| Go service (`service-*`) | go-mod version · file count · code size · license · CI status                | yes      |
 | Go library (`golib`)     | go-mod version · file count · code size · CI status                          | no       |
 | JS package (`nodelib`)   | file count · code size · CI status                                           | yes      |
 | Actions (`workflows`)    | file count · code size · CI status                                           | no       |
 | CLI (`stack`)            | go-mod version (`?filename=cli/go.mod`) · file count · code size · CI status | no       |
+
+Every `a-novel` repository with tech badges, platforms and infra included, puts the license badge
+right after code size.
 
 "Codecov if applicable" = the repo's CI calls the `generic-actions/codecov` action. Verify
 before adding the badge: `grep -rl generic-actions/codecov <repo>/.github/workflows`. Today
