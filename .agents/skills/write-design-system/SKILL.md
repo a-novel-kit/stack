@@ -198,10 +198,12 @@ Rules:
   internal `FieldButton`, as the PasswordInput toggle and the Combobox trigger do.
 - Share surface, option-row, spacing, radius, and elevation tokens across listbox, menu, and popover
   families while preserving each widget's distinct selection and keyboard model.
-- A floating surface leaves its inset to its owner wherever the browser anchors it, since the inset
-  sets the surface's distance from its source. Only the centered fallback, for a browser without
-  anchor positioning, sets one. uikit's `FloatingSurface` reset it on anchored surfaces until
-  uikit#317, which pressed every list, menu and tooltip against its source.
+- A floating surface leaves its inset to its owner, since the inset sets the surface's distance from
+  its source. uikit's `FloatingSurface` reset it on anchored surfaces until uikit#317, which pressed
+  every list, menu and tooltip against its source. A surface the browser leaves away from its
+  source, as one without anchor positioning does, or Safari on iOS 26 with its floating toolbars,
+  is placed by script under its source at the owner's gap, and follows the page as it scrolls;
+  never centered on the screen, where it reads as far from its field.
 - Keep interactive target size at least the WCAG 2.2 AA minimum; use a larger touch target where the
   product context allows it.
 - Preserve long labels, localization, RTL, text zoom, narrow containers, reduced motion, and forced
