@@ -101,14 +101,15 @@ icons as files (`?no-inline`, since Vite inlines a small image as a data URL), w
 `apple-touch-icon`, and `/favicon.ico` redirects to the icon: a password manager's icon service,
 such as Bitwarden's, downloads the icon from there and cannot read a data URL.
 
-A protected page renders locked under a log-in modal, on every platform. On the account platform,
-whose one landing page is `/account` (`/` redirects there with its query, and the rail lists no
-Home), a protected load without a session redirects to `loginHref`, the login dialog over
-`/account`; a request already carrying an `auth` view renders a 401 locked page under the shell's
-dialog instead. A client platform's `AccessBoundary` shows an anonymous visitor a dialog that
-cannot close onto the locked page: it leads to `/auth/sign-in` or home. Studio, locked whole with its
-home at `/projects` (`/` redirects there), leads to the invitation request instead of home, which is
-the locked page itself.
+A visitor without an account who opens a protected page lands on the login modal itself, on every
+platform, with no page in between asking them to sign in. On the account platform, whose one landing
+page is `/account` (`/` redirects there with its query, and the rail lists no Home), a protected
+load without a session redirects to `loginHref`, the login dialog over `/account`; a request already
+carrying an `auth` view renders a 401 locked page under the shell's dialog instead. On a client
+platform, a protected load redirects with 307 to `/auth/sign-in?returnTo=<page>`, which leads to the
+account platform's login dialog, and `AccessBoundary` only waits while that happens, or shows the
+forbidden and unavailable states. Studio is locked whole: its home is `/projects` (`/` redirects
+there), and only its privacy and sign-in failure pages stay open without an account.
 
 `a-novel/platform-template` is the shortcut to start a new platform, so it tracks the platforms'
 conventions. A change that sets or changes a convention in a platform ships with the matching
