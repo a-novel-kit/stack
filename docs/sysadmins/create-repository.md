@@ -95,24 +95,14 @@ A repository posts its pull requests and its issues to channels of its own. Unti
 
 1. In Discord, create `<name>-reviews` in the organization's **Pull Requests** category and `<name>-issues` in its **Issues** category, so each takes the category's permissions.
 2. On each channel, open **Edit Channel → Integrations → Webhooks → New Webhook**, then **Copy Webhook URL**.
-3. Add each webhook to its map. The reviews map is the organization secret `REVIEWS_WEBHOOKS`, and the issues map is the `.github` repository's `ISSUES_WEBHOOKS`; both are JSON from `<org>/<name>` to the webhook. A secret cannot be read back, so each map is set whole: gather every entry from **Server Settings → Integrations → Webhooks** and add the new one.
-4. Set the reviews map. `gh secret set` prompts for a single line, so a pasted map would lose all but its first. The block reads the map until Ctrl-D, checks it is one JSON object, and passes it on standard input:
+3. Set each webhook as a secret of the repository. A repository secret wins over the organization's of the same name, and changing a channel later sets that one secret again. Each command prompts for its webhook:
 
    ```bash
-   map="$(cat)"
-   jq -e 'type == "object"' <<<"$map" >/dev/null &&
-     gh secret set REVIEWS_WEBHOOKS --org "$ORG" --visibility all <<<"$map"
+   gh secret set REVIEWS_WEBHOOK --repo "$ORG/$NAME"
+   gh secret set ISSUES_WEBHOOK --repo "$ORG/$NAME"
    ```
 
-5. Set the issues map the same way:
-
-   ```bash
-   map="$(cat)"
-   jq -e 'type == "object"' <<<"$map" >/dev/null &&
-     gh secret set ISSUES_WEBHOOKS --repo "$ORG/.github" <<<"$map"
-   ```
-
-The next pull request event posts to the new reviews channel.
+The next pull request event posts to the new reviews channel. Issues reach their channel through the repository's `notify-post.yaml`, which the `.github` repository's issues feed dispatches.
 
 ## Watch it in Grafana
 
