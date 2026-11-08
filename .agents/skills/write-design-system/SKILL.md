@@ -242,7 +242,8 @@ changes them.
   (`--color-border-subtle`), so it stays visible past the island it opens from. Its option text
   keeps 7.2:1 even over a primary button. A select keeps the focused field's look while its list
   shows, tied to its open state rather than to focus, since a tap or a click focuses a button
-  without showing it. The list opens `--space-3` from the field, clear of its focus glow.
+  without showing it. The list opens against the field's focus ring (`--border-width-strong`),
+  touching it without covering it.
 - **Glows never meet a clip.** A container that clips or scrolls leaves a lit control's glow room
   inside it. A padded card clips nothing, and a dialog's body scrolls out to the dialog's sides and
   bottom, so only the dialog's own edge cuts a glow or a focus ring.
