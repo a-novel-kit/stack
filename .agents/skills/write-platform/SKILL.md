@@ -87,13 +87,16 @@ directories above it, and `src/lib/`. Screens, their parts and `src/lib/ui/` imp
 (`$app/state`, `$app/navigation`), storage, cookies, environment secrets, or network clients; the
 route files and adapters bring those in.
 
-The shell keeps its phone header and the maintenance banner stuck to the top of the workspace, and
-sets `--shell-sticky-top` to their height. A page's own sticky part, such as a tab bar, sits there,
+The shell fixes its phone header to the screen and keeps the maintenance banner stuck to the top of
+the workspace, and sets `--shell-sticky-top` to their height. A page's own sticky part, such as a tab bar, sits there,
 under them, frosted and overhanging its column as
 [write-design-system](../write-design-system/SKILL.md#the-a-novel-visual-direction) describes. The
 root layout paints the canvas color on `html` and the lamp on a fixed `body::before` layer with
 `will-change: transform`: iOS drops a fixed layer that has no compositing layer of its own once the
-page scrolls far.
+page scrolls far. Chrome on iOS still moves fixed layers as its toolbar collapses
+([WebKit bug 297779](https://bugs.webkit.org/show_bug.cgi?id=297779)) and can lose the lamp, which
+Safari keeps; no CSS works around it. The root layout also styles the links iOS makes of an email
+address or a date it finds in the text (`a[x-apple-data-detectors]`) as plain text.
 
 A protected page renders locked under a log-in modal, on every platform. On the account platform,
 whose one landing page is `/account` (`/` redirects there with its query, and the rail lists no

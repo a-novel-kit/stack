@@ -83,6 +83,11 @@ For every meaningful step, account for:
 Keep vocabulary stable through the flow. Name controls by the outcome people recognize, keep the same
 verb in confirmation and feedback, and make errors identify both the problem and the next action.
 
+Order every static list, such as tabs, a menu, navigation links or a settings page, by how much
+people need each entry: the most relevant first, where the eye and the thumb land, the rarest last.
+Keep entries of one kind together and set each group apart, never interleaved. Account's tabs read
+My information, Privacy, Preferences, Devices for that reason.
+
 ## 3. Pass the reuse and contribution gate
 
 Inventory the existing product, UI kit, native platform, and established interaction patterns before
