@@ -32,7 +32,7 @@
     "vitepress": "^1.6.4",
     "vitepress-plugin-tabs": "^0.9.1"
   },
-  "packageManager": "pnpm@12.17.0",
+  "packageManager": "pnpm@12.18.0",
   "engines": {
     "node": ">=23.11.0",
     "npm": ">=10.9.2"
