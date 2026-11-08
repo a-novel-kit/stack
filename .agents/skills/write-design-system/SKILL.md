@@ -176,6 +176,13 @@ Rules:
   and localized glow for selection when the component contract calls for it; keep resting, hovered,
   selected, and disabled emphasis visibly distinct. Preserve each variant's semantic color family
   unless a cross-family state meaning is explicit.
+- Hover only where a pointer hovers: every `:hover` treatment sits inside `@media (hover: hover)`. A
+  finger otherwise leaves the last tapped control hovered, and a tab bar scrolled sideways lights
+  the tabs it passes. `:active` keeps the pressed look on touch.
+- Remove a border with `border-width: 0`, never the `border: 0` shorthand, where the element's
+  border color transitions: the shorthand resets the color to the text color, and the next state
+  fades from it as a light outline. The shells' rail buttons flashed one each time the rail
+  collapsed.
 - Reset native control appearance only within a component that fully restores focus-visible,
   disabled, invalid, autofill, high-contrast, and platform input behavior. Prefer native controls;
   implement a custom select, combobox, menu, or dialog only when the native contract cannot satisfy
@@ -240,15 +247,18 @@ changes them.
 - **A sticky bar frosts and overhangs.** A page's sticky part, such as a tab bar, is the canvas's
   color without its lamp, translucent over a backdrop blur, so what scrolls under it frosts. It
   overhangs its column by the hairline ring (`--border-width-thin`) on each side, so the ring of a
-  card as wide as the column never shows past its edges, and spans a phone's whole width. A finger
-  or a wheel scrolls its overflow, so it shows no scrollbar.
+  card as wide as the column never shows past its edges, and spans a phone's whole width, where its
+  tabs center while they fit. A finger or a wheel scrolls its overflow, so it shows no scrollbar.
 - **A field's list is the field's well.** An open select or combobox list takes the field's own
   color (`--color-control-surface`), frosted over a backdrop blur, and a subtle border
   (`--color-border-subtle`), so it stays visible past the island it opens from. Its option text
   keeps 7.2:1 even over a primary button. A select keeps the focused field's look while its list
   shows, tied to its open state rather than to focus, since a tap or a click focuses a button
   without showing it. The list opens against the field's focus ring (`--border-width-strong`),
-  touching it without covering it.
+  touching it without covering it. It dims what it blurs (`--filter-dim`), so a bright action behind
+  it does not clash with its options. It fades in as it drops `--space-1` from the field, and plays
+  it back on close, in `--duration-fast`; uikit's `FloatingSurface` keeps a closing surface on the
+  page until its exit transition ends.
 - **Glows never meet a clip.** A container that clips or scrolls leaves a lit control's glow room
   inside it. A padded card clips nothing, and a dialog's body scrolls out to the dialog's sides and
   bottom, so only the dialog's own edge cuts a glow or a focus ring.
@@ -272,12 +282,16 @@ changes them.
   `role="note"` so it is not announced again.
 - **Navigation is a vertical rail.** Every app uses the same shell: a collapsible rail on wide
   screens, a header one control tall and a fullscreen drawer on narrow ones, sharing one navigation
-  surface. The links of one group touch, as in most productivity apps. A `Separator`, inset like
-  the links, sets groups apart, and the account and the logout sit in separate groups so a click
-  never lands on the wrong one. The top and bottom groups stay 32px apart. Every link opens in the
-  same tab, between Agora apps included: a reader who wants another tab asks their browser. A link
-  to the page showing outside a NavList, such as the account link, carries `aria-current="page"`
-  and reads as the current item (`Button` styles it); the account picture then shows in full color.
+  surface. The header is fixed to the screen, so iOS stretches the page under it past the top while
+  the header and its light stay in place, and the drawer, as every modal dialog, holds the page
+  behind it still. The links of one group touch, as in most productivity apps, and run in order of
+  importance ([plan-ui-design](../plan-ui-design/SKILL.md#2-map-the-task-before-the-screen)). A
+  `Separator`, inset like the links, sets groups apart, and the account and the logout sit in
+  separate groups so a click never lands on the wrong one. The top and bottom groups stay 32px
+  apart. Every link opens in the same tab, between Agora apps included: a reader who wants another
+  tab asks their browser. A link to the page showing outside a NavList, such as the account link,
+  carries `aria-current="page"` and reads as the current item (`Button` styles it); the account
+  picture then shows in full color.
 - **Selection in amber.** Selected text reads amber on a translucent blue veil
   (`--color-selection-{text,surface}`), a pair no other state uses. Buttons, tabs and menus are not
   selectable.
