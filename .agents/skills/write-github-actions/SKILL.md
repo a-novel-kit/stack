@@ -440,11 +440,12 @@ no `lint-semgrep` job.
 The governance workflows (`gates.yaml`, `release-train.yaml`, `hotfix.yaml`, `approve-pr.yaml`,
 `epic-rollback.yaml`, `recover-prs.yaml`, `check-dependencies.yaml`, `clean-images.yaml`,
 `pr-relay.yaml`, `auto-approve-dependabot.yaml`, `lock-closed.yaml`, `notify.yaml`,
-`auto-assign-author.yaml`) live in each repository, which owns its copies, its `.github/CODEOWNERS`
-too. A new repository gets them from its class's template repository, or copies them from a sibling
-when it starts empty. A change that concerns every repository lands in each copy, one pull request
-per repository. A copy may still open with a "Managed by" banner naming the retired command: delete
-it when you edit the file. What those workflows mean is `coordinate-landing`'s subject.
+`notify-post.yaml`, `auto-assign-author.yaml`) live in each repository, which owns its copies, its
+`.github/CODEOWNERS` too. A new repository gets them from its class's template repository, or copies
+them from a sibling when it starts empty. A change that concerns every repository lands in each copy,
+one pull request per repository. A copy may still open with a "Managed by" banner naming the retired
+command: delete it when you edit the file. What those workflows mean is `coordinate-landing`'s
+subject.
 
 Two of them keep dependency PRs moving without a person. `auto-approve-dependabot.yaml` approves the
 bots' PRs, withholding approval while `renovate/stability-days` is pending; its `status` trigger
@@ -479,12 +480,14 @@ without a ping. Nothing posts its draft, assignee or reopen changes. A post that
 ends with two commands: one requests the reader's own review, the other dispatches `approve-pr` for
 an admin who opened the pull request.
 
-Each repository has its own reviews and issues channels. The `REVIEWS_WEBHOOKS` org secret and the
-`.github` repo's `ISSUES_WEBHOOKS` secret map `<org>/<repo>` to that channel's webhook, and a
-repository missing from a map posts to the org's channel (`REVIEWS_WEBHOOK`, `ISSUES_WEBHOOK`), which
-is the `.github` repo's own. `discord-post` picks the entry and masks it: GitHub masks a JSON secret
-only as a whole, so an expression such as `fromJSON(secrets.X)[repo]` would print the URL in the
-step's inputs. Changing a channel rewrites the whole map, since a secret cannot be read back.
+Each repository has its own reviews and issues channels, whose webhooks are its own
+`REVIEWS_WEBHOOK` and `ISSUES_WEBHOOK` secrets, so changing a channel sets one secret. A repository
+secret wins over the org's of the same name, so a repository without its own channel posts to the
+org's, which is the `.github` repo's own. The feeds that run in the repository read its secret
+directly. The issues feed and the stuck feed's review post run in each org's `.github`, which cannot
+read another repository's secrets: `discord-dispatch` hands each repository its posts in one dispatch
+of its `notify-post.yaml`, which posts them in order and resolves their pings itself. A repository
+without that workflow loses those posts, with a warning in the `.github` run.
 
 A bot's PR notifies nobody on GitHub: it has no assignee, and CODEOWNERS leaves dependency manifests
 and lockfiles unowned, so a version bump requests no review. A failing one reaches the Discord
