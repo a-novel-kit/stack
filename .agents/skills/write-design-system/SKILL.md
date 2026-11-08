@@ -114,6 +114,11 @@ Rules:
 - Derive invisible groups and semi-opaque island surfaces from semantic surface, opacity, blur, and
   elevation tokens. Use backdrop blur as progressive enhancement and retain legible separation
   without it.
+- A backdrop blur reads only what lies under its own box, so whatever crosses a frosted edge stays
+  sharp there. Where something can cross it, as a button under an open list does, paint the frost
+  on a layer reaching past the box by twice the blur radius, clip it back with the box's own
+  `overflow: clip`, and scroll the content inside, so the layer stays in place. uikit's Select and
+  Combobox lists show the pattern.
 - Make overlay and interaction tokens relative to their intended backdrop. A hover layer must remain
   distinguishable on canvas, island, glass, popover, and dialog surfaces; do not reuse the same
   opaque surface token for both the backdrop and the control state.
