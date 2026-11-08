@@ -114,6 +114,11 @@ Rules:
 - Derive invisible groups and semi-opaque island surfaces from semantic surface, opacity, blur, and
   elevation tokens. Use backdrop blur as progressive enhancement and retain legible separation
   without it.
+- A backdrop blur reads only what lies under its own box, so whatever crosses a frosted edge stays
+  sharp there. Where something can cross it, as a button under an open list does, paint the frost
+  on a layer reaching past the box by twice the blur radius, clip it back with the box's own
+  `overflow: clip`, and scroll the content inside, so the layer stays in place. uikit's Select and
+  Combobox lists show the pattern.
 - Make overlay and interaction tokens relative to their intended backdrop. A hover layer must remain
   distinguishable on canvas, island, glass, popover, and dialog surfaces; do not reuse the same
   opaque surface token for both the backdrop and the control state.
@@ -242,7 +247,8 @@ changes them.
   (`--color-border-subtle`), so it stays visible past the island it opens from. Its option text
   keeps 7.2:1 even over a primary button. A select keeps the focused field's look while its list
   shows, tied to its open state rather than to focus, since a tap or a click focuses a button
-  without showing it. The list opens `--space-3` from the field, clear of its focus glow.
+  without showing it. The list opens against the field's focus ring (`--border-width-strong`),
+  touching it without covering it.
 - **Glows never meet a clip.** A container that clips or scrolls leaves a lit control's glow room
   inside it. A padded card clips nothing, and a dialog's body scrolls out to the dialog's sides and
   bottom, so only the dialog's own edge cuts a glow or a focus ring.
