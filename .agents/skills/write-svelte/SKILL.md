@@ -109,6 +109,9 @@ Load `write-frontend-tests` for tests or stories and `write-design-system` for u
 - An `error()` thrown from a `+server.ts` endpoint skips `+error.svelte`: SvelteKit answers with
   JSON or the static `src/error.html`, by the request's `Accept`. A route that redirects but must
   render the error page on a refusal is a page whose server load redirects.
+- SvelteKit 3 reads route parameter matchers from one `src/params.ts`, whose `params` export maps
+  each matcher name to a Standard Schema, such as a service client's zod enum. A `src/params/<name>.ts`
+  file exporting `match` is not read.
 - SvelteKit 3's `redirect()` refuses an external URL unless passed `{ external: true }` or an
   allowlist of origins. Its `error()` takes the message as a string and extra properties third:
   `error(404, "Not found", { code })`.

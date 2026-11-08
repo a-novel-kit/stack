@@ -100,7 +100,9 @@ whose one landing page is `/account` (`/` redirects there with its query, and th
 Home), a protected load without a session redirects to `loginHref`, the login dialog over
 `/account`; a request already carrying an `auth` view renders a 401 locked page under the shell's
 dialog instead. A client platform's `AccessBoundary` shows an anonymous visitor a dialog that
-cannot close onto the locked page: it leads to `/auth/sign-in` or home.
+cannot close onto the locked page: it leads to `/auth/sign-in` or home. Studio, locked whole with its
+home at `/projects` (`/` redirects there), leads to the invitation request instead of home, which is
+the locked page itself.
 
 `a-novel/platform-template` is the shortcut to start a new platform, so it tracks the platforms'
 conventions. A change that sets or changes a convention in a platform ships with the matching
