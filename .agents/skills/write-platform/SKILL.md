@@ -91,7 +91,16 @@ The shell keeps its phone header and the maintenance banner stuck to the top of 
 sets `--shell-sticky-top` to their height. A page's own sticky part, such as a tab bar, sits there,
 under them, frosted and overhanging its column as
 [write-design-system](../write-design-system/SKILL.md#the-a-novel-visual-direction) describes. The
-root layout paints the canvas color on `html` and the lamp on a fixed `html::before` layer.
+root layout paints the canvas color on `html` and the lamp on a fixed `body::before` layer with
+`will-change: transform`: iOS drops a fixed layer that has no compositing layer of its own once the
+page scrolls far.
+
+A protected page renders locked under a log-in modal, on every platform. On the account platform,
+whose one landing page is `/account` (`/` redirects there with its query, and the rail lists no
+Home), a protected load without a session redirects to `loginHref`, the login dialog over
+`/account`; a request already carrying an `auth` view renders a 401 locked page under the shell's
+dialog instead. A client platform's `AccessBoundary` shows an anonymous visitor a dialog that
+cannot close onto the locked page: it leads to `/auth/sign-in` or home.
 
 `a-novel/platform-template` is the shortcut to start a new platform, so it tracks the platforms'
 conventions. A change that sets or changes a convention in a platform ships with the matching

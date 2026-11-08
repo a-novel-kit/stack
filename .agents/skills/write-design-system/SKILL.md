@@ -209,9 +209,11 @@ changes them.
   line, a dark bottom line, an embossed edge, or a gradient face: skeuomorphism reads dated.
 - **Cards are frosted glass.** A raised card is a light veil with a backdrop blur
   (`--color-surface-island-glass`), so the lamp shines through it as it lights the navigation. A
-  card inside a card stands on it: opaque (`--color-surface-island-strong`), with a small shadow
-  for volume (`--shadow-sm`). Options of one kind sit as cards inside one card, as Account's
-  credentials hold a card per way to log in.
+  card inside a card lays its veil on the parent's: a step lighter, tinted by the lamp alike, with
+  a stronger shadow (`--shadow-md`). An opaque inner card would block the lamp and read colder.
+  Muted text on it steps up to the secondary shade, which keeps 4.9:1 under the lamp's brightest
+  point. Options of one kind sit as cards inside one card, as Account's credentials hold a card per
+  way to log in.
 - **One lit action per view.** The primary action has a slight gradient that lightens toward the
   top and a soft underglow in its own color (`--gradient-action-primary`,
   `--shadow-action-primary`), with no transparency. Every other action stays flat. A short form sits
@@ -227,10 +229,14 @@ changes them.
   scrolls. Navigation stays in the viewport's corner, so the light it carries (`--fill-navigation`)
   lines up in every browser. Anything else lets the canvas's light through instead of painting its
   own: frosted cards, and sticky bars that blur what scrolls under them.
-- **A sticky bar frosts and overhangs.** A page's sticky part, such as a tab bar, has no fill: a
-  backdrop blur frosts what scrolls under it, so at rest it is the canvas, lamp included. It
+- **A sticky bar frosts and overhangs.** A page's sticky part, such as a tab bar, is the canvas's
+  color without its lamp, translucent over a backdrop blur, so what scrolls under it frosts. It
   overhangs its column by the hairline ring (`--border-width-thin`) on each side, so the ring of a
-  card as wide as the column never shows past its edges.
+  card as wide as the column never shows past its edges, and spans a phone's whole width. A finger
+  or a wheel scrolls its overflow, so it shows no scrollbar.
+- **A field's list is the field's well.** An open select or combobox list takes the canvas's dark
+  color, opaque so nothing under it shows through, and a subtle border (`--color-border-subtle`),
+  so it stays visible past the island it opens from.
 - **Glows never meet a clip.** A container that clips or scrolls leaves a lit control's glow room
   inside it. A padded card clips nothing, and a dialog's body scrolls out to the dialog's sides and
   bottom, so only the dialog's own edge cuts a glow or a focus ring.
@@ -257,12 +263,16 @@ changes them.
   surface. The links of one group touch, as in most productivity apps. A `Separator`, inset like
   the links, sets groups apart, and the account and the logout sit in separate groups so a click
   never lands on the wrong one. The top and bottom groups stay 32px apart. Every link opens in the
-  same tab, between Agora apps included: a reader who wants another tab asks their browser.
+  same tab, between Agora apps included: a reader who wants another tab asks their browser. A link
+  to the page showing outside a NavList, such as the account link, carries `aria-current="page"`
+  and reads as the current item (`Button` styles it); the account picture then shows in full color.
 - **Selection in amber.** Selected text reads amber on a translucent blue veil
   (`--color-selection-{text,surface}`), a pair no other state uses. Buttons, tabs and menus are not
   selectable.
 - **Focus without noise.** A dialog focuses itself when it opens, so no control lights its focus
-  ring until the reader moves; keyboard focus stays visible everywhere else.
+  ring until the reader moves; keyboard focus stays visible everywhere else. The skip link's target,
+  the page's `main`, takes focus without a ring: a click inside it and a scrolling key would
+  otherwise outline the whole page.
 - **Repeated spacing.** Space inside and between elements uses a few repeated steps: 4, 8, 12, 16,
   24, and 32px (`--space-{1,2,3,4,6,8}`), with 48 and 64 for page layout. Fields sit 16px apart and
   form actions 32px below the last field. The in-between steps (`--space-1-5`, `--space-5`) only
