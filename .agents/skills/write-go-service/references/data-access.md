@@ -189,10 +189,10 @@ operation that does not lock the project checks ownership this way, a read that 
 row anyway included: `ProjectGet` runs the helper, then selects the project by ID alone, and never
 compares the owner of the row it read.
 
-Every write to a project locks it, which runs the project's writes one at a time, and checks
-ownership in the lock. `PgProjectLock` takes the owner and the time the core passes, reports in the
-same `bool` whether it matched a row, and the core runs it first in the transaction, through
-`lockOwnedProject`:
+Every write to a project's content (its fields, beats, scenes, layers, cells and recaps) locks it,
+which runs the project's writes one at a time, and checks ownership in the lock. `PgProjectLock`
+takes the owner and the time the core passes, reports in the same `bool` whether it matched a row,
+and the core runs it first in the transaction, through `lockOwnedProject`:
 
 ```sql
 -- pg.projectLock.sql
@@ -205,8 +205,12 @@ WHERE
 ```
 
 An `UPDATE` holds the row lock `SELECT … FOR UPDATE` would, and also stamps the project's edit date,
-which orders the owner's project list. Every write goes through the lock, so a new write stamps the
-date without asking, and a refused write rolls the stamp back with its transaction.
+which orders the owner's project list. A new content write stamps the date by taking the lock, and a
+refused write rolls the stamp back with its transaction. Creating or deleting the project skips the
+lock, and so does a picture write, which is cosmetic: it checks ownership through `checkProjectOwnership`
+and leaves the edit date alone. narrative-engine's `TestProjectWriteLock` parses `internal/core` and
+fails on a service that builds an insert, update, upsert, delete or move request before
+`lockOwnedProject`, outside its exemptions; its CONTRIBUTING states the rule.
 
 The lock stays a statement of its own, before the write. A statement reads the data as it stood when
 the statement started, so a lock taken inside the write would wait for a concurrent change, then
