@@ -186,6 +186,10 @@ Rules:
   internal `FieldButton`, as the PasswordInput toggle and the Combobox trigger do.
 - Share surface, option-row, spacing, radius, and elevation tokens across listbox, menu, and popover
   families while preserving each widget's distinct selection and keyboard model.
+- A floating surface leaves its inset to its owner wherever the browser anchors it, since the inset
+  sets the surface's distance from its source. Only the centered fallback, for a browser without
+  anchor positioning, sets one. uikit's `FloatingSurface` reset it on anchored surfaces until
+  uikit#317, which pressed every list, menu and tooltip against its source.
 - Keep interactive target size at least the WCAG 2.2 AA minimum; use a larger touch target where the
   product context allows it.
 - Preserve long labels, localization, RTL, text zoom, narrow containers, reduced motion, and forced
@@ -209,11 +213,10 @@ changes them.
   line, a dark bottom line, an embossed edge, or a gradient face: skeuomorphism reads dated.
 - **Cards are frosted glass.** A raised card is a light veil with a backdrop blur
   (`--color-surface-island-glass`), so the lamp shines through it as it lights the navigation. A
-  card inside a card lays its veil on the parent's: a step lighter, tinted by the lamp alike, with
-  a stronger shadow (`--shadow-md`). An opaque inner card would block the lamp and read colder.
-  Muted text on it steps up to the secondary shade, which keeps 4.9:1 under the lamp's brightest
-  point. Options of one kind sit as cards inside one card, as Account's credentials hold a card per
-  way to log in.
+  card inside a card keeps the parent's glass and stands out by its shadow alone (`--shadow-md`):
+  an opaque inner card blocks the lamp and reads colder, and a lighter one reads too bright and
+  drops muted text under 4.5:1 near the lamp. Options of one kind sit as cards inside one card, as
+  Account's credentials hold a card per way to log in.
 - **One lit action per view.** The primary action has a slight gradient that lightens toward the
   top and a soft underglow in its own color (`--gradient-action-primary`,
   `--shadow-action-primary`), with no transparency. Every other action stays flat. A short form sits
@@ -234,9 +237,12 @@ changes them.
   overhangs its column by the hairline ring (`--border-width-thin`) on each side, so the ring of a
   card as wide as the column never shows past its edges, and spans a phone's whole width. A finger
   or a wheel scrolls its overflow, so it shows no scrollbar.
-- **A field's list is the field's well.** An open select or combobox list takes the canvas's dark
-  color, opaque so nothing under it shows through, and a subtle border (`--color-border-subtle`),
-  so it stays visible past the island it opens from.
+- **A field's list is the field's well.** An open select or combobox list takes the field's own
+  color (`--color-control-surface`), frosted over a backdrop blur, and a subtle border
+  (`--color-border-subtle`), so it stays visible past the island it opens from. Its option text
+  keeps 7.2:1 even over a primary button. A select keeps the focused field's look while its list
+  shows, tied to its open state rather than to focus, since a tap or a click focuses a button
+  without showing it. The list opens `--space-3` from the field, clear of its focus glow.
 - **Glows never meet a clip.** A container that clips or scrolls leaves a lit control's glow room
   inside it. A padded card clips nothing, and a dialog's body scrolls out to the dialog's sides and
   bottom, so only the dialog's own edge cuts a glow or a focus ring.
