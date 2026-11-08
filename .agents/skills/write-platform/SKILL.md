@@ -96,7 +96,10 @@ root layout paints the canvas color on `html` and the lamp on a fixed `body::bef
 page scrolls far. Chrome on iOS still moves fixed layers as its toolbar collapses
 ([WebKit bug 297779](https://bugs.webkit.org/show_bug.cgi?id=297779)) and can lose the lamp, which
 Safari keeps; no CSS works around it. The root layout also styles the links iOS makes of an email
-address or a date it finds in the text (`a[x-apple-data-detectors]`) as plain text.
+address or a date it finds in the text (`a[x-apple-data-detectors]`) as plain text. It links its
+icons as files (`?no-inline`, since Vite inlines a small image as a data URL), with an opaque 192px
+`apple-touch-icon`, and `/favicon.ico` redirects to the icon: a password manager's icon service,
+such as Bitwarden's, downloads the icon from there and cannot read a data URL.
 
 A protected page renders locked under a log-in modal, on every platform. On the account platform,
 whose one landing page is `/account` (`/` redirects there with its query, and the rail lists no
