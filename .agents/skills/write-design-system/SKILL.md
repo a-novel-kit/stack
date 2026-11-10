@@ -223,7 +223,9 @@ changes them.
   raised surface steps lighter, so islands stand clear of the field without borders.
 - **Depth from light, never bevels.** Texture and depth come from the lamp, glow, and
   transparency. A raised surface stays flat: a hairline ring gives it its shape (`--shadow-ring`,
-  carried by `--shadow-{sm,md,lg}`), and the lamp gives the page its volume. Never draw a bright top
+  carried by `--shadow-{sm,md,lg}`), and the lamp gives the page its volume. A surface floating over
+  others at the screen's edge, such as the consent banner, takes `--shadow-floating`, which reaches
+  every side: the offset of `--shadow-lg` falls off the screen there. Never draw a bright top
   line, a dark bottom line, an embossed edge, or a gradient face: skeuomorphism reads dated.
 - **Cards are frosted glass.** A raised card is a light veil with a backdrop blur
   (`--color-surface-island-glass`), so the lamp shines through it as it lights the navigation. A

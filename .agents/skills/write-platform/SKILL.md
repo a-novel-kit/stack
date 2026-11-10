@@ -105,7 +105,9 @@ A visitor without an account who opens a protected page lands on the login modal
 platform, with no page in between asking them to sign in. On the account platform, whose one landing
 page is `/account` (`/` redirects there with its query, and the rail lists no Home), a protected
 load without a session redirects to `loginHref`, the login dialog over `/account`; a request already
-carrying an `auth` view renders a 401 locked page under the shell's dialog instead. On a client
+carrying an `auth` view renders a 401 locked page under the shell's dialog instead. The locked page
+shows nothing of its own, and its dialog stays open: it offers no close control, and Escape changes
+nothing. On a client
 platform, a protected load redirects with 307 to `/auth/sign-in?returnTo=<page>`, which leads to the
 account platform's login dialog, and `AccessBoundary` only waits while that happens, or shows the
 forbidden and unavailable states. Studio is locked whole: its home is `/projects` (`/` redirects
@@ -277,6 +279,28 @@ hydration mismatch.
 
 Never persist passwords, short codes, access tokens, refresh tokens, or unredacted backend errors.
 
+## Data a read could not bring
+
+A failed read shows no error when the page cannot do without the data. **Static data**, what a page
+always shows about the visitor, such as the account's name, picture, email or settings, holds its
+place with uikit's `Skeleton` and is read again for good, on a backoff that settles at one read every
+3 minutes. **Dynamic data**, such as a paginated list, retries a few times on the same backoff, then
+shows its error in a toned box.
+
+Both go through `retryWhile` in `src/lib/client/retry.svelte.ts`, built on nodelib-browser's
+`retryWithBackoff`. The server load names a key with `event.depends`, and the attempt calls
+`invalidate` on it, so a retry re-runs only what is missing. A run holds one timer, and the calling
+component's teardown clears it. Retry only idempotent reads. Hold a retry while a form is open whose
+state derives from the data, since new data resets the form.
+
+The controls tied to static data keep working while it is missing. A planned downtime that stops them
+disables them, and the shell's stay:
+
+- The sign-in and register links stay for a visitor without an account session, and the account link
+  and logout for one with it. A refresh-token cookie tells them apart when Authentication cannot.
+- Every authentication dialog keeps its form, with a maintenance alert above a disabled submit.
+- A page left open as a downtime starts loads again, and shows what a new visit would.
+
 ## Authentication and server policy
 
 Treat the SvelteKit server as a backend-for-frontend when a platform consumes an authentication
@@ -364,8 +388,9 @@ keeps only these account controls:
 - A registration link to the account platform's `/?auth=register`, which requests an invitation.
 - Once signed in, a link that opens the account platform in the same tab, and the logout form. The
   link shows the visitor's username and picture, which the platform reads from the profile service
-  and loads from the account platform's public picture route. Without the profile, it falls back to
-  the email handle and initials, so the profile service stays out of the platform's readiness.
+  and loads from the account platform's public picture route. An account with no profile yet falls
+  back to the email handle and initials. While the profile cannot be read, the link holds a skeleton
+  and the platform retries, so the profile service stays out of the platform's readiness.
 
 Infra registers every platform but the account platform in Authentication's client registry. The
 platform's name is its client ID, and `/auth/callback` on its host is its one redirect URI. The
