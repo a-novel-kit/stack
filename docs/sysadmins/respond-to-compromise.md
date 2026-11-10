@@ -295,11 +295,11 @@ The Go proxy keeps every version it has served, forever. A version the attacker 
    retract v1.4.2 // Published from a compromised account.
    ```
 
-2. Once it merges, release a patch. The retraction takes effect with the release that carries it, which waits for your approval at the `release` environment:
+2. Once it merges, cut a release. The retraction takes effect with the release that carries it, which waits for your approval at the `release` environment:
 
    ```bash
    REPO=a-novel-kit/golib
-   gh workflow run release.yaml --repo "$REPO" -f release_type=patch
+   gh workflow run release.yaml --repo "$REPO"
    ```
 
 3. Once the release is out, check that the proxy reports the retraction. The command prints the reason:

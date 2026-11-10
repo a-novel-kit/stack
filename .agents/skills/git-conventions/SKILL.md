@@ -55,8 +55,9 @@ Branch names are lowercase kebab-case only. No underscores and no slashes inside
 branch carries no version number. Only the two kinds of long-lived line do:
 
 - `release/vX.Y` holds a released minor and its backports.
-- `v<N>` develops major N until it replaces `master`. The line it replaces keeps its own `v<N>` name,
-  and the `retired-lines` ruleset freezes it once `master` releases a later major.
+- `v<N>` develops major N, the default branch's major plus one, until its release replaces `master`
+  (`prepare-release`). The line it replaces keeps its own `v<N>` name, and the `retired-lines` ruleset
+  freezes it once `master` releases a later major.
 
 ---
 

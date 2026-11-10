@@ -62,7 +62,7 @@ two things. The vocabulary is a contract, and a reused name is a future bug.
 | **Grace window**                           | The 45-minute interval (3× the 15-min sweep) a stray sibling has to re-enter the queue before the freeze trips — absorbs normal queue churn.                                                                                                                                                |
 | **Roll-forward**                           | Re-enqueuing a _landable_ stray within grace (enable auto-merge). Recovery **forward**, not a rollback — the preferred repair.                                                                                                                                                              |
 | **epic-rollback**                          | The human-triggered, admin-gated, VCS-layer compensator: reconstruct the current wave's merged `epic:<N>` ledger, revert each squash newest-first under a **fresh** rollback-Epic, and land them in reverse through the merge-gate.                                                         |
-| **Release train**                          | One admin dispatch that releases every repo an Epic landed in — derive each repo's bump, drive its `release.yaml`, record the tag.                                                                                                                                                          |
+| **Release train**                          | One admin dispatch that releases every repo an Epic landed in: drive each repo's `release.yaml`, record the tag.                                                                                                                                                                            |
 | **Receipt**                                | The tag a repo's release cut, recorded on the Epic. The release train's output **and** its idempotent-resume ledger.                                                                                                                                                                        |
 | **AGENT_KILL_SWITCH**                      | The org-wide fail-safe emergency halt (an org variable).                                                                                                                                                                                                                                    |
 | **`automation:paused`**                    | The per-Epic pause label on the Epic issue — holds THAT Epic's automation, best-effort.                                                                                                                                                                                                     |
@@ -203,9 +203,8 @@ itself revertible.
 Dispatch **`release-train`** for Epic N (admin-gated, `dry_run`-default). Rehearse first (the dry run
 dispatches each repo's `release.yaml` with `dry_run=true` and cuts nothing), then run live:
 
-- It reconstructs the Epic's landed repos, derives each repo's semver **bump** from its
-  conventional-commit range (fix→patch, feat→minor, `!`/`BREAKING CHANGE`→major), and drives each
-  repo's own `release.yaml` — any order (INV-1 makes them independent).
+- It reconstructs the Epic's landed repos and drives each repo's own `release.yaml`, which sizes
+  itself from its commits, in any order (INV-1 makes them independent).
 - It records a **receipt** (the cut tag) per repo on the Epic. **Idempotent resume**: a re-dispatch
   skips every repo already shipped for this Epic (derived from _live tags_, never the receipt), so a
   partial train re-cuts only the unshipped.
@@ -234,8 +233,8 @@ The saga lands and releases a set of repos; keeping them _version_-compatible ac
 - **Publish-before-rollout.** When one repo's change is needed by another, the **dependency PR merges
   and releases FIRST**, and the consumer re-pins to the released tag before _its_ PR merges. Within a
   single Epic the merge-gate lands the set together, but the _release_ order across repos still honors
-  this: release the dependency, re-pin, then release the consumer (the release train derives bumps
-  per repo; cross-repo re-pins are `manage-versions`').
+  this: release the dependency, re-pin, then release the consumer (the release train releases each
+  repo; cross-repo re-pins are `manage-versions`').
 - **Expand→contract** (staged breaking change). A breaking change never ships in one step: **expand**
   — add the new path alongside the old, non-breaking, and release; migrate every consumer; **contract**
   — remove the old path in a later release. Drafted ahead as `blocked-by` sub-issues. This is how a

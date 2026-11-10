@@ -24,8 +24,8 @@ footer) and `implement-feature` (the layered-branch workflow these cross-repo pl
 - **Each repo is git-tag semver.** A release is a `vX.Y.Z` git tag pushed on a `master` commit; the
   next version comes from the commit history since the last tag (`fix:`/`chore:` → patch, `feat:` or
   an absorbable breaking change → minor). A `!` does **not** force a major here: a major is a planned
-  `vX`-line initiative, never derived from a commit range — `prepare-release` owns that policy and the
-  sizing. The tag
+  `v<N>`-branch initiative, never derived from a commit range. `prepare-release` describes that policy
+  and the sizing. The tag
   push triggers the `release` workflow (`a-novel-kit/workflows/publish-actions/auto-release`),
   which cuts the GitHub Release and, for service repos, builds and publishes the Docker images /
   npm packages tagged with that version.
@@ -47,15 +47,19 @@ footer) and `implement-feature` (the layered-branch workflow these cross-repo pl
 ## Cutting a release
 
 A release is cut **in CI**, not from a developer's working tree. An admin triggers the repo's
-**release workflow** and picks a **release type** (patch / minor / major), or the release train does
-(`coordinate-landing`). `release.yaml` then runs in three parts (a-novel/.github#414):
+**release workflow**, or the release train does (`coordinate-landing`). Nobody picks a size: the
+commits since the last release make it a patch or a minor, and a run on the next major's `v<N>` branch
+cuts that major, as `prepare-release` details. `release.yaml` then runs in three parts
+(a-novel/.github#414):
 
 - **`plan`** runs the `release-core` action as a dry run, with no environment and no credential: it
   computes the version and checks the bump, the doc stamp and the tags. A rehearsal runs only this.
 - **`cut`** runs `release-core` in the protected `release` environment as the release App, whose
   key only that environment holds. It bumps version files (workspace-aware), refreshes doc refs
-  (`prepublish:doc` / `a-novel publish stamp`), commits, tags `vX.Y.Z`, pushes the commit and tags
-  together, and creates the GitHub Release.
+  (`prepublish:doc` / `a-novel publish stamp`), names a pending `docs/migrations/NEXT.md` after the
+  version, commits, tags `vX.Y.Z`, pushes the commit and tags together, and creates the GitHub
+  Release. For a major, the same atomic push makes the `v<N>` branch `master` and keeps the old
+  `master` as `v<N-1>`.
 - **The tag publishes.** The root tag runs `release.yaml` again, and that run builds and attests the
   images, attests and publishes the npm tarballs, and dispatches infra's `pin-release.yaml`.
 
@@ -76,7 +80,7 @@ a-novel/infra's GitHub root manages:
 2. **The `tags` ruleset** restricts who can create a tag. A tag is the release decision: it starts
    the publishing run, so only admins and the release bot may create one.
 3. **The `release` environment** holds the release App's key and admits only the default branch,
-   `release/v*` lines and `v*` tags. Every cut waits there for `core` or the repo's `owners-<class>`
+   `release/v*` lines, the next major's `v<N>` branch and `v*` tags. Every cut waits there for `core` or the repo's `owners-<class>`
    team; the person who dispatched may approve their own run. The first backport onto a new line
    waits there too, since only the release App may create the line.
 
