@@ -71,7 +71,10 @@ A master reference is frozen when master's `test-browser` fails on screenshot ch
 pull requests already approved, and every re-run fails the same way. A commit without a pull request
 between the reference and master's head causes it, such as an admin's direct push. A workflows
 release older than the fix for a-novel-kit/workflows#685 also freezes it when a release is cut during
-an approved change's master run.
+an approved change's master run. A release older than the fix for a-novel-kit/workflows#731 freezes
+it too when a merged pull request's master run never published a reference and that pull request's
+head run names an older baseline. Only a run at master's head publishes a reference, so an Actions
+outage or two close merges cause this, and re-running the older run changes nothing.
 
 1. Have the Workspace owner trash the current reference, the `playwright-<run>-<attempt>.tar` batch in
    `<slug>/ci/references`.
