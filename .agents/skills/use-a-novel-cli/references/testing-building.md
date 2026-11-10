@@ -76,10 +76,10 @@ Dockerfiles, builds them with the same convention CI uses, and prints a pass/fai
 
 ## `a-novel publish` — release doc helpers
 
-Releases are cut **in CI**: trigger the repo's release workflow and pick a release
-type (patch / minor / major). The cut waits for `core` or the repo's `owners-<class>` to
-approve it, then the `release-core` action (in `a-novel-kit/workflows`)
-bumps the version, refreshes doc refs, commits, tags `vX.Y.Z`, pushes, and creates the
+Releases are cut **in CI**: trigger the repo's release workflow, on the default branch for a
+patch or a minor sized from its commits, or on the next major's `v<N>` branch for a major. The cut
+waits for `core` or the repo's `owners-<class>` to approve it, then the `release-core` action (in
+`a-novel-kit/workflows`) bumps the version, refreshes doc refs, commits, tags `vX.Y.Z`, pushes, and creates the
 GitHub Release. The [Agent] bot performs the push. `manage-versions` covers it in depth.
 
 There is **no local release command** — `stamp` is the only verb under `a-novel publish`.

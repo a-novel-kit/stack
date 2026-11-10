@@ -21,7 +21,7 @@ understand the current patterns.
 **Do not write or revive a `scripts/publish.sh` or `scripts/prepublish-version.sh`** for any
 service or kit repo. The release flow — version bump (workspace-aware), commit, tag, push, and
 GitHub Release — runs **in CI** in the `release-core` GitHub Action (`a-novel-kit/workflows`),
-triggered from the repo's release workflow with a release-type selector (patch / minor / major).
+triggered from the repo's release workflow, which sizes the release from its commits or its `v<N>` branch.
 It auto-detects whether the repo uses `pnpm-workspace.yaml` (recursive `pnpm version`) or not
 (root-only) and refreshes doc refs via `prepublish:doc` (`a-novel publish stamp`). The bash
 equivalents were deleted because each copy drifted independently (pnpm 10 → 11 broke two of

@@ -141,8 +141,8 @@ runs:
   verbatim out of the manifest and run them against stubbed network leaves, so the shipped code is
   what executes and there is no fixture to drift.
 
-Consumer-visible changes (a renamed input, a new preferred path) need a migration guide under
-`docs/migrations/`; `prepare-release` owns sizing the release and writing it.
+Consumer-visible changes (a renamed input, a new preferred path) add to `docs/migrations/NEXT.md`;
+`prepare-release` owns writing it.
 
 ---
 
@@ -313,10 +313,12 @@ nothing: no ruleset requires a Codecov status.
 
 The `retired-lines` ruleset freezes the `v<N>` branches of past majors. Discovery reads the major
 from the default branch's root `package.json`, and the ruleset covers `v0` to `v<major-1>`: only
-admins create, update or delete them, and nobody force-pushes. A `v<N>` branch at or above that major
-develops a coming major and stays open, and a repository at major 0 carries no `retired-lines`.
+admins create, update or delete them, and nobody force-pushes. A repository at major 0 carries no
+`retired-lines`.
 
-The `release-lines` ruleset requires the same set on `release/vX.Y` branches. A backport runs those
+The `release-lines` ruleset requires the same set on `release/vX.Y` branches and on `v<major+1>`, the
+next major's branch, which only admins create. That is the one `v<N>` branch the `release` environment
+opens on, since a release from it runs its own workflow with the release key. A backport runs those
 checks from its line's own workflow files, so a check added after the line's tag never reports there
 and an admin merges past it (`manage-versions`).
 
@@ -425,7 +427,8 @@ trigger would stay blocked until someone edits the org's settings. The GitHub ro
 it; an org admin recreates it with `POST /orgs/{org}/actions/policies`.
 
 The `governance` environment is what makes that hold for any copy of a workflow. It admits the
-default branch, plus `release/v*` lines and `v*` tags where the tags rulesets guard them, and
+default branch, plus `release/v*` lines, the next major's `v<N>` branch and `v*` tags where the
+rulesets guard them, and
 `deployment: false` keeps that check: a feature branch's job naming the environment is refused
 before its first step, so a branch that brings back an old workflow reads no key.
 
