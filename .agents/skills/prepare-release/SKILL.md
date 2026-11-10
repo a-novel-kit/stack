@@ -109,7 +109,7 @@ A branch cannot know the version it ships in, so it never names one.
 - **Path:** `docs/migrations/NEXT.md`. Create it when absent. When another branch already started it,
   add this branch's changes to it.
 - **Named at release.** Every release, hotfixes included, renames it to `vX.Y.Z.md` in its publish
-  push, replaces the word `NEXT` inside it, and adds the paragraph under its title to the
+  push, stamps the version in its title, and adds the paragraph under its title to the
   `docs/migrations/README.md` list, newest first. Never edit that index by hand: it is a list so a
   release can extend it without breaking prettier's alignment of a table.
 - **One file per release, immutable once shipped.** Never a single growing `UPGRADING.md`: a released
