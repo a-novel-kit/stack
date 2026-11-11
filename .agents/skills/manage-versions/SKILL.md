@@ -141,7 +141,9 @@ fixed forward, and the hotfix is the fast path:
 - **cut** — merging a backport runs `release-core-hotfix` behind the protected `release` environment,
   as the release App. It bumps the patch, then pushes the bump commit to the line together with the
   `vX.Y.(Z+1)` tag. It creates the Release with `--latest=false`, so a patch to an old line never
-  becomes "Latest". The tag runs the line's own publishing jobs, so the patch reaches production,
+  becomes "Latest". Before the approval, the run rehearses the cut with no credential and writes the
+  patch's release notes to its summary, as `release.yaml`'s `notes` job does; the caller's `cut` job
+  grants `contents: write` for it. The tag runs the line's own publishing jobs, so the patch reaches production,
   except on a line cut before its repository adopted the release split.
 - **retract** — for a Go module, a `retract vX.Y.Z` directive (added in a later release) marks a bad
   version so `go get` skips it. The tag stays (immutable); `retract` is the downstream "don't use this".
