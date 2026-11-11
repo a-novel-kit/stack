@@ -220,10 +220,10 @@ neutrals. Keep the canonical brand, pressure, and signal colors stable unless th
 changes them.
 
 - **Three hues, blue most.** Every color is a nuance of the brand blue, the pressure magenta or the signal
-  amber, in that order of frequency. Blue carries actions, links and tags; magenta is rarer, for an accent
-  such as a project's genres (`Badge tone="accent"`, `--color-accent-text`) and for failures; amber is
-  rarest, for highlights and text selection. An even blend of two, as Studio's violet lamp was, reads as a
-  fourth hue: never use one.
+  amber, in that order of frequency. Blue carries actions, links and tags; magenta is rarer, for the
+  second accent, such as a project's genres (`Badge tone="accent"`, `--color-accent-secondary`), and
+  for failures; amber is rarest, for highlights and text selection. An even blend of two, as Studio's
+  violet lamp was, reads as a fourth hue: never use one.
 - **Contrast through elevation.** Neutrals stay blue-gray. The canvas sits near black, and each
   raised surface steps lighter, so islands stand clear of the field without borders.
 - **Depth from light, never bevels.** Texture and depth come from the lamp, glow, and
