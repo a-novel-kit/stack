@@ -219,6 +219,11 @@ slate surfaces, and one colored lamp in the corner. Warmth means a calm, relaxin
 neutrals. Keep the canonical brand, pressure, and signal colors stable unless the brief explicitly
 changes them.
 
+- **Three hues, blue most.** Every color is a nuance of the brand blue, the pressure magenta or the signal
+  amber, in that order of frequency. Blue carries actions, links and tags; magenta is rarer, for an accent
+  such as a project's genres (`Badge tone="accent"`, `--color-accent-text`) and for failures; amber is
+  rarest, for highlights and text selection. An even blend of two, as Studio's violet lamp was, reads as a
+  fourth hue: never use one.
 - **Contrast through elevation.** Neutrals stay blue-gray. The canvas sits near black, and each
   raised surface steps lighter, so islands stand clear of the field without borders.
 - **Depth from light, never bevels.** Texture and depth come from the lamp, glow, and
@@ -233,17 +238,25 @@ changes them.
   an opaque inner card blocks the lamp and reads colder, and a lighter one reads too bright and
   drops muted text under 4.5:1 near the lamp. Options of one kind sit as cards inside one card, as
   Account's credentials hold a card per way to log in.
+- **A collection is a mosaic of ghost cards.** Each item of a collection, such as Studio's projects, is
+  a ghost card (`Card surface="ghost"`): the canvas's own color under a raised card's veil, ring and
+  blur, so the list reads as the page until the pointer lights one card as a raised card. The cards
+  run down one column before the next, each as tall as it needs, never aligned across columns. A
+  card stops at the long readable measure (`--layout-readable-measure-long`, 80ch) plus its padding,
+  and the columns center on a screen wider than they need.
 - **One lit action per view.** The primary action has a slight gradient that lightens toward the
   top and a soft underglow in its own color (`--gradient-action-primary`,
   `--shadow-action-primary`), with no transparency. Every other action stays flat. A short form sits
-  in a compact dialog (`Dialog size="sm"`) and stretches its submit (`FormActions align="stretch"`).
+  in a compact dialog (`Dialog size="sm"`). Every form's and dialog's actions follow one rule
+  (`FormActions`, a dialog's `actions`): side by side at the end of the line at their natural width, and
+  stacked full width below 35rem, the primary action last.
   Secondary journeys become quiet text buttons (`Button variant="text"`): colored text at rest, a
   soft box on hover. A recovery action sits on the label row (`Field labelActions`), a journey
   switch is one footer line. Never stack ghost buttons under a form.
 - **One lamp per app.** A radial light in the top-start corner, scaled to the viewport, tells
   people which app they are in, as JetBrains IDEs tint their toolbar with a project color. Each app
-  sets `--color-lamp` on its root element: Account's ember, Studio's violet
-  (`--color-lamp-{ember,violet}`). iOS ignores a fixed background, so the canvas paints its light
+  sets `--color-lamp` on its root element: Account's ember, Studio's magenta
+  (`--color-lamp-{ember,magenta}`). iOS ignores a fixed background, so the canvas paints its light
   (`--fill-canvas`) on a layer fixed to the viewport behind the page, never on an element that
   scrolls. Navigation stays in the viewport's corner, so the light it carries (`--fill-navigation`)
   lines up in every browser. Anything else lets the canvas's light through instead of painting its
@@ -277,7 +290,12 @@ changes them.
   (`--color-surface-sunken`), with no border: only focus and errors outline it, and a transparent
   border keeps it outlined in forced-colors mode (`--color-field-border`). Fields always sit inside
   an island, never on the canvas, and share the button heights, so a borderless field keeps the
-  same visual weight as the action beside it.
+  same visual weight as the action beside it. Every input is one, under a field's label above the well,
+  never a legend on its edge: a choice among short options is a `ChipGroup`, tags a `TagInput` (a space
+  ends one, in lower-kebab-case), and a file a `FileInput`. A chip and a tag share a badge's size and
+  regular weight, so a choice reads as the tag it becomes. A file field has no button: it names the
+  file, a folder icon at its end opens the picker as the whole field does, and a cross removes the
+  choice. A chosen image always shows above its field, framed or not, never inside it.
 - **Failures sit in a feedback box.** A message that reports a failure, a refusal, or something the
   reader must act on renders in a toned feedback component, never as plain text: an `Alert` inside a
   section, an `InlineMessage` beside a control, a `StatusState` when it replaces the page. The tone,
@@ -299,6 +317,10 @@ changes them.
 - **Selection in amber.** Selected text reads amber on a translucent blue veil
   (`--color-selection-{text,surface}`), a pair no other state uses. Buttons, tabs and menus are not
   selectable.
+- **A chosen ghost button reads as the current item.** A ghost or text button never draws a border
+  or glow: a soft box under the pointer, and once chosen (`aria-pressed`) the navigation's current
+  item, blue whatever its tone, as Studio's column choice shows. Only an outline button keeps a
+  bordered selection.
 - **Focus without noise.** A dialog focuses itself when it opens, so no control lights its focus
   ring until the reader moves; keyboard focus stays visible everywhere else. The skip link's target,
   the page's `main`, takes focus without a ring: a click inside it and a scrolling key would
