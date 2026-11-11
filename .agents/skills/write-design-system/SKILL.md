@@ -318,10 +318,11 @@ changes them.
 - **Selection in amber.** Selected text reads amber on a translucent blue veil
   (`--color-selection-{text,surface}`), a pair no other state uses. Buttons, tabs and menus are not
   selectable.
-- **A chosen ghost button reads as the current item.** A ghost or text button never draws a border
-  or glow: a soft box under the pointer, and once chosen (`aria-pressed`) the navigation's current
-  item, blue whatever its tone, as Studio's column choice shows. Only an outline button keeps a
-  bordered selection.
+- **A chosen ghost button reads as the current item.** A ghost or text button never draws a border:
+  a soft box under the pointer, and once chosen (`aria-pressed`) the navigation's current item, blue
+  whatever its tone, with NavList's glowing indicator under its label, which no hover draws, so a
+  brand toggle under the pointer never reads as chosen. Studio's column choice shows it. Only an
+  outline button keeps a bordered selection, and a disabled choice stays visible, dimmed.
 - **Focus without noise.** A dialog focuses itself when it opens, so no control lights its focus
   ring until the reader moves; keyboard focus stays visible everywhere else. The skip link's target,
   the page's `main`, takes focus without a ring: a click inside it and a scrolling key would
