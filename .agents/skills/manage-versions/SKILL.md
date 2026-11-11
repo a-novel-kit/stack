@@ -49,11 +49,15 @@ footer) and `implement-feature` (the layered-branch workflow these cross-repo pl
 A release is cut **in CI**, not from a developer's working tree. An admin triggers the repo's
 **release workflow**, or the release train does (`coordinate-landing`). Nobody picks a size: the
 commits since the last release make it a patch or a minor, and a run on the next major's `v<N>` branch
-cuts that major, as `prepare-release` details. `release.yaml` then runs in three parts
+cuts that major, as `prepare-release` details. `release.yaml` then runs in four parts
 (a-novel/.github#414):
 
 - **`plan`** runs the `release-core` action as a dry run, with no environment and no credential: it
-  computes the version and checks the bump, the doc stamp and the tags. A rehearsal runs only this.
+  computes the version and checks the bump, the doc stamp and the tags. A rehearsal runs only this
+  and `notes`.
+- **`notes`** writes the GitHub Release body for `plan`'s tag to the run summary, through GitHub's
+  release-notes endpoint. That endpoint wants contents write, so the job holds the token alone and
+  runs no repository code. `cut` waits for it, so whoever approves the cut has read what ships.
 - **`cut`** runs `release-core` in the protected `release` environment as the release App, whose
   key only that environment holds. It bumps version files (workspace-aware), refreshes doc refs
   (`prepublish:doc` / `a-novel publish stamp`), names a pending `docs/migrations/NEXT.md` after the
