@@ -239,8 +239,9 @@ changes them.
   drops muted text under 4.5:1 near the lamp. Options of one kind sit as cards inside one card, as
   Account's credentials hold a card per way to log in.
 - **A collection is a mosaic of ghost cards.** Each item of a collection, such as Studio's projects, is
-  a ghost card (`Card surface="ghost"`): the canvas's own color under a raised card's veil, ring and
-  blur, so the list reads as the page until the pointer lights one card as a raised card. The cards
+  a ghost card (`Card surface="ghost"`): the canvas's own color under a raised card's veil and blur,
+  ringed as a divider since it has no surface of its own, so the list reads as the page until the
+  pointer or the keyboard's focus lights one card as a raised card. The cards
   run down one column before the next, each as tall as it needs, never aligned across columns. A
   card stops at the long readable measure (`--layout-readable-measure-long`, 80ch) plus its padding,
   and the columns center on a screen wider than they need.
