@@ -34,6 +34,6 @@ A-Novel spans two GitHub organizations. [`a-novel`](https://github.com/a-novel) 
 
 [Start your contributor setup](/dependencies/).
 
-Ask questions on [Discord](https://discord.gg/rp4Qr8cA). Report security issues privately, through the [security policy](https://github.com/a-novel-kit/.github/blob/master/SECURITY.md).
+Ask questions on [Fluxer](https://fluxer.gg/zrf7UIAg). Report security issues privately, through the [security policy](https://github.com/a-novel-kit/.github/blob/master/SECURITY.md).
 
 **Sysadmins** add [their own setup](/sysadmins/) on top.

@@ -148,4 +148,4 @@ The connection closes after an idle hour, or at once with `ssh -O exit git@githu
 
 ## Accept your invitations
 
-Once you are [enrolled](./discord#get-enrolled), GitHub emails an invitation per organization. Accept both, from the email or the invitation pages ([`a-novel`](https://github.com/orgs/a-novel/invitation), [`a-novel-kit`](https://github.com/orgs/a-novel-kit/invitation)).
+Once you are [enrolled](./fluxer#get-enrolled), GitHub emails an invitation per organization. Accept both, from the email or the invitation pages ([`a-novel`](https://github.com/orgs/a-novel/invitation), [`a-novel-kit`](https://github.com/orgs/a-novel-kit/invitation)).

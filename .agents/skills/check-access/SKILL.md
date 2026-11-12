@@ -4,7 +4,7 @@ description: >
   Know what the operator's GitHub roles, tokens and accounts allow, check before an operation a base
   contributor may lack, and state what is missing instead of trying. Load before approvals, merges
   past a gate, releases, privileged labels, repository or org settings, secrets, Google Cloud,
-  Bitwarden or Discord, and when a call fails with 403, 404 or a missing secret.
+  Bitwarden or Fluxer, and when a call fails with 403, 404 or a missing secret.
 ---
 
 # Check access
@@ -26,7 +26,7 @@ Each role is a GitHub team per repository class: `service`, `platform`, `infra`,
 | Ops        | `developers-infra` and a Google account | Production: `gcloud` reads, OpenTofu state, the services' namespaces, secret versions     |
 | Maintainer | `maintainers-<class>`                   | Maintain: approvals that `review-gate` counts                                             |
 | Owner      | `owners-<class>`                        | Admin: ruleset bypass, `approve-pr` on their own pull requests, the `release` environment |
-| Core       | `core`, owner of both organizations     | Admin everywhere, org settings and teams, Bitwarden, Discord admin                        |
+| Core       | `core`, owner of both organizations     | Admin everywhere, org settings and teams, Bitwarden, Fluxer community admin               |
 
 A role covers its class's repositories only; elsewhere the member reads. Every tier also holds Write
 on its org's bot-comment dispatcher, `a-novel/.github` or `a-novel-kit/stack`, so any member posts
@@ -39,7 +39,7 @@ applies a privileged label: it records a reviewer's decision.
 
 Core hands some access out one by one, whatever the role:
 
-- Tokens in `a-novel secrets`: `DISCORD_READER_TOKEN`, `DISCORD_WRITER_TOKEN`, and the service
+- Tokens in `a-novel secrets`: `FLUXER_READER_TOKEN`, `FLUXER_WRITER_TOKEN`, and the service
   secrets a repository's `.a-novel/secrets.yaml` declares.
 - Write on an organization's project board, granted per project.
 - A planned downtime, which core schedules.

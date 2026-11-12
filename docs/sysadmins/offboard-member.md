@@ -48,7 +48,7 @@ for ORG in a-novel a-novel-kit; do
 done
 ```
 
-A `maintainers-` or `core` team at 1 would lose its last member. [Promote](./promote-member) someone into it first. Give each Discord repository role they hold to another member too, so CI alerts and review requests still reach someone.
+A `maintainers-` or `core` team at 1 would lose its last member. [Promote](./promote-member) someone into it first. Give each Fluxer repository role they hold to another member too, so CI alerts and review requests still reach someone.
 
 ## Remove their access
 
@@ -75,7 +75,7 @@ gh api "orgs/a-novel/members/$LOGIN"
 gh api "orgs/a-novel-kit/members/$LOGIN"
 ```
 
-### Remove their Discord roles
+### Remove their Fluxer roles
 
 Untick every role they hold: `developers` or `ops`, their repository roles and the admin role. They keep the community channels, as any visitor does.
 

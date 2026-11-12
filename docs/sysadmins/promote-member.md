@@ -26,7 +26,7 @@ It prints `active`.
 
 ### Give the repository roles
 
-Discord has one role per repository, named `<org>/<repo>`. CI pings it when the repository's build fails or a pull request waits for a reviewer. Right-click their name in the member list, open **Roles** and tick the role of each repository they look after.
+Fluxer has one role per repository, named `<org>/<repo>`. CI pings it when the repository's build fails or a pull request waits for a reviewer. Right-click their name in the member list, open **Roles** and tick the role of each repository they look after.
 
 ## Core
 
@@ -55,9 +55,9 @@ gh auth refresh -h github.com --remove-scopes admin:org
 
 Both lines print `active`.
 
-### Make them a Discord admin
+### Make them a Fluxer admin
 
-Give them the server's admin role, the one with the **Administrator** permission.
+Give them the community's admin role, the one with the **Administrator** permission.
 
 ### Open Bitwarden to them
 

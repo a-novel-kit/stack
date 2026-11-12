@@ -28,7 +28,7 @@ export default defineConfig({
         text: "Dependencies",
         items: [
           { text: "Overview", link: "/dependencies/" },
-          { text: "Discord", link: "/dependencies/discord" },
+          { text: "Fluxer", link: "/dependencies/fluxer" },
           { text: "Git", link: "/dependencies/git" },
           { text: "GitHub", link: "/dependencies/github" },
           { text: "Commit signing", link: "/dependencies/signing" },
@@ -85,7 +85,7 @@ export default defineConfig({
     },
     socialLinks: [
       { icon: "github", link: "https://github.com/a-novel-kit/stack" },
-      { icon: "discord", link: "https://discord.gg/rp4Qr8cA" },
+      { icon: "fluxer", link: "https://fluxer.gg/zrf7UIAg" },
     ],
   },
 });

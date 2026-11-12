@@ -31,7 +31,7 @@ only name the step.
 
 You act with the developer's access, and most developers hold less than these skills describe.
 Before an operation they may lack, such as an approval, a release, a privileged label, a repository
-or org setting, a secret, Google Cloud or Discord, check their access with
+or org setting, a secret, Google Cloud or Fluxer, check their access with
 [check-access](.agents/skills/check-access/SKILL.md). When they lack it, say what is missing and who
 holds it, then stop: never look for a workaround. A command they ask for but cannot run gets that
 answer instead of the command.

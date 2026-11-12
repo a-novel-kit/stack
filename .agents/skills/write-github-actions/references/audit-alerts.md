@@ -14,7 +14,7 @@ Contents:
 ## What alerts and where
 
 An audit-log entry that can hand someone access, weaken a protection or push past a rule reaches the
-private `security-audit` Discord channel within half an hour. The watched actions are a fixed list in
+private `security-audit` Fluxer channel within half an hour. The watched actions are a fixed list in
 `collect.mjs`, by family:
 
 - pushes past a rule, and changes to rulesets, branch protections and environments;
@@ -39,7 +39,7 @@ repositories, read as one line. The Agent App reads the log with an installation
 organization **Administration: read** and nothing else. The default token reads the runs.
 
 A public repository's run summary is public, so the step summary holds counts only: entries read,
-alerting and fresh, and what each ignore rule hid. The alerts themselves reach only Discord. A
+alerting and fresh, and what each ignore rule hid. The alerts themselves reach only Fluxer. A
 `hook.create` entry, for one, holds the webhook URL in clear.
 
 ## Window and deduplication
@@ -52,7 +52,7 @@ The overlap rereads alerts the previous run posted. Each run uploads the `_docum
 alert in its window as its `notify-audit-seen` artifact, kept one day, and the next run skips
 those. A lost artifact warns in the run, and its alerts may post again.
 
-The caller's concurrency group runs one poll at a time. A post Discord refuses fails the run, so the
+The caller's concurrency group runs one poll at a time. A post Fluxer refuses fails the run, so the
 next run reads from the last success and posts the alerts again: a duplicate, never a loss.
 
 ## Ignore rules
