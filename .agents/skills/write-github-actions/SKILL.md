@@ -230,7 +230,9 @@ starts. The merge box hides the cancelled run behind the newer one when both rep
 commit. Add `queue: max` to the group, which keeps up to 100 runs waiting in order, when every event
 must run or when the triggers report on different commits. A `workflow_run`, `delete` or `schedule`
 run reports on the default branch's head, so a pull request run it replaces stays cancelled as the
-newest run on the pull request's head. `visual-tests.yaml` queues both its approval and its cleanup.
+newest run on the pull request's head. `gates.yaml` queues because its relay runs report on master.
+`visual-tests.yaml` queues both its approval and its cleanup. The `translations.yaml` approval and
+the `hotfix.yaml` backport queue because each run acts on its own event.
 A cancelling group on a workflow that also triggers on `labeled` gives each label
 event's run a group of its own, as infra's `main.yaml` does by appending
 `${{ endsWith(github.event.action, 'labeled') && format('-{0}', github.run_id) || '' }}` to its group.
