@@ -1,6 +1,6 @@
 # Dependencies
 
-This guide sets up your machine as an A-Novel contributor. Everything is yours to do except enrollment, which the team grants. Ask for it first, on [Discord](./discord).
+This guide sets up your machine as an A-Novel contributor. Everything is yours to do except enrollment, which the team grants. Ask for it first, on [Fluxer](./fluxer).
 
 ## Choose your system
 

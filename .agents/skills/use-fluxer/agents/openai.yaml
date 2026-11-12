@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use Fluxer"
+  short_description: "Read and answer A-Novel Fluxer messages, channels and threads"
+  default_prompt: "Use $use-fluxer to read or answer this Fluxer message or channel."

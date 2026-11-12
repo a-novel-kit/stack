@@ -2,7 +2,7 @@
 
 A member joins as a developer or as ops. Developers work in the repositories. Ops also run production, so they get a Google account and cloud access on top.
 
-Enroll a newcomer once the team agrees and they have [sent you their accounts](/dependencies/discord#link-your-accounts). Inviting members takes owner rights on both GitHub organizations.
+Enroll a newcomer once the team agrees and they have [sent you their accounts](/dependencies/fluxer#link-your-accounts). Inviting members takes owner rights on both GitHub organizations.
 
 ## Set the member
 
@@ -16,13 +16,13 @@ echo "$GITHUB_ID"
 
 ## Link their accounts
 
-The `github-discord-map` project in Bitwarden Secrets Manager holds one secret per member, which CI reads to mention them on Discord. This step needs the [Bitwarden web app](https://vault.bitwarden.eu).
+The `github-discord-map` project in Bitwarden Secrets Manager holds one secret per member, which CI reads to mention them on Fluxer. This step needs the [Bitwarden web app](https://vault.bitwarden.eu).
 
-Open **Secrets Manager → Projects → github-discord-map**, then **New → Secret**. Set **Name** to their GitHub ID and **Value** to the Discord user ID they sent.
+Open **Secrets Manager → Projects → github-discord-map**, then **New → Secret**. Set **Name** to their GitHub ID and **Value** to the Fluxer user ID they sent.
 
-## Give the Discord role
+## Give the Fluxer role
 
-In Discord, right-click their name in the member list, open **Roles** and tick `developers` or `ops`. The role opens the private working channels.
+In Fluxer, right-click their name in the member list, open **Roles** and tick `developers` or `ops`. The role opens the private working channels.
 
 ## Invite them on GitHub
 

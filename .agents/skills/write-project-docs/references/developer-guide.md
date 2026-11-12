@@ -8,7 +8,7 @@ Contents: [Shape](#shape), [Prose](#prose), [Commands](#commands), [Tabs](#tabs)
 
 ## Shape
 
-The site runs in the order a contributor works: **Dependencies** (one page per tool, Discord first),
+The site runs in the order a contributor works: **Dependencies** (one page per tool, Fluxer first),
 **a-novel CLI** (installation), **Working with AI** (agent setup, then working through an agent),
 **Runbooks** (the same work by hand) and **Sysadmins**. AI comes before the runbooks because the
 workspace is optimized for agents. Agents are a tool, not a requirement: never claim most work goes
@@ -20,7 +20,7 @@ needs its sidebar entry under the right group.
 
 Access has two levels, and the structure carries them. Everything outside **Sysadmins** is for
 contributors and is theirs to do; the one thing the team grants them, enrollment, lives on the
-Discord page with what it brings (the member role for the private working channels, GitHub access).
+Fluxer page with what it brings (the member role for the private working channels, GitHub access).
 **Sysadmins** holds the admin side: stricter security requirements, extra tools (Google Cloud CLI,
 OpenTofu, Bitwarden), and duties such as enrolling contributors and applying repository settings.
 Maintainers get no section: their access widens the contributor setup without changing it. Write the
@@ -28,7 +28,7 @@ contributor path without exceptions: a sysadmin difference gets at most a one-li
 the Sysadmins section, which holds the stricter setup (the security key, for one).
 
 A tool's page opens with its role in the team's work, never its current feature set: a list of what
-Discord posts, which plans an agent accepts or which keys the UI binds goes stale, and the tool's own
+Fluxer posts, which plans an agent accepts or which keys the UI binds goes stale, and the tool's own
 help shows it. `## Install` opens with the version check and a link that skips to `## Configure`;
 every step inside Configure a reader may have done before opens with its own check. Never repeat
 what the sidebar or a page already shows, such as a table of pages or of their checks.
@@ -37,7 +37,7 @@ what the sidebar or a page already shows, such as a table of pages or of their c
 
 Write assertive, short sentences, one idea each, and trust the reader with what the page shows:
 
-- State the step: "Accept the server invite", not "Joining needs the browser or the app: open the
+- State the step: "Accept the community invite", not "Joining needs the browser or the app: open the
   invite and accept it". A sentence that chains clauses with colons and semicolons splits in two.
 - Never describe the page's own structure ("every page has an Install and a Configure section"); a
   reader sees it by opening one. A call to action names the reader's goal ("Start your contributor
@@ -45,13 +45,13 @@ Write assertive, short sentences, one idea each, and trust the reader with what 
 - Say a fact once. A code block shows what a command does; the prose adds only what the block
   cannot, such as why or when.
 - Guide where the reader cannot guess: where to look and whom to ask, then what comes out of it.
-  Name the exact menus and labels where a value hides, in bold and joined with →, as for a Discord
+  Name the exact menus and labels where a value hides, in bold and joined with →, as for a Fluxer
   user ID or GitHub's private email address.
 
 ## Commands
 
 - Give a command for every step, and say so when a step needs the browser or an app instead (creating
-  a token, accepting an invitation, a Discord setting).
+  a token, accepting an invitation, a Fluxer setting).
 - Set a block's inputs as variables on its first lines, so the reader edits those and runs the rest as
   it is. Read a secret with `read -rs` or `Read-Host -MaskInput`, never as an argument, so it stays out
   of the terminal and the shell history. A procedure repeated per item, such as each security key,

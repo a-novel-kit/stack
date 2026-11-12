@@ -27,7 +27,7 @@ secrets:
     description: OpenAI API key used by narrative generation.
 ```
 
-`test`, `build`, `run` and the UI pass them along. A missing secret prints a warning that names it. Ask the team on Discord for its value.
+`test`, `build`, `run` and the UI pass them along. A missing secret prints a warning that names it. Ask the team on Fluxer for its value.
 
 ## The GitHub Packages token
 

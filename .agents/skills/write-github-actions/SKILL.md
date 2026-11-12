@@ -484,7 +484,7 @@ approved commit equals the list `generic-actions/google-service-ranges` computes
 at that moment, so a bot can refresh the SMTP egress ranges but never widen them. Anything else,
 Renovate's `automerge: false` updates included, waits for a maintainer's or an admin's review.
 
-A person's PR posts to the Discord reviews feed alone, through `notify-pr-run`: a review request
+A person's PR posts to the Fluxer reviews feed alone, through `notify-pr-run`: a review request
 pings its reviewers, a review or a drop from the merge queue pings its owner, and its merge posts
 without a ping. Nothing posts its draft, assignee or reopen changes. A post that asks for a reviewer
 ends with two commands: one requests the reader's own review, the other dispatches `approve-pr` for
@@ -500,7 +500,7 @@ of its `notify-post.yaml`, which posts them in order and resolves their pings it
 without that workflow loses those posts, with a warning in the `.github` run.
 
 A bot's PR notifies nobody on GitHub: it has no assignee, and CODEOWNERS leaves dependency manifests
-and lockfiles unowned, so a version bump requests no review. A failing one reaches the Discord
+and lockfiles unowned, so a version bump requests no review. A failing one reaches the Fluxer
 dependencies feed instead, and so does one still green and out of the merge queue 2 hours after its
 last commit (`notify-stuck-run`); when that one waits on a person's review, it posts to the reviews
 feed too, pinging its reviewers. A person's manifest change (`go.mod`, a tool's `.mod`, `go.work`,

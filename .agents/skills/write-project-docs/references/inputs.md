@@ -18,12 +18,12 @@ edited.
 
 ### 1.2 Required for README.md
 
-| Input               | Example                                                   | Default / Fallback                                                                                       |
-| ------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Main CI workflow    | `main.yaml`                                               | `main.yaml`                                                                                              |
-| Codecov graph token | `almKepuGQE` (public token, safe to commit)               | Omit the `?token=…` query parameter entirely and leave a `TODO(project-docs)` comment next to the badge. |
-| Twitter handle      | `agorastoryverse`                                         | `agorastoryverse`                                                                                        |
-| Discord invite ID   | numeric ID `1315240114691248138` + invite code `rp4Qr8cA` | same as existing services                                                                                |
+| Input               | Example                                     | Default / Fallback                                                                                       |
+| ------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Main CI workflow    | `main.yaml`                                 | `main.yaml`                                                                                              |
+| Codecov graph token | `almKepuGQE` (public token, safe to commit) | Omit the `?token=…` query parameter entirely and leave a `TODO(project-docs)` comment next to the badge. |
+| Twitter handle      | `agorastoryverse`                           | `agorastoryverse`                                                                                        |
+| Fluxer invite URL   | `https://fluxer.gg/zrf7UIAg`                | same as existing services                                                                                |
 
 The codecov graph token is **public** — it controls badge/graph rendering only, not repo access,
 so committing it is safe (see [Badge Catalog](badges.md#badge-catalog)).

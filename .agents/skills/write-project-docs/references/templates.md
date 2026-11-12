@@ -20,7 +20,7 @@ inputs from Phase 1 before writing the file; an unresolved `{{…}}` in the outp
 # {{project-display-name}}
 
 [![X (formerly Twitter) Follow](https://img.shields.io/twitter/follow/{{twitter-handle}})](https://twitter.com/{{twitter-handle}})
-[![Discord](https://img.shields.io/discord/{{discord-id}}?logo=discord)](https://discord.gg/{{discord-invite-code}})
+[![Fluxer](https://img.shields.io/badge/Fluxer-Agora-blue?logo=fluxer)]({{fluxer-invite-url}})
 
 <hr />
 

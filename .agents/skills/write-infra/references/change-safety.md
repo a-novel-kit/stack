@@ -354,7 +354,7 @@ read them on the cluster.
     crosses the perimeter needs a rule in the same pull request.
   - Each project's `cloudaudit.googleapis.com/policy` log holds the refused calls, and the calls a
     spec-only rule would refuse. Prove a perimeter change with a real call from a workload.
-  - Management stays outside, since its Workflows call Discord and GitHub, which Workflows inside a
+  - Management stays outside, since its Workflows call Fluxer and GitHub, which Workflows inside a
     perimeter cannot reach.
 - **Organization guardrails are set by hand,** from the setup runbook: the plan identity's deny
   policy, and the access policy with its two grants. Organization Administrator holds none of their

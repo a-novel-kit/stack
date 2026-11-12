@@ -28,7 +28,7 @@ and the `stack` CLI. Reference implementations: the
 <one concise line describing what this is>      ← ALWAYS present, directly under the title
 
 [![X (formerly Twitter) Follow](https://img.shields.io/twitter/follow/agorastoryverse)](https://twitter.com/agorastoryverse)
-[![Discord](https://img.shields.io/discord/1315240114691248138?logo=discord)](https://discord.gg/rp4Qr8cA)
+[![Fluxer](https://img.shields.io/badge/Fluxer-Agora-blue?logo=fluxer)](https://fluxer.gg/zrf7UIAg)
 
 <hr />
 

@@ -1,6 +1,6 @@
 # Create a repository
 
-A new repository takes its settings from its class, joins the workspace and gets its own Discord role and channels. Creating one is a pull request to a-novel/infra. The release App, the Discord role and the channels take owner rights on its organization and on the Discord server.
+A new repository takes its settings from its class, joins the workspace and gets its own Fluxer role and channels. Creating one is a pull request to a-novel/infra. The release App, the Fluxer role and the channels take owner rights on its organization and on the Fluxer community.
 
 ## Set the repository
 
@@ -68,12 +68,12 @@ rm "$KEY_FILE"
 
 The App keeps its other keys, so every other repository keeps releasing.
 
-## Create its Discord role
+## Create its Fluxer role
 
 CI mentions a repository through its own role.
 
-1. In Discord, open **Server Settings → Roles → Create Role**. Name it exactly `<org>/<name>` and save.
-2. With [Developer Mode](/dependencies/discord#link-your-accounts) on, right-click the role and choose **Copy Role ID**.
+1. In Fluxer, open **Community settings → Roles → Create role**. Name it exactly `<org>/<name>` and save.
+2. Right-click the role and choose **Copy role ID**.
 
 Add the role to the organization's `DISCORD_REPO_ROLES` variable, which maps each repository to its role:
 
@@ -89,12 +89,12 @@ gh auth refresh -h github.com --remove-scopes admin:org
 
 `gh variable get` prints the map, the new repository included. Give its role to the repository's admins, as in [Promote a member](./promote-member#give-the-repository-roles).
 
-## Create its Discord channels
+## Create its Fluxer channels
 
 A repository posts its pull requests and its issues to channels of its own. Until it has them, both go to the organization's `github-reviews` and `github-issues`.
 
-1. In Discord, create `<name>-reviews` in the organization's **Pull Requests** category and `<name>-issues` in its **Issues** category, so each takes the category's permissions.
-2. On each channel, open **Edit Channel → Integrations → Webhooks → New Webhook**, then **Copy Webhook URL**.
+1. In Fluxer, create `<name>-reviews` in the organization's **Pull Requests** category and `<name>-issues` in its **Issues** category, so each takes the category's permissions.
+2. On each channel, open **Edit channel → Webhooks → Create webhook**. Expand the new webhook and choose **Copy webhook URL**, which starts with `https://api.fluxer.app/webhooks/`.
 3. Set each webhook as a secret of the repository. A repository secret wins over the organization's of the same name, and changing a channel later sets that one secret again. Each command prompts for its webhook:
 
    ```bash
