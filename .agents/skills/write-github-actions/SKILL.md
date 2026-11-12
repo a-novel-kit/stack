@@ -223,10 +223,15 @@ platform-studio's `main.yaml` groups by
 newer run cancels the older one, which could otherwise post a stale screenshot verdict last, while
 every other run gets a group of its own and finishes. Cancel only where a newer head supersedes the
 run, since a push moves the merge box to the new head. A cancelled job on the current head stays red
-there, because the merge box shows each workflow's newest run. A gate that events on one head
-re-trigger, such as `gates.yaml` on labels and reviews, queues with `cancel-in-progress: false`: its
-runs never overlap, so the last one reads the latest state, and a newer event replaces the waiting run
-before it starts. A cancelling group on a workflow that also triggers on `labeled` gives each label
+there, because the merge box shows each workflow's newest run. A job that several events re-trigger
+runs in a group without cancellation, so its runs never overlap and the last one reads the latest
+state. A group holds one waiting run by default, and the next event cancels that run before it
+starts. The merge box hides the cancelled run behind the newer one when both report on the same
+commit. Add `queue: max` to the group, which keeps up to 100 runs waiting in order, when every event
+must run or when the triggers report on different commits. A `workflow_run`, `delete` or `schedule`
+run reports on the default branch's head, so a pull request run it replaces stays cancelled as the
+newest run on the pull request's head. `visual-tests.yaml` queues both its approval and its cleanup.
+A cancelling group on a workflow that also triggers on `labeled` gives each label
 event's run a group of its own, as infra's `main.yaml` does by appending
 `${{ endsWith(github.event.action, 'labeled') && format('-{0}', github.run_id) || '' }}` to its group.
 A pull request takes its labels in the second it opens, and GitHub can admit those runs to a shared
