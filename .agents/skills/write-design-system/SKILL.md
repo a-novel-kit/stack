@@ -119,6 +119,14 @@ Rules:
   on a layer reaching past the box by twice the blur radius, clip it back with the box's own
   `overflow: clip`, and scroll the content inside, so the layer stays in place. uikit's Select and
   Combobox lists show the pattern.
+- A backdrop blur is recomputed over its whole box for every frame drawn under it, whatever changed,
+  and costs by area, not radius. Under a modal Dialog's full-viewport backdrop blur, the page's own
+  frosted surfaces (cards, sticky bars, the consent banner, toasts) sit unseen yet still cost each
+  frame, so they drop their blur while `:root:has(dialog.dialog:modal)` holds: once the backdrop has
+  faded in, through a zero-length `backdrop-filter` transition delayed by `--duration-normal`, so
+  none shows unfrosted, and back at once on close. One inside a dialog keeps it. A new frosted page
+  surface does the same: on Account's dialogs, this cut 28% of each frame under software compositing
+  and 75% of GPU time (a-novel-kit/uikit#350).
 - Make overlay and interaction tokens relative to their intended backdrop. A hover layer must remain
   distinguishable on canvas, island, glass, popover, and dialog surfaces; do not reuse the same
   opaque surface token for both the backdrop and the control state.
