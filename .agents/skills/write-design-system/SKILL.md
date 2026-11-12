@@ -127,6 +127,12 @@ Rules:
   none shows unfrosted, and back at once on close. One inside a dialog keeps it. A new frosted page
   surface does the same: on Account's dialogs, this cut 28% of each frame under software compositing
   and 75% of GPU time (a-novel-kit/uikit#350).
+- A modal dialog makes every node outside it inert, the top layer included, so a popover cannot float
+  a request above it. A request the reader must stay able to answer, such as the consent banner, also
+  renders inside the topmost modal Dialog (uikit's internal `overModal` list), where Account's login on
+  a page that needs one would otherwise leave it unanswerable. The page's own copy stays, inert and
+  under the backdrop, so the copy inside crossfades over it with the dialog; while a request waits, a
+  dialog fades without rising, since a transform would carry the fixed copy along.
 - Make overlay and interaction tokens relative to their intended backdrop. A hover layer must remain
   distinguishable on canvas, island, glass, popover, and dialog surfaces; do not reuse the same
   opaque surface token for both the backdrop and the control state.
@@ -154,6 +160,10 @@ Rules:
 - Keep shared layout primitives limited to generic geometry, responsiveness, and composition points.
   Applications own page landmarks, navigation models, route structure, product labels, workflow
   steps, and final shell compositions; do not ship a demo-shaped application skeleton from uikit.
+- Center a consumer's rendered option in its row as a box: the span holding it is a flex container
+  that centers its items. An inline-flex box that starts with an icon or a flag takes the icon's bottom
+  edge as its baseline, so set on a text line it rides above the row's middle, as Account's language
+  select did by 2px until uikit's Select, Combobox and ActionMenu centered it.
 - Optically align asymmetric icons and marks inside their real control context; do not expose random
   offsets as consumer props.
 - Design components as small semantic bricks. A prop earns its place when it changes semantics,
@@ -248,8 +258,8 @@ changes them.
   Account's credentials hold a card per way to log in.
 - **A collection is a mosaic of ghost cards.** Each item of a collection, such as Studio's projects, is
   a ghost card (`Card surface="ghost"`): the canvas's own color under a raised card's veil and blur,
-  ringed as a divider since it has no surface of its own, so the list reads as the page until the
-  pointer or the keyboard's focus lights one card as a raised card. The cards
+  ringed a step over a divider (`--color-border-item`) since it has no surface of its own, so the list
+  reads as the page until the pointer or the keyboard's focus lights one card as a raised card. The cards
   run down one column before the next, each as tall as it needs, never aligned across columns. A
   card stops at the long readable measure (`--layout-readable-measure-long`, 80ch) plus its padding,
   and the columns center on a screen wider than they need.
@@ -270,11 +280,12 @@ changes them.
   scrolls. Navigation stays in the viewport's corner, so the light it carries (`--fill-navigation`)
   lines up in every browser. Anything else lets the canvas's light through instead of painting its
   own: frosted cards, and sticky bars that blur what scrolls under them.
-- **A sticky bar frosts and overhangs.** A page's sticky part, such as a tab bar, is the canvas's
-  color without its lamp, translucent over a backdrop blur, so what scrolls under it frosts. It
-  overhangs its column by the hairline ring (`--border-width-thin`) on each side, so the ring of a
-  card as wide as the column never shows past its edges, and spans a phone's whole width, where its
-  tabs center while they fit. A finger or a wheel scrolls its overflow, so it shows no scrollbar.
+- **A sticky bar frosts and overhangs.** A page's sticky part, such as a tab bar, is clear glass over
+  a backdrop blur: the lamp shines through it, and only what scrolls under it frosts. It draws no
+  line, as no layout part does. It overhangs its column by the hairline ring (`--border-width-thin`)
+  on each side, so the ring of a card as wide as the column never shows past its edges, and spans a
+  phone's whole width, where its tabs center while they fit. A finger or a wheel scrolls its
+  overflow, so it shows no scrollbar.
 - **A field's list is the field's well.** An open select or combobox list takes the field's own
   color (`--color-control-surface`), frosted over a backdrop blur, and a subtle border
   (`--color-border-subtle`), so it stays visible past the island it opens from. Its option text
@@ -354,7 +365,10 @@ changes them.
 Preserve that direction, along with compact metadata and vivid semantic accents. Tune the owning
 semantic role and compare before/after renders across its consumers.
 
-- Judge color with area and backdrop. A small badge can carry a saturated fill; a large status box
+- Judge color with area and backdrop. A badge or a chosen chip fills with a deep step of its tone's
+  own ramp under light text (`--color-label-*`), since a full accent glares behind its words. Darken
+  along the ramp, never by lowering lightness at the same chroma: the color leaves the gamut and
+  clips to another hue, as the genre magenta turned plain red. A large status box
   needs a quieter tint with a clear icon and accent. Improve vividness through chroma and foreground
   contrast before adding white or increasing opacity everywhere. Keep control variants in their
   semantic color family through hover and selection.
