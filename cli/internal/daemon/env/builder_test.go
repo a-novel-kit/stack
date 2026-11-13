@@ -122,6 +122,15 @@ func TestBuilderForTarget(t *testing.T) {
 			wantEnv: hostPostgres,
 		},
 		{
+			// A setting that names itself with a default, so the operator can override
+			// it, takes the default in go-exec as in container mode.
+			name: "SelfReferenceTakesDefault", services: []string{"svc"},
+			target: discovery.Target{Name: "grpc", Service: "svc", Environment: map[string]string{
+				"OPENAI_API_KEY": "${OPENAI_API_KEY:-placeholder}",
+			}},
+			wantEnv: map[string]string{"OPENAI_API_KEY": "placeholder"},
+		},
+		{
 			// Without the allocation, which infra-up makes, nothing listens on the host,
 			// and the compose values stay.
 			name: "NoAllocationKeepsCompose", services: []string{"svc"},

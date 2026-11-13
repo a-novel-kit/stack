@@ -108,10 +108,13 @@ func TestRefs(t *testing.T) {
 func TestSubstitute(t *testing.T) {
 	t.Parallel()
 
-	vars := map[string]string{"HOST": "localhost", "PORT": "5432"}
+	vars := map[string]string{"HOST": "localhost", "PORT": "5432", "EMPTY": ""}
 	testCases := []struct{ in, want string }{
 		{"${HOST}:${PORT}", "localhost:5432"},
 		{"${HOST:-ignored}", "localhost"},
+		// An unknown or empty reference takes its default, as compose's `:-` does.
+		{"${UNKNOWN:-placeholder}", "placeholder"},
+		{"${EMPTY:-placeholder}", "placeholder"},
 		// An unknown reference resolves empty, as compose does.
 		{"prefix ${UNKNOWN} suffix", "prefix  suffix"},
 		{"plain", "plain"},
