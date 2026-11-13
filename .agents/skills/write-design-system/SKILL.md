@@ -320,10 +320,12 @@ changes them.
   its well with a search (`ChipGroup searchLabel`). The search filters the chips by label, whatever
   their case and accents, and never changes the choice: a hidden chip keeps its choice and its
   checkbox in the form. Under it, the chips scroll past an open select's height and gather in titled
-  sections a divider apart (`ChipOption.section`), each title pinned while its chips pass under it.
-  The pinned title frosts rather than repeating the well's translucent color, which would darken its
-  band at rest. A wheel stops at the list's end; a finger carries on to the page, so a swipe on a
-  phone never sticks in the list.
+  sections a divider apart (`ChipOption.section`), each title pinned flush under the search while its
+  chips pass under it. A pinned title stays plain: it paints the well's color over a dialog's, as the
+  well shows inside a dialog, since the well's own translucent color would let the chips show
+  through. A wheel stops at the list's end; a finger carries on to the page. On a narrow screen the
+  form keeps only the choice, as badges under the search's name, and a tap opens the search and the
+  chips over the whole screen.
 - **Failures sit in a feedback box.** A message that reports a failure, a refusal, or something the
   reader must act on renders in a toned feedback component, never as plain text: an `Alert` inside a
   section, an `InlineMessage` beside a control, a `StatusState` when it replaces the page. The tone,
