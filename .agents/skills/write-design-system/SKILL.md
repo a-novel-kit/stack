@@ -256,6 +256,11 @@ changes them.
   an opaque inner card blocks the lamp and reads colder, and a lighter one reads too bright and
   drops muted text under 4.5:1 near the lamp. Options of one kind sit as cards inside one card, as
   Account's credentials hold a card per way to log in.
+- **Corners stay concentric.** A shape inside another takes the outer radius less the padding
+  between them, so both corners share their centers. Each `--radius-*` step doubles the one below,
+  and a card's padding is half its radius, so a nested card lands on the next step down at any
+  depth. A list or a toolbar holds `--radius-md` items in `--space-1` and takes their sum, which
+  is off the scale. A new padded surface picks its radius from its padding the same way.
 - **A collection is a mosaic of ghost cards.** Each item of a collection, such as Studio's projects, is
   a ghost card (`Card surface="ghost"`): the canvas's own color under a raised card's veil and blur,
   ringed a step over a divider (`--color-border-item`) since it has no surface of its own, so the list
