@@ -256,11 +256,15 @@ changes them.
   an opaque inner card blocks the lamp and reads colder, and a lighter one reads too bright and
   drops muted text under 4.5:1 near the lamp. Options of one kind sit as cards inside one card, as
   Account's credentials hold a card per way to log in.
-- **Corners stay concentric.** A shape inside another takes the outer radius less the padding
-  between them, so both corners share their centers. Each `--radius-*` step doubles the one below,
-  and a card's padding is half its radius, so a nested card lands on the next step down at any
-  depth. A list or a toolbar holds `--radius-md` items in `--space-1` and takes their sum, which
-  is off the scale. A new padded surface picks its radius from its padding the same way.
+- **Corners stay concentric.** A shape inside another takes the outer radius less the space
+  between them, so both corners share their centers. Each `--radius-*` step doubles the one below
+  (3, 6, 12, 24px). A nested card sits half its parent's radius from the edge and lands on the next
+  step down at any depth, while the card's other content sits a spacing step further in (18px in a
+  top card, 9px nested). A list, a toolbar or a toggle group adds its `--space-1` padding to its
+  items' radius, which is off the scale.
+- **Corners follow the shape.** Labeled buttons, fields, message boxes and navigation links take
+  `--radius-lg`. An icon-only button or a compact navigation item keeps `--radius-md`: 12px on a
+  28px square reads round. A button inside a field takes the field's radius less its inset.
 - **A collection is a mosaic of ghost cards.** Each item of a collection, such as Studio's projects, is
   a ghost card (`Card surface="ghost"`): the canvas's own color under a raised card's veil and blur,
   ringed a step over a divider (`--color-border-item`) since it has no surface of its own, so the list
@@ -362,16 +366,18 @@ changes them.
   ring until the reader moves; keyboard focus stays visible everywhere else. The skip link's target,
   the page's `main`, takes focus without a ring: a click inside it and a scrolling key would
   otherwise outline the whole page.
-- **Repeated spacing.** Space inside and between elements uses a few repeated steps: 4, 8, 12, 16,
-  24, and 32px (`--space-{1,2,3,4,6,8}`), with 48 and 64 for page layout. Fields sit 16px apart and
-  form actions 32px below the last field. The in-between steps (`--space-1-5`, `--space-5`) only
-  size dense details such as a badge, and a negative margin only lets a hover box overhang its row.
+- **Repeated spacing.** Space inside and between elements uses a few repeated steps: 3, 6, 9, 12,
+  18, and 24px (`--space-{1,2,3,4,6,8}`), with 36 and 48 for page layout. Fields sit 12px apart and
+  form actions 24px below the last field. The in-between `--space-1-5` only separates chips and tags,
+  and a negative margin only lets a hover box overhang its row or a nested card reach its inset.
+  Sizes keep a 4px grid on `--size-{N}`: control heights, icons, avatars, badges, marks, surface
+  widths, and the reach of shadows and glows. A size never takes a `--space-*` token.
   uikit's Layout & shape docs map each common role to its step, and each width to a `--layout-*`
   token; a new screen picks from them. A value outside them is a rare exception that sits beside a
   comment naming its reason, as the root's 20rem floor names WCAG 1.4.10's reflow width. A role
   that recurs gets a row in that table first.
 - **Compact controls.** Controls sit on a 4px grid at 28, 32, and 40px, and a coarse pointer adds
-  `space-1` to each. Small and medium buttons set their label in the small text size. Empty space
+  `--size-1` to each. Small and medium buttons set their label in the small text size. Empty space
   inside a button reads as bulk; keep its padding tight and its target large through height alone.
 - **Weight marks action.** A label names one control, so it stays regular. Bold is kept for actions
   and group names.
