@@ -1,6 +1,7 @@
 package compose
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"regexp"
@@ -120,9 +121,9 @@ func Parse(raw []byte) (*File, error) {
 	return &f, nil
 }
 
-// refPattern matches a ${VAR} or ${VAR:-default} reference, capturing VAR. The
-// default is matched but never applied.
-var refPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}`)
+// refPattern matches a ${VAR} or ${VAR:-default} reference, capturing VAR and
+// the default.
+var refPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}`)
 
 // Refs returns the distinct variables s references, in first-seen order.
 func Refs(s string) []string {
@@ -135,12 +136,13 @@ func Refs(s string) []string {
 	return out
 }
 
-// Substitute resolves every reference in s against vars. An unknown reference
-// resolves to the empty string, and its `:-default` is never applied, so a
-// missing variable never survives as a literal ${VAR}.
+// Substitute resolves every reference in s against vars. A variable vars leaves
+// empty takes its `:-default`, as compose does, and resolves empty without one,
+// so a missing variable never survives as a literal ${VAR}.
 func Substitute(s string, vars map[string]string) string {
 	return refPattern.ReplaceAllStringFunc(s, func(ref string) string {
-		return vars[refPattern.FindStringSubmatch(ref)[1]]
+		m := refPattern.FindStringSubmatch(ref)
+		return cmp.Or(vars[m[1]], m[2])
 	})
 }
 

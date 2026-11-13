@@ -314,6 +314,11 @@ comes up with a single `podman compose --profile <target> up`, given the port va
 references; the `a-novel` CLI only keeps those values in sync across services, and is never needed
 to run one. Each target sits behind a profile named after its `cmd/` directory.
 
+A go-exec target, the default mode of `a-novel run start`, takes its process environment from its
+`environment:` block alone: its image's `ENV` never reaches it. The daemon allocates the ports;
+repeat there every other setting a standalone image sets with `ENV`, such as
+`SERVICE_ISSUER_OPTIONAL: true`, or the target starts only in container mode.
+
 A long-runner depends on its database only: its standalone image runs the service's one-shots at
 boot, and the daemon gates it on them itself. Never make it wait on a one-shot: podman-compose turns
 each dependency into podman's `--requires`, which runs the exited one-shot again when the target
