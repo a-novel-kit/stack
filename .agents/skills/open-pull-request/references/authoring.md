@@ -156,6 +156,11 @@ The parent is the Epic, or a Feature whose own parent is the Epic.
   to move the Task's board Status: In review when the PR is ready, Awaiting release when it merges.
   GitHub ignores closing keywords on a PR into any other base, such as a long-lived `v1` branch.
   Such a PR writes `Task <ref>`, and its Tracking section is its only link to the Task.
+- **Refs left open.** GitHub reads a closing keyword anywhere in the body or a commit message:
+  `close`, `fix` or `resolve`, in any form or case, with or without a colon, before a ref. On merge
+  it closes each issue or pull request so named, recorded as closed by the merger. A body reading
+  "the same fix: <refs>" closed the five sibling PRs it listed, unmerged. Put every ref the PR must
+  not close after another word, such as `Related:` or `With`.
 - **Board.** A PR is never a board item. Do not add it to a board, and do not copy the Task's
   Priority, Size or tracking labels onto it. A second card per task drifts from the first, and
   nothing keeps the two in sync.
