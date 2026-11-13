@@ -281,11 +281,12 @@ changes them.
   lines up in every browser. Anything else lets the canvas's light through instead of painting its
   own: frosted cards, and sticky bars that blur what scrolls under them.
 - **A sticky bar frosts and overhangs.** A page's sticky part, such as a tab bar, is clear glass over
-  a backdrop blur: the lamp shines through it, and only what scrolls under it frosts. It draws no
-  line, as no layout part does. It overhangs its column by the hairline ring (`--border-width-thin`)
-  on each side, so the ring of a card as wide as the column never shows past its edges, and spans a
-  phone's whole width, where its tabs center while they fit. A finger or a wheel scrolls its
-  overflow, so it shows no scrollbar.
+  a backdrop blur: the lamp shines through it, and only what scrolls under it frosts. A bar at the
+  page's foot holds actions over whatever scrolls by, so it darkens to the canvas under its frost, as
+  the navigation does. It draws no line, as no layout part does. It overhangs its column by the
+  hairline ring (`--border-width-thin`) on each side, so the ring of a card as wide as the column
+  never shows past its edges, and spans a phone's whole width, where its tabs center while they fit.
+  A finger or a wheel scrolls its overflow, so it shows no scrollbar.
 - **A field's list is the field's well.** An open select or combobox list takes the field's own
   color (`--color-control-surface`), frosted over a backdrop blur, and a subtle border
   (`--color-border-subtle`), so it stays visible past the island it opens from. Its option text
@@ -324,8 +325,8 @@ changes them.
   chips pass under it. A pinned title stays plain: it paints the well's color over a dialog's, as the
   well shows inside a dialog, since the well's own translucent color would let the chips show
   through. A wheel stops at the list's end; a finger carries on to the page. On a narrow screen the
-  form keeps only the choice, as badges under the search's name, and a tap opens the search and the
-  chips over the whole screen.
+  form keeps only the choice, as badges or a placeholder, and a tap opens the search and the chips
+  over the whole screen.
 - **Failures sit in a feedback box.** A message that reports a failure, a refusal, or something the
   reader must act on renders in a toned feedback component, never as plain text: an `Alert` inside a
   section, an `InlineMessage` beside a control, a `StatusState` when it replaces the page. The tone,
