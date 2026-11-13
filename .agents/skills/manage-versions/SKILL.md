@@ -238,9 +238,16 @@ pin commit in a feature branch conflicts with each one that touches the same lin
 feature's reviewer to acknowledge a dependency change, with `allow-dependency-change`, and mixes a
 version bump into a feature diff.
 
-1. **Dispatch Renovate** in each consumer once the release exists:
-   `gh workflow run renovate.yaml --repo <org>/<consumer>`. Wait for its bump PR.
-2. **Let a green bump PR land.** Its auto-merge queues it.
+1. **Dispatch Renovate** in each consumer once the release's publish job has finished:
+   `gh workflow run renovate.yaml --repo <org>/<consumer>`. Wait for its bump PR. A run started
+   while the packages still publish sees only those already out, and splits a family across
+   versions: uikit 0.21.0 reached Studio and Account without its tokens, so the new label tokens
+   resolved to nothing. Dispatch again once publishing ends, before pushing onto the branch.
+2. **Let a green bump PR land.** Its auto-merge queues it. A pre-1.0 uikit update is the
+   exception: the shared Renovate preset turns its auto-merge off, since a minor may break
+   consumers, so the auto-approver skips it. A maintainer approves it with
+   `gh pr review <n> --repo <org>/<consumer> --approve`, then queues it with
+   `gh pr merge <n> --repo <org>/<consumer> --auto`.
 3. **Fix a red bump PR on its own branch.** When the release needs a code migration, such as a
    visual change a consumer's tests pin, push only that migration onto Renovate's branch, right
    after its last rebase. The push withholds the auto-approval, so the PR needs a maintainer's
