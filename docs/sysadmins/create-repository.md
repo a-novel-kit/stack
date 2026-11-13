@@ -75,15 +75,15 @@ CI mentions a repository through its own role.
 1. In Fluxer, open **Community settings → Roles → Create role**. Name it exactly `<org>/<name>` and save.
 2. Right-click the role and choose **Copy role ID**.
 
-Add the role to the organization's `DISCORD_REPO_ROLES` variable, which maps each repository to its role:
+Add the role to the organization's `CHAT_REPO_ROLES` variable, which maps each repository to its role:
 
 ```bash
 ROLE_ID=123456789012345678
 gh auth refresh -h github.com -s admin:org
-ROLES=$(gh api "orgs/$ORG/actions/variables/DISCORD_REPO_ROLES" \
+ROLES=$(gh api "orgs/$ORG/actions/variables/CHAT_REPO_ROLES" \
   --jq ".value | fromjson | .[\"$ORG/$NAME\"] = \"$ROLE_ID\" | tojson")
-gh variable set DISCORD_REPO_ROLES --org "$ORG" --visibility all --body "$ROLES"
-gh variable get DISCORD_REPO_ROLES --org "$ORG"
+gh variable set CHAT_REPO_ROLES --org "$ORG" --visibility all --body "$ROLES"
+gh variable get CHAT_REPO_ROLES --org "$ORG"
 gh auth refresh -h github.com --remove-scopes admin:org
 ```
 

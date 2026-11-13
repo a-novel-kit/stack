@@ -495,7 +495,7 @@ Each repository has its own reviews and issues channels, whose webhooks are its 
 secret wins over the org's of the same name, so a repository without its own channel posts to the
 org's, which is the `.github` repo's own. The feeds that run in the repository read its secret
 directly. The issues feed and the stuck feed's review post run in each org's `.github`, which cannot
-read another repository's secrets: `discord-dispatch` hands each repository its posts in one dispatch
+read another repository's secrets: `chat-dispatch` hands each repository its posts in one dispatch
 of its `notify-post.yaml`, which posts them in order and resolves their pings itself. A repository
 without that workflow loses those posts, with a warning in the `.github` run.
 
