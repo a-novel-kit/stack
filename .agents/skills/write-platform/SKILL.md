@@ -279,6 +279,19 @@ hydration mismatch.
 
 Never persist passwords, short codes, access tokens, refresh tokens, or unredacted backend errors.
 
+## Forms that edit a stored value
+
+A form that opens on a stored value, such as the account's username or the interface language,
+keeps its submit disabled while the draft equals that value, after the trimming the service applies,
+or breaks the rule the client mirrors. A disabled button never stands alone: the field shows the
+rule's message as the visitor types, rather than after a refused submit. Without scripts the draft
+never reaches the page's state, so gate the disabling on the page having run its scripts, as the
+account's `scripted` flag does: the button then stays enabled and the server validates. A choice
+only scripts can change, such as uikit's `Select`, needs no gate.
+
+A form that starts blank, such as sign-in, registration or a new email, validates at submit
+instead: a rule checked from the first keystroke would flag an entry not yet finished.
+
 ## Data a read could not bring
 
 A failed read shows no error when the page cannot do without the data. **Static data**, what a page
