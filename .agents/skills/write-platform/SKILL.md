@@ -262,6 +262,17 @@ Every state has one canonical owner:
 - **Local storage** owns non-sensitive preferences of one app and recoverable user-specific drafts.
   Namespace and version keys, migrate or discard unknown versions, and read them only behind an
   SSR-safe client adapter.
+- **A browser database** (IndexedDB) owns the browser's copy of a small, bounded set of service
+  resources a page lists, such as Studio's projects (a-novel/.github#604). The server renders the
+  shell and the browser renders the list from the database. Name the database from a SHA-256 of
+  the user ID, which the browser never receives, and delete another account's database, or every
+  one for a signed-out visitor, on the next load. Apply each sweep result and each local write in
+  one readwrite transaction that rereads what it changes, and never let an older service timestamp
+  replace a newer one. A **sweep** sends what the browser holds, a map from ID to its drift value,
+  and the service answers only what drifted, so an ID it no longer returns is deleted. Run each
+  sweep under a Web Lock named for its part, so tabs run it once, and tell the other tabs to reread
+  through a BroadcastChannel. The code lives in typed modules under `src/lib/client/`, injected
+  into the page controller.
 - **Server session cookies** own authentication credentials. Name each one with the `__Host-`
   prefix, which the browser accepts only with `Secure`, `Path=/` and no `Domain`
   ([RFC 6265bis §4.1.3.2](https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-rfc6265bis#section-4.1.3.2)),
