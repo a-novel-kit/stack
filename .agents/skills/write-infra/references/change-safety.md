@@ -304,6 +304,13 @@ read them on the cluster.
   - Renovate delays OpenTofu, provider and cluster add-on updates by 7 days (6 hours for OpenTofu
     and provider patches) to bound a compromised release.
   - State holds no secret values, because those are added outside OpenTofu.
+- **The Grafana and GitHub plans read a third party's credentials,** as `infra-reviewed-plan`.
+  - A person's run waits in the `plan` environment until a maintainer, an owner or an admin admits
+    it.
+  - A run the Dependencies App raised plans at once: the identity trusts that App's `actor_id`,
+    since no contributor can act as it.
+  - The jobs pick the environment with `github.actor != vars.DEPENDENCY_BOT_LOGIN && 'plan' || ''`.
+    The GitHub root still manages `plan` because discovery reads the names an expression quotes.
 - **Only admins bypass the rulesets.** A merge to `master` deploys production, and every bot
   reaches it through a pull request. The Agent and Dependencies keys live only in each repository's
   `governance` environment, which the GitHub root's secret sync fills from Secret Manager. That

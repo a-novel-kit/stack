@@ -64,9 +64,8 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 - **Bot pull requests merge alone only when they are safe to.** The auto-approver runs strict here:
   a release pin, or an update Renovate itself put on auto-merge that only moves versions. Renovate
   arms every minor and patch update. A plan needing `allow-downtime` or `allow-resource-deletion`
-  still holds it for a maintainer, and so does a change to the Grafana or GitHub root, whose plans
-  wait for a maintainer to admit them. Majors, a moved action tag, and anything else a bot opens
-  wait for a maintainer's or an admin's review on GitHub.
+  still holds it for a maintainer. Majors, a moved action tag, and anything else a bot opens wait
+  for a maintainer's or an admin's review on GitHub.
 - **Secrets are pinned** as numeric versions.
 - **The docs** are in `docs/ops-basics.md`, `docs/architecture.md` and `docs/runbooks/`.
 
