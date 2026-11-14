@@ -318,9 +318,10 @@ changes them.
   carry text.
 - **Fields are wells.** A field is a translucent darkening of the island it sits in
   (`--color-surface-sunken`), with no border: only focus and errors outline it, and a transparent
-  border keeps it outlined in forced-colors mode (`--color-field-border`). Fields always sit inside
-  an island, never on the canvas, and share the button heights, so a borderless field keeps the
-  same visual weight as the action beside it. Every input is one, under a field's label above the well,
+  border keeps it outlined in forced-colors mode. A field outside an island, on the canvas or a sticky
+  bar, takes a ghost card's ring (`--color-field-border`), and each island (a card, a dialog, a
+  popover, a fieldset) resets it to transparent for its fields. Fields share the button heights, so
+  a borderless field keeps the same visual weight as the action beside it. Every input is one, under a field's label above the well,
   never a legend on its edge: a choice among short options is a `ChipGroup`, tags a `TagInput` (a space
   ends one, in lower-kebab-case), and a file a `FileInput`. A chip and a tag share a badge's size and
   regular weight, so a choice reads as the tag it becomes. A file field has no button: it names the
