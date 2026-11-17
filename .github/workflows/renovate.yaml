@@ -11,28 +11,27 @@ jobs:
     environment:
       name: governance
       deployment: false
+    # Renovate writes as the Dependencies App, with the token the action mints from its key. The job
+    # token only reads GitHub Packages, for Renovate and for the commands it runs, such as
+    # pnpm install.
     permissions:
-      checks: write
-      statuses: write
-      contents: write
-      issues: write
-      pull-requests: write
+      contents: read
       packages: read
-      actions: read
-      id-token: write
-      security-events: read
     steps:
       - uses: a-novel-kit/workflows/generic-actions/renovate@v1.86.0
         with:
           repository_config: "true"
-          # The cli/ tool modfiles regenerate their own sum after a bump: `go get` only ever adds to
-          # a .sum, so the delete is what keeps stale hashes from accumulating. `go mod tidy` is
-          # deliberately not used on them — it prunes requires, which silently drops linters.
-          allowed_commands: >-
-            ["^go mod tidy && go generate .*", "^go mod tidy && go tool .*", "^go get -u .*",
-            "^rm -f cli/[a-z0-9-]+\\.sum$",
-            "^go -C cli get -modfile=[a-z0-9-]+\\.mod -tool [^;&|]+$",
-            "^rm -rf cli/proto/gen$", "^go -C cli tool -modfile=buf\\.mod buf generate$"]
+          # The post-upgrade commands of renovate.json, and no other. The cli/ tool modfiles regenerate
+          # their own sum after a bump: `go get` only ever adds to a .sum, so the delete is what keeps
+          # stale hashes from accumulating. `go mod tidy` is deliberately not used on them: it prunes
+          # requires, which silently drops linters.
+          allowed_commands: |
+            [
+              "^rm -f cli/[a-z0-9-]+\\.sum$",
+              "^go -C cli get -modfile=[a-z0-9-]+\\.mod -tool [a-z0-9./-]+$",
+              "^rm -rf cli/proto/gen$",
+              "^go -C cli tool -modfile=buf\\.mod buf generate$"
+            ]
           github_token: ${{ secrets.GITHUB_TOKEN }}
           app_private_key: ${{ secrets.DEPENDENCY_BOT_PRIVATE_KEY }}
           client_id: ${{ vars.DEPENDENCY_BOT_CLIENT_ID }}
