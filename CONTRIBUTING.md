@@ -128,20 +128,16 @@ After a change under `cli/`, rebuild and reinstall the CLI from the checkout you
 a-novel install --source "$PWD/cli"   # from the root of the checkout you changed
 ```
 
-Run the main CI checks from the stack root:
+Run the CI checks from the stack root:
 
 ```bash
-cd cli
-go generate ./...   # proto bindings; CI fails on a diff
-go tool -modfile=buf.mod buf lint
-go tool -modfile=buf.mod buf format --diff --exit-code
-go tool -modfile=golangci-lint.mod golangci-lint run ./...
-go tool -modfile=govulncheck.mod govulncheck ./...
-go test -race ./...
-cd ..
-pnpm lint
+pnpm generate       # proto bindings; CI fails on a diff
+pnpm lint           # Prettier, ESLint, symlinks, golangci-lint, buf
+pnpm test:go
 pnpm docs:build     # fails on a dead internal link
 ```
+
+`pnpm format` applies the Go, proto and Prettier formatters. `go -C cli tool -modfile=govulncheck.mod govulncheck ./...` scans the module's dependencies.
 
 `pnpm docs:dev` serves the guide with live reload.
 
