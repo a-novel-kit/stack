@@ -10,13 +10,14 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/daemon/env"
 )
 
-// newBuilderWith returns a Builder over a fresh Allocator that knows services.
+// newBuilderWith returns a Builder over a fresh Allocator that knows services,
+// and an empty secrets store.
 func newBuilderWith(t *testing.T, services []string) (*env.Builder, *env.Allocator) {
 	t.Helper()
 
 	alloc := env.NewAllocator()
 	alloc.SetServices(services)
-	return env.NewBuilder(alloc), alloc
+	return env.NewBuilder(alloc, t.TempDir()), alloc
 }
 
 // TestBuilderForService pins the env block `a-novel run env` shows and

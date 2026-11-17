@@ -34,7 +34,7 @@ func TestCanonicalID(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			s := &Server{stacks: testCase.stacks}
+			s := New(Config{Stacks: testCase.stacks})
 			require.Equal(t, testCase.want, s.canonicalID(testCase.id))
 		})
 	}

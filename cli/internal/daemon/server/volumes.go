@@ -17,7 +17,7 @@ func (s *Server) ListVolumes(ctx context.Context, req *anovelv1.ListVolumesReque
 	if err != nil {
 		return nil, err
 	}
-	listed := volumes.List(ctx, svc)
+	listed := volumes.List(ctx, s.cfg.BackupsRoot, svc)
 	out := &anovelv1.ListVolumesResponse{Volumes: make([]*anovelv1.Volume, 0, len(listed))}
 	for _, v := range listed {
 		out.Volumes = append(out.Volumes, volumeToProto(v))
@@ -35,7 +35,7 @@ func (s *Server) BackupVolume(ctx context.Context, req *anovelv1.BackupVolumeReq
 	if err := s.ensureServiceDown(ctx, svc, req.GetForce(), "backup"); err != nil {
 		return nil, err
 	}
-	paths, err := volumes.Backup(context.WithoutCancel(ctx), svc, req.GetTag())
+	paths, err := volumes.Backup(context.WithoutCancel(ctx), s.cfg.BackupsRoot, svc, req.GetTag())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -52,7 +52,7 @@ func (s *Server) RestoreVolume(ctx context.Context, req *anovelv1.RestoreVolumeR
 	if err := s.ensureServiceDown(ctx, svc, req.GetForce(), "restore"); err != nil {
 		return nil, err
 	}
-	restored, err := volumes.Restore(context.WithoutCancel(ctx), svc, req.GetFrom())
+	restored, err := volumes.Restore(context.WithoutCancel(ctx), s.cfg.BackupsRoot, svc, req.GetFrom())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -69,7 +69,7 @@ func (s *Server) ClearVolume(ctx context.Context, req *anovelv1.ClearVolumeReque
 	if err := s.ensureServiceDown(ctx, svc, req.GetForce(), "clear"); err != nil {
 		return nil, err
 	}
-	cleared, err := volumes.Clear(context.WithoutCancel(ctx), svc, req.GetNoBackup())
+	cleared, err := volumes.Clear(context.WithoutCancel(ctx), s.cfg.BackupsRoot, svc, req.GetNoBackup())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -81,12 +81,12 @@ func (s *Server) ClearVolume(ctx context.Context, req *anovelv1.ClearVolumeReque
 // cascade-kills both first.
 func (s *Server) ensureServiceDown(ctx context.Context, svc *discovery.Service, force bool, op string) error {
 	var running []string
-	for _, inst := range s.runner.AllInstances() {
+	for _, inst := range s.cfg.Runner.AllInstances() {
 		if inst.Stack == svc.Stack && inst.Service == svc.Name && inst.Phase != anovelv1.Phase_PHASE_TERMINATED {
 			running = append(running, inst.Target)
 		}
 	}
-	sess, _ := s.runner.InfraSession(svc.Stack, svc.Name)
+	sess, _ := s.cfg.Runner.InfraSession(svc.Stack, svc.Name)
 	if len(running) == 0 && !sess.Up {
 		return nil // all clear
 	}
@@ -96,7 +96,7 @@ func (s *Server) ensureServiceDown(ctx context.Context, svc *discovery.Service, 
 			op, svc.Stack, svc.Name, running, sess.Up)
 	}
 	// A forced KillInfra cascades through the targets and the infra alike.
-	if err := s.runner.KillInfra(ctx, svc.Stack, svc.Name, true /* force */); err != nil {
+	if err := s.cfg.Runner.KillInfra(ctx, svc.Stack, svc.Name, true /* force */); err != nil {
 		return connect.Errorf(connect.CodeInternal,
 			"force-stop before %s: %v", op, err).WithCause(err)
 	}

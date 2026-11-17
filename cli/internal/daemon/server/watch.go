@@ -21,7 +21,7 @@ func (s *Server) Watch(ctx context.Context, req *anovelv1.WatchRequest, stream a
 	ctx, cancel := s.streamContext(ctx)
 	defer cancel()
 	filter := s.watchFilter(req)
-	ch, unsub := s.runner.SubscribePhases(func(ev runner.PhaseEvent) bool { return watches(filter, ev) })
+	ch, unsub := s.cfg.Runner.SubscribePhases(func(ev runner.PhaseEvent) bool { return watches(filter, ev) })
 	defer unsub()
 	for {
 		select {

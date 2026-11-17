@@ -18,13 +18,15 @@ import (
 // values from the discovery snapshot and resolves references against the
 // shared Allocator.
 type Builder struct {
-	alloc *Allocator
+	alloc       *Allocator
+	secretsRoot string // the local secrets store ForTarget decrypts from
 }
 
-// NewBuilder wraps an Allocator. The Allocator must have SetServices
-// called before the first ForTarget invocation.
-func NewBuilder(alloc *Allocator) *Builder {
-	return &Builder{alloc: alloc}
+// NewBuilder wraps an Allocator and the root of the secrets store. The
+// Allocator must have SetServices called before the first ForTarget
+// invocation.
+func NewBuilder(alloc *Allocator, secretsRoot string) *Builder {
+	return &Builder{alloc: alloc, secretsRoot: secretsRoot}
 }
 
 // Entry is one resolved env variable.
@@ -64,7 +66,7 @@ func (b *Builder) ForTarget(t *discovery.Target) ([]Entry, []string, error) {
 	// becomes a warning.
 	var warnings []string
 	if t.CmdDir != "" {
-		res, err := injectSecrets(t.ServiceDir())
+		res, err := secrets.InjectForRepo(t.ServiceDir(), b.secretsRoot)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -127,10 +129,6 @@ func (b *Builder) portRefs(t *discovery.Target) []portRef {
 	}
 	return out
 }
-
-// injectSecrets is the seam to the secrets package, indirected through a package
-// var so the env-builder tests can stub it without touching the local key store.
-var injectSecrets = secrets.InjectForRepo
 
 // ForService builds the env block of every target and infra in svc, which
 // GetEnv shows and infra-up hands to compose. Target ports are only looked up.

@@ -47,7 +47,7 @@ func (s *Server) serviceToProto(svc *discovery.Service, infraStates map[string]r
 	}
 	for _, t := range svc.Targets {
 		var inst *runner.Instance
-		if live, ok := s.runner.Instance(t.ID()); ok {
+		if live, ok := s.cfg.Runner.Instance(t.ID()); ok {
 			inst = &live
 		}
 		out.Targets = append(out.Targets, targetToProto(t, inst))
@@ -84,7 +84,7 @@ func (s *Server) liveInfraStates(stack string) map[string]runner.InfraState {
 	// can afford the headroom, and being slow beats being wrong.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	return s.runner.InfraStatesOf(ctx, stack)
+	return s.cfg.Runner.InfraStatesOf(ctx, stack)
 }
 
 // targetToProto renders t with inst's live state layered on, so the proto

@@ -15,21 +15,23 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
-	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
+	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil/fsutiltest"
 )
 
 // TestStore exercises the encrypted store's round-trip, listing, removal,
 // nonce freshness, tamper detection, and at-rest file permissions.
-//
-// Not parallel: every sub-test sets XDG_DATA_HOME to isolate the store.
 func TestStore(t *testing.T) {
+	t.Parallel()
+
 	t.Run("Success/RoundTrip", func(t *testing.T) {
-		t.Setenv("XDG_DATA_HOME", t.TempDir())
+		t.Parallel()
+
+		root := t.TempDir()
 		values := map[string]string{"openai-key": "sk-secret-value", "anthropic-key": "ak-other-value"}
-		saveStore(t, values)
+		saveStore(t, root, values)
 
 		// Re-open from scratch and read the values back.
-		reopened := openStore(t, nil)
+		reopened := openStore(t, root, nil)
 		for id, want := range values {
 			got, ok := reopened.Get(id)
 			require.True(t, ok, "get %s", id)
@@ -40,18 +42,21 @@ func TestStore(t *testing.T) {
 	})
 
 	t.Run("Success/List", func(t *testing.T) {
-		t.Setenv("XDG_DATA_HOME", t.TempDir())
-		got := openStore(t, map[string]string{"zeta": "v", "alpha": "v", "mike": "v"}).List()
+		t.Parallel()
+
+		got := openStore(t, t.TempDir(), map[string]string{"zeta": "v", "alpha": "v", "mike": "v"}).List()
 		require.Equal(t, []string{"alpha", "mike", "zeta"}, got) // sorted, ids only
 	})
 
 	t.Run("Success/Remove", func(t *testing.T) {
-		t.Setenv("XDG_DATA_HOME", t.TempDir())
-		st := openStore(t, map[string]string{"keep": "v1", "drop": "v2"})
+		t.Parallel()
+
+		root := t.TempDir()
+		st := openStore(t, root, map[string]string{"keep": "v1", "drop": "v2"})
 		st.Remove("drop")
 		require.NoError(t, st.Save())
 
-		reopened := openStore(t, nil)
+		reopened := openStore(t, root, nil)
 		_, ok := reopened.Get("drop")
 		require.False(t, ok, "removed secret still present after reload")
 		_, ok = reopened.Get("keep")
@@ -59,10 +64,12 @@ func TestStore(t *testing.T) {
 	})
 
 	t.Run("Success/NonceMakesCiphertextDiffer", func(t *testing.T) {
-		t.Setenv("XDG_DATA_HOME", t.TempDir())
+		t.Parallel()
+
+		root := t.TempDir()
 		write := func() []byte {
-			saveStore(t, map[string]string{"k": "same-value"})
-			blob, err := os.ReadFile(filepath.Join(paths.SecretsRoot(), "store.enc"))
+			saveStore(t, root, map[string]string{"k": "same-value"})
+			blob, err := os.ReadFile(filepath.Join(root, "store.enc"))
 			require.NoError(t, err)
 			return blob
 		}
@@ -73,10 +80,11 @@ func TestStore(t *testing.T) {
 	t.Run("Success/ReadsNonceThenCiphertext", func(t *testing.T) {
 		// A store sealed by hand as `nonce || ciphertext`, the layout every
 		// release writes, opens.
-		t.Setenv("XDG_DATA_HOME", t.TempDir())
-		_, err := secrets.Init()
+		t.Parallel()
+
+		root := t.TempDir()
+		_, err := secrets.Init(root)
 		require.NoError(t, err)
-		root := paths.SecretsRoot()
 		key, err := os.ReadFile(filepath.Join(root, "key"))
 		require.NoError(t, err)
 		block, err := aes.NewCipher(key)
@@ -88,31 +96,47 @@ func TestStore(t *testing.T) {
 		nonce := make([]byte, gcm.NonceSize())
 		_, _ = rand.Read(nonce) // never fails: it crashes the program instead
 		require.NoError(t, os.WriteFile(filepath.Join(root, "store.enc"), gcm.Seal(nonce, nonce, plain, nil), 0o600))
-		got, ok := openStore(t, nil).Get("k")
+		got, ok := openStore(t, root, nil).Get("k")
 		require.True(t, ok, "get k")
 		require.Equal(t, "v", got)
 	})
 
 	t.Run("Error/TamperDetected", func(t *testing.T) {
-		t.Setenv("XDG_DATA_HOME", t.TempDir())
-		saveStore(t, map[string]string{"k": "v"})
+		t.Parallel()
 
-		storePath := filepath.Join(paths.SecretsRoot(), "store.enc")
+		root := t.TempDir()
+		saveStore(t, root, map[string]string{"k": "v"})
+
+		storePath := filepath.Join(root, "store.enc")
 		blob, err := os.ReadFile(storePath)
 		require.NoError(t, err)
 		// Flip the last byte (inside the GCM tag / ciphertext): gcm.Open
 		// must reject it.
 		blob[len(blob)-1] ^= 0xFF
 		require.NoError(t, os.WriteFile(storePath, blob, 0o600))
-		_, err = secrets.Open()
+		_, err = secrets.Open(root)
 		require.Error(t, err, "decrypt of a tampered store")
 	})
 
-	t.Run("Success/FilePermissions", func(t *testing.T) {
-		t.Setenv("XDG_DATA_HOME", t.TempDir())
-		saveStore(t, map[string]string{"k": "v"})
+	t.Run("Error/WrongKeyLength", func(t *testing.T) {
+		// A key of another length is corrupt. The error names its length and
+		// never its bytes.
+		t.Parallel()
 
-		root := paths.SecretsRoot()
+		root := t.TempDir()
+		fsutiltest.Write(t, root, map[string]string{"key": "short-key"})
+		_, err := secrets.Open(root)
+		require.ErrorContains(t, err, "9 bytes")
+		require.NotContains(t, err.Error(), "short-key")
+	})
+
+	t.Run("Success/FilePermissions", func(t *testing.T) {
+		t.Parallel()
+
+		// The store creates its root, so the root's mode is the store's own.
+		root := filepath.Join(t.TempDir(), "secrets")
+		saveStore(t, root, map[string]string{"k": "v"})
+
 		wantModes := map[string]os.FileMode{
 			filepath.Join(root, "key"):       0o600,
 			filepath.Join(root, "store.enc"): 0o600,
@@ -129,15 +153,17 @@ func TestStore(t *testing.T) {
 
 // TestInit pins that the local key is created once: a later Init, or a
 // concurrent one, never overwrites it.
-//
-// Not parallel: every sub-test sets XDG_DATA_HOME to isolate the store.
 func TestInit(t *testing.T) {
+	t.Parallel()
+
 	t.Run("Success/IdempotentNeverOverwritesKey", func(t *testing.T) {
-		t.Setenv("XDG_DATA_HOME", t.TempDir())
-		keyPath := filepath.Join(paths.SecretsRoot(), "key")
+		t.Parallel()
+
+		root := t.TempDir()
+		keyPath := filepath.Join(root, "key")
 		keys := make([][]byte, 2)
 		for i, wantCreated := range []bool{true, false} {
-			created, err := secrets.Init()
+			created, err := secrets.Init(root)
 			require.NoError(t, err)
 			require.Equal(t, wantCreated, created, "init #%d: only the first creates a key", i+1)
 			key, err := os.ReadFile(keyPath)
@@ -148,7 +174,9 @@ func TestInit(t *testing.T) {
 	})
 
 	t.Run("Success/ConcurrentCreatesOneKey", func(t *testing.T) {
-		t.Setenv("XDG_DATA_HOME", t.TempDir())
+		t.Parallel()
+
+		root := t.TempDir()
 		const runs = 16
 		start := make(chan struct{})
 		var created atomic.Int32
@@ -157,7 +185,7 @@ func TestInit(t *testing.T) {
 		for i := range runs {
 			wg.Go(func() {
 				<-start
-				ok, err := secrets.Init()
+				ok, err := secrets.Init(root)
 				errs[i] = err
 				if ok {
 					created.Add(1)

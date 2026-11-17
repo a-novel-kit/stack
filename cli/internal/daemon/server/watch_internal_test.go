@@ -49,7 +49,7 @@ func TestDescribePhaseEvent(t *testing.T) {
 func TestWatchFilter(t *testing.T) {
 	t.Parallel()
 
-	s := &Server{stacks: discovery.Stacks{{Name: "fork"}, {Name: "main", Default: true}}}
+	s := New(Config{Stacks: discovery.Stacks{{Name: "fork"}, {Name: "main", Default: true}}})
 	event := runner.PhaseEvent{Stack: "main", Service: "svc", TargetID: "main/svc/rest"}
 
 	testCases := []struct {

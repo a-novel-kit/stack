@@ -13,8 +13,11 @@ import (
 )
 
 // newRunnerForLaunch builds a runner over one discovered target whose ports
-// block makes every env build claim REST_PORT.
-func newRunnerForLaunch() (*Runner, *env.Allocator, *discovery.Target) {
+// block makes every env build claim REST_PORT. Its log store writes under
+// logsRoot.
+func newRunnerForLaunch(t *testing.T, logsRoot string) (*Runner, *env.Allocator, *discovery.Target) {
+	t.Helper()
+
 	tgt := &discovery.Target{Name: "rest", Service: "svc", Stack: "default", Ports: []string{"${REST_PORT}:8080"}}
 	stacks := discovery.Stacks{{
 		Name:     "default",
@@ -23,7 +26,7 @@ func newRunnerForLaunch() (*Runner, *env.Allocator, *discovery.Target) {
 	}}
 	alloc := env.NewAllocator()
 	alloc.SetServices([]string{"svc"})
-	return New(stacks, alloc, env.NewBuilder(alloc), logs.New()), alloc, tgt
+	return New(stacks, alloc, env.NewBuilder(alloc, t.TempDir()), logs.New(logsRoot)), alloc, tgt
 }
 
 // stubOnPath puts first on PATH a stand-in for the tool name, a shell script

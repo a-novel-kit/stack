@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 	"github.com/a-novel-kit/stack/cli/internal/shared/retention"
 )
 
@@ -39,6 +38,7 @@ const maxArchivedRuns = 5
 // Store is the daemon's per-target log registry. Concurrency-safe;
 // one Store per daemon.
 type Store struct {
+	root    string // the directory holding every target's logs
 	mu      sync.RWMutex
 	streams map[string]*targetStream // key: targetID = stack/service/target
 }
@@ -53,10 +53,10 @@ type targetStream struct {
 	closed      bool        // once the proc terminates, no new lines
 }
 
-// New returns an empty Store. Its stream registry populates on
-// OpenForWrite; nothing is touched on disk until a target actually emits.
-func New() *Store {
-	return &Store{streams: make(map[string]*targetStream)}
+// New returns an empty Store writing under root. Its stream registry populates
+// on OpenForWrite; nothing is touched on disk until a target actually emits.
+func New(root string) *Store {
+	return &Store{root: root, streams: make(map[string]*targetStream)}
 }
 
 // OpenForWrite prepares the log file for a fresh run of `targetID`. The
@@ -64,7 +64,7 @@ func New() *Store {
 // oldest archives are pruned, and a new current.log is created. Returns
 // a Writer the runner can pipe stdout / stderr through.
 func (s *Store) OpenForWrite(targetID, stack, service, target string) (*Writer, error) {
-	dir := targetDir(stack, service, target)
+	dir := s.targetDir(stack, service, target)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("mkdir log dir %s: %w", dir, err)
 	}
@@ -152,7 +152,7 @@ func (s *Store) CloseTarget(targetID string) {
 // ListRuns returns the timestamps of every archived run of a target, newest
 // first.
 func (s *Store) ListRuns(stack, service, target string) []string {
-	entries, err := os.ReadDir(targetDir(stack, service, target))
+	entries, err := os.ReadDir(s.targetDir(stack, service, target))
 	if err != nil {
 		return nil
 	}
@@ -170,17 +170,17 @@ func (s *Store) ListRuns(stack, service, target string) []string {
 
 // CurrentPath returns the path of the active current.log for a target.
 func (s *Store) CurrentPath(stack, service, target string) string {
-	return filepath.Join(targetDir(stack, service, target), "current.log")
+	return filepath.Join(s.targetDir(stack, service, target), "current.log")
 }
 
 // RunPath returns the path of an archived run.
 func (s *Store) RunPath(stack, service, target, runID string) string {
-	return filepath.Join(targetDir(stack, service, target), "run-"+runID+".log")
+	return filepath.Join(s.targetDir(stack, service, target), "run-"+runID+".log")
 }
 
 // targetDir is the directory holding one target's current and archived runs.
-func targetDir(stack, service, target string) string {
-	return filepath.Join(paths.LogsRoot(), stack, service, target)
+func (s *Store) targetDir(stack, service, target string) string {
+	return filepath.Join(s.root, stack, service, target)
 }
 
 // close terminates the stream: closes the file handle and every

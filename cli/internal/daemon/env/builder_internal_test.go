@@ -10,7 +10,7 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
-	"github.com/a-novel-kit/stack/cli/internal/shared/seamtest"
+	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil/fsutiltest"
 )
 
 // toMap collapses the sorted entry slice into a map keyed by variable name,
@@ -25,14 +25,15 @@ func toMap(entries []Entry) map[string]string {
 
 // TestBuilderForTarget exercises refs.go and allocator.go together against the
 // compose-env wiring rules a service depends on at runtime. Each case builds a
-// minimal in-memory discovery.Target, touching neither the filesystem nor
-// podman, and asserts on the resulting env map.
-//
-//nolint:paralleltest // swaps the package-level injectSecrets seam.
+// minimal in-memory discovery.Target, never touching podman, and asserts on the
+// resulting env map. A case with secrets writes its manifest and store to temp
+// directories.
 func TestBuilderForTarget(t *testing.T) {
-	// serviceRoot resolves only from a non-empty CmdDir, which gates the
-	// secrets injection.
-	cmdDir := filepath.Join("/tmp", "service-svc", "cmd", "rest")
+	t.Parallel()
+
+	// openAIManifest declares one secret, with the description its missing
+	// warning quotes.
+	const openAIManifest = "secrets:\n  - env: OPENAI_API_KEY\n    id: openai-key\n    description: used by generation\n"
 	// hostPostgres is the connection a host process gets to svc's postgres infra
 	// with the default credentials, PORT standing for the allocated port.
 	hostPostgres := map[string]string{
@@ -50,7 +51,11 @@ func TestBuilderForTarget(t *testing.T) {
 		services  []string
 		infraPort string // acquired for the target's service first, as infra-up does
 		target    discovery.Target
-		secrets   *secrets.Resolution // nil: injectSecrets must not be called
+		// manifest is the service's .a-novel/secrets.yaml, empty for none. A
+		// case with one runs its target from that service's cmd/ directory.
+		manifest string
+		// store holds the secrets set in the local store, nil for no store.
+		store map[string]string
 		// builds runs ForTarget this many times, 0 meaning once, so a result that
 		// depends on map order shows.
 		builds int
@@ -248,24 +253,17 @@ func TestBuilderForTarget(t *testing.T) {
 			// The repo's decrypted secrets ride into the spawned process's cmd.Env
 			// as plain entries.
 			name: "Success/InjectsRepoSecrets", services: []string{"svc"},
-			target:  discovery.Target{Name: "rest", Service: "svc", CmdDir: cmdDir},
-			secrets: &secrets.Resolution{Env: map[string]string{"OPENAI_API_KEY": "sk-test"}},
-			wantEnv: map[string]string{"OPENAI_API_KEY": "sk-test"},
-		},
-		{
-			// Without a CmdDir, serviceRoot is empty and the injection is skipped,
-			// so no relative path is read by accident.
-			name: "Success/NoCmdDirSkipsInjection", services: []string{"svc"},
-			target: discovery.Target{Name: "rest", Service: "svc"},
+			target:   discovery.Target{Name: "rest", Service: "svc"},
+			manifest: openAIManifest,
+			store:    map[string]string{"openai-key": "sk-test"},
+			wantEnv:  map[string]string{"OPENAI_API_KEY": "sk-test"},
 		},
 		{
 			// A declared-but-unset secret stays out of the env and raises one
 			// value-free warning line naming what to set.
 			name: "Success/MissingSecretWarns", services: []string{"svc"},
-			target: discovery.Target{Name: "rest", Service: "svc", CmdDir: cmdDir},
-			secrets: &secrets.Resolution{Missing: []secrets.Declaration{
-				{Env: "OPENAI_API_KEY", ID: "openai-key", Description: "used by generation"},
-			}},
+			target:   discovery.Target{Name: "rest", Service: "svc"},
+			manifest: openAIManifest,
 			check: func(t *testing.T, env map[string]string, warnings []string, _ *Allocator) {
 				t.Helper()
 				require.NotContains(t, env, "OPENAI_API_KEY")
@@ -279,19 +277,32 @@ func TestBuilderForTarget(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			seamtest.Swap(t, &injectSecrets, func(string) (secrets.Resolution, error) {
-				require.NotNil(t, testCase.secrets, "injectSecrets must not be called")
-				return *testCase.secrets, nil
-			})
+			t.Parallel()
+
+			target := testCase.target
+			target.Stack = "default"
+			secretsRoot := t.TempDir()
+			if testCase.store != nil {
+				st, err := secrets.Open(secretsRoot)
+				require.NoError(t, err)
+				for id, value := range testCase.store {
+					st.Set(id, value)
+				}
+				require.NoError(t, st.Save())
+			}
+			if testCase.manifest != "" {
+				serviceDir := t.TempDir()
+				fsutiltest.Write(t, serviceDir, map[string]string{secrets.MappingFile: testCase.manifest})
+				target.CmdDir = filepath.Join(serviceDir, "cmd", target.Name)
+			}
+
 			alloc := NewAllocator()
 			alloc.SetServices(testCase.services)
-			b := NewBuilder(alloc)
+			b := NewBuilder(alloc, secretsRoot)
 			if testCase.infraPort != "" {
 				_, err := alloc.Acquire(testCase.target.Service, testCase.infraPort, "svc-infra")
 				require.NoError(t, err)
 			}
-			target := testCase.target
-			target.Stack = "default"
 
 			for range max(testCase.builds, 1) {
 				entries, warnings, err := b.ForTarget(&target)
@@ -307,6 +318,23 @@ func TestBuilderForTarget(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestBuilderForTargetWithoutCmdDir pins that a target without a CmdDir skips
+// the secrets injection, so no manifest resolves against the daemon's working
+// directory. Not parallel: t.Chdir moves the working directory of the whole
+// process.
+func TestBuilderForTargetWithoutCmdDir(t *testing.T) {
+	cwd := t.TempDir()
+	fsutiltest.Write(t, cwd, map[string]string{secrets.MappingFile: "secrets:\n  - env: OPENAI_API_KEY\n    id: openai-key\n"})
+	t.Chdir(cwd)
+	alloc := NewAllocator()
+	alloc.SetServices([]string{"svc"})
+
+	_, warnings, err := NewBuilder(alloc, t.TempDir()).ForTarget(&discovery.Target{Name: "rest", Service: "svc", Stack: "default"})
+
+	require.NoError(t, err)
+	require.Empty(t, warnings, "the target read the manifest in the working directory")
 }
 
 // TestIsHostKind pins the suffix rule: a var is a host kind only with its

@@ -20,10 +20,10 @@ func TestListStacks(t *testing.T) {
 		{Service: "service-a", Reason: "compose service has no profile"},
 		{Service: "service-b", Path: "/w/app/service-b/cmd/rest", Reason: "cmd/rest/ has no compose service"},
 	}
-	srv := server.New("test", "", discovery.Stacks{
+	srv := server.New(server.Config{Version: "test", Stacks: discovery.Stacks{
 		{Name: "default", Path: "/w", Default: true, Errors: problems},
 		{Name: "alive", Path: "/tmp/here"},
-	}, nil, nil, nil, nil, nil)
+	}})
 
 	resp, err := srv.ListStacks(t.Context(), &anovelv1.ListStacksRequest{})
 	require.NoError(t, err)

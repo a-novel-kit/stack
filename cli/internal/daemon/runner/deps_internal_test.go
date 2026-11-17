@@ -25,7 +25,7 @@ import (
 // one-shot that fails while a target starts is recorded, so the next start
 // refuses with the restart hint instead of running it again.
 //
-//nolint:paralleltest // sub-tests set XDG_STATE_HOME and a stand-in podman or go on PATH with t.Setenv.
+//nolint:paralleltest // sub-tests put a stand-in podman or go on PATH with t.Setenv.
 func TestEnsureDepsReady(t *testing.T) {
 	migrations := &discovery.Target{
 		Name: "migrations", ComposeName: "service-x-migrations", Service: "service-x", Stack: "default",
@@ -98,7 +98,7 @@ func TestEnsureDepsReady(t *testing.T) {
 		}
 		alloc := env.NewAllocator()
 		alloc.SetServices([]string{"service-x"})
-		r := New(discovery.Stacks{{Name: "default", Default: true, Services: []*discovery.Service{svc}}}, alloc, env.NewBuilder(alloc), logs.New())
+		r := New(discovery.Stacks{{Name: "default", Default: true, Services: []*discovery.Service{svc}}}, alloc, env.NewBuilder(alloc, t.TempDir()), logs.New(t.TempDir()))
 
 		err := r.EnsureDepsReady(t.Context(), rest, svc, anovelv1.Mode_MODE_GO_EXEC)
 
@@ -109,7 +109,6 @@ func TestEnsureDepsReady(t *testing.T) {
 	})
 
 	t.Run("Error/FailedOneShotRecorded", func(t *testing.T) {
-		t.Setenv("XDG_STATE_HOME", t.TempDir())
 		// A stand-in go that records each run and fails keeps the toolchain out
 		// of the test.
 		dir := t.TempDir()
@@ -128,7 +127,7 @@ func TestEnsureDepsReady(t *testing.T) {
 		svc := &discovery.Service{Name: "service-x", Stack: "default", Targets: []*discovery.Target{migrations, rest}}
 		alloc := env.NewAllocator()
 		alloc.SetServices([]string{"service-x"})
-		r := New(discovery.Stacks{{Name: "default", Default: true, Services: []*discovery.Service{svc}}}, alloc, env.NewBuilder(alloc), logs.New())
+		r := New(discovery.Stacks{{Name: "default", Default: true, Services: []*discovery.Service{svc}}}, alloc, env.NewBuilder(alloc, t.TempDir()), logs.New(t.TempDir()))
 		// The infra is up and no one-shot has run, as after a restart of the daemon.
 		sess := newInfraSession("default", "service-x")
 		sess.Up = true

@@ -16,7 +16,6 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/daemon/runner"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/server"
 	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil/fsutiltest"
-	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
 // rebindingListener wraps the daemon's listener. Its Close binds a fresh
@@ -78,7 +77,7 @@ func TestServe(t *testing.T) {
 
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			srv := server.New("test", path, nil, nil, nil, nil, cancel, ctx.Done())
+			srv := server.New(server.Config{Version: "test", SocketPath: path, Stop: cancel, Stopping: ctx.Done()})
 			serveErr := make(chan error, 1)
 			go func() { serveErr <- serve(ctx, wrapped, srv) }()
 
@@ -127,9 +126,10 @@ func TestListen(t *testing.T) {
 
 // TestReplayCheckpoint pins that startup consumes the reinstall checkpoint
 // whatever it holds. An unusable checkpoint left on disk refuses every later
-// install with "checkpoint already present". Not parallel: t.Setenv points
-// XDG_STATE_HOME, where the checkpoint lives, at a temp dir.
+// install with "checkpoint already present".
 func TestReplayCheckpoint(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name string
 		// content is the checkpoint file, "" for none.
@@ -139,19 +139,24 @@ func TestReplayCheckpoint(t *testing.T) {
 		{name: "Success/Valid", content: fmt.Sprintf(`{"schema": %d, "go_exec": []}`, reinstall.SchemaVersion)},
 		{name: "Error/Malformed", content: "{"},
 		{name: "Error/OtherSchema", content: fmt.Sprintf(`{"schema": %d}`, reinstall.SchemaVersion+1)},
+		// A target the new daemon no longer knows fails its relaunch, and startup
+		// goes on.
+		{name: "Error/RelaunchFails", content: fmt.Sprintf(`{"schema": %d, "go_exec": [{"target_id": "default/svc/gone"}]}`, reinstall.SchemaVersion)},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			t.Parallel()
+
+			dir := t.TempDir()
+			checkpoint := filepath.Join(dir, "reinstall.json")
 			if testCase.content != "" {
-				checkpoint := paths.ReinstallCheckpoint()
-				fsutiltest.Write(t, filepath.Dir(checkpoint), map[string]string{filepath.Base(checkpoint): testCase.content})
+				fsutiltest.Write(t, dir, map[string]string{"reinstall.json": testCase.content})
 			}
 
-			replayCheckpoint(t.Context(), runner.New(nil, nil, nil, logs.New()))
+			replayCheckpoint(t.Context(), runner.New(nil, nil, nil, logs.New(t.TempDir())), checkpoint)
 
-			require.False(t, reinstall.Exists(), "the checkpoint is still on disk after startup")
+			require.False(t, reinstall.Exists(checkpoint), "the checkpoint is still on disk after startup")
 		})
 	}
 }

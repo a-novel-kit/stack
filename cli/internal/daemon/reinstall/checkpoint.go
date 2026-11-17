@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil"
-	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
 // SchemaVersion is bumped when Checkpoint's shape changes. A daemon reading a
@@ -37,13 +36,12 @@ type GoExecCheckpoint struct {
 	Env []string `json:"env"`
 }
 
-// Write serializes cp to paths.ReinstallCheckpoint() atomically and synced to
-// disk, so a crash never leaves a corrupt checkpoint.
+// Write serializes cp to the checkpoint at path atomically and synced to disk,
+// so a crash never leaves a corrupt checkpoint.
 // It stamps the schema and timestamp itself.
-func Write(cp Checkpoint) error {
+func Write(path string, cp Checkpoint) error {
 	cp.Schema = SchemaVersion
 	cp.WrittenAt = time.Now()
-	path := paths.ReinstallCheckpoint()
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
@@ -58,12 +56,11 @@ func Write(cp Checkpoint) error {
 	return nil
 }
 
-// Read returns the checkpoint at paths.ReinstallCheckpoint(), or (nil, nil)
-// when none exists, the common case at a fresh start. A malformed file or an
-// unknown schema is an error. The daemon logs it and discards the checkpoint,
-// so the handoff degrades to "containers survive, go-exec targets are lost".
-func Read() (*Checkpoint, error) {
-	path := paths.ReinstallCheckpoint()
+// Read returns the checkpoint at path, or (nil, nil) when none exists, the
+// common case at a fresh start. A malformed file or an unknown schema is an
+// error. The daemon logs it and discards the checkpoint, so the handoff
+// degrades to "containers survive, go-exec targets are lost".
+func Read(path string) (*Checkpoint, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -81,27 +78,27 @@ func Read() (*Checkpoint, error) {
 	return &cp, nil
 }
 
-// Delete removes the checkpoint. Idempotent.
-func Delete() error {
-	if err := os.Remove(paths.ReinstallCheckpoint()); err != nil && !errors.Is(err, fs.ErrNotExist) {
+// Delete removes the checkpoint at path. Idempotent.
+func Delete(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	return nil
 }
 
-// Exists reports whether the checkpoint file is present. Status uses it to
+// Exists reports whether the checkpoint at path is present. Status uses it to
 // surface "reinstall pending".
-func Exists() bool {
-	_, err := os.Stat(paths.ReinstallCheckpoint())
+func Exists(path string) bool {
+	_, err := os.Stat(path)
 	return err == nil
 }
 
 // EnsureSinglePending guards against a double checkpoint. A checkpoint already
-// present when PrepareReinstall arrives yields an error and leaves the file
-// untouched, and the caller resolves it, usually by aborting the second
+// present at path when PrepareReinstall arrives yields an error and leaves the
+// file untouched, and the caller resolves it, usually by aborting the second
 // install.
-func EnsureSinglePending() error {
-	if Exists() {
+func EnsureSinglePending(path string) error {
+	if Exists(path) {
 		return errors.New("reinstall checkpoint already present: another install in flight or a previous one didn't complete")
 	}
 	return nil

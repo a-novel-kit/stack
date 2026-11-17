@@ -32,13 +32,14 @@ import (
 // maxProcs above zero caps GOMAXPROCS for the spawned process, so concurrent
 // `go test` targets share the machine's cores. keep leaves the target's compose
 // env up after the run; the next run's preflight adopts it, schema included.
-func Job(t detect.Target, timeout time.Duration, maxProcs int, keep bool) jobs.Job {
+// The repo's declared secrets come from the store under secretsRoot.
+func Job(t detect.Target, timeout time.Duration, maxProcs int, keep bool, secretsRoot string) jobs.Job {
 	return jobs.Job{
 		Name:   t.Name,
 		Group:  string(t.Kind),
 		Detail: t.RelDir,
 		Run: func(ctx context.Context, out io.Writer) (string, error) {
-			return "", run(ctx, t, timeout, maxProcs, keep, out)
+			return "", run(ctx, t, timeout, maxProcs, keep, secretsRoot, out)
 		},
 	}
 }
@@ -46,9 +47,10 @@ func Job(t detect.Target, timeout time.Duration, maxProcs int, keep bool) jobs.J
 // PrepareEnv builds the process environment for a target. It starts from
 // os.Environ(). A target with a compose env adds its allocated host ports, the
 // URLs derived from them and the local test credentials. The repo's declared
-// secrets come last, so a provisioned value wins over any default. Progress
-// goes to out, and secret values never do.
-func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, error) {
+// secrets, decrypted from the store under secretsRoot, come last, so a
+// provisioned value wins over any default. Progress goes to out, and secret
+// values never do.
+func PrepareEnv(ctx context.Context, t detect.Target, secretsRoot string, out io.Writer) ([]string, error) {
 	runEnv := os.Environ()
 	if t.Env != nil {
 		added, err := composeEnv(ctx, t.Env, runEnv)
@@ -67,7 +69,7 @@ func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, 
 
 	// An unset secret only raises a value-free warning, so tests that do not
 	// need it still run.
-	res, err := secrets.InjectForRepo(root)
+	res, err := secrets.InjectForRepo(root, secretsRoot)
 	if err != nil {
 		return nil, fmt.Errorf("secrets injection failed: %w", err)
 	}
@@ -128,7 +130,7 @@ func formatEnvBlock(kv []string) string {
 
 // run executes t.Cmd with t.Args in t.Dir, writing the command line, the env
 // assembly, compose output and the command's own output to out.
-func run(ctx context.Context, t detect.Target, timeout time.Duration, maxProcs int, keep bool, out io.Writer) error {
+func run(ctx context.Context, t detect.Target, timeout time.Duration, maxProcs int, keep bool, secretsRoot string, out io.Writer) error {
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
@@ -136,7 +138,7 @@ func run(ctx context.Context, t detect.Target, timeout time.Duration, maxProcs i
 	}
 
 	_, _ = fmt.Fprintf(out, "$ %s %s\n", t.Cmd, strings.Join(t.Args, " "))
-	runEnv, err := PrepareEnv(ctx, t, out)
+	runEnv, err := PrepareEnv(ctx, t, secretsRoot, out)
 	if err != nil {
 		return err
 	}
