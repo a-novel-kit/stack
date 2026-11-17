@@ -1,7 +1,7 @@
 name: release
 
-# Releases are cut from the GitHub UI (Actions ▸ release ▸ Run) or
-# by the release train, through workflow_call's identical inputs. `plan`
+# Releases are cut from the GitHub UI (Actions > release > Run) or by the
+# release train, which dispatches this workflow. `plan`
 # rehearses with no credential; `cut` runs in the protected `release` environment,
 # the "who can publish" gate whose key only it reads, and pushes the version
 # commit, the tags and the GitHub Release as the release App.
@@ -13,18 +13,17 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Bump & report only — no commit, tag, push, or release
-        required: false
-        type: boolean
-        default: false
-  workflow_call:
-    inputs:
-      dry_run:
+        description: "Bump and report only: no commit, tag, push or release"
         required: false
         type: boolean
         default: false
 
 run-name: "🚀 release ${{ github.ref_name }}${{ inputs.dry_run && ' (dry-run)' || '' }}"
+
+# The a-novel CLI release-core runs in plan and cut.
+env:
+  # renovate: datasource=go depName=github.com/a-novel-kit/stack/cli
+  cli_version: "1.42.5"
 
 # No concurrency lock, on purpose: two simultaneous releases compute the same
 # tag, the first push wins, and the second fails on the atomic push before
@@ -41,8 +40,7 @@ jobs:
       - id: core
         uses: a-novel-kit/workflows/publish-actions/release-core@v1.87.0
         with:
-          # renovate: datasource=go depName=github.com/a-novel-kit/stack/cli
-          cli_version: "1.42.5"
+          cli_version: ${{ env.cli_version }}
           dry_run: "true"
 
   # GitHub's release-notes endpoint wants contents write although it stores nothing, so this job
@@ -73,8 +71,7 @@ jobs:
     steps:
       - uses: a-novel-kit/workflows/publish-actions/release-core@v1.87.0
         with:
-          # renovate: datasource=go depName=github.com/a-novel-kit/stack/cli
-          cli_version: "1.42.5"
+          cli_version: ${{ env.cli_version }}
           client_id: ${{ vars.RELEASE_BOT_CLIENT_ID }}
           app_private_key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
 
@@ -92,4 +89,3 @@ jobs:
         with:
           client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
           app_private_key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
-          project_id: ${{ github.repository_owner == 'a-novel' && 'PVT_kwDOB9MxdM4BMh8r' || 'PVT_kwDOCy-nAM4BbtKH' }}

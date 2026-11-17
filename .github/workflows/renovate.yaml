@@ -20,13 +20,16 @@ jobs:
     steps:
       - uses: a-novel-kit/workflows/generic-actions/renovate@v1.87.0
         with:
-          repository_config: "true"
-          # The post-upgrade commands of renovate.json, and no other. The cli/ tool modfiles regenerate
-          # their own sum after a bump: `go get` only ever adds to a .sum, so the delete is what keeps
-          # stale hashes from accumulating. `go mod tidy` is deliberately not used on them: it prunes
-          # requires, which silently drops linters.
+          # The post-upgrade commands of the go-tools preset, which runs them inside cli/, and of
+          # renovate.json's buf and proto rules, and no other. A tool modfile regenerates its own sum
+          # after a bump: `go get` only ever adds to a .sum, so the delete is what keeps stale hashes
+          # from accumulating. `go mod tidy` is deliberately not used on them: it prunes requires,
+          # which silently drops linters.
           allowed_commands: |
             [
+              "^rm -f [a-z-]+\\.sum$",
+              "^go get -modfile=[a-z-]+\\.mod -tool [a-z0-9./-]+$",
+              "^go tool -modfile=[a-z-]+\\.mod [a-z./ -]+$",
               "^rm -f cli/[a-z0-9-]+\\.sum$",
               "^go -C cli get -modfile=[a-z0-9-]+\\.mod -tool [a-z0-9./-]+$",
               "^rm -rf cli/proto/gen$",
