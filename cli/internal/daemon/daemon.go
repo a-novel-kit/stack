@@ -40,7 +40,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("parse %s: %w", stacks.EnvVar, err)
 	}
-	ln, err := listen(socketPath)
+	ln, err := listen(ctx, socketPath)
 	if err != nil {
 		return err
 	}
@@ -104,13 +104,13 @@ func Run(ctx context.Context, opts Options) error {
 // bound: both then run, one of them unreachable. The lock ends with the bind,
 // so a daemon still draining its streams after closing its listener never holds
 // up the next one.
-func listen(socketPath string) (net.Listener, error) {
+func listen(ctx context.Context, socketPath string) (net.Listener, error) {
 	// The parent is normally an existing /run/user/<uid> or the /tmp fallback;
 	// this only creates one when XDG_RUNTIME_DIR points somewhere unusual.
 	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
 		return nil, fmt.Errorf("mkdir socket parent: %w", err)
 	}
-	unlock, err := lockFile(socketPath + ".lock")
+	unlock, err := paths.Lock(socketPath+".lock", true)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ func listen(socketPath string) (net.Listener, error) {
 	}
 	// A responsive listener means another daemon already owns this socket.
 	// Reporting it here names the socket and the command that frees it.
-	if isLive(socketPath) {
+	if isLive(ctx, socketPath) {
 		return nil, fmt.Errorf("daemon already running on %s: use `a-novel core kill` to stop it first", socketPath)
 	}
 	if _, err := os.Stat(socketPath); err == nil {
@@ -129,7 +129,7 @@ func listen(socketPath string) (net.Listener, error) {
 			return nil, fmt.Errorf("remove stale socket %s: %w", socketPath, err)
 		}
 	}
-	ln, err := net.Listen("unix", socketPath)
+	ln, err := new(net.ListenConfig).Listen(ctx, "unix", socketPath)
 	if err != nil {
 		return nil, fmt.Errorf("listen on %s: %w", socketPath, err)
 	}
@@ -201,38 +201,11 @@ func serve(ctx context.Context, ln net.Listener, srv *server.Server) error {
 	return nil
 }
 
-// lockFile takes an exclusive flock on the file at path, waiting while another
-// process holds it, and returns its release. The kernel drops the lock when the
-// process ends, however it ends.
-//
-// The file sits beside the socket, in /tmp on the fallback path, so it opens
-// without following a symlink and must belong to this user: a lock file another
-// user planted could otherwise be held forever.
-func lockFile(path string) (func(), error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDONLY|syscall.O_NOFOLLOW, 0o600)
-	if err != nil {
-		return nil, fmt.Errorf("open lock %s: %w", path, err)
-	}
-	info, err := f.Stat()
-	if err != nil {
-		_ = f.Close()
-		return nil, fmt.Errorf("stat lock %s: %w", path, err)
-	}
-	if !paths.OwnedByUser(info) {
-		_ = f.Close()
-		return nil, fmt.Errorf("lock %s: %w", path, paths.ErrForeignOwner)
-	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		_ = f.Close()
-		return nil, fmt.Errorf("lock %s: %w", path, err)
-	}
-	return func() { _ = f.Close() }, nil
-}
-
 // isLive reports whether the socket at path is bound by a responsive daemon. A
 // plain unix dial is enough to tell a stale socket file from a live listener.
-func isLive(path string) bool {
-	conn, err := net.DialTimeout("unix", path, 200*time.Millisecond)
+func isLive(ctx context.Context, path string) bool {
+	dialer := net.Dialer{Timeout: 200 * time.Millisecond}
+	conn, err := dialer.DialContext(ctx, "unix", path)
 	if err != nil {
 		return false
 	}

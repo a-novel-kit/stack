@@ -3,10 +3,9 @@ package env
 import (
 	"strconv"
 	"strings"
-)
 
-// hostLocalhost is the hostname synthesized for every *_HOST derivation.
-const hostLocalhost = "localhost"
+	"github.com/a-novel-kit/stack/cli/internal/shared/hostenv"
+)
 
 // ServicePrefix is the uppercase, underscore-separated form of a service name
 // used in cross-service env references: `service-json-keys` becomes
@@ -46,18 +45,7 @@ func derivedFor(localPortVar string, port int) map[string]string {
 	base := strings.TrimSuffix(localPortVar, "_PORT")
 	return map[string]string{
 		localPortVar:   strconv.Itoa(port),
-		base + "_HOST": hostLocalhost,
-		base + "_URL":  urlFor(base, port),
+		base + "_HOST": hostenv.Localhost,
+		base + "_URL":  hostenv.URL(base, port),
 	}
-}
-
-// urlFor renders the URL string for a "<base>_PORT" allocation. gRPC gets the
-// schemeless `localhost:port` form that grpc-go clients take as-is; everything
-// else gets `http://`.
-func urlFor(base string, port int) string {
-	hostPort := hostLocalhost + ":" + strconv.Itoa(port)
-	if base == "GRPC" {
-		return hostPort
-	}
-	return "http://" + hostPort
 }

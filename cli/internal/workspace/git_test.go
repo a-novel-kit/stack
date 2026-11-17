@@ -59,7 +59,7 @@ func TestOngoingWork(t *testing.T) {
 
 			local, _ := workspacetest.InitSync(t)
 			testCase.setup(t, local)
-			require.Equal(t, testCase.want, workspace.OngoingWork(local))
+			require.Equal(t, testCase.want, workspace.OngoingWork(t.Context(), local))
 		})
 	}
 }
@@ -68,18 +68,18 @@ func TestUnpushedCommits(t *testing.T) {
 	t.Parallel()
 
 	local, _ := workspacetest.InitSync(t)
-	require.Equal(t, 0, workspace.UnpushedCommits(local), "fresh clone")
+	require.Equal(t, 0, workspace.UnpushedCommits(t.Context(), local), "fresh clone")
 
 	workspacetest.Commit(t, local, "c.txt", "c0\n")
-	require.Equal(t, 1, workspace.UnpushedCommits(local), "after one local commit")
+	require.Equal(t, 1, workspace.UnpushedCommits(t.Context(), local), "after one local commit")
 
 	workspacetest.Git(t, local, "push", "--quiet")
-	require.Equal(t, 0, workspace.UnpushedCommits(local), "after push")
+	require.Equal(t, 0, workspace.UnpushedCommits(t.Context(), local), "after push")
 
 	// With no upstream there is no remote to have lost the commit to.
 	workspacetest.Git(t, local, "checkout", "--quiet", "-b", "no-upstream")
 	workspacetest.Commit(t, local, "d.txt", "d0\n")
-	require.Equal(t, 0, workspace.UnpushedCommits(local), "no upstream")
+	require.Equal(t, 0, workspace.UnpushedCommits(t.Context(), local), "no upstream")
 }
 
 func TestToplevel(t *testing.T) {
@@ -110,7 +110,7 @@ func TestToplevel(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := workspace.Toplevel(testCase.dir)
+			got, err := workspace.Toplevel(t.Context(), testCase.dir)
 			if testCase.wantErr {
 				require.Error(t, err)
 				require.Empty(t, got)

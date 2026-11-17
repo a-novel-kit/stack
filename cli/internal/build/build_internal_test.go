@@ -90,7 +90,7 @@ func TestComposeEnv(t *testing.T) {
 			t.Parallel()
 
 			env := &detect.ComposeEnv{Ports: []string{"POSTGRES_PORT", "REST_PORT"}, Refs: testCase.refs}
-			added, err := composeEnv(env, testCase.base)
+			added, err := composeEnv(t.Context(), env, testCase.base)
 			require.NoError(t, err)
 			vars := map[string]string{}
 			for _, kv := range added {
@@ -187,7 +187,7 @@ func TestAllocPorts(t *testing.T) {
 	for i := range names {
 		names[i] = fmt.Sprintf("PORT_%d", i)
 	}
-	entries, err := allocPorts(names)
+	entries, err := allocPorts(t.Context(), names)
 	require.NoError(t, err)
 	seen := map[string]string{}
 	for i, entry := range entries {

@@ -2,6 +2,7 @@ package setup
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -27,8 +28,8 @@ type Options struct {
 // step-by-step progress to w. The prompter confirms cloning a missing default
 // stack. A nil prompter makes the run non-interactive, and that stack is then
 // skipped.
-func Run(opts Options, w io.Writer, prompter Prompter) error {
-	if err := checkEnvironment(w); err != nil {
+func Run(ctx context.Context, opts Options, w io.Writer, prompter Prompter) error {
+	if err := checkEnvironment(ctx, w); err != nil {
 		return err
 	}
 	if err := ensureStateDirs(w); err != nil {
@@ -40,7 +41,7 @@ func Run(opts Options, w io.Writer, prompter Prompter) error {
 	}
 	_, _ = fmt.Fprintf(w, "▸ Bootstrapping %d stack(s)...\n", len(stk))
 	for _, s := range stk {
-		status, detail := bootstrapStack(s, prompter)
+		status, detail := bootstrapStack(ctx, s, prompter)
 		_, _ = fmt.Fprintf(w, "  %s %s (%s)\n", statusGlyph(status), s.Name, detail)
 	}
 	rcPath, rcEdited, err := manageShellRC(w, opts, stk)
@@ -53,9 +54,9 @@ func Run(opts Options, w io.Writer, prompter Prompter) error {
 
 // checkEnvironment checks the host tools. GitHub SSH only matters when a stack
 // needs cloning, so its failure is a warning.
-func checkEnvironment(w io.Writer) error {
+func checkEnvironment(ctx context.Context, w io.Writer) error {
 	_, _ = fmt.Fprintln(w, "▸ Checking environment...")
-	if err := checkPodman(); err != nil {
+	if err := checkPodman(ctx); err != nil {
 		return fmt.Errorf("podman check: %w", err)
 	}
 	_, _ = fmt.Fprintln(w, "  ✓ podman")
@@ -63,7 +64,7 @@ func checkEnvironment(w io.Writer) error {
 		return fmt.Errorf("git check: %w", err)
 	}
 	_, _ = fmt.Fprintln(w, "  ✓ git")
-	if err := checkGitHubSSH(); err != nil {
+	if err := checkGitHubSSH(ctx); err != nil {
 		_, _ = fmt.Fprintln(w, "  ⚠ GitHub SSH ("+err.Error()+")")
 	} else {
 		_, _ = fmt.Fprintln(w, "  ✓ GitHub SSH")

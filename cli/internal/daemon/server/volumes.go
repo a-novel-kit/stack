@@ -12,12 +12,12 @@ import (
 
 // ListVolumes returns one read-only Volume row per compose-declared volume on
 // the service, with its size and backup count.
-func (s *Server) ListVolumes(_ context.Context, req *anovelv1.ListVolumesRequest) (*anovelv1.ListVolumesResponse, error) {
+func (s *Server) ListVolumes(ctx context.Context, req *anovelv1.ListVolumesRequest) (*anovelv1.ListVolumesResponse, error) {
 	svc, err := s.findService(req.GetStack(), req.GetService())
 	if err != nil {
 		return nil, err
 	}
-	listed := volumes.List(svc)
+	listed := volumes.List(ctx, svc)
 	out := &anovelv1.ListVolumesResponse{Volumes: make([]*anovelv1.Volume, 0, len(listed))}
 	for _, v := range listed {
 		out.Volumes = append(out.Volumes, volumeToProto(v))
@@ -35,7 +35,7 @@ func (s *Server) BackupVolume(ctx context.Context, req *anovelv1.BackupVolumeReq
 	if err := s.ensureServiceDown(ctx, svc, req.GetForce(), "backup"); err != nil {
 		return nil, err
 	}
-	paths, err := volumes.Backup(svc, req.GetTag())
+	paths, err := volumes.Backup(ctx, svc, req.GetTag())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -52,7 +52,7 @@ func (s *Server) RestoreVolume(ctx context.Context, req *anovelv1.RestoreVolumeR
 	if err := s.ensureServiceDown(ctx, svc, req.GetForce(), "restore"); err != nil {
 		return nil, err
 	}
-	restored, err := volumes.Restore(svc, req.GetFrom())
+	restored, err := volumes.Restore(ctx, svc, req.GetFrom())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -69,7 +69,7 @@ func (s *Server) ClearVolume(ctx context.Context, req *anovelv1.ClearVolumeReque
 	if err := s.ensureServiceDown(ctx, svc, req.GetForce(), "clear"); err != nil {
 		return nil, err
 	}
-	cleared, err := volumes.Clear(svc, req.GetNoBackup())
+	cleared, err := volumes.Clear(ctx, svc, req.GetNoBackup())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}

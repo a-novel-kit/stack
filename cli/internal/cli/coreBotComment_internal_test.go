@@ -174,7 +174,7 @@ func TestRunSucceeded(t *testing.T) {
 				return reply + "\n", nil
 			})
 
-			got, err := runSucceeded("a-novel-kit/stack", 42)
+			got, err := runSucceeded(t.Context(), "a-novel-kit/stack", 42)
 			if testCase.wantErr {
 				require.Error(t, err)
 			} else {

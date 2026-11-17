@@ -2,6 +2,7 @@ package detect
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -166,20 +167,20 @@ func skipDir(absRoot, path, name string, ignored map[string]struct{}) bool {
 
 // Builds walks root and returns every build target found, sorted by kind, then
 // directory, then name.
-func Builds(root string) ([]Target, error) {
-	return walk(root, func(dir, rel string) []Target {
+func Builds(ctx context.Context, root string) ([]Target, error) {
+	return walk(ctx, root, func(dir, rel string) []Target {
 		return slices.Concat(detectGo(dir, rel), detectPnpm(dir, rel), detectPodman(dir, rel))
 	})
 }
 
 // walk calls visit for every directory under root the scan keeps, and returns
 // the targets it emits in presentation order.
-func walk(root string, visit func(dir, rel string) []Target) ([]Target, error) {
+func walk(ctx context.Context, root string, visit func(dir, rel string) []Target) ([]Target, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
 	}
-	ignored := gitIgnoredDirs(absRoot)
+	ignored := gitIgnoredDirs(ctx, absRoot)
 	var targets []Target
 	err = filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {

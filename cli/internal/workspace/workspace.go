@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -39,6 +40,9 @@ func (r Repo) FullName() string { return r.Org + "/" + r.Name }
 // Listed reports whether set names r, by its full or its bare name. Repo
 // names are unique across both orgs, so a bare name is unambiguous.
 func (r Repo) Listed(set map[string]bool) bool { return set[r.FullName()] || set[r.Name] }
+
+// InOrgs reports whether one of the two A-Novel organizations owns r.
+func (r Repo) InOrgs() bool { return r.Org == OrgAnovel || r.Org == OrgAnovelKit }
 
 // SSHURL is the canonical clone URL.
 func (r Repo) SSHURL() string { return "git@github.com:" + r.FullName() + ".git" }
@@ -102,9 +106,9 @@ type Checkout struct {
 // Checkouts lists the workspace checkouts under root: the stack
 // repository at root, resolved from its origin, then each whitelisted
 // repository cloned under app/ or kit/.
-func Checkouts(root string) ([]Checkout, error) {
+func Checkouts(ctx context.Context, root string) ([]Checkout, error) {
 	var out []Checkout
-	self, selfErr := Origin(root)
+	self, selfErr := Origin(ctx, root)
 	if selfErr == nil {
 		out = append(out, Checkout{Repo: self, Path: root})
 	}

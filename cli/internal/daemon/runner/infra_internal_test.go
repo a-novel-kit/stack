@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -14,6 +15,7 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/env"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/logs"
+	"github.com/a-novel-kit/stack/cli/internal/shared/podman"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -228,48 +230,69 @@ func TestRecordOneShot(t *testing.T) {
 	}
 }
 
-// TestInfraHealthy pins that an empty container query is ready only for a
-// service that declares no infra. A compose version that swallows the labels,
-// or containers that have not appeared yet, also yield an empty query, and the
-// dependents must not run against a database still starting.
-func TestInfraHealthy(t *testing.T) {
+// TestInfraReady pins that an empty container query is not ready: a compose
+// version that swallows the labels, or containers that have not appeared yet,
+// also yield one, and the dependents must not run against a database still
+// starting.
+func TestInfraReady(t *testing.T) {
 	t.Parallel()
 
-	running := infraContainerState{phase: pmPhaseRunning, health: pmHealthHealthy}
-	// A container with no healthcheck reports health "-", which is healthy enough to run.
-	noHealthcheck := infraContainerState{phase: pmPhaseRunning, health: "-"}
-	oneShotDone := infraContainerState{phase: pmPhaseExited, exitCode: 0}
-	starting := infraContainerState{phase: "created", health: "starting"}
-	oneShotFailed := infraContainerState{phase: pmPhaseExited, exitCode: 1}
-	inspectFailed := infraContainerState{inspectErr: true}
+	container := func(state string) podman.Container {
+		var c podman.Container
+		if err := json.Unmarshal([]byte(inspectState("cid", state)), &c); err != nil {
+			panic(err)
+		}
+		return c
+	}
+	running := container("running|healthy|0")
+	noHealthcheck := container("running|-|0")
+	oneShotDone := container("exited|-|0")
+	starting := container("created|starting|0")
+	oneShotFailed := container("exited|-|1")
 
 	testCases := []struct {
-		name          string
-		declaredInfra int
-		states        []infraContainerState
+		name       string
+		containers []podman.Container
 
 		want bool
 	}{
-		{name: "Success/NoInfraDeclared", want: true},
-		{name: "Success/NoInfraDeclaredIgnoresStrayContainers", states: []infraContainerState{starting}, want: true},
-		{name: "Success/Running", declaredInfra: 1, states: []infraContainerState{running}, want: true},
-		{name: "Success/NoHealthcheck", declaredInfra: 1, states: []infraContainerState{noHealthcheck}, want: true},
-		{name: "Success/OneShotDone", declaredInfra: 1, states: []infraContainerState{oneShotDone}, want: true},
-		{name: "Success/RunningAndOneShotDone", declaredInfra: 2, states: []infraContainerState{running, oneShotDone}, want: true},
+		{name: "Success/Running", containers: []podman.Container{running}, want: true},
+		{name: "Success/NoHealthcheck", containers: []podman.Container{noHealthcheck}, want: true},
+		{name: "Success/OneShotDone", containers: []podman.Container{oneShotDone}, want: true},
+		{name: "Success/RunningAndOneShotDone", containers: []podman.Container{running, oneShotDone}, want: true},
 
-		// Infra is declared but no container resolved yet, so keep waiting.
-		{name: "Error/NoneResolved", declaredInfra: 1},
-		{name: "Error/Starting", declaredInfra: 1, states: []infraContainerState{starting}},
-		{name: "Error/OneShotFailed", declaredInfra: 1, states: []infraContainerState{oneShotFailed}},
-		{name: "Error/RunningAndStarting", declaredInfra: 2, states: []infraContainerState{running, starting}},
-		{name: "Error/InspectFailed", declaredInfra: 1, states: []infraContainerState{inspectFailed}},
+		// No container resolved yet, so keep waiting.
+		{name: "Error/NoneResolved"},
+		{name: "Error/Starting", containers: []podman.Container{starting}},
+		{name: "Error/OneShotFailed", containers: []podman.Container{oneShotFailed}},
+		{name: "Error/RunningAndStarting", containers: []podman.Container{running, starting}},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.Equal(t, testCase.want, infraHealthy(testCase.declaredInfra, testCase.states))
+			require.Equal(t, testCase.want, infraReady(testCase.containers))
 		})
 	}
+}
+
+// TestWaitInfraHealthy pins the waits around infraReady: a service that
+// declares no infra is ready at once, and an inspect that keeps failing reads
+// as not ready until the timeout.
+//
+//nolint:paralleltest // stubOnPath puts a stand-in podman on PATH with t.Setenv.
+func TestWaitInfraHealthy(t *testing.T) {
+	t.Run("Success/NoInfraDeclared", func(t *testing.T) {
+		require.NoError(t, (&Runner{}).waitInfraHealthy(t.Context(), &discovery.Service{}, time.Millisecond))
+	})
+
+	t.Run("Error/InspectFailed", func(t *testing.T) {
+		// The label query finds a container that every inspect then misses.
+		stubOnPath(t, "podman", "#!/bin/sh\ncase \"$1\" in\nps) echo cid-gone ;;\n*) echo '[]'; exit 125 ;;\nesac\n")
+
+		svc := &discovery.Service{Name: "svc", Stack: "default", Infra: []*discovery.Infra{{Name: "postgres"}}}
+		err := (&Runner{}).waitInfraHealthy(t.Context(), svc, 50*time.Millisecond)
+		require.ErrorContains(t, err, "infra not healthy within")
+	})
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/daemon"
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
+	"github.com/a-novel-kit/stack/cli/internal/shared/poll"
 	"github.com/a-novel-kit/stack/cli/internal/version"
 )
 
@@ -53,17 +54,18 @@ func startDaemon(ctx context.Context, foreground bool) error {
 	if foreground {
 		return daemon.Run(ctx, daemon.Options{Version: version.String()})
 	}
-	return startDetached()
+	return startDetached(ctx)
 }
 
 // startDetached re-execs the current binary with the hidden daemon
 // subcommand, in its own session so it survives this process's exit, and waits
 // for it to answer. Callers check that no daemon runs already.
-func startDetached() error {
+func startDetached(ctx context.Context) error {
 	bin, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("locate own binary: %w", err)
 	}
+	//nolint:noctx // the daemon outlives this command, so no context may end it.
 	c := exec.Command(bin, commandCore, daemonInternalCmd)
 	// Detach: new process group, no terminal.
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
@@ -83,7 +85,7 @@ func startDetached() error {
 		return fmt.Errorf("spawn daemon: %w", err)
 	}
 	rpcClient := rpc.New("")
-	if !daemonReady(rpcClient, daemonStartTimeout) {
+	if !daemonReady(ctx, rpcClient, daemonStartTimeout) {
 		return fmt.Errorf("daemon did not become ready within %s%s", daemonStartTimeout, daemonFailureDetail(logErr, logOffset))
 	}
 	fmt.Printf("a-novel daemon started on %s (pid %d)\n", rpcClient.SocketPath(), c.Process.Pid)
@@ -96,18 +98,14 @@ func startDetached() error {
 const daemonStartTimeout = 5 * time.Second
 
 // daemonReady polls the daemon until it answers a ping or timeout elapses.
-func daemonReady(c *rpc.Client, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		_, err := c.Ping(ctx)
-		cancel()
-		if err == nil {
-			return true
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	return false
+func daemonReady(ctx context.Context, c *rpc.Client, timeout time.Duration) bool {
+	err := poll.Until(ctx, 50*time.Millisecond, timeout, func(ctx context.Context) (bool, error) {
+		pingCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		defer cancel()
+		_, err := c.Ping(pingCtx)
+		return err == nil, nil
+	})
+	return err == nil
 }
 
 // openDaemonLog opens the detached daemon's log for appending, creating its

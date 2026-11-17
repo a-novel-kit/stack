@@ -86,7 +86,7 @@ func TestBackupOne(t *testing.T) {
 	// Fails whether or not podman is installed: the export either cannot start or
 	// rejects the unknown volume. Either way backupOne leaves no file behind, so
 	// `restore` only ever offers a complete archive.
-	require.Error(t, backupOne("a-novel-test-volume-that-does-not-exist", dest))
+	require.Error(t, backupOne(t.Context(), "a-novel-test-volume-that-does-not-exist", dest))
 	_, err := os.Stat(dest)
 	require.ErrorIs(t, err, fs.ErrNotExist)
 }

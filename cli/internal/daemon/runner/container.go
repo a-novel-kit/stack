@@ -11,6 +11,7 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/logs"
+	"github.com/a-novel-kit/stack/cli/internal/shared/podman"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -39,12 +40,12 @@ func (r *Runner) startContainer(ctx context.Context, inst *Instance, t *discover
 		return nil, err
 	}
 
-	if err := podman(ctx, env, "compose",
+	if err := podman.Run(ctx, env, "compose",
 		"-p", composeProjectName(t.Stack, t.Service),
 		"-f", r.stacks.Service(t.Stack, t.Service).ComposePath,
 		"--profile", t.Name,
 		containerLabelArgs(t.Stack, t.Service, t.Name),
-		dockerFormatBuildArgs,
+		podman.DockerFormatBuildArgs,
 		"up", "-d", "--build", "--no-deps", t.ComposeName,
 	); err != nil {
 		r.markTerminated(id, anovelv1.ExitReason_EXIT_REASON_ERROR, "compose up: "+err.Error())
@@ -98,7 +99,7 @@ func (r *Runner) startContainer(ctx context.Context, inst *Instance, t *discover
 // labels set at creation or, failing that, compose's naming. It returns "" when
 // neither finds one.
 func targetContainer(ctx context.Context, t *discovery.Target) string {
-	if ids, err := podmanIDs(ctx, labelFilters(t.Stack, t.Service, t.Name)...); err == nil && len(ids) > 0 {
+	if ids, err := podman.IDs(ctx, nil, labelFilters(t.Stack, t.Service, t.Name)...); err == nil && len(ids) > 0 {
 		return ids[0]
 	}
 	return containerByName(ctx, composeProjectName(t.Stack, t.Service), t.ComposeName)
@@ -114,7 +115,7 @@ type containerWatch struct{ id, cid string }
 // fast-exiting container shows without waiting a tick. It then starts the
 // runner's poller unless one already runs.
 func (r *Runner) watchContainer(id, cid string) {
-	r.checkContainer(containerWatch{id: id, cid: cid})
+	r.checkContainers([]containerWatch{{id: id, cid: cid}})
 
 	r.mu.Lock()
 	start := !r.polling
@@ -159,49 +160,39 @@ func (r *Runner) liveContainers() []containerWatch {
 }
 
 // checkContainers inspects the containers of watches in one podman call and
-// applies each result to its instance. One vanished container fails the whole
-// call, so a failed call checks each container alone to find it.
+// applies each result to its instance. A container the call misses is gone,
+// and its instance ends as crashed.
 func (r *Runner) checkContainers(watches []containerWatch) {
 	cids := make([]string, len(watches))
 	for i, w := range watches {
 		cids[i] = w.cid
 	}
-	// The call serves every instance, so no instance's end cancels it.
-	states, err := podmanInspectAll(context.Background(), cids)
-	if err != nil {
-		for _, w := range watches {
-			r.checkContainer(w)
-		}
-		return
-	}
-	for i, w := range watches {
-		r.applyContainerState(w, states[i])
-	}
-}
 
-// checkContainer inspects one container and applies the result to its
-// instance. A failed inspect means the container is gone, and its instance
-// ends as crashed.
-func (r *Runner) checkContainer(w containerWatch) {
-	states, err := podmanInspectAll(context.Background(), []string{w.cid})
+	// The call serves every instance, so no instance's end cancels it.
+	containers, err := podman.Inspect(context.Background(), nil, cids)
+	gone := "container gone"
 	if err != nil {
-		if r.stillRuns(w) {
-			r.markTerminated(w.id, anovelv1.ExitReason_EXIT_REASON_CRASHED, err.Error())
-		}
-		return
+		gone = err.Error()
 	}
-	r.applyContainerState(w, states[0])
+
+	for _, w := range watches {
+		if c, ok := podman.Find(containers, w.cid); ok {
+			r.applyContainerState(w, c)
+		} else if r.stillRuns(w) {
+			r.markTerminated(w.id, anovelv1.ExitReason_EXIT_REASON_CRASHED, gone)
+		}
+	}
 }
 
 // applyContainerState folds one inspect result into the instance of w through
 // updateContainerState. An exited container ends the instance: killed when a
 // stop was asked, an error on a nonzero exit code, a success otherwise.
-func (r *Runner) applyContainerState(w containerWatch, s infraContainerState) {
+func (r *Runner) applyContainerState(w containerWatch, c podman.Container) {
 	if !r.stillRuns(w) {
 		return
 	}
-	r.updateContainerState(w.id, s.phase, s.health)
-	if podmanPhase(s.phase) != anovelv1.Phase_PHASE_TERMINATED {
+	r.updateContainerState(w.id, c.State.Status, c.HealthStatus())
+	if podmanPhase(c.State.Status) != anovelv1.Phase_PHASE_TERMINATED {
 		return
 	}
 	reason := anovelv1.ExitReason_EXIT_REASON_SUCCESS
@@ -211,7 +202,7 @@ func (r *Runner) applyContainerState(w containerWatch, s infraContainerState) {
 	switch {
 	case stopping:
 		reason = anovelv1.ExitReason_EXIT_REASON_KILLED
-	case s.exitCode != 0:
+	case c.State.ExitCode != 0:
 		reason = anovelv1.ExitReason_EXIT_REASON_ERROR
 	}
 	r.markTerminated(w.id, reason, "")
@@ -322,7 +313,7 @@ func (r *Runner) InfraContainer(ctx context.Context, stack, service, infraName, 
 	if !ok || st.ContainerID == "" {
 		return fmt.Errorf("no container for %s/%s/%s", stack, service, infraName)
 	}
-	if err := podman(ctx, nil, verb, "--time", "10", st.ContainerID); err != nil {
+	if err := podman.Run(ctx, nil, verb, "--time", "10", st.ContainerID); err != nil {
 		return fmt.Errorf("podman %s %s: %w", verb, st.ContainerID, err)
 	}
 	return nil
@@ -376,7 +367,7 @@ func (r *Runner) killContainer(ctx context.Context, id string, grace time.Durati
 		return nil
 	}
 	seconds := max(int(grace.Seconds()), 0)
-	if err := podman(ctx, nil, "stop", "-t", strconv.Itoa(seconds), cid); err != nil {
+	if err := podman.Run(ctx, nil, "stop", "-t", strconv.Itoa(seconds), cid); err != nil {
 		return fmt.Errorf("podman stop %s: %w", cid, err)
 	}
 	// The poller also reaches markTerminated once it sees the exit. Calling it here settles the phase

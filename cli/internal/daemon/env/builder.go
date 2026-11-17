@@ -3,7 +3,6 @@ package env
 import (
 	"cmp"
 	"maps"
-	"net/url"
 	"os"
 	"slices"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
 	"github.com/a-novel-kit/stack/cli/internal/shared/compose"
+	"github.com/a-novel-kit/stack/cli/internal/shared/hostenv"
 )
 
 // Builder assembles env blocks for services / targets. It reads compose
@@ -229,26 +229,12 @@ func (b *Builder) setHostPostgres(out map[string]string, owner string) {
 	if !allocated {
 		return
 	}
-	hostPort := strconv.Itoa(port)
-	user := cmp.Or(out["POSTGRES_USER"], "postgres")
-	pass := cmp.Or(out["POSTGRES_PASSWORD"], "postgres")
-	db := cmp.Or(out["POSTGRES_DATABASE"], out["POSTGRES_DB"], "postgres")
-
-	dsn := url.URL{
-		Scheme:   "postgres",
-		User:     url.UserPassword(user, pass),
-		Host:     hostLocalhost + ":" + hostPort,
-		Path:     "/" + db,
-		RawQuery: "sslmode=disable",
-	}
-	maps.Copy(out, map[string]string{
-		"POSTGRES_DSN":      dsn.String(),
-		"POSTGRES_HOST":     hostLocalhost,
-		"POSTGRES_PORT":     hostPort,
-		"POSTGRES_USER":     user,
-		"POSTGRES_PASSWORD": pass,
-		"POSTGRES_DATABASE": db,
-	})
+	maps.Copy(out, hostenv.Postgres(
+		out["POSTGRES_USER"],
+		out["POSTGRES_PASSWORD"],
+		cmp.Or(out["POSTGRES_DATABASE"], out["POSTGRES_DB"]),
+		port,
+	))
 	setDefault(out, "POSTGRES_TLS_ENABLED", "false")
 }
 
@@ -384,14 +370,14 @@ func (b *Builder) resolveOne(varName, owner string, services []string, allocate 
 		}
 		return strconv.Itoa(port), nil
 	case isHostKind(localVar):
-		return hostLocalhost, nil
+		return hostenv.Localhost, nil
 	case isURLKind(localVar):
 		// The URL composes from the matching _PORT, read under the same service
 		// prefix, so a cross-service URL never takes the consumer's own port.
 		base := strings.TrimSuffix(localVar, "_URL")
 		if portStr := ctx[strings.TrimSuffix(varName, "_URL")+"_PORT"]; portStr != "" {
 			port, _ := strconv.Atoi(portStr)
-			return urlFor(base, port), nil
+			return hostenv.URL(base, port), nil
 		}
 		return "", nil
 	default:

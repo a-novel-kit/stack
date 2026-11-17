@@ -87,27 +87,3 @@ func TestDerivedFor(t *testing.T) {
 		"REST_URL":  "http://localhost:12345",
 	}, derivedFor("REST_PORT", 12345))
 }
-
-// TestUrlFor pins the URL forms: a gRPC URL stays schemeless, since
-// `localhost:port` is what grpc-go's Dial takes, and REST keeps its http://
-// scheme.
-func TestUrlFor(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name string
-		base string
-		port int
-		want string
-	}{
-		{name: "Success/GRPCSchemeless", base: "GRPC", port: 9090, want: "localhost:9090"},
-		{name: "Success/HTTP", base: "REST", port: 8080, want: "http://localhost:8080"},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, testCase.want, urlFor(testCase.base, testCase.port))
-		})
-	}
-}

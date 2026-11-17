@@ -10,6 +10,7 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/logs"
+	"github.com/a-novel-kit/stack/cli/internal/shared/poll"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -152,21 +153,15 @@ func (r *Runner) killGoExec(ctx context.Context, id string, grace time.Duration)
 // awaitTerminated polls inst every 50ms until it reaches TERMINATED or timeout
 // passes, reporting whether it did. It returns ctx's error when ctx ends first.
 func (r *Runner) awaitTerminated(ctx context.Context, inst *Instance, timeout time.Duration) (bool, error) {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	err := poll.Until(ctx, 50*time.Millisecond, timeout, func(context.Context) (bool, error) {
 		r.mu.RLock()
-		done := inst.Phase == anovelv1.Phase_PHASE_TERMINATED
-		r.mu.RUnlock()
-		if done {
-			return true, nil
-		}
-		select {
-		case <-ctx.Done():
-			return false, ctx.Err()
-		case <-time.After(50 * time.Millisecond):
-		}
+		defer r.mu.RUnlock()
+		return inst.Phase == anovelv1.Phase_PHASE_TERMINATED, nil
+	})
+	if errors.Is(err, poll.ErrTimeout) {
+		return false, nil
 	}
-	return false, nil
+	return err == nil, err
 }
 
 // transition applies an atomic phase change and emits a PhaseEvent so Watch

@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"slices"
@@ -49,22 +50,22 @@ var GitHubMux sshMux
 
 // Open starts sharing for the rest of the process. It leaves git's SSH setup
 // alone when the user customized the ssh command, or when no connection opens.
-func (m *sshMux) Open() {
+func (m *sshMux) Open(ctx context.Context) {
 	if os.Getenv("GIT_SSH_COMMAND") != "" {
 		return
 	}
-	if out, _ := exec.Command("git", "config", "--get", "core.sshCommand").Output(); len(out) > 0 {
+	if out, _ := exec.CommandContext(ctx, "git", "config", "--get", "core.sshCommand").Output(); len(out) > 0 {
 		return
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.opts = ownMuxOpts
-	if out, err := exec.Command("ssh", "-G", githubSSHHost).Output(); err == nil &&
+	if out, err := exec.CommandContext(ctx, "ssh", "-G", githubSSHHost).Output(); err == nil &&
 		strings.Contains(string(out), "\ncontrolpath ") {
 		m.opts = nil
 	}
-	if m.up(time.Now()) {
+	if m.up(ctx, time.Now()) {
 		m.slots = make(chan struct{}, githubSessionCap)
 	}
 }
@@ -72,11 +73,11 @@ func (m *sshMux) Open() {
 // up reports whether the connection is up at now, and opens it when it is not.
 // It skips the check within sshUpWindow after the last one that succeeded.
 // Callers hold m.mu, so a lapsed connection reopens once.
-func (m *sshMux) up(now time.Time) bool {
+func (m *sshMux) up(ctx context.Context, now time.Time) bool {
 	if now.Sub(m.upAt) < sshUpWindow {
 		return true
 	}
-	if !connectSSH(m.opts) {
+	if !connectSSH(ctx, m.opts) {
 		return false
 	}
 	m.upAt = now
@@ -85,11 +86,11 @@ func (m *sshMux) up(now time.Time) bool {
 
 // connectSSH reports whether the connection that opts reach is up, and opens
 // it when it is not. Opening prompts for the key's touch on the terminal.
-var connectSSH = func(opts []string) bool {
-	if exec.Command("ssh", slices.Concat(opts, []string{"-O", "check", githubSSHHost})...).Run() == nil {
+var connectSSH = func(ctx context.Context, opts []string) bool {
+	if exec.CommandContext(ctx, "ssh", slices.Concat(opts, []string{"-O", "check", githubSSHHost})...).Run() == nil {
 		return true
 	}
-	start := exec.Command("ssh", slices.Concat(opts, []string{"-fN", githubSSHHost})...)
+	start := exec.CommandContext(ctx, "ssh", slices.Concat(opts, []string{"-fN", githubSSHHost})...)
 	start.Stderr = os.Stderr
 	return start.Run() == nil
 }
@@ -97,7 +98,7 @@ var connectSSH = func(opts []string) bool {
 // acquire takes a session on the connection, reopening it if it lapsed, and
 // returns the environment git needs to use it plus the session's release.
 // Before open, or once the connection cannot reopen, git connects on its own.
-func (m *sshMux) acquire() ([]string, func()) {
+func (m *sshMux) acquire(ctx context.Context) ([]string, func()) {
 	if m.slots == nil {
 		return nil, func() {}
 	}
@@ -106,7 +107,7 @@ func (m *sshMux) acquire() ([]string, func()) {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !m.up(time.Now()) || m.opts == nil {
+	if !m.up(ctx, time.Now()) || m.opts == nil {
 		return nil, release
 	}
 	return []string{"GIT_SSH_COMMAND=ssh " + strings.Join(m.opts, " ")}, release

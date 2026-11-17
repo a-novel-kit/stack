@@ -112,9 +112,8 @@ func TestUpdateContainerState(t *testing.T) {
 }
 
 // TestCheckContainers covers one tick of the poller. A single podman call
-// inspects every container, and each line reaches its own instance. A vanished
-// container fails that call, and one inspect per container then ends only the
-// vanished one, as crashed. A result that comes back after a restart leaves the
+// inspects every container, and each result reaches its own instance. A
+// vanished container, which the call misses, ends as crashed. A result that comes back after a restart leaves the
 // target's new instance alone.
 //
 //nolint:paralleltest // fakePodmanInspect puts a stand-in podman on PATH with t.Setenv.
@@ -122,7 +121,7 @@ func TestCheckContainers(t *testing.T) {
 	type container struct {
 		// phase is the instance's phase before the check.
 		phase anovelv1.Phase
-		// inspect is the line podman prints for the container, "" once it
+		// inspect is the container's state for inspectState, "" once it
 		// vanished.
 		inspect string
 		// restarted marks an instance that a kill and a restart replaced
@@ -168,8 +167,7 @@ func TestCheckContainers(t *testing.T) {
 					wantPhase: anovelv1.Phase_PHASE_TERMINATED, wantReason: anovelv1.ExitReason_EXIT_REASON_CRASHED,
 				},
 			},
-			// The batch, then one inspect per container.
-			wantCalls: 3,
+			wantCalls: 1,
 		},
 		{
 			name: "Success/Restarted",
@@ -177,7 +175,7 @@ func TestCheckContainers(t *testing.T) {
 				"exited": {phase: anovelv1.Phase_PHASE_PENDING, inspect: "exited|-|1", restarted: true, wantPhase: anovelv1.Phase_PHASE_PENDING},
 				"gone":   {phase: anovelv1.Phase_PHASE_PENDING, restarted: true, wantPhase: anovelv1.Phase_PHASE_PENDING},
 			},
-			wantCalls: 3,
+			wantCalls: 1,
 		},
 	}
 
@@ -189,7 +187,7 @@ func TestCheckContainers(t *testing.T) {
 			watches := make([]containerWatch, 0, len(testCase.containers))
 			for cid, c := range testCase.containers {
 				if c.inspect != "" {
-					inspects[cid] = c.inspect + "\n"
+					inspects[cid] = inspectState(cid, c.inspect)
 				}
 				id := "default/svc/" + cid
 				inst := &Instance{ID: id, Mode: anovelv1.Mode_MODE_CONTAINER, Phase: c.phase, ContainerID: cid}
@@ -219,7 +217,7 @@ func TestCheckContainers(t *testing.T) {
 //nolint:paralleltest // fakePodmanInspect puts a stand-in podman on PATH with t.Setenv.
 func TestWatchContainer(t *testing.T) {
 	dir := fakePodmanInspect(t)
-	fsutiltest.Write(t, dir, map[string]string{"cid123": "exited|-|0\n"})
+	fsutiltest.Write(t, dir, map[string]string{"cid123": inspectState("cid123", "exited|-|0")})
 	const id = "default/svc/rest"
 	r := &Runner{instances: map[string]*Instance{
 		id: {ID: id, Mode: anovelv1.Mode_MODE_CONTAINER, Phase: anovelv1.Phase_PHASE_RUNNING, ContainerID: "cid123"},

@@ -76,7 +76,7 @@ func TestUpdateRepo(t *testing.T) {
 			fsutiltest.Write(t, local, testCase.dirty)
 			masterBefore := workspacetest.Git(t, local, "rev-parse", "refs/heads/master")
 
-			status, err := updateRepo(local, io.Discard)
+			status, err := updateRepo(t.Context(), local, io.Discard)
 			require.NoError(t, err)
 			require.Equal(t, testCase.wantStatus, status)
 
@@ -124,7 +124,7 @@ func TestSyncJobs(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			list, skipped := syncJobs(t.TempDir(), repos, normalizeFilter(testCase.allow), normalizeFilter(testCase.ignore))
+			list, skipped := syncJobs(t.Context(), t.TempDir(), repos, normalizeFilter(testCase.allow), normalizeFilter(testCase.ignore))
 			got := make([]string, len(list))
 			for i, job := range list {
 				got[i] = job.Name

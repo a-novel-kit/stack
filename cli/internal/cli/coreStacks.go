@@ -75,7 +75,7 @@ The daemon reads $A_NOVEL_STACKS when it starts. Add the entry, run
   a-novel core stacks new review-291 --root ~/scratch/review-291`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return createStack(cmd.OutOrStdout(), args[0], root)
+			return createStack(cmd.Context(), cmd.OutOrStdout(), args[0], root)
 		},
 	}
 	cmd.Flags().StringVar(&root, "root", "",
@@ -86,7 +86,7 @@ The daemon reads $A_NOVEL_STACKS when it starts. Add the entry, run
 // createStack clones the workspace into root, or the default root for name,
 // and prints the $A_NOVEL_STACKS entry that registers it. A root holding files
 // is refused.
-func createStack(out io.Writer, name, root string) error {
+func createStack(ctx context.Context, out io.Writer, name, root string) error {
 	if name == stacks.DefaultName {
 		return fmt.Errorf("%q is reserved for the workspace stack", stacks.DefaultName)
 	}
@@ -101,7 +101,7 @@ func createStack(out io.Writer, name, root string) error {
 		return fmt.Errorf("%s already exists and is not empty", root)
 	}
 	_, _ = fmt.Fprintf(out, "▸ cloning the workspace into %s\n", root)
-	if err := setup.CloneStack(root); err != nil {
+	if err := setup.CloneStack(ctx, root); err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(out, "  ✓ %s\n", root)
@@ -338,7 +338,7 @@ func pruneOne(
 	if err != nil {
 		return err
 	}
-	blockers := pruneBlockers(root)
+	blockers := pruneBlockers(ctx, root)
 	printPrunePlan(out, st, held, blockers, opts)
 
 	if opts.dryRun {
@@ -466,8 +466,8 @@ func dryRunVerdict(blockers []string, force bool) string {
 // pruneBlockers lists the reasons a stack's checkouts should outlive the
 // prune, at most one per checkout, in checkout order. It checks every checkout
 // at once: each check runs several local git commands.
-func pruneBlockers(root string) []string {
-	checkouts, err := workspace.Checkouts(root)
+func pruneBlockers(ctx context.Context, root string) []string {
+	checkouts, err := workspace.Checkouts(ctx, root)
 	if err != nil {
 		// An unreadable root has no recoverable work in it by definition;
 		// removing it is the whole point of the command.
@@ -477,7 +477,7 @@ func pruneBlockers(root string) []string {
 	reasons := make([]string, len(checkouts))
 	var wg sync.WaitGroup
 	for i, c := range checkouts {
-		wg.Go(func() { reasons[i] = checkoutBlocker(c) })
+		wg.Go(func() { reasons[i] = checkoutBlocker(ctx, c) })
 	}
 	wg.Wait()
 
@@ -487,11 +487,11 @@ func pruneBlockers(root string) []string {
 // checkoutBlocker names the work c holds that exists nowhere else, or returns
 // "". A clean checkout on its default branch can still hold the only copy of a
 // commit, so unpushed commits block too.
-func checkoutBlocker(c workspace.Checkout) string {
-	if reason := workspace.OngoingWork(c.Path); reason != "" {
+func checkoutBlocker(ctx context.Context, c workspace.Checkout) string {
+	if reason := workspace.OngoingWork(ctx, c.Path); reason != "" {
 		return c.Name + ": " + reason
 	}
-	if n := workspace.UnpushedCommits(c.Path); n > 0 {
+	if n := workspace.UnpushedCommits(ctx, c.Path); n > 0 {
 		return fmt.Sprintf("%s: %d unpushed commit(s)", c.Name, n)
 	}
 	return ""

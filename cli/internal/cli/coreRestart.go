@@ -51,7 +51,7 @@ func restartDaemon(cmd *cobra.Command, force, preserve bool) error {
 			return err
 		}
 	}
-	return startDetached()
+	return startDetached(ctx)
 }
 
 // stopForRestart stops a running daemon and waits until it is gone. preserve

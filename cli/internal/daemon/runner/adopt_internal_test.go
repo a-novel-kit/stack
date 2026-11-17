@@ -116,11 +116,13 @@ func TestAdoptEntries(t *testing.T) {
 //
 //nolint:paralleltest // fakePodmanInspect puts a stand-in podman on PATH with t.Setenv.
 func TestReseedAllocator(t *testing.T) {
-	// inspectLines are the lines podman prints per container ID. A container
-	// with no line has vanished.
-	inspectLines := map[string]string{
-		"cid-a": `cid-a|default_svc-a_postgres-a_1|{"5432/tcp":[{"HostIp":"","HostPort":"38631"}]}` + "\n",
-		"cid-b": `cid-b|default_svc-b_valkey-b_1|{"6379/tcp":[{"HostIp":"","HostPort":"38632"}]}` + "\n",
+	// inspects are the objects podman prints per container ID. A container
+	// with none has vanished.
+	inspects := map[string]string{
+		"cid-a": `{"Id": "cid-a", "Name": "default_svc-a_postgres-a_1",
+			"NetworkSettings": {"Ports": {"5432/tcp": [{"HostIp": "", "HostPort": "38631"}]}}}`,
+		"cid-b": `{"Id": "cid-b", "Name": "default_svc-b_valkey-b_1",
+			"NetworkSettings": {"Ports": {"6379/tcp": [{"HostIp": "", "HostPort": "38632"}]}}}`,
 	}
 	stacks := discovery.Stacks{{Name: "default", Services: []*discovery.Service{
 		{Name: "svc-a", Stack: "default", Infra: []*discovery.Infra{{Name: "postgres-a", Ports: []string{"${POSTGRES_PORT}:5432"}}}},
@@ -140,15 +142,14 @@ func TestReseedAllocator(t *testing.T) {
 		containers [][2]string
 	}{
 		{name: "Success", containers: [][2]string{{"svc-a", "cid-a"}, {"svc-b", "cid-b"}}},
-		// The vanished container sits between the others, which shifts the
-		// line positions.
+		// The vanished container sits between the others.
 		{name: "Error/Vanished", containers: [][2]string{{"svc-a", "cid-a"}, {"svc-a", "cid-gone"}, {"svc-b", "cid-b"}}},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			dir := fakePodmanInspect(t)
-			fsutiltest.Write(t, dir, inspectLines)
+			fsutiltest.Write(t, dir, inspects)
 
 			alloc := env.NewAllocator()
 			alloc.SetServices([]string{"svc-a", "svc-b"})

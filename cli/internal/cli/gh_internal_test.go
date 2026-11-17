@@ -38,7 +38,7 @@ func TestGh(t *testing.T) {
 				return "ok", nil
 			})
 
-			_, err := gh("api", "repos/o/r")
+			_, err := gh(t.Context(), "api", "repos/o/r")
 			if testCase.wantErr {
 				require.Error(t, err)
 			} else {

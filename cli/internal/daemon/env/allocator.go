@@ -2,12 +2,14 @@ package env
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"maps"
-	"net"
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/a-novel-kit/stack/cli/internal/shared/hostenv"
 )
 
 // An Allocator picks free host ports for `*_PORT` env variables and refcounts
@@ -161,19 +163,14 @@ type Allocation struct {
 	Refs     []string
 }
 
-// pickFreePort asks the kernel for a free ephemeral port by binding to :0 and
-// reading back what was assigned. Another process can claim the same port in
-// the window between the close here and the caller's bind, which is acceptable
-// for local dev.
+// pickFreePort picks a free host port and frees it at once for the process
+// meant to bind it.
 func pickFreePort() (int, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	// Binding the loopback never blocks, so no caller context is needed.
+	listener, port, err := hostenv.Listen(context.Background())
 	if err != nil {
 		return 0, err
 	}
-	defer func() { _ = ln.Close() }()
-	addr, ok := ln.Addr().(*net.TCPAddr)
-	if !ok {
-		return 0, fmt.Errorf("env: unexpected listener type %T", ln.Addr())
-	}
-	return addr.Port, nil
+	_ = listener.Close()
+	return port, nil
 }

@@ -63,7 +63,7 @@ func installCLI(cmd *cobra.Command, source string) error {
 	_, _ = fmt.Fprintln(out, "  ✓ binary built")
 
 	_, _ = fmt.Fprintln(out, "▸ starting fresh daemon...")
-	if err := startDetached(); err != nil {
+	if err := startDetached(ctx); err != nil {
 		return fmt.Errorf("daemon start: %w", err)
 	}
 	_, _ = fmt.Fprintln(out, "\n✓ install complete.")

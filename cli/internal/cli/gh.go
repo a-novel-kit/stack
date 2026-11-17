@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,8 +18,8 @@ var ghExec = runGH
 
 // runGH runs `gh` and returns stdout; on failure it folds gh's output into the
 // error (see ghError).
-func runGH(args ...string) (string, error) {
-	c := exec.Command("gh", args...)
+func runGH(ctx context.Context, args ...string) (string, error) {
+	c := exec.CommandContext(ctx, "gh", args...)
 	var out, errb bytes.Buffer
 	c.Stdout, c.Stderr = &out, &errb
 	if err := c.Run(); err != nil {
@@ -33,13 +34,17 @@ var rateLimitWait = time.Minute
 
 // gh runs ghExec, retried twice after a secondary-rate-limit rejection. The
 // limit rejects a request before acting on it, so a retried write is safe.
-func gh(args ...string) (string, error) {
+func gh(ctx context.Context, args ...string) (string, error) {
 	for attempt := 1; ; attempt++ {
-		out, err := ghExec(args...)
+		out, err := ghExec(ctx, args...)
 		if attempt == 3 || !isRateLimited(err) {
 			return out, err
 		}
-		time.Sleep(rateLimitWait)
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(rateLimitWait):
+		}
 	}
 }
 

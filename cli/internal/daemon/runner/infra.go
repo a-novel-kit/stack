@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/env"
+	"github.com/a-novel-kit/stack/cli/internal/shared/podman"
+	"github.com/a-novel-kit/stack/cli/internal/shared/poll"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -120,11 +123,11 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 
 	// 1. Bring up the profile-less compose services, which compose's default
 	//    rules resolve to exactly the infra entries.
-	if err := podman(ctx, env.Environ(envEntries), "compose",
+	if err := podman.Run(ctx, env.Environ(envEntries), "compose",
 		"-p", composeProjectName(stack, service),
 		"-f", svc.ComposePath,
 		containerLabelArgs(stack, service),
-		dockerFormatBuildArgs,
+		podman.DockerFormatBuildArgs,
 		"up", "-d", "--build",
 	); err != nil {
 		r.dropInfraSession(stack, service)
@@ -200,7 +203,7 @@ func (r *Runner) KillInfra(ctx context.Context, stack, service string, force boo
 	// `compose down` tears down the project's infra and any orphaned
 	// containers. Without --volume the postgres data survives; only
 	// `volume clear` destroys volumes.
-	err = podman(ctx, nil, "compose",
+	err = podman.Run(ctx, nil, "compose",
 		"-p", composeProjectName(stack, service), "-f", svc.ComposePath,
 		"down", "--remove-orphans", "-t", "10")
 	// Reset session regardless of compose's exit; the user can re-run
@@ -267,68 +270,31 @@ func (r *Runner) runOneShot(ctx context.Context, t *discovery.Target, mode anove
 	if _, err := r.launch(ctx, t, mode); err != nil {
 		return err
 	}
-	// Block until terminated, polling every 500ms, with a 5-minute bound as a
-	// safety net.
-	deadline := time.Now().Add(5 * time.Minute)
-	for time.Now().Before(deadline) {
+	// Block until terminated, with a 5-minute bound as a safety net.
+	err := poll.Until(ctx, 500*time.Millisecond, 5*time.Minute, func(context.Context) (bool, error) {
 		inst, ok := r.Instance(t.ID())
-		if !ok {
-			return fmt.Errorf("one-shot %s vanished from tracker", t.ID())
+		switch {
+		case !ok:
+			return false, fmt.Errorf("one-shot %s vanished from tracker", t.ID())
+		case inst.Phase != anovelv1.Phase_PHASE_TERMINATED:
+			return false, nil
+		case inst.ExitReason != anovelv1.ExitReason_EXIT_REASON_SUCCESS:
+			return false, fmt.Errorf("one-shot %s exited %s: %s", t.ID(), inst.ExitReason, inst.LastErr)
+		default:
+			return true, nil
 		}
-		if inst.Phase == anovelv1.Phase_PHASE_TERMINATED {
-			if inst.ExitReason == anovelv1.ExitReason_EXIT_REASON_SUCCESS {
-				return nil
-			}
-			return fmt.Errorf("one-shot %s exited %s: %s", t.ID(), inst.ExitReason, inst.LastErr)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(500 * time.Millisecond):
-		}
+	})
+	if errors.Is(err, poll.ErrTimeout) {
+		return fmt.Errorf("one-shot %s did not terminate within 5m", t.ID())
 	}
-	return fmt.Errorf("one-shot %s did not terminate within 5m", t.ID())
+	return err
 }
 
-// infraContainerState is one container's inspected state, or the fact that its
-// inspect failed.
-type infraContainerState struct {
-	phase      string
-	health     string
-	exitCode   int
-	inspectErr bool
-}
-
-// infraHealthy reports whether a service's infra is ready to depend on.
-//
-// declaredInfra is len(svc.Infra). A service that declares no infra is ready
-// with nothing to wait for. One that declares infra but whose containers have
-// not been resolved yet is not ready: an empty container query is a state to
-// wait through, since the label query sees nothing while Postgres still runs
-// initdb.
-func infraHealthy(declaredInfra int, states []infraContainerState) bool {
-	if declaredInfra == 0 {
-		return true
-	}
-
-	if len(states) == 0 {
-		return false
-	}
-
-	for _, s := range states {
-		if s.inspectErr {
-			return false
-		}
-
-		running := s.phase == pmPhaseRunning && (s.health == pmHealthHealthy || s.health == "-")
-		oneShotDone := s.phase == pmPhaseExited && s.exitCode == 0
-
-		if !running && !oneShotDone {
-			return false
-		}
-	}
-
-	return true
+// infraReady reports whether every inspected infra container of a service is
+// ready to depend on. An empty inspection is not: the label query sees nothing
+// while Postgres still runs initdb.
+func infraReady(containers []podman.Container) bool {
+	return len(containers) > 0 && !slices.ContainsFunc(containers, func(c podman.Container) bool { return !c.Ready() })
 }
 
 // resolveInfraContainerIDs returns the container IDs of a service's infra,
@@ -337,7 +303,7 @@ func infraHealthy(declaredInfra int, states []infraContainerState) bool {
 // swallow the label flag make the label query come back empty, and the wait
 // mistakes that for "no infra".
 func resolveInfraContainerIDs(ctx context.Context, svc *discovery.Service) ([]string, error) {
-	ids, err := podmanIDs(ctx, labelFilters(svc.Stack, svc.Name)...)
+	ids, err := podman.IDs(ctx, nil, labelFilters(svc.Stack, svc.Name)...)
 	if err != nil {
 		return nil, fmt.Errorf("list infra containers for %s: %w", composeProjectName(svc.Stack, svc.Name), err)
 	}
@@ -356,9 +322,8 @@ func resolveInfraContainerIDs(ctx context.Context, svc *discovery.Service) ([]st
 	return ids, nil
 }
 
-// waitInfraHealthy polls every container in the project until each one is
-// either running and healthy (long-runners) or exited with success
-// (one-shots). It gives up after timeout with an error.
+// waitInfraHealthy polls the service's infra containers until each one is
+// ready (see podman.Container.Ready). It gives up after timeout with an error.
 func (r *Runner) waitInfraHealthy(ctx context.Context, svc *discovery.Service, timeout time.Duration) error {
 	// A service that declares no infra has nothing to wait for, and this is the
 	// only place that is known for certain rather than inferred from an empty
@@ -367,40 +332,20 @@ func (r *Runner) waitInfraHealthy(ctx context.Context, svc *discovery.Service, t
 		return nil
 	}
 
-	deadline := time.Now().Add(timeout)
-
-	for time.Now().Before(deadline) {
+	err := poll.Until(ctx, time.Second, timeout, func(ctx context.Context) (bool, error) {
 		ids, err := resolveInfraContainerIDs(ctx, svc)
 		if err != nil {
-			return err
+			return false, err
 		}
-
-		if infraHealthy(len(svc.Infra), inspectInfra(ctx, ids)) {
-			return nil
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(time.Second):
-		}
+		// A failed inspect, such as a container vanishing between the listing
+		// and the inspect, reads as not ready yet.
+		containers, err := podman.Inspect(ctx, nil, ids)
+		return err == nil && infraReady(containers), nil
+	})
+	if errors.Is(err, poll.ErrTimeout) {
+		return fmt.Errorf("infra not healthy within %s", timeout)
 	}
-
-	return fmt.Errorf("infra not healthy within %s", timeout)
-}
-
-// inspectInfra inspects every container of ids in one podman call. A failed
-// call marks the poll failed, which reads as not ready, as one failed
-// container does.
-func inspectInfra(ctx context.Context, ids []string) []infraContainerState {
-	if len(ids) == 0 {
-		return nil
-	}
-	states, err := podmanInspectAll(ctx, ids)
-	if err != nil {
-		return []infraContainerState{{inspectErr: true}}
-	}
-	return states
+	return err
 }
 
 // topoSortOneShots returns the service's one-shot targets with dependencies
