@@ -1,4 +1,4 @@
-# Upgrading to v1.43.0
+# Upgrading to NEXT
 
 The `a-novel` CLI settles on one exit code for a usage error and one `--format` flag for machine
 output, rejects a flag value it does not know instead of falling back silently, and lets the daemon
@@ -16,6 +16,7 @@ that a mistyped value now fails instead of being ignored.
 | exit status 1 after a usage error (wrong argument count, unknown subcommand, bad argument)      | exit status 2                                   |
 | `core sync -j 0` running every repository at once                                               | `core sync -j <n>` with a positive count        |
 | `--type` tolerating spaces or capitals (`-t 'go, pnpm'`, `-t Go`)                               | lowercase words, comma-separated: `-t go,pnpm`  |
+| an explicitly empty value (`--type=`, `--mode=`, `--format=`...) meaning the default            | leave the flag out                              |
 | a shorthand such as `service-json-keys/rest` landing in the stack `$A_NOVEL_STACKS` names first | the daemon's default stack, or `--stack <name>` |
 | `core restart` succeeding while the shutdown leaves targets running                             | a non-zero exit; stop them, or retry            |
 
@@ -76,6 +77,11 @@ values, and shell completion offers them. A typo such as `run start --mode=conta
 the target in go-exec mode; it now exits 2 and names the accepted values. `--type=go,bogus` fails
 the same way instead of dropping `bogus`, and `--type` no longer trims or lowercases its words.
 
+An explicitly empty value fails too. `--type=` used to mean every kind, `--mode=` go-exec (the
+current mode, on `run restart`), `--one-shots=` go-exec, `--kind=` all, `--stream=` both, and
+`--format=` on `run env` the shell form; each now exits 2. A script passing `--type="$KINDS"` with a
+variable that may be empty leaves the flag out instead.
+
 `--jobs` must be a positive number in `test`, `build` and `core sync` alike. Leave it out to keep
 each command's default.
 
@@ -92,6 +98,9 @@ daemon started; `core stacks list` reports that case. Pass `--stack <name>` or t
 `core kill --force`, `core restart`, `core prepare-reinstall` and `install` share one stop. A
 shutdown that leaves targets running fails each of them and names the targets, and `install` now
 stops on a daemon that does not answer or exits too slowly, where it used to warn and continue.
+
+A failed `core restart` leaves the daemon stopped: the stop has already shut it down when it reports
+the targets that survived, so no new daemon starts. Stop the named targets, then run `core start`.
 
 ## The `run ui` dashboard
 
