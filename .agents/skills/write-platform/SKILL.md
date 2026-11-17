@@ -372,10 +372,12 @@ service:
   call or an identity provider such as Google. "Register" ("M’inscrire" in French) opens the
   invitation request on every platform. Only the account platform's page for a dead invitation link
   says "Request an invitation", which matches its offer to request a new one.
-- A response rendered with a session belongs to its visitor alone: the request hook sends
-  `Cache-Control: private, no-store` whenever the session cookies are present
-  ([RFC 9111 §5.2.2.5](https://www.rfc-editor.org/rfc/rfc9111#section-5.2.2.5)). Every response also
-  refuses framing with `X-Frame-Options: DENY` and `frame-ancestors 'none'`
+- A response rendered with a session belongs to its visitor alone. The request hook sends
+  `Cache-Control: private, no-store` on a response that sets cookies or carries no `Cache-Control`
+  of its own ([RFC 9111 §5.2.2.5](https://www.rfc-editor.org/rfc/rfc9111#section-5.2.2.5)). Any
+  other response keeps its route's policy, as a checksum-named asset keeps
+  `private, max-age=31536000, immutable`. Every response also refuses framing with
+  `X-Frame-Options: DENY` and `frame-ancestors 'none'`
   ([RFC 9700 §4.16](https://www.rfc-editor.org/rfc/rfc9700#section-4.16)).
 - The minimum password length stays 4, as ruled, and is never raised. Every new-password field
   (account creation, reset, change) shows a hint recommending at least 15 characters, the
