@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/a-novel-kit/stack/cli/internal/workspace/workspacetest"
 )
 
 // TestSecretsSetRefusesNonInteractive verifies the TTY gate: `secrets set`
@@ -13,7 +15,7 @@ import (
 //
 // Not parallel: swaps the package-level stdinIsTTY seam.
 func TestSecretsSetRefusesNonInteractive(t *testing.T) {
-	swap(t, &stdinIsTTY, func() bool { return false })
+	workspacetest.Swap(t, &stdinIsTTY, func() bool { return false })
 
 	if _, err := runCmd(t, newSecretsSetCmd(), "some-id"); err == nil || !strings.Contains(err.Error(), "non-interactively") {
 		t.Fatalf("set = %v, want an interactive-only refusal", err)
@@ -26,8 +28,8 @@ func TestSecretsSetStoresWithoutEchoingValue(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	const secretValue = "sk-super-secret"
-	swap(t, &stdinIsTTY, func() bool { return true })
-	swap(t, &readPassword, func() ([]byte, error) { return []byte(secretValue), nil })
+	workspacetest.Swap(t, &stdinIsTTY, func() bool { return true })
+	workspacetest.Swap(t, &readPassword, func() ([]byte, error) { return []byte(secretValue), nil })
 
 	out, err := runCmd(t, newSecretsSetCmd(), "openai-key")
 	if err != nil {

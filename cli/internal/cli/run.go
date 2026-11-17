@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
-	"github.com/a-novel-kit/stack/cli/internal/tui"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -76,21 +75,6 @@ core start'). Daemon control itself lives under 'a-novel core'.`,
 		newDebugCmd(),
 	)
 	return cmd
-}
-
-func newUICmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "ui",
-		Short: "Open the terminal UI",
-		Long: `Open the full-screen view of every service: the service list, each service's
-targets and infra as tabs, and the selected tab's live log. Esc opens the
-command palette, ? lists every key, and q quits without stopping anything.
-The UI talks to the same daemon as the CLI, so each sees what the other
-starts.`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return tui.Run()
-		},
-	}
 }
 
 // entityRef is a parsed CLI argument naming a target or an infra container.

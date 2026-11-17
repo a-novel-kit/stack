@@ -1,10 +1,8 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -16,10 +14,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/a-novel-kit/stack/cli/internal/batchview"
 	"github.com/a-novel-kit/stack/cli/internal/build"
 	"github.com/a-novel-kit/stack/cli/internal/detect"
 	"github.com/a-novel-kit/stack/cli/internal/jobs"
-	"github.com/a-novel-kit/stack/cli/internal/ui"
 )
 
 // capability is `test` or `build`. Both discover the targets under a
@@ -33,47 +31,6 @@ type capability struct {
 	long    string
 	example string
 }
-
-var (
-	testCapability = capability{
-		name:   "test",
-		looks:  "a go.mod (Go tests) or a package.json with test* scripts (pnpm)",
-		detect: detect.Tests,
-		short:  "Run Go and pnpm tests, spinning up their podman-compose envs",
-		long: `Discovers a Go test target per module and every pnpm "test"/"test:*" script
-under the working directory, lets you pick which to run, runs them in parallel
-and prints a report with coverage and the full output of every failure.
-
-A Go module shipping builds/podman-compose.go[.<path>].test.yaml gets one target
-per file, scoped to that path. A target with a compose env has it brought up
-(host ports allocated, health awaited) around the run and torn down after, so
-independent envs run concurrently.
-
-With -y or without a terminal, every target runs without the picker,
-sequentially unless --jobs says otherwise.`,
-		example: `  a-novel test                  # pick, then run in parallel
-  a-novel test -t go            # only Go test targets
-  a-novel test -y               # run all tests, no prompt (CI-safe)
-  a-novel test --dry-run        # show targets and their envs, run nothing`,
-	}
-	buildCapability = capability{
-		name:   "build",
-		looks:  "a go.mod (Go), a package.json with build* scripts (pnpm), or a root Dockerfile / builds/*.Dockerfile (Podman)",
-		detect: detect.Builds,
-		short:  "Build Go modules, pnpm scripts and Podman images",
-		long: `Discovers a Go module per go.mod, every pnpm "build"/"build:*" script, a root
-Dockerfile and each builds/*.Dockerfile under the working directory, lets you
-pick what to build, builds it in parallel and prints a report.
-
-With -y or without a terminal, every target builds without the picker,
-sequentially unless --jobs says otherwise.`,
-		example: `  a-novel build                 # pick, then build in parallel
-  a-novel build -t go,podman    # only Go and Podman targets
-  a-novel build -j 4            # cap parallelism at 4
-  a-novel build -y              # build everything, no prompt (CI-safe)
-  a-novel build --dry-run       # show what would build, run nothing`,
-	}
-)
 
 // capabilityOpts holds the flags `test` and `build` share, and the test-only
 // --no-cover and --keep.
@@ -129,7 +86,7 @@ func runCapability(cmd *cobra.Command, c capability, o capabilityOpts) error {
 		return err
 	}
 	if o.dryRun {
-		fmt.Print(ui.DryRunView(c.name, targets))
+		fmt.Print(batchview.DryRunView(c.name, targets))
 		return nil
 	}
 
@@ -150,7 +107,7 @@ func runCapability(cmd *cobra.Command, c capability, o capabilityOpts) error {
 		return err
 	}
 	if interactive {
-		chosen, ok, err := ui.Pick(c.name, targets)
+		chosen, ok, err := batchview.Pick(c.name, targets)
 		if err != nil {
 			return fmt.Errorf("picker: %w", err)
 		}
@@ -172,10 +129,10 @@ func runCapability(cmd *cobra.Command, c capability, o capabilityOpts) error {
 		list[i] = build.Job(t, o.timeout, procs, o.keep)
 	}
 
-	fmt.Println(ui.Banner())
+	fmt.Println(batchview.Banner())
 	fmt.Println()
-	batch := ui.RunJobs(ctx, list, limit, interactive)
-	fmt.Print(ui.Report(strings.ToUpper(c.name), batch, ui.Failed))
+	batch := batchview.RunJobs(ctx, list, limit, interactive)
+	fmt.Print(batchview.Report(strings.ToUpper(c.name), batch, batchview.Failed))
 	return batchError(batch)
 }
 
@@ -247,7 +204,7 @@ func parseKinds(v string) ([]detect.Kind, error) {
 
 // withCoverage rewrites every test target for coverage mode. A Go target keeps
 // its package selectors and gains -cover, so every test package runs. The
-// report leaves generated and test-support trees out (see ui.CoverageView). A
+// report leaves generated and test-support trees out (see batchview.CoverageView). A
 // pnpm target gains `-- --coverage`, whose vitest table the report shows
 // verbatim.
 func withCoverage(targets []detect.Target) []detect.Target {
@@ -281,23 +238,23 @@ func preflight(ctx context.Context, verb string, targets []detect.Target, canPro
 	case len(conflicts) == 0:
 		return nil
 	case keep:
-		fmt.Fprintln(os.Stderr, ui.Warn.Render("Reusing the existing test environment (--keep); "+
+		fmt.Fprintln(os.Stderr, batchview.Warn.Render("Reusing the existing test environment (--keep); "+
 			"its data and schema persist from the previous run."))
 		return nil
 	}
 
-	fmt.Fprintln(os.Stderr, ui.EnvConflictView(verb, conflicts))
+	fmt.Fprintln(os.Stderr, batchview.EnvConflictView(verb, conflicts))
 	proceed := true
 	if canPrompt {
-		fmt.Fprint(os.Stderr, ui.Gold.Render("Clean it and continue, or abort? [c]lean / [a]bort: "))
+		fmt.Fprint(os.Stderr, batchview.Gold.Render("Clean it and continue, or abort? [c]lean / [a]bort: "))
 		answer := readAnswer(os.Stdin)
 		proceed = answer == "c" || answer == "clean"
 	} else {
-		fmt.Fprintln(os.Stderr, ui.Warn.Render("No prompt available — cleaning the stale environment "+
+		fmt.Fprintln(os.Stderr, batchview.Warn.Render("No prompt available — cleaning the stale environment "+
 			"(scoped to this checkout only) and continuing."))
 	}
 	for _, c := range conflicts {
-		fmt.Fprintln(os.Stderr, ui.Muted.Render("  cleaning "+c.Env.ID+" …"))
+		fmt.Fprintln(os.Stderr, batchview.Muted.Render("  cleaning "+c.Env.ID+" …"))
 		// Detached: teardown must complete even if the run is aborting.
 		_ = build.TearDown(context.WithoutCancel(ctx), c.Env)
 	}
@@ -309,7 +266,7 @@ func preflight(ctx context.Context, verb string, targets []detect.Target, canPro
 
 // batchError turns a finished batch into the command's exit status: 130 when
 // interrupted, 1 when a job failed. The report already explains either.
-func batchError(b ui.Batch) error {
+func batchError(b batchview.Batch) error {
 	switch {
 	case b.Aborted:
 		return &ExitError{Code: exitAborted}
@@ -317,15 +274,4 @@ func batchError(b ui.Batch) error {
 		return &ExitError{Code: 1}
 	}
 	return nil
-}
-
-// usageError marks a bad invocation, exit status 2.
-func usageError(err error) error {
-	return &ExitError{Code: exitUsage, Err: err}
-}
-
-// readAnswer reads one line of in, trimmed and lowercased.
-func readAnswer(in io.Reader) string {
-	line, _ := bufio.NewReader(in).ReadString('\n')
-	return strings.ToLower(strings.TrimSpace(line))
 }

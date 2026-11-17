@@ -13,6 +13,7 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/setup"
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
+	"github.com/a-novel-kit/stack/cli/internal/workspace"
 )
 
 const sandboxFlag = "--sandbox"
@@ -156,12 +157,12 @@ func unsupportedSandboxCommand(command string) bool {
 // sandboxWorkingDir maps cwd, when it sits in a workspace repository, onto the
 // same directory of that repository's copy in the temporary stack at root.
 func sandboxWorkingDir(root, cwd string) (string, error) {
-	repoRoot, err := gitToplevel(cwd)
+	repoRoot, err := workspace.Toplevel(cwd)
 	if err != nil {
 		return root, nil //nolint:nilerr // outside a repository, the command runs from the stack root
 	}
-	repo, err := repoFromGitRemote(repoRoot)
-	if err != nil || (repo.Org != orgAnovel && repo.Org != orgAnovelKit) {
+	repo, err := workspace.Origin(repoRoot)
+	if err != nil || (repo.Org != workspace.OrgAnovel && repo.Org != workspace.OrgAnovelKit) {
 		return root, nil //nolint:nilerr // a foreign repository has no copy in the stack
 	}
 	rel, err := filepath.Rel(repoRoot, cwd)

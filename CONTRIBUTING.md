@@ -109,7 +109,7 @@ In container mode the daemon runs a target through the compose file its service 
 
 ## Adding a command
 
-A new command is a Cobra subcommand under `cli/internal/cli/`, built by a `new<Name>Cmd` function. Wire it into the parent that fits:
+A new command is a Cobra subcommand under `cli/internal/cli/`, built by a `new<Name>Cmd` function in a file named after its command path: `core sync` lives in `coreSync.go`, `run topology` in `runTopology.go`. A group's file (`core.go`, `run.go`) holds the group and what its subcommands share. Logic that is not command wiring lives in its own package: the workspace model and its git plumbing in `internal/workspace`, the batch views of `test`, `build` and `core sync` in `internal/batchview`, and the `run ui` dashboard in `internal/dashboard`. Wire the command into the parent that fits:
 
 | Parent | Holds                                        |
 | ------ | -------------------------------------------- |

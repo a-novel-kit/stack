@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/a-novel-kit/stack/cli/internal/workspace/workspacetest"
 )
 
 func TestSandboxArgs(t *testing.T) {
@@ -59,8 +61,8 @@ func TestRunSandbox(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	mustGit(t, currentRepo, "init", "--quiet")
-	mustGit(t, currentRepo, "remote", "add", "origin", "git@github.com:a-novel/service-authentication.git")
+	workspacetest.Git(t, currentRepo, "init", "--quiet")
+	workspacetest.Git(t, currentRepo, "remote", "add", "origin", "git@github.com:a-novel/service-authentication.git")
 
 	type call struct {
 		dir       string

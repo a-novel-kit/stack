@@ -3,54 +3,31 @@ package cli
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/a-novel-kit/stack/cli/internal/workspace/workspacetest"
 )
 
 // Tests never wait out GitHub's secondary rate limit.
 func init() { rateLimitWait = 0 }
 
-// TestMain runs every git command under a fixed identity and no global or
-// system config, so a developer's commit.gpgsign cannot stall fixture commits.
 func TestMain(m *testing.M) {
-	gitEnv := map[string]string{
-		"GIT_CONFIG_GLOBAL":   os.DevNull,
-		"GIT_CONFIG_NOSYSTEM": "1",
-		"GIT_AUTHOR_NAME":     "test",
-		"GIT_AUTHOR_EMAIL":    "test@a-novel.dev",
-		"GIT_COMMITTER_NAME":  "test",
-		"GIT_COMMITTER_EMAIL": "test@a-novel.dev",
-	}
-
-	for key, value := range gitEnv {
-		if err := os.Setenv(key, value); err != nil {
-			panic(err)
-		}
-	}
+	workspacetest.IsolateGit()
 	m.Run()
 }
 
 // Failures the stubbed gh returns, worded as gh reports them.
 var errGHNotFound = errors.New("gh: Not Found (HTTP 404)")
 
-// swap sets *p to v for the test and restores it on cleanup. A test that swaps
-// a package-level seam cannot run in parallel.
-func swap[T any](t *testing.T, p *T, v T) {
-	t.Helper()
-	orig := *p
-	*p = v
-	t.Cleanup(func() { *p = orig })
-}
-
 // stubGH routes every gh call through respond, which sees the args joined.
 func stubGH(t *testing.T, respond func(call string) (string, error)) {
 	t.Helper()
-	swap(t, &ghExec, func(args ...string) (string, error) {
+	workspacetest.Swap(t, &ghExec, func(args ...string) (string, error) {
 		return respond(strings.Join(args, " "))
 	})
 }
@@ -65,22 +42,6 @@ func runCmd(t *testing.T, cmd *cobra.Command, args ...string) (string, error) {
 	cmd.SilenceUsage, cmd.SilenceErrors = true, true
 	err := cmd.Execute()
 	return out.String(), err
-}
-
-// gitOut runs a git command in dir and returns its trimmed output.
-func gitOut(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	out, err := runGit(dir, args...)
-	if err != nil {
-		panic(fmt.Sprintf("git -C %s %s: %v\n%s", dir, strings.Join(args, " "), err, out))
-	}
-	return strings.TrimSpace(out)
-}
-
-// mustGit runs a git command in dir.
-func mustGit(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	gitOut(t, dir, args...)
 }
 
 // writeFixture writes content to dir/name, creating parent directories.
@@ -102,66 +63,4 @@ func readFixture(t *testing.T, dir, name string) string {
 		panic(err)
 	}
 	return string(b)
-}
-
-// commitFixture writes content to dir/name and commits it.
-func commitFixture(t *testing.T, dir, name, content string) {
-	t.Helper()
-	writeFixture(t, dir, name, content)
-	mustGit(t, dir, "add", "-A")
-	mustGit(t, dir, "commit", "--quiet", "-m", "update "+name)
-}
-
-// initRepo creates a repository in a new temp dir.
-func initRepo(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	mustGit(t, dir, "init", "--quiet", "--initial-branch=master")
-	return dir
-}
-
-// initBare creates a bare repository in a new temp dir.
-func initBare(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	mustGit(t, dir, "init", "--bare", "--quiet", "--initial-branch=master")
-	return dir
-}
-
-// initSyncRepo builds a bare "origin" with master holding a.txt ("a0") and
-// b.txt ("b0"), and returns (local, seed): a clone of it, and a second clone
-// that pushes new commits so tests can put local "behind". origin/HEAD is set
-// by the clone, so defaultBranch reads "master" as it does in the field.
-func initSyncRepo(t *testing.T) (string, string) {
-	t.Helper()
-	origin := initBare(t)
-	seed := initRepo(t)
-	commitFixture(t, seed, "a.txt", "a0\n")
-	commitFixture(t, seed, "b.txt", "b0\n")
-	mustGit(t, seed, "remote", "add", "origin", origin)
-	mustGit(t, seed, "push", "--quiet", "-u", "origin", "master")
-
-	local := t.TempDir()
-	mustGit(t, seed, "clone", "--quiet", origin, local)
-	return local, seed
-}
-
-// advanceOrigin pushes a.txt = "a1" from the seed clone, so origin is one
-// fast-forwardable commit ahead of the local clone.
-func advanceOrigin(t *testing.T, seed string) {
-	t.Helper()
-	commitFixture(t, seed, "a.txt", "a1\n")
-	mustGit(t, seed, "push", "--quiet", "origin", "master")
-}
-
-// initPublishRepo creates a repo with one commit on master, already pushed to a
-// bare "origin", so commands comparing HEAD against origin have a real remote.
-func initPublishRepo(t *testing.T) string {
-	t.Helper()
-	origin := initBare(t)
-	root := initRepo(t)
-	commitFixture(t, root, "package.json", `{"version": "1.0.0"}`)
-	mustGit(t, root, "remote", "add", "origin", origin)
-	mustGit(t, root, "push", "--quiet", "-u", "origin", "master")
-	return root
 }
