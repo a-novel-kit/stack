@@ -203,7 +203,7 @@ func newServer(ctx context.Context, cfg config.App) (*grpc.Server, error) {
 - **A service tests its gate wiring, never the gate.** golib's tests cover the gate's own cases.
   `cmd/rest`'s `TestNewRouter` and `cmd/grpc`'s `TestNewServer` build the real router or server and
   check what the wiring decides, one row each:
-  - the liveness ping answers 200 without a token;
+  - the liveness ping (REST) and the health service (gRPC, `SERVING`) answer without a token;
   - a gated route, such as the healthcheck, refuses a call without a token (401, or
     `Unauthenticated` for a unary call and a stream);
   - a valid token passes;
