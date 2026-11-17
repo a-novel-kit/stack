@@ -49,7 +49,6 @@ concurrency:
   group: bot-comment-${{ inputs.repo }}-${{ inputs.nonce }}
   cancel-in-progress: false
 
-# Every write uses the scoped App token, so the workflow token gets nothing.
 permissions: {}
 
 jobs:

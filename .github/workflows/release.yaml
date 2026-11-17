@@ -1,9 +1,8 @@
 name: release
 
-# Releases are cut from the GitHub UI (Actions > release > Run) or by the
-# release train, which dispatches this workflow. `plan`
-# rehearses with no credential; `cut` runs in the protected `release` environment,
-# the "who can publish" gate whose key only it reads, and pushes the version
+# Releases are cut from the GitHub UI (Actions > release > Run) or by the release train, which
+# dispatches this workflow. `plan` rehearses with no credential; `cut` runs in the protected
+# `release` environment, the "who can publish" gate whose key only it reads, and pushes the version
 # commit, the tags and the GitHub Release as the release App.
 #
 # The CLI's Go module lives under cli/, so release-core derives the cli/vX.Y.Z
@@ -20,7 +19,7 @@ on:
 
 run-name: "🚀 release ${{ github.ref_name }}${{ inputs.dry_run && ' (dry-run)' || '' }}"
 
-# The a-novel CLI release-core runs in plan and cut.
+# plan and cut run release-core with this CLI version.
 env:
   # renovate: datasource=go depName=github.com/a-novel-kit/stack/cli
   cli_version: "1.42.5"
