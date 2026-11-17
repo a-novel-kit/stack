@@ -293,9 +293,8 @@ health timeout, why _this_ job runs its binary twice. Reviewers get the general 
 A job's ID **is** its required-check context, so name it by lane: `test-go`, `lint-go`, `lint-js`,
 `test-js`, `lint-proto`, `generated-go`, and the `build-*` / `report-*` families. A lane is named
 after what it checks, so the JS lane is `js`, as the Go lane is `go`. A bare verb like `test` breaks
-down in a repo holding both Go and JS, where two jobs would claim the name. Some repos still
-emit a legacy bare `test`; new jobs use the lane form. Renaming a job changes its required check,
-which [the next section](#required-checks-and-rulesets) covers.
+down in a repo holding both Go and JS, where two jobs would claim the name. Renaming a job changes
+its required check, which [the next section](#required-checks-and-rulesets) covers.
 
 A job must also not take the name of a check-run the [Agent] App posts. `gates.yaml` names its job
 `evaluate` for that reason — the job is only the runner, and a same-named job would collide with the
@@ -598,7 +597,7 @@ There is no local runner, so verification is reading plus CI.
   object at the ref. Limit it in the step's `env`, which actions/checkout passes to git:
   `GIT_CONFIG_COUNT: 1`, `GIT_CONFIG_KEY_0: lfs.fetchinclude`, and `GIT_CONFIG_VALUE_0: <pattern>`.
   A second checkout over an existing tree leaves its pointer files in place; run `git lfs checkout`
-  after it. uikit's `main.yaml` `lint-js` does both.
+  after it. ui-assets' `main.yaml` `lint-js` does both.
 - **An artifact another job downloads, uploaded without `overwrite: true`.** A re-run uploads it
   again under the same name. `download-artifact` keeps the highest-ID artifact of each name, and a
   re-run's upload can carry a lower ID than an earlier attempt's, so the download misses the re-run's
