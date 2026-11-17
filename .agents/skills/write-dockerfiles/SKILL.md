@@ -82,7 +82,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # ── Optional: install tools used in the final image ────────────────────────────────────
 # A tool the image needs (grpcurl for a healthcheck, say) installs here — after go mod
 # download, before the source COPY — so it caches independently of source changes.
-RUN GOBIN=/usr/local/bin go install github.com/fullstorydev/grpcurl/cmd/grpcurl@v1.9.3
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    GOBIN=/usr/local/bin go install github.com/fullstorydev/grpcurl/cmd/grpcurl@v1.9.3
 
 # ── Copy source files ──────────────────────────────────────────────────────────────────
 # Copy the Go source directories whole. .dockerignore drops tests and docs, and the go-build
@@ -109,8 +111,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 4. `COPY` source files
 5. `RUN go build`
 
-Never move `go mod download` after source COPY: it defeats layer caching. Both `RUN` steps mount
-the module cache, and `go build` also mounts the build cache, as the builder example shows.
+Never move `go mod download` after source COPY: it defeats layer caching. Every `RUN` step mounts
+the module cache, and the steps that compile (`go install`, `go build`) also mount the build cache,
+as the builder example shows.
 
 **Build flags**: all three (`CGO_ENABLED=0`, `-ldflags="-s -w"`, `-trimpath`) are required on every
 `go build`. Set `CGO_ENABLED=0` once as `ENV` at the top of the stage rather than inlining it per

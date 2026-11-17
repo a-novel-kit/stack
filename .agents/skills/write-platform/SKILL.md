@@ -93,10 +93,9 @@ narrow one it fixes its phone header to the screen and moves the banner to the f
 banner's block size when the banner sits at the foot, which uikit's `StickyBar edge="end"` reads. A
 page's own sticky part, such as a tab bar, sits under `--shell-sticky-top`, frosted and overhanging
 its column as [write-design-system](../write-design-system/SKILL.md#the-a-novel-visual-direction)
-describes. The
-root layout paints the canvas color on `html` and the lamp on a fixed `body::before` layer with
-`will-change: transform`: iOS drops a fixed layer that has no compositing layer of its own once the
-page scrolls far. Chrome on iOS still moves fixed layers as its toolbar collapses
+describes. The root layout paints the canvas color on `html` and the lamp on a fixed `body::before`
+layer with `will-change: transform`: iOS drops a fixed layer that has no compositing layer of its
+own once the page scrolls far. Chrome on iOS still moves fixed layers as its toolbar collapses
 ([WebKit bug 297779](https://bugs.webkit.org/show_bug.cgi?id=297779)) and can lose the lamp, which
 Safari keeps; no CSS works around it. The root layout also styles the links iOS makes of an email
 address or a date it finds in the text (`a[x-apple-data-detectors]`) as plain text. It links its
