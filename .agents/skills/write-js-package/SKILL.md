@@ -24,7 +24,7 @@ pkg/js/
 ├── rest/                        # Published npm package (@a-novel/<service-slug>-rest)
 │   ├── src/
 │   │   ├── index.ts             # Re-exports everything — only file consumers import from
-│   │   ├── api.ts               # <Service>Api class (HTTP plumbing + system endpoints)
+│   │   ├── api.ts               # <Service>Api class (RestClient + system endpoints)
 │   │   └── <domain>.ts          # One file per resource domain (e.g., item.ts)
 │   ├── dist/                    # Build artefacts — never edit manually
 │   ├── package.json
@@ -45,17 +45,26 @@ published package is `@a-novel/<service-slug>-rest`, the private test project is
 `<service-slug>-rest-test-project`, and the client class is the slug in PascalCase without its
 `service-` prefix — `service-narrative-engine` gives `NarrativeEngineApi`. Both packages are pnpm
 workspace members, listed in `pnpm-workspace.yaml` and in the root `package.json` `workspaces`
-array.
+array. The test project declares no dependency of its own, workspace links included: the root
+`package.json`, which Renovate watches, declares everything it imports, the client as `workspace:*`
+too. Renovate's `:ignoreModulesAndTests` preset skips `**/test/**`, so a version pinned there would
+never move, and one form for every dependency holds across the fleet.
 
-`vite.config.ts` keeps every peer dependency out of the bundle, subpaths included. Rollup matches
-`external` entries by exact specifier, so a list of package names bundles `@a-novel-kit/nodelib-browser/http`
-while excluding `@a-novel-kit/nodelib-browser`. The client then carries a stale copy of the peer's
-classes, and `instanceof` checks and new fields silently diverge from the consumer's version. Match
-by prefix:
+`vite.config.ts` is one call to `ViteLibrary` from `@a-novel-kit/nodelib-config/vite-library`:
 
 ```ts
-external: (id) => Object.keys(peerDependencies).some((peer) => id === peer || id.startsWith(`${peer}/`)),
+import manifest from "./package.json" with { type: "json" };
+
+import { ViteLibrary } from "@a-novel-kit/nodelib-config/vite-library";
+
+export default ViteLibrary(import.meta.dirname, { src: "src/index.ts" }, manifest);
 ```
+
+It keeps every dependency and peer out of the bundle, subpaths included. Rollup matches a plain
+`external` list by exact specifier, so a list of package names bundles
+`@a-novel-kit/nodelib-browser/http` while excluding `@a-novel-kit/nodelib-browser`. The client then
+carries a stale copy of the peer's classes, and `instanceof` checks and new fields silently diverge
+from the consumer's version.
 
 A new resource domain follows the same split: one `<domain>.ts` source file, one `<domain>.test.ts`
 test file. Never merge unrelated domains into a single file.
@@ -63,7 +72,8 @@ test file. Never merge unrelated domains into a single file.
 A service whose tests need helpers that other repos also use publishes them as a third package,
 `pkg/js/rest-test/` (`@a-novel/<service-slug>-rest-test`) — `service-authentication` ships one for
 its email round-trips. Helpers used only by this repo's own suite stay beside the tests that use
-them.
+them. A suite reads Mailpit with `searchMail` and `mailLinks` from
+`@a-novel-kit/nodelib-test/mailpit`, polling with `vi.waitFor`.
 
 ---
 
@@ -107,18 +117,29 @@ Divergence between the spec, the client, and the handlers is a bug.
 
 ### `api.ts` — The `<Service>Api` Class
 
-`<Service>Api` owns all HTTP plumbing. It holds the `_baseUrl` and exposes two primitives:
+`<Service>Api` extends `RestClient` from `@a-novel-kit/nodelib-browser/http`, which owns the HTTP
+plumbing (`fetch`, `fetchVoid`, `fetchBlob`, `fetchResponse`) and takes an optional `fetcher`. The
+subclass adds only `ping()` and `health()` for its API version, typed with the package's
+`HealthDependency`:
 
 ```typescript
-/** Fire-and-forget — discards the response body. Throws on non-2xx. */
-async fetchVoid(input: string, init?: RequestInit): Promise<void>
+import { type HealthDependency, RestClient } from "@a-novel-kit/nodelib-browser/http";
 
-/** JSON response — decodes the body as T, validated against the Zod schema when one is given. */
-async fetch<T>(input: string, validator?: ZodType<T>, init?: RequestInit): Promise<T>
+export class TemplateApi extends RestClient {
+  async ping(): Promise<void> { ... }
+  async health(): Promise<Record<string, HealthDependency>> { ... }
+}
 ```
 
-Domain functions always delegate to one of these two, never to the global `fetch` — a direct `fetch`
-call bypasses base-URL composition, response validation, and error handling.
+The constructor takes the base URL, without a trailing slash. A server-side caller also passes a
+`fetcher`, which wraps `fetch` to add its service token or a deadline. Every method takes a path
+under the base URL. `fetch` decodes the JSON body through the Zod schema it is given, `fetchVoid`
+discards the body, and `fetchBlob` reads it as a `Blob`; each throws an `HttpError` on a non-2xx
+status. `fetchResponse` returns the response whatever its status. The client's `package.json` sets
+its `@a-novel-kit/nodelib-browser` peer to `^2.13.0`, the first release with `RestClient`.
+
+Domain functions always call one of these methods, never the global `fetch`: a direct `fetch` call
+bypasses base-URL composition, response validation, and error handling.
 
 System endpoints (`/ping`, `/healthcheck`) live in `api.ts` as methods on the class: `ping()`
 resolves once the service is reachable, and `health()` returns `Record<string, HealthDependency>`
@@ -160,17 +181,15 @@ const query = params.toString();
 return await api.fetch(`/resource${query ? `?${query}` : ""}`, ResourceSchema, { method: "GET" });
 ```
 
-**Headers**: use constants from `@a-novel-kit/nodelib-browser/http`. `HTTP_HEADERS.JSON` sets
-`Content-Type: application/json`, which describes a request body, so a request without a body, such
-as a `GET` or a `DELETE`, sends none.
-
-**Request body**: pass serialized JSON as the body with `HTTP_HEADERS.JSON` on POST/PUT/PATCH:
+**Headers and body**: pass `accessToken` to send the bearer token, and `json` to send a JSON body
+with its `Content-Type`. A request without a body, such as a `GET` or a `DELETE`, sends no
+`Content-Type`. Never import `HTTP_HEADERS` (deprecated).
 
 ```typescript
 return await api.fetch("/resource", ResourceSchema, {
-  method: "POST",
-  headers: HTTP_HEADERS.JSON,
-  body: JSON.stringify(payload),
+  method: "PUT",
+  accessToken,
+  json: request,
 });
 ```
 
@@ -340,7 +359,8 @@ await expectStatus(itemGet(api, "00000000-0000-0000-0000-000000000000"), 404);
 For every exported function, cover:
 
 - The happy path (valid input, expected response shape)
-- Each documented error case (400 bad request, 404 not found, etc.)
+- Each documented error case (400 for a malformed request, 422 for an invalid one, 404 not found,
+  etc.)
 - Optional parameters: one test with the parameter absent, one with it set (when it changes the
   result meaningfully)
 
@@ -358,8 +378,11 @@ Every entry is stated in full above; this list is the review checklist.
 - Adding a domain file without its `export *` line in `index.ts`.
 - Diverging from the OpenAPI spec on URL paths, query parameter names, response field names, or HTTP
   methods — they must match it exactly.
-- Listing peer dependencies by name in `external`, which bundles their subpath imports.
+- Writing `vite.config.ts` by hand instead of calling `ViteLibrary`: a list of peer names in
+  `external` bundles their subpath imports.
 - Calling global `fetch` instead of `api.fetch` / `api.fetchVoid`.
+- Building the `Authorization` header or a `JSON.stringify` body by hand instead of passing
+  `accessToken` and `json`.
 - Dropping the Zod validator on an `api.fetch` call whose response the service defines.
 - Skipping JSDoc on an exported symbol.
 - Using `any` (an open-ended field is `unknown`, and every other type is explicit or inferred from a

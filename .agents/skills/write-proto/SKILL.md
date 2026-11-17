@@ -127,11 +127,11 @@ Managed mode injects `option go_package`: the prefix plus the file's directory. 
 `internal/handlers/protogen/anovel/template/v0`.
 
 **`buf.gen.docs.yaml`** converts the protos into the gRPC document of the service's API reference,
-the Scalar page each service deploys to GitHub Pages. `publish-docs` runs it on `master`, and a
-`jq` step names the document, stamps the `package.json` version, and drops the Connect headers and
-per-field titles the converter adds. Nothing it writes is committed. The converter describes
-Connect-style HTTP calls that a grpc-go server does not answer, so `openapi.html` hides test
-requests and code samples for that document.
+the Scalar page each service deploys to GitHub Pages. `publish-docs` runs it on `master` through
+`github-pages-actions/publish-api-docs`, whose `jq` step names the document, stamps the
+`package.json` version, and drops the Connect headers and per-field titles the converter adds.
+Nothing it writes is committed. The converter describes Connect-style HTTP calls that a grpc-go
+server does not answer, so `openapi.html` hides test requests and code samples for that document.
 
 ---
 
@@ -270,9 +270,12 @@ Wire-safe (non-breaking) changes:
 | Add a new RPC           | Old clients never call it                               |
 | Add or change a comment | No runtime impact                                       |
 
-Renaming is never the safe refactor it looks like — buf rejects it at `FILE` level. To rename a
-field, add a new field with the correct name and a new number, deprecate the old one with a
-comment, then remove it in a coordinated release.
+Renaming is never the safe refactor it looks like: buf rejects it at `FILE` level. To rename a
+field, add a new field with the correct name and a new number, and name the new field in the old
+one's comment, with no `Deprecated:` paragraph and no `deprecated = true` option: protoc-gen-go
+turns either into a `Deprecated:` comment in the generated Go, where staticcheck's SA1019 fails
+every consumer still reading the old field. Remove the old field
+in a coordinated release once no consumer reads it.
 
 An intended break, such as a package that was never released or a planned major, needs no admin
 override. A reviewer adds the `buf skip breaking` label, and `bufbuild/buf-action` skips the

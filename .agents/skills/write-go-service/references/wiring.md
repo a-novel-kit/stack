@@ -7,7 +7,7 @@ Read this reference when routed here by [write-go-service](../SKILL.md). Its rul
 Configuration structs + loading from env vars or YAML. No logic beyond parsing and defaulting.
 
 - **Static config** (feature flags, algorithm choices, topology) → YAML files.
-- **Dynamic config with defaults** (ports, timeouts, DSNs) → env vars via the `internal/config/env/`
+- **Dynamic config with defaults** (ports, timeouts, hosts) → env vars via the `internal/config/env/`
   helper package.
 - Group related fields into named structs; nest for sub-domains (`App.Rest`, `App.Grpc`, `App.Main`).
 - **Server config comes from golib.** `App.Rest` is an `httpf.ServerConfig` loaded with
@@ -15,13 +15,26 @@ Configuration structs + loading from env vars or YAML. No logic beyond parsing a
   `grpcf.ServerConfig` loaded the same way over `GRPC_*`. Never redeclare those variables, types or
   defaults. A service that needs another default overrides it on a copy of
   `httpf.ServerConfigDefault` (or `grpcf.ServerConfigDefault`), next to the reason.
+- **The other standard variables come from golib loaders.** `env.go` reads each block in one line
+  and never redeclares its variables or defaults:
+  - `otelpresets.LoadTelemetry(getEnv, otelpresets.ServerFlushTimeout)` picks the exporter and the
+    loggers that match it (see [telemetry](telemetry.md#export)).
+  - `postgrespresets.LoadConnection(getEnv, postgrespresets.ConnectionDefault)` reads the discrete
+    `POSTGRES_*` variables, pool bounds included. `Connection.Preset` builds one preset per role,
+    such as the migrations job's with its `lock_timeout`.
+  - `servicetoken.LoadConfig(getEnv)` reads `SERVICE_TOKEN_ISSUER`, `SERVICE_TOKEN_AUDIENCE`,
+    `SERVICE_TOKEN_CALLERS` and `SERVICE_ISSUER_OPTIONAL`.
+  - `grpcf.LoadClientConfig(getEnv, "SERVICE_<NAME>", defaults)` reads a dependency's `_HOST`,
+    `_PORT`, `_TLS` and `_TOKEN_PATH`. `main` dials it with `Address()` and `DialOptions()`.
 - **Servers come from golib, one line each.** `cmd/` builds the router with
-  `httpf.NewRouter(cfg.Rest, cfg.Otel, cfg.RestLogger, cfg.App.DowntimeStart)` and runs it with
+  `httpf.NewMux(cfg.Rest, cfg.RestLogger, cfg.App.DowntimeStart)` and runs it with
   `httpf.ListenAndServe(ctx, cfg.Rest, router)`; gRPC uses
-  `grpcf.NewServer(ctx, cfg.Otel, cfg.GrpcLogger, cfg.App.DowntimeStart, ctxInterceptor)` and
-  `grpcf.ListenAndServe(ctx, cfg.Grpc, server)`. Both servers take the process context: when it ends,
-  requests and unary calls drain within the shutdown timeout, while gRPC streams end with
-  `UNAVAILABLE` so their clients resume elsewhere. A REST request that keeps taking on work, such as
+  `grpcf.NewGRPCServer(ctx, cfg.GrpcLogger, cfg.App.DowntimeStart, nil, serviceToken...)` and
+  `grpcf.ListenAndServe(ctx, cfg.Grpc, server)`. Both trace under the providers `otel.Init`
+  installs. A nil base context gives each gRPC call the values of the process context, the database
+  handle included. Both servers take the process context: when it ends, requests and unary calls
+  drain within the shutdown timeout, while gRPC streams end with `UNAVAILABLE` so their clients
+  resume elsewhere. A REST request that keeps taking on work, such as
   a batch, mounts `httpf.EndOnShutdown(ctx)` with `With`: its context ends when shutdown begins, so
   it stops starting work, which it must check its context for. What differs per service, such as the
   ping path or the CORS methods, is a default on the config copy, never an argument.
@@ -123,10 +136,56 @@ Each `cmd/<name>/main.go` wires the full dependency graph and starts a server or
 ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 defer stop()
 
-// ... wiring
+lo.Must0(otel.Init(cfg.Otel))
+defer cfg.Otel.Flush()
 
-lo.Must0(httpf.ListenAndServe(ctx, cfg.Rest, router))
+ctx = lo.Must(postgres.NewContext(ctx, cfg.Postgres))
+defer cfg.Postgres.Close()
+
+// ... DAO, core and handler wiring
+
+router := httpf.NewMux(cfg.Rest, cfg.RestLogger, cfg.App.DowntimeStart)
+withServiceToken := lo.Must(httpf.ServiceTokenGate(
+    cfg.ServiceToken, httpf.NewPoolClient(httpf.PoolOptions{}), cfg.Logger, cfg.Rest.Liveness,
+))
+
+router.Route("/v0", func(api chi.Router) {
+    api.Get("/ping", httpf.Ping)
+    api.Get("/healthcheck", httpf.Health(map[string]func(context.Context) error{
+        "client:postgres": postgres.Health,
+    }))
+    // ... one line per route
+})
+
+lo.Must0(httpf.ListenAndServe(ctx, cfg.Rest, withServiceToken(router)))
 ```
+
+A gRPC `main` opens the same way, then serves:
+
+```go
+serviceToken := lo.Must(grpcf.ServiceTokenGate(cfg.ServiceToken, httpf.NewPoolClient(httpf.PoolOptions{})))
+server := grpcf.NewGRPCServer(ctx, cfg.GrpcLogger, cfg.App.DowntimeStart, nil, serviceToken...)
+grpcf.RegisterHealth(ctx, server)
+
+// ... one Register<Service>Server line per handler
+
+lo.Must0(grpcf.ListenAndServe(ctx, cfg.Grpc, server))
+```
+
+- **The service token gates fail closed.** Each returns `servicetoken.ErrIssuerRequired` without
+  an issuer, unless `SERVICE_ISSUER_OPTIONAL` is true, so `lo.Must` stops the process at startup.
+  The REST gate leaves open the paths it lists, such as the liveness path. The gRPC gate leaves the
+  health service open.
+- **Ping and health come from golib.** `httpf.Ping` answers the liveness path with "pong".
+  `httpf.Health` runs its named probes at once, each under a span `rest.Health(<name>)`, and
+  answers `{"client:postgres": {"status": "up"}}`, with 503 when a probe fails. A service writes
+  only the probes it owns, such as a dependency's status call.
+- **A probe returns an error safe to export.** `httpf.Health` exports a probe's error on the
+  probe's span. Authentication's SMTP probe returns `errSmtpUnhealthy`, never the error of the SMTP
+  `Ping`, whose reply text can carry a credential.
+- **`grpcf.RegisterHealth(ctx, server)`** registers the health and echo services. The health
+  service reports `SERVING` until `ctx` ends, then `NOT_SERVING`, so callers stop sending calls to
+  a server that drains.
 
 ### Fault reporting
 
@@ -140,7 +199,7 @@ records none.
   `Internal` or `Unavailable`, and a panic in a handler or under `otel.RecoverPanic`, which also
   logs the panic's type and stack at error level. A handler adds no record of its own, and a
   handled 4xx condition is never one.
-- **A serve failure or a drain past its budget** returns from `httpf.Serve` or
+- **A serve failure or a drain past its budget** returns from `httpf.ListenAndServe` or
   `grpcf.ListenAndServe`, and `main` exits with it. A failure while serving restarts the pod, which
   Grafana's Health dashboard counts.
 - **Work that outlives its request records its own failure.** No server span sees it fail, so each
@@ -148,16 +207,19 @@ records none.
   `otel.ReportError(span, err)` and `span.SetAttributes(otel.ErrorType(err))` on that root, as
   golib's `worker.Poll` does. A job that waits for the same work records the result on the job's
   root instead.
-- **A job's root span carries the job's failure.** Its `run` starts the span, then records the
-  failure on it the same way before returning it to `main`, which exits non-zero after the deferred
-  flush, so the Kubernetes Job fails too. Its setup, such as loading a key or connecting to the
-  database, runs under that span and returns its error rather than panicking past it. A usage
-  error, such as an unknown operation, records nothing.
-- **A job flushes its telemetry within `config.OtelJobFlushTimeout`,** one minute, through
-  `config.OtelJobPresetDefault`. A job often ends within milliseconds, so every span and log leaves
+- **A job's root span carries the job's failure.** The job runs its work with
+  `worker.Run(ctx, "job.<Name>", fn)`, which opens that root span, records a failure on it the same
+  way, and returns it to `main`. `main` exits non-zero after the deferred flush, so the Kubernetes
+  Job fails too. Its setup, such as loading a key or connecting to the database, runs inside `fn`
+  and returns its error rather than panicking past it. A usage error, such as an unknown operation,
+  records nothing.
+- **A job flushes its telemetry within `otelpresets.JobFlushTimeout`,** one minute, which it passes
+  to `otelpresets.LoadTelemetry`. A job often ends within milliseconds, so every span and log leaves
   in that exit flush. The OpenTelemetry SDK gives the spans, then the logs, 30 seconds each. A
-  server keeps `config.OtelFlushTimeout`, 2 seconds.
-- **A server's drain ends 6 seconds after SIGTERM.** `env.TimeoutShutdownDefault` sets the REST and
-  gRPC shutdown budgets, so the 2-second OpenTelemetry flush that follows finishes well inside the
-  pod's 30-second termination grace period. Work still running when the drain ends is cut, and the
-  server returns an error wrapping `context.DeadlineExceeded`.
+  server passes `otelpresets.ServerFlushTimeout`, 2 seconds.
+- **A server's drain ends 6 seconds after SIGTERM.** golib's `httpf.ServerConfigDefault` and
+  `grpcf.ServerConfigDefault` set the REST and gRPC shutdown budgets, so the 2-second OpenTelemetry
+  flush that follows finishes well inside the pod's 30-second termination grace period. Work still
+  running when the drain ends is cut, and the server returns an error wrapping
+  `context.DeadlineExceeded`. Authentication alone overrides the REST budget, to 25 seconds, which
+  outlasts its SMTP send timeout.

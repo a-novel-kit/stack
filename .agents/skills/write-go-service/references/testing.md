@@ -103,7 +103,7 @@ require.Equal(t, testCase.expect, res)
 ### REST handler tests — `net/http/httptest`, no real server
 
 ```go
-handler := handlers.NewRestJwkGet(service, config.LoggerDev)
+handler := handlers.NewRestJwkGet(service, &loggingpresets.LogLocal{Out: io.Discard})
 w := httptest.NewRecorder()
 handler.ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/jwk?id="+id, nil))
 
@@ -119,7 +119,7 @@ if testCase.expectResponse != nil {
 ```
 
 - Build requests with `httptest.NewRequestWithContext(t.Context(), method, url, body)`, using the
-  **real registered method and path** (`http.MethodGet`, `"/healthcheck"` not `"/"`).
+  **real registered method and path** (`http.MethodGet`, `"/jwk"` not `"/"`).
 - Decode the expected response into `any` (not a typed struct) — this avoids import coupling and
   matches JSON numbers as `float64`. For empty list results use `[]any{}` (not `nil`): Go encodes a
   nil slice as `null` and a non-nil empty slice as `[]`, distinct API contracts.

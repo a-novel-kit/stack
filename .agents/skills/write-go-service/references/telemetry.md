@@ -37,7 +37,7 @@ own, such as `"core.GenerationStream(events)"`, and reports there the error that
   `"dao.PgJwkSearch"` for `PgJwkSearch`.
 - **Core** — nothing to strip: `"core.JwkSearch"` for `JwkSearch`.
 - **Sub-spans** (private methods) — append in parentheses: `"rest.JwkGet(parseID)"`,
-  `"grpc.Status(reportPostgres)"`.
+  `"rest.Health(client:postgres)"`, as golib's `httpf.Health` names each probe's span.
 
 **Reporting follows `write-go`**: every failed operation reports on its own span, and the detail is
 recorded once. Here is how it lands on the service layers:
@@ -96,13 +96,16 @@ One user action is one trace, from the platform's server to the last service it 
 
 The servers export over golib's `otelpresets.OTLP`, configured by the standard `OTEL_EXPORTER_OTLP_*`
 and `OTEL_SERVICE_NAME` variables. The preset sets no exporter option of its own, so the backend
-changes with the variables alone. `service-template`'s `internal/config` is the reference.
+changes with the variables alone.
 
-- **Pick every preset from one flag.** `exportsOTLP` holds when `OTEL` and `OTEL_EXPORTER_OTLP_ENDPOINT`
-  are both set. It chooses `LogOTel`, `GRPCOTel` and a nil request logger together. A logger that
-  checked the endpoint alone would write into the disabled provider of a job without `OTEL`.
-- **Read `OTEL_*` without the service's prefix.** The SDK reads them unprefixed, so the endpoint the
-  service checks is the one its exporter uses.
-- **Leave the liveness path untraced** with `UntracedPaths`. The probe then opens no trace, the
-  handler's own span included.
-- **Write no request or call log.** The server span records each request and call.
+- **Pick every preset with `otelpresets.LoadTelemetry`.** `env.go` loads it once, and the app config
+  takes its `Otel`, `Logger`, `HTTPLogger` and `RPCLogger` fields together:
+  - without `OTEL`, the `Disabled` exporter and terminal loggers;
+  - with `OTEL` and no `OTEL_EXPORTER_OTLP_ENDPOINT`, the `Local` exporter and the same loggers;
+  - with both, the `OTLP` exporter and loggers that write through it.
+- **Read `OTEL_*` without the service's prefix.** The SDK reads them unprefixed, and so does
+  `LoadTelemetry` for the endpoint, so the endpoint it checks is the one the exporter uses.
+- **Leave the liveness path untraced.** `httpf.NewMux` does it under every preset: the probe opens
+  no trace, the handler's own span included. Leave `OTLP.UntracedPaths` unset: it does nothing.
+- **Write no request or call log.** The server span records each request and call. Under `OTLP`,
+  `LoadTelemetry` returns a nil `HTTPLogger` and an `RPCLogger` that logs only panics.

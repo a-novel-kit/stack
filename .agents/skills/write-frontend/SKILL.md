@@ -106,7 +106,8 @@ or instruction to find an earlier link does not replace it.
 - Load `choose-dependency` before adding, replacing, or evaluating a package.
 - Prefer the web platform, an existing workspace package, or an existing dependency in that order.
 - Before implementing reusable code in a terminal app, route visual contracts to uikit and
-  framework-agnostic runtime or shared build/lint/test/localization configuration to nodelib.
+  non-visual runtime, Svelte helpers included, or shared build/lint/test/localization configuration
+  to nodelib.
 - Require an explicit reason for every runtime dependency: capability, maintenance owner, release
   health, browser cost, license, security posture, and why the current stack cannot provide it.
 - Prefer standards-body or established-organization ownership. Do not adopt an unmaintained package

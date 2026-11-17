@@ -21,9 +21,8 @@ Before writing code, check OpenTofu, the providers, Kubernetes, its operators an
 - **Inline workflow steps** call `tofu`, `gh`, `gcloud`, `jq` and `curl` directly.
 - **A shared step sequence** becomes a repository composite action: `.github/actions/tofu` plans,
   enforces the policy, copies images and applies.
-- **Service roots are found on disk.** `deploy.yaml` applies each one through a matrix, and
-  `drift.yaml` checks each one. Only what GitHub cannot derive is listed by hand: a root's
-  `plan-<root>` required check, which `check-service-roots.sh` enforces.
+- **Roots are found on disk.** `drift.yaml` checks `bootstrap` and each directory under
+  `environments/production`, and each root's `plan-<root>` job in `main.yaml` is its required check.
 - **Bash** runs the workflow steps that mostly call `tofu`, `gh`, `gcloud`, `skopeo` or `jq`.
   `smoke.sh` is POSIX `sh`, since it runs inside each service's own image.
 - **Workflow rules that can stop or misdeploy production live in tested scripts:** zero-dependency
@@ -101,7 +100,7 @@ Run the whole gate the way CI does:
 - zizmor with the fleet config (`kit/workflows/security-actions/lint-workflows/zizmor.yml`);
 - shellcheck through `koalaman/shellcheck`;
 - Prettier and the Renovate validator through `npx`;
-- `node --test '.github/scripts/*.test.mjs'` and `.github/scripts/check-service-roots.sh`.
+- `node --test '.github/scripts/*.test.mjs'`.
 
 ## Known traps
 

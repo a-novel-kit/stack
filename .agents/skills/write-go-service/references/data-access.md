@@ -88,11 +88,11 @@ is a transaction only when a caller opened one.
 
 ### Constraint violations
 
-A write that breaks a constraint fails with the constraint's SQLSTATE and name. The DAO matches
-both and joins a sentinel, as it joins `ErrXxxNotFound` to `sql.ErrNoRows`. A foreign key
-violation (`23503`) means the referenced row is missing, so it maps to a not-found sentinel. A check
-violation (`23514`) maps to the sentinel of the limit it guards. The layer's `common.go` holds the
-matcher:
+A write that breaks a constraint fails with the constraint's SQLSTATE and name. The DAO reads both
+with golib's `postgres.SQLState(err)`, matches them, and joins a sentinel, as it joins
+`ErrXxxNotFound` to `sql.ErrNoRows`. A foreign key violation (`23503`) means the referenced row is
+missing, so it maps to a not-found sentinel. A check violation (`23514`) maps to the sentinel of the
+limit it guards. The layer's `common.go` holds the codes:
 
 ```go
 const (
@@ -101,14 +101,6 @@ const (
     // pgCheckViolation is the SQLSTATE PostgreSQL raises when a write breaks a check constraint.
     pgCheckViolation = "23514"
 )
-
-// isViolation reports whether err comes from a write that broke the named constraint, which code
-// classifies.
-func isViolation(err error, code, constraint string) bool {
-    var pgErr pgdriver.Error
-
-    return errors.As(err, &pgErr) && pgErr.Field('C') == code && pgErr.Field('n') == constraint
-}
 ```
 
 A cell upsert maps each of its foreign keys to its own sentinel:
@@ -116,13 +108,17 @@ A cell upsert maps each of its foreign keys to its own sentinel:
 ```go
 err = db.NewRaw(cellUpsertQuery, request.ProjectID, request.SceneID, request.LayerID /* … */).Scan(ctx, entity)
 
+code, constraint := postgres.SQLState(err)
+
 switch {
-case isViolation(err, pgForeignKeyViolation, "cells_scene_fkey"):
+case code == pgForeignKeyViolation && constraint == "cells_scene_fkey":
     err = errors.Join(err, ErrCellUpsertSceneNotFound)
-case isViolation(err, pgForeignKeyViolation, "cells_layer_fkey"):
+case code == pgForeignKeyViolation && constraint == "cells_layer_fkey":
     err = errors.Join(err, ErrCellUpsertLayerNotFound)
 }
 ```
+
+`SQLState` returns two empty strings for an error that wraps no PostgreSQL error, nil included.
 
 Use **`write-sql`** for the constraints and their names.
 

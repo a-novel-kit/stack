@@ -226,7 +226,7 @@ func (h *RestUserList) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    httpf.SendJSON(ctx, w, span, lo.Map(users, func(user *core.User, _ int) User { return loadUser(user) }))
+    httpf.SendJSONStatus(w, span, http.StatusOK, lo.Map(users, func(user *core.User, _ int) User { return loadUser(user) }))
 }
 
 func NewRestUserList(service RestUserListService, logger logging.Log) *RestUserList {
@@ -243,7 +243,7 @@ func NewRestUserList(service RestUserListService, logger logging.Log) *RestUserL
   request that decodes but fails core validation (`core.ErrInvalidRequest`) answers 422. A refusal
   that depends on stored state, such as a duplicate or a full project, answers 409.
 - Conventional short names `w` / `r`. JSON in via `json.NewDecoder(r.Body)` or `gorilla/schema` for
-  query params; out via the project's `httpf.SendJSON`.
+  query params; out via the project's `httpf.SendJSONStatus`.
 - **A single write and its batch take their own routes**, with the same methods: `POST`, `PUT` and
   `DELETE /v1/scene` act on one scene, and the same methods on `/v1/scenes` on a batch.
   `GET /v1/scenes` stays the list, and a move keeps its own route, `POST /v1/scene/move`.

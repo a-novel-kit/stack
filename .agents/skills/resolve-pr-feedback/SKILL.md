@@ -62,6 +62,9 @@ Two rules anchor the loop; the rest of this skill is their mechanics:
 2. **Genuinely unclear or worth discussing → reply with a specific question, leave open.**
    Silence is the worst option; acting on partial understanding is the second-worst.
 
+A PR goes to the developer for merge only with no open thread: every one, nits included, is fixed
+or answered, then resolved.
+
 If you partially accepted, took a different direction, or bundled the fix with adjacent changes, the
 **reply explains the deviation** before resolution. Quiet, after-the-fact re-interpretation erodes
 trust. Larger deviations where the reviewer might prefer the original suggestion fall under rule 2 —

@@ -248,10 +248,10 @@ rule — all of which apply here. The service-specific additions:
   route all external traffic through REST, never expose gRPC directly.
 - **A security gate never turns itself off on empty configuration.** An unset issuer, caller list
   or key stops the process at startup, and only an explicit opt-out that production never sets
-  starts it without the gate. json-keys' gRPC server refuses to start without
-  `SERVICE_TOKEN_ISSUER` unless `SERVICE_ISSUER_OPTIONAL` is true, which only its standalone gRPC
-  image and the CI smoke runs set, and a table test of `cmd/grpc`'s `newServer` covers the three
-  cases.
+  starts it without the gate. golib's `httpf.ServiceTokenGate` and `grpcf.ServiceTokenGate` return
+  `servicetoken.ErrIssuerRequired` without `SERVICE_TOKEN_ISSUER`, unless `SERVICE_ISSUER_OPTIONAL`
+  is true, which only local and test stacks set. golib's tests cover the gate's cases, so a service
+  mounts the gate with `lo.Must` and writes no wrapper or test of its own.
 
 ---
 

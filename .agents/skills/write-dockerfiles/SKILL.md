@@ -431,7 +431,7 @@ Always exclude:
   reads the same three variables as that database, `POSTGRES_USER`, `POSTGRES_PASSWORD` and
   `POSTGRES_DB`, in either contract: a DSN built from them, or `POSTGRES_DATABASE: "${POSTGRES_DB}"`
   beside the user and password. Never write the DSN out as a URL with its credentials, even with
-  placeholders: secret scanning flags it.
+  placeholders, as `AGENTS.md` rules for every credential-shaped URL.
 - **`${POSTGRES_PORT}` in a target's connection.** A target's `POSTGRES_DSN` or `POSTGRES_PORT` uses
   port `5432`, the container port, never the host-mapped `${POSTGRES_PORT}`: services communicate
   over the compose network, not through the host. The daemon owns `POSTGRES_PORT` for the host port

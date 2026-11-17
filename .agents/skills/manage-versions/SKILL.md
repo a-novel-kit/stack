@@ -64,8 +64,10 @@ cuts that major, as `prepare-release` details. `release.yaml` then runs in four 
   version, commits, tags `vX.Y.Z`, pushes the commit and tags together, and creates the GitHub
   Release. For a major, the same atomic push makes the `v<N>` branch `master` and keeps the old
   `master` as `v<N-1>`.
-- **The tag publishes.** The root tag runs `release.yaml` again, and that run builds and attests the
-  images, attests and publishes the npm tarballs, and dispatches infra's `pin-release.yaml`.
+- **The tag publishes.** The root tag runs the repository's publishing workflow: `release.yaml`
+  again, or, in a service whose `main.yaml` owns its image builds, `main.yaml`, whose
+  build jobs build and attest the images and whose tag-only jobs (`if: github.ref_type == 'tag'`)
+  attest and publish the npm tarballs and dispatch infra's `pin-release.yaml`.
 
 A repository that has not adopted the split yet releases in one job as the [Agent] bot; the
 workflows repo's `docs/migrations/v1.57.0.md` is the adoption guide.
@@ -91,10 +93,11 @@ a-novel/infra's GitHub root manages:
 These guard the release, never the registries. GitHub Packages lets every workflow run of a
 repository write that repository's packages, whatever its ref, so a branch can publish an npm version
 or push and move an image tag. A version proves its origin only through its release proof: an
-attestation over its bytes, signed by the producer's `release.yaml` at the version's tag, and an
-immutable Release of that tag from the release App. A branch run's attestation names its branch, and
-only a release makes the tag and the Release. The auto-approver merges a first-party version only
-with that proof (`write-github-actions`), and infra deploys an image only with it (`write-infra`).
+attestation over its bytes, signed at the version's tag by the producer's `release.yaml`, or by its
+`main.yaml` where that file builds the release images, and an immutable Release of that tag from the
+release App. A branch run's attestation names its branch, and only a release makes the tag and the
+Release. The auto-approver merges a first-party version only with that proof
+(`write-github-actions`), and infra deploys an image only with it (`write-infra`).
 
 A `v*` tag is only ever created by a CI dispatch — the release or release-train job, running as the
 release App. Nobody pushes one by hand, maintainers included. Repo admins can bypass every rule
@@ -349,8 +352,11 @@ removal step. Catch it now, not then.
 ### The staged path itself
 
 1. **Add the new path, non-breaking.** New function / field / endpoint / column alongside the old,
-   which keeps working unchanged. Release this (a `feat:`, _not_ a breaking change — nothing broke
-   yet). Mark the old path `// Deprecated: use NewThing` so consumers and pkg.go.dev see it.
+   which keeps working unchanged. Release this (a `feat:`, _not_ a breaking change: nothing broke
+   yet). The old path's doc names the replacement ("Prefer NewThing."). A Go doc comment and a proto
+   comment carry no `Deprecated:` paragraph while any consumer still uses the path: staticcheck's
+   SA1019 would fail that consumer's lint on the Renovate bump. An OpenAPI `deprecated: true` and a
+   JSDoc `@deprecated` fail no consumer's check, so they stay.
 2. **Migrate every consumer to the new path.** One PR per consumer (drawn from the step-0 list),
    each rebased on the Renovate bump that brings the release from step 1 (per the merge-order
    rule), each releasing once green. Tick consumers off the list as their PRs land; an empty list means step 3 is safe.
@@ -361,14 +367,20 @@ removal step. Catch it now, not then.
 
 This shape recurs everywhere; the layer skills carry the specifics:
 
-- **Go public APIs** (`golib`, graduated packages, `pkg/go`): add → `// Deprecated:` → migrate →
-  remove. Never change a function signature in place; add a new function.
+- **Go public APIs** (`golib`, graduated packages, `pkg/go`): add → name the replacement in the
+  old doc → migrate → remove. Never change a function signature in place: a retired positional
+  parameter becomes variadic when it is the last one, and the new form otherwise takes a new
+  constructor name.
 - **Proto** (`write-proto`): never reuse a field number, never change a field's type, never remove
-  a field that's still consumed — add new fields/messages/RPCs; mark old ones `// Deprecated`;
+  a field that's still consumed: add new fields/messages/RPCs; name the replacement in the old
+  one's comment, with no `Deprecated:` paragraph and no `deprecated = true` option, since
+  protoc-gen-go turns either into a `Deprecated:` comment in the Go code;
   remove only after every gRPC consumer is updated. `buf breaking` enforces a lot of this.
 - **REST API** (`write-openapi`): add new endpoints/parameters/fields; keep old ones working;
   document the deprecation; remove only after clients have migrated. Optional request params and
-  additive response fields are non-breaking; removing or repurposing either is breaking.
+  additive response fields are non-breaking; removing or repurposing either is breaking. Moving a
+  refusal to another status, such as 400 to 422, is a contract change too: a client accepts both
+  codes until the service release that sends the new one is deployed, then drops the old one.
 - **DB migrations** (`write-sql`): additive first (new nullable column, new table, new index) — and
   never modify a `.up.sql` that has merged to `master`; a "change" is a new migration. A
   destructive migration (drop column, narrow a type) ships only after the code that read the old
@@ -388,8 +400,8 @@ When a change spans repos:
       (`go get module@<sha>`, then `go mod tidy`) — never a `replace`, never `@branch`. Before
       marking it ready, ask the developer to cut the dependency's release, then rebase on
       Renovate's bump to it.
-- [ ] Breaking a shared contract? Stage it (add → deprecate → migrate → remove); the current PR is
-      the _additive_ step only.
+- [ ] Breaking a shared contract? Stage it (add → point at the replacement → migrate → remove); the
+      current PR is the _additive_ step only.
 - [ ] For any breaking change to a public symbol, **`grep -rn` the whole workspace** (`app/` _and_
       `kit/`) for consumers before writing the dependency PR, and paste the file list into the PR
       description under "Consumer migration follow-ups".
