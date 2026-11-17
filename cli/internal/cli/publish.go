@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -43,15 +44,15 @@ shows before the release.`,
   a-novel publish stamp 'a-novel-kit/workflows/[^@]+@' '*/*/action.yaml'`,
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return stampVersion(cmd.OutOrStdout(), args[0], args[1:])
+			return stampVersion(cmd.Context(), cmd.OutOrStdout(), args[0], args[1:])
 		},
 	}
 }
 
 // stampVersion stamps the repository's package version into every
 // <prefix>vX.Y.Z reference of the files patterns resolve to.
-func stampVersion(out io.Writer, prefix string, patterns []string) error {
-	root, err := workspace.Toplevel(".")
+func stampVersion(ctx context.Context, out io.Writer, prefix string, patterns []string) error {
+	root, err := workspace.Toplevel(ctx, ".")
 	if err != nil {
 		return fmt.Errorf("publish: %w", err)
 	}

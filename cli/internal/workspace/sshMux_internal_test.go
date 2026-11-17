@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 func TestSSHMux(t *testing.T) {
 	var checks int
 	var connected bool
-	seamtest.Swap(t, &connectSSH, func([]string) bool {
+	seamtest.Swap(t, &connectSSH, func(context.Context, []string) bool {
 		checks++
 		return connected
 	})
@@ -40,7 +41,7 @@ func TestSSHMux(t *testing.T) {
 	var m sshMux
 	for _, step := range steps {
 		connected = step.connected
-		require.Equal(t, step.wantUp, m.up(start.Add(step.at)), "%s: up", step.name)
+		require.Equal(t, step.wantUp, m.up(t.Context(), start.Add(step.at)), "%s: up", step.name)
 		require.Equal(t, step.wantChecks, checks, "%s: checks", step.name)
 	}
 }

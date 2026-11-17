@@ -2,14 +2,12 @@ package runner
 
 import (
 	"context"
-	"encoding/json"
-	"os/exec"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/a-novel-kit/stack/cli/internal/shared/compose"
+	"github.com/a-novel-kit/stack/cli/internal/shared/podman"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -134,27 +132,25 @@ func (r *Runner) reseedAllocator(ctx context.Context, infra []psEntry) {
 	if r.alloc == nil || len(infra) == 0 {
 		return
 	}
+	ids := make([]string, len(infra))
 	byID := make(map[string]psEntry, len(infra))
-	args := []string{"inspect", "--format={{.Id}}|{{.Name}}|{{json .NetworkSettings.Ports}}"}
-	for _, e := range infra {
+	for i, e := range infra {
+		ids[i] = e.ID
 		byID[e.ID] = e
-		args = append(args, e.ID)
 	}
-	// A vanished container fails the call, and podman still prints a line for
-	// every other one. Each line names its container, so the others reseed
-	// whatever the exit status.
-	out, _ := exec.CommandContext(ctx, "podman", args...).Output()
-	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
-		id, rest, _ := strings.Cut(line, "|")
-		if e, ok := byID[id]; ok {
-			r.reseedInfra(e.Labels[labelStack], e.Labels[labelService], rest)
+	// A vanished container fails the call, and podman still reports every
+	// other one, so the others reseed whatever the error.
+	containers, _ := podman.Inspect(ctx, nil, ids)
+	for _, c := range containers {
+		if e, ok := byID[c.ID]; ok {
+			r.reseedInfra(e.Labels[labelStack], e.Labels[labelService], c)
 		}
 	}
 }
 
-// reseedInfra reserves the host ports of one infra container of stack and
-// service. line holds the rest of its inspect line, "<name>|<ports JSON>".
-func (r *Runner) reseedInfra(stack, service, line string) {
+// reseedInfra reserves the host ports of infra container c of stack and
+// service.
+func (r *Runner) reseedInfra(stack, service string, c podman.Container) {
 	// The compose `ports:` block maps container-side ports back to ${VAR}
 	// names. Container names follow compose's `<project>_<infraName>_N`
 	// pattern, and infraName picks the right Infra record among the several a
@@ -163,19 +159,12 @@ func (r *Runner) reseedInfra(stack, service, line string) {
 	if svc == nil {
 		return
 	}
-	rawName, portsJSON, ok := strings.Cut(line, "|")
-	if !ok {
-		return
-	}
-	rawName = strings.TrimPrefix(strings.TrimSpace(rawName), "/") // podman sometimes prefixes
-	infra := svc.FindInfra(extractInfraNameFromContainerName(rawName, composeProjectName(stack, service)))
+	name := strings.TrimPrefix(c.Name, "/") // podman sometimes prefixes
+	infra := svc.FindInfra(extractInfraNameFromContainerName(name, composeProjectName(stack, service)))
 	if infra == nil {
 		return
 	}
-	containerToHost, err := hostPorts(portsJSON)
-	if err != nil {
-		return
-	}
+	containerToHost := c.HostPorts()
 	consumer := infraConsumer(stack, service)
 	for _, raw := range infra.Ports {
 		varName, containerPort, ok := compose.HostPort(raw)
@@ -188,29 +177,6 @@ func (r *Runner) reseedInfra(stack, service, line string) {
 		}
 		r.alloc.Reserve(service, varName, hostPort, consumer)
 	}
-}
-
-// hostPorts maps each container-side port of podman's port map, such as
-// { "5432/tcp": [{"HostIp": "0.0.0.0", "HostPort": "38631"}] }, to the host port
-// its first binding uses. A port without a numeric binding is left out.
-func hostPorts(portsJSON string) (map[string]int, error) {
-	var portMap map[string][]struct {
-		HostPort string `json:"HostPort"`
-	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(portsJSON)), &portMap); err != nil {
-		return nil, err
-	}
-	containerToHost := make(map[string]int)
-	for containerPort, bindings := range portMap {
-		if len(bindings) == 0 {
-			continue
-		}
-		port, _, _ := strings.Cut(containerPort, "/") // "5432/tcp"
-		if host, err := strconv.Atoi(bindings[0].HostPort); err == nil {
-			containerToHost[port] = host
-		}
-	}
-	return containerToHost, nil
 }
 
 // containerInfraNameRe matches the trailing infra name in compose's
@@ -253,7 +219,7 @@ func (r *Runner) markInfraSessionUp(stack, service string) {
 func translatePodmanStatus(status string) (anovelv1.Phase, anovelv1.Health) {
 	state, rest, _ := strings.Cut(strings.ToLower(status), " ")
 	if state == "up" {
-		state = pmPhaseRunning
+		state = podman.StateRunning
 	}
 	phase := podmanPhase(state)
 	if phase == anovelv1.Phase_PHASE_TERMINATED {

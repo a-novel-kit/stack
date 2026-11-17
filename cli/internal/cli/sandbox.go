@@ -22,7 +22,7 @@ const sandboxFlag = "--sandbox"
 // through, so tests run it without cloning or spawning anything.
 type sandboxSystem struct {
 	tempDir   func() (string, error)
-	clone     func(string) error
+	clone     func(context.Context, string) error
 	removeAll func(string) error
 	run       func(ctx context.Context, dir string, env, args []string, stdout, stderr io.Writer) error
 	cwd       string
@@ -126,7 +126,7 @@ func runSandbox(
 	}()
 
 	_, _ = fmt.Fprintf(stderr, "▸ Preparing sandbox %s\n", root)
-	if err := system.clone(root); err != nil {
+	if err := system.clone(ctx, root); err != nil {
 		return fmt.Errorf("clone stack: %w", err)
 	}
 
@@ -139,7 +139,7 @@ func runSandbox(
 		return fmt.Errorf("populate sandbox: %w", err)
 	}
 
-	dir, err := sandboxWorkingDir(root, system.cwd)
+	dir, err := sandboxWorkingDir(ctx, root, system.cwd)
 	if err != nil {
 		return err
 	}
@@ -155,13 +155,13 @@ func unsupportedSandboxCommand(command string) bool {
 
 // sandboxWorkingDir maps cwd, when it sits in a workspace repository, onto the
 // same directory of that repository's copy in the temporary stack at root.
-func sandboxWorkingDir(root, cwd string) (string, error) {
-	repoRoot, err := workspace.Toplevel(cwd)
+func sandboxWorkingDir(ctx context.Context, root, cwd string) (string, error) {
+	repoRoot, err := workspace.Toplevel(ctx, cwd)
 	if err != nil {
 		return root, nil //nolint:nilerr // outside a repository, the command runs from the stack root
 	}
-	repo, err := workspace.Origin(repoRoot)
-	if err != nil || (repo.Org != workspace.OrgAnovel && repo.Org != workspace.OrgAnovelKit) {
+	repo, err := workspace.Origin(ctx, repoRoot)
+	if err != nil || !repo.InOrgs() {
 		return root, nil //nolint:nilerr // a foreign repository has no copy in the stack
 	}
 	rel, err := filepath.Rel(repoRoot, cwd)

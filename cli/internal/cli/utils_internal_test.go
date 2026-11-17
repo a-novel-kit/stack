@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,7 +25,7 @@ func TestMain(m *testing.M) {
 // stubGH routes every gh call through respond, which sees the args joined.
 func stubGH(t *testing.T, respond func(call string) (string, error)) {
 	t.Helper()
-	seamtest.Swap(t, &ghExec, func(args ...string) (string, error) {
+	seamtest.Swap(t, &ghExec, func(_ context.Context, args ...string) (string, error) {
 		return respond(strings.Join(args, " "))
 	})
 }

@@ -1,6 +1,7 @@
 package detect
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"maps"
@@ -26,10 +27,10 @@ import (
 // The env filename convention is `podman-compose.<id>.test.yaml` where <id>
 // is the environment ("go"/"pnpm") followed by the dotted test path it covers
 // ("go.internal", "go.pkg", "pnpm"); a bare env id covers the whole suite.
-func Tests(root string) ([]Target, error) {
-	return walk(root, func(dir, rel string) []Target {
+func Tests(ctx context.Context, root string) ([]Target, error) {
+	return walk(ctx, root, func(dir, rel string) []Target {
 		envs := composeEnvs(dir)
-		return slices.Concat(goTests(dir, rel, envs), pnpmTests(dir, rel, envs))
+		return slices.Concat(goTests(ctx, dir, rel, envs), pnpmTests(dir, rel, envs))
 	})
 }
 
@@ -122,7 +123,7 @@ func (f envFile) toEnv(dir string) *ComposeEnv {
 }
 
 // goTests emits the Go test target(s) for a module at dir.
-func goTests(dir, rel string, envs []envFile) []Target {
+func goTests(ctx context.Context, dir, rel string, envs []envFile) []Target {
 	if !IsFile(filepath.Join(dir, "go.mod")) {
 		return nil
 	}
@@ -170,7 +171,7 @@ func goTests(dir, rel string, envs []envFile) []Target {
 	// ./internal. It has no env and omits -count=1: a package that needs
 	// external state declares its own env file, so an uncovered package is
 	// cache-safe or fails on the missing state.
-	if uncovered := uncoveredGoSelectors(goTestPackageDirs(dir), scoped); len(uncovered) > 0 {
+	if uncovered := uncoveredGoSelectors(goTestPackageDirs(ctx, dir), scoped); len(uncovered) > 0 {
 		detail := "go test " + strings.Join(uncovered, " ") + "  ·  no env"
 		args := append([]string{testArg}, uncovered...)
 		targets = append(targets, goTarget(dir, rel, uncoveredTargetName, detail, args...))
@@ -185,13 +186,13 @@ func goTests(dir, rel string, envs []envFile) []Target {
 // discovered on its own. That stop also keeps out a sibling checkout dropped
 // under tmp/, a worktree git does not report as ignored. The module root itself
 // is the empty path.
-func goTestPackageDirs(dir string) [][]string {
+func goTestPackageDirs(ctx context.Context, dir string) [][]string {
 	absRoot, err := filepath.Abs(dir)
 	if err != nil {
 		return nil
 	}
 
-	ignored := gitIgnoredDirs(absRoot)
+	ignored := gitIgnoredDirs(ctx, absRoot)
 	seen := map[string]bool{}
 	var pkgs [][]string
 	_ = filepath.WalkDir(absRoot, func(path string, entry os.DirEntry, walkErr error) error {

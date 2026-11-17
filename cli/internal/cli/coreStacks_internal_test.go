@@ -285,7 +285,7 @@ func TestPruneBlockers(t *testing.T) {
 				testCase.setup(t, root)
 			}
 
-			got := pruneBlockers(root)
+			got := pruneBlockers(t.Context(), root)
 			if testCase.want == "" {
 				require.Empty(t, got)
 				return

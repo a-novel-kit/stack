@@ -53,7 +53,7 @@ func TestPrepareEnv(t *testing.T) {
 			}
 
 			var out strings.Builder
-			runEnv, err := build.PrepareEnv(detect.Target{Kind: detect.KindGo, Name: "x", Dir: repoRoot}, &out)
+			runEnv, err := build.PrepareEnv(t.Context(), detect.Target{Kind: detect.KindGo, Name: "x", Dir: repoRoot}, &out)
 			require.NoError(t, err)
 			var got string
 			for _, e := range runEnv {

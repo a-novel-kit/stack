@@ -2,13 +2,11 @@ package build
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
-	"net"
-	"net/url"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +19,10 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/detect"
 	"github.com/a-novel-kit/stack/cli/internal/jobs"
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
+	"github.com/a-novel-kit/stack/cli/internal/shared/hostenv"
+	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
+	"github.com/a-novel-kit/stack/cli/internal/shared/podman"
+	"github.com/a-novel-kit/stack/cli/internal/shared/poll"
 )
 
 // Job wraps t for the job runner. A timeout above zero bounds the whole target,
@@ -46,10 +48,10 @@ func Job(t detect.Target, timeout time.Duration, maxProcs int, keep bool) jobs.J
 // URLs derived from them and the local test credentials. The repo's declared
 // secrets come last, so a provisioned value wins over any default. Progress
 // goes to out, and secret values never do.
-func PrepareEnv(t detect.Target, out io.Writer) ([]string, error) {
+func PrepareEnv(ctx context.Context, t detect.Target, out io.Writer) ([]string, error) {
 	runEnv := os.Environ()
 	if t.Env != nil {
-		added, err := composeEnv(t.Env, runEnv)
+		added, err := composeEnv(ctx, t.Env, runEnv)
 		if err != nil {
 			return nil, err
 		}
@@ -82,8 +84,8 @@ func PrepareEnv(t detect.Target, out io.Writer) ([]string, error) {
 // standard local test values for the vars the compose file references that
 // nothing else set, such as an internal-only Postgres' credentials, and the
 // URLs and connection settings derived from both.
-func composeEnv(e *detect.ComposeEnv, base []string) ([]string, error) {
-	ports, err := allocPorts(e.Ports)
+func composeEnv(ctx context.Context, e *detect.ComposeEnv, base []string) ([]string, error) {
+	ports, err := allocPorts(ctx, e.Ports)
 	if err != nil {
 		return nil, fmt.Errorf("port allocation failed: %w", err)
 	}
@@ -134,7 +136,7 @@ func run(ctx context.Context, t detect.Target, timeout time.Duration, maxProcs i
 	}
 
 	_, _ = fmt.Fprintf(out, "$ %s %s\n", t.Cmd, strings.Join(t.Args, " "))
-	runEnv, err := PrepareEnv(t, out)
+	runEnv, err := PrepareEnv(ctx, t, out)
 	if err != nil {
 		return err
 	}
@@ -194,7 +196,7 @@ func envDown(ctx context.Context, e *detect.ComposeEnv, runEnv []string, out io.
 // tag of the image, other checkouts' tags included.
 func untagImages(ctx context.Context, e *detect.ComposeEnv) {
 	for _, image := range e.Images {
-		_ = exec.CommandContext(ctx, "podman", "untag", image, image).Run()
+		_ = podman.Run(ctx, nil, "untag", image, image)
 	}
 }
 
@@ -226,23 +228,18 @@ func repoRoot(t detect.Target) string {
 	return t.Dir
 }
 
-// allocPorts binds an ephemeral TCP port for each var name and returns
-// "NAME=port" entries. Every listener holds its port until allocPorts returns,
-// so binds within one call never alias. A small race remains between releasing
-// a port and the container claiming it, accepted as unavoidable for local runs.
-func allocPorts(names []string) ([]string, error) {
+// allocPorts binds a free host port for each var name and returns "NAME=port"
+// entries. Every listener holds its port until allocPorts returns, so binds
+// within one call never alias.
+func allocPorts(ctx context.Context, names []string) ([]string, error) {
 	out := make([]string, 0, len(names))
 	for _, n := range names {
-		l, err := net.Listen("tcp", "localhost:0")
+		listener, port, err := hostenv.Listen(ctx)
 		if err != nil {
 			return nil, err
 		}
-		defer func() { _ = l.Close() }()
-		addr, ok := l.Addr().(*net.TCPAddr)
-		if !ok {
-			return nil, fmt.Errorf("unexpected listener address type %T", l.Addr())
-		}
-		out = append(out, fmt.Sprintf("%s=%d", n, addr.Port))
+		defer func() { _ = listener.Close() }()
+		out = append(out, n+"="+strconv.Itoa(port))
 	}
 	return out, nil
 }
@@ -297,9 +294,8 @@ func testDefaults(refs, env []string) []string {
 }
 
 // derivedURLs builds the host connection vars from the allocated ports by the
-// fixed `<X>_PORT` rule: POSTGRES_PORT→the Postgres connection settings,
-// GRPC_PORT→GRPC_URL (host:port), and any other X_PORT→X_URL
-// (http://localhost:port).
+// fixed `<X>_PORT` rule: POSTGRES_PORT gives the Postgres connection settings,
+// any other X_PORT gives X_URL (see hostenv.URL).
 func derivedURLs(names []string, env []string) []string {
 	var out []string
 	for _, n := range names {
@@ -307,52 +303,40 @@ func derivedURLs(names []string, env []string) []string {
 		if !ok {
 			continue
 		}
-		p := envVal(env, n)
-		switch base {
-		case "POSTGRES":
-			out = append(out, postgresEnv(env, p)...)
-		case "GRPC":
-			out = append(out, "GRPC_URL=localhost:"+p)
-		default:
-			out = append(out, base+"_URL=http://localhost:"+p)
+		// allocPorts wrote the value, so it always parses.
+		port, _ := strconv.Atoi(envVal(env, n))
+		if base == "POSTGRES" {
+			out = append(out, postgresEnv(env, port)...)
+		} else {
+			out = append(out, base+"_URL="+hostenv.URL(base, port))
 		}
 	}
 	return out
 }
 
 // postgresEnv lists the settings that point a test process at the env's
-// Postgres on port, in both forms services read: the POSTGRES_DSN URL, and the
-// discrete POSTGRES_* settings a service prefers once POSTGRES_HOST is set,
-// beside the allocated POSTGRES_PORT. It leaves out a setting env already
-// holds, so the env block lists each once.
-//
-// Both forms log in with env's POSTGRES_USER, POSTGRES_PASSWORD and
-// POSTGRES_DB, the values the compose file hands the container, or pgStd for an
-// unset one. The test database serves no TLS.
-func postgresEnv(env []string, port string) []string {
-	user := cmp.Or(envVal(env, "POSTGRES_USER"), pgStd)
-	password := cmp.Or(envVal(env, "POSTGRES_PASSWORD"), pgStd)
-	db := cmp.Or(envVal(env, "POSTGRES_DB"), pgStd)
+// Postgres on port (see hostenv.Postgres), logging in with the user, password
+// and database the compose file hands the container. It forces
+// POSTGRES_TLS_ENABLED off, since the test database serves no TLS, and leaves
+// out a setting env already holds, so the env block lists each once.
+func postgresEnv(env []string, port int) []string {
+	settings := hostenv.Postgres(
+		envVal(env, "POSTGRES_USER"),
+		envVal(env, "POSTGRES_PASSWORD"),
+		// The compose file hands the container its database as POSTGRES_DB,
+		// while a POSTGRES_DATABASE the shell inherited names another one.
+		envVal(env, "POSTGRES_DB"),
+		port,
+	)
+	settings["POSTGRES_TLS_ENABLED"] = "false"
 
-	dsn := url.URL{
-		Scheme:   "postgres",
-		User:     url.UserPassword(user, password),
-		Host:     "localhost:" + port,
-		Path:     "/" + db,
-		RawQuery: "sslmode=disable",
+	out := make([]string, 0, len(settings))
+	for _, key := range slices.Sorted(maps.Keys(settings)) {
+		if envVal(env, key) != settings[key] {
+			out = append(out, key+"="+settings[key])
+		}
 	}
-	settings := []string{
-		"POSTGRES_DSN=" + dsn.String(),
-		"POSTGRES_HOST=localhost",
-		"POSTGRES_USER=" + user,
-		"POSTGRES_PASSWORD=" + password,
-		"POSTGRES_DATABASE=" + db,
-		"POSTGRES_TLS_ENABLED=false",
-	}
-	return slices.DeleteFunc(settings, func(kv string) bool {
-		key, value, _ := strings.Cut(kv, "=")
-		return envVal(env, key) == value
-	})
+	return out
 }
 
 // compose runs `podman compose [global...] -p <project> -f <file> <args...>`
@@ -374,21 +358,6 @@ func compose(ctx context.Context, out io.Writer, env []string, e *detect.Compose
 	return cmd.Run()
 }
 
-// podmanOut runs `podman <args...>` and returns its trimmed stdout, with stderr
-// folded into the error. Its output is parsed, so it stays out of the job's
-// log.
-func podmanOut(ctx context.Context, env []string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "podman", args...)
-	cmd.Env = env
-	var out, errb bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &errb
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(errb.String()))
-	}
-	return strings.TrimSpace(out.String()), nil
-}
-
 // distinctEnvs returns the envs of targets, each project once.
 func distinctEnvs(targets []detect.Target) []detect.ComposeEnv {
 	seen := map[string]bool{}
@@ -405,14 +374,15 @@ func distinctEnvs(targets []detect.Target) []detect.ComposeEnv {
 
 // ClaimEnvs locks the env of every target until the returned release runs, so
 // a second run of the same checkout stops instead of sharing or tearing down an
-// env in use. Each lock is a flock on a file named after the env's project. The
-// kernel drops it when the process ends, however it ends, so an env left by a
-// run that died holds none.
+// env in use. Each lock is a flock on a file named after the env's project, in
+// a directory of the shared temp dir that must belong to this user (see
+// paths.Lock). The kernel drops a lock when its process ends, however it ends,
+// so an env left by a run that died holds none.
 func ClaimEnvs(targets []detect.Target) (func(), error) {
-	var held []*os.File
+	var held []func()
 	release := func() {
-		for _, f := range held {
-			_ = f.Close() // closing the file drops its lock
+		for _, unlock := range held {
+			unlock()
 		}
 	}
 
@@ -424,35 +394,22 @@ func ClaimEnvs(targets []detect.Target) (func(), error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("create env lock directory: %w", err)
 	}
+	if err := paths.CheckOwner(dir); err != nil {
+		return nil, fmt.Errorf("env lock directory: %w", err)
+	}
 
 	for _, e := range envs {
-		f, err := lockEnv(dir, e)
+		unlock, err := paths.TryLock(filepath.Join(dir, e.Project+".lock"))
+		if errors.Is(err, paths.ErrLocked) {
+			err = fmt.Errorf("env %s is in use by another run of this checkout; retry once it ends", e.ID)
+		}
 		if err != nil {
 			release()
 			return nil, err
 		}
-		held = append(held, f)
+		held = append(held, unlock)
 	}
 	return release, nil
-}
-
-// lockEnv opens e's lock file in dir and flocks it without waiting. The lock
-// lasts until the returned file is closed.
-func lockEnv(dir string, e detect.ComposeEnv) (*os.File, error) {
-	f, err := os.OpenFile(filepath.Join(dir, e.Project+".lock"), os.O_CREATE|os.O_RDONLY, 0o600)
-	if err != nil {
-		return nil, fmt.Errorf("open lock of env %s: %w", e.ID, err)
-	}
-
-	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
-	if err == nil {
-		return f, nil
-	}
-	_ = f.Close()
-	if errors.Is(err, syscall.EWOULDBLOCK) {
-		return nil, fmt.Errorf("env %s is in use by another run of this checkout; retry once it ends", e.ID)
-	}
-	return nil, fmt.Errorf("lock env %s: %w", e.ID, err)
 }
 
 // A Conflict is a compose project that already has containers on the host,
@@ -471,7 +428,7 @@ func EnvConflicts(ctx context.Context, targets []detect.Target) []Conflict {
 	if len(envs) == 0 {
 		return nil
 	}
-	out, err := podmanOut(ctx, os.Environ(), "ps", "-a", "--format", "{{.Names}}")
+	out, err := podman.Output(ctx, os.Environ(), "ps", "-a", "--format", "{{.Names}}")
 	if err != nil {
 		return nil
 	}
@@ -513,14 +470,10 @@ func TearDown(ctx context.Context, e detect.ComposeEnv) error {
 	if err == nil {
 		return nil
 	}
-	_ = exec.CommandContext(ctx, "podman", "pod", "rm", "-f", "pod_"+e.Project).Run()
-	_ = exec.CommandContext(ctx, "podman", "network", "rm", "-f", e.Project+"_api").Run()
+	_ = podman.Run(ctx, nil, "pod", "rm", "-f", "pod_"+e.Project)
+	_ = podman.Run(ctx, nil, "network", "rm", "-f", e.Project+"_api")
 	return err
 }
-
-// dockerFormatBuildArgs builds images in the docker format. Podman's default
-// OCI format drops a Dockerfile's HEALTHCHECK, which waitHealthy follows.
-const dockerFormatBuildArgs = "--podman-build-args=--format docker -q"
 
 // composeUpPhased brings a compose env up in two waves and waits for each wave
 // to become healthy. The first wave holds the dependency-free services, the
@@ -537,7 +490,7 @@ const dockerFormatBuildArgs = "--podman-build-args=--format docker -q"
 // it just created. TearDown owns orphan removal.
 func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect.ComposeEnv, healthTimeout time.Duration) error {
 	if len(e.Services) == 0 {
-		if err := compose(ctx, out, env, e, []string{dockerFormatBuildArgs}, "up", "-d", "--build"); err != nil {
+		if err := compose(ctx, out, env, e, []string{podman.DockerFormatBuildArgs}, "up", "-d", "--build"); err != nil {
 			return err
 		}
 		return waitHealthy(ctx, out, env, e, healthTimeout)
@@ -560,7 +513,7 @@ func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect
 		waveNum++
 		_, _ = fmt.Fprintf(out, "── env up (wave %d: %s) ──\n", waveNum, strings.Join(wave, " "))
 		args := append([]string{"up", "-d", "--build", "--no-deps"}, wave...)
-		if err := compose(ctx, out, env, e, []string{dockerFormatBuildArgs}, args...); err != nil {
+		if err := compose(ctx, out, env, e, []string{podman.DockerFormatBuildArgs}, args...); err != nil {
 			return err
 		}
 		_, _ = fmt.Fprint(out, "── env wait ──\n")
@@ -572,32 +525,31 @@ func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect
 }
 
 // waitHealthy polls the env's containers until every one is ready, standing in
-// for the `compose up --wait` the podman-compose provider lacks. A container is
-// ready once it runs with a healthy or absent healthcheck, or has exited 0 as a
-// one-shot init or migration. A non-zero exit fails fast; otherwise polling
-// continues to the timeout, whose error carries the offending containers' log
-// tails so the user sees why they never came up.
+// for the `compose up --wait` the podman-compose provider lacks. A container
+// that exits non-zero fails the wait at once; otherwise it lasts until the
+// timeout, whose error carries the log tails of the containers still pending,
+// so the user sees why they never came up.
 func waitHealthy(ctx context.Context, out io.Writer, env []string, e *detect.ComposeEnv, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for {
-		poll, err := pollEnv(ctx, env, e.Project+"_")
-		if err != nil {
-			return err
+	var last envPoll
+	err := poll.Until(ctx, 1500*time.Millisecond, timeout, func(ctx context.Context) (bool, error) {
+		result, err := pollEnv(ctx, env, e.Project+"_")
+		// A poll the deadline cut short saw nothing; the timeout error reports
+		// the last complete one.
+		if ctx.Err() == nil {
+			last = result
 		}
-		states := strings.Join(poll.states, "  ")
-		if poll.ready {
-			_, _ = fmt.Fprintf(out, "ready: %s\n", states)
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return healthTimeoutError(ctx, env, poll.pending, states, timeout)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(1500 * time.Millisecond):
-		}
+		return result.ready, err
+	})
+
+	states := strings.Join(last.states, "  ")
+	switch {
+	case errors.Is(err, poll.ErrTimeout):
+		return healthTimeoutError(ctx, env, last.pending, states, timeout)
+	case err != nil:
+		return err
 	}
+	_, _ = fmt.Fprintf(out, "ready: %s\n", states)
+	return nil
 }
 
 // healthTimeoutError reports the env's last state, with the log tail of each
@@ -621,77 +573,42 @@ type envPoll struct {
 }
 
 // pollEnv inspects every container whose name starts with prefix. It fails on
-// a container that exited non-zero, quoting its log tail.
+// a container that exited non-zero, quoting its log tail. A container the
+// inspect call missed counts as pending.
 func pollEnv(ctx context.Context, env []string, prefix string) (envPoll, error) {
-	ids, err := podmanOut(ctx, env, "ps", "-a", "--filter", "name="+prefix, "--format", "{{.ID}}")
+	ids, err := podman.IDs(ctx, env, "--filter", "name="+prefix)
 	if err != nil {
 		return envPoll{}, fmt.Errorf("listing containers: %w", err)
 	}
-	idList := strings.Fields(ids)
-	poll := envPoll{ready: len(idList) > 0}
-	inspected := inspectContainers(ctx, env, idList)
-	for _, id := range idList {
-		parts, ok := inspected[id]
+
+	result := envPoll{ready: len(ids) > 0}
+	containers, _ := podman.Inspect(ctx, env, ids)
+	for _, id := range ids {
+		c, ok := podman.Find(containers, id)
 		if !ok {
-			poll.ready = false
-			poll.pending = append(poll.pending, id)
+			result.ready = false
+			result.pending = append(result.pending, id)
 			continue
 		}
-		name, st, health, code := parts[0], parts[1], parts[2], parts[3]
-		poll.states = append(poll.states, fmt.Sprintf("%s=%s/%s", name, st, health))
-		switch {
-		case st == "exited" && code == "0":
-			// one-shot completed successfully
-		case st == "running" && (health == "-" || health == "healthy"):
-			// long-lived service ready
-		case st == "exited":
-			return envPoll{}, fmt.Errorf("container %s exited with code %s:\n%s",
-				name, code, containerLogTail(ctx, env, id, 30))
-		default:
-			poll.ready = false
-			poll.pending = append(poll.pending, id)
-		}
-	}
-	return poll, nil
-}
 
-// pollInspectFormat prints a container's full id, name, status, health and exit
-// code on one line.
-const pollInspectFormat = "{{.Id}}|{{.Name}}|{{.State.Status}}|" +
-	"{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}"
-
-// inspectContainers inspects every container of ids in one podman call. It maps
-// each id to its name, status, health and exit code. A failed call maps none,
-// and the poll then counts every container as pending.
-func inspectContainers(ctx context.Context, env, ids []string) map[string][]string {
-	if len(ids) == 0 {
-		return nil
-	}
-	out, err := podmanOut(ctx, env, slices.Concat([]string{"inspect", "--format", pollInspectFormat}, ids)...)
-	if err != nil {
-		return nil
-	}
-	fields := make(map[string][]string, len(ids))
-	for line := range strings.Lines(out) {
-		parts := strings.Split(strings.TrimRight(line, "\n"), "|")
-		if len(parts) < 5 {
-			continue
+		result.states = append(result.states, fmt.Sprintf("%s=%s/%s", c.Name, c.State.Status, c.HealthStatus()))
+		if c.Failed() {
+			return envPoll{}, fmt.Errorf("container %s exited with code %d:\n%s",
+				c.Name, c.State.ExitCode, containerLogTail(ctx, env, id, 30))
 		}
-		// podman ps prints short ids, and the inspect line starts with the full one.
-		for _, id := range ids {
-			if strings.HasPrefix(parts[0], id) {
-				fields[id] = parts[1:]
-			}
+		if !c.Ready() {
+			result.ready = false
+			result.pending = append(result.pending, id)
 		}
 	}
-	return fields
+	return result, nil
 }
 
 // containerLogTail returns the last `lines` lines of a container's combined
 // stdout+stderr, so waitHealthy's failure path can show a container's own
 // startup errors.
 func containerLogTail(ctx context.Context, env []string, id string, lines int) string {
-	out, err := podmanOut(ctx, env, "logs", "--tail", strconv.Itoa(lines), id)
+	out, err := podman.Output(ctx, env, "logs", "--tail", strconv.Itoa(lines), id)
 	if err != nil {
 		return ""
 	}

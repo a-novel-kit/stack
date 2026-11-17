@@ -90,7 +90,7 @@ func TestComposeEnv(t *testing.T) {
 			t.Parallel()
 
 			env := &detect.ComposeEnv{Ports: []string{"POSTGRES_PORT", "REST_PORT"}, Refs: testCase.refs}
-			added, err := composeEnv(env, testCase.base)
+			added, err := composeEnv(t.Context(), env, testCase.base)
 			require.NoError(t, err)
 			vars := map[string]string{}
 			for _, kv := range added {
@@ -187,7 +187,7 @@ func TestAllocPorts(t *testing.T) {
 	for i := range names {
 		names[i] = fmt.Sprintf("PORT_%d", i)
 	}
-	entries, err := allocPorts(names)
+	entries, err := allocPorts(t.Context(), names)
 	require.NoError(t, err)
 	seen := map[string]string{}
 	for i, entry := range entries {
@@ -196,4 +196,29 @@ func TestAllocPorts(t *testing.T) {
 		require.NotContains(t, seen, port, "%s reuses the port of %s", name, seen[port])
 		seen[port] = name
 	}
+}
+
+// TestWaitHealthy pins that a timeout reports the last complete poll, with the
+// pending containers' log tails, when the deadline cuts a later poll short. Not
+// parallel: t.Setenv puts the stand-in podman on PATH.
+func TestWaitHealthy(t *testing.T) {
+	bin := t.TempDir()
+	// The first `ps` lists one starting container; every later one outlives the
+	// deadline.
+	script := fmt.Sprintf(`#!/bin/sh
+case "$1" in
+ps)
+	if [ -e %[1]s/listed ]; then exec sleep 5; fi
+	touch %[1]s/listed
+	echo 0123456789abcdef ;;
+inspect) echo '[{"Id": "0123456789abcdef", "Name": "proj_db_1", "State": {"Status": "running", "Health": {"Status": "starting"}}}]' ;;
+logs) echo "db: still initializing" ;;
+esac
+`, bin)
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "podman"), []byte(script), 0o700))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	err := waitHealthy(t.Context(), io.Discard, nil, &detect.ComposeEnv{Project: "proj"}, 2*time.Second)
+	require.ErrorContains(t, err, "last state: proj_db_1=running/starting")
+	require.ErrorContains(t, err, "db: still initializing")
 }

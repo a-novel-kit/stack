@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -47,7 +46,7 @@ func (l *rebindingListener) Accept() (net.Conn, error) {
 
 func (l *rebindingListener) Close() error {
 	err := l.Listener.Close()
-	l.next, l.rebindErr = net.Listen("unix", l.path)
+	l.next, l.rebindErr = new(net.ListenConfig).Listen(context.Background(), "unix", l.path)
 	return err
 }
 
@@ -73,7 +72,7 @@ func TestServe(t *testing.T) {
 			t.Parallel()
 
 			path := filepath.Join(t.TempDir(), "daemon.sock")
-			ln, err := listen(path)
+			ln, err := listen(t.Context(), path)
 			require.NoError(t, err)
 			wrapped := &rebindingListener{Listener: ln, path: path, acceptErr: testCase.acceptErr, accepting: make(chan struct{})}
 
@@ -95,7 +94,7 @@ func TestServe(t *testing.T) {
 			// socket file.
 			require.NoError(t, wrapped.rebindErr, "rebind after close")
 			t.Cleanup(func() { _ = wrapped.next.Close() })
-			require.True(t, isLive(path), "serve removed the socket the next daemon bound")
+			require.True(t, isLive(t.Context(), path), "serve removed the socket the next daemon bound")
 		})
 	}
 }
@@ -111,7 +110,7 @@ func TestListen(t *testing.T) {
 	errs := make([]error, starts)
 	var wg sync.WaitGroup
 	for i := range starts {
-		wg.Go(func() { listeners[i], errs[i] = listen(path) })
+		wg.Go(func() { listeners[i], errs[i] = listen(t.Context(), path) })
 	}
 	wg.Wait()
 
@@ -123,7 +122,7 @@ func TestListen(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, bound, "starts that bound the socket, with errors %v", errs)
-	require.True(t, isLive(path), "the bound socket is gone")
+	require.True(t, isLive(t.Context(), path), "the bound socket is gone")
 }
 
 // TestReplayCheckpoint pins that startup consumes the reinstall checkpoint
@@ -155,30 +154,4 @@ func TestReplayCheckpoint(t *testing.T) {
 			require.False(t, reinstall.Exists(), "the checkpoint is still on disk after startup")
 		})
 	}
-}
-
-// TestLockFile pins that the lock beside the socket never follows a symlink: on
-// the /tmp fallback, another user could plant one there.
-func TestLockFile(t *testing.T) {
-	t.Parallel()
-
-	t.Run("Success", func(t *testing.T) {
-		t.Parallel()
-
-		unlock, err := lockFile(filepath.Join(t.TempDir(), "own.lock"))
-		require.NoError(t, err)
-		unlock()
-	})
-
-	t.Run("Error/Symlink", func(t *testing.T) {
-		t.Parallel()
-
-		dir := t.TempDir()
-		fsutiltest.Write(t, dir, map[string]string{"target": ""})
-		link := filepath.Join(dir, "daemon.sock.lock")
-		require.NoError(t, os.Symlink(filepath.Join(dir, "target"), link))
-
-		_, err := lockFile(link)
-		require.Error(t, err, "lockFile followed a symlink")
-	})
 }

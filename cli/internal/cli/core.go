@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon"
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/poll"
 	"github.com/a-novel-kit/stack/cli/internal/version"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
@@ -71,15 +73,18 @@ const daemonExitTimeout = 10 * time.Second
 // waitDaemonGone polls until the daemon stops answering, for up to
 // daemonExitTimeout. A script can then run `core start` on the next line.
 func waitDaemonGone(ctx context.Context, c *rpc.Client, out io.Writer) error {
-	deadline := time.Now().Add(daemonExitTimeout)
-	for time.Now().Before(deadline) {
-		if up, err := daemonUp(ctx, c); !up && err == nil {
-			_, _ = fmt.Fprintln(out, "daemon stopped.")
-			return nil
-		}
-		time.Sleep(100 * time.Millisecond)
+	err := poll.Until(ctx, 100*time.Millisecond, daemonExitTimeout, func(ctx context.Context) (bool, error) {
+		up, err := daemonUp(ctx, c)
+		return !up && err == nil, nil
+	})
+	if errors.Is(err, poll.ErrTimeout) {
+		return fmt.Errorf("daemon didn't shut down within %s", daemonExitTimeout)
 	}
-	return fmt.Errorf("daemon didn't shut down within %s", daemonExitTimeout)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(out, "daemon stopped.")
+	return nil
 }
 
 // shutdown asks the daemon to exit and reports what it stopped. force also

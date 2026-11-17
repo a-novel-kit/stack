@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil"
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
@@ -159,7 +160,11 @@ func (st *Store) Save() error {
 	if err := os.MkdirAll(st.root, dirMode); err != nil {
 		return fmt.Errorf("secrets: create %s: %w", st.root, err)
 	}
-	return writeFileAtomic(filepath.Join(st.root, storeFile), blob)
+	// An atomic write never leaves a half-written store behind a crash.
+	if err := fsutil.WriteAtomic(filepath.Join(st.root, storeFile), blob, fileMode); err != nil {
+		return fmt.Errorf("secrets: write store: %w", err)
+	}
+	return nil
 }
 
 // encrypt seals plain with AES-256-GCM under key, returning `nonce || ciphertext`.
@@ -202,32 +207,4 @@ func newGCM(key []byte) (cipher.AEAD, error) {
 		return nil, fmt.Errorf("secrets: init GCM: %w", err)
 	}
 	return gcm, nil
-}
-
-// writeFileAtomic writes data at fileMode to a temp file in the same directory
-// and renames it over path, so a crash mid-write never leaves a half-written
-// store. A failed write removes the temp file.
-func writeFileAtomic(path string, data []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".store-*.tmp")
-	if err != nil {
-		return fmt.Errorf("secrets: create temp store: %w", err)
-	}
-	// Both calls are no-ops once the file is closed and renamed.
-	defer func() {
-		_ = tmp.Close()
-		_ = os.Remove(tmp.Name())
-	}()
-	if err := tmp.Chmod(fileMode); err != nil {
-		return fmt.Errorf("secrets: chmod temp store: %w", err)
-	}
-	if _, err := tmp.Write(data); err != nil {
-		return fmt.Errorf("secrets: write temp store: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("secrets: close temp store: %w", err)
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		return fmt.Errorf("secrets: finalize store: %w", err)
-	}
-	return nil
 }

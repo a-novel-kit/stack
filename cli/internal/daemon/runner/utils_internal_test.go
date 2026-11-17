@@ -39,25 +39,45 @@ func stubOnPath(t *testing.T, name, script string) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-// fakePodmanInspect puts on PATH a stand-in podman whose inspect prints, for
-// each container ID, the line held in the file of that name under the returned
-// directory. An ID with no file fails the call with exit 125 after the other
-// lines, as podman does. Every call appends its arguments to the directory's
-// calls file.
+// fakePodmanInspect puts on PATH a stand-in podman whose inspect prints, as
+// one JSON array, the object held in the file named after each container ID
+// under the returned directory. An ID with no file fails the call with exit
+// 125 after printing the others, as podman does. Every call appends its
+// arguments to the directory's calls file.
 func fakePodmanInspect(t *testing.T) string {
 	t.Helper()
 
 	dir := t.TempDir()
 	stubOnPath(t, "podman", fmt.Sprintf(`#!/bin/sh
 echo "$@" >> %[1]s/calls
-shift 2
+shift 3
 status=0
+sep=""
+printf '['
 for cid in "$@"; do
-	cat %[1]s/"$cid" 2>/dev/null || status=125
+	if [ -f %[1]s/"$cid" ]; then
+		printf '%%s' "$sep"
+		cat %[1]s/"$cid"
+		sep=","
+	else
+		status=125
+	fi
 done
+printf ']'
 exit $status
 `, dir))
 	return dir
+}
+
+// inspectState is the `podman inspect` object of container cid in state,
+// written "<status>|<health>|<exit code>" with "-" for no healthcheck.
+func inspectState(cid, state string) string {
+	parts := strings.Split(state, "|")
+	health := ""
+	if parts[1] != "-" {
+		health = fmt.Sprintf(`, "Health": {"Status": %q}`, parts[1])
+	}
+	return fmt.Sprintf(`{"Id": %q, "State": {"Status": %q, "ExitCode": %s%s}}`, cid, parts[0], parts[2], health)
 }
 
 // podmanCalls counts the calls a fakePodmanInspect directory recorded.

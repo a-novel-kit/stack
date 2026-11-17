@@ -76,7 +76,7 @@ func TestExecExitCode(t *testing.T) {
 	// Real *exec.ExitError values, since ExitCode reads the platform
 	// ProcessState.
 	runExit := func(code int) error {
-		return exec.Command("sh", "-c", "exit "+strconv.Itoa(code)).Run() //nolint:gosec
+		return exec.CommandContext(t.Context(), "sh", "-c", "exit "+strconv.Itoa(code)).Run()
 	}
 	errPipe := errors.New("pipe closed")
 
@@ -89,7 +89,7 @@ func TestExecExitCode(t *testing.T) {
 		{name: "Success/CleanExit", in: nil, want: 0},
 		{name: "Success/NonZeroExit", in: runExit(3), want: 3},
 		// A signal ends the child as a shell reports it: 128 + SIGTERM.
-		{name: "Success/Signal", in: exec.Command("sh", "-c", "kill -TERM $$").Run(), want: 143},
+		{name: "Success/Signal", in: exec.CommandContext(t.Context(), "sh", "-c", "kill -TERM $$").Run(), want: 143},
 		// Not an *exec.ExitError: the child's status was never obtained.
 		{name: "Error/WaitFailure", in: errPipe, want: 0, wantErr: errPipe},
 	}

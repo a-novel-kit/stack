@@ -26,7 +26,7 @@ func TestExitStatus(t *testing.T) {
 			t.Parallel()
 
 			var exitErr *exec.ExitError
-			require.ErrorAs(t, exec.Command("sh", "-c", testCase.script).Run(), &exitErr)
+			require.ErrorAs(t, exec.CommandContext(t.Context(), "sh", "-c", testCase.script).Run(), &exitErr)
 			require.Equal(t, testCase.want, exitStatus(exitErr))
 		})
 	}

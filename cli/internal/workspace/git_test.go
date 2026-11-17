@@ -59,7 +59,7 @@ func TestOngoingWork(t *testing.T) {
 
 			local, _ := workspacetest.InitSync(t)
 			testCase.setup(t, local)
-			require.Equal(t, testCase.want, workspace.OngoingWork(local))
+			require.Equal(t, testCase.want, workspace.OngoingWork(t.Context(), local))
 		})
 	}
 }
@@ -68,18 +68,18 @@ func TestUnpushedCommits(t *testing.T) {
 	t.Parallel()
 
 	local, _ := workspacetest.InitSync(t)
-	require.Equal(t, 0, workspace.UnpushedCommits(local), "fresh clone")
+	require.Equal(t, 0, workspace.UnpushedCommits(t.Context(), local), "fresh clone")
 
 	workspacetest.Commit(t, local, "c.txt", "c0\n")
-	require.Equal(t, 1, workspace.UnpushedCommits(local), "after one local commit")
+	require.Equal(t, 1, workspace.UnpushedCommits(t.Context(), local), "after one local commit")
 
 	workspacetest.Git(t, local, "push", "--quiet")
-	require.Equal(t, 0, workspace.UnpushedCommits(local), "after push")
+	require.Equal(t, 0, workspace.UnpushedCommits(t.Context(), local), "after push")
 
 	// With no upstream there is no remote to have lost the commit to.
 	workspacetest.Git(t, local, "checkout", "--quiet", "-b", "no-upstream")
 	workspacetest.Commit(t, local, "d.txt", "d0\n")
-	require.Equal(t, 0, workspace.UnpushedCommits(local), "no upstream")
+	require.Equal(t, 0, workspace.UnpushedCommits(t.Context(), local), "no upstream")
 }
 
 func TestToplevel(t *testing.T) {
@@ -110,7 +110,7 @@ func TestToplevel(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := workspace.Toplevel(testCase.dir)
+			got, err := workspace.Toplevel(t.Context(), testCase.dir)
 			if testCase.wantErr {
 				require.Error(t, err)
 				require.Empty(t, got)
@@ -123,6 +123,80 @@ func TestToplevel(t *testing.T) {
 			wantResolved, err := filepath.EvalSymlinks(testCase.want)
 			require.NoError(t, err)
 			require.Equal(t, wantResolved, gotResolved)
+		})
+	}
+}
+
+// TestParseURL pins the remote forms that name a GitHub repository. The parser
+// backs the org guard of detect, setup's stack check and the sandbox, so a
+// foreign host or a local path must name none.
+func TestParseURL(t *testing.T) {
+	t.Parallel()
+
+	stack := workspace.Repo{Org: "a-novel-kit", Name: "stack"}
+
+	testCases := []struct {
+		name   string
+		url    string
+		expect workspace.Repo
+		ok     bool
+	}{
+		{name: "Success/SSH", url: "git@github.com:a-novel-kit/stack.git", expect: stack, ok: true},
+		{name: "Success/SSHScheme", url: "ssh://git@github.com/a-novel-kit/stack.git", expect: stack, ok: true},
+		{name: "Success/HTTPS", url: "https://github.com/a-novel-kit/stack", expect: stack, ok: true},
+		{name: "Success/HTTPSGitSuffix", url: "https://github.com/a-novel-kit/stack.git\n", expect: stack, ok: true},
+		{
+			name: "Success/Fork", url: "git@github.com:someone/stack.git",
+			expect: workspace.Repo{Org: "someone", Name: "stack"}, ok: true,
+		},
+		{name: "Error/ForeignHost", url: "https://gitlab.com/a-novel/foo.git"},
+		{name: "Error/LookalikeHost", url: "https://github.com.example.org/a-novel/foo.git"},
+		{name: "Error/LocalPath", url: "/srv/mirrors/a-novel-kit/stack.git"},
+		{name: "Error/ExtraSegment", url: "https://github.com/a-novel-kit/stack/tree"},
+		{name: "Error/NoName", url: "git@github.com:a-novel-kit"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			repo, ok := workspace.ParseURL(testCase.url)
+			require.Equal(t, testCase.ok, ok)
+			require.Equal(t, testCase.expect, repo)
+		})
+	}
+}
+
+// TestRootRepo pins that the workspace root counts as the stack whatever its
+// origin's host, so a stack cloned from a local mirror keeps its unsaved work
+// guarded, while a GitHub origin names the repository, a fork included.
+func TestRootRepo(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name   string
+		origin string // "" for a directory that is no checkout
+		expect workspace.Repo
+		ok     bool
+	}{
+		{name: "Success/GitHub", origin: "git@github.com:someone/stack.git", expect: workspace.Repo{Org: "someone", Name: "stack"}, ok: true},
+		{name: "Success/LocalMirror", origin: "/srv/mirrors/stack.git", expect: workspace.StackRepo, ok: true},
+		{name: "Error/NotACheckout"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			if testCase.origin != "" {
+				root = workspacetest.Init(t)
+				workspacetest.Git(t, root, "remote", "add", "origin", testCase.origin)
+			}
+
+			repo, ok := workspace.RootRepo(t.Context(), root)
+			require.Equal(t, testCase.ok, ok)
+			require.Equal(t, testCase.expect, repo)
 		})
 	}
 }

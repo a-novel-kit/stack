@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/a-novel-kit/stack/cli/internal/shared/poll"
 	"github.com/a-novel-kit/stack/cli/internal/workspace"
 )
 
@@ -273,14 +275,15 @@ func chunkBotComments(items []botBatchItem, maxBytes int) ([][]botBatchItem, err
 // given form inputs (-f key=value, beyond the shared nonce), waits for the
 // resulting run by nonce, and watches it to completion.
 func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs ...string) error {
+	ctx := cmd.Context()
 	nonce := newNonce()
 	dispatchArgs := []string{"workflow", commandRun, botWorkflowFile, "--repo", dispatchRepo, "-f", "nonce=" + nonce}
-	if _, err := gh(append(dispatchArgs, formArgs...)...); err != nil {
+	if _, err := gh(ctx, append(dispatchArgs, formArgs...)...); err != nil {
 		return fmt.Errorf("bot-comment: dispatch to %s failed: %w", dispatchRepo, err)
 	}
 	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dispatched bot-comment %s; waiting for the run...\n", label)
 
-	runID, err := waitForDispatchedRun(dispatchRepo, nonce)
+	runID, err := waitForDispatchedRun(ctx, dispatchRepo, nonce)
 	if err != nil {
 		return fmt.Errorf("bot-comment: %w", err)
 	}
@@ -288,18 +291,18 @@ func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs
 	// gh run watch streams progress and, with --exit-status, exits non-zero
 	// when the run concluded in failure. It is wired straight to this
 	// command's stdio so the operator sees live progress.
-	watch := exec.Command("gh", commandRun, "watch", strconv.FormatInt(runID, 10),
+	watch := exec.CommandContext(ctx, "gh", commandRun, "watch", strconv.FormatInt(runID, 10),
 		"--repo", dispatchRepo, "--exit-status", "--interval", "3")
 	watch.Stdout = cmd.OutOrStdout()
 	watch.Stderr = cmd.ErrOrStderr()
 	if err := watch.Run(); err != nil {
 		// A failed poll stops gh run watch while the run goes on to post, so the
 		// run's own conclusion decides whether the comments landed.
-		if succeeded, viewErr := runSucceeded(dispatchRepo, runID); viewErr == nil && succeeded {
+		if succeeded, viewErr := runSucceeded(ctx, dispatchRepo, runID); viewErr == nil && succeeded {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "gh run watch stopped (%v), but run %d succeeded\n", err, runID)
 			return nil
 		}
-		logs, _ := gh(commandRun, "view", strconv.FormatInt(runID, 10),
+		logs, _ := gh(ctx, commandRun, "view", strconv.FormatInt(runID, 10),
 			"--repo", dispatchRepo, "--log-failed")
 		return fmt.Errorf("bot-comment: workflow run %d failed: %w\n%s", runID, err, logs)
 	}
@@ -308,42 +311,41 @@ func dispatchBotComment(cmd *cobra.Command, dispatchRepo, label string, formArgs
 
 // runSucceeded waits for a run to complete and reports whether it concluded in
 // success. A failed read counts as not yet complete until botRunFinishTimeout.
-func runSucceeded(dispatchRepo string, runID int64) (bool, error) {
-	deadline := time.Now().Add(botRunFinishTimeout)
-	for {
-		out, err := gh(commandRun, "view", strconv.FormatInt(runID, 10), "--repo", dispatchRepo,
+func runSucceeded(ctx context.Context, dispatchRepo string, runID int64) (bool, error) {
+	var conclusion string
+	err := poll.Until(ctx, botRunPoll, botRunFinishTimeout, func(ctx context.Context) (bool, error) {
+		out, err := gh(ctx, commandRun, "view", strconv.FormatInt(runID, 10), "--repo", dispatchRepo,
 			"--json", "status,conclusion", "--jq", `.status + " " + .conclusion`)
-		if status, conclusion, _ := strings.Cut(strings.TrimSpace(out), " "); err == nil && status == "completed" {
-			return conclusion == "success", nil
-		}
-		if time.Now().After(deadline) {
-			return false, fmt.Errorf("run %d did not complete within %s", runID, botRunFinishTimeout)
-		}
-		time.Sleep(botRunPoll)
+		status, found, _ := strings.Cut(strings.TrimSpace(out), " ")
+		conclusion = found
+		return err == nil && status == "completed", nil
+	})
+	if errors.Is(err, poll.ErrTimeout) {
+		return false, fmt.Errorf("run %d did not complete within %s", runID, botRunFinishTimeout)
 	}
+	return err == nil && conclusion == "success", err
 }
 
 // waitForDispatchedRun polls the run list until a run whose name carries the
 // nonce appears, and returns its database ID. workflow_dispatch returns no run
 // ID and the run takes a moment to register, hence the bounded poll.
-func waitForDispatchedRun(dispatchRepo, nonce string) (int64, error) {
-	deadline := time.Now().Add(botRunLookupTimeout)
-	for {
-		out, err := gh(commandRun, "list",
+func waitForDispatchedRun(ctx context.Context, dispatchRepo, nonce string) (int64, error) {
+	var id int64
+	err := poll.Until(ctx, botRunLookupPoll, botRunLookupTimeout, func(ctx context.Context) (bool, error) {
+		out, err := gh(ctx, commandRun, "list",
 			"--repo", dispatchRepo,
 			"--workflow", botWorkflowFile,
 			"--event", "workflow_dispatch",
 			"--limit", "30",
 			"--json", "databaseId,displayTitle")
-		if id := runWithNonce(out, nonce); err == nil && id != 0 {
-			return id, nil
-		}
-		if time.Now().After(deadline) {
-			return 0, fmt.Errorf("dispatched run did not appear within %s "+
-				"(check 'gh run list --repo %s')", botRunLookupTimeout, dispatchRepo)
-		}
-		time.Sleep(botRunLookupPoll)
+		id = runWithNonce(out, nonce)
+		return err == nil && id != 0, nil
+	})
+	if errors.Is(err, poll.ErrTimeout) {
+		return 0, fmt.Errorf("dispatched run did not appear within %s "+
+			"(check 'gh run list --repo %s')", botRunLookupTimeout, dispatchRepo)
 	}
+	return id, err
 }
 
 // runWithNonce returns the id of the run in a `gh run list` JSON listing whose

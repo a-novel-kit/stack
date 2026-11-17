@@ -1,6 +1,7 @@
 package volumes
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
+	"github.com/a-novel-kit/stack/cli/internal/shared/podman"
 	"github.com/a-novel-kit/stack/cli/internal/shared/retention"
 )
 
@@ -49,14 +51,14 @@ func BackupDir(stack, service, volume string) string {
 
 // List returns one Volume entry per compose-declared volume on the service.
 // The size comes from podman, the backup count from the backups dir.
-func List(svc *discovery.Service) []Volume {
+func List(ctx context.Context, svc *discovery.Service) []Volume {
 	out := make([]Volume, 0, len(svc.Volumes))
 	for _, v := range svc.Volumes {
 		volume := Volume{
 			Name:        v.Name,
 			Service:     svc.Name,
 			Stack:       svc.Stack,
-			SizeBytes:   podmanVolumeSize(PodmanVolumeName(svc.Stack, svc.Name, v.Name)),
+			SizeBytes:   podmanVolumeSize(ctx, PodmanVolumeName(svc.Stack, svc.Name, v.Name)),
 			BackupCount: int32(len(retention.Files(BackupDir(svc.Stack, svc.Name, v.Name), isArchive))),
 		}
 		out = append(out, volume)
@@ -67,14 +69,13 @@ func List(svc *discovery.Service) []Volume {
 // podmanVolumeSize returns the volume's size on disk, from `du -sb` on the
 // mountpoint `podman volume inspect` reports. A missing volume, or one du
 // cannot measure, reports 0.
-func podmanVolumeSize(fullName string) int64 {
-	out, err := exec.Command("podman", "volume", "inspect", fullName,
-		"--format", "{{.Mountpoint}}").Output()
-	mountpoint := strings.TrimSpace(string(out))
+func podmanVolumeSize(ctx context.Context, fullName string) int64 {
+	mountpoint, err := podman.Output(ctx, nil, "volume", "inspect", fullName, "--format", "{{.Mountpoint}}")
 	if err != nil || mountpoint == "" {
 		return 0
 	}
-	if out, err = exec.Command("du", "-sb", mountpoint).Output(); err != nil {
+	out, err := exec.CommandContext(ctx, "du", "-sb", mountpoint).Output()
+	if err != nil {
 		return 0
 	}
 	// du prints "<bytes>\t<path>".
@@ -96,7 +97,7 @@ func isArchive(name string) bool { return strings.HasSuffix(name, ".tar.zst") }
 //
 // The caller owns the service-down pre-check; Backup itself runs
 // unconditionally.
-func Backup(svc *discovery.Service, tag string) ([]string, error) {
+func Backup(ctx context.Context, svc *discovery.Service, tag string) ([]string, error) {
 	timestamp := time.Now().UTC().Format("2006-01-02T15-04-05Z")
 	var archives []string
 	for _, v := range svc.Volumes {
@@ -110,7 +111,7 @@ func Backup(svc *discovery.Service, tag string) ([]string, error) {
 			filename = timestamp + "." + sanitizeTag(tag) + ".tar.zst"
 		}
 		dest := filepath.Join(dir, filename)
-		if err := backupOne(full, dest); err != nil {
+		if err := backupOne(ctx, full, dest); err != nil {
 			return archives, fmt.Errorf("backup volume %s: %w", v.Name, err)
 		}
 		// Read the archive back before calling it a backup: Clear destroys the
@@ -135,8 +136,8 @@ func Backup(svc *discovery.Service, tag string) ([]string, error) {
 // A failed backup leaves no file behind, so every archive on disk is a complete
 // one. Clear treats a successful backup as license to destroy the volume, and
 // `restore` picks from the same directory.
-func backupOne(volumeName, dest string) error {
-	if err := writeBackup(volumeName, dest); err != nil {
+func backupOne(ctx context.Context, volumeName, dest string) error {
+	if err := writeBackup(ctx, volumeName, dest); err != nil {
 		_ = os.Remove(dest)
 
 		return err
@@ -151,7 +152,7 @@ func backupOne(volumeName, dest string) error {
 // and the frame checksum, so it is the call a full disk surfaces in, after
 // everything else looked fine. Every close error is returned, since a dropped
 // one reports a truncated archive as a successful backup.
-func writeBackup(volumeName, dest string) (err error) {
+func writeBackup(ctx context.Context, volumeName, dest string) (err error) {
 	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", dest, err)
@@ -162,7 +163,7 @@ func writeBackup(volumeName, dest string) (err error) {
 		}
 	}()
 
-	cmd := exec.Command("podman", "volume", "export", volumeName)
+	cmd := exec.CommandContext(ctx, "podman", "volume", "export", volumeName)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -243,7 +244,7 @@ func tagRune(c rune) rune {
 // the archive timestamp; empty takes each volume's most recent .tar.zst by
 // mtime. Every archive is validated before any volume is touched. It returns
 // the restored volume names.
-func Restore(svc *discovery.Service, from string) ([]string, error) {
+func Restore(ctx context.Context, svc *discovery.Service, from string) ([]string, error) {
 	// 1. Resolve the source archive for each volume.
 	plans := make([]restorePlan, 0, len(svc.Volumes))
 	for _, v := range svc.Volumes {
@@ -265,7 +266,7 @@ func Restore(svc *discovery.Service, from string) ([]string, error) {
 	// 2. Every archive is valid, so restore each in turn.
 	var restored []string
 	for _, p := range plans {
-		if err := restoreOne(p.volume, p.archive); err != nil {
+		if err := restoreOne(ctx, p.volume, p.archive); err != nil {
 			return restored, fmt.Errorf("restore %s: %w", p.bare, err)
 		}
 		restored = append(restored, p.bare)
@@ -338,7 +339,7 @@ func validateArchive(path string) error {
 }
 
 // restoreOne pipes a zstd-decompressed archive into `podman volume import`.
-func restoreOne(volumeName, archive string) error {
+func restoreOne(ctx context.Context, volumeName, archive string) error {
 	f, err := os.Open(archive)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", archive, err)
@@ -350,8 +351,8 @@ func restoreOne(volumeName, archive string) error {
 	}
 	defer dec.Close()
 	// `podman volume import` requires the target volume to exist.
-	_ = exec.Command("podman", "volume", "create", volumeName).Run()
-	cmd := exec.Command("podman", "volume", "import", volumeName, "-")
+	_ = podman.Run(ctx, nil, "volume", "create", volumeName)
+	cmd := exec.CommandContext(ctx, "podman", "volume", "import", volumeName, "-")
 	cmd.Stdin = dec
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -369,19 +370,17 @@ func restoreOne(volumeName, archive string) error {
 // undo is one `restore` away; noBackup makes the deletion irreversible.
 //
 // The caller owns the service-down pre-check.
-func Clear(svc *discovery.Service, noBackup bool) ([]string, error) {
+func Clear(ctx context.Context, svc *discovery.Service, noBackup bool) ([]string, error) {
 	if !noBackup {
-		if _, err := Backup(svc, "auto-pre-clear"); err != nil {
+		if _, err := Backup(ctx, svc, "auto-pre-clear"); err != nil {
 			return nil, fmt.Errorf("auto-backup before clear: %w", err)
 		}
 	}
 	var cleared []string
 	for _, v := range svc.Volumes {
 		full := PodmanVolumeName(svc.Stack, svc.Name, v.Name)
-		cmd := exec.Command("podman", "volume", "rm", "-f", full)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return cleared, fmt.Errorf("rm volume %s: %w\n%s", v.Name, err, string(out))
+		if err := podman.Run(ctx, nil, "volume", "rm", "-f", full); err != nil {
+			return cleared, fmt.Errorf("rm volume %s: %w", v.Name, err)
 		}
 		cleared = append(cleared, v.Name)
 	}

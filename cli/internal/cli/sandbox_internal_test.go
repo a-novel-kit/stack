@@ -44,7 +44,7 @@ func TestRunSandbox(t *testing.T) {
 		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 		system := sandboxSystem{
 			tempDir: func() (string, error) { return root, os.Mkdir(root, 0o700) },
-			clone: func(path string) error {
+			clone: func(_ context.Context, path string) error {
 				return os.MkdirAll(filepath.Join(path, "app", "service-authentication", "internal"), 0o700)
 			},
 			removeAll: func(path string) error {
@@ -95,7 +95,7 @@ func TestRunSandbox(t *testing.T) {
 					allocated = true
 					return root, os.Mkdir(root, 0o700)
 				},
-				clone: func(string) error { return nil },
+				clone: func(context.Context, string) error { return nil },
 				removeAll: func(path string) error {
 					removed = true
 					return errors.Join(testCase.removeErr, os.RemoveAll(path))

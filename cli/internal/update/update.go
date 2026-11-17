@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/mod/semver"
 
+	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil"
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
@@ -131,10 +132,9 @@ func readCache(path string) (cacheEntry, error) {
 	return entry, err
 }
 
-// writeCache writes entry to a temp file in the same directory and renames it
-// into place. A concurrent invocation or an interrupted write therefore never
-// leaves a half-written cache that disables the check until the interval
-// expires.
+// writeCache writes entry atomically, so a concurrent invocation or an
+// interrupted write never leaves a half-written cache that disables the check
+// until the interval expires.
 func writeCache(path string, entry cacheEntry) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -143,17 +143,5 @@ func writeCache(path string, entry cacheEntry) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), cacheFile+".*")
-	if err != nil {
-		return err
-	}
-	defer func() { _ = os.Remove(tmp.Name()) }() // no-op once the rename succeeds
-	if _, err := tmp.Write(raw); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
+	return fsutil.WriteAtomic(path, raw, 0o600)
 }

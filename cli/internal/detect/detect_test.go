@@ -50,7 +50,7 @@ func TestBuilds(t *testing.T) {
 			root := t.TempDir()
 			fsutiltest.Write(t, root, testCase.files)
 
-			targets, err := detect.Builds(root)
+			targets, err := detect.Builds(t.Context(), root)
 			require.NoError(t, err)
 			podmanTargets := make([]detect.Target, 0, len(targets))
 			for _, target := range targets {

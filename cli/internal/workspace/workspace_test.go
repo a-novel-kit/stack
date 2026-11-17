@@ -33,7 +33,7 @@ func TestCheckouts(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, dir, ".git"), 0o755))
 	}
 
-	got, err := workspace.Checkouts(root)
+	got, err := workspace.Checkouts(t.Context(), root)
 	require.NoError(t, err)
 	dirs := map[string]string{}
 	for _, c := range got {

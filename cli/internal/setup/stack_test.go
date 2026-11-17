@@ -55,7 +55,7 @@ func TestCloneStack(t *testing.T) {
 				testCase.seed(t, path)
 			}
 
-			require.Error(t, setup.CloneStack(path), "CloneStack succeeded with ssh disabled")
+			require.Error(t, setup.CloneStack(t.Context(), path), "CloneStack succeeded with ssh disabled")
 
 			_, err := os.Lstat(path)
 			if testCase.wantExists {

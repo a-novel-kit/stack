@@ -26,7 +26,7 @@ import (
 type capability struct {
 	name    string
 	looks   string // what discovery scans for, quoted when nothing is found
-	detect  func(dir string) ([]detect.Target, error)
+	detect  func(ctx context.Context, dir string) ([]detect.Target, error)
 	short   string
 	long    string
 	example string
@@ -81,7 +81,7 @@ func runCapability(cmd *cobra.Command, c capability, o capabilityOpts) error {
 	if o.timeout < 0 {
 		return usageError(fmt.Errorf("--timeout: want a duration like 10m / 30s / 0, got %s", o.timeout))
 	}
-	targets, err := detectTargets(c, o)
+	targets, err := detectTargets(cmd.Context(), c, o)
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func runCapability(cmd *cobra.Command, c capability, o capabilityOpts) error {
 // detectTargets scans o.dir for c's targets of the kinds --type keeps. A
 // missing directory or one outside an a-novel repository fails before any
 // walk, so a wrong path never looks like an empty scan.
-func detectTargets(c capability, o capabilityOpts) ([]detect.Target, error) {
+func detectTargets(ctx context.Context, c capability, o capabilityOpts) ([]detect.Target, error) {
 	kinds, err := parseKinds(o.types)
 	if err != nil {
 		return nil, usageError(err)
@@ -148,10 +148,10 @@ func detectTargets(c capability, o capabilityOpts) ([]detect.Target, error) {
 	if info, statErr := os.Stat(o.dir); statErr != nil || !info.IsDir() {
 		return nil, usageError(fmt.Errorf("cannot scan %q: not an accessible directory", absDir))
 	}
-	if err := detect.RepoGuard(o.dir); err != nil {
+	if err := detect.RepoGuard(ctx, o.dir); err != nil {
 		return nil, usageError(err)
 	}
-	targets, err := c.detect(o.dir)
+	targets, err := c.detect(ctx, o.dir)
 	if err != nil {
 		return nil, fmt.Errorf("scan failed: %w", err)
 	}

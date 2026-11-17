@@ -49,5 +49,5 @@ func setupMachine(cmd *cobra.Command, opts setup.Options, nonInteractive bool) e
 	if !nonInteractive {
 		prompter = &setup.StdinPrompter{Out: cmd.OutOrStderr()}
 	}
-	return setup.Run(opts, cmd.OutOrStdout(), prompter)
+	return setup.Run(cmd.Context(), opts, cmd.OutOrStdout(), prompter)
 }

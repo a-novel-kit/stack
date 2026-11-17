@@ -208,7 +208,7 @@ func TestGoTests(t *testing.T) {
 				envs[i].env, envs[i].file = string(KindGo), compose
 			}
 
-			targets := goTests(dir, ".", envs)
+			targets := goTests(t.Context(), dir, ".", envs)
 			got := make([]string, len(targets))
 			for i, target := range targets {
 				got[i] = target.Name + " " + strings.Join(target.Args, " ")

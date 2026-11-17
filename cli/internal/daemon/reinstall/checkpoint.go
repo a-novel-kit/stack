@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil"
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
@@ -36,8 +37,8 @@ type GoExecCheckpoint struct {
 	Env []string `json:"env"`
 }
 
-// Write serializes cp to paths.ReinstallCheckpoint() and fsyncs it, writing to
-// a temporary file and renaming so a crash never leaves a corrupt checkpoint.
+// Write serializes cp to paths.ReinstallCheckpoint() atomically and synced to
+// disk, so a crash never leaves a corrupt checkpoint.
 // It stamps the schema and timestamp itself.
 func Write(cp Checkpoint) error {
 	cp.Schema = SchemaVersion
@@ -47,26 +48,12 @@ func Write(cp Checkpoint) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
-	tmp := path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	data, err := json.MarshalIndent(cp, "", "  ")
 	if err != nil {
-		return fmt.Errorf("create %s: %w", tmp, err)
-	}
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(cp); err != nil {
-		_ = f.Close()
 		return fmt.Errorf("encode: %w", err)
 	}
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("fsync: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("close: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("rename: %w", err)
+	if err := fsutil.WriteAtomic(path, append(data, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
 }

@@ -1,37 +1,37 @@
 package detect
 
 import (
-	"bytes"
+	"context"
 	"fmt"
-	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
+
+	"github.com/a-novel-kit/stack/cli/internal/workspace"
 )
 
-// anovelRemote matches a git remote URL belonging to the a-novel or
-// a-novel-kit GitHub orgs, in SSH (git@github.com:a-novel/x) or HTTPS
-// (https://github.com/a-novel-kit/x) form.
-var anovelRemote = regexp.MustCompile(`github\.com[:/]a-novel(-kit)?/`)
-
 // RepoGuard fails, before any scan, when dir is not inside a git repository of
-// the a-novel or a-novel-kit orgs, as its remotes name them.
-func RepoGuard(dir string) error {
-	top, err := git(dir, "rev-parse", "--show-toplevel")
+// the a-novel or a-novel-kit orgs, as any of its remotes names them. A fork's
+// clone passes through its upstream remote.
+func RepoGuard(ctx context.Context, dir string) error {
+	top, err := workspace.Toplevel(ctx, dir)
 	if err != nil {
 		return fmt.Errorf("%q is not inside a git repository; the a-novel CLI only "+
 			"runs inside an a-novel / a-novel-kit repository", dir)
 	}
-	remotes, err := git(dir, "remote", "-v")
-	if err != nil || strings.TrimSpace(remotes) == "" {
+	remotes, err := workspace.Git(ctx, dir, "remote", "-v")
+	if err != nil || remotes == "" {
 		return fmt.Errorf("git repository %s has no remote; cannot verify it "+
 			"belongs to a-novel / a-novel-kit", top)
 	}
-	if !anovelRemote.MatchString(remotes) {
-		return fmt.Errorf("git repository %s is not an a-novel / a-novel-kit "+
-			"repository", top)
+	for line := range strings.Lines(remotes) {
+		// "<name>\t<url> (fetch)"
+		if fields := strings.Fields(line); len(fields) > 1 {
+			if repo, ok := workspace.ParseURL(fields[1]); ok && repo.InOrgs() {
+				return nil
+			}
+		}
 	}
-	return nil
+	return fmt.Errorf("git repository %s is not an a-novel / a-novel-kit repository", top)
 }
 
 // gitIgnoredDirs returns the absolute paths of directories git ignores under
@@ -40,9 +40,9 @@ func RepoGuard(dir string) error {
 // to its top dir, so a single set membership check prunes the whole subtree.
 // On any git error it returns an empty set, and the depth and name guards
 // still bound the walk.
-func gitIgnoredDirs(absRoot string) map[string]struct{} {
+func gitIgnoredDirs(ctx context.Context, absRoot string) map[string]struct{} {
 	set := map[string]struct{}{}
-	out, err := git(absRoot, "ls-files", "-z", "--others", "--ignored",
+	out, err := workspace.Git(ctx, absRoot, "ls-files", "-z", "--others", "--ignored",
 		"--exclude-standard", "--directory")
 	if err != nil {
 		return set
@@ -58,16 +58,4 @@ func gitIgnoredDirs(absRoot string) map[string]struct{} {
 		set[p] = struct{}{}
 	}
 	return set
-}
-
-// git runs `git -C dir <args...>` and returns trimmed stdout.
-func git(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	var out, errb bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &errb
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(errb.String()))
-	}
-	return strings.TrimSpace(out.String()), nil
 }

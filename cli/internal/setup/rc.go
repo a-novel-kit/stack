@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil"
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 	"github.com/a-novel-kit/stack/cli/internal/shared/retention"
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
@@ -241,18 +242,9 @@ func writeWithBackup(rcPath string, newContent []byte) (string, error) {
 		}
 		pruneOldRCBackups(rcPath)
 	}
-	// A temp file and a rename make the write atomic, so a partial write never
-	// leaves the rc broken. The umask filters WriteFile's mode, and Chmod does
-	// not.
-	tmp := target + ".a-novel-tmp"
-	if err := os.WriteFile(tmp, newContent, mode); err != nil {
-		return backupPath, fmt.Errorf("write tmp: %w", err)
-	}
-	if err := os.Chmod(tmp, mode); err != nil {
-		return backupPath, fmt.Errorf("chmod tmp: %w", err)
-	}
-	if err := os.Rename(tmp, target); err != nil {
-		return backupPath, fmt.Errorf("rename tmp: %w", err)
+	// An atomic write never leaves the rc broken.
+	if err := fsutil.WriteAtomic(target, newContent, mode); err != nil {
+		return backupPath, fmt.Errorf("write %s: %w", target, err)
 	}
 	return backupPath, nil
 }

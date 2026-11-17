@@ -84,7 +84,7 @@ func syncWorkspace(cmd *cobra.Command, o syncOpts) error {
 		return nil
 	}
 
-	list, skipped := syncJobs(root, repos, normalizeFilter(o.allow), normalizeFilter(o.ignore))
+	list, skipped := syncJobs(cmd.Context(), root, repos, normalizeFilter(o.allow), normalizeFilter(o.ignore))
 	_, _ = fmt.Fprintf(out, "▸ Syncing %d repo(s) at %s\n", len(list), root)
 	if len(skipped) > 0 {
 		_, _ = fmt.Fprintf(out, "  left out: %s\n", strings.Join(skipped, ", "))
@@ -92,7 +92,7 @@ func syncWorkspace(cmd *cobra.Command, o syncOpts) error {
 	if len(list) == 0 {
 		return nil
 	}
-	workspace.GitHubMux.Open()
+	workspace.GitHubMux.Open(cmd.Context())
 	batch := batchview.RunJobs(cmd.Context(), list, o.limit, stdoutIsTTY())
 	_, _ = fmt.Fprint(out, batchview.Report("SYNC", batch, syncNeedsAttention))
 	return batchError(batch)
@@ -108,8 +108,8 @@ func syncNeedsAttention(r jobs.Result) bool {
 // name a repo by its full or its bare name. It also returns the names left out:
 // those --ignore names, and the stack repository at root, which never syncs into
 // itself. --allow drops the others silently.
-func syncJobs(root string, repos []workspace.Repo, allowed, ignored map[string]bool) ([]jobs.Job, []string) {
-	self, _ := workspace.Origin(root)
+func syncJobs(ctx context.Context, root string, repos []workspace.Repo, allowed, ignored map[string]bool) ([]jobs.Job, []string) {
+	self, _ := workspace.RootRepo(ctx, root)
 	var list []jobs.Job
 	var skipped []string
 	for _, r := range repos {
@@ -123,17 +123,17 @@ func syncJobs(root string, repos []workspace.Repo, allowed, ignored map[string]b
 		}
 		list = append(list, jobs.Job{
 			Name: name,
-			Run:  func(_ context.Context, out io.Writer) (string, error) { return syncRepo(root, r, out) },
+			Run:  func(ctx context.Context, out io.Writer) (string, error) { return syncRepo(ctx, root, r, out) },
 		})
 	}
 	return list, skipped
 }
 
 // syncRepo clones r under root, or updates the checkout already there.
-func syncRepo(root string, r workspace.Repo, out io.Writer) (string, error) {
+func syncRepo(ctx context.Context, root string, r workspace.Repo, out io.Writer) (string, error) {
 	dir := r.Dir(root)
 	if fsutil.Exists(filepath.Join(dir, ".git")) {
-		return updateRepo(dir, out)
+		return updateRepo(ctx, dir, out)
 	}
 	if fsutil.Exists(dir) {
 		return "", fmt.Errorf("%s exists but is not a git repo", dir)
@@ -141,8 +141,8 @@ func syncRepo(root string, r workspace.Repo, out io.Writer) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return "", fmt.Errorf("create parent: %w", err)
 	}
-	if gitOut, err := workspace.GitRemote(filepath.Dir(dir), "clone", "--quiet", r.SSHURL(), dir); err != nil {
-		return "", fmt.Errorf("clone failed: %w\n%s", err, strings.TrimSpace(gitOut))
+	if _, err := workspace.GitRemote(ctx, filepath.Dir(dir), "clone", "--quiet", r.SSHURL(), dir); err != nil {
+		return "", fmt.Errorf("clone failed: %w", err)
 	}
 	_, _ = fmt.Fprintf(out, "cloned → %s\n", dir)
 	return syncCloned, nil
@@ -154,35 +154,35 @@ func syncRepo(root string, r workspace.Repo, out io.Writer) (string, error) {
 //   - on it, `git pull --ff-only` advances it in place, preserving unstaged
 //     changes, and git's refusal to overwrite one becomes a skip;
 //   - a diverged default is skipped.
-func updateRepo(dir string, out io.Writer) (string, error) {
-	def := workspace.DefaultBranch(dir)
-	if gitOut, err := workspace.GitRemote(dir, "fetch", "--quiet", "--tags", "--prune", "origin"); err != nil {
-		return "", fmt.Errorf("fetch failed: %w\n%s", err, gitOut)
+func updateRepo(ctx context.Context, dir string, out io.Writer) (string, error) {
+	def := workspace.DefaultBranch(ctx, dir)
+	if _, err := workspace.GitRemote(ctx, dir, "fetch", "--quiet", "--tags", "--prune", "origin"); err != nil {
+		return "", fmt.Errorf("fetch failed: %w", err)
 	}
 	// The on-default path's pull needs a local branch tracking origin/<def>.
-	if _, err := workspace.Git(dir, "rev-parse", "--verify", "--quiet", "refs/heads/"+def); err != nil {
-		_, _ = workspace.Git(dir, "branch", "--quiet", "--track", def, "origin/"+def)
+	if _, err := workspace.Git(ctx, dir, "rev-parse", "--verify", "--quiet", "refs/heads/"+def); err != nil {
+		_, _ = workspace.Git(ctx, dir, "branch", "--quiet", "--track", def, "origin/"+def)
 	}
-	// A failed rev-parse prints an error naming its ref, so the two outputs
-	// never match, and the fast-forward below reports the problem.
-	local, _ := workspace.Git(dir, "rev-parse", "refs/heads/"+def)
-	remote, _ := workspace.Git(dir, "rev-parse", "refs/remotes/origin/"+def)
-	if local == remote {
+	// A failed rev-parse leaves the refs unequal, and the fast-forward below
+	// reports the problem.
+	local, localErr := workspace.Git(ctx, dir, "rev-parse", "refs/heads/"+def)
+	remote, remoteErr := workspace.Git(ctx, dir, "rev-parse", "refs/remotes/origin/"+def)
+	if localErr == nil && remoteErr == nil && local == remote {
 		_, _ = fmt.Fprintf(out, "%s up-to-date\n", def)
 		return syncUpToDate, nil
 	}
 
-	current, _ := workspace.Git(dir, "symbolic-ref", "--quiet", "--short", "HEAD")
+	current, _ := workspace.Git(ctx, dir, "symbolic-ref", "--quiet", "--short", "HEAD")
 	args := []string{"fetch", "--quiet", "origin", def + ":" + def}
-	if strings.TrimSpace(current) == def {
+	if current == def {
 		args = []string{"pull", "--quiet", "--ff-only", "origin", def}
 	}
-	if gitOut, err := workspace.GitRemote(dir, args...); err != nil {
+	if _, err := workspace.GitRemote(ctx, dir, args...); err != nil {
 		reason := "local " + def + " diverged from origin"
-		if strings.Contains(gitOut, "overwritten") {
+		if strings.Contains(err.Error(), "overwritten") {
 			reason = "unstaged changes on " + def + " would be overwritten (changes kept)"
 		}
-		_, _ = fmt.Fprintf(out, "%s: skipped\n%s\n", reason, strings.TrimSpace(gitOut))
+		_, _ = fmt.Fprintf(out, "%s: skipped\n%s\n", reason, err)
 		return syncSkipped, nil
 	}
 	_, _ = fmt.Fprintf(out, "%s updated\n", def)
