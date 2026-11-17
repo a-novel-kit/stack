@@ -29,8 +29,8 @@ const killGrace = 10 * time.Second
 // the daemon, so their response reaches the client before the socket closes.
 const shutdownDelay = 50 * time.Millisecond
 
-// Config wires a Server to the daemon's subsystems. A field left zero leaves
-// the RPCs that need it unusable, which a test of other RPCs relies on.
+// Config wires a Server to the daemon's subsystems. daemon.Run sets every
+// field; a test leaves zero the fields of the RPCs it does not call.
 type Config struct {
 	Version     string           // daemon binary version, reported by Status
 	SocketPath  string           // reported by Status

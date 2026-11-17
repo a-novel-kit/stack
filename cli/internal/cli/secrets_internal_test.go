@@ -12,23 +12,26 @@ import (
 
 // TestNewSecretsSetCmd pins the TTY gate of `secrets set`: it refuses when stdin
 // is not a terminal, so a value is never piped in. On the interactive path, a
-// stubbed no-echo reader shows the value is stored but never printed.
+// stubbed no-echo reader shows the value is stored, encrypted, where the
+// developer's tokens live under XDG_DATA_HOME, and never printed: a moved
+// store would strand every stored token.
 //
 //nolint:paralleltest // swaps the package-level stdinIsTTY and readPassword seams.
 func TestNewSecretsSetCmd(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
-		root := t.TempDir()
+		dataHome := t.TempDir()
+		t.Setenv("XDG_DATA_HOME", dataHome)
 		const secretValue = "sk-super-secret"
 		seamtest.Swap(t, &stdinIsTTY, func() bool { return true })
 		seamtest.Swap(t, &readPassword, func() ([]byte, error) { return []byte(secretValue), nil })
 
-		out, err := runCmd(t, newSecretsSetCmd(root), "openai-key")
+		out, err := runCmd(t, newSecretsCmd(), "set", "openai-key")
 		require.NoError(t, err)
 		require.Contains(t, out, "set openai-key")
 		require.NotContains(t, out, secretValue)
 
 		// The encrypted store must exist and must not contain the plaintext value.
-		blob, err := os.ReadFile(filepath.Join(root, "store.enc"))
+		blob, err := os.ReadFile(filepath.Join(dataHome, "a-novel", "secrets", "store.enc"))
 		require.NoError(t, err)
 		require.NotContains(t, string(blob), secretValue, "plaintext secret value found in the at-rest store: not encrypted")
 	})
