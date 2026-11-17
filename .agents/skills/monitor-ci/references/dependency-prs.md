@@ -122,8 +122,8 @@ new attempt runs every job, and auto-merge queues the PR once they pass.
 A red `evaluate` job from `review-gate` is the same class in a repository whose `gates.yaml` still
 cancels runs in progress. A label or a review starts a run while another runs on the same head, and
 the cancelled one stays red, though the `review-gate` check the [Agent] App posts passed. Re-run the
-newest cancelled run the same way, then set that `gates.yaml`'s `cancel-in-progress` to `false`, as
-its siblings' copies have it.
+newest cancelled run the same way, then make that `gates.yaml` call `gates-run.yaml`, whose
+`evaluate` job queues every run (`queue: max`).
 
 ## Land them without saturating CI
 

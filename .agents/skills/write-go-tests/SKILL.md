@@ -197,7 +197,8 @@ conventions.
 ## Test Helpers
 
 Shared test utilities belong in a `utils_test.go` file (or a dedicated `test/` subpackage when they
-are shared across packages). Every helper must:
+are shared across packages). A pure lookup or builder, which cannot fail, takes no `t`. A helper
+that can fail must:
 
 - Accept `t *testing.T` as its first argument.
 - Call `t.Helper()` as its first statement, so failure attribution points at the caller.

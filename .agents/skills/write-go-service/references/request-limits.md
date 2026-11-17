@@ -4,7 +4,7 @@ Read this reference when routed here by [write-go-service](../SKILL.md). Its rul
 REST route and gRPC method a service adds or changes, and to any costly operation.
 
 Every service bounds what one caller can consume, in its own code, so the limits are reviewed with
-the routes they guard. golib's `httpf` carries the standard setup: `NewRouter` applies the body
+the routes they guard. golib's `httpf` carries the standard setup: `NewMux` applies the body
 limit and the trusted visitor IP, and `Limits` builds the rate limits.
 
 ## Decide on every route and method
@@ -16,17 +16,17 @@ Each route or method you add or change gets one of these, decided with the code 
 - **Strict limits:** a route that issues tokens, checks a password or sends email, as
   [Strict limits](#strict-limits) describes.
 - **Costly:** a route or method that calls a paid provider or spends heavy CPU or memory: a strict
-  per-caller rate and a concurrency gate on REST ([Costly routes](#costly-routes)), a method cap on
-  gRPC ([gRPC](#grpc)).
+  per-caller rate and a concurrency gate on REST ([Costly routes](#costly-routes)), a server cap
+  sized to its peak memory on gRPC ([gRPC](#grpc)).
 - **Retune:** a limit that legitimate traffic hits changes its default in `env.go`, with the reason
   beside it. Never remove a limit to make a test pass: turn the stack's limits off instead.
 
 ## Standard limits
 
-- **Body.** `REST_MAX_REQUEST_SIZE` defaults to 16 KiB, applied by `httpf.NewRouter`. chi cannot
+- **Body.** `REST_MAX_REQUEST_SIZE` defaults to 16 KiB, applied by `httpf.NewMux`. chi cannot
   raise a global limit for one route: the outer reader always stops first. A route that needs more
   sits outside the global limit, in a group with its own `RequestSize`.
-- **Rate.** `httpf.NewRouter` limits every route but the ping (`REST_LIVENESS_PATH`) to
+- **Rate.** `httpf.NewMux` limits every route but the ping (`REST_LIVENESS_PATH`) to
   `REST_RATE_LIMIT` per visitor, `5/1s` by default. Limits count per method and route pattern, which
   the router looks up itself: a raw path would give every path-parameter value a fresh budget.
 - **Refusal.** Answer `429` with `Retry-After`, and document it on every limited route (see
@@ -56,7 +56,7 @@ one:
 
 Every rate or concurrency limit is configuration, like a timeout: an environment variable with its
 default in `env.go`, never a number in a middleware. A rate is an `httpf.Rate`, written `<requests>/<window>`
-(`3/5m`) in its variable and in its default: `config.Must(httpf.ParseRate("3/5m"))` writes the
+(`3/5m`) in its variable and in its default: `lo.Must(httpf.ParseRate("3/5m"))` writes the
 default, and `config.LoadEnv` reads the variable with `httpf.ParseRate`. Name each policy once in the
 service's limits file, built on `httpf.Limits.By` with a caller key or `httpf.BodyKeyRate` for a
 target named in the body. The limits file exposes one named middleware per guarded route family,
@@ -111,14 +111,8 @@ where the user is known. A gRPC server bounds its calls in flight, per instance,
 - **Server cap.** `grpcf.NewCallLimit`, from `GRPC_MAX_CONCURRENT_CALLS`, caps the calls one
   instance runs at once, health checks aside. Size it so the cap times one call's peak memory fits
   the container's memory limit; infra sets it beside `GOMEMLIMIT`. Pass the `CallLimit` to
-  `grpcf.NewServer` as an extra option.
-- **Method cap.** `grpcf.MethodCallLimit(fullMethod, limit)` gives one method a cap of its own,
-  inside the server's, as a route's rate limit adds to the router's. Add one when a method costs far
-  more than its neighbours, such as a paid provider call or a large payload, so its calls cannot fill
-  the server and starve cheap ones like a status poll. Each cap is configuration like a rate: an
-  environment variable with its default in `env.go`, and the `CallLimit` built once in the server's
-  wiring file, never a literal in `main`.
-- **Refusal.** A full server or method refuses a call with `UNAVAILABLE` before reading it.
+  `grpcf.NewGRPCServer` as an extra option.
+- **Refusal.** A full server refuses a call with `UNAVAILABLE` before reading it.
   In-cluster callers retry `UNAVAILABLE` on the next pod through golib's service config, so a
   refusal moves the call rather than failing it.
 - **The retry rule.** `UNAVAILABLE` means the call did not run. A handler that has had an effect, a

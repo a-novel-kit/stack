@@ -421,9 +421,11 @@ Affected: /ping GET, /healthcheck GET, /jwks GET
 
 None of these handlers returns a 4xx, by design:
 
-- `/ping` — always returns 200 (liveness check only).
-- `/healthcheck` — always returns 200 regardless of dependency status (callers read the body to assess health).
-- `/jwks` — accepts any string for `usage` and returns an empty list for an unrecognized usage; it never validates input with a 400.
+- `/ping`: always returns 200 (liveness check only).
+- `/healthcheck`: reports each dependency in its body, with 200 when every one is up and 503
+  otherwise; it reads no input, so it never refuses one with a 4xx.
+- `/jwks`: accepts any string for `usage` and returns an empty list for an unrecognized usage; it
+  never refuses input with a 4xx.
 
 Do not add spurious 4xx responses to silence these warnings — that would document behavior
 the server does not have.

@@ -17,7 +17,9 @@ Contents:
 Each repo's `renovate.json` extends one class preset (`renovate/<class>.json`) pinned to a workflows
 release; every class extends `renovate/base.json`. `docs/renovate-presets.md` in the workflows repo
 documents the presets for consumers. A preset change reaches a repo in two Renovate runs: one
-proposes the bump of the pinned release, the next regenerates branches under the new preset.
+proposes the bump of the pinned release, the next regenerates branches under the new preset. That
+`renovate.json` is the repo's only policy: the `renovate` action's `repository_config` input is
+deprecated and ignored, with a warning.
 
 The workflows release stamps every self-reference, including its own `renovate.json`
 (`github>a-novel-kit/workflows//renovate/workflows#vX.Y.Z`). A Renovate PR bumping the workflows
@@ -38,6 +40,11 @@ tidy`.
 - Give every Go tool modfile its own `additionalBranchPrefix` (`golangci-lint-`, `gotestsum-`,
   `govulncheck-`, `buf-`, `mockery-`). Never add a modfile to `gomod.managerFilePatterns` without
   one; `tests/renovate.test.mjs` fails when one is missing.
+- The `go-tools` preset's `golangci-lint`, `gotestsum` and `govulncheck` rules match their modfile
+  in any directory and run its post-upgrade commands there
+  (`workingDirTemplate: "{{{packageFileDir}}}"`), so a module in a subdirectory, such as the stack's
+  `cli/`, needs no copy of them in its `renovate.json`. The same tool's modfile in two directories
+  shares one branch, which takes its configuration from the first upgrade on it.
 - A group spanning managers, such as a service's module, images and npm client, carries the union
   of options on the group rule: `postUpdateOptions` concatenates across rules; `goGetDirs`,
   `postUpgradeTasks` and `groupName` take the last matching rule.
@@ -78,10 +85,11 @@ Compose files and Dockerfiles pin first-party images by digest (`pinDigests` for
 so a moved tag changes nothing a consumer runs and each bump names the digest the approver checks.
 The composite-action default manager keeps a digest written after the tag, and a default gets that
 digest by hand once. The scanner images of `lint-semgrep` and `lint-workflows` are pinned the same
-way, as `version: "<tag>@sha256:<digest>"`, which the workflow manager reads as the tag and its
-digest. Other third-party images stay on tags. Publishers rebuild image tags as routine, so an image
-digest update carries no review signal: the digest review rule leaves out the `docker` datasource,
-and the update merges on its own.
+way, as `version: "<tag>@sha256:<digest>"` in the action's step `env`, which the base preset's
+workflow manager reads as the tag and its digest: it reads kit/workflows' action manifests as well
+as workflows. Other third-party images stay on tags. Publishers rebuild image tags as routine, so an
+image digest update carries no review signal: the digest review rule leaves out the `docker`
+datasource, and the update merges on its own.
 
 Only one manager may read a pinned line. A repository's own regex manager that also matches a
 `version:` line but not its digest wins the replacement, so the update moves the tag and keeps the
@@ -112,8 +120,9 @@ therefore have no gate.
 
 ## Release files pinned by hash
 
-A workflow pin of a downloaded tool carries the SHA-256 of the file its action downloads, on the
-line after `version`. The base preset's workflow manager reads it as the digest:
+A downloaded tool's pin carries the SHA-256 of the file its action downloads, on the line after
+`version`: the action's default in its step `env`, or a caller's override in a workflow. The base
+preset's workflow manager reads it as the digest:
 
 ```yaml
 # renovate: datasource=custom.hadolint depName=hadolint/hadolint

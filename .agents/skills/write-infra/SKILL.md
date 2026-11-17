@@ -39,7 +39,7 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
 | `bootstrap/`                         | Management project: state bucket, CI identities and trust, secrets, Barman buckets |
 | `environments/production/foundation` | Workload project, cluster and node pool, network, egress, perimeter, budget        |
 | `environments/production/cluster`    | Namespaces, add-ons, admission, workloads, databases, network policies             |
-| `environments/production/<service>`  | One service's release pins and secret versions, which the cluster root reads       |
+| `environments/production/cluster/releases` | One file per service: its release pins and secret versions, which the cluster root reads |
 | `environments/production/grafana`    | Grafana Cloud's alerts and dashboards                                              |
 | `environments/production/github`     | Both organizations' repositories, with their rulesets, teams and environments      |
 | `environments/recovery-*`            | The recovery drill: a throwaway cluster, then the databases it restores            |

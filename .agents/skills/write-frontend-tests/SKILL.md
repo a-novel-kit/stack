@@ -194,9 +194,10 @@ affected instead of inventing a screenshot test.
 - Use accessible locators and observable readiness conditions. Never use fixed sleeps.
 - Keep test data isolated and clean it through supported product interfaces.
 - Point every URL the server under test reads at a local fixture started in a global setup, never at
-  a live or production file. When the server caches what it reads, give each state its own
-  `webServer` entry: entries start in order, so later ones run `node build` on the first entry's
-  build. platform-studio's downtime journeys follow this pattern.
+  a live or production file. When the server caches what it reads, give each state its own server
+  through `SvelteKitPlaywright`'s `servers`: the first builds, the others serve that build.
+  `downtimeServers()` and `downtimeSetup()` from `@a-novel-kit/nodelib-test/playwright` set up the
+  planned-downtime states, and a journey reaches each state's server at `downtimeOrigin(state)`.
 - Make a compose service that a journey stops and starts, as the outage journeys stop
   `authentication`, join a holder's network: `network_mode: service:<holder>`, where a
   `registry.k8s.io/pause` holder publishes the ports. A restarted container otherwise gets a new
@@ -210,9 +211,14 @@ affected instead of inventing a screenshot test.
 - Run Authentication in a platform's stack with the callers production gives it.
   service-authentication's `service-token-issuer` image stands in for the cluster's issuer, which
   Authentication trusts through `SERVICE_TOKEN_ISSUER`, `SERVICE_TOKEN_AUDIENCE` and
-  `SERVICE_TOKEN_CALLERS`. A Playwright global setup draws the platform's token from the issuer into
-  the file `SERVICE_TOKEN_PATH` names. Fixtures call Authentication through a `fetch` that adds a
-  caller's token from the issuer in `X-Service-Authorization`.
+  `SERVICE_TOKEN_CALLERS`. `serviceTokenSetup` from `@a-novel-kit/nodelib-test/playwright` draws the
+  platform's tokens from the issuer into the files the servers read, as `SERVICE_TOKEN_PATH` names.
+  Fixtures call Authentication through `callerFetch(subject)` from the same entry, which adds the
+  caller's token in `X-Service-Authorization`.
+- Read the emails a test sends with `searchMail` and `mailLinks` from
+  `@a-novel-kit/nodelib-test/mailpit`, polling with the runner's own `expect.poll` or `vi.waitFor`.
+  A journey that follows an email's link takes it from `emailLink` in
+  `@a-novel-kit/nodelib-test/playwright`, which refuses a link to another origin.
 - Run the account platform's image in a client's stack, with a token drawn from the issuer at
   start, and register the client in `OAUTH_CLIENTS` on the address of the journeys' server. The
   account platform's own stack registers a stub client instead, whose callback the test serves and

@@ -120,11 +120,24 @@ runs:
   `scan-secrets` and `refresh-apko-locks` do. The step sets `GOPROXY: "https://proxy.golang.org|direct"`:
   `go install` never retries, and the pipe sends any proxy error to the origin, which the checksum
   database still checks. Every Go action step that fetches modules sets it too. A downloaded binary
-  takes a caller `sha256` input on the line after `version` and passes `sha256sum --check` before it runs, and a datasource in the base
-  Renovate preset moves the hash with the version
+  passes `sha256sum --check` before it runs, and a datasource in the base Renovate preset moves the
+  hash with the version
   ([release files pinned by hash](references/renovate-presets.md#release-files-pinned-by-hash)). A
-  container image runs by digest: the caller pins `version: "<tag>@sha256:<digest>"`, as for
-  `lint-semgrep` and `lint-workflows`, and the base preset moves the digest with the tag.
+  container image runs by digest, as `<tag>@sha256:<digest>`, as in `lint-semgrep` and
+  `lint-workflows`. The action holds its default `version` (and `sha256` for a downloaded binary) as
+  annotated keys in the `env` of the step that fetches the tool, which the base preset's workflow
+  regex reads, so Renovate bumps it in kit/workflows. A caller that overrides a downloaded binary's
+  `version` passes its `sha256` with it, and an image's `version` always reads
+  `<tag>@sha256:<digest>`.
+- An action that reads the repository checks it out itself, with `persist-credentials: false`, so
+  a job that runs only that action needs no checkout step. That checkout removes untracked files, so
+  an earlier step's output in the workspace is gone. `build-actions/compose-up` starts services for
+  the job's later steps and reads the job's own checkout.
+- Shell helpers several actions share live in a file beside the action folders, such as
+  `generic-actions/landing.sh`. The runner downloads the whole repository at the action's tag, so a
+  step loads it with `source "$GITHUB_ACTION_PATH/../landing.sh"`, under a
+  `# shellcheck source=/dev/null` directive. `review-gate` and `revoke-labels` read
+  `generic-actions/privileged-labels.txt` the same way.
 - Reference a sibling action in the same repo by its pinned tag
   (`a-novel-kit/workflows/generic-actions/pull-bot@v1.20.1`). A relative `./` path would bind a
   released action to whatever sits on `master`, so a release could not be internally consistent.
@@ -175,7 +188,9 @@ On a pull request, `github.sha` is GitHub's temporary merge commit (`refs/pull/N
 pull request's head. Anything bound to a head uses `github.event.pull_request.head.sha`: a commit
 status, a label approval, a proof. A job that must test exactly the approved commit checks it out
 by that sha. `pull-bot`'s default, `github.head_ref`, is the branch tip, which a push can move
-mid-run.
+mid-run. `node-actions/setup-node` checks out the event's commit, so the Node lanes test the merge
+commit, as the Go lanes do. `test-playwright` and `lint-translations` pass the head sha, since their
+approval labels bind the head.
 
 Each job declares its own `permissions` block. Read-only is the floor (`contents: read`); image and
 npm publishing add `packages: write`, `attestations: write`, `id-token: write`; a job whose action
@@ -230,9 +245,9 @@ starts. The merge box hides the cancelled run behind the newer one when both rep
 commit. Add `queue: max` to the group, which keeps up to 100 runs waiting in order, when every event
 must run or when the triggers report on different commits. A `workflow_run`, `delete` or `schedule`
 run reports on the default branch's head, so a pull request run it replaces stays cancelled as the
-newest run on the pull request's head. `gates.yaml` queues because its relay runs report on master.
-`visual-tests.yaml` queues both its approval and its cleanup. The `translations.yaml` approval and
-the `hotfix.yaml` backport queue because each run acts on its own event.
+newest run on the pull request's head. `gates-run.yaml` queues because its relay runs report on
+master. `visual-tests.yaml` queues both its approval and its cleanup. The `translations.yaml`
+approval and the `hotfix.yaml` backport queue because each run acts on its own event.
 A cancelling group on a workflow that also triggers on `labeled` gives each label
 event's run a group of its own, as infra's `main.yaml` does by appending
 `${{ endsWith(github.event.action, 'labeled') && format('-{0}', github.run_id) || '' }}` to its group.
@@ -242,9 +257,10 @@ the [diagnosis and recovery](../monitor-ci/references/dependency-prs.md#stranded
 
 Each workflow an event matches starts a run of its own, and during a GitHub incident every run
 waits in the same queue. Governance runs already far outnumber CI runs, so a new job joins the
-workflow that answers its event: `check-dependencies.yaml` carries the `with-feature-env`
-revocation. Checks that share a trigger run as steps of one job, as in `gates.yaml`, each with
-`if: ${{ !cancelled() && … }}` so a failing gate leaves the others posting. A `workflow_run`
+workflow that answers its event: `check-dependencies.yaml` carries the `revoke-labels` job, which
+removes every privileged label after a push. Checks that share a trigger run as steps of one job, as
+in `gates-run.yaml`, each with `if: ${{ !cancelled() && … }}` so a failing gate leaves the others
+posting. A `workflow_run`
 trigger that only some branches need lists them under `branches:`, since a job's `if:` still
 starts the run. A required check that Actions posts keeps a workflow whose runs never skip it:
 a newer run on the same head that skips the job reports `skipped`, which passes.
@@ -254,8 +270,11 @@ a newer run on the same head that skips the job reports `skipped`, which passes.
 ## `needs:` carries data, plus one build gate
 
 A `needs:` edge has two uses. The first is **data flow**: the downstream job consumes something
-the upstream one produces, such as an image digest read as `needs.build-database.outputs.digest`, a
-coverage artifact ID read as `needs.test-go.outputs.artifact-id`, or a file left on disk.
+the upstream one produces, such as an image digest read as `needs.build-database.outputs.digest`,
+the coverage artifacts the test jobs leave for `report-codecov`, or a file left on disk.
+`generic-actions/codecov` downloads every artifact of the run when it gets neither
+`coverage_artifact` nor `coverage_artifact_ids`, so `report-codecov` needs its test jobs and threads
+no artifact ID.
 
 The second is a **build gate** in front of the expensive jobs. Every repo in both orgs draws on one
 pool of runners, so a test or image job started on code that does not compile holds a runner that
@@ -307,9 +326,10 @@ App's check.
 a-novel/infra's GitHub root decides which jobs gate the default branch, as its
 [Repository config](https://github.com/a-novel/infra/blob/master/docs/architecture.md#repository-config)
 describes. The required set is `merge-gate`, `epic-freeze`, `review-gate` and `check-dependencies`,
-plus every job declared in the repo's `.github/workflows/main.yaml`, minus two exclusions: IDs
-starting with `report-` (reporting and post-merge jobs), and jobs whose `if:` restricts them to
-master, since a job that never runs on a PR cannot gate one.
+plus every job declared in the repo's `.github/workflows/main.yaml`, minus three exclusions: IDs
+starting with `report-` (reporting and post-merge jobs), jobs whose `if:` restricts them to master,
+and tag-only jobs whose `if:` holds `github.ref_type == 'tag'`, since a job that never runs on a PR
+cannot gate one.
 
 Adding a job to `main.yaml` therefore adds a required check once it reaches the default branch: the
 root's sweep reads changed workflows every 10 minutes. Renaming or removing one leaves its old
@@ -364,8 +384,9 @@ a later push. `check-append-only` removes its label only when the step gets
 `with-feature-env` follows the same rule to publish rather than waive. `build-actions/docker` tags
 an image only on a push to the default branch, a release, or a pull request carrying the label,
 which gets the moving `pr-<N>` tag; every other build is pushed by digest alone for the jobs of its
-run. The managed `check-dependencies.yaml` removes the label on the next push, so the tag keeps naming the
-last head someone labeled. A repo's `main.yaml` must trigger on `labeled` for the label to build.
+run. `check-dependencies.yaml`'s `revoke-labels` job removes it on the next push, with the other
+privileged labels, so the tag keeps naming the last head someone labeled. A repo's `main.yaml` must
+trigger on `labeled` for the label to build.
 
 Services and platforms (`clean_images: true`) also get the managed `clean-images.yaml`, which deletes
 images once the branch or pull request that built them is gone.
@@ -406,9 +427,10 @@ is settled: the gates below hold there too. Anyone with Write can approve, label
 the tiers rest on gates rather than roles.
 `review-gate`, required
 everywhere, needs an approval of the head from a maintainer, an admin or the [Agent] App, and counts
-a privileged label only when one of them applied it last; the list of privileged labels lives in the
-`gates.yaml` template, mirrored by the Dependabot job's step. A dispatch-only workflow that
-must stay with admins or maintainers runs `generic-actions/require-role` first: it checks
+a privileged label only when one of them applied it last; the list of privileged labels lives in
+`generic-actions/privileged-labels.txt`, which `review-gate` reads when its `privileged_labels`
+input is empty and `revoke-labels` removes after a push. A dispatch-only workflow that must stay
+with admins or maintainers runs `generic-actions/require-role` first: it checks
 `github.triggering_actor`, because `github.actor` still names the original dispatcher on a re-run,
 and the role name, because the legacy permission field reports Maintain as `write`. Another workflow
 starts a gated one through `workflow_run`, whose run inherits the upstream run's triggering actor. A
@@ -451,9 +473,12 @@ The governance workflows (`gates.yaml`, `release-train.yaml`, `hotfix.yaml`, `ap
 `pr-relay.yaml`, `auto-approve-dependabot.yaml`, `lock-closed.yaml`, `notify.yaml`,
 `notify-post.yaml`, `auto-assign-author.yaml`) live in each repository, which owns its copies, its
 `.github/CODEOWNERS` too. A new repository gets them from its class's template repository, or copies
-them from a sibling when it starts empty. A change that concerns every repository lands in each copy,
-one pull request per repository. A copy may still open with a "Managed by" banner naming the retired
-command: delete it when you edit the file. What those workflows mean is `coordinate-landing`'s
+them from a sibling when it starts empty. The engines live in kit/workflows reusable workflows
+(`gates-run`, `dependabot-run`, `auto-approve-dependabot-run`), so each copy is a thin caller and an
+engine change ships in one release. Each org's `bot-comment.yaml` dispatcher calls `bot-comment-run`
+the same way. A change that concerns every repository lands in each copy, one pull request per
+repository. A copy may still open with a "Managed by" banner naming the retired command: delete it
+when you edit the file. What those workflows mean is `coordinate-landing`'s
 subject.
 
 Two of them keep dependency PRs moving without a person. `auto-approve-dependabot.yaml` approves the
@@ -462,16 +487,19 @@ approves once Renovate marks the update stable. It approves a PR on a `renovate/
 Renovate itself put it on auto-merge, so an update a preset sets to `automerge: false`, such as a
 major, waits for a maintainer or an admin. The first to enable auto-merge decides, so a re-armed PR
 stays approved and a person taking it off auto-merge holds it. The bot's own `chore/deps/` and
-`backport/` PRs need no such choice. `recover-prs.yaml` re-arms auto-merge on a PR the
-merge queue dropped for `checks_timed_out`, and dispatches Renovate when a merge leaves a dependency
-PR conflicting.
+`backport/` PRs need no such choice. Dependabot's own events read no secret, so the workflow's
+`dependabot` job calls `dependabot-run.yaml` once the CI run of a Dependabot security PR passes: it
+resolves the PR, runs the gates on its head through `gates-run.yaml`, then approves and queues it.
+`recover-prs.yaml` re-arms auto-merge on a PR the merge queue dropped for `checks_timed_out`, and
+dispatches Renovate when a merge leaves a dependency PR conflicting.
 
 The auto-approver also withholds a first-party version without its release proof, in every mode.
 `generic-actions/verify-release-proof` reads each first-party npm package a `pnpm-lock.yaml` adds and
 each first-party image pinned by a release tag. It requires an attestation over the exact bytes from
-the producer's `release.yaml` at the version's tag, on a GitHub-hosted runner, and an immutable Release
-of that tag from the org's release App. Renovate therefore pins first-party images by digest. The
-first-party age exemptions stay, since the proof makes waiting pointless. The job token makes the
+the producer's `release.yaml`, or its `main.yaml` where that file builds the release images, at the
+version's tag, on a GitHub-hosted runner, and an immutable Release of that tag from the org's
+release App. Renovate therefore pins first-party images by digest. The first-party age exemptions
+stay, since the proof makes waiting pointless. The job token makes the
 reads the App cannot: `statuses`, `contents`, `attestations` and `packages`, all read. The approval
 and its auto-merge name the commit the job checked, so a later push needs its own.
 
@@ -480,8 +508,9 @@ PR merges on its own only as a release pin, as a version update Renovate itself 
 whose every changed line moves only a dependency reference's version, an OpenTofu `version`
 argument and a version file such as `.opentofu-version` included, or a digest with its version, or as a refresh of `google-service-ranges.json` alone. The refresh passes only when the file at the
 approved commit equals the list `generic-actions/google-service-ranges` computes from Google's files
-at that moment, so a bot can refresh the SMTP egress ranges but never widen them. Anything else,
-Renovate's `automerge: false` updates included, waits for a maintainer's or an admin's review.
+at that moment, so a bot can refresh the SMTP egress ranges but never widen them. A PR labeled
+`breaking-release`, read live, waits for a maintainer. Anything else, Renovate's `automerge: false`
+updates included, waits for a maintainer's or an admin's review.
 
 A person's PR posts to the Fluxer reviews feed alone, through `notify-pr-run`: a review request
 pings its reviewers, a review or a drop from the merge queue pings its owner, and its merge posts
@@ -575,7 +604,7 @@ There is no local runner, so verification is reading plus CI.
 - **A `run:` step in a composite action without `shell: bash`.** The step fails to load; composite
   actions have no default shell.
 - **Fixing one copy of a governance workflow.** Each repository owns its copy, so a fix every
-  repository needs lands in each one.
+  repository needs lands in each one. A fix to an engine lands once, in kit/workflows.
 - **Expecting a new `main.yaml` job to gate its own pull request.** It gates nothing until the
   GitHub root's sweep reads it from the default branch.
 - **Another bot's branch under `renovate/`.** Renovate prunes the branches under its prefix that its
@@ -605,9 +634,10 @@ There is no local runner, so verification is reading plus CI.
 - **Interpolating an input straight into a `run:` script.** Bind it through `env:` so the value cannot
   be read as shell syntax.
 - **A startup requirement added to one smoke run.** `build-actions/docker` starts the image it built
-  with `run_args` and pushes it only once its healthcheck passes. A service runs that smoke run in
-  `main.yaml` and again in `release.yaml`, which pull-request CI never runs. When a binary starts to
-  require a setting, grep every workflow for its Dockerfile and update each `run_args`: json-keys
+  with `run_args` and pushes it only once its healthcheck passes. A service whose `release.yaml`
+  still builds its images runs that smoke run in `main.yaml` and again in `release.yaml`, which
+  pull-request CI never runs; a service whose `main.yaml` builds on the tag runs it once. Keep each
+  image's flags in one `builds/` file passed as `run_args_file`, which every build checks: json-keys
   v2.15.1 and genai v0.8.5 were tagged without a gRPC image, since only `main.yaml` passed the
   `SERVICE_ISSUER_OPTIONAL` opt-out of the new `SERVICE_TOKEN_ISSUER` check.
 - **A cached image build that a secret should change.** `build-actions/docker` restores the layer

@@ -29,9 +29,9 @@ not a general-purpose client library. Apply this ownership split before adding c
 - **Platform** owns its shell and UX: routes, screen and shell compositions, route models, product
   copy and catalogs, supported locales, product URL and local-storage policy, and service-specific
   authentication, session, client, and health wiring.
-- **Nodelib** owns reusable non-visual client infrastructure: framework-agnostic runtime helpers and
-  shared build, lint, test, SvelteKit, and localization configuration. A representative extraction
-  fixture belongs beside the shared preset it validates.
+- **Nodelib** owns reusable non-visual client infrastructure: runtime helpers, with the Svelte ones
+  in `@a-novel-kit/nodelib-svelte`, and shared build, lint, test, SvelteKit, and localization
+  configuration. A representative extraction fixture belongs beside the shared preset it validates.
 - **Uikit** owns reusable visual contracts: design tokens, components, and shared Storybook theme,
   preview, decorator, docs, and visual-test defaults.
 
@@ -146,9 +146,9 @@ must work without JavaScript. Opt a private route family out with `export const 
 is a heavy browser application, such as an editor, and its browser-only behavior is deliberate and
 tested; never disable SSR globally to hide unsafe module initialization or a hydration bug.
 
-adapter-node 6 reads no `ORIGIN` at run time. The Vite config passes
-`paths: { origin: process.env.ORIGIN }`, so a build for a known address, such as nodelib's
-Playwright server, bakes its origin in. The published image derives the origin from each request's
+adapter-node 6 reads no `ORIGIN` at run time. nodelib's `SvelteKitVite` sets
+`paths: { origin: process.env.ORIGIN }`, so a build for a known address, such as the Playwright
+server, bakes its origin in. The published image derives the origin from each request's
 `Host`, over https unless `PROTOCOL_HEADER` names a header. Production's load balancer ends TLS, so
 https holds there. SvelteKit's CSRF check and `event.url` both read that origin, and a sign-in builds
 its redirect URI from `event.url`.
@@ -162,8 +162,8 @@ run with the local-development configuration unless they mock that module. A ser
 names a production resource, such as `DOWNTIME_URL`, is then live in a unit test, and only the
 offline unit project keeps the test from fetching it.
 
-Trace the server with SvelteKit's own spans and nodelib's setup. Enable
-`sveltekit({ tracing: { server: true } })`, declare `OTEL` in `src/env.ts`, and start
+Trace the server with SvelteKit's own spans and nodelib's setup. `SvelteKitVite` enables
+SvelteKit's server spans. Declare `OTEL` in `src/env.ts`, and start
 `@a-novel-kit/nodelib-server/telemetry` from `src/instrumentation.server.ts` with
 `untracedRoutes: ["/ping"]`, flushing it on adapter-node's `sveltekit:shutdown` event. The setup
 mirrors golib's OTLP preset: the deployment's standard `OTEL_EXPORTER_OTLP_*` variables pick the
@@ -172,12 +172,13 @@ services, keeps every trace even when the caller did not sample it, and redacts 
 recorded URLs. Keep secrets in the query, never in a path segment, which is recorded as is. In
 production, the server spans go to Grafana through the cluster's Alloy, as `write-infra` describes.
 
-The server `handle` hook names SvelteKit's request span, `sveltekit.handle.root`, after its route
-ID, as `GET /(studio)/projects`. A request that matched no route keeps the method alone, so a path
-never names a span. The hook also records the response's `http.response.status_code` and marks a
-5xx response as an error. Span metrics split the traffic by that name and class each request by
-the code and the span status, and SvelteKit renders a failing load as a 500 page without failing
-the span.
+Name each request's span with `traceResponse` from `@a-novel-kit/nodelib-server/telemetry` in the
+`handle` hook, called with the event and the response `resolve` returned. It names SvelteKit's
+request span, `sveltekit.handle.root`, after its route ID, as `GET /(studio)/projects`. A request
+that matched no route keeps the method alone, so a path never names a span. It also records the
+response's `http.response.status_code` and marks a 5xx response as an error. Span metrics split the
+traffic by that name and class each request by the code and the span status, and SvelteKit renders
+a failing load as a 500 page without failing the span.
 
 A new platform, or a change to its routes, form actions or the services it calls, updates its
 Grafana coverage in infra, as `write-infra`'s [Grafana coverage](../write-infra/references/grafana.md)
@@ -240,6 +241,8 @@ resets, so a browser test covers that reset.
 
 A screen renders from its props and its controller alone. The wiring reads the app's contexts, such
 as the planned downtime or the telemetry preference, and passes their values through the controller.
+The root layout creates those two with `createPlatformDowntime` and `createTelemetryPreference` from
+`@a-novel-kit/nodelib-svelte`, and installs each with its `set` function, as `setPlatformDowntime`.
 The localization context is the one context a screen reads itself. A story then reaches every state
 with a fixed controller, and a state it cannot reach that way is hidden state to move into the
 controller.
@@ -253,7 +256,9 @@ not copy the reusable preview into the platform.
 Every state has one canonical owner:
 
 - **Path and search parameters** own shareable, navigation-relevant UI state. Centralize codecs,
-  validate every value, choose deliberate defaults, and preserve unrelated parameters.
+  validate every value, choose deliberate defaults, and preserve unrelated parameters. Read the
+  address bar as `page.shallow?.url ?? page.url`, so no page keeps its own copy of the URL or a
+  `popstate` listener.
 - **Shared preference cookies** own a setting every Agora app shares on a device, such as the
   collapsed navigation rail or the language. `@a-novel-kit/nodelib-browser/preferences` names each
   one and keeps it on `PUBLIC_PLATFORM_DOMAIN`, and the server reads it, so the first paint shows
@@ -313,11 +318,12 @@ place with uikit's `Skeleton` and is read again for good, on a backoff that sett
 3 minutes. **Dynamic data**, such as a paginated list, retries a few times on the same backoff, then
 shows its error in a toned box.
 
-Both go through `retryWhile` in `src/lib/client/retry.svelte.ts`, built on nodelib-browser's
+Both go through `retryWhile` from `@a-novel-kit/nodelib-svelte`, built on nodelib-browser's
 `retryWithBackoff`. The server load names a key with `event.depends`, and the attempt calls
 `invalidate` on it, so a retry re-runs only what is missing. A run holds one timer, and the calling
-component's teardown clears it. Retry only idempotent reads. Hold a retry while a form is open whose
-state derives from the data, since new data resets the form.
+component's teardown clears it. Pass `onError: (error) => telemetry.captureError(error)` to a
+bounded `retryWhile`: it receives the failure that ends the run. Retry only idempotent reads. Hold a
+retry while a form is open whose state derives from the data, since new data resets the form.
 
 The controls tied to static data keep working while it is missing. A planned downtime that stops them
 disables them, and the shell's stay:
@@ -356,12 +362,12 @@ service:
   An ordinary page load must not mint a token merely to render signed-out UI. Keep its cookie until
   the token expires: a visitor gets only a few anonymous tokens, and a browser restart must not
   spend one.
-- Send every service call through one wrapped `fetch`. It forwards the visitor's IP in
-  `X-Client-IP`, read with `event.getClientAddress()` (adapter-node's `ADDRESS_HEADER` and
-  `XFF_DEPTH` behind a proxy). It also sends the platform's service token in
-  `X-Service-Authorization`, read from `SERVICE_TOKEN_PATH` on every call, since the kubelet
-  replaces the file before the token expires. Services rate-limit by that visitor; without it,
-  every visitor shares the platform's budget.
+- Send every service call through one wrapped `fetch`, which each service client receives as its
+  `fetcher`. It forwards the visitor's IP in `X-Client-IP`, read with `event.getClientAddress()`
+  (adapter-node's `ADDRESS_HEADER` and `XFF_DEPTH` behind a proxy). It also sends the platform's
+  service token in `X-Service-Authorization`, read from `SERVICE_TOKEN_PATH` on every call, since
+  the kubelet replaces the file before the token expires. Services rate-limit by that visitor;
+  without it, every visitor shares the platform's budget.
 - Map a service's `429` to a too-many-attempts message. It is neither an outage nor a signed-out
   state.
 - Refresh a rejected or expiring session at one server-owned boundary. Clear cookies only after a
@@ -469,8 +475,9 @@ names, validation messages, titles, and metadata use message keys; logs and prot
   Do not replace a requested message-catalog workflow with generated per-message functions merely
   for type safety.
 - Resolve visible messages atomically where they render. Svelte components read the request- or
-  tree-scoped i18next instance from the shared native context and call it with statically
-  discoverable keys; they do not receive pretranslated screen-sized dictionaries.
+  tree-scoped i18next instance from the shared native context and do not receive pretranslated
+  screen-sized dictionaries. Call `t()` with a literal key: a key computed from a map hides it from
+  extraction.
 - Declare each product message only in its static catalog. Do not mirror catalogs into `*Copy`
   interfaces, copy-builder functions, story-only dictionaries, or other programmatic message maps.
   A table of `(t) => t("key")` selectors is such a map; call `t()` with the static key where the

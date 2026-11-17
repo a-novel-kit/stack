@@ -45,9 +45,10 @@
   fails on a missing attribute. Ship the output in its own pull request first, then the change that
   uses it.
 - **Roots also read each other's committed `terraform.tfvars`,** through
-  `provider::terraform::decode_tfvars`: the cluster root reads every service root's pins and
-  foundation's principals, Grafana reads foundation's node pool and the cluster's databases, and
-  `recovery-database` reads the cluster's databases and each service root's database pin. No output
+  `provider::terraform::decode_tfvars`: the cluster root reads each service's
+  `releases/<service>.tfvars` and foundation's principals, Grafana reads foundation's node pool and
+  the cluster's databases, and `recovery-database` reads the cluster's databases and each release
+  file's database pin. No output
   shows these reads. Before removing or renaming an input, grep the whole repository for its name,
   `environments/recovery*` included (a-novel/infra#1408).
 - **A plan shows the state it read.** When pull requests merge and deploy close together, re-run a
@@ -69,7 +70,8 @@
   that must re-run a Job goes in the Job's name, so that a change replaces the Job: the cluster
   root's migrations Job ends its name with a hash of the database lineage, after its image digest
   (a-novel/infra#1376). A template annotation, as the servers carry for the lineage, plans as an
-  in-place update that Kubernetes refuses.
+  in-place update the provider never sends: a created Job keeps its pods, so recreate the Job
+  (`replace_triggered_by` or a new name) to change its template.
 - **A Job the apply waits on ends before the wait does.** Its `active_deadline_seconds` stays below
   its `timeouts.create`. A Job that outlives the wait stays tainted and running, and the next
   deploy's replacement, which the plan policy counts as harmless, deletes it with `Foreground`
@@ -150,13 +152,13 @@ read them on the cluster.
 
 ## Release contract
 
-1. **Each release image is pinned once,** by `tag@digest` in its service root's `terraform.tfvars`,
-   the database image included. The cluster root reads every pin, and its deploy copies each into
-   the service's `a-novel-<service>` repository before it applies. Foundation's `releases` set keeps
-   those repositories beside the cluster, in `europe-west9`, and the nodes only read them.
-   Foundation applies before the cluster, so a new repository exists before its first copy. A
-   release without a database change keeps the reproducible digest and plans nothing for the
-   database (a-novel/infra#1408).
+1. **Each release image is pinned once,** by `tag@digest` in the cluster root's
+   `releases/<service>.tfvars`, the database image included. The cluster root reads every pin, and
+   its deploy copies each into the service's `a-novel-<service>` repository before it applies.
+   Foundation's `releases` set keeps those repositories beside the cluster, in `europe-west9`, and
+   the nodes only read them. Foundation applies before the cluster, so a new repository exists
+   before its first copy. A release without a database change keeps the reproducible digest and
+   plans nothing for the database (a-novel/infra#1408).
    - The `a-novel-images` admission policy admits only images from the workload project's Artifact
      Registry, pinned by digest, in every namespace the cluster root manages.
 2. **Migrations run once per image and lineage, before the service rolls.** The migrations Job's
@@ -240,11 +242,10 @@ read them on the cluster.
   that failed before writing deploys nothing. The cluster root gives each listed service's
   workloads `DOWNTIME_START`, and they refuse work from `start` until someone clears it; `end` only
   informs users.
-- **A downtime's GKE maintenance exclusion lands only when foundation applies.** The exclusion
-  holds node upgrades through the window. When a merge lands while the downtime's full deploy waits
-  behind another deploy, the merge's deploy replaces it, and applies foundation only when
-  foundation changed. Check that foundation applied after the downtime was written. Otherwise an
-  admin dispatches `deploy.yaml`, which applies every root, before `start`.
+- **Every deploy applies foundation and the cluster,** since both read `DOWNTIME`: foundation sets
+  the GKE maintenance exclusion that holds node upgrades through the window, and the cluster gives
+  the listed services `DOWNTIME_START`. Whichever deploy runs last leaves the current window in
+  both.
 - **A downtime post's color follows its headline.** Once `start` has passed, every post that reads
   "Expected back" shows the in-progress color, whatever change it announces.
 - **Users see a downtime whenever a deploy can enforce one.** Any deploy applies `DOWNTIME`, so a
@@ -412,8 +413,9 @@ read them on the cluster.
     namespace, through the workload's `service_ca` input. Go reads it through `SSL_CERT_DIR`, Node
     through `NODE_EXTRA_CA_CERTS`, and grpcurl and BusyBox wget through `SSL_CERT_FILE`. OpenSSL
     skips a `SSL_CERT_DIR` file that is not named after its hash.
-  - A Go service dials another through `grpcf.ServiceTokenCredentialsProvider` with `TLS` set,
-    which a variable of its own enables, as Authentication's `SERVICE_JSON_KEYS_TLS` does.
+  - A Go service dials another with the `DialOptions` of a `grpcf.ClientConfig` loaded by
+    `grpcf.LoadClientConfig`, whose `TLS` comes from a variable of its own, as Authentication's
+    `SERVICE_JSON_KEYS_TLS` does.
   - The kubelet's gRPC probe speaks only plaintext, so `cluster-workload` probes a TLS gRPC server
     by TCP on its port. grpcurl cannot probe it: it resolves each method through server reflection,
     which the service-token interceptor refuses (a-novel/infra#1438).
@@ -459,12 +461,10 @@ service, and a-novel/infra#1404 for a platform.
    (`cluster_databases`). Add version 1 of each secret value by hand: the cluster's External
    Secrets waits for it.
 2. **One pull request runs the service:**
-   - its root holds its pins and secret versions, and `main.yaml` gains its `plan-<root>` job.
-     `deploy.yaml` and `drift.yaml` find the root on disk; `lint-repository` names what is missing;
+   - its `releases/<service>.tfvars` in the cluster root holds its pins and secret versions;
    - the service joins foundation's `releases` set, which creates its `a-novel-<service>`
      repository;
-   - the cluster root adds its namespace, budget, database with its queries, secrets and
-     `release_roles`, its workloads through `cluster-workload` with their network policies, and its
+   - the cluster root adds its namespace, budget, database with its queries, secrets, its workloads through `cluster-workload` with their network policies, and its
      smoke and health checks. An API it serves joins `service_tls`. Each service it calls lists it in
      `SERVICE_TOKEN_CALLERS`;
    - a new internet host joins foundation's `egress_allowlist` and the cluster root's
@@ -483,9 +483,4 @@ service, and a-novel/infra#1404 for a platform.
   a-novel/service-narrative-engine#1053 before it could run.
 - **The first pins are written by hand.** `pin-release.yaml` skips a repository infra pins no image
   of, so the first release opens no pull request. Read each image's digest from the registry for
-  the service root's `terraform.tfvars`. Later releases pin themselves.
-- **The new root's first plan fails.** OpenTofu's GCS backend creates a missing state under a lock
-  even with `-lock=false`, and the plan identity only reads the state bucket, so
-  `storage.objects.create` is denied on `<root>/default.tflock`. The deploy creates the state on
-  merge. `plan-<root>` becomes a required check only once the GitHub root reads the merged
-  `main.yaml`, and plan jobs skip the merge queue, so the failure blocks nothing.
+  its `releases/<service>.tfvars`. Later releases pin themselves.

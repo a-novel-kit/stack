@@ -62,7 +62,8 @@ shaky, the answer is no:
 1. It is **pure boilerplate / glue** — no business logic, nothing a-novel-specific in its core; it
    does the same mechanical thing regardless of who calls it. (Examples already in `golib`: the
    `otel.Report*` span helpers, `postgres.GetContext`/`WithinTx`/migration plumbing, the `logging`
-   presets, the `httpf` error-mapping + JSON helpers, the `config.LoadEnv` parsers.)
+   presets, the `httpf` error-mapping + JSON helpers, `config.LoadEnv` and the env loaders built
+   on it, such as `servicetoken.LoadConfig`.)
 2. **One consumer is enough.** Generic glue moves to `golib` with its first consumer. An option,
    hook or abstraction no caller needs stays out.
 3. **No dependency already covers it.** If `samber/lo`, `uptrace/bun`, an `otel` contrib package,
@@ -76,14 +77,18 @@ When it is unclear whether the code is about the domain, ask the developer.
 ### Removing from golib
 
 Maintenance includes shrinking. Survey every consumer in both organizations first
-(`manage-versions`), then follow the rule that matches the export. Both apply to every kit library,
-graduated packages included, and neither needs a major.
+(`manage-versions`), then follow the rule that matches the export. These rules apply to every kit
+library, graduated packages included, and none needs a major.
 
 - **An export no repository uses** goes in one minor release with a migration guide. Dead code
   needs no deprecation.
 - **An export consumers use but that is misnamed or misshaped** gets its replacement in a minor
-  release, and the old name stays as a forwarding alias marked `// Deprecated:`. Consumers move
-  once Renovate brings the release, and a later minor removes the alias once no consumer uses it.
+  release. The old form stays, and its doc comment says "Prefer X" with no `// Deprecated:`
+  paragraph: staticcheck's SA1019 would fail every consumer's lint on the Renovate bump. Consumers
+  migrate, then a later minor deletes the old form once no consumer uses it.
+- **A retired positional parameter** becomes variadic when it is the last one. Otherwise the
+  replacement takes a new name: `httpf.NewMux` and `grpcf.NewGRPCServer` replace `httpf.NewRouter`
+  and `grpcf.NewServer`, whose ignored tracing argument sits before others.
 
 A helper that a newer upstream subsumes follows the same two rules.
 
@@ -209,8 +214,9 @@ package, helpers, mockery where interfaces exist). The kit-flavoured additions:
 - **Putting domain logic or speculative options in `golib`.** Generic glue belongs there from its
   first consumer; an option no caller needs does not.
 - **Reimplementing stdlib or an existing dep in `golib`.** Rule #1: `golib` shrinks.
-- **Removing a used export in one release, or deprecating a dead one.** A used export keeps a
-  deprecated alias until no consumer uses it; a dead one goes in one minor with a guide.
+- **Removing a used export in one release, or giving any export a `// Deprecated:` paragraph.** A
+  used export keeps a "Prefer X" note until no consumer uses it, since SA1019 fails consumers' lint
+  on a deprecated symbol; a dead one goes in one minor with a guide.
 - **Designing a graduated package's API around a-novel's needs only.** Cover the domain.
 - **Authoring a bespoke `CODE_OF_CONDUCT.md` / restating the org contributing guide.** Use the
   `a-novel-kit/.github` defaults; the per-repo `CONTRIBUTING.md` only _extends_ the org-wide one.
