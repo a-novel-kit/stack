@@ -79,6 +79,9 @@ func isValidStackRepo(ctx context.Context, path string) bool {
 // path holding a file or a non-empty directory, and cleans up after itself in
 // an existing empty one.
 func CloneStack(ctx context.Context, path string) error {
+	// A trailing slash would make the base name empty and the parent the stack
+	// itself, so the clone would land one level too deep.
+	path = filepath.Clean(path)
 	// Ensure parent dir exists; clone creates the leaf.
 	parent := filepath.Dir(path)
 	if err := os.MkdirAll(parent, 0o700); err != nil {
