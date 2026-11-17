@@ -397,6 +397,7 @@ Always exclude:
 - `node_modules` — potentially hundreds of MB; not part of any Go build
 - `**/*_test.go` — test files are not compiled into production binaries
 - `**/testdata`: test fixtures, which the whole-directory source COPY would otherwise carry
+- `**/mocks`: generated mocks, which only tests import
 
 ---
 
@@ -427,9 +428,10 @@ Always exclude:
   error while postgres is still initializing. Always use `condition: service_healthy`, and declare
   the dependency's healthcheck in compose: podman drops a Dockerfile `HEALTHCHECK` from OCI images.
 - **Hardcoded credentials in a test env's connection.** A test env's connection to its own database
-  reads the same three variables as that database, in either contract:
-  `postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host:5432/${POSTGRES_DB}`, or
-  `POSTGRES_DATABASE: "${POSTGRES_DB}"` beside the user and password.
+  reads the same three variables as that database, `POSTGRES_USER`, `POSTGRES_PASSWORD` and
+  `POSTGRES_DB`, in either contract: a DSN built from them, or `POSTGRES_DATABASE: "${POSTGRES_DB}"`
+  beside the user and password. Never write the DSN out as a URL with its credentials, even with
+  placeholders: secret scanning flags it.
 - **`${POSTGRES_PORT}` in a target's connection.** A target's `POSTGRES_DSN` or `POSTGRES_PORT` uses
   port `5432`, the container port, never the host-mapped `${POSTGRES_PORT}`: services communicate
   over the compose network, not through the host. The daemon owns `POSTGRES_PORT` for the host port

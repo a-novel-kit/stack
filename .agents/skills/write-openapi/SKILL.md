@@ -267,6 +267,7 @@ components:
     jwkGet:
     notFound:
     badRequest:
+    unprocessableEntity:
     internalError:
 ```
 

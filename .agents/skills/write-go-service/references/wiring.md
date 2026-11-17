@@ -94,7 +94,8 @@ connection holds each request in memory until the server begins its answer.
 Every package the client imports joins each consumer's binary and runs its initialization there.
 The client imports no `core` or `dao` package. A type it shares with the service, such as the
 claims of a token, lives in a leaf package under `internal/models`. Check the closure with
-`go list -deps ./pkg/go`.
+`go list -deps ./pkg/go`, and assert it in a `pkg/go` test, as service-authentication's
+`Success/DependencyBoundary` case does.
 
 ---
 

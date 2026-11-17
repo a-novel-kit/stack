@@ -61,7 +61,9 @@ func TestPgJwkSelect(t *testing.T) {
 ```
 
 - `t.Parallel()` on the outer function, like any test. Construct the DAO once outside the
-  loop. Insert fixtures via `db.NewInsert().Model(...)` on the test's database.
+  loop. Insert fixtures via `db.NewInsert().Model(...)` on the test's database. A package whose
+  cases fill several tables moves those inserts into an `insertFixtures(ctx, t, …)` helper in
+  `utils_test.go`, as narrative-engine's DAO tests do.
 - A test verifying filtering/ordering needs enough fixtures to make the assertion meaningful (a
   `"FilterUsage"` case needs at least one matching row and one non-matching row).
 - Use fixed UUIDs (`uuid.MustParse("00000000-0000-0000-0000-000000000001")`) and fixed timestamps
@@ -84,6 +86,11 @@ require.Equal(t, testCase.expect, res)
 ```
 
 - One mock per interface the service depends on; test each independently.
+- A transaction comes from golib's `transactiontest`. `NewTransactor()` runs the callback; assert
+  its `Calls()` where the number of scopes is the behavior. `NewFailingTransactor(err)` stands in
+  for a transaction that cannot open. A case that observes
+  what runs inside the transaction passes a local func adapter with a `WithinTx` method. Never
+  generate a mock for golib's Transactor, and never open a database in a core test.
 - For a service that iterates a collection (calling a sub-service per DAO result), register the
   mock expectations as a slice and set each `.Once()`.
 - When a mock argument can't be fully specified up front (a generated UUID, an encrypted blob), use
@@ -120,7 +127,9 @@ if testCase.expectResponse != nil {
   map proving the handler wires it, the generic fallback (500), and, if the handler parses input
   before calling the service, an invalid-input case. One handler tests each shared `httpf.ErrMap`
   entry by entry (see `write-go-tests`). Assert the body on success cases (including empty
-  collections); on error cases assert only the status code.
+  collections); on error cases assert only the status code, unless the error's body or a header
+  is a protocol contract: an OAuth 2.0 error response (RFC 6749 section 5.2), a `WWW-Authenticate`
+  challenge, a `Retry-After`.
 
 ### gRPC handler tests — call the method directly, read the status
 
