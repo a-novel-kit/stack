@@ -82,7 +82,7 @@ func cliSourceDir(override string) (string, error) {
 		sourceDir = filepath.Join(stack.Path, "cli")
 	}
 	if !fsutil.Exists(filepath.Join(sourceDir, "go.mod")) {
-		return "", fmt.Errorf("no go.mod at %s — pass --source pointing at the CLI source dir", sourceDir)
+		return "", fmt.Errorf("no go.mod at %s: pass --source pointing at the CLI source dir", sourceDir)
 	}
 	return sourceDir, nil
 }

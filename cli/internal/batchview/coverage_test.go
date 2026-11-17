@@ -20,7 +20,7 @@ ok  	x/proto/gen/protogen  0.01s  coverage: 0.0% of statements
 ok  	x/pkg/go  0.05s  coverage: 60.0% of statements`
 
 	results := []jobs.Result{{
-		Job:    jobs.Job{Name: "x", Group: "go"},
+		Name: "x", Group: "go",
 		Output: out,
 	}}
 
@@ -62,7 +62,7 @@ func TestGoCoverageKeepsSubstringMatches(t *testing.T) {
 		"ok  	x/internal/attestation  0.01s  coverage: 70.0% of statements"
 
 	results := []jobs.Result{{
-		Job:    jobs.Job{Name: "x", Group: "go"},
+		Name: "x", Group: "go",
 		Output: out,
 	}}
 

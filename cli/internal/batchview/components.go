@@ -156,7 +156,7 @@ func EnvConflictView(verb string, conflicts []build.Conflict) string {
 	w := termWidth()
 	var b strings.Builder
 	b.WriteString(section("environment conflict", colCrit, w) + "\n\n")
-	b.WriteString(para("An existing "+verb+" environment was found — almost certainly the "+
+	b.WriteString(para("An existing "+verb+" environment was found, almost certainly the "+
 		"leftover of a previously aborted run. Running on top of it would be "+
 		"unreliable, so it must be cleared first.", w) + "\n\n")
 	for _, c := range conflicts {

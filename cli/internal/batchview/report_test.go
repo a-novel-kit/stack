@@ -19,10 +19,10 @@ var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 func TestReport(t *testing.T) {
 	t.Parallel()
 
-	ok := jobs.Result{Job: jobs.Job{Name: "a-novel-kit/golib"}, Status: "updated", Output: "master updated"}
-	skipped := jobs.Result{Job: jobs.Job{Name: "a-novel/infra"}, Status: "skipped", Output: "diverged"}
-	failed := jobs.Result{Job: jobs.Job{Name: "a-novel/service-x"}, Err: errors.New("fetch failed"), Output: "ssh: refused"}
-	passed := jobs.Result{Job: jobs.Job{Name: "x", Group: "go"}, Output: "ok x"}
+	ok := jobs.Result{Name: "a-novel-kit/golib", Status: "updated", Output: "master updated"}
+	skipped := jobs.Result{Name: "a-novel/infra", Status: "skipped", Output: "diverged"}
+	failed := jobs.Result{Name: "a-novel/service-x", Err: errors.New("fetch failed"), Output: "ssh: refused"}
+	passed := jobs.Result{Name: "x", Group: "go", Output: "ok x"}
 
 	testCases := []struct {
 		name    string
@@ -68,7 +68,7 @@ func TestReport(t *testing.T) {
 		},
 		{
 			name:  "Error/Aborted",
-			batch: Batch{Results: []jobs.Result{ok, {Job: jobs.Job{Name: "late"}, Err: jobs.ErrAborted}}, Aborted: true},
+			batch: Batch{Results: []jobs.Result{ok, {Name: "late", Err: jobs.ErrAborted}}, Aborted: true},
 			show:  Failed,
 			want:  []string{"error: aborted before completion", "✗ late aborted before completion", "! SYNC ABORTED"},
 		},

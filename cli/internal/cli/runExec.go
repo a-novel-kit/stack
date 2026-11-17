@@ -75,7 +75,7 @@ func execBeside(cmd *cobra.Command, ref entityRef, argv []string) error {
 func execResult(exitCode *int32) error {
 	if exitCode == nil {
 		return errors.New("exec: daemon closed the stream without reporting an exit status " +
-			"(a daemon older than this CLI does not send one — run 'a-novel core restart')")
+			"(a daemon older than this CLI does not send one: run 'a-novel core restart')")
 	}
 
 	if *exitCode != 0 {

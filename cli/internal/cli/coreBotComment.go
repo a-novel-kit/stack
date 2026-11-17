@@ -114,7 +114,7 @@ func postBotComments(cmd *cobra.Command, args []string, o botCommentOpts) error 
 
 	if o.batchPath != "" {
 		if len(args) != 2 {
-			return errors.New("bot-comment: with --batch, pass <org> <repo> only — each comment carries its own number")
+			return errors.New("bot-comment: with --batch, pass <org> <repo> only: each comment carries its own number")
 		}
 		if o.body != "" || o.replyTo != "" {
 			return errors.New("bot-comment: --batch cannot be combined with --body or --reply-to")

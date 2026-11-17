@@ -146,8 +146,8 @@ func execExitCode(waitErr error) (int32, error) {
 		return 0, nil
 	}
 
-	var exitErr *exec.ExitError
-	if !errors.As(waitErr, &exitErr) {
+	exitErr, ok := errors.AsType[*exec.ExitError](waitErr)
+	if !ok {
 		return 0, waitErr
 	}
 

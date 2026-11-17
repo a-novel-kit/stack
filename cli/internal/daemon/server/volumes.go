@@ -92,7 +92,7 @@ func (s *Server) ensureServiceDown(ctx context.Context, svc *discovery.Service, 
 	}
 	if !force {
 		return connect.Errorf(connect.CodeFailedPrecondition,
-			"refusing to %s while %s/%s is up — kill targets + infra first (or pass --force):\n  running targets: %v\n  infra session up: %v",
+			"refusing to %s while %s/%s is up: kill targets + infra first (or pass --force):\n  running targets: %v\n  infra session up: %v",
 			op, svc.Stack, svc.Name, running, sess.Up)
 	}
 	// A forced KillInfra cascades through the targets and the infra alike.

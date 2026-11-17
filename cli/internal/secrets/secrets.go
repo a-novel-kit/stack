@@ -65,7 +65,7 @@ func initAt(root string) (bool, error) {
 	// concurrent first runs exactly one writes a key.
 	f, err := os.OpenFile(filepath.Join(root, keyFile), os.O_WRONLY|os.O_CREATE|os.O_EXCL, fileMode)
 	if errors.Is(err, fs.ErrExist) {
-		return false, nil // key already exists — never overwrite
+		return false, nil // key already exists: never overwrite
 	}
 	if err != nil {
 		return false, fmt.Errorf("secrets: create key: %w", err)
@@ -90,7 +90,7 @@ func openAt(root string) (*Store, error) {
 	}
 	if len(key) != keyLen {
 		// Never echo the key material; just its length.
-		return nil, fmt.Errorf("secrets: local key is %d bytes, expected %d — store is corrupt", len(key), keyLen)
+		return nil, fmt.Errorf("secrets: local key is %d bytes, expected %d: store is corrupt", len(key), keyLen)
 	}
 	st := &Store{root: root, key: key, values: map[string]string{}}
 	if err := st.load(); err != nil {

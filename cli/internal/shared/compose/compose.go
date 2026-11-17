@@ -42,8 +42,8 @@ type Build struct {
 
 // DependsOn is the set of services a service depends on, from either YAML form:
 //
-//	depends_on: [svc1, svc2]              # short form — list of names
-//	depends_on:                            # long form — map keyed by name
+//	depends_on: [svc1, svc2]              # short form: list of names
+//	depends_on:                            # long form: map keyed by name
 //	  svc1: { condition: service_healthy }
 type DependsOn map[string]struct{}
 

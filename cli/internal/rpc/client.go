@@ -238,8 +238,8 @@ func (c *Client) Debug(ctx context.Context, targetID string) (*anovelv1.DebugRes
 // IsNotRunning reports whether err signals an unreachable daemon: a missing
 // socket or a refused connection.
 func IsNotRunning(err error) bool {
-	var nrErr *NotRunningError
-	return errors.As(err, &nrErr)
+	_, ok := errors.AsType[*NotRunningError](err)
+	return ok
 }
 
 // NotRunningError is a transport failure to reach the daemon. It carries the
@@ -270,13 +270,11 @@ func call[Req, Resp any](ctx context.Context, c *Client, rpc func(context.Contex
 func (c *Client) mapErr(err error) error {
 	// Connect errors carry a code, and a missing or refusing socket comes
 	// through as Unavailable.
-	var ce *connect.Error
-	if errors.As(err, &ce) && ce.Code() == connect.CodeUnavailable {
+	if ce, ok := errors.AsType[*connect.Error](err); ok && ce.Code() == connect.CodeUnavailable {
 		return &NotRunningError{SocketPath: c.path, Cause: err}
 	}
 	// Raw net.OpError (e.g., dial unix: connect: no such file or directory)
-	var opErr *net.OpError
-	if errors.As(err, &opErr) {
+	if _, ok := errors.AsType[*net.OpError](err); ok {
 		return &NotRunningError{SocketPath: c.path, Cause: err}
 	}
 	return err

@@ -87,8 +87,8 @@ func RunSandbox(
 // childExit carries a child's exit status as an ExitError. A child killed by
 // the interrupt that cancelled ctx exits as interrupted.
 func childExit(ctx context.Context, err error) error {
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
+	exitErr, ok := errors.AsType[*exec.ExitError](err)
+	if !ok {
 		return err
 	}
 	if exitErr.ExitCode() < 0 && ctx.Err() != nil {
@@ -133,8 +133,7 @@ func runSandbox(
 	env := replaceEnv(system.environ, stacks.EnvVar, "sandbox:"+root)
 	syncArgs := []string{commandCore, commandSync, "--root", root}
 	if err := system.run(ctx, root, env, syncArgs, stderr, stderr); err != nil {
-		var exitErr *ExitError
-		if errors.As(err, &exitErr) {
+		if _, ok := errors.AsType[*ExitError](err); ok {
 			return err
 		}
 		return fmt.Errorf("populate sandbox: %w", err)

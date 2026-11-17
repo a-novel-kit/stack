@@ -29,9 +29,8 @@ func TestExecResult(t *testing.T) {
 
 	for _, testCase := range testCases {
 		err := execResult(testCase.exitCode)
-		var exitErr *ExitError
 		gotExit := 0
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*ExitError](err); ok {
 			gotExit = exitErr.Code
 		}
 		if gotExit != testCase.wantExit || (err != nil && gotExit == 0) != testCase.wantErr {

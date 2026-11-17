@@ -122,7 +122,7 @@ func listen(socketPath string) (net.Listener, error) {
 	// A responsive listener means another daemon already owns this socket.
 	// Reporting it here names the socket and the command that frees it.
 	if isLive(socketPath) {
-		return nil, fmt.Errorf("daemon already running on %s — use `a-novel core kill` to stop it first", socketPath)
+		return nil, fmt.Errorf("daemon already running on %s: use `a-novel core kill` to stop it first", socketPath)
 	}
 	if _, err := os.Stat(socketPath); err == nil {
 		if err := os.Remove(socketPath); err != nil {

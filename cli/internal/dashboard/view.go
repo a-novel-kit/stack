@@ -85,7 +85,7 @@ func (m *model) renderMain() string {
 func (m *model) renderStatus(width int) string {
 	if m.status.level == statusIdle || m.status.text == "" {
 		if m.discoveryProblems > 0 {
-			note := fmt.Sprintf("!  %d discovery problem(s) — run `a-novel core status` to read them", m.discoveryProblems)
+			note := fmt.Sprintf("!  %d discovery problem(s): run `a-novel core status` to read them", m.discoveryProblems)
 			return styleWarn.Render(truncate(note, width-1))
 		}
 		return styleDim.Render(strings.Repeat("─", width))
@@ -296,7 +296,7 @@ const (
 // row is the paused indicator.
 func (m *model) renderLogs(width, height int) string {
 	if len(m.logLines) == 0 {
-		return styleDim.Render("(no log lines yet — start the target or run :refresh)")
+		return styleDim.Render("(no log lines yet: start the target or run :refresh)")
 	}
 	// Away from the tail, the bottom line of the pane holds the scroll
 	// indicator; at the tail the full height goes to log content.
@@ -320,7 +320,7 @@ func (m *model) renderLogs(width, height int) string {
 		rows = append(rows, styleDim.Render(ts)+" "+styleWarn.Render(tag)+" "+truncate(line, width-logPrefixWidth))
 	}
 	if m.logScroll > 0 {
-		indicator := fmt.Sprintf("⏸ paused — %d line(s) below cursor  ·  pgdn/end resumes tail",
+		indicator := fmt.Sprintf("⏸ paused: %d line(s) below cursor  ·  pgdn/end resumes tail",
 			m.logScroll)
 		rows = append(rows, styleWarn.Render(truncate(indicator, width)))
 	}
@@ -356,7 +356,7 @@ func footerHint(key, text string) string {
 
 // helpLines is the help page, listing every command, grouped by category.
 var helpLines = []string{
-	styleHeader.Render("a-novel run ui  —  command reference"),
+	styleHeader.Render("a-novel run ui: command reference"),
 	"",
 	styleHeader.Render("Navigation"),
 	"  ↑/↓ or j/k           select service",
@@ -367,14 +367,14 @@ var helpLines = []string{
 	"  Ctrl-↑/Ctrl-↓        step one line",
 	"  Home / g              jump to oldest buffered line",
 	"  End  / G              jump to tail and resume auto-follow",
-	styleDim.Render("  (terminal text selection works — click + drag to copy lines)"),
+	styleDim.Render("  (terminal text selection works: click + drag to copy lines)"),
 	"",
 	styleHeader.Render("Tab kinds"),
 	"  [target]               daemon-supervised process (go-exec or container)",
 	"  {infra}                podman container (postgres, mailserver, ...)",
 	"",
 	styleHeader.Render("Daemon-backed actions (via Esc command palette)"),
-	"  :start                 start active target (default go-exec) — targets only",
+	"  :start                 start active target (default go-exec), targets only",
 	"  :start container       start active target in container mode",
 	"  :kill                  kill active tab (target → SIGTERM; infra → podman stop)",
 	"  :restart               kill then start (target) / podman restart (infra)",
@@ -391,10 +391,10 @@ var helpLines = []string{
 	"  q or Ctrl-C            quit (daemon keeps running)",
 	"",
 	styleHeader.Render("Status bar (above the footer)"),
-	"  " + styleWarn.Render("⏳") + "  busy   — action in flight; persists until it resolves",
-	"  " + styleSuccess.Render("✓") + "  done   — last action succeeded; fades after 5s",
-	"  " + styleErr.Render("✗") + "  error  — last action failed or invalid; sticks until the next action",
-	"  " + styleWarn.Render("!") + "  issues — discovery found problems in the stack; `a-novel core status` lists them",
+	"  " + styleWarn.Render("⏳") + "  busy    action in flight; persists until it resolves",
+	"  " + styleSuccess.Render("✓") + "  done    last action succeeded; fades after 5s",
+	"  " + styleErr.Render("✗") + "  error   last action failed or invalid; sticks until the next action",
+	"  " + styleWarn.Render("!") + "  issues  discovery found problems in the stack; `a-novel core status` lists them",
 	"",
 	styleDim.Render("(daemon-backed verbs are implemented via the same RPC as the CLI; what you see in the UI is what `a-novel run ps` would show)"),
 }

@@ -48,7 +48,7 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 		st, found := s.runner.InfraStatesOf(ctx, stack)[service+"/"+name]
 		if !found || st.ContainerID == "" {
 			return connect.Errorf(connect.CodeFailedPrecondition,
-				"no container for %s/%s/%s — has infra-start been run?", stack, service, name)
+				"no container for %s/%s/%s: has infra-start been run?", stack, service, name)
 		}
 		return streamPodmanLogs(ctx, st.ContainerID, req.GetFollow(), req.GetTailLines(), stream)
 	}

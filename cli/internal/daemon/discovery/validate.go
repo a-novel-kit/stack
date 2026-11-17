@@ -76,7 +76,7 @@ func unresolvedRefs(
 			if isResolvable(ref, allServices, declared) {
 				continue
 			}
-			reason := fmt.Sprintf("%s declares %s=%q referencing ${%s} — daemon doesn't synthesize this var "+
+			reason := fmt.Sprintf("%s declares %s=%q referencing ${%s}: daemon doesn't synthesize this var "+
 				"(set as constant in compose, or use a recognized form: *_PORT / *_HOST / *_URL / POSTGRES_DSN / <SERVICE>_<VAR>)",
 				where, key, value, ref)
 			errs = append(errs, DiscoveryError{Service: svc.Name, Path: svc.ComposePath, Reason: reason})

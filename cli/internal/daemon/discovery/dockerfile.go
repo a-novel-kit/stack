@@ -32,8 +32,8 @@ func dockerfileHasHealthcheck(path string) bool {
 		trimmed := strings.TrimRight(line, " \t")
 		// Continuation: drop the trailing backslash and keep accumulating
 		// until the logical line ends.
-		if strings.HasSuffix(trimmed, "\\") {
-			logical.WriteString(strings.TrimSuffix(trimmed, "\\"))
+		if before, ok := strings.CutSuffix(trimmed, "\\"); ok {
+			logical.WriteString(before)
 			logical.WriteByte(' ')
 			continue
 		}

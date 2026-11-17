@@ -185,8 +185,8 @@ func envValues(env []string, name string) []string {
 	prefix := name + "="
 	var values []string
 	for _, entry := range env {
-		if strings.HasPrefix(entry, prefix) {
-			values = append(values, strings.TrimPrefix(entry, prefix))
+		if after, ok := strings.CutPrefix(entry, prefix); ok {
+			values = append(values, after)
 		}
 	}
 	return values

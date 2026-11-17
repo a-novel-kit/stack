@@ -73,7 +73,7 @@ func reportSummary(title string, b Batch, w int) string {
 	headline, lead := OK.Render(glyphOK+" "+title+" PASSED"), "Every job succeeded."
 	switch {
 	case b.Aborted:
-		headline, lead = Warn.Render("! "+title+" ABORTED"), "Interrupted before every job finished — results above are partial."
+		headline, lead = Warn.Render("! "+title+" ABORTED"), "Interrupted before every job finished: results above are partial."
 	case failed > 0:
 		headline, lead = Crit.Render(glyphFail+" "+title+" FAILED"), "One or more jobs failed; their full output is above."
 	}

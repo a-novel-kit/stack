@@ -94,8 +94,7 @@ func (r *Runner) watchGoExec(inst *Instance, cmd *exec.Cmd, logWriter *logs.Writ
 	if err != nil {
 		msg = err.Error()
 		reason = anovelv1.ExitReason_EXIT_REASON_CRASHED
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			// Supervising `go run` means a SIGTERM to the process
 			// group always surfaces as a signal exit, even when the
 			// binary handled it and exited 0. A signal exit during a

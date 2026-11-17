@@ -79,7 +79,7 @@ func syncWorkspace(cmd *cobra.Command, o syncOpts) error {
 	}
 	out := cmd.OutOrStdout()
 	if len(repos) == 0 {
-		_, _ = fmt.Fprintf(out, "no %s at %s — nothing to sync.\n"+
+		_, _ = fmt.Fprintf(out, "no %s at %s: nothing to sync.\n"+
 			"Create it with a `repos:` list of <org>/<name> entries.\n", workspace.ReposFile, root)
 		return nil
 	}
@@ -182,7 +182,7 @@ func updateRepo(dir string, out io.Writer) (string, error) {
 		if strings.Contains(gitOut, "overwritten") {
 			reason = "unstaged changes on " + def + " would be overwritten (changes kept)"
 		}
-		_, _ = fmt.Fprintf(out, "%s — skipped\n%s\n", reason, strings.TrimSpace(gitOut))
+		_, _ = fmt.Fprintf(out, "%s: skipped\n%s\n", reason, strings.TrimSpace(gitOut))
 		return syncSkipped, nil
 	}
 	_, _ = fmt.Fprintf(out, "%s updated\n", def)
@@ -193,7 +193,7 @@ func updateRepo(dir string, out io.Writer) (string, error) {
 func normalizeFilter(values []string) map[string]bool {
 	out := map[string]bool{}
 	for _, v := range values {
-		for _, part := range strings.Split(v, ",") {
+		for part := range strings.SplitSeq(v, ",") {
 			if part = strings.TrimSpace(part); part != "" {
 				out[part] = true
 			}

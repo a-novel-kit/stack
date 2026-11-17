@@ -271,7 +271,7 @@ func selectPruneTargets(registered []*anovelv1.Stack, args []string, all bool) (
 		}
 		if st.GetIsDefault() {
 			return nil, fmt.Errorf(
-				"%q is the default stack — it is the workspace, not scratch space", st.GetName())
+				"%q is the default stack: it is the workspace, not scratch space", st.GetName())
 		}
 		return []*anovelv1.Stack{st}, nil
 	}
@@ -346,7 +346,7 @@ func pruneOne(
 		return nil
 	}
 	if len(blockers) > 0 && !opts.force {
-		return fmt.Errorf("holds work that exists nowhere else (%s) — push it, or --force to discard",
+		return fmt.Errorf("holds work that exists nowhere else (%s): push it, or --force to discard",
 			strings.Join(blockers, "; "))
 	}
 	if !opts.yes && !confirm(cmd, fmt.Sprintf("  Prune %s and everything it holds?", name)) {
@@ -437,9 +437,9 @@ func reportUnmanaged(out io.Writer, managed map[string]bool) {
 		if managed[s.Name] {
 			continue
 		}
-		reason := "not managed — restart the daemon to pick it up"
+		reason := "not managed: restart the daemon to pick it up"
 		if info, statErr := os.Stat(s.Path); statErr != nil || !info.IsDir() {
-			reason = "files are gone — drop it from " + stacks.EnvVar
+			reason = "files are gone: drop it from " + stacks.EnvVar
 		}
 		_, _ = fmt.Fprintf(out, "! %-20s %-40s %s\n", s.Name, s.Path, reason)
 	}
@@ -458,9 +458,9 @@ func printDiscoveryErrors(out io.Writer, indent string, st *anovelv1.Stack) {
 // stack gets the reason the real run would refuse.
 func dryRunVerdict(blockers []string, force bool) string {
 	if len(blockers) > 0 && !force {
-		return "(dry run — would refuse: unsaved work above; --force overrides)"
+		return "(dry run, would refuse: unsaved work above; --force overrides)"
 	}
-	return "(dry run — nothing changed)"
+	return "(dry run: nothing changed)"
 }
 
 // pruneBlockers lists the reasons a stack's checkouts should outlive the

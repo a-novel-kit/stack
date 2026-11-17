@@ -1,11 +1,11 @@
 # Adapted from the a-novel service config (service-json-keys/.golangci.yaml).
 # Pruned for a CLI rather than a clean-architecture service:
 #   - dropped DB / web / proto / logging linters (sqlclosecheck, rowserrcheck,
-#     protogetter, spancheck, zerologlint, …) — no such code here;
+#     protogetter, spancheck, zerologlint, …): no such code here;
 #   - dropped forbidigo: a CLI's job IS to write to stdout via fmt.Print*;
 #   - dropped err113: fmt.Errorf for user-facing arg errors is idiomatic here;
 #   - dropped gosec: this tool deliberately execs detected build commands with
-#     variable args (G204) — that is the feature, not a vulnerability;
+#     variable args (G204): that is the feature, not a vulnerability;
 #   - dropped mnd/lll/nlreturn/wsl: layout constants and prose lines are
 #     intrinsic to a lipgloss TUI and not worth the churn.
 # The formatter stack (gci/gofmt/gofumpt) and the correctness core
@@ -56,11 +56,13 @@ linters:
     - makezero
     - mirror
     - misspell
+    - modernize
     - nakedret
     - nilerr
     - nilnesserr
     - nolintlint
     - nonamedreturns
+    - paralleltest
     - perfsprint
     - prealloc
     - predeclared
@@ -71,10 +73,15 @@ linters:
     # not a bug.
     - staticcheck
     - testableexamples
+    - testifylint
+    - testpackage
+    - thelper
+    - tparallel
     - unconvert
     - unparam
     - unused
     - usestdlibvars
+    - usetesting
     - wastedassign
     - whitespace
 

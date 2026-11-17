@@ -14,9 +14,9 @@ import (
 
 // Status texts of the palette verbs that need a selection.
 const (
-	noServiceText = "no active service — select one with ↑/↓ first"
-	noTabText     = "no active tab — select one with ←/→ first"
-	noTargetText  = "no active target — select one with ←/→ first"
+	noServiceText = "no active service: select one with ↑/↓ first"
+	noTabText     = "no active tab: select one with ←/→ first"
+	noTargetText  = "no active target: select one with ←/→ first"
 )
 
 // servicesMsg carries a fresh ListServices snapshot from the daemon, with the

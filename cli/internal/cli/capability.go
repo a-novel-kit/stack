@@ -191,7 +191,7 @@ func parseKinds(v string) ([]detect.Kind, error) {
 		return nil, nil
 	}
 	var kinds []detect.Kind
-	for _, part := range strings.Split(v, ",") {
+	for part := range strings.SplitSeq(v, ",") {
 		if k := detect.Kind(strings.ToLower(strings.TrimSpace(part))); slices.Contains(detect.Kinds, k) {
 			kinds = append(kinds, k)
 		}
@@ -250,7 +250,7 @@ func preflight(ctx context.Context, verb string, targets []detect.Target, canPro
 		answer := readAnswer(os.Stdin)
 		proceed = answer == "c" || answer == "clean"
 	} else {
-		fmt.Fprintln(os.Stderr, batchview.Warn.Render("No prompt available — cleaning the stale environment "+
+		fmt.Fprintln(os.Stderr, batchview.Warn.Render("No prompt available: cleaning the stale environment "+
 			"(scoped to this checkout only) and continuing."))
 	}
 	for _, c := range conflicts {

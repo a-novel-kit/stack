@@ -52,7 +52,7 @@ func goCoverage(results []jobs.Result) []covEntry {
 		if r.Group != string(detect.KindGo) {
 			continue
 		}
-		for _, line := range strings.Split(r.Output, "\n") {
+		for line := range strings.SplitSeq(r.Output, "\n") {
 			if e, ok := parseCoverLine(line, r.Name); ok {
 				es = append(es, e)
 			}
@@ -74,7 +74,7 @@ func parseCoverLine(line, fallback string) (covEntry, bool) {
 		return covEntry{}, false
 	}
 	pkg := fallback
-	for _, f := range strings.Fields(line) {
+	for f := range strings.FieldsSeq(line) {
 		if strings.Contains(f, "/") {
 			pkg = f
 			break
@@ -153,7 +153,7 @@ func CoverageView(results []jobs.Result, width int) string {
 
 	for _, n := range node {
 		b.WriteString("\n" + covHeading("pnpm · "+n.name) + "\n")
-		for _, line := range strings.Split(n.block, "\n") {
+		for line := range strings.SplitSeq(n.block, "\n") {
 			b.WriteString("  " + Muted.Render(line) + "\n")
 		}
 	}
