@@ -56,7 +56,8 @@ func Call[Req, Resp any](ctx context.Context, rpc func(context.Context, *Req) (*
 // Stream opens a server stream of a client New returned, as in
 // rpc.Stream(ctx, c.StreamLogs, req), and yields its messages until it ends,
 // then closes it. A failure is yielded once, as the last value: a daemon that
-// does not answer the opening call yields a NotRunningError.
+// does not answer yields a NotRunningError, whether the opening call or, as
+// connect reports a dial failure, the first Receive finds it.
 func Stream[Req, Resp any, S interface {
 	Receive() (*Resp, error)
 	Close() error
@@ -71,10 +72,13 @@ func Stream[Req, Resp any, S interface {
 
 		for {
 			msg, err := stream.Receive()
-			if errors.Is(err, io.EOF) {
+			switch {
+			case errors.Is(err, io.EOF):
 				return
-			}
-			if !yield(msg, err) || err != nil {
+			case err != nil:
+				yield(nil, mapErr(err))
+				return
+			case !yield(msg, nil):
 				return
 			}
 		}

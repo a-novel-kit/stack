@@ -52,7 +52,12 @@ func watchPhases(cmd *cobra.Command, o watchOpts) error {
 		enc := json.NewEncoder(out)
 		handle = func(ev *anovelv1.WatchResponse) { encodeEvent(enc, ev) }
 	}
-	req := &anovelv1.WatchRequest{Stack: o.scope.selector(), Service: o.service, TargetId: o.target}
+	req := &anovelv1.WatchRequest{Stack: o.scope.selector(), Service: o.service}
+	if o.target != "" {
+		// --stack applies to a shorthand as in the other verbs; the daemon
+		// resolves what is left.
+		req.TargetId = parseEntityID(o.target, o.scope.stack).ID
+	}
 	return watchEvents(cmd.Context(), rpc.New(), req, handle)
 }
 

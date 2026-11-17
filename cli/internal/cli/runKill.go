@@ -8,6 +8,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -58,6 +59,6 @@ func killEntity(cmd *cobra.Command, ref entityRef, timeout time.Duration) error 
 		_, _ = fmt.Fprintf(out, "%s: not running (no-op)\n", ref.ID)
 		return nil
 	}
-	_, _ = fmt.Fprintf(out, "killed %s (phase=%s, exit=%s)\n", t.GetId(), rpc.Word(t.GetPhase()), rpc.Word(t.GetExitReason()))
+	_, _ = fmt.Fprintf(out, "killed %s (phase=%s, exit=%s)\n", t.GetId(), enumword.Word(t.GetPhase()), enumword.Word(t.GetExitReason()))
 	return nil
 }

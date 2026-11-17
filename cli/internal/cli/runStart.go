@@ -6,12 +6,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
 func newStartCmd() *cobra.Command {
 	var stack string
-	mode := rpc.Word(anovelv1.Mode_MODE_GO_EXEC)
+	mode := enumword.Word(anovelv1.Mode_MODE_GO_EXEC)
 	cmd := &cobra.Command{
 		Use:   "start <target>",
 		Short: "Start a target in go-exec (default) or container mode",
@@ -30,7 +31,7 @@ mode is left as it is.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			req := &anovelv1.StartTargetRequest{
 				TargetId: parseEntityID(args[0], stack).ID,
-				Mode:     rpc.Parse[anovelv1.Mode](mode),
+				Mode:     enumword.Parse[anovelv1.Mode](mode),
 			}
 			resp, err := rpc.Call(cmd.Context(), rpc.New().StartTarget, req)
 			if err != nil {
@@ -56,5 +57,5 @@ func targetSummary(t *anovelv1.Target) string {
 	case anovelv1.Mode_MODE_CONTAINER:
 		ident = "container=" + t.GetContainerId()[:min(12, len(t.GetContainerId()))]
 	}
-	return fmt.Sprintf("%s (mode=%s, phase=%s, %s)", t.GetId(), rpc.Word(t.GetMode()), rpc.Word(t.GetPhase()), ident)
+	return fmt.Sprintf("%s (mode=%s, phase=%s, %s)", t.GetId(), enumword.Word(t.GetMode()), enumword.Word(t.GetPhase()), ident)
 }

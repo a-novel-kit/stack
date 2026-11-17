@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -34,7 +35,7 @@ starting a server.`,
 
 func newServiceInfraStartCmd() *cobra.Command {
 	req := &anovelv1.StartInfraRequest{}
-	oneShots := rpc.Word(anovelv1.Mode_MODE_GO_EXEC)
+	oneShots := enumword.Word(anovelv1.Mode_MODE_GO_EXEC)
 	cmd := &cobra.Command{
 		Use:   "start <service>",
 		Short: "Bring up a service's infrastructure and run its one-shots",
@@ -46,7 +47,7 @@ Infra already up is left as it is.`,
   a-novel run service infra start service-json-keys --one-shots=container`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			req.Service, req.OneShotsMode = args[0], rpc.Parse[anovelv1.Mode](oneShots)
+			req.Service, req.OneShotsMode = args[0], enumword.Parse[anovelv1.Mode](oneShots)
 			resp, err := rpc.Call(cmd.Context(), rpc.New().StartInfra, req)
 			if err != nil {
 				return err

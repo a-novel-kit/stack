@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
@@ -237,11 +238,11 @@ func (m *model) startCmd(args []string) tea.Cmd {
 		return setStatusCmd(statusError, noTargetText)
 	}
 	req := &anovelv1.StartTargetRequest{TargetId: t.GetId(), Mode: anovelv1.Mode_MODE_GO_EXEC}
-	if len(args) > 0 && args[0] == rpc.Word(anovelv1.Mode_MODE_CONTAINER) {
+	if len(args) > 0 && args[0] == enumword.Word(anovelv1.Mode_MODE_CONTAINER) {
 		req.Mode = anovelv1.Mode_MODE_CONTAINER
 	}
 	return action{
-		busy:    "Starting " + t.GetName() + " (" + rpc.Word(req.GetMode()) + ")... infra + one-shots will run first",
+		busy:    "Starting " + t.GetName() + " (" + enumword.Word(req.GetMode()) + ")... infra + one-shots will run first",
 		success: "Started " + t.GetName(),
 		label:   "start " + t.GetName(),
 		timeout: time.Minute,

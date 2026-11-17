@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/runner"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
@@ -39,6 +40,35 @@ func TestDescribePhaseEvent(t *testing.T) {
 
 			ev := runner.PhaseEvent{TargetID: id, NewPhase: testCase.phase, ExitReason: testCase.reason}
 			require.Equal(t, id+" "+testCase.want, describePhaseEvent(ev))
+		})
+	}
+}
+
+// TestWatchFilter pins that a watch on a target shorthand follows the canonical
+// target: events carry canonical IDs, so a raw shorthand would match nothing.
+func TestWatchFilter(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{stacks: discovery.Stacks{{Name: "fork"}, {Name: "main", Default: true}}}
+	event := runner.PhaseEvent{Stack: "main", Service: "svc", TargetID: "main/svc/rest"}
+
+	testCases := []struct {
+		name     string
+		targetID string
+		want     bool
+	}{
+		{name: "Success/Shorthand", targetID: "svc/rest", want: true},
+		{name: "Success/Canonical", targetID: "main/svc/rest", want: true},
+		{name: "Success/AnyTarget", want: true},
+		{name: "Success/OtherStack", targetID: "fork/svc/rest"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			filter := s.watchFilter(&anovelv1.WatchRequest{TargetId: testCase.targetID})
+			require.Equal(t, testCase.want, watches(filter, event))
 		})
 	}
 }

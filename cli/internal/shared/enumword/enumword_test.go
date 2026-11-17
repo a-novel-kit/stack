@@ -1,4 +1,4 @@
-package rpc_test
+package enumword_test
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -31,7 +31,7 @@ func TestWord(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.Equal(t, testCase.want, rpc.Word(testCase.value))
+			require.Equal(t, testCase.want, enumword.Word(testCase.value))
 		})
 	}
 }
@@ -53,7 +53,7 @@ func TestParse(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.Equal(t, testCase.want, rpc.Parse[anovelv1.Mode](testCase.word))
+			require.Equal(t, testCase.want, enumword.Parse[anovelv1.Mode](testCase.word))
 		})
 	}
 }

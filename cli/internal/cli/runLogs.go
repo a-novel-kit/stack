@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -49,7 +50,7 @@ with stdout and stderr merged. It keeps no archived runs, so --previous and
 	cmd.Flags().BoolVarP(&req.Follow, "follow", "f", false, "stream new lines as they arrive")
 	cmd.Flags().Int32Var(&req.TailLines, "tail", 0, "start from the last N lines (0 = all)")
 	cmd.Flags().DurationVar(&o.since, "since", 0, "only lines newer than this duration")
-	streams := []string{rpc.Word(anovelv1.LogStream_LOG_STREAM_STDOUT), rpc.Word(anovelv1.LogStream_LOG_STREAM_STDERR)}
+	streams := []string{enumword.Word(anovelv1.LogStream_LOG_STREAM_STDOUT), enumword.Word(anovelv1.LogStream_LOG_STREAM_STDERR)}
 	addEnumFlag(cmd, &enumFlag{value: &o.stream, allowed: streams}, "stream", "", "filter to stdout or stderr only")
 	cmd.Flags().BoolVar(&o.previous, "previous", false, "read the most recent archived run instead of the current")
 	cmd.Flags().StringVar(&req.RunId, "run-id", "", "read a specific archived run by timestamp")
@@ -64,7 +65,7 @@ func streamLogs(cmd *cobra.Command, ref entityRef, req *anovelv1.StreamLogsReque
 		return errors.New("--previous / --run-id are not supported for infra (podman owns its log file)")
 	}
 	ctx, c := cmd.Context(), rpc.New()
-	req.TargetId, req.Stream = ref.ID, rpc.Parse[anovelv1.LogStream](o.stream)
+	req.TargetId, req.Stream = ref.ID, enumword.Parse[anovelv1.LogStream](o.stream)
 	if o.previous && req.GetRunId() == "" {
 		runs, err := rpc.Call(ctx, c.ListRuns, &anovelv1.ListRunsRequest{TargetId: ref.ID})
 		if err != nil {

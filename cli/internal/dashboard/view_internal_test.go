@@ -176,8 +176,8 @@ func TestTargetStatusDot(t *testing.T) {
 	}{
 		{name: "Success/LongRunner/Exited", reason: anovelv1.ExitReason_EXIT_REASON_SUCCESS, want: batchview.Muted.Render("○")},
 		{name: "Success/LongRunner/Killed", reason: anovelv1.ExitReason_EXIT_REASON_KILLED, want: batchview.Muted.Render("○")},
-		{name: "Success/LongRunner/Error", reason: anovelv1.ExitReason_EXIT_REASON_ERROR, want: batchview.Err.Render("●")},
-		{name: "Success/LongRunner/Crashed", reason: anovelv1.ExitReason_EXIT_REASON_CRASHED, want: batchview.Err.Render("●")},
+		{name: "Success/LongRunner/Error", reason: anovelv1.ExitReason_EXIT_REASON_ERROR, want: batchview.Crit.Render("●")},
+		{name: "Success/LongRunner/Crashed", reason: anovelv1.ExitReason_EXIT_REASON_CRASHED, want: batchview.Crit.Render("●")},
 		{
 			name:   "Success/OneShot/Succeeded",
 			kind:   anovelv1.TargetKind_TARGET_KIND_ONE_SHOT,
@@ -194,7 +194,7 @@ func TestTargetStatusDot(t *testing.T) {
 			name:   "Success/OneShot/Error",
 			kind:   anovelv1.TargetKind_TARGET_KIND_ONE_SHOT,
 			reason: anovelv1.ExitReason_EXIT_REASON_ERROR,
-			want:   batchview.Err.Render(batchview.GlyphFail),
+			want:   batchview.Crit.Render(batchview.GlyphFail),
 		},
 	}
 

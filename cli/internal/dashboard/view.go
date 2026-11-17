@@ -10,7 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/a-novel-kit/stack/cli/internal/batchview"
-	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -196,7 +196,7 @@ func (m *model) detailHeader() string {
 		if t.GetPid() != 0 {
 			tail = fmt.Sprintf(" pid=%d", t.GetPid()) + tail
 		}
-		return batchview.Gold.Render(t.GetName()+" · "+rpc.Word(t.GetMode())+" · ") +
+		return batchview.Gold.Render(t.GetName()+" · "+enumword.Word(t.GetMode())+" · ") +
 			renderPhase(t.GetPhase()) +
 			batchview.Gold.Render(tail)
 	}
@@ -238,13 +238,13 @@ func renderTab(dot, label string, selected bool) string {
 //
 //	long-runner running        → ● green
 //	long-runner starting       → ● yellow
-//	long-runner failed         → ● red    (error or crash)
+//	long-runner failed         → ● crit   (error or crash)
 //	long-runner stopped        → ○ dim    (exited 0 or killed)
 //	long-runner not started    → ○ dim
 //
 //	one-shot running           → ● yellow (in progress)
 //	one-shot completed (ok)    → ✓ green
-//	one-shot failed            → ✗ red
+//	one-shot failed            → ✗ crit
 //	one-shot killed            → ○ dim
 //	one-shot not started       → ○ dim
 func targetStatusDot(t *anovelv1.Target) string {
@@ -260,9 +260,9 @@ func targetStatusDot(t *anovelv1.Target) string {
 	case anovelv1.Phase_PHASE_TERMINATED:
 		switch {
 		case targetFailed(t) && isOneShot:
-			return batchview.Err.Render(batchview.GlyphFail)
+			return batchview.Crit.Render(batchview.GlyphFail)
 		case targetFailed(t):
-			return batchview.Err.Render("●")
+			return batchview.Crit.Render("●")
 		case isOneShot && t.GetExitReason() == anovelv1.ExitReason_EXIT_REASON_SUCCESS:
 			return batchview.OK.Render(batchview.GlyphOK)
 		}
@@ -495,11 +495,11 @@ func countRunning(svc *anovelv1.Service) int {
 }
 
 // serviceTargetsLine is the nav's targets row. A failed target turns it into a
-// red "● errored". Otherwise it shows running out of total targets, behind a
+// crit "● errored". Otherwise it shows running out of total targets, behind a
 // green dot when one runs and a dim one when none does.
 func serviceTargetsLine(svc *anovelv1.Service) string {
 	if serviceHasError(svc) {
-		return batchview.Err.Render("●") + " errored"
+		return batchview.Crit.Render("●") + " errored"
 	}
 	running := countRunning(svc)
 	total := len(svc.GetTargets())
@@ -557,7 +557,7 @@ func infraDot(in *anovelv1.Infra) string {
 	case anovelv1.Health_HEALTH_STARTING:
 		return batchview.Warn.Render("●")
 	case anovelv1.Health_HEALTH_UNHEALTHY:
-		return batchview.Err.Render("●")
+		return batchview.Crit.Render("●")
 	}
 	return batchview.Muted.Render("○")
 }
@@ -572,7 +572,7 @@ func infraHealthLabel(in *anovelv1.Infra) string {
 	case in.GetHealth() == anovelv1.Health_HEALTH_UNSPECIFIED:
 		return ""
 	}
-	return rpc.Word(in.GetHealth())
+	return enumword.Word(in.GetHealth())
 }
 
 // computeNavWidth picks the sidebar's frame width so the longest service name
@@ -591,7 +591,7 @@ func computeNavWidth(svcs []*anovelv1.Service) int {
 }
 
 // serviceHasError reports whether any target in the service failed.
-// serviceTargetsLine renders the red "● errored" line from it, and the nav
+// serviceTargetsLine renders the crit "● errored" line from it, and the nav
 // keeps such a service undimmed since it needs attention.
 func serviceHasError(svc *anovelv1.Service) bool {
 	return slices.ContainsFunc(svc.GetTargets(), targetFailed)
@@ -609,7 +609,7 @@ func renderPhase(p anovelv1.Phase) string {
 	case anovelv1.Phase_PHASE_TERMINATED:
 		style = batchview.Muted
 	}
-	return style.Render(rpc.Word(p))
+	return style.Render(enumword.Word(p))
 }
 
 // safeShort returns the first n bytes of an ASCII identifier such as a

@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -25,7 +26,7 @@ its data.`,
 	}
 	addStackFlag(cmd, &stack)
 	addEnumFlag(cmd, &enumFlag{value: &mode, allowed: modeWords}, "mode", "",
-		"switch to this mode (go-exec | container); empty keeps current")
+		"switch to this mode (go-exec | container) (default: keep the current mode)")
 	return cmd
 }
 
@@ -43,7 +44,7 @@ func restartEntity(cmd *cobra.Command, ref entityRef, mode string) error {
 		return nil
 	}
 
-	req := &anovelv1.RestartTargetRequest{TargetId: ref.ID, Mode: rpc.Parse[anovelv1.Mode](mode)}
+	req := &anovelv1.RestartTargetRequest{TargetId: ref.ID, Mode: enumword.Parse[anovelv1.Mode](mode)}
 	resp, err := rpc.Call(ctx, c.RestartTarget, req)
 	if err != nil {
 		return err

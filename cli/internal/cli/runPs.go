@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
@@ -178,7 +179,7 @@ func renderService(w io.Writer, s *anovelv1.Service) {
 
 	for _, t := range s.GetTargets() {
 		_, _ = fmt.Fprintf(w, "  %-6s %-30s  %-12s  %s\n",
-			rpc.Word(t.GetKind()), t.GetName(), targetStatusLabel(t), prefix+t.GetName())
+			enumword.Word(t.GetKind()), t.GetName(), targetStatusLabel(t), prefix+t.GetName())
 	}
 
 	for _, in := range s.GetInfra() {
@@ -190,9 +191,9 @@ func renderService(w io.Writer, s *anovelv1.Service) {
 // infraStatusLabel returns an infra container's phase word, followed by its
 // health when the container reports one.
 func infraStatusLabel(in *anovelv1.Infra) string {
-	label := rpc.Word(in.GetPhase())
+	label := enumword.Word(in.GetPhase())
 	if in.GetHealth() != anovelv1.Health_HEALTH_UNSPECIFIED {
-		label += " " + rpc.Word(in.GetHealth())
+		label += " " + enumword.Word(in.GetHealth())
 	}
 	return label
 }
@@ -226,5 +227,5 @@ func targetStatusLabel(t *anovelv1.Target) string {
 			return "crashed"
 		}
 	}
-	return rpc.Word(t.GetPhase())
+	return enumword.Word(t.GetPhase())
 }

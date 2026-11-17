@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -20,7 +20,7 @@ const (
 )
 
 // modeWords are the words --mode and --one-shots take.
-var modeWords = []string{rpc.Word(anovelv1.Mode_MODE_GO_EXEC), rpc.Word(anovelv1.Mode_MODE_CONTAINER)}
+var modeWords = []string{enumword.Word(anovelv1.Mode_MODE_GO_EXEC), enumword.Word(anovelv1.Mode_MODE_CONTAINER)}
 
 // addStackFlag defines --stack on cmd, into p. An empty stack is the daemon's
 // default one.
