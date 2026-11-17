@@ -45,7 +45,9 @@ different contracts and failure paths. The selected references are conventions, 
 **Test each shared helper and each shared error map once.** One representative caller covers every
 branch of a helper, such as an ownership preflight, and every entry of a shared error map. Each
 operation then keeps four kinds of case: its success, the errors it raises itself, its transaction
-case when it writes inside one, and one case proving which shared helper or map it wires.
+case when it writes inside one, and one case proving which shared helper or map it wires. A failure
+the operation only returns from a shared helper is the helper's error, which its representative
+caller covers.
 
 ## Timing and validation
 
@@ -112,9 +114,11 @@ does: no "TestWhenUserIsNotFound", no "TestReturnsErrorOnBadInput". Scenarios ar
 below).
 
 A package-level function follows the same rule: `TestFunctionName`, one per exported function. A
-test that calls `t.Setenv` or swaps process-global state stays a top-level function of its own, with
-the `//nolint:paralleltest` reason. Under a parallel parent, `t.Setenv` panics and a global swap
-leaks into sibling sub-tests.
+test that calls `t.Setenv` or swaps process-global state stays a top-level function of its own.
+Under a parallel parent, `t.Setenv` panics and a global swap leaks into sibling sub-tests. A test
+that swaps a global carries the `//nolint:paralleltest` reason. A test that calls `t.Setenv`, in its
+body or its sub-tests, needs none: `paralleltest` skips it, and `nolintlint` reports the directive
+as unused, so its doc comment holds the reason.
 
 ---
 
@@ -130,6 +134,10 @@ package lib_test
 ```
 
 This keeps tests off unexported internals, and honest about the public API.
+
+A test that needs unexported access, such as a CLI command's constructor or a package-level seam,
+stays in the package, in a file named `<file>_internal_test.go`, which the `testpackage` linter
+skips. Never export a symbol only to test it.
 
 ---
 
@@ -195,6 +203,8 @@ are shared across packages). Every helper must:
 - Call `t.Helper()` as its first statement, so failure attribution points at the caller.
 - Use `panic` (not `require`) for setup errors that should be impossible in practice — a panic
   surfaces clearly in test output and signals a bug in the test setup, not a runtime error.
+- A fixture helper that writes to a test database takes the sub-test's `t` and uses `require`: a
+  constraint failure there is a bug in the test data, and `require` reports it at the caller.
 
 ```go
 func mustEncryptBase64Value(ctx context.Context, t *testing.T, data any) string {
@@ -248,7 +258,8 @@ it?" If not, it is not worth writing.
 - **Calling `AssertExpectations` by hand.** The generated constructor already registers it with
   `t.Cleanup`. Delete the explicit call, and never build a mock as `&MockX{}`, which skips it.
 - **Asserting response body on error paths.** For REST handlers, assert only the status code on
-  error cases. The body is an implementation detail.
+  error cases. The body is an implementation detail, unless it or a header is a protocol contract,
+  such as an OAuth 2.0 error response, a `WWW-Authenticate` challenge or a `Retry-After`.
 - **Mocking the database in DAO tests.** DAO tests always use a real database via
   `postgrestest.RunDBTest`. Mocks belong in service and handler tests.
 - **Using DAO sentinels in handler tests.** Handler tests must not import `dao`. Their service mock

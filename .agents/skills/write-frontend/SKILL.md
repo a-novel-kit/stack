@@ -146,6 +146,8 @@ or instruction to find an earlier link does not replace it.
   `retry.test.ts`. Follow SvelteKit route filenames exactly where its router owns the convention.
 - Name exported types and components in PascalCase; functions, values, and props in camelCase; and
   true constants in SCREAMING_SNAKE_CASE only when the package already uses that distinction.
+  nodelib-config's factories (`Eslint`, `SvelteKitVite`, ...) keep PascalCase: each names a whole
+  tool's configuration.
 - Give booleans a state or capability name (`disabled`, `hasError`, `canRetry`) and event callbacks
   the behavior they represent (`onSubmit`, `onDismiss`). Avoid generic `data`, `item`, or `handler`
   when a domain name is available.
