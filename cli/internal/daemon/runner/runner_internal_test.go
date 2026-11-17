@@ -64,7 +64,9 @@ func TestInvalidateInfraStateCache(t *testing.T) {
 
 			r.storeInfraStates("default", startGen, map[string]InfraState{"x/y": {ContainerID: "scanned"}})
 
-			require.Equal(t, testCase.wantStates, r.infraStateCache["default"].states)
+			entry, ok := r.infraStateCache["default"]
+			require.Equal(t, !testCase.invalidated, ok, "cache entry written")
+			require.Equal(t, testCase.wantStates, entry.states)
 		})
 	}
 }

@@ -128,7 +128,8 @@ func TestListen(t *testing.T) {
 
 // TestReplayCheckpoint pins that startup consumes the reinstall checkpoint
 // whatever it holds. An unusable checkpoint left on disk refuses every later
-// install with "checkpoint already present".
+// install with "checkpoint already present". Not parallel: t.Setenv points
+// XDG_STATE_HOME, where the checkpoint lives, at a temp dir.
 func TestReplayCheckpoint(t *testing.T) {
 	testCases := []struct {
 		name string

@@ -10,7 +10,7 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
-	"github.com/a-novel-kit/stack/cli/internal/workspace/workspacetest"
+	"github.com/a-novel-kit/stack/cli/internal/shared/seamtest"
 )
 
 // toMap collapses the sorted entry slice into a map keyed by variable name,
@@ -279,7 +279,7 @@ func TestBuilderForTarget(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			workspacetest.Swap(t, &injectSecrets, func(string) (secrets.Resolution, error) {
+			seamtest.Swap(t, &injectSecrets, func(string) (secrets.Resolution, error) {
 				require.NotNil(t, testCase.secrets, "injectSecrets must not be called")
 				return *testCase.secrets, nil
 			})

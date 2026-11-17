@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/a-novel-kit/stack/cli/internal/shared/seamtest"
 	"github.com/a-novel-kit/stack/cli/internal/workspace/workspacetest"
 )
 
@@ -23,7 +24,7 @@ func TestMain(m *testing.M) {
 // stubGH routes every gh call through respond, which sees the args joined.
 func stubGH(t *testing.T, respond func(call string) (string, error)) {
 	t.Helper()
-	workspacetest.Swap(t, &ghExec, func(args ...string) (string, error) {
+	seamtest.Swap(t, &ghExec, func(args ...string) (string, error) {
 		return respond(strings.Join(args, " "))
 	})
 }

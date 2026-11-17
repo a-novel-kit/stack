@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/a-novel-kit/stack/cli/internal/shared/seamtest"
 	"github.com/a-novel-kit/stack/cli/internal/workspace"
-	"github.com/a-novel-kit/stack/cli/internal/workspace/workspacetest"
 )
 
 // testBotRepo is one const so the repeated literal does not trip goconst.
@@ -150,8 +150,8 @@ func TestChunkBotComments(t *testing.T) {
 //
 //nolint:paralleltest // swaps the package-level ghExec seam and the poll pacing.
 func TestRunSucceeded(t *testing.T) {
-	workspacetest.Swap(t, &botRunPoll, time.Millisecond)
-	workspacetest.Swap(t, &botRunFinishTimeout, 50*time.Millisecond)
+	seamtest.Swap(t, &botRunPoll, time.Millisecond)
+	seamtest.Swap(t, &botRunFinishTimeout, 50*time.Millisecond)
 
 	testCases := []struct {
 		name    string

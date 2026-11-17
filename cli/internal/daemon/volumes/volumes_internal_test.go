@@ -46,7 +46,7 @@ func TestCompressTo(t *testing.T) {
 
 		got, err := io.ReadAll(dec)
 		require.NoError(t, err)
-		require.Equal(t, payload, got)
+		require.True(t, bytes.Equal(payload, got), "round trip: got %d bytes, want %d", len(got), len(payload))
 	})
 
 	t.Run("Error/FlushFailure", func(t *testing.T) {

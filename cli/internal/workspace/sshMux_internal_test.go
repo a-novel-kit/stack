@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/a-novel-kit/stack/cli/internal/workspace/workspacetest"
+	"github.com/a-novel-kit/stack/cli/internal/shared/seamtest"
 )
 
 // TestSSHMux pins the check window of up: a success vouches for the connection
@@ -16,7 +16,7 @@ import (
 func TestSSHMux(t *testing.T) {
 	var checks int
 	var connected bool
-	workspacetest.Swap(t, &connectSSH, func([]string) bool {
+	seamtest.Swap(t, &connectSSH, func([]string) bool {
 		checks++
 		return connected
 	})

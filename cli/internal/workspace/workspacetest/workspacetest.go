@@ -97,16 +97,6 @@ func AdvanceOrigin(t *testing.T, seed string) {
 	Git(t, seed, "push", "--quiet", "origin", "master")
 }
 
-// Swap sets *p to v for the test and restores it on cleanup. A test that swaps
-// a package-level seam cannot run in parallel.
-func Swap[T any](t *testing.T, p *T, v T) {
-	t.Helper()
-
-	orig := *p
-	*p = v
-	t.Cleanup(func() { *p = orig })
-}
-
 // InitPushed creates a repository whose one commit on master, a package.json at
 // version 1.0.0, is already pushed to a bare "origin", so code comparing HEAD
 // against origin has a real remote.

@@ -156,7 +156,8 @@ func TestStackBackupDir(t *testing.T) {
 // TestReportUnmanaged pins that a registration the daemon is not serving is
 // named in the output, and that a vanished root reads differently from one the
 // daemon simply has not picked up yet. The two need different fixes: drop the
-// entry, or restart.
+// entry, or restart. Not parallel: t.Setenv sets the process-wide stack
+// registry the report reads.
 func TestReportUnmanaged(t *testing.T) {
 	present := t.TempDir()
 	gone := filepath.Join(t.TempDir(), "swept")

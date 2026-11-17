@@ -72,7 +72,8 @@ func TestDaemonFailureDetail(t *testing.T) {
 }
 
 // TestOpenDaemonLog pins the append: a start that fails is often one of
-// several, and every attempt stays in the log to explain the last one.
+// several, and every attempt stays in the log to explain the last one. Not
+// parallel: t.Setenv points XDG_STATE_HOME, where the log lives, at a temp dir.
 func TestOpenDaemonLog(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
