@@ -99,14 +99,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - uses: a-novel-kit/workflows/security-actions/scan-secrets@v1.87.0
         with:
-          config: .gitleaks.toml
-          # renovate: datasource=github-releases depName=gitleaks/gitleaks
-          version: "8.30.1"
+          extra_config: .gitleaks.toml
 
   # Audits the workflows, the permissions each job holds included.
   lint-workflows:
@@ -114,13 +109,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - uses: a-novel-kit/workflows/security-actions/lint-workflows@v1.87.0
-        with:
-          # renovate: datasource=docker depName=ghcr.io/zizmorcore/zizmor
-          version: "1.32.0@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d"
 
   test-go-cli:
     # Go unit tests for the cli/ module. The race detector stays on for the

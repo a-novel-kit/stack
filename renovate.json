@@ -3,42 +3,6 @@
   "extends": ["github>a-novel-kit/workflows//renovate/library#v1.87.0"],
   "packageRules": [
     {
-      "description": "Keep cli/golangci-lint.mod on its own branch. A Renovate artifact update takes its whole config from the upgrade that sorts first on the branch. One branch per modfile keeps each goGetDirs and post-upgrade task on the file it names.",
-      "matchFileNames": ["cli/golangci-lint.mod"],
-      "additionalBranchPrefix": "golangci-lint-",
-      "goGetDirs": ["."],
-      "postUpgradeTasks": {
-        "commands": [
-          "rm -f cli/golangci-lint.sum",
-          "go -C cli get -modfile=golangci-lint.mod -tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
-        ],
-        "executionMode": "branch"
-      }
-    },
-    {
-      "description": "Keep cli/gotestsum.mod on its own branch. A Renovate artifact update takes its whole config from the upgrade that sorts first on the branch. One branch per modfile keeps each goGetDirs and post-upgrade task on the file it names.",
-      "matchFileNames": ["cli/gotestsum.mod"],
-      "additionalBranchPrefix": "gotestsum-",
-      "goGetDirs": ["."],
-      "postUpgradeTasks": {
-        "commands": ["rm -f cli/gotestsum.sum", "go -C cli get -modfile=gotestsum.mod -tool gotest.tools/gotestsum"],
-        "executionMode": "branch"
-      }
-    },
-    {
-      "description": "Keep cli/govulncheck.mod on its own branch. A Renovate artifact update takes its whole config from the upgrade that sorts first on the branch. One branch per modfile keeps each goGetDirs and post-upgrade task on the file it names.",
-      "matchFileNames": ["cli/govulncheck.mod"],
-      "additionalBranchPrefix": "govulncheck-",
-      "goGetDirs": ["."],
-      "postUpgradeTasks": {
-        "commands": [
-          "rm -f cli/govulncheck.sum",
-          "go -C cli get -modfile=govulncheck.mod -tool golang.org/x/vuln/cmd/govulncheck"
-        ],
-        "executionMode": "branch"
-      }
-    },
-    {
       "description": "Keep cli/buf.mod on its own branch, and regenerate the proto stubs after a bump. No code imports buf. The code it emits links google.golang.org/protobuf, which cli/go.mod keeps, and buf's own dependencies stay out of cli/go.mod.",
       "matchFileNames": ["cli/buf.mod"],
       "additionalBranchPrefix": "buf-",
@@ -52,11 +16,6 @@
         ],
         "executionMode": "branch"
       }
-    },
-    {
-      "description": "Tidy cli/go.mod after a Go bump, so go.sum holds the module-content (h1:) hashes too. A job that compiles cli/ without them fails with `missing go.sum entry`. The option reaches cli/go.mod because each Go modfile has its own branch (see the rules above), so keep those branches apart.",
-      "matchFileNames": ["cli/go.mod"],
-      "postUpdateOptions": ["gomodTidy"]
     },
     {
       "description": "Regenerate cli/proto/gen when a generator module moves. cli/buf.gen.yaml runs protoc-gen-go and protoc-gen-connect-go from cli/go.mod, so the generated code matches the runtime it links. The regeneration lands on the bump's own branch, which generated-go-cli checks.",
