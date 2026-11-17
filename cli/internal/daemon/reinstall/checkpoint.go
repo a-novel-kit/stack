@@ -115,7 +115,7 @@ func Exists() bool {
 // install.
 func EnsureSinglePending() error {
 	if Exists() {
-		return errors.New("reinstall checkpoint already present — another install in flight or a previous one didn't complete")
+		return errors.New("reinstall checkpoint already present: another install in flight or a previous one didn't complete")
 	}
 	return nil
 }

@@ -1,14 +1,16 @@
-package cli
+package cli_test
 
 import (
-	"errors"
+	"bytes"
 	"fmt"
-	"os/exec"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
+
+	"github.com/a-novel-kit/stack/cli/internal/cli"
 )
 
 // commandCase runs the real root with args.
@@ -35,24 +37,29 @@ func TestRejectUnknownSubcommands(t *testing.T) {
 		{name: "Error/RemovedNestedCommand", args: []string{"run", "service", "status", "service-json-keys"}, wantErr: `unknown command "status" for "a-novel run service"`},
 		{name: "Error/Suggestion", args: []string{"core", "stakcs"}, wantErr: "Did you mean this?\n\tstacks"},
 	}
-	testCases = slices.Concat(testCases, unknownSubcommandCases(NewRoot()))
+	testCases = slices.Concat(testCases, unknownSubcommandCases(cli.NewRoot()))
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			out, err := runCmd(t, NewRoot(), testCase.args...)
+			out, err := execute(t, testCase.args...)
 			if testCase.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
-					t.Fatalf("Execute(%v) error = %v, want %q", testCase.args, err, testCase.wantErr)
-				}
+				require.ErrorContains(t, err, testCase.wantErr)
 				return
 			}
-			if err != nil || !strings.Contains(out, testCase.wantOut) {
-				t.Fatalf("Execute(%v) = %v, output %q; want success printing %q", testCase.args, err, out, testCase.wantOut)
-			}
+			require.NoError(t, err)
+			require.Contains(t, out, testCase.wantOut)
 		})
 	}
+}
+
+// TestRejectLateSandbox pins that --sandbox anywhere but first is refused.
+func TestRejectLateSandbox(t *testing.T) {
+	t.Parallel()
+
+	_, err := execute(t, "secrets", "ls", "--sandbox")
+	require.ErrorContains(t, err, "must be the first argument")
 }
 
 // unknownSubcommandCases returns a case passing an unknown subcommand to cmd and
@@ -73,31 +80,15 @@ func unknownSubcommandCases(cmd *cobra.Command) []commandCase {
 	return cases
 }
 
-// TestExitStatus pins the status a finished child hands the CLI: its own exit
-// code, or 128 plus the signal that ended it, as a shell reports it.
-func TestExitStatus(t *testing.T) {
-	t.Parallel()
+// execute runs the real root with args and returns its combined output.
+func execute(t *testing.T, args ...string) (string, error) {
+	t.Helper()
 
-	testCases := []struct {
-		name   string
-		script string
-		want   int
-	}{
-		{name: "Success/ExitCode", script: "exit 3", want: 3},
-		{name: "Success/Signal", script: "kill -TERM $$", want: 143},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			var exitErr *exec.ExitError
-			if err := exec.Command("sh", "-c", testCase.script).Run(); !errors.As(err, &exitErr) {
-				t.Fatalf("run %q: got %v, want an exit error", testCase.script, err)
-			}
-			if got := exitStatus(exitErr); got != testCase.want {
-				t.Errorf("exitStatus = %d, want %d", got, testCase.want)
-			}
-		})
-	}
+	var out bytes.Buffer
+	root := cli.NewRoot()
+	root.SetArgs(args)
+	root.SetOut(&out)
+	root.SetErr(&out)
+	err := root.Execute()
+	return out.String(), err
 }

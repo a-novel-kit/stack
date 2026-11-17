@@ -104,7 +104,7 @@ func (r *Runner) StartInfra(ctx context.Context, stack, service string, oneShots
 	r.sessMu.Lock()
 	if sess, ok := r.infraSessions[key]; ok && sess.Up {
 		r.sessMu.Unlock()
-		return nil // idempotent — already up
+		return nil // idempotent: already up
 	}
 	sess := newInfraSession(stack, service)
 	r.infraSessions[key] = sess

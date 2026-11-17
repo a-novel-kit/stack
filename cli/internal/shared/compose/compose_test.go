@@ -1,10 +1,13 @@
-package compose
+package compose_test
 
 import (
-	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/a-novel-kit/stack/cli/internal/shared/compose"
+	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil/fsutiltest"
 )
 
 // TestReadFile pins the parsed shape, including both YAML forms of the
@@ -15,7 +18,7 @@ func TestReadFile(t *testing.T) {
 	testCases := []struct {
 		name    string
 		yaml    string
-		want    *File
+		want    *compose.File
 		wantErr bool
 	}{
 		{
@@ -36,21 +39,21 @@ services:
 volumes:
   postgres-data:
 `,
-			want: &File{
-				Services: map[string]Service{
+			want: &compose.File{
+				Services: map[string]compose.Service{
 					"postgres-svc": {
-						Build:       &Build{Context: "..", Dockerfile: "./builds/database.Dockerfile"},
+						Build:       &compose.Build{Context: "..", Dockerfile: "./builds/database.Dockerfile"},
 						Ports:       []string{"${POSTGRES_PORT}:5432"},
-						Environment: Environment{"POSTGRES_DSN": "postgres://${USER}@h/db?sslmode=disable"},
+						Environment: compose.Environment{"POSTGRES_DSN": "postgres://${USER}@h/db?sslmode=disable"},
 						Healthcheck: &struct{}{},
 					},
 					"svc-rest": {
 						Profiles:  []string{"rest"},
-						DependsOn: DependsOn{"postgres-svc": {}, "init": {}},
+						DependsOn: compose.DependsOn{"postgres-svc": {}, "init": {}},
 						// The list form splits on the first '=' only.
-						Environment: Environment{"DSN": "postgres://u:p@h/d?sslmode=disable", "USER": "postgres"},
+						Environment: compose.Environment{"DSN": "postgres://u:p@h/d?sslmode=disable", "USER": "postgres"},
 					},
-					"svc-job": {DependsOn: DependsOn{"postgres-svc": {}, "mailserver": {}}},
+					"svc-job": {DependsOn: compose.DependsOn{"postgres-svc": {}, "mailserver": {}}},
 				},
 				Volumes: map[string]struct{}{"postgres-data": {}},
 			},
@@ -64,19 +67,17 @@ volumes:
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			path := filepath.Join(t.TempDir(), "podman-compose.yaml")
+			dir := t.TempDir()
 			if testCase.yaml != "" {
-				if err := os.WriteFile(path, []byte(testCase.yaml), 0o600); err != nil {
-					panic(err)
-				}
+				fsutiltest.Write(t, dir, map[string]string{"podman-compose.yaml": testCase.yaml})
 			}
-			got, err := ReadFile(path)
-			if (err != nil) != testCase.wantErr {
-				t.Fatalf("ReadFile error = %v, wantErr %v", err, testCase.wantErr)
+			got, err := compose.ReadFile(filepath.Join(dir, "podman-compose.yaml"))
+			if testCase.wantErr {
+				require.Error(t, err)
+				return
 			}
-			if !testCase.wantErr && !reflect.DeepEqual(got, testCase.want) {
-				t.Errorf("ReadFile =\n%+v\nwant\n%+v", got, testCase.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, testCase.want, got)
 		})
 	}
 }
@@ -85,22 +86,27 @@ func TestRefs(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
+		name string
 		in   string
 		want []string
 	}{
-		{"${POSTGRES_PORT}", []string{"POSTGRES_PORT"}},
-		{"${SMTP_HOST}:${SMTP_PORT}", []string{"SMTP_HOST", "SMTP_PORT"}},
-		{"${X:-fallback}", []string{"X"}},
-		{"postgres://${USER}:${PASS}@${HOST}:${PORT}/db", []string{"USER", "PASS", "HOST", "PORT"}},
-		{"${X}/${X}", []string{"X"}},
-		{"plain-literal", nil},
+		{name: "Success/Single", in: "${POSTGRES_PORT}", want: []string{"POSTGRES_PORT"}},
+		{name: "Success/Several", in: "${SMTP_HOST}:${SMTP_PORT}", want: []string{"SMTP_HOST", "SMTP_PORT"}},
+		{name: "Success/WithDefault", in: "${X:-fallback}", want: []string{"X"}},
+		{
+			name: "Success/FirstSeenOrder",
+			in:   "postgres://${USER}:${PASS}@${HOST}:${PORT}/db",
+			want: []string{"USER", "PASS", "HOST", "PORT"},
+		},
+		{name: "Success/Distinct", in: "${X}/${X}", want: []string{"X"}},
+		{name: "Success/NoRef", in: "plain-literal"},
 	}
+
 	for _, testCase := range testCases {
-		t.Run(testCase.in, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			if got := Refs(testCase.in); !reflect.DeepEqual(got, testCase.want) {
-				t.Errorf("Refs(%q) = %v, want %v", testCase.in, got, testCase.want)
-			}
+
+			require.Equal(t, testCase.want, compose.Refs(testCase.in))
 		})
 	}
 }
@@ -109,22 +115,26 @@ func TestSubstitute(t *testing.T) {
 	t.Parallel()
 
 	vars := map[string]string{"HOST": "localhost", "PORT": "5432", "EMPTY": ""}
-	testCases := []struct{ in, want string }{
-		{"${HOST}:${PORT}", "localhost:5432"},
-		{"${HOST:-ignored}", "localhost"},
+	testCases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "Success/Known", in: "${HOST}:${PORT}", want: "localhost:5432"},
+		{name: "Success/KnownIgnoresDefault", in: "${HOST:-ignored}", want: "localhost"},
 		// An unknown or empty reference takes its default, as compose's `:-` does.
-		{"${UNKNOWN:-placeholder}", "placeholder"},
-		{"${EMPTY:-placeholder}", "placeholder"},
+		{name: "Success/UnknownTakesDefault", in: "${UNKNOWN:-placeholder}", want: "placeholder"},
+		{name: "Success/EmptyTakesDefault", in: "${EMPTY:-placeholder}", want: "placeholder"},
 		// An unknown reference resolves empty, as compose does.
-		{"prefix ${UNKNOWN} suffix", "prefix  suffix"},
-		{"plain", "plain"},
+		{name: "Success/UnknownResolvesEmpty", in: "prefix ${UNKNOWN} suffix", want: "prefix  suffix"},
+		{name: "Success/NoRef", in: "plain", want: "plain"},
 	}
+
 	for _, testCase := range testCases {
-		t.Run(testCase.in, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			if got := Substitute(testCase.in, vars); got != testCase.want {
-				t.Errorf("Substitute(%q) = %q, want %q", testCase.in, got, testCase.want)
-			}
+
+			require.Equal(t, testCase.want, compose.Substitute(testCase.in, vars))
 		})
 	}
 }
@@ -133,22 +143,32 @@ func TestHostPort(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
+		name           string
 		in             string
-		name, port     string
+		wantName       string
+		wantPort       string
 		wantAllocation bool
 	}{
-		{in: "${POSTGRES_PORT}:5432", name: "POSTGRES_PORT", port: "5432", wantAllocation: true},
-		{in: " ${REST_PORT:-8080}:8080 ", name: "REST_PORT", port: "8080", wantAllocation: true},
-		{in: "5432:5432"},
-		{in: "${DATA}:/var/lib/data"},
+		{
+			name: "Success/Variable", in: "${POSTGRES_PORT}:5432",
+			wantName: "POSTGRES_PORT", wantPort: "5432", wantAllocation: true,
+		},
+		{
+			name: "Success/DefaultAndSpaces", in: " ${REST_PORT:-8080}:8080 ",
+			wantName: "REST_PORT", wantPort: "8080", wantAllocation: true,
+		},
+		{name: "Success/Literal", in: "5432:5432"},
+		{name: "Success/ContainerPath", in: "${DATA}:/var/lib/data"},
 	}
+
 	for _, testCase := range testCases {
-		t.Run(testCase.in, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			name, port, ok := HostPort(testCase.in)
-			if name != testCase.name || port != testCase.port || ok != testCase.wantAllocation {
-				t.Errorf("HostPort(%q) = %q, %q, %v; want %q, %q, %v", testCase.in, name, port, ok, testCase.name, testCase.port, testCase.wantAllocation)
-			}
+
+			name, port, ok := compose.HostPort(testCase.in)
+			require.Equal(t, testCase.wantName, name)
+			require.Equal(t, testCase.wantPort, port)
+			require.Equal(t, testCase.wantAllocation, ok)
 		})
 	}
 }

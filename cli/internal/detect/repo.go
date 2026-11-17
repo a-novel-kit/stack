@@ -47,7 +47,7 @@ func gitIgnoredDirs(absRoot string) map[string]struct{} {
 	if err != nil {
 		return set
 	}
-	for _, p := range strings.Split(out, "\x00") {
+	for p := range strings.SplitSeq(out, "\x00") {
 		p = strings.TrimSuffix(strings.TrimSpace(p), "/")
 		if p == "" {
 			continue

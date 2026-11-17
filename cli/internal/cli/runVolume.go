@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/a-novel-kit/stack/cli/internal/client/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/rpc"
 )
 
 func newVolumeCmd() *cobra.Command {

@@ -144,7 +144,7 @@ func (r *Runner) reseedAllocator(ctx context.Context, infra []psEntry) {
 	// every other one. Each line names its container, so the others reseed
 	// whatever the exit status.
 	out, _ := exec.CommandContext(ctx, "podman", args...).Output()
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		id, rest, _ := strings.Cut(line, "|")
 		if e, ok := byID[id]; ok {
 			r.reseedInfra(e.Labels[labelStack], e.Labels[labelService], rest)

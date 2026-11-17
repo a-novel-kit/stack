@@ -9,7 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/a-novel-kit/stack/cli/internal/client/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil"
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 )
 
@@ -80,8 +81,8 @@ func cliSourceDir(override string) (string, error) {
 		}
 		sourceDir = filepath.Join(stack.Path, "cli")
 	}
-	if !exists(filepath.Join(sourceDir, "go.mod")) {
-		return "", fmt.Errorf("no go.mod at %s — pass --source pointing at the CLI source dir", sourceDir)
+	if !fsutil.Exists(filepath.Join(sourceDir, "go.mod")) {
+		return "", fmt.Errorf("no go.mod at %s: pass --source pointing at the CLI source dir", sourceDir)
 	}
 	return sourceDir, nil
 }

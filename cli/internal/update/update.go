@@ -64,7 +64,7 @@ func Notify(w io.Writer, current string) {
 	if !shouldNotify(current, latest) {
 		return
 	}
-	_, _ = fmt.Fprintf(w, "a-novel %s is available — you're on %s.\n", latest, current)
+	_, _ = fmt.Fprintf(w, "a-novel %s is available (you're on %s).\n", latest, current)
 	_, _ = fmt.Fprintf(w, "  Update: go install %s@latest\n", installPath)
 }
 

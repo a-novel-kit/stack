@@ -50,7 +50,7 @@ func launchClaude(args []string) error {
 	bin, err := exec.LookPath(claudeBin)
 	if err != nil {
 		return fmt.Errorf(
-			"claude not found in $PATH — install Claude Code (https://claude.com/claude-code): %w", err)
+			"claude not found in $PATH: install Claude Code (https://claude.com/claude-code): %w", err)
 	}
 	if err := os.Chdir(stack.Path); err != nil {
 		return fmt.Errorf("enter stack root %s: %w", stack.Path, err)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/setup"
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
+	"github.com/a-novel-kit/stack/cli/internal/workspace"
 )
 
 const sandboxFlag = "--sandbox"
@@ -86,8 +87,8 @@ func RunSandbox(
 // childExit carries a child's exit status as an ExitError. A child killed by
 // the interrupt that cancelled ctx exits as interrupted.
 func childExit(ctx context.Context, err error) error {
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
+	exitErr, ok := errors.AsType[*exec.ExitError](err)
+	if !ok {
 		return err
 	}
 	if exitErr.ExitCode() < 0 && ctx.Err() != nil {
@@ -132,8 +133,7 @@ func runSandbox(
 	env := replaceEnv(system.environ, stacks.EnvVar, "sandbox:"+root)
 	syncArgs := []string{commandCore, commandSync, "--root", root}
 	if err := system.run(ctx, root, env, syncArgs, stderr, stderr); err != nil {
-		var exitErr *ExitError
-		if errors.As(err, &exitErr) {
+		if _, ok := errors.AsType[*ExitError](err); ok {
 			return err
 		}
 		return fmt.Errorf("populate sandbox: %w", err)
@@ -156,12 +156,12 @@ func unsupportedSandboxCommand(command string) bool {
 // sandboxWorkingDir maps cwd, when it sits in a workspace repository, onto the
 // same directory of that repository's copy in the temporary stack at root.
 func sandboxWorkingDir(root, cwd string) (string, error) {
-	repoRoot, err := gitToplevel(cwd)
+	repoRoot, err := workspace.Toplevel(cwd)
 	if err != nil {
 		return root, nil //nolint:nilerr // outside a repository, the command runs from the stack root
 	}
-	repo, err := repoFromGitRemote(repoRoot)
-	if err != nil || (repo.Org != orgAnovel && repo.Org != orgAnovelKit) {
+	repo, err := workspace.Origin(repoRoot)
+	if err != nil || (repo.Org != workspace.OrgAnovel && repo.Org != workspace.OrgAnovelKit) {
 		return root, nil //nolint:nilerr // a foreign repository has no copy in the stack
 	}
 	rel, err := filepath.Rel(repoRoot, cwd)

@@ -40,18 +40,19 @@ cli/
 ├── proto/anovel/v1/core.proto     connect-rpc contract
 └── internal/
     ├── daemon/                    daemon-side (server, runner, env, logs, volumes, ...)
-    ├── client/rpc/                Unix-socket connect-rpc client
-    ├── cli/                       Cobra command tree, workspace model, gh/git helpers
+    ├── rpc/                       Unix-socket connect-rpc client
+    ├── cli/                       Cobra command tree, one file per command path
+    ├── workspace/                 workspace model, git and SSH plumbing
     ├── detect/                    working-tree discovery of test and build targets
     ├── build/                     a detected target as a job: env, compose up/down, deadline
     ├── jobs/                      bounded parallel job runner with live progress
-    ├── tui/                       Bubble Tea TUI
-    ├── ui/                        picker, live job view and report for every batch command
+    ├── dashboard/                 the `run ui` Bubble Tea dashboard
+    ├── batchview/                 picker, live job view and report of every batch command
     ├── setup/                     `core setup` bootstrap
     ├── secrets/                   local AES-256-GCM secrets store + env injection
     ├── update/                    best-effort "newer version available" notice
     ├── version/                   build-version resolution (ldflags / buildinfo)
-    └── shared/                    XDG paths, stacks parser, compose files, archive retention
+    └── shared/                    XDG paths, stacks parser, compose files, archive retention, fsutil
 ```
 
 ### Parallel jobs
@@ -109,7 +110,7 @@ In container mode the daemon runs a target through the compose file its service 
 
 ## Adding a command
 
-A new command is a Cobra subcommand under `cli/internal/cli/`, built by a `new<Name>Cmd` function. Wire it into the parent that fits:
+A new command is a Cobra subcommand under `cli/internal/cli/`, built by a `new<Name>Cmd` function in a file named after its command path: `core sync` lives in `coreSync.go`, `run topology` in `runTopology.go`. A group's file (`core.go`, `run.go`) holds the group and what its subcommands share. Logic that is not command wiring lives in its own package: the workspace model and its git plumbing in `internal/workspace`, the batch views of `test`, `build` and `core sync` in `internal/batchview`, and the `run ui` dashboard in `internal/dashboard`. Wire the command into the parent that fits:
 
 | Parent | Holds                                        |
 | ------ | -------------------------------------------- |

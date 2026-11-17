@@ -63,7 +63,7 @@ func (r *Runner) ensureDepReady(ctx context.Context, svc *discovery.Service, dep
 	inst, ok := r.Instance(dep.ID())
 	if !ok || inst.Phase != anovelv1.Phase_PHASE_RUNNING {
 		return fmt.Errorf(
-			"long-runner dep %s/%s is not running — start it explicitly first (`a-novel run start %s/%s`)",
+			"long-runner dep %s/%s is not running: start it explicitly first (`a-novel run start %s/%s`)",
 			svc.Name, dep.Name, svc.Name, dep.Name)
 	}
 	// A container long-runner with a healthcheck must be healthy. go-exec or
@@ -71,7 +71,7 @@ func (r *Runner) ensureDepReady(ctx context.Context, svc *discovery.Service, dep
 	if inst.Mode == anovelv1.Mode_MODE_CONTAINER && dep.Kind == discovery.TargetKindLongRunner &&
 		(inst.Health == anovelv1.Health_HEALTH_UNHEALTHY || inst.Health == anovelv1.Health_HEALTH_STARTING) {
 		return fmt.Errorf(
-			"long-runner dep %s/%s is %s — wait for it to become healthy",
+			"long-runner dep %s/%s is %s: wait for it to become healthy",
 			svc.Name, dep.Name, strings.ToLower(strings.TrimPrefix(inst.Health.String(), "HEALTH_")))
 	}
 	return nil
@@ -100,14 +100,14 @@ func (r *Runner) ensureOneShotSatisfied(ctx context.Context, svc *discovery.Serv
 	// A teardown between the bring-up and this read leaves no session.
 	sess, ok := r.InfraSession(svc.Stack, svc.Name)
 	if !ok || !sess.Up {
-		return fmt.Errorf("one-shot dep %s/%s requires infra up — call `a-novel run service infra start %s` first",
+		return fmt.Errorf("one-shot dep %s/%s requires infra up: call `a-novel run service infra start %s` first",
 			svc.Name, t.Name, svc.Name)
 	}
 	if prev, recorded := sess.OneShotResults[t.Name]; recorded {
 		if prev == anovelv1.ExitReason_EXIT_REASON_SUCCESS {
 			return nil
 		}
-		return fmt.Errorf("one-shot dep %s/%s last exited %s — restart infra to retry (`a-novel run service infra kill %s && a-novel run service infra start %s`)",
+		return fmt.Errorf("one-shot dep %s/%s last exited %s: restart infra to retry (`a-novel run service infra kill %s && a-novel run service infra start %s`)",
 			svc.Name, t.Name, prev, svc.Name, svc.Name)
 	}
 	// A one-shot not yet run in this session runs now, and its outcome is

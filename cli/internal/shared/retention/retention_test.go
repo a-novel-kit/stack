@@ -1,54 +1,47 @@
-package retention
+package retention_test
 
 import (
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil/fsutiltest"
+	"github.com/a-novel-kit/stack/cli/internal/shared/retention"
 )
 
 func TestPrune(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	now := time.Now()
+	fsutiltest.Write(t, dir, map[string]string{"d.zst": "", "c.zst": "", "b.zst": "", "a.zst": "", "keep.txt": ""})
 	// Names run against modification order, so only the mtime can rank them.
-	archives := []string{"d.zst", "c.zst", "b.zst", "a.zst", "keep.txt"}
-	for i, name := range archives {
-		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, nil, 0o600); err != nil {
-			t.Fatal(err)
-		}
+	now := time.Now()
+	for i, name := range []string{"d.zst", "c.zst", "b.zst", "a.zst", "keep.txt"} {
 		mod := now.Add(time.Duration(i) * time.Minute)
-		if err := os.Chtimes(path, mod, mod); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.Chtimes(filepath.Join(dir, name), mod, mod))
 	}
-	if err := os.Mkdir(filepath.Join(dir, "sub.zst"), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "sub.zst"), 0o700))
 	isArchive := func(name string) bool { return strings.HasSuffix(name, ".zst") }
 
-	Prune(dir, isArchive, 2)
+	retention.Prune(dir, isArchive, 2)
 
-	files := Files(dir, func(string) bool { return true })
+	files := retention.Files(dir, func(string) bool { return true })
 	got := make([]string, len(files))
 	for i, path := range files {
 		got[i] = filepath.Base(path)
 	}
 	// The two newest archives stay, oldest first; the unmatched file and the
 	// directory are never candidates.
-	if want := []string{"b.zst", "a.zst", "keep.txt"}; !slices.Equal(got, want) {
-		t.Errorf("after Prune: got %q, want %q", got, want)
-	}
+	require.Equal(t, []string{"b.zst", "a.zst", "keep.txt"}, got)
 }
 
-func TestFilesUnreadableDir(t *testing.T) {
+// TestFiles pins that an unreadable dir yields no file.
+func TestFiles(t *testing.T) {
 	t.Parallel()
 
-	if got := Files(filepath.Join(t.TempDir(), "missing"), func(string) bool { return true }); len(got) != 0 {
-		t.Errorf("Files on a missing dir: got %q, want none", got)
-	}
+	require.Empty(t, retention.Files(filepath.Join(t.TempDir(), "missing"), func(string) bool { return true }))
 }

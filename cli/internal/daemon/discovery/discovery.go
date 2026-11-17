@@ -289,7 +289,7 @@ func discoverService(stack, dir string) (*Service, []DiscoveryError) {
 		// naturally.
 		if len(cs.Profiles) == 0 {
 			if _, hasCmd := cmdNames[csName]; hasCmd {
-				reason := fmt.Sprintf("compose service %q has no profile but a matching cmd/%s/ exists — "+
+				reason := fmt.Sprintf("compose service %q has no profile but a matching cmd/%s/ exists: "+
 					"declare profiles:[%q] to make it a target, or rename the cmd dir", csName, csName, csName)
 				errs = append(errs, DiscoveryError{Service: name, Path: composePath, Reason: reason})
 				delete(cmdNames, csName)

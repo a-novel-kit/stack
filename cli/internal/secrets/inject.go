@@ -68,9 +68,9 @@ func (r Resolution) Warnings() []string {
 	for _, d := range r.Missing {
 		line := fmt.Sprintf("⚠ secret not set: %s (id: %s)", d.Env, d.ID)
 		if d.Description != "" {
-			line += " — " + d.Description
+			line += ": " + d.Description
 		}
-		line += " — run: a-novel secrets set " + d.ID
+		line += "; run: a-novel secrets set " + d.ID
 		out = append(out, line)
 	}
 	return out

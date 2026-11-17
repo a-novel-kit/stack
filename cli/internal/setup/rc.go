@@ -91,7 +91,7 @@ func shellFromPath(p string) string {
 // setup with the same stacks and shell produces a byte-identical block.
 func renderRCBlock(stk []stacks.Stack, shell string) string {
 	var b strings.Builder
-	b.WriteString("# Managed by `a-novel core setup` — do not edit between markers.\n")
+	b.WriteString("# Managed by `a-novel core setup`: do not edit between markers.\n")
 	b.WriteString("# Re-run `a-novel core setup` to update; delete both markers to opt out.\n")
 	// The export is emitted only for a layout beyond the implicit default,
 	// keeping the common single-stack case quiet.

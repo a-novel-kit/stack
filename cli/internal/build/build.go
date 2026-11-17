@@ -94,9 +94,9 @@ func composeEnv(e *detect.ComposeEnv, base []string) ([]string, error) {
 // ANSI SGR codes used by formatEnvBlock. The block lands in captured output, so
 // its colors travel as raw 256-color escapes rather than lipgloss styles.
 const (
-	envHdr = "\x1b[1;38;5;172m" // gold, bold — the header
-	envKey = "\x1b[38;5;37m"    // accent — variable names
-	envEq  = "\x1b[38;5;66m"    // muted — the " = " separator
+	envHdr = "\x1b[1;38;5;172m" // gold, bold: the header
+	envKey = "\x1b[38;5;37m"    // accent: variable names
+	envEq  = "\x1b[38;5;66m"    // muted: the " = " separator
 	envRst = "\x1b[0m"
 )
 

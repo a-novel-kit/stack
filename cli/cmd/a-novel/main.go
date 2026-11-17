@@ -51,8 +51,7 @@ func exitCode(err error) int {
 		return 0
 	}
 	code := 1
-	var exitErr *cli.ExitError
-	if errors.As(err, &exitErr) {
+	if exitErr, ok := errors.AsType[*cli.ExitError](err); ok {
 		code = exitErr.Code
 		if exitErr.Err == nil {
 			return code

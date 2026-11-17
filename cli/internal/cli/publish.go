@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/a-novel-kit/stack/cli/internal/workspace"
 )
 
 func newPublishCmd() *cobra.Command {
@@ -49,7 +51,7 @@ shows before the release.`,
 // stampVersion stamps the repository's package version into every
 // <prefix>vX.Y.Z reference of the files patterns resolve to.
 func stampVersion(out io.Writer, prefix string, patterns []string) error {
-	root, err := gitToplevel(".")
+	root, err := workspace.Toplevel(".")
 	if err != nil {
 		return fmt.Errorf("publish: %w", err)
 	}

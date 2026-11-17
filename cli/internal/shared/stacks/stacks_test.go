@@ -1,38 +1,48 @@
-package stacks
+package stacks_test
 
 import (
-	"slices"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 )
 
+//nolint:paralleltest // t.Setenv("HOME") pins the paths Parse expands, and forbids t.Parallel.
 func TestParse(t *testing.T) {
 	t.Setenv("HOME", "/home/me")
 
 	testCases := []struct {
+		name    string
 		raw     string
-		want    []Stack
+		want    []stacks.Stack
 		wantErr bool
 	}{
-		{"", []Stack{{Name: DefaultName, Path: "/home/me/git-projects/a-novel", IsDefault: true}}, false},
 		{
-			" main : ~/work , scratch:/tmp/x ,",
-			[]Stack{{Name: "main", Path: "/home/me/work", IsDefault: true}, {Name: "scratch", Path: "/tmp/x"}},
-			false,
+			name: "Success/ImplicitDefault",
+			want: []stacks.Stack{{Name: stacks.DefaultName, Path: "/home/me/git-projects/a-novel", IsDefault: true}},
 		},
-		{"main", nil, true},
-		{":/path", nil, true},
-		{"main:", nil, true},
-		{"a:/x,a:/y", nil, true},
+		{
+			name: "Success/TrimsAndExpandsHome",
+			raw:  " main : ~/work , scratch:/tmp/x ,",
+			want: []stacks.Stack{{Name: "main", Path: "/home/me/work", IsDefault: true}, {Name: "scratch", Path: "/tmp/x"}},
+		},
+		{name: "Error/NoPath", raw: "main", wantErr: true},
+		{name: "Error/EmptyName", raw: ":/path", wantErr: true},
+		{name: "Error/EmptyPath", raw: "main:", wantErr: true},
+		{name: "Error/DuplicateName", raw: "a:/x,a:/y", wantErr: true},
 	}
+
 	for _, testCase := range testCases {
-		got, err := Parse(testCase.raw)
-		if (err != nil) != testCase.wantErr {
-			t.Errorf("Parse(%q): got err %v, want error %v", testCase.raw, err, testCase.wantErr)
-			continue
-		}
-		if !slices.Equal(got, testCase.want) {
-			t.Errorf("Parse(%q): got %+v, want %+v", testCase.raw, got, testCase.want)
-		}
+		t.Run(testCase.name, func(t *testing.T) {
+			got, err := stacks.Parse(testCase.raw)
+			if testCase.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, testCase.want, got)
+		})
 	}
 }
 
@@ -44,21 +54,23 @@ func TestDefault(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{name: "FirstEntryWins", stacks: "main:/srv/main,fork:/srv/fork", want: "/srv/main"},
-		{name: "UnsetFallsBackToImplicitDefault", stacks: "", want: "/home/tester/git-projects/a-novel"},
-		{name: "MalformedEntry", stacks: "no-path-here", wantErr: true},
+		{name: "Success/FirstEntryWins", stacks: "main:/srv/main,fork:/srv/fork", want: "/srv/main"},
+		{name: "Success/UnsetFallsBackToImplicitDefault", stacks: "", want: "/home/tester/git-projects/a-novel"},
+		{name: "Error/MalformedEntry", stacks: "no-path-here", wantErr: true},
 	}
+
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			t.Setenv(EnvVar, testCase.stacks)
+			t.Setenv(stacks.EnvVar, testCase.stacks)
 			t.Setenv("HOME", "/home/tester")
-			got, err := Default()
-			if (err != nil) != testCase.wantErr {
-				t.Fatalf("Default() error = %v, wantErr %v", err, testCase.wantErr)
+
+			got, err := stacks.Default()
+			if testCase.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
 			}
-			if got.Path != testCase.want {
-				t.Errorf("Default().Path = %q, want %q", got.Path, testCase.want)
-			}
+			require.Equal(t, testCase.want, got.Path)
 		})
 	}
 }

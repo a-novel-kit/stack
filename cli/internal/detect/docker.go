@@ -82,11 +82,11 @@ func dockerfileRequiredSecretIDs(path string) []string {
 	}
 
 	var ids []string
-	for _, line := range strings.Split(string(raw), "\n") {
+	for line := range strings.SplitSeq(string(raw), "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "#") {
 			continue
 		}
-		for _, token := range strings.Fields(line) {
+		for token := range strings.FieldsSeq(line) {
 			mount, isMount := strings.CutPrefix(token, "--mount=")
 			if !isMount {
 				continue
@@ -104,7 +104,7 @@ func dockerfileRequiredSecretIDs(path string) []string {
 func requiredSecretID(mount string) string {
 	var id string
 	var secret, required bool
-	for _, option := range strings.Split(mount, ",") {
+	for option := range strings.SplitSeq(mount, ",") {
 		switch {
 		case option == "type=secret":
 			secret = true
@@ -160,8 +160,8 @@ func imageName(filename string) string {
 	// The "kind" is the first dot-separated segment: for "standalone.grpc" it
 	// is "standalone"; for "rotate-keys" it is "rotate-keys".
 	head := base
-	if i := strings.IndexByte(base, '.'); i >= 0 {
-		head = base[:i]
+	if before, _, ok := strings.Cut(base, "."); ok {
+		head = before
 	}
 
 	if _, isJob := jobBasenames[head]; isJob {

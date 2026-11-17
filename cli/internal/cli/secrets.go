@@ -91,7 +91,7 @@ func setSecret(out io.Writer, id string) error {
 		return errors.New("secrets set: <id> must not be empty")
 	}
 	if !stdinIsTTY() {
-		return errors.New("secrets set: refusing to run non-interactively — a secret " +
+		return errors.New("secrets set: refusing to run non-interactively: a secret " +
 			"is read with no echo from a terminal, so it must be set by a human. Run it yourself")
 	}
 	_, _ = fmt.Fprintf(out, "Enter value for %q (input hidden): ", id)
@@ -103,7 +103,7 @@ func setSecret(out io.Writer, id string) error {
 		return fmt.Errorf("secrets set: read value: %w", err)
 	}
 	if len(value) == 0 {
-		return errors.New("secrets set: empty value — nothing stored")
+		return errors.New("secrets set: empty value, nothing stored")
 	}
 	st, err := secrets.Open()
 	if err != nil {
@@ -137,7 +137,7 @@ func listSecrets(out io.Writer) error {
 	}
 	ids := st.List()
 	if len(ids) == 0 {
-		_, _ = fmt.Fprintln(out, "no secrets set — use `a-novel secrets set <id>`")
+		_, _ = fmt.Fprintln(out, "no secrets set: use `a-novel secrets set <id>`")
 		return nil
 	}
 	for _, id := range ids {
@@ -212,8 +212,7 @@ func execWithSecrets(cmd *cobra.Command, envPairs, argv []string) error {
 	child.Stdout = cmd.OutOrStdout()
 	child.Stderr = cmd.ErrOrStderr()
 	if err := child.Run(); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			return &ExitError{Code: exitStatus(exitErr)}
 		}
 		return fmt.Errorf("secrets exec: %w", err)
