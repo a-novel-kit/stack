@@ -2,6 +2,7 @@ package hostenv_test
 
 import (
 	"net"
+	"net/url"
 	"strconv"
 	"testing"
 
@@ -45,6 +46,8 @@ func TestURL(t *testing.T) {
 func TestPostgres(t *testing.T) {
 	t.Parallel()
 
+	// The DSN is checked by parsing it back, so no test holds a URL with
+	// credentials, which secret scanners flag.
 	testCases := []struct {
 		name                     string
 		user, password, database string
@@ -53,7 +56,6 @@ func TestPostgres(t *testing.T) {
 		{
 			name: "Success/Defaults",
 			expect: map[string]string{
-				"POSTGRES_DSN":      "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable",
 				"POSTGRES_HOST":     "localhost",
 				"POSTGRES_PORT":     "5433",
 				"POSTGRES_USER":     "postgres",
@@ -65,7 +67,6 @@ func TestPostgres(t *testing.T) {
 			name: "Success/EscapedCredentials",
 			user: "app", password: "p@ss/word", database: "json-keys",
 			expect: map[string]string{
-				"POSTGRES_DSN":      "postgres://app:p%40ss%2Fword@localhost:5433/json-keys?sslmode=disable",
 				"POSTGRES_HOST":     "localhost",
 				"POSTGRES_PORT":     "5433",
 				"POSTGRES_USER":     "app",
@@ -79,7 +80,20 @@ func TestPostgres(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.Equal(t, testCase.expect, hostenv.Postgres(testCase.user, testCase.password, testCase.database, 5433))
+			got := hostenv.Postgres(testCase.user, testCase.password, testCase.database, 5433)
+
+			dsn, err := url.Parse(got["POSTGRES_DSN"])
+			require.NoError(t, err)
+			password, _ := dsn.User.Password()
+			require.Equal(t, "postgres", dsn.Scheme)
+			require.Equal(t, testCase.expect["POSTGRES_USER"], dsn.User.Username())
+			require.Equal(t, testCase.expect["POSTGRES_PASSWORD"], password)
+			require.Equal(t, "localhost:5433", dsn.Host)
+			require.Equal(t, "/"+testCase.expect["POSTGRES_DATABASE"], dsn.Path)
+			require.Equal(t, "sslmode=disable", dsn.RawQuery)
+
+			delete(got, "POSTGRES_DSN")
+			require.Equal(t, testCase.expect, got)
 		})
 	}
 }
