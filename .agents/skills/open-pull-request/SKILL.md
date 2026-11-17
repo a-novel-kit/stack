@@ -98,7 +98,8 @@ the full test suite to publish agreed work, disable CI, or weaken existing asser
 **Before merge:** after scope approval, complete and run the full relevant regression suite, review
 coverage, and finish code cleanup. Client-side changes include affected Playwright tests and
 reviewed screenshot comparisons. Run applicable lint, type, test, and build checks; skip targets
-the change cannot affect. CI confirms local verification.
+the change cannot affect. CI confirms local verification. Every review thread, nits included, is
+fixed or answered, then resolved: a PR reaches the developer for merge with no open thread.
 
 ```bash
 # 1. LINT — pnpm scripts (lint/format/generate are NOT a-novel CLI verbs):

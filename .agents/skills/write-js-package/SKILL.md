@@ -45,9 +45,10 @@ published package is `@a-novel/<service-slug>-rest`, the private test project is
 `<service-slug>-rest-test-project`, and the client class is the slug in PascalCase without its
 `service-` prefix — `service-narrative-engine` gives `NarrativeEngineApi`. Both packages are pnpm
 workspace members, listed in `pnpm-workspace.yaml` and in the root `package.json` `workspaces`
-array. The test project declares no dependency of its own. Renovate's `:ignoreModulesAndTests`
-preset skips `**/test/**`, so a version pinned there never moves; its dependencies live in the root
-`package.json`, which Renovate watches.
+array. The test project declares no dependency of its own, workspace links included: the root
+`package.json`, which Renovate watches, declares everything it imports, the client as `workspace:*`
+too. Renovate's `:ignoreModulesAndTests` preset skips `**/test/**`, so a version pinned there would
+never move, and one form for every dependency holds across the fleet.
 
 `vite.config.ts` is one call to `ViteLibrary` from `@a-novel-kit/nodelib-config/vite-library`:
 

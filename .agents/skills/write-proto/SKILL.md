@@ -270,10 +270,11 @@ Wire-safe (non-breaking) changes:
 | Add a new RPC           | Old clients never call it                               |
 | Add or change a comment | No runtime impact                                       |
 
-Renaming is never the safe refactor it looks like — buf rejects it at `FILE` level. To rename a
+Renaming is never the safe refactor it looks like: buf rejects it at `FILE` level. To rename a
 field, add a new field with the correct name and a new number, and name the new field in the old
-one's comment, with no `Deprecated:` paragraph: protoc-gen-go copies the comment into the generated
-Go, where staticcheck's SA1019 fails every consumer still reading the old field. Remove the old field
+one's comment, with no `Deprecated:` paragraph and no `deprecated = true` option: protoc-gen-go
+turns either into a `Deprecated:` comment in the generated Go, where staticcheck's SA1019 fails
+every consumer still reading the old field. Remove the old field
 in a coordinated release once no consumer reads it.
 
 An intended break, such as a package that was never released or a planned major, needs no admin

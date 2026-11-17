@@ -90,7 +90,7 @@ library, graduated packages included, and none needs a major.
   replacement takes a new name: `httpf.NewMux` and `grpcf.NewGRPCServer` replace `httpf.NewRouter`
   and `grpcf.NewServer`, whose ignored tracing argument sits before others.
 
-A helper that a newer upstream subsumes follows the same two rules.
+A helper that a newer upstream subsumes follows these rules.
 
 ---
 

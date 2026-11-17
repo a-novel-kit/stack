@@ -21,8 +21,8 @@ Before writing code, check OpenTofu, the providers, Kubernetes, its operators an
 - **Inline workflow steps** call `tofu`, `gh`, `gcloud`, `jq` and `curl` directly.
 - **A shared step sequence** becomes a repository composite action: `.github/actions/tofu` plans,
   enforces the policy, copies images and applies.
-- **Roots are found on disk.** `drift.yaml` checks each directory under `environments/production`,
-  and each root's `plan-<root>` job in `main.yaml` is its required check.
+- **Roots are found on disk.** `drift.yaml` checks `bootstrap` and each directory under
+  `environments/production`, and each root's `plan-<root>` job in `main.yaml` is its required check.
 - **Bash** runs the workflow steps that mostly call `tofu`, `gh`, `gcloud`, `skopeo` or `jq`.
   `smoke.sh` is POSIX `sh`, since it runs inside each service's own image.
 - **Workflow rules that can stop or misdeploy production live in tested scripts:** zero-dependency

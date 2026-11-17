@@ -47,6 +47,10 @@ issues, pull requests and replies. It spends width for nothing and reads as mach
 period, a colon, a comma or parentheses instead. A page title separates the page from the brand
 with `|`, and an empty table cell stays empty.
 
+Never write a URL that carries credentials, a user and a password before its host, in docs,
+guides, tests or comments, even with fake values: GitHub secret scanning alerts on it. Name the
+variables instead. A pre-existing localhost fixture may stay.
+
 Prefer the smallest complete solution: fewer instructions for a reader to hold, fewer moving parts,
 and clear, idiomatic control flow. Preserve required behavior and the project's architecture,
 dependency policy, security, and testing standards. Simplify the whole affected path before

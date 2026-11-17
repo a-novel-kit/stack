@@ -131,8 +131,9 @@ runs:
   `<tag>@sha256:<digest>`.
 - An action that reads the repository checks it out itself, with `persist-credentials: false`, so
   a job that runs only that action needs no checkout step. That checkout removes untracked files, so
-  an earlier step's output in the workspace is gone. `build-actions/compose-up` starts services for
-  the job's later steps and reads the job's own checkout.
+  an earlier step's output in the workspace is gone. An action that inspects what earlier steps
+  left, or needs the caller's history, reads the job's own checkout: `check-changes`,
+  `check-append-only`, `refresh-apko-locks` and `build-actions/compose-up`.
 - Shell helpers several actions share live in a file beside the action folders, such as
   `generic-actions/landing.sh`. The runner downloads the whole repository at the action's tag, so a
   step loads it with `source "$GITHUB_ACTION_PATH/../landing.sh"`, under a
@@ -328,8 +329,8 @@ a-novel/infra's GitHub root decides which jobs gate the default branch, as its
 describes. The required set is `merge-gate`, `epic-freeze`, `review-gate` and `check-dependencies`,
 plus every job declared in the repo's `.github/workflows/main.yaml`, minus three exclusions: IDs
 starting with `report-` (reporting and post-merge jobs), jobs whose `if:` restricts them to master,
-and tag-only jobs whose `if:` holds `github.ref_type == 'tag'`, since a job that never runs on a PR
-cannot gate one.
+and tag-only jobs whose `if:` holds `github.ref_type == 'tag'` (a-novel/infra#1708), since a job
+that never runs on a PR cannot gate one.
 
 Adding a job to `main.yaml` therefore adds a required check once it reaches the default branch: the
 root's sweep reads changed workflows every 10 minutes. Renaming or removing one leaves its old
