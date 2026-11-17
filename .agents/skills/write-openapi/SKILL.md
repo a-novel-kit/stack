@@ -311,8 +311,8 @@ The spec must exactly mirror what the Go handlers return. Rules:
   in the handler. If the handler can never return 422, do not document 422.
 - Every response schema field must correspond to a field the handler actually serializes.
   Check the JSON tags on the Go struct.
-- Parameter `required: true` must match whether the handler actually validates and
-  rejects missing inputs with 400.
+- Parameter `required: true` must match whether the handler actually rejects a missing input:
+  400 when the decoder rejects it, 422 when core validation does.
 - The `usage` parameter values documented as examples must match the registered usages
   in `internal/config/jwks.config.yaml` (`auth`, `auth-refresh`). Those are named signing
   configuration identifiers, not JWK `use` values (`sig`, `enc`).
@@ -339,11 +339,13 @@ table:
 | Conditional `GET` on an unchanged resource  | `304`         | the `ETag` and `Cache-Control` of 200 |
 | Redirect after a `POST` (POST/redirect/GET) | `303`         | `Location`                            |
 | Moved, temporarily or for good, method kept | `307` / `308` | `Location`                            |
+| Request that fails to decode                | `400`         |                                       |
 | Missing or invalid credentials              | `401`         | `WWW-Authenticate`                    |
 | Authenticated but not allowed               | `403`         |                                       |
 | Method not served on this path              | `405`         | `Allow`                               |
 | Write conflicts with the current state      | `409`         |                                       |
 | `If-Match` or `If-Unmodified-Since` failed  | `412`         |                                       |
+| Request decodes but fails validation        | `422`         |                                       |
 | Rate limited                                | `429`         | `Retry-After`                         |
 
 - **Never `301` or `302`.** A client may turn a redirected `POST` into a `GET` on either, so the
@@ -371,7 +373,7 @@ responses:
   "200":
     $ref: "#/components/responses/jwkGet"
   "400":
-    $ref: "#/components/responses/badRequest" # only if the handler validates input
+    $ref: "#/components/responses/badRequest" # only if the handler decodes input
   "404":
     $ref: "#/components/responses/notFound" # only if the handler returns 404
   default:

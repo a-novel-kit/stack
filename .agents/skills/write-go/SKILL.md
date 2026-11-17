@@ -145,7 +145,8 @@ layer/role prefixes (`pg.*`, `rest.*`, `grpc.*`, `*.config.go`, `common.go`, …
   for `context.Context`, `err` for errors, `i` / `k` / `v` in range loops, `t` for `*testing.T`.
 - **Initialisms keep Go's casing**: `ID`, `URL`, `JSON`, `JWT`, `HTTP`, `SQL`, `TTL`, `DSN`, `KID`,
   as in `GcloudProjectID`, `GrpcURL` and `PostgresDSN`. An initialism that _starts_ an unexported
-  identifier goes all-lowercase: `id`, `url`.
+  identifier goes all-lowercase: `id`, `url`. staticcheck's `ST1003` checks the common ones in every Go
+  repository.
 - **Layer and protocol prefixes are words**: `Rest`, `Grpc`, `Pg`, `Jwk`, `Dao`, as in
   `RestJwkGet`, `GrpcClaimsSign`, `PgJwkSearch` and `JwkSearchDao`. Generated code keeps the casing
   its generator chose, such as protobuf's `GetId`.
@@ -162,18 +163,23 @@ Every type with a constructor uses `New<TypeName>(deps...) *<TypeName>`. Return 
 pointer, not an interface — unless the concrete type is genuinely an implementation detail hidden
 by design (e.g. a `pkg/go` client behind an interface).
 
-**Always the composite-literal form**, never `new(T)`:
+**Always the composite-literal form** for a struct, never `new(T)`:
 
 ```go
-// WRONG — `new(T)` is a second style for the same thing; mixing the two is noise.
+// WRONG: `new(T)` is a second style for the same thing; mixing the two is noise.
 func NewPgUserSelect() *PgUserSelect { return new(PgUserSelect) }
 
-// CORRECT — reads identically whether the struct is empty or has fields.
+// CORRECT: reads identically whether the struct is empty or has fields.
 func NewPgUserSelect() *PgUserSelect              { return &PgUserSelect{} }
 func NewUserSearch(r UserSearchDao) *UserSearch { return &UserSearch{dao: r} }
 ```
 
-Treat any `new(T)` you find as cleanup-on-sight when the file is already in scope.
+Treat any `new(T)` of a struct as cleanup-on-sight when the file is already in scope.
+
+**`new(expr)` makes a pointer to a value.** Go 1.26 accepts an expression, as in
+`new(time.Now())`, so `new(expr)` replaces `lo.ToPtr(expr)` and every pointer helper of its kind.
+The `modernize` linter, enabled in every Go repository, reports these and the other idioms a newer
+Go release offers, such as `errors.AsType` in place of a declared target and `errors.As`.
 
 ---
 

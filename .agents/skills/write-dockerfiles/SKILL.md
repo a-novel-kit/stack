@@ -64,7 +64,7 @@ All Go images follow the same two-stage build pattern.
 ### Builder stage
 
 ```dockerfile
-FROM docker.io/library/golang:1.26.2-alpine AS builder
+FROM docker.io/library/golang:1.27.4-alpine AS builder
 
 # Produce a fully static binary with no C library dependency: required on Alpine (musl
 # libc), and it keeps the final image free of dynamic linker dependencies.
@@ -76,7 +76,8 @@ WORKDIR /app
 # go mod download runs before any source COPY, so the module cache layer survives rebuilds
 # that only touch source. Only go.mod or go.sum invalidates it.
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 # ── Optional: install tools used in the final image ────────────────────────────────────
 # A tool the image needs (grpcurl for a healthcheck, say) installs here — after go mod
@@ -84,17 +85,20 @@ RUN go mod download
 RUN GOBIN=/usr/local/bin go install github.com/fullstorydev/grpcurl/cmd/grpcurl@v1.9.3
 
 # ── Copy source files ──────────────────────────────────────────────────────────────────
-# Copy only the packages this binary needs, never the entire repo: keeps the build context
-# small and avoids invalidating unrelated caches.
-COPY ./cmd/grpc ./cmd/grpc
-COPY ./internal/handlers ./internal/handlers
-# ... other internal packages the binary imports
+# Copy the Go source directories whole. .dockerignore drops tests and docs, and the go-build
+# cache mount recompiles only the packages that changed, so a new internal package or
+# embedded asset needs no Dockerfile edit.
+COPY ./cmd ./cmd
+COPY ./internal ./internal
+# COPY ./pkg/go ./pkg/go   (only when the binary imports pkg/go)
 
 # ── Build ──────────────────────────────────────────────────────────────────────────────
 # -ldflags="-s -w" strips symbol table and DWARF debug info, reducing binary size ~30%.
 # -trimpath removes local filesystem paths from the binary for reproducible builds.
 # Use a package path (./cmd/grpc/) not a file path (cmd/grpc/main.go).
-RUN go build -ldflags="-s -w" -trimpath -o /grpc ./cmd/grpc/
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -ldflags="-s -w" -trimpath -o /grpc ./cmd/grpc/
 ```
 
 **Layer ordering rule**: the order of instructions is strictly:
@@ -202,9 +206,11 @@ They run to completion and exit.
 ## Database Image
 
 Every service with a database ships the same image recipe: signed Wolfi packages assembled by apko,
-plus pgBackRest built from its checksum-verified upstream release. Copy `builds/database.Dockerfile`
-and `builds/database.apko.yaml` from `service-json-keys`, then add the service's own packages and
-init SQL.
+plus pgBackRest built from its checksum-verified upstream release. Each service keeps its own copy
+of the recipe. Copy `builds/database.Dockerfile`, `builds/database.apko.yaml` and
+`builds/database.builder.apko.yaml` from `service-template`, then add the service's own packages
+and init SQL. The copies match the template's except for two things: the versions, which Renovate
+moves, and what the service needs, such as genai's pg_cron. Any other difference is drift to fix.
 
 Production runs the image under CloudNativePG, whose instance manager replaces the entrypoint and
 whose Barman Cloud plugin takes the backups. Infra relies on UID/GID 999, the PostgreSQL binaries

@@ -22,8 +22,10 @@ or signatures.
 (`EXPECT`, `.Once()`, `mock.MatchedBy`) and JSON comparison utilities. Misuse yields silent
 false-positives and missed failures.
 
-**Never remove existing tests** unless the feature they cover is fully deprecated and removed from
-the codebase. Fix a stale or failing test; do not delete it.
+**Keep every test that asserts something no other test does.** Fix a stale or failing test; do not
+delete it. A test may go in three cases only: its feature is removed, another test in the repository
+already makes each of its assertions, or the dependency's own test suite covers each of its
+assertions.
 
 ---
 
@@ -39,6 +41,11 @@ For layer-specific behavior load `write-go-service` or `write-go-kit` as appropr
 Pick the closest truthful layer that exposes the changed behavior. Reuse established cases and
 fixtures; do not create a second assertion of the same fact at every layer. Preserve coverage of
 different contracts and failure paths. The selected references are conventions, not optional examples.
+
+**Test each shared helper and each shared error map once.** One representative caller covers every
+branch of a helper, such as an ownership preflight, and every entry of a shared error map. Each
+operation then keeps four kinds of case: its success, the errors it raises itself, its transaction
+case when it writes inside one, and one case proving which shared helper or map it wires.
 
 ## Timing and validation
 
@@ -170,7 +177,7 @@ lifetime to the test, so in-flight operations are cancelled when the test ends.
 
 ## Layer-specific test patterns
 
-DAO tests against a real Postgres in a rolled-back transaction, service tests wiring layered mocks,
+DAO tests against a real Postgres database of their own, service tests wiring layered mocks,
 REST and gRPC handler test shapes, how `lib` and `pkg/go` tests differ — that is
 clean-architecture-service detail, and it lives in **`write-go-service`**. Load that skill when
 writing tests inside an `a-novel` service. Shared libraries under `a-novel-kit` have no such
@@ -213,7 +220,8 @@ it?" If not, it is not worth writing.
 
 ## Common Pitfalls
 
-- **Removing tests.** Delete a test only once its feature is gone; otherwise fix it.
+- **Removing tests.** Delete a test only once its feature is gone or another suite makes each of
+  its assertions; otherwise fix it.
 - **Misnamed test functions.** The name must match the type under test exactly: `TestGrpcJwkGet`,
   not `TestJwkGet`.
 - **Missing `t.Parallel()`.** Every test function and every sub-test calls it, absent a documented
@@ -237,14 +245,14 @@ it?" If not, it is not worth writing.
 - **`assert` instead of `require`.** Always use `require` in test bodies.
 - **`context.Background()` in test bodies.** Use `t.Context()` instead.
 - **Hard-coding mock expectations for context.** Always use `mock.Anything` for `ctx`.
-- **Skipping `AssertExpectations`.** Call it for every mock, even when only the happy path was
-  reached — it catches unexpected calls too.
+- **Calling `AssertExpectations` by hand.** The generated constructor already registers it with
+  `t.Cleanup`. Delete the explicit call.
 - **Asserting response body on error paths.** For REST handlers, assert only the status code on
   error cases. The body is an implementation detail.
 - **Mocking the database in DAO tests.** DAO tests always use a real database via
-  `postgres.RunIsolatedTransactionalTest`. Mocks belong in service and handler tests.
+  `postgrestest.RunDBTest`. Mocks belong in service and handler tests.
 - **Using DAO sentinels in handler tests.** Handler tests must not import `dao`. Their service mock
-  returns the _core-layer_ sentinel (e.g., `core.ErrJwkNotFound`), not the DAO one
-  (`dao.ErrJwkSelectNotFound`), mirroring what the real service returns after translation and
+  returns the _core-layer_ sentinel (e.g., `core.ErrUserNotFound`), not the DAO one
+  (`dao.ErrUserNotFound`), mirroring what the real service returns after translation and
   keeping the test honest about the handler's contract.
 - **Running the full suite during incremental work.** Scope it — see "After every edit".

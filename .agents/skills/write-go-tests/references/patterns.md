@@ -108,11 +108,6 @@ if testCase.serviceMock != nil {
 }
 ```
 
-**Always call `AssertExpectations`** at the end of each sub-test for every mock:
-
-```go
-service.AssertExpectations(t)
-repository.AssertExpectations(t)
-```
-
-It verifies every registered expectation was called.
+**The constructor asserts the expectations.** `NewMockX(t)` registers `mock.AssertExpectations(t)`
+with `t.Cleanup`, so every sub-test ends by checking that each registered expectation was called.
+Never call `AssertExpectations` yourself.

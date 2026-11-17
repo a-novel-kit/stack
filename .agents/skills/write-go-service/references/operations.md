@@ -51,8 +51,10 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
 
 - **A cap on a request field is a validator tag**, never a config value or a hand-written check.
   `validate:"required,max=2097152"` caps a `json.RawMessage` at 2 MiB, and `validate:"max=500"` caps
-  a slice. When no built-in tag expresses the rule, register a custom one on the package's
-  `validate` instance with `RegisterValidation`, as `notblank` is. A cap the schema already holds
+  a slice. When no built-in tag expresses the rule, look in the validator's
+  `non-standard/validators` package next, which holds `NotBlank` for the `notblank` tag. Register
+  a custom one on the package's `validate` instance with `RegisterValidation` only when neither
+  holds the rule. A cap the schema already holds
   reuses its value and needs no setting of its own. Rate and concurrency limits stay configuration
   (see [request limits](request-limits.md)).
 - **A known set is a Go slice behind a custom tag**, never `oneof`. `ProjectLanguages` lists the
@@ -68,10 +70,10 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
   }
   ```
 
-- **Every write has a single and a batch operation.** A create, an update, a delete and a content
-  write each come twice, singular for one item and plural for a batch: `SceneCreate` and
-  `ScenesCreate`, `SceneUpdate` and `ScenesUpdate`, `SceneDelete` and `ScenesDelete`, `CellWrite`
-  and `CellsWrite`. Each has its own DAO (`PgSceneInsert` and `PgScenesInsert`), handler and route.
+- **A single write goes through its batch operation.** A create, an update, a delete and a content
+  write each have one core operation and one DAO, both plural: `ScenesCreate` and
+  `PgScenesInsert`, `ScenesUpdate`, `ScenesDelete`, `CellsWrite`. The single route keeps its own
+  handler, which sends a batch of one item to the batch operation and answers with its one result.
   A move stays single. The client chooses how much each request carries, and balances bandwidth and
   load itself. A batch takes at most 100 items, `validate:"required,min=1,max=100,dive"`, and
   applies all of them or none. A list of IDs adds `unique` before `dive`, a list of items that carry
@@ -109,8 +111,9 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
 - **A preflight repeated across services becomes a helper** in the layer's `common.go`. It takes the
   dependency and an options struct, and opens its own span, as every core function that takes a
   context does (see [telemetry](telemetry.md)). The ownership check is one, and `lockOwnedProject`
-  has the same shape around the lock (see [ownership](data-access.md#ownership)). Each service still
-  declares its own DAO interface, which satisfies the helper's:
+  has the same shape around the lock (see [ownership](data-access.md#ownership)). The helper's DAO
+  interface is declared once, in `common.go`, and every service that runs the preflight types its
+  field and constructor parameter with it:
 
   ```go
   // projectOwnerDao checks that a user owns a project.
@@ -234,7 +237,10 @@ func NewRestUserList(service RestUserListService, logger logging.Log) *RestUserL
 
 - **REST is public-facing.** Never leak internal error detail. Map each expected sentinel to a
   status with the project's error-mapping helper (`httpf.HandleError` + `httpf.ErrMap`); the
-  helper's fallback covers unmapped errors as 500. `httpf.HandleError` marks the span failed for a
+  helper's fallback covers unmapped errors as 500.
+- **A refusal takes the status of its cause.** A request that fails to decode answers 400. A
+  request that decodes but fails core validation (`core.ErrInvalidRequest`) answers 422. A refusal
+  that depends on stored state, such as a duplicate or a full project, answers 409. `httpf.HandleError` marks the span failed for a
   5xx and leaves a 4xx unset, so never add a separate report on a path that goes through it (see
   Telemetry).
 - Conventional short names `w` / `r`. JSON in via `json.NewDecoder(r.Body)` or `gorilla/schema` for

@@ -313,16 +313,10 @@ That grep:
   the same either way.
 - Seeds the **consumer-migration list** in step 2 below, tracked explicitly so no consumer is
   forgotten and fails silently at step 3 (removal).
-- Surfaces the case where the "shared" symbol has **zero in-org consumers**, and lets you decide what
-  that means for _this particular symbol_. For an internal / not-yet-public helper (a fresh `golib`
-  sub-package no service imports yet, a service's private `pkg/go` symbol), zero consumers usually
-  means the additive-then-deprecate dance is over-engineering and the symbol can be removed directly.
-  For a **graduated / community-facing package** (`a-novel-kit/jwt` and any future graduate — see
-  `write-go-kit`'s graduation rules), the workspace grep does **not** see external pkg.go.dev
-  consumers, so staged removal still applies at zero in-org hits: the discipline is the public API
-  contract, not the consumer count. Similarly, a single in-org consumer of a `golib` helper may
-  signal it belongs inlined into that consumer (`write-go-kit`'s "should this go in golib?" bar) —
-  a `golib`-specific rule, since graduated packages stay staged regardless.
+- Surfaces the case where the shared symbol has **zero consumers in either organization**. A
+  library export no repository uses goes in one minor release with a migration guide, with no
+  deprecation step. The rule covers every kit library, graduated packages such as `a-novel-kit/jwt`
+  included ([write-go-kit](../write-go-kit/SKILL.md#removing-from-golib)).
 
 Grep commands from the workspace root (the directory holding `app/` and `kit/`), by symbol kind:
 
@@ -362,11 +356,8 @@ removal step. Catch it now, not then.
    rule), each releasing once green. Tick consumers off the list as their PRs land; an empty list means step 3 is safe.
 3. **Remove the old path.** Once _every_ consumer is off it, a follow-up PR in the dependency deletes
    the old symbol/field/endpoint/column. _This_ is the breaking change, now safe because nothing uses
-   the old path. Release it (a major bump for a graduated package / `pkg/go`; for a service's
-   internal-only contract, the version policy still applies).
-
-The major-version bump in step 3 is **signalling** — it tells consumers "the old path is gone". It
-does not license skipping steps 1–2: a major bump that strands consumers is still a broken release.
+   the old path. Release it as a minor with a migration guide: a small break never takes a major
+   (see `prepare-release`).
 
 This shape recurs everywhere; the layer skills carry the specifics:
 
@@ -444,8 +435,8 @@ commits and then re-releasing — never by rewriting a tag.
 - **One PR that flips a public API / proto / endpoint / column old → new.** Stage it, so there is
   always a both-work window.
 - **`BREAKING CHANGE:` footer on the additive step.** It goes on the removal step (step 3).
-- **A major bump used as a shortcut.** It signals "old path removed"; it does not excuse skipping
-  the consumer migration.
+- **A major bump used as a shortcut.** A removal ships in a minor once no consumer uses the old
+  path; no version number excuses skipping the consumer migration.
 - **A release pinned in a feature branch.** It conflicts with every Renovate merge on the same
   lines and asks the feature's reviewer for a dependency label. Dispatch Renovate and rebase on its
   bump instead, as [bring a release through Renovate](#bring-a-release-through-renovate) shows.

@@ -25,9 +25,6 @@ core's validator checks the request, and the core checks ownership (see [Ownersh
 //go:embed pg.userSelect.sql
 var userSelectQuery string
 
-// ErrUserSelectNotFound is returned when no user matches the requested ID.
-var ErrUserSelectNotFound = errors.New("user not found")
-
 // UserSelectRequest holds the parameters for a [PgUserSelect.Exec] call.
 type UserSelectRequest struct {
     ID uuid.UUID
@@ -53,7 +50,7 @@ func (dao *PgUserSelect) Exec(ctx context.Context, request *UserSelectRequest) (
 
     err = db.NewRaw(userSelectQuery, request.ID).Scan(ctx, &user)
     if errors.Is(err, sql.ErrNoRows) {
-        err = errors.Join(err, ErrUserSelectNotFound)
+        err = errors.Join(err, ErrUserNotFound)
     }
 
     if err != nil {
@@ -63,6 +60,10 @@ func (dao *PgUserSelect) Exec(ctx context.Context, request *UserSelectRequest) (
     return &user, nil
 }
 ```
+
+**An entity has one not-found sentinel.** `ErrUserNotFound` lives in the layer's `common.go`, and
+every DAO that misses a user joins it. Core re-exports it once, as `core.ErrUserNotFound`, so every
+handler maps one name.
 
 The file reads in one order: the embedded query, the sentinels, the request, the struct, its
 constructor, then `Exec`. `Exec` opens its span, then repeats one shape: a call, then the block that

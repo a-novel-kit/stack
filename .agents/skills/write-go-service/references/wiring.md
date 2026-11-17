@@ -16,9 +16,9 @@ Configuration structs + loading from env vars or YAML. No logic beyond parsing a
   defaults. A service that needs another default overrides it on a copy of
   `httpf.ServerConfigDefault` (or `grpcf.ServerConfigDefault`), next to the reason.
 - **Servers come from golib, one line each.** `cmd/` builds the router with
-  `httpf.NewRouter(cfg.Rest, cfg.Otel, cfg.HttpLogger, cfg.App.DowntimeStart)` and runs it with
+  `httpf.NewRouter(cfg.Rest, cfg.Otel, cfg.RestLogger, cfg.App.DowntimeStart)` and runs it with
   `httpf.ListenAndServe(ctx, cfg.Rest, router)`; gRPC uses
-  `grpcf.NewServer(ctx, cfg.Otel, cfg.Logger, cfg.App.DowntimeStart, ctxInterceptor)` and
+  `grpcf.NewServer(ctx, cfg.Otel, cfg.GrpcLogger, cfg.App.DowntimeStart, ctxInterceptor)` and
   `grpcf.ListenAndServe(ctx, cfg.Grpc, server)`. Both servers take the process context: when it ends,
   requests and unary calls drain within the shutdown timeout, while gRPC streams end with
   `UNAVAILABLE` so their clients resume elsewhere. A REST request that keeps taking on work, such as
@@ -115,14 +115,16 @@ Each `cmd/<name>/main.go` wires the full dependency graph and starts a server or
 
 - Dependency injection is **explicit and manual** — no framework, no reflection. Wire everything in
   `main()` with plain constructor calls.
-- Graceful shutdown: `signal.Notify` on a channel, block on it, then stop the server
-  (`server.GracefulStop()` for gRPC, `httpServer.Shutdown(ctx)` for HTTP). Never `os.Exit`.
+- Graceful shutdown: `signal.NotifyContext` gives the process context, and golib's
+  `ListenAndServe` drains the server when it ends. Never `os.Exit`.
 
 ```go
-quit := make(chan os.Signal, 1)
-signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-<-quit
-server.GracefulStop()
+ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+defer stop()
+
+// ... wiring
+
+lo.Must0(httpf.ListenAndServe(ctx, cfg.Rest, router))
 ```
 
 ### Fault reporting

@@ -61,28 +61,33 @@ shaky, the answer is no:
 
 1. It is **pure boilerplate / glue** — no business logic, nothing a-novel-specific in its core; it
    does the same mechanical thing regardless of who calls it. (Examples already in `golib`: the
-   `otel.Report*` span helpers, `postgres.GetContext`/`RunInTx`/migration plumbing, the `logging`
+   `otel.Report*` span helpers, `postgres.GetContext`/`WithinTx`/migration plumbing, the `logging`
    presets, the `httpf` error-mapping + JSON helpers, the `config.LoadEnv` parsers.)
-2. **Several services would otherwise copy it verbatim.** One service needing it is not enough — a
-   one-off belongs inline in that service (or, reluctantly, its near-empty `internal/lib/`). Two
-   services with the same copy-paste is the bar.
+2. **It is generic.** Ask whether the code is about the domain before counting its copies.
+   Generic glue moves to `golib` with its first consumer, since a service's `internal/lib/` is a
+   holding pen. The bar rules out speculative generality: an option, hook or abstraction no caller
+   needs yet.
 3. **No dependency already covers it.** If `samber/lo`, `uptrace/bun`, an `otel` contrib package,
    or anything else in (or addable to) `go.mod` does it, use that instead.
 4. **You can't make it disappear instead.** Sometimes the right move is to delete the duplicated
    code from all the services and not have it anywhere — if the "boilerplate" is two lines, inline
    beats a `golib` symbol.
 
-When in genuine doubt: **don't add it.** Adding a symbol is cheap; removing one that other repos
-import is a coordinated cross-repo release dance (deprecate → migrate every consumer → remove —
-see `manage-versions`). That asymmetry is why the bar is high.
+When it is unclear whether the code is about the domain, ask the developer.
 
 ### Removing from golib
 
-Maintenance includes shrinking. When a newer upstream subsumes a `golib` helper, **delete the
-helper** — staged: deprecate it (a doc comment + a `// Deprecated:` line pointing at the
-replacement), drive the consumers to migrate, then remove it in a later release. (See
-`manage-versions` for the backward-compatible-staging rule; it applies to every public symbol you
-retire.)
+Maintenance includes shrinking. Survey every consumer in both organizations first
+(`manage-versions`), then follow the rule that matches the export. Both apply to every kit library,
+graduated packages included, and neither needs a major.
+
+- **An export no repository uses** goes in one minor release with a migration guide. Dead code
+  needs no deprecation.
+- **An export consumers use but that is misnamed or misshaped** gets its replacement in a minor
+  release, and the old name stays as a forwarding alias marked `// Deprecated:`. Consumers move
+  once Renovate brings the release, and a later minor removes the alias once no consumer uses it.
+
+A helper that a newer upstream subsumes follows the same two rules.
 
 ---
 
@@ -107,8 +112,9 @@ retire.)
   cross-coupling between `golib` sub-packages to the minimum the concern genuinely requires.
 - Within a sub-package, separate the **ready-made values** from the **mechanics**: `presets/`
   holds the pre-assembled configs (e.g. `otel/presets`, `postgres/presets`, `logging/presets`),
-  `utils/` (or top-level helper files) holds the functions. Keep the top-level package surface of
-  a sub-package small and stable.
+  and the sub-package's own files hold the functions. A `presets/` directory declares the package
+  `<parent>presets` (`postgrespresets`), so several presets packages never collide in one import
+  block. Keep the top-level package surface of a sub-package small and stable.
 - `golib` ships a small amount of generated code (the `grpcf` proto bits) — `buf` is in the
   toolchain (`buf.yaml`, `buf.gen.yaml`); `pnpm generate:go` runs `go generate` and `buf generate`,
   `pnpm lint:proto` runs `buf lint`, `pnpm format:proto` runs `buf format`/`buf dep update`. Treat `.proto` in
@@ -128,7 +134,7 @@ developer's call** — when you see a candidate, flag it; do not move it unpromp
 Once graduated, the package is a **public, community-facing library**, and the rules change:
 
 - **Design the API broadly, not for our needs.** A graduated package covers its _domain_, not just
-  the slice a-novel happens to use: `jwt` implements JWA / JWE / JWK / JWS / JWP, not only the two
+  the slice a-novel happens to use: `jwt` implements JWA, JWE, JWK and JWS, not only the two
   token flows the auth service needs. Design the exported surface as if strangers will build on it.
 - **Documentation beyond godoc.** `jwt`'s README is its user guide, with badges (Go version, CI
   status, codecov) and a `go get` line, and `docs/migrations/` holds its migration guides.
@@ -190,8 +196,8 @@ package, helpers, mockery where interfaces exist). The kit-flavoured additions:
 - **A single shared-fixture sub-package may use a plain name** (`testutils/` — `jwt` has one). The
   layer-prefixed-name rule in `write-go-tests` (`configtest`, `libtest`, …) keeps _several_ fixture
   packages distinct in one repo; a small library with one is fine.
-- **No service-DB harness.** Kit libraries have no `dao` layer, so there is no
-  `postgres.RunIsolatedTransactionalTest` to use, and most kit tests are pure unit tests. Where a
+- **No service-DB harness.** Kit libraries have no `dao` layer, so most kit tests are pure unit
+  tests. Where a
   sub-package wraps an external system (`postgres`, `smtp`), its tests may stand a real instance up
   via the repo's `scripts/test.sh` — follow whatever the repo already does.
 
@@ -203,11 +209,11 @@ package, helpers, mockery where interfaces exist). The kit-flavoured additions:
 
 - **Adding a thin wrapper around a good dependency to `golib`.** Use the dependency directly, even
   from a service.
-- **Putting a one-off in `golib` because it "might be reused".** Two real consumers, or it stays
-  out.
+- **Putting domain logic or speculative options in `golib`.** Generic glue belongs there from its
+  first consumer; an option no caller needs does not.
 - **Reimplementing stdlib or an existing dep in `golib`.** Rule #1: `golib` shrinks.
-- **Removing a public `golib`/graduated-package symbol in one shot.** Deprecate → migrate consumers
-  → remove later, ordered per `manage-versions`.
+- **Removing a used export in one release, or deprecating a dead one.** A used export keeps a
+  deprecated alias until no consumer uses it; a dead one goes in one minor with a guide.
 - **Designing a graduated package's API around a-novel's needs only.** Cover the domain.
 - **Authoring a bespoke `CODE_OF_CONDUCT.md` / restating the org contributing guide.** Use the
   `a-novel-kit/.github` defaults; the per-repo `CONTRIBUTING.md` only _extends_ the org-wide one.
