@@ -127,55 +127,91 @@ Each `cmd/<name>/main.go` wires the full dependency graph and starts a server or
 8. Start the server with graceful shutdown on SIGINT/SIGTERM
 ```
 
-- Dependency injection is **explicit and manual** — no framework, no reflection. Wire everything in
-  `main()` with plain constructor calls.
+- Dependency injection is **explicit and manual**: no framework, no reflection. Wire everything in
+  `main()`, or in the `newRouter` or `newServer` it calls, with plain constructor calls.
 - Graceful shutdown: `signal.NotifyContext` gives the process context, and golib's
   `ListenAndServe` drains the server when it ends. Never `os.Exit`.
 
 ```go
-ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-defer stop()
+func main() {
+    cfg := config.AppPresetDefault
 
-lo.Must0(otel.Init(cfg.Otel))
-defer cfg.Otel.Flush()
+    ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+    defer stop()
 
-ctx = lo.Must(postgres.NewContext(ctx, cfg.Postgres))
-defer cfg.Postgres.Close()
+    lo.Must0(otel.Init(cfg.Otel))
+    defer cfg.Otel.Flush()
 
-// ... DAO, core and handler wiring
+    ctx = lo.Must(postgres.NewContext(ctx, cfg.Postgres))
+    defer cfg.Postgres.Close()
 
-router := httpf.NewMux(cfg.Rest, cfg.RestLogger, cfg.App.DowntimeStart)
-withServiceToken := lo.Must(httpf.ServiceTokenGate(
-    cfg.ServiceToken, httpf.NewPoolClient(httpf.PoolOptions{}), cfg.Logger, cfg.Rest.Liveness,
-))
+    router := lo.Must(newRouter(cfg))
 
-router.Route("/v0", func(api chi.Router) {
-    api.Get("/ping", httpf.Ping)
-    api.Get("/healthcheck", httpf.Health(map[string]func(context.Context) error{
-        "client:postgres": postgres.Health,
-    }))
-    // ... one line per route
-})
+    lo.Must0(httpf.ListenAndServe(ctx, cfg.Rest, router))
+}
 
-lo.Must0(httpf.ListenAndServe(ctx, cfg.Rest, withServiceToken(router)))
+// newRouter builds the REST API behind the service-token gate, which leaves the liveness probe open.
+func newRouter(cfg config.App) (http.Handler, error) {
+    withServiceToken, err := httpf.ServiceTokenGate(
+        cfg.ServiceToken, httpf.NewPoolClient(httpf.PoolOptions{}), cfg.Logger, cfg.Rest.Liveness,
+    )
+    if err != nil {
+        return nil, fmt.Errorf("service token gate: %w", err)
+    }
+
+    // ... DAO, core and handler wiring
+
+    router := httpf.NewMux(cfg.Rest, cfg.RestLogger, cfg.App.DowntimeStart)
+
+    router.Route("/v0", func(api chi.Router) {
+        api.Get("/ping", httpf.Ping)
+        api.Get("/healthcheck", httpf.Health(map[string]func(context.Context) error{
+            "client:postgres": postgres.Health,
+        }))
+        // ... one line per route
+    })
+
+    return withServiceToken(router), nil
+}
 ```
 
-A gRPC `main` opens the same way, then serves:
+A gRPC `main` opens the same way, then serves `lo.Must(newServer(ctx, cfg))`:
 
 ```go
-serviceToken := lo.Must(grpcf.ServiceTokenGate(cfg.ServiceToken, httpf.NewPoolClient(httpf.PoolOptions{})))
-server := grpcf.NewGRPCServer(ctx, cfg.GrpcLogger, cfg.App.DowntimeStart, nil, serviceToken...)
-grpcf.RegisterHealth(ctx, server)
+// newServer builds the gRPC server behind the service-token gate, which leaves the health service open.
+func newServer(ctx context.Context, cfg config.App) (*grpc.Server, error) {
+    serviceToken, err := grpcf.ServiceTokenGate(cfg.ServiceToken, httpf.NewPoolClient(httpf.PoolOptions{}))
+    if err != nil {
+        return nil, fmt.Errorf("service token gate: %w", err)
+    }
 
-// ... one Register<Service>Server line per handler
+    // ... DAO, core and handler wiring
 
-lo.Must0(grpcf.ListenAndServe(ctx, cfg.Grpc, server))
+    server := grpcf.NewGRPCServer(ctx, cfg.GrpcLogger, cfg.App.DowntimeStart, nil, serviceToken...)
+    grpcf.RegisterHealth(ctx, server)
+
+    // ... one Register<Service>Server line per handler
+
+    return server, nil
+}
 ```
 
 - **The service token gates fail closed.** Each returns `servicetoken.ErrIssuerRequired` without
-  an issuer, unless `SERVICE_ISSUER_OPTIONAL` is true, so `lo.Must` stops the process at startup.
-  The REST gate leaves open the paths it lists, such as the liveness path. The gRPC gate leaves the
-  health service open.
+  an issuer, unless `SERVICE_ISSUER_OPTIONAL` is true. `newRouter` and `newServer` return that
+  error, so `lo.Must` in `main` stops the process at startup. The REST gate leaves open the paths it
+  lists, such as the liveness path. The gRPC gate leaves the health service open.
+- **A service tests its gate wiring, never the gate.** golib's tests cover the gate's own cases.
+  `cmd/rest`'s `TestNewRouter` and `cmd/grpc`'s `TestNewServer` build the real router or server and
+  check what the wiring decides, one row each:
+  - the liveness ping (REST) and the health service (gRPC, `SERVING`) answer without a token;
+  - a gated route, such as the healthcheck, refuses a call without a token (401, or
+    `Unauthenticated` for a unary call and a stream);
+  - a valid token passes;
+  - the opt-out admits a call without a token;
+  - an empty issuer returns `servicetoken.ErrIssuerRequired`.
+
+  a-novel/service-template#968 is the reference.
+
 - **Ping and health come from golib.** `httpf.Ping` answers the liveness path with "pong".
   `httpf.Health` runs its named probes at once, each under a span `rest.Health(<name>)`, and
   answers `{"client:postgres": {"status": "up"}}`, with 503 when a probe fails. A service writes

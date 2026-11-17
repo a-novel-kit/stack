@@ -250,8 +250,9 @@ rule — all of which apply here. The service-specific additions:
   or key stops the process at startup, and only an explicit opt-out that production never sets
   starts it without the gate. golib's `httpf.ServiceTokenGate` and `grpcf.ServiceTokenGate` return
   `servicetoken.ErrIssuerRequired` without `SERVICE_TOKEN_ISSUER`, unless `SERVICE_ISSUER_OPTIONAL`
-  is true, which only local and test stacks set. golib's tests cover the gate's cases, so a service
-  mounts the gate with `lo.Must` and writes no wrapper or test of its own.
+  is true, which only local and test stacks set. `cmd/` wires the gate in `newRouter` and
+  `newServer`, which return its error, and tests that wiring as
+  [wiring](references/wiring.md#cmd-targets) describes. golib's own tests cover the gate's cases.
 
 ---
 
