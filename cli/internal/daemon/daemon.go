@@ -62,11 +62,11 @@ func Run(ctx context.Context) error {
 	// (SERVICE_X_VAR) resolve to the owning service.
 	alloc := env.NewAllocator()
 	alloc.SetServices(disc.ServiceNames())
-	builder := env.NewBuilder(alloc)
+	builder := env.NewBuilder(alloc, paths.SecretsRoot())
 
 	// Per-target JSON-line files under $XDG_STATE_HOME/a-novel/logs, with
 	// subscriber fan-out for live streaming.
-	logStore := logs.New()
+	logStore := logs.New(paths.LogsRoot())
 	// The supervisor starts empty and fills as RPCs arrive. It shares the
 	// discovery snapshot to resolve target IDs without round-tripping through
 	// the server, and the allocator to release port refcounts on termination.
@@ -77,7 +77,19 @@ func Run(ctx context.Context) error {
 	// `a-novel install` or `core restart` starts the next daemon.
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	srv := server.New(version.String(), socketPath, disc, run, builder, logStore, stop, ctx.Done())
+	checkpoint := paths.ReinstallCheckpoint()
+	srv := server.New(server.Config{
+		Version:     version.String(),
+		SocketPath:  socketPath,
+		BackupsRoot: paths.BackupsRoot(),
+		Checkpoint:  checkpoint,
+		Stacks:      disc,
+		Runner:      run,
+		Env:         builder,
+		Logs:        logStore,
+		Stop:        stop,
+		Stopping:    ctx.Done(),
+	})
 
 	// Reconstitute the Instance and InfraSession records of every podman
 	// container carrying the adoption labels, so containers that outlived a
@@ -86,7 +98,7 @@ func Run(ctx context.Context) error {
 		fmt.Fprintf(os.Stderr, "recovery: adopted %d orphan container(s), %d target(s)\n", cN, tN)
 	}
 
-	replayCheckpoint(ctx, run)
+	replayCheckpoint(ctx, run, checkpoint)
 	return serve(ctx, ln, srv)
 }
 
@@ -140,13 +152,13 @@ func listen(ctx context.Context, socketPath string) (net.Listener, error) {
 }
 
 // replayCheckpoint relaunches the go-exec targets a prior PrepareReinstall
-// checkpointed, then drops the checkpoint. A checkpoint is used once: an
-// unusable one is reported and dropped too, so it never refuses a later
+// checkpointed at path, then drops the checkpoint. A checkpoint is used once:
+// an unusable one is reported and dropped too, so it never refuses a later
 // install. A relaunch that fails is reported and skipped, so it never blocks
 // startup.
-func replayCheckpoint(ctx context.Context, run *runner.Runner) {
-	cp, err := reinstall.Read()
-	defer func() { _ = reinstall.Delete() }()
+func replayCheckpoint(ctx context.Context, run *runner.Runner, path string) {
+	cp, err := reinstall.Read(path)
+	defer func() { _ = reinstall.Delete(path) }()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "reinstall: discarding the checkpoint: %v\n", err)
 		return
@@ -154,7 +166,7 @@ func replayCheckpoint(ctx context.Context, run *runner.Runner) {
 	if cp == nil {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "reinstall: replaying %d go-exec target(s) from %s\n", len(cp.GoExec), paths.ReinstallCheckpoint())
+	fmt.Fprintf(os.Stderr, "reinstall: replaying %d go-exec target(s) from %s\n", len(cp.GoExec), path)
 	for _, gx := range cp.GoExec {
 		if err := run.Relaunch(ctx, gx.TargetID, gx.Env); err != nil {
 			fmt.Fprintf(os.Stderr, "reinstall: relaunch %s failed: %v\n", gx.TargetID, err)

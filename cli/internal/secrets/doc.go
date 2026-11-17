@@ -6,9 +6,12 @@
 // manager prevents accidental exposure; it does not defend against a local
 // attacker who can already read the user's home directory.
 //
-//   - A 32-byte local key from crypto/rand lives at SecretsRoot()/key, mode 0600
+// The store lives in a root directory its callers pass. The CLI passes
+// $XDG_DATA_HOME/a-novel/secrets.
+//
+//   - A 32-byte local key from crypto/rand lives at <root>/key, mode 0600
 //     inside a 0700 directory. It is generated once and never overwritten.
-//   - The store at SecretsRoot()/store.enc holds a flat JSON map {secretID: value}
+//   - The store at <root>/store.enc holds a flat JSON map {secretID: value}
 //     encrypted as a whole with AES-256-GCM. Each write uses a fresh random
 //     12-byte nonce, stored as `nonce || ciphertext`, and lands atomically
 //     (temp file and rename) at mode 0600.

@@ -45,7 +45,7 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 	// container's stdout through this same RPC. Those containers belong to
 	// podman, so the branch reads `podman logs -f <cid>`.
 	if stack, service, name, ok := parseInfraLogID(tid); ok {
-		st, found := s.runner.InfraStatesOf(ctx, stack)[service+"/"+name]
+		st, found := s.cfg.Runner.InfraStatesOf(ctx, stack)[service+"/"+name]
 		if !found || st.ContainerID == "" {
 			return connect.Errorf(connect.CodeFailedPrecondition,
 				"no container for %s/%s/%s: has infra-start been run?", stack, service, name)
@@ -57,16 +57,16 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 		return err
 	}
 	// Pick the file to stream.
-	path := s.logs.CurrentPath(tgt.Stack, tgt.Service, tgt.Name)
+	path := s.cfg.Logs.CurrentPath(tgt.Stack, tgt.Service, tgt.Name)
 	if req.GetRunId() != "" {
-		path = s.logs.RunPath(tgt.Stack, tgt.Service, tgt.Name, req.GetRunId())
+		path = s.cfg.Logs.RunPath(tgt.Stack, tgt.Service, tgt.Name, req.GetRunId())
 	}
 
 	// Under --follow, subscribe before reading the file, so no line written in
 	// between is lost.
 	var sub <-chan logs.Line
 	if follow {
-		if ch, unsub, ok := s.logs.Subscribe(tid); ok {
+		if ch, unsub, ok := s.cfg.Logs.Subscribe(tid); ok {
 			defer unsub()
 			sub = ch
 		}
@@ -115,7 +115,7 @@ func (s *Server) ListRuns(_ context.Context, req *anovelv1.ListRunsRequest) (*an
 		return nil, err
 	}
 	return &anovelv1.ListRunsResponse{
-		RunIds: s.logs.ListRuns(tgt.Stack, tgt.Service, tgt.Name),
+		RunIds: s.cfg.Logs.ListRuns(tgt.Stack, tgt.Service, tgt.Name),
 	}, nil
 }
 

@@ -16,13 +16,11 @@ import (
 // lifecycle. Each test stands up a real Store backed by a tempdir, so the
 // file-write side effects stay out of the way of the fanout assertions.
 
-// withStore returns a fresh Store and a target ready for writes, under the
-// targetID "default/test/x". Teardown drops the XDG_STATE_HOME override so an
-// adjacent test cannot pick up this directory.
+// withStore returns a fresh Store under a temp root and a target ready for
+// writes, under the targetID "default/test/x".
 func withStore(t *testing.T) (*Store, string, *Writer) {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	s := New()
+	s := New(t.TempDir())
 	const id = "default/test/x"
 	w, err := s.OpenForWrite(id, "default", "test", "x")
 	if err != nil {
@@ -32,9 +30,12 @@ func withStore(t *testing.T) (*Store, string, *Writer) {
 	return s, id, w
 }
 
-//nolint:paralleltest // every sub-test sets XDG_STATE_HOME through withStore
 func TestStore(t *testing.T) {
+	t.Parallel()
+
 	t.Run("Success/SubscribeRoundtrip", func(t *testing.T) {
+		t.Parallel()
+
 		s, id, w := withStore(t)
 		ch, unsub, ok := s.Subscribe(id)
 		require.True(t, ok, "Subscribe on a live target")
@@ -52,6 +53,8 @@ func TestStore(t *testing.T) {
 	})
 
 	t.Run("Success/UnsubscribeRemovesFromFanout", func(t *testing.T) {
+		t.Parallel()
+
 		// The subscribers list returns to zero length once every subscriber
 		// unsubscribes, so a long-lived target sheds the ones that leave.
 		s, id, w := withStore(t)
@@ -83,6 +86,8 @@ func TestStore(t *testing.T) {
 	})
 
 	t.Run("Success/UnsubscribeDuringWrite", func(t *testing.T) {
+		t.Parallel()
+
 		// Race the unsub against an in-flight stream of writes. Holding ts.mu
 		// through the fanout, and leaving the channel open on unsub, is what keeps
 		// every iteration clear of a "send on closed channel" panic.
@@ -104,6 +109,8 @@ func TestStore(t *testing.T) {
 	})
 
 	t.Run("Error/SubscribeAfterClose", func(t *testing.T) {
+		t.Parallel()
+
 		s, id, w := withStore(t)
 		_ = w.Close()
 		s.CloseTarget(id)
@@ -115,6 +122,8 @@ func TestStore(t *testing.T) {
 	})
 
 	t.Run("Success/FullBufferDrops", func(t *testing.T) {
+		t.Parallel()
+
 		// The 32-slot buffer plus a non-blocking send means more lines than the
 		// buffer holds still never block the writer.
 		s, id, w := withStore(t)
@@ -131,12 +140,14 @@ func TestStore(t *testing.T) {
 
 	// The no-subscriber path still reaches the file.
 	t.Run("Success/NoSubscriberStillWritesFile", func(t *testing.T) {
-		_, _, w := withStore(t)
+		t.Parallel()
+
+		s, _, w := withStore(t)
 		_, err := w.Stdout().Write([]byte("orphan\n"))
 		require.NoError(t, err)
 		// Give the encoder a moment.
 		time.Sleep(50 * time.Millisecond)
-		data, err := os.ReadFile(filepath.Join(os.Getenv("XDG_STATE_HOME"), "a-novel", "logs", "default", "test", "x", "current.log"))
+		data, err := os.ReadFile(filepath.Join(s.root, "default", "test", "x", "current.log"))
 		require.NoError(t, err)
 		require.NotEmpty(t, data, "log file after a write")
 	})
@@ -144,8 +155,10 @@ func TestStore(t *testing.T) {
 	// Archive names outside the run-<stamp>.log shape, such as a stray run-x,
 	// stay out of the listing.
 	t.Run("Success/ListRunsSkipsMalformedNames", func(t *testing.T) {
+		t.Parallel()
+
 		s, _, _ := withStore(t)
-		dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "a-novel", "logs", "default", "test", "x")
+		dir := filepath.Join(s.root, "default", "test", "x")
 		fsutiltest.Write(t, dir, map[string]string{
 			"run-x":              "",
 			"run-":               "",
@@ -160,6 +173,8 @@ func TestStore(t *testing.T) {
 	// Many subscribers against concurrent writes: holding the lock through the
 	// fanout must neither deadlock nor trip the race detector.
 	t.Run("Success/ConcurrentSubscribersWrites", func(t *testing.T) {
+		t.Parallel()
+
 		s, id, w := withStore(t)
 		const subs = 8
 		var wg sync.WaitGroup

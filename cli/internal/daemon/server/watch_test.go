@@ -38,7 +38,7 @@ func TestWatch(t *testing.T) {
 			t.Parallel()
 
 			stopping := make(chan struct{})
-			s := server.New("test", "", nil, runner.New(nil, nil, nil, logs.New()), nil, nil, nil, stopping)
+			s := server.New(server.Config{Version: "test", Runner: runner.New(nil, nil, nil, logs.New(t.TempDir())), Stopping: stopping})
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 

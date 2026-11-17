@@ -18,6 +18,7 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/build"
 	"github.com/a-novel-kit/stack/cli/internal/detect"
 	"github.com/a-novel-kit/stack/cli/internal/jobs"
+	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
 // capability is `test` or `build`. Both discover the targets under a
@@ -127,9 +128,10 @@ func runCapability(cmd *cobra.Command, c capability, o capabilityOpts) error {
 	if limit > 1 {
 		procs = max(1, runtime.NumCPU()/limit)
 	}
+	secretsRoot := paths.SecretsRoot()
 	list := make([]jobs.Job, len(targets))
 	for i, t := range targets {
-		list[i] = build.Job(t, o.timeout, procs, o.keep)
+		list[i] = build.Job(t, o.timeout, procs, o.keep, secretsRoot)
 	}
 
 	_, _ = fmt.Fprintln(out, batchview.Banner()+"\n")

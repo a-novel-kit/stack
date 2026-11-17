@@ -14,7 +14,6 @@ import (
 	"slices"
 
 	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil"
-	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
 const (
@@ -26,7 +25,7 @@ const (
 	fileMode os.FileMode = 0o600
 )
 
-// keyFile / storeFile are the fixed file names under SecretsRoot().
+// keyFile / storeFile are the fixed file names under the secrets root.
 const (
 	keyFile   = "key"
 	storeFile = "store.enc"
@@ -41,22 +40,11 @@ type Store struct {
 	values map[string]string
 }
 
-// Open loads (and, if missing, initializes) the local key and the encrypted
-// store under paths.SecretsRoot(). A first call creates the key but not the
-// store file: an empty store has no file on disk until the first Save.
-func Open() (*Store, error) {
-	return openAt(paths.SecretsRoot())
-}
-
-// Init creates the secrets directory and the local key if they don't already
-// exist. It is idempotent: an existing key is never overwritten. The bool is
-// true when a new key was generated, false when one already existed.
-func Init() (bool, error) {
-	return initAt(paths.SecretsRoot())
-}
-
-// initAt is the testable core of Init, parameterized on the root directory.
-func initAt(root string) (bool, error) {
+// Init creates the secrets directory root and the local key in it if they
+// don't already exist. It is idempotent: an existing key is never overwritten.
+// The bool is true when a new key was generated, false when one already
+// existed.
+func Init(root string) (bool, error) {
 	if err := os.MkdirAll(root, dirMode); err != nil {
 		return false, fmt.Errorf("secrets: create %s: %w", root, err)
 	}
@@ -78,11 +66,11 @@ func initAt(root string) (bool, error) {
 	return true, nil
 }
 
-// openAt is the testable core of Open, parameterized on the root directory. It
-// ensures the key exists (creating it on first use) and loads + decrypts the
-// store if present.
-func openAt(root string) (*Store, error) {
-	if _, err := initAt(root); err != nil {
+// Open loads (and, if missing, initializes) the local key and the encrypted
+// store under root. A first call creates the key but not the store file: an
+// empty store has no file on disk until the first Save.
+func Open(root string) (*Store, error) {
+	if _, err := Init(root); err != nil {
 		return nil, err
 	}
 	key, err := os.ReadFile(filepath.Join(root, keyFile))

@@ -6,11 +6,10 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
 )
 
-// openStore opens the store under the current XDG_DATA_HOME and sets values in
-// it, unsaved.
-func openStore(t *testing.T, values map[string]string) *secrets.Store {
+// openStore opens the store under root and sets values in it, unsaved.
+func openStore(t *testing.T, root string, values map[string]string) *secrets.Store {
 	t.Helper()
-	st, err := secrets.Open()
+	st, err := secrets.Open(root)
 	if err != nil {
 		panic(err)
 	}
@@ -20,10 +19,10 @@ func openStore(t *testing.T, values map[string]string) *secrets.Store {
 	return st
 }
 
-// saveStore opens the store, sets values and saves it.
-func saveStore(t *testing.T, values map[string]string) {
+// saveStore opens the store under root, sets values and saves it.
+func saveStore(t *testing.T, root string, values map[string]string) {
 	t.Helper()
-	if err := openStore(t, values).Save(); err != nil {
+	if err := openStore(t, root, values).Save(); err != nil {
 		panic(err)
 	}
 }

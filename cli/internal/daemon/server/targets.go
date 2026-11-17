@@ -22,7 +22,7 @@ func (s *Server) StartTarget(ctx context.Context, req *anovelv1.StartTargetReque
 	if err != nil {
 		return nil, err
 	}
-	inst, err := s.runner.StartTarget(ctx, t, svc, mode)
+	inst, err := s.cfg.Runner.StartTarget(ctx, t, svc, mode)
 	switch {
 	case errors.Is(err, runner.ErrEnv):
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -41,12 +41,12 @@ func (s *Server) KillTarget(ctx context.Context, req *anovelv1.KillTargetRequest
 	if req.GetTimeout() != nil {
 		grace = req.GetTimeout().AsDuration()
 	}
-	if err := s.runner.Kill(ctx, id, grace); err != nil {
+	if err := s.cfg.Runner.Kill(ctx, id, grace); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	resp := &anovelv1.KillTargetResponse{}
-	inst, tracked := s.runner.Instance(id)
-	t, _ := s.stacks.Target(id)
+	inst, tracked := s.cfg.Runner.Instance(id)
+	t, _ := s.cfg.Stacks.Target(id)
 	if tracked && t != nil {
 		resp.Target = targetToProto(t, &inst)
 	}
@@ -57,11 +57,11 @@ func (s *Server) KillTarget(ctx context.Context, req *anovelv1.KillTargetRequest
 // start claims the slot, so mutual exclusion holds.
 func (s *Server) RestartTarget(ctx context.Context, req *anovelv1.RestartTargetRequest) (*anovelv1.RestartTargetResponse, error) {
 	id := s.canonicalID(req.GetTargetId())
-	if err := s.runner.Kill(ctx, id, killGrace); err != nil {
+	if err := s.cfg.Runner.Kill(ctx, id, killGrace); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	mode := req.GetMode()
-	if prev, ok := s.runner.Instance(id); ok && mode == anovelv1.Mode_MODE_UNSPECIFIED {
+	if prev, ok := s.cfg.Runner.Instance(id); ok && mode == anovelv1.Mode_MODE_UNSPECIFIED {
 		// Keep the previous mode when an instance record survives;
 		// StartTarget defaults to go-exec otherwise.
 		mode = prev.Mode

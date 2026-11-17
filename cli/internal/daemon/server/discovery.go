@@ -13,7 +13,7 @@ import (
 // ListStacks returns every stack the daemon manages: the registered ones
 // discovery accepted, in registration order.
 func (s *Server) ListStacks(_ context.Context, _ *anovelv1.ListStacksRequest) (*anovelv1.ListStacksResponse, error) {
-	return &anovelv1.ListStacksResponse{Stacks: stacksToProto(s.stacks)}, nil
+	return &anovelv1.ListStacksResponse{Stacks: stacksToProto(s.cfg.Stacks)}, nil
 }
 
 // ListServices returns every service in the requested stack. An empty

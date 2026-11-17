@@ -149,7 +149,7 @@ func TestStackBackupDir(t *testing.T) {
 	require.True(t, strings.HasPrefix(got, paths.BackupsRoot()), "%q is not under %q", got, paths.BackupsRoot())
 	require.Equal(t, "agent-7b46", filepath.Base(got))
 	// The per-volume path must nest inside it, or the purge misses backups.
-	perVolume := volumes.BackupDir("agent-7b46", "service-json-keys", "pg-data")
+	perVolume := volumes.BackupDir(paths.BackupsRoot(), "agent-7b46", "service-json-keys", "pg-data")
 	require.True(t, strings.HasPrefix(perVolume, got+string(filepath.Separator)), "volumes.BackupDir = %q is not inside %q", perVolume, got)
 }
 

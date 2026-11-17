@@ -20,7 +20,7 @@ func (s *Server) GetEnv(_ context.Context, req *anovelv1.GetEnvRequest) (*anovel
 	}
 	out := &anovelv1.GetEnvResponse{}
 	for _, svc := range services {
-		entries, err := s.envBuilder.ForService(svc, "")
+		entries, err := s.cfg.Env.ForService(svc, "")
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}

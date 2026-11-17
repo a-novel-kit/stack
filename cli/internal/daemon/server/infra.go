@@ -15,7 +15,7 @@ func (s *Server) StartInfra(ctx context.Context, req *anovelv1.StartInfraRequest
 	if err != nil {
 		return nil, err
 	}
-	if err := s.runner.StartInfra(ctx, svc.Stack, svc.Name, req.GetOneShotsMode()); err != nil {
+	if err := s.cfg.Runner.StartInfra(ctx, svc.Stack, svc.Name, req.GetOneShotsMode()); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
 	return &anovelv1.StartInfraResponse{
@@ -30,7 +30,7 @@ func (s *Server) KillInfra(ctx context.Context, req *anovelv1.KillInfraRequest) 
 	if err != nil {
 		return nil, err
 	}
-	if err := s.runner.KillInfra(ctx, svc.Stack, svc.Name, req.GetForce()); err != nil {
+	if err := s.cfg.Runner.KillInfra(ctx, svc.Stack, svc.Name, req.GetForce()); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
 	return &anovelv1.KillInfraResponse{
@@ -71,7 +71,7 @@ func (s *Server) infraContainer(ctx context.Context, stack, service, name, verb 
 		return nil, connect.Errorf(connect.CodeNotFound,
 			"infra %q not declared in %s/%s", name, svc.Stack, svc.Name)
 	}
-	if err := s.runner.InfraContainer(ctx, svc.Stack, svc.Name, in.Name, verb); err != nil {
+	if err := s.cfg.Runner.InfraContainer(ctx, svc.Stack, svc.Name, in.Name, verb); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
 	return infraToProto(in, s.liveInfraStates(svc.Stack)), nil

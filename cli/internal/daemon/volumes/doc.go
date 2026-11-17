@@ -2,7 +2,8 @@
 // list, backup, restore and clear.
 //
 // A backup is the `podman volume export` tar stream, compressed with zstd into
-// $XDG_DATA_HOME/a-novel/backups/<stack>/<service>/<volume>/<timestamp>.tar.zst.
+// <root>/<stack>/<service>/<volume>/<timestamp>.tar.zst. The daemon passes
+// $XDG_DATA_HOME/a-novel/backups as the backups root.
 // A restore decompresses it into `podman volume import`, and a clear takes a
 // backup, unless told otherwise, before `podman volume rm -f`.
 //

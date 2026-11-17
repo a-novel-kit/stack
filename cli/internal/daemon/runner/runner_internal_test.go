@@ -80,7 +80,7 @@ func TestInvalidateInfraStateCache(t *testing.T) {
 // its claim sees the failure. Concurrent starts of one target, as a TUI double
 // press or two long-runners waiting on one one-shot make, spawn it once.
 //
-//nolint:paralleltest // sub-tests set XDG_STATE_HOME and a stand-in go on PATH with t.Setenv.
+//nolint:paralleltest // a sub-test puts a stand-in go on PATH with t.Setenv.
 func TestLaunch(t *testing.T) {
 	testCases := []struct {
 		name string
@@ -97,7 +97,7 @@ func TestLaunch(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			r, alloc, tgt := newRunnerForLaunch()
+			r, alloc, tgt := newRunnerForLaunch(t, t.TempDir())
 			port, err := alloc.Acquire("svc", "REST_PORT", tgt.ID())
 			require.NoError(t, err)
 			r.instances[tgt.ID()] = &Instance{ID: tgt.ID(), Target: tgt.Name, Service: "svc", Stack: "default", Phase: testCase.phase, Mode: testCase.mode}
@@ -116,12 +116,11 @@ func TestLaunch(t *testing.T) {
 	}
 
 	t.Run("Error/SpawnFails", func(t *testing.T) {
-		// A state dir that is a file makes the log directory, and so the spawn,
+		// A logs root that is a file makes the log directory, and so the spawn,
 		// fail.
 		state := t.TempDir()
 		fsutiltest.Write(t, state, map[string]string{"not-a-dir": ""})
-		t.Setenv("XDG_STATE_HOME", filepath.Join(state, "not-a-dir"))
-		r, alloc, tgt := newRunnerForLaunch()
+		r, alloc, tgt := newRunnerForLaunch(t, filepath.Join(state, "not-a-dir"))
 
 		_, err := r.launch(t.Context(), tgt, anovelv1.Mode_MODE_GO_EXEC)
 
@@ -134,10 +133,9 @@ func TestLaunch(t *testing.T) {
 	})
 
 	t.Run("Success/ConcurrentStarts", func(t *testing.T) {
-		t.Setenv("XDG_STATE_HOME", t.TempDir())
 		// A stand-in go that only sleeps keeps the toolchain out of the test.
 		stubOnPath(t, "go", "#!/bin/sh\nexec sleep 30\n")
-		r, _, tgt := newRunnerForLaunch()
+		r, _, tgt := newRunnerForLaunch(t, t.TempDir())
 		tgt.CmdDir = filepath.Join(t.TempDir(), "cmd", "rest")
 		t.Cleanup(func() { _ = r.Kill(context.Background(), tgt.ID(), 0) })
 
@@ -168,12 +166,13 @@ func TestLaunch(t *testing.T) {
 // ports the previous daemon gave it, so the new daemon must hold them for it: a
 // replay that skipped the allocator let the next consumer of REST_PORT draw a
 // fresh port the process never bound.
+//
+//nolint:paralleltest // stubOnPath puts a stand-in go on PATH with t.Setenv.
 func TestRelaunch(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	// The runner spawns `go run`; a stand-in go that only sleeps keeps the
 	// toolchain out of the test.
 	stubOnPath(t, "go", "#!/bin/sh\nexec sleep 30\n")
-	r, alloc, tgt := newRunnerForLaunch()
+	r, alloc, tgt := newRunnerForLaunch(t, t.TempDir())
 	tgt.CmdDir = filepath.Join(t.TempDir(), "cmd", "rest")
 
 	require.NoError(t, r.Relaunch(t.Context(), tgt.ID(), []string{"REST_PORT=41234"}))

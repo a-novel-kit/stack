@@ -1,9 +1,10 @@
 // Package logs stores each target's output and streams it live.
 //
-// A target's runs live in one directory, which keeps the five latest archived
-// runs:
+// A target's runs live in one directory under the store's root, which keeps the
+// five latest archived runs. The daemon roots its store at
+// $XDG_STATE_HOME/a-novel/logs:
 //
-//	$XDG_STATE_HOME/a-novel/logs/<stack>/<service>/<target>/
+//	<root>/<stack>/<service>/<target>/
 //	├── current.log              ← the run in progress
 //	└── run-<timestamp>.log      ← an archived run
 //

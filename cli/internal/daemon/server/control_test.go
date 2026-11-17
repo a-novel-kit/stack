@@ -21,10 +21,9 @@ import (
 // TestPrepareReinstall covers the reinstall handoff. A go-exec process outlives
 // its daemon, so a target left running keeps the ports the next daemon
 // relaunches it on. The checkpoint records those ports and nothing else, so no
-// env value, secrets included, reaches the file. It sets XDG_STATE_HOME and
-// PATH, so it cannot run in parallel.
+// env value, secrets included, reaches the file. It puts a stand-in go on PATH,
+// so it cannot run in parallel.
 func TestPrepareReinstall(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	// The runner spawns `go run`. A stand-in go that only sleeps keeps the
 	// toolchain out of the test.
 	bin := t.TempDir()
@@ -42,11 +41,15 @@ func TestPrepareReinstall(t *testing.T) {
 	}}
 	alloc := env.NewAllocator()
 	alloc.SetServices([]string{"svc"})
-	builder := env.NewBuilder(alloc)
-	logStore := logs.New()
+	builder := env.NewBuilder(alloc, t.TempDir())
+	logStore := logs.New(t.TempDir())
 	run := runner.New(stacks, alloc, builder, logStore)
+	checkpoint := filepath.Join(t.TempDir(), "reinstall.json")
 	stopped := make(chan struct{})
-	srv := server.New("test", "", stacks, run, builder, logStore, func() { close(stopped) }, stopped)
+	srv := server.New(server.Config{
+		Version: "test", Checkpoint: checkpoint, Stacks: stacks, Runner: run, Env: builder, Logs: logStore,
+		Stop: func() { close(stopped) }, Stopping: stopped,
+	})
 
 	require.NoError(t, run.Relaunch(t.Context(), tgt.ID(), []string{"REST_PORT=41235"}))
 	t.Cleanup(func() { _ = run.Kill(context.Background(), tgt.ID(), 0) })
@@ -54,8 +57,9 @@ func TestPrepareReinstall(t *testing.T) {
 	resp, err := srv.PrepareReinstall(t.Context(), &anovelv1.PrepareReinstallRequest{})
 	require.NoError(t, err)
 	require.Equal(t, int32(1), resp.GetGoExecTargetCount())
+	require.Equal(t, checkpoint, resp.GetCheckpointPath())
 
-	cp, err := reinstall.Read()
+	cp, err := reinstall.Read(checkpoint)
 	require.NoError(t, err)
 	require.NotNil(t, cp)
 	require.Equal(t, []reinstall.GoExecCheckpoint{{TargetID: tgt.ID(), Env: []string{"REST_PORT=41235"}}}, cp.GoExec)

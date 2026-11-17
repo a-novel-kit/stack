@@ -88,7 +88,7 @@ func (s *Server) Exec(ctx context.Context, req *anovelv1.ExecRequest, stream ano
 // instance decides the mode. Without one, go-exec is the only mode that works,
 // there being no live container to attach to.
 func (s *Server) siblingCommand(ctx context.Context, tgt *discovery.Target, cmdv []string) (*exec.Cmd, error) {
-	if inst, ok := s.runner.Instance(tgt.ID()); ok && inst.Phase == anovelv1.Phase_PHASE_RUNNING &&
+	if inst, ok := s.cfg.Runner.Instance(tgt.ID()); ok && inst.Phase == anovelv1.Phase_PHASE_RUNNING &&
 		inst.Mode == anovelv1.Mode_MODE_CONTAINER {
 		if inst.ContainerID == "" {
 			return nil, connect.NewError(connect.CodeFailedPrecondition,
@@ -100,7 +100,7 @@ func (s *Server) siblingCommand(ctx context.Context, tgt *discovery.Target, cmdv
 	// relative paths match what the target sees. The builder allocates when
 	// needed under the target's own consumer ID, which the usual refcounting
 	// releases.
-	envEntries, _, err := s.envBuilder.ForTarget(tgt)
+	envEntries, _, err := s.cfg.Env.ForTarget(tgt)
 	if err != nil {
 		return nil, connect.Errorf(connect.CodeInternal, "exec: env: %v", err).WithCause(err)
 	}
@@ -173,7 +173,7 @@ func (s *Server) Debug(_ context.Context, req *anovelv1.DebugRequest) (*anovelv1
 	if id == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "debug: target_id required")
 	}
-	inst, ok := s.runner.Instance(id)
+	inst, ok := s.cfg.Runner.Instance(id)
 	if !ok {
 		return nil, connect.Errorf(connect.CodeNotFound, "debug: target %q not tracked (start it first)", id)
 	}

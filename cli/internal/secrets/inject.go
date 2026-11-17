@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
 // MappingFile is the per-repo, value-free secrets manifest, committed at the
@@ -77,8 +75,8 @@ func (r Resolution) Warnings() []string {
 }
 
 // InjectForRepo reads the value-free manifest at repoRoot/.a-novel/secrets.yaml,
-// decrypts each declared secret from the local store, and returns the env pairs
-// to inject plus the declarations still missing.
+// decrypts each declared secret from the local store under secretsRoot, and
+// returns the env pairs to inject plus the declarations still missing.
 //
 // It is forgiving, so a missing secret never blocks a test or a run:
 //   - no manifest → empty Resolution, no error;
@@ -92,13 +90,7 @@ func (r Resolution) Warnings() []string {
 //
 // Env values are secret material: callers must inject them into the child env
 // only and never print or log them.
-func InjectForRepo(repoRoot string) (Resolution, error) {
-	return injectForRepoAt(repoRoot, paths.SecretsRoot())
-}
-
-// injectForRepoAt is the testable core of InjectForRepo: it resolves the
-// manifest relative to repoRoot and the store under root.
-func injectForRepoAt(repoRoot, root string) (Resolution, error) {
+func InjectForRepo(repoRoot, secretsRoot string) (Resolution, error) {
 	m, err := readMapping(filepath.Join(repoRoot, MappingFile))
 	if err != nil {
 		return Resolution{}, err
@@ -110,11 +102,11 @@ func injectForRepoAt(repoRoot, root string) (Resolution, error) {
 	// With no store or key set up at all, every declared secret is reported
 	// missing: the common case for a developer who has not provisioned this
 	// service's secrets yet. No key is created.
-	if _, statErr := os.Stat(filepath.Join(root, keyFile)); errors.Is(statErr, os.ErrNotExist) {
+	if _, statErr := os.Stat(filepath.Join(secretsRoot, keyFile)); errors.Is(statErr, os.ErrNotExist) {
 		return Resolution{Missing: m.Secrets}, nil
 	}
 
-	st, err := openAt(root)
+	st, err := Open(secretsRoot)
 	if err != nil {
 		return Resolution{}, err
 	}

@@ -170,7 +170,7 @@ func TestKillInfra(t *testing.T) {
 			stubOnPath(t, "podman", fmt.Sprintf("#!/bin/sh\ncase \"$1\" in\ncompose) exit 0 ;;\nstop) exit %d ;;\n*) exit 1 ;;\nesac\n", testCase.stopExit))
 
 			svc := &discovery.Service{Name: "svc", Stack: "default"}
-			r := New(discovery.Stacks{{Name: "default", Default: true, Services: []*discovery.Service{svc}}}, env.NewAllocator(), nil, logs.New())
+			r := New(discovery.Stacks{{Name: "default", Default: true, Services: []*discovery.Service{svc}}}, env.NewAllocator(), nil, logs.New(t.TempDir()))
 			r.instances[id] = &Instance{
 				ID: id, Target: "rest", Service: "svc", Stack: "default",
 				Mode: anovelv1.Mode_MODE_CONTAINER, Phase: anovelv1.Phase_PHASE_RUNNING, ContainerID: "cid1",

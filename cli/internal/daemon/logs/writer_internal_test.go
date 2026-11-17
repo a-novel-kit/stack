@@ -14,9 +14,9 @@ import (
 // TestWriter pins how a view splits output into log lines. A line comes out
 // whole up to maxLineBytes, across writes too. A longer line comes out in
 // maxLineBytes pieces, so output that never ends a line still reaches the log.
-//
-//nolint:paralleltest // every sub-test sets XDG_STATE_HOME through withStore
 func TestWriter(t *testing.T) {
+	t.Parallel()
+
 	long := strings.Repeat("x", 2*maxLineBytes+maxLineBytes/2)
 	piece, rest := strings.Repeat("x", maxLineBytes), strings.Repeat("x", maxLineBytes/2)
 
@@ -34,6 +34,8 @@ func TestWriter(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
 			s, _, w := withStore(t)
 			stdout := w.Stdout()
 			for _, chunk := range testCase.write {

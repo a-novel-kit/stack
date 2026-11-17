@@ -15,7 +15,6 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
-	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 	"github.com/a-novel-kit/stack/cli/internal/shared/podman"
 	"github.com/a-novel-kit/stack/cli/internal/shared/retention"
 )
@@ -40,9 +39,9 @@ func PodmanVolumeName(stack, service, bareVolume string) string {
 	return stack + "_" + service + "_" + bareVolume
 }
 
-// BackupDir is the per-volume backups directory.
-func BackupDir(stack, service, volume string) string {
-	return filepath.Join(paths.BackupsRoot(), stack, service, volume)
+// BackupDir is the per-volume backups directory under the backups root.
+func BackupDir(root, stack, service, volume string) string {
+	return filepath.Join(root, stack, service, volume)
 }
 
 // =============================================================================
@@ -50,8 +49,8 @@ func BackupDir(stack, service, volume string) string {
 // =============================================================================
 
 // List returns one Volume entry per compose-declared volume on the service.
-// The size comes from podman, the backup count from the backups dir.
-func List(ctx context.Context, svc *discovery.Service) []Volume {
+// The size comes from podman, the backup count from the backups dir under root.
+func List(ctx context.Context, root string, svc *discovery.Service) []Volume {
 	out := make([]Volume, 0, len(svc.Volumes))
 	for _, v := range svc.Volumes {
 		volume := Volume{
@@ -59,7 +58,7 @@ func List(ctx context.Context, svc *discovery.Service) []Volume {
 			Service:     svc.Name,
 			Stack:       svc.Stack,
 			SizeBytes:   podmanVolumeSize(ctx, PodmanVolumeName(svc.Stack, svc.Name, v.Name)),
-			BackupCount: int32(len(retention.Files(BackupDir(svc.Stack, svc.Name, v.Name), isArchive))),
+			BackupCount: int32(len(retention.Files(BackupDir(root, svc.Stack, svc.Name, v.Name), isArchive))),
 		}
 		out = append(out, volume)
 	}
@@ -92,17 +91,18 @@ func isArchive(name string) bool { return strings.HasSuffix(name, ".tar.zst") }
 // =============================================================================
 
 // Backup writes a tar.zst archive of every compose-declared volume on the
-// service. A non-empty tag is embedded in the filename for later
-// identification. It returns the absolute path of each created archive.
+// service under the backups root. A non-empty tag is embedded in the filename
+// for later identification. It returns the absolute path of each created
+// archive.
 //
 // The caller owns the service-down pre-check; Backup itself runs
 // unconditionally.
-func Backup(ctx context.Context, svc *discovery.Service, tag string) ([]string, error) {
+func Backup(ctx context.Context, root string, svc *discovery.Service, tag string) ([]string, error) {
 	timestamp := time.Now().UTC().Format("2006-01-02T15-04-05Z")
 	var archives []string
 	for _, v := range svc.Volumes {
 		full := PodmanVolumeName(svc.Stack, svc.Name, v.Name)
-		dir := BackupDir(svc.Stack, svc.Name, v.Name)
+		dir := BackupDir(root, svc.Stack, svc.Name, v.Name)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return archives, fmt.Errorf("mkdir %s: %w", dir, err)
 		}
@@ -240,15 +240,15 @@ func tagRune(c rune) rune {
 // Restore
 // =============================================================================
 
-// Restore replaces each volume's contents from a backup archive. `from` selects
-// the archive timestamp; empty takes each volume's most recent .tar.zst by
-// mtime. Every archive is validated before any volume is touched. It returns
-// the restored volume names.
-func Restore(ctx context.Context, svc *discovery.Service, from string) ([]string, error) {
+// Restore replaces each volume's contents from a backup archive under the
+// backups root. `from` selects the archive timestamp; empty takes each volume's
+// most recent .tar.zst by mtime. Every archive is validated before any volume
+// is touched. It returns the restored volume names.
+func Restore(ctx context.Context, root string, svc *discovery.Service, from string) ([]string, error) {
 	// 1. Resolve the source archive for each volume.
 	plans := make([]restorePlan, 0, len(svc.Volumes))
 	for _, v := range svc.Volumes {
-		dir := BackupDir(svc.Stack, svc.Name, v.Name)
+		dir := BackupDir(root, svc.Stack, svc.Name, v.Name)
 		archive, err := resolveBackup(dir, from)
 		if err != nil {
 			return nil, fmt.Errorf("locate backup for %s: %w", v.Name, err)
@@ -366,13 +366,14 @@ func restoreOne(ctx context.Context, volumeName, archive string) error {
 // Clear
 // =============================================================================
 
-// Clear destroys every volume on the service. It takes an auto-backup first, so
-// undo is one `restore` away; noBackup makes the deletion irreversible.
+// Clear destroys every volume on the service. It takes an auto-backup under the
+// backups root first, so undo is one `restore` away; noBackup makes the
+// deletion irreversible.
 //
 // The caller owns the service-down pre-check.
-func Clear(ctx context.Context, svc *discovery.Service, noBackup bool) ([]string, error) {
+func Clear(ctx context.Context, root string, svc *discovery.Service, noBackup bool) ([]string, error) {
 	if !noBackup {
-		if _, err := Backup(ctx, svc, "auto-pre-clear"); err != nil {
+		if _, err := Backup(ctx, root, svc, "auto-pre-clear"); err != nil {
 			return nil, fmt.Errorf("auto-backup before clear: %w", err)
 		}
 	}

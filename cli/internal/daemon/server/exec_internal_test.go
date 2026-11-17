@@ -37,8 +37,8 @@ func TestSiblingCommand(t *testing.T) {
 	}}
 	alloc := env.NewAllocator()
 	alloc.SetServices([]string{"svc"})
-	builder := env.NewBuilder(alloc)
-	s := &Server{runner: runner.New(stacks, alloc, builder, logs.New()), envBuilder: builder}
+	builder := env.NewBuilder(alloc, t.TempDir())
+	s := New(Config{Runner: runner.New(stacks, alloc, builder, logs.New(t.TempDir())), Env: builder})
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()

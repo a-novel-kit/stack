@@ -12,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/a-novel-kit/stack/cli/internal/secrets"
+	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 )
 
 // readPassword reads a line from the terminal with echo disabled, so the typed
@@ -34,15 +35,16 @@ environment variables mapped to secret IDs, without values. 'a-novel test',
 'a-novel build' and the targets the daemon runs receive them, and a missing
 one prints a warning that names it.`,
 	}
-	cmd.AddCommand(newSecretsInitCmd())
-	cmd.AddCommand(newSecretsSetCmd())
-	cmd.AddCommand(newSecretsListCmd())
-	cmd.AddCommand(newSecretsRemoveCmd())
-	cmd.AddCommand(newSecretsExecCmd())
+	root := paths.SecretsRoot()
+	cmd.AddCommand(newSecretsInitCmd(root))
+	cmd.AddCommand(newSecretsSetCmd(root))
+	cmd.AddCommand(newSecretsListCmd(root))
+	cmd.AddCommand(newSecretsRemoveCmd(root))
+	cmd.AddCommand(newSecretsExecCmd(root))
 	return cmd
 }
 
-func newSecretsInitCmd() *cobra.Command {
+func newSecretsInitCmd(root string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
 		Short: "Create the local secrets key and store directory",
@@ -50,14 +52,15 @@ func newSecretsInitCmd() *cobra.Command {
 alone. An existing key stays as it is.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return initSecrets(cmd.OutOrStdout())
+			return initSecrets(cmd.OutOrStdout(), root)
 		},
 	}
 }
 
-// initSecrets creates the secrets store and says whether it generated a key.
-func initSecrets(out io.Writer) error {
-	created, err := secrets.Init()
+// initSecrets creates the secrets store under root and says whether it
+// generated a key.
+func initSecrets(out io.Writer, root string) error {
+	created, err := secrets.Init(root)
 	if err != nil {
 		return err
 	}
@@ -69,7 +72,7 @@ func initSecrets(out io.Writer) error {
 	return nil
 }
 
-func newSecretsSetCmd() *cobra.Command {
+func newSecretsSetCmd(root string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "set <id>",
 		Short: "Store a secret value, typed with no echo",
@@ -78,15 +81,16 @@ encrypted. The command refuses to run without a terminal, so a value never
 passes through a pipe, a log or a shell history.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return setSecret(cmd.OutOrStdout(), args[0])
+			return setSecret(cmd.OutOrStdout(), root, args[0])
 		},
 	}
 }
 
 // setSecret reads the value of id from the terminal with echo off, and stores
-// it. Echo-off reading takes a real terminal, so a non-interactive stdin is
-// refused. A secret then never passes through a pipe, a log or a shell history.
-func setSecret(out io.Writer, id string) error {
+// it under root. Echo-off reading takes a real terminal, so a non-interactive
+// stdin is refused. A secret then never passes through a pipe, a log or a shell
+// history.
+func setSecret(out io.Writer, root, id string) error {
 	if strings.TrimSpace(id) == "" {
 		return usageError(errors.New("secrets set: <id> must not be empty"))
 	}
@@ -105,7 +109,7 @@ func setSecret(out io.Writer, id string) error {
 	if len(value) == 0 {
 		return errors.New("secrets set: empty value, nothing stored")
 	}
-	st, err := secrets.Open()
+	st, err := secrets.Open(root)
 	if err != nil {
 		return err
 	}
@@ -117,7 +121,7 @@ func setSecret(out io.Writer, id string) error {
 	return nil
 }
 
-func newSecretsListCmd() *cobra.Command {
+func newSecretsListCmd(root string) *cobra.Command {
 	return &cobra.Command{
 		Use:     "ls",
 		Aliases: []string{"list"},
@@ -127,14 +131,14 @@ ever printed: a program reads one through 'secrets exec' or the
 .a-novel/secrets.yaml of its repository.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return listSecrets(cmd.OutOrStdout())
+			return listSecrets(cmd.OutOrStdout(), root)
 		},
 	}
 }
 
-// listSecrets prints the stored secret IDs, one per line, and never a value.
-func listSecrets(out io.Writer) error {
-	st, err := secrets.Open()
+// listSecrets prints the IDs stored under root, one per line, and never a value.
+func listSecrets(out io.Writer, root string) error {
+	st, err := secrets.Open(root)
 	if err != nil {
 		return err
 	}
@@ -149,7 +153,7 @@ func listSecrets(out io.Writer) error {
 	return nil
 }
 
-func newSecretsRemoveCmd() *cobra.Command {
+func newSecretsRemoveCmd(root string) *cobra.Command {
 	return &cobra.Command{
 		Use:     "rm <id>",
 		Aliases: []string{"remove"},
@@ -159,14 +163,15 @@ passes for a deletion. Nothing can bring the value back: set it again with
 'secrets set'.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return removeSecret(cmd.OutOrStdout(), args[0])
+			return removeSecret(cmd.OutOrStdout(), root, args[0])
 		},
 	}
 }
 
-// removeSecret deletes the secret id; an unknown id is an error.
-func removeSecret(out io.Writer, id string) error {
-	st, err := secrets.Open()
+// removeSecret deletes the secret id from the store under root; an unknown id
+// is an error.
+func removeSecret(out io.Writer, root, id string) error {
+	st, err := secrets.Open(root)
 	if err != nil {
 		return err
 	}
@@ -181,7 +186,7 @@ func removeSecret(out io.Writer, id string) error {
 	return nil
 }
 
-func newSecretsExecCmd() *cobra.Command {
+func newSecretsExecCmd(root string) *cobra.Command {
 	var envPairs []string
 	cmd := &cobra.Command{
 		Use:   "exec --env NAME=<secret-id> [--env ...] -- <cmd> [args...]",
@@ -192,7 +197,7 @@ environment alone.`,
 		Example: `  a-novel secrets exec --env OPENAI_API_KEY=openai-key -- python main.py`,
 		Args:    cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return execWithSecrets(cmd, envPairs, args)
+			return execWithSecrets(cmd, root, envPairs, args)
 		},
 	}
 	cmd.Flags().StringArrayVar(&envPairs, "env", nil, "NAME=<secret-id> to inject into the child env (repeatable)")
@@ -201,14 +206,14 @@ environment alone.`,
 	return cmd
 }
 
-// execWithSecrets runs argv with each NAME=<secret-id> pair added to its
-// environment, wired to the command's stdio. The child's exit code becomes
-// the CLI's, and no error message carries a secret.
-func execWithSecrets(cmd *cobra.Command, envPairs, argv []string) error {
+// execWithSecrets runs argv with each NAME=<secret-id> pair, resolved from the
+// store under root, added to its environment, wired to the command's stdio. The
+// child's exit code becomes the CLI's, and no error message carries a secret.
+func execWithSecrets(cmd *cobra.Command, root string, envPairs, argv []string) error {
 	if len(envPairs) == 0 {
 		return usageError(errors.New("secrets exec: at least one --env NAME=<secret-id> is required"))
 	}
-	extra, err := secretEnv(envPairs)
+	extra, err := secretEnv(root, envPairs)
 	if err != nil {
 		return err
 	}
@@ -220,10 +225,11 @@ func execWithSecrets(cmd *cobra.Command, envPairs, argv []string) error {
 	return childExit(cmd.Context(), child.Run())
 }
 
-// secretEnv resolves each NAME=<secret-id> pair into a NAME=value child-env
-// entry. Every id resolves before the child starts, so a typo fails first.
-func secretEnv(pairs []string) ([]string, error) {
-	st, err := secrets.Open()
+// secretEnv resolves each NAME=<secret-id> pair against the store under root
+// into a NAME=value child-env entry. Every id resolves before the child starts,
+// so a typo fails first.
+func secretEnv(root string, pairs []string) ([]string, error) {
+	st, err := secrets.Open(root)
 	if err != nil {
 		return nil, err
 	}

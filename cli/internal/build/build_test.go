@@ -19,9 +19,9 @@ import (
 // repo without a mapping injects nothing and does not fail, and a
 // declared-but-unset secret is not injected, does not fail the build, and
 // surfaces a value-free warning so the developer knows what to set.
-//
-// Not parallel: every sub-test sets XDG_DATA_HOME to isolate the secrets store.
 func TestPrepareEnv(t *testing.T) {
+	t.Parallel()
+
 	const manifest = "secrets:\n  - env: OPENAI_API_KEY\n    id: openai-key\n    description: used by generation\n"
 	testCases := []struct {
 		name     string
@@ -39,9 +39,11 @@ func TestPrepareEnv(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			t.Setenv("XDG_DATA_HOME", t.TempDir())
+			t.Parallel()
+
+			secretsRoot := t.TempDir()
 			if testCase.secret != "" {
-				st, err := secrets.Open()
+				st, err := secrets.Open(secretsRoot)
 				require.NoError(t, err)
 				st.Set("openai-key", testCase.secret)
 				require.NoError(t, st.Save())
@@ -53,7 +55,7 @@ func TestPrepareEnv(t *testing.T) {
 			}
 
 			var out strings.Builder
-			runEnv, err := build.PrepareEnv(t.Context(), detect.Target{Kind: detect.KindGo, Name: "x", Dir: repoRoot}, &out)
+			runEnv, err := build.PrepareEnv(t.Context(), detect.Target{Kind: detect.KindGo, Name: "x", Dir: repoRoot}, secretsRoot, &out)
 			require.NoError(t, err)
 			var got string
 			for _, e := range runEnv {
@@ -154,7 +156,7 @@ func TestJob(t *testing.T) {
 				Args: []string{"-c", `printf 'GMP=[%s]' "$GOMAXPROCS"`},
 			}
 			var out strings.Builder
-			_, err := build.Job(tgt, 0, testCase.maxProcs, false).Run(t.Context(), &out)
+			_, err := build.Job(tgt, 0, testCase.maxProcs, false, t.TempDir()).Run(t.Context(), &out)
 			require.NoError(t, err, out.String())
 			require.Contains(t, out.String(), "GMP=["+testCase.want+"]")
 		})

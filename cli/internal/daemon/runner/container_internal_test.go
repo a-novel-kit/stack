@@ -19,8 +19,9 @@ import (
 // finds no container yet and leaves the target STOPPING. When compose returns,
 // the start stops the container it brought up and fails, so the killed target
 // never serves.
+//
+//nolint:paralleltest // stubOnPath puts a stand-in podman on PATH with t.Setenv.
 func TestStartContainer(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	// A stand-in podman: compose up waits for the test's release file, ps
 	// names one container, and stop records its arguments.
 	dir := t.TempDir()
@@ -32,7 +33,7 @@ stop) echo "$@" >> %[1]s/stops ;;
 *) exit 1 ;;
 esac
 `, dir))
-	r, _, tgt := newRunnerForLaunch()
+	r, _, tgt := newRunnerForLaunch(t, t.TempDir())
 
 	started := make(chan error, 1)
 	go func() {

@@ -22,9 +22,10 @@ import (
 // client cancels, and at once with CodeUnavailable when the daemon stops, so it
 // never holds the graceful shutdown. A missing log means no run yet: a snapshot
 // fails with CodeNotFound and a follow waits for the run. Any other read
-// failure fails the stream as it is. Each case sets XDG_STATE_HOME, so none
-// runs in parallel.
+// failure fails the stream as it is.
 func TestStreamLogs(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name string
 		// follow asks for the lines written after the snapshot.
@@ -52,15 +53,15 @@ func TestStreamLogs(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			// The log store writes under XDG_STATE_HOME.
-			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			t.Parallel()
+
 			tgt := &discovery.Target{Name: "rest", Service: "svc", Stack: "default"}
 			stacks := discovery.Stacks{{
 				Name:     "default",
 				Default:  true,
 				Services: []*discovery.Service{{Name: "svc", Stack: "default", Targets: []*discovery.Target{tgt}}},
 			}}
-			logStore := logs.New()
+			logStore := logs.New(t.TempDir())
 			if testCase.running {
 				w, err := logStore.OpenForWrite(tgt.ID(), tgt.Stack, tgt.Service, tgt.Name)
 				require.NoError(t, err)
@@ -71,7 +72,7 @@ func TestStreamLogs(t *testing.T) {
 			}
 
 			stopping := make(chan struct{})
-			s := server.New("test", "", stacks, nil, nil, logStore, nil, stopping)
+			s := server.New(server.Config{Version: "test", Stacks: stacks, Logs: logStore, Stopping: stopping})
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 
@@ -99,9 +100,10 @@ func TestStreamLogs(t *testing.T) {
 
 // TestListRuns pins that a request resolves a target shorthand against the
 // daemon's default stack, so `run logs --previous` reads the target `run ps`
-// shows, whatever $A_NOVEL_STACKS the client's shell holds. Each case sets
-// XDG_STATE_HOME, so none runs in parallel.
+// shows, whatever $A_NOVEL_STACKS the client's shell holds.
 func TestListRuns(t *testing.T) {
+	t.Parallel()
+
 	newService := func(stack string) *discovery.Service {
 		target := &discovery.Target{Name: "rest", Service: "svc", Stack: stack}
 		return &discovery.Service{Name: "svc", Stack: stack, Targets: []*discovery.Target{target}}
@@ -125,13 +127,13 @@ func TestListRuns(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			// The log store reads its archives under XDG_STATE_HOME. Only the
-			// default stack's target has one.
-			t.Setenv("XDG_STATE_HOME", t.TempDir())
-			logStore := logs.New()
+			t.Parallel()
+
+			// Only the default stack's target has an archived run.
+			logStore := logs.New(t.TempDir())
 			archives := filepath.Dir(logStore.CurrentPath("main", "svc", "rest"))
 			fsutiltest.Write(t, archives, map[string]string{"run-20261117T120000.log": ""})
-			s := server.New("test", "", stacks, nil, nil, logStore, nil, nil)
+			s := server.New(server.Config{Version: "test", Stacks: stacks, Logs: logStore})
 
 			resp, err := s.ListRuns(t.Context(), &anovelv1.ListRunsRequest{TargetId: testCase.targetID})
 			require.Equal(t, testCase.wantCode, codeOf(err), "ListRuns: %v", err)

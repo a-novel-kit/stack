@@ -29,37 +29,34 @@ const killGrace = 10 * time.Second
 // the daemon, so their response reaches the client before the socket closes.
 const shutdownDelay = 50 * time.Millisecond
 
+// Config wires a Server to the daemon's subsystems. A field left zero leaves
+// the RPCs that need it unusable, which a test of other RPCs relies on.
+type Config struct {
+	Version     string           // daemon binary version, reported by Status
+	SocketPath  string           // reported by Status
+	BackupsRoot string           // where the volume RPCs keep backups
+	Checkpoint  string           // where PrepareReinstall writes its checkpoint
+	Stacks      discovery.Stacks // the managed stacks and their service trees
+	Runner      *runner.Runner   // process and container supervisor
+	Env         *env.Builder     // env block synthesis
+	Logs        *logs.Store      // per-target log files and streaming hub
+	// Stop ends the daemon's main loop; Shutdown and PrepareReinstall call it.
+	// It is idempotent.
+	Stop func()
+	// Stopping closes once the daemon begins to stop, whatever stopped it.
+	Stopping <-chan struct{}
+}
+
 // Server is the daemon's connect-rpc handler, owning the state that survives
 // across RPC calls.
 type Server struct {
-	version    string           // daemon binary version (from build info)
-	startedAt  time.Time        // for uptime calculation
-	socketPath string           // for Status responses
-	stacks     discovery.Stacks // the managed stacks and their service trees
-	runner     *runner.Runner   // process / container supervisor
-	envBuilder *env.Builder     // env block synthesis
-	logs       *logs.Store      // per-target log files + streaming hub
-	// stop tells the daemon's main loop to exit cleanly. It is idempotent.
-	stop func()
-	// stopping closes once the daemon begins to stop, whatever stopped it.
-	stopping <-chan struct{}
+	cfg       Config
+	startedAt time.Time // for uptime calculation
 }
 
-// New constructs a Server with every daemon-side subsystem wired up. stop is
-// what Shutdown and PrepareReinstall call to end the daemon, and stopping
-// closes once the daemon begins to stop.
-func New(version, socketPath string, disc discovery.Stacks, run *runner.Runner, builder *env.Builder, logStore *logs.Store, stop func(), stopping <-chan struct{}) *Server {
-	return &Server{
-		version:    version,
-		startedAt:  time.Now(),
-		socketPath: socketPath,
-		stacks:     disc,
-		runner:     run,
-		envBuilder: builder,
-		logs:       logStore,
-		stop:       stop,
-		stopping:   stopping,
-	}
+// New constructs a Server wired as cfg says.
+func New(cfg Config) *Server {
+	return &Server{cfg: cfg, startedAt: time.Now()}
 }
 
 // errStopping is the cause a stream's context carries when the daemon stopped
@@ -73,7 +70,7 @@ func (s *Server) streamContext(ctx context.Context) (context.Context, context.Ca
 	ctx, cancel := context.WithCancelCause(ctx)
 	go func() {
 		select {
-		case <-s.stopping:
+		case <-s.cfg.Stopping:
 			cancel(errStopping)
 		case <-ctx.Done():
 		}
@@ -94,11 +91,11 @@ func streamEnd(ctx context.Context) error {
 // findStack returns the discovered Stack named `name`, or the default stack
 // when the name is empty. An unknown name yields a connect.Error.
 func (s *Server) findStack(name string) (*discovery.Stack, error) {
-	if len(s.stacks) == 0 {
+	if len(s.cfg.Stacks) == 0 {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			"no stacks registered (set A_NOVEL_STACKS)")
 	}
-	if st := s.stacks.Stack(name); st != nil {
+	if st := s.cfg.Stacks.Stack(name); st != nil {
 		return st, nil
 	}
 	return nil, connect.Errorf(connect.CodeNotFound,
@@ -112,7 +109,7 @@ func (s *Server) findService(stackName, serviceName string) (*discovery.Service,
 	if err != nil {
 		return nil, err
 	}
-	if svc := s.stacks.Service(st.Name, serviceName); svc != nil {
+	if svc := s.cfg.Stacks.Service(st.Name, serviceName); svc != nil {
 		return svc, nil
 	}
 	return nil, connect.Errorf(connect.CodeNotFound,
@@ -123,7 +120,7 @@ func (s *Server) findService(stackName, serviceName string) (*discovery.Service,
 // the one findStack resolves.
 func (s *Server) scope(name string) ([]*discovery.Stack, error) {
 	if name == allStacks {
-		return s.stacks, nil
+		return s.cfg.Stacks, nil
 	}
 	st, err := s.findStack(name)
 	if err != nil {
@@ -140,7 +137,7 @@ func (s *Server) scope(name string) ([]*discovery.Stack, error) {
 func (s *Server) canonicalID(id string) string {
 	parts := strings.Split(id, "/")
 	isShorthand := len(parts) == 2 || len(parts) == 3 && parts[1] == "infra"
-	if st := s.stacks.Stack(""); isShorthand && st != nil {
+	if st := s.cfg.Stacks.Stack(""); isShorthand && st != nil {
 		return st.Name + "/" + id
 	}
 	return id
@@ -148,7 +145,7 @@ func (s *Server) canonicalID(id string) string {
 
 // findTarget returns the discovered target with the given ID.
 func (s *Server) findTarget(id string) (*discovery.Target, *discovery.Service, error) {
-	if t, svc := s.stacks.Target(id); t != nil {
+	if t, svc := s.cfg.Stacks.Target(id); t != nil {
 		return t, svc, nil
 	}
 	return nil, nil, connect.Errorf(connect.CodeNotFound, "unknown target %q", id)

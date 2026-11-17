@@ -12,9 +12,9 @@ import (
 // TestInjectForRepo covers the value-free manifest → Resolution flow: the
 // set-secret (injected), unset-secret (reported missing), absent-store (all
 // missing), absent-manifest, and malformed-manifest cases.
-//
-// Not parallel: every sub-test sets XDG_DATA_HOME to isolate the store.
 func TestInjectForRepo(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name        string
 		store       map[string]string // nil: never opened, so no key or store exists
@@ -63,16 +63,18 @@ func TestInjectForRepo(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			t.Setenv("XDG_DATA_HOME", t.TempDir())
+			t.Parallel()
+
+			secretsRoot := t.TempDir()
 			if testCase.store != nil {
-				saveStore(t, testCase.store)
+				saveStore(t, secretsRoot, testCase.store)
 			}
 			repoRoot := t.TempDir()
 			if testCase.manifest != "" {
 				fsutiltest.Write(t, repoRoot, map[string]string{".a-novel/secrets.yaml": testCase.manifest})
 			}
 
-			res, err := secrets.InjectForRepo(repoRoot)
+			res, err := secrets.InjectForRepo(repoRoot, secretsRoot)
 			if testCase.wantErr {
 				require.Error(t, err)
 			} else {

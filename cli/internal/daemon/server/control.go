@@ -14,25 +14,24 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/reinstall"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/runner"
-	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
 // Ping is the cheap handshake clients use to verify the daemon is alive.
 // `core start` uses it to detect an already-running instance.
 func (s *Server) Ping(_ context.Context, _ *anovelv1.PingRequest) (*anovelv1.PingResponse, error) {
-	return &anovelv1.PingResponse{DaemonVersion: s.version}, nil
+	return &anovelv1.PingResponse{DaemonVersion: s.cfg.Version}, nil
 }
 
 // Status reports everything `a-novel core status` needs in one round-trip.
 func (s *Server) Status(_ context.Context, _ *anovelv1.StatusRequest) (*anovelv1.StatusResponse, error) {
 	return &anovelv1.StatusResponse{
-		DaemonVersion:              s.version,
-		SocketPath:                 s.socketPath,
+		DaemonVersion:              s.cfg.Version,
+		SocketPath:                 s.cfg.SocketPath,
 		StartedAt:                  timestamppb.New(s.startedAt),
 		Uptime:                     durationpb.New(time.Since(s.startedAt)),
-		Stacks:                     stacksToProto(s.stacks),
-		ReinstallCheckpointPending: reinstall.Exists(),
+		Stacks:                     stacksToProto(s.cfg.Stacks),
+		ReinstallCheckpointPending: reinstall.Exists(s.cfg.Checkpoint),
 	}, nil
 }
 
@@ -44,7 +43,7 @@ func (s *Server) Status(_ context.Context, _ *anovelv1.StatusRequest) (*anovelv1
 // A second PrepareReinstall is rejected while one is pending, guarded by the
 // checkpoint file's existence.
 func (s *Server) PrepareReinstall(_ context.Context, _ *anovelv1.PrepareReinstallRequest) (*anovelv1.PrepareReinstallResponse, error) {
-	if err := reinstall.EnsureSinglePending(); err != nil {
+	if err := reinstall.EnsureSinglePending(s.cfg.Checkpoint); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
 	// A running target still holds its port claims, so the checkpoint records
@@ -53,11 +52,11 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *anovelv1.PrepareReinstal
 	ids := s.liveGoExecIDs()
 	cp := reinstall.Checkpoint{}
 	for _, id := range ids {
-		if t, _ := s.stacks.Target(id); t != nil {
-			cp.GoExec = append(cp.GoExec, reinstall.GoExecCheckpoint{TargetID: id, Env: s.envBuilder.HeldPorts(t)})
+		if t, _ := s.cfg.Stacks.Target(id); t != nil {
+			cp.GoExec = append(cp.GoExec, reinstall.GoExecCheckpoint{TargetID: id, Env: s.cfg.Env.HeldPorts(t)})
 		}
 	}
-	if err := reinstall.Write(cp); err != nil {
+	if err := reinstall.Write(s.cfg.Checkpoint, cp); err != nil {
 		return nil, connect.Errorf(connect.CodeInternal, "write checkpoint: %v", err).WithCause(err)
 	}
 	// Stop the targets before the daemon exits, since a go-exec process
@@ -66,9 +65,9 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *anovelv1.PrepareReinstal
 	for _, failure := range s.stopAll(ids, nil, 5*time.Second).failures {
 		fmt.Fprintf(os.Stderr, "reinstall: %s\n", failure)
 	}
-	time.AfterFunc(shutdownDelay, s.stop)
+	time.AfterFunc(shutdownDelay, s.cfg.Stop)
 	return &anovelv1.PrepareReinstallResponse{
-		CheckpointPath:    paths.ReinstallCheckpoint(),
+		CheckpointPath:    s.cfg.Checkpoint,
 		GoExecTargetCount: int32(len(cp.GoExec)),
 	}, nil
 }
@@ -85,10 +84,10 @@ func (s *Server) PrepareReinstall(_ context.Context, _ *anovelv1.PrepareReinstal
 func (s *Server) Shutdown(_ context.Context, req *anovelv1.ShutdownRequest) (*anovelv1.ShutdownResponse, error) {
 	var sessions []runner.InfraSessionRef
 	if req.GetForce() {
-		sessions = s.runner.ActiveInfraSessions()
+		sessions = s.cfg.Runner.ActiveInfraSessions()
 	}
 	outcome := s.stopAll(s.liveGoExecIDs(), sessions, killGrace)
-	time.AfterFunc(shutdownDelay, s.stop)
+	time.AfterFunc(shutdownDelay, s.cfg.Stop)
 	return &anovelv1.ShutdownResponse{
 		GoExecKilled:          int32(outcome.goExecKilled),
 		InfraServicesTornDown: int32(outcome.infraTornDown),
@@ -99,7 +98,7 @@ func (s *Server) Shutdown(_ context.Context, req *anovelv1.ShutdownRequest) (*an
 // liveGoExecIDs returns the IDs of every starting or running go-exec target.
 func (s *Server) liveGoExecIDs() []string {
 	var ids []string
-	for _, inst := range s.runner.AllInstances() {
+	for _, inst := range s.cfg.Runner.AllInstances() {
 		if inst.Mode == anovelv1.Mode_MODE_GO_EXEC && inst.Live() {
 			ids = append(ids, inst.ID)
 		}
@@ -114,9 +113,9 @@ func (s *Server) stopAll(ids []string, sessions []runner.InfraSessionRef, grace 
 	killCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	return tearDown(ids, sessions,
-		func(id string) error { return s.runner.Kill(killCtx, id, grace) },
+		func(id string) error { return s.cfg.Runner.Kill(killCtx, id, grace) },
 		func(ref runner.InfraSessionRef) error {
-			return s.runner.KillInfra(killCtx, ref.Stack, ref.Service, true /* force */)
+			return s.cfg.Runner.KillInfra(killCtx, ref.Stack, ref.Service, true /* force */)
 		})
 }
 
