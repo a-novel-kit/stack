@@ -63,10 +63,8 @@ shaky, the answer is no:
    does the same mechanical thing regardless of who calls it. (Examples already in `golib`: the
    `otel.Report*` span helpers, `postgres.GetContext`/`WithinTx`/migration plumbing, the `logging`
    presets, the `httpf` error-mapping + JSON helpers, the `config.LoadEnv` parsers.)
-2. **It is generic.** Ask whether the code is about the domain before counting its copies.
-   Generic glue moves to `golib` with its first consumer, since a service's `internal/lib/` is a
-   holding pen. The bar rules out speculative generality: an option, hook or abstraction no caller
-   needs yet.
+2. **One consumer is enough.** Generic glue moves to `golib` with its first consumer. An option,
+   hook or abstraction no caller needs stays out.
 3. **No dependency already covers it.** If `samber/lo`, `uptrace/bun`, an `otel` contrib package,
    or anything else in (or addable to) `go.mod` does it, use that instead.
 4. **You can't make it disappear instead.** Sometimes the right move is to delete the duplicated
@@ -134,8 +132,9 @@ developer's call** — when you see a candidate, flag it; do not move it unpromp
 Once graduated, the package is a **public, community-facing library**, and the rules change:
 
 - **Design the API broadly, not for our needs.** A graduated package covers its _domain_, not just
-  the slice a-novel happens to use: `jwt` implements JWA, JWE, JWK and JWS, not only the two
-  token flows the auth service needs. Design the exported surface as if strangers will build on it.
+  the slice a-novel happens to use: `jwt` implements JWA, JWE, JWK, JWS and the JWT claims layer,
+  not only the two token flows the auth service needs. Design the exported surface as if strangers
+  will build on it.
 - **Documentation beyond godoc.** `jwt`'s README is its user guide, with badges (Go version, CI
   status, codecov) and a `go get` line, and `docs/migrations/` holds its migration guides.
 - **Thorough tests + coverage gates.** A `codecov.yml`, high coverage, and `Example_xxx` /
@@ -145,9 +144,8 @@ Once graduated, the package is a **public, community-facing library**, and the r
   Contributor Covenant, verbatim — don't author one), and a `CONTRIBUTING.md` that links the org
   concepts doc at `a-novel-kit/.github/blob/master/CONTRIBUTING.md` rather than restating it.
 - **Semver discipline.** Public API stability is why the package graduated into its own versioned
-  repo. Deprecate-then-remove; never break the API without a major bump; and even a major bump
-  stages the break (add the new path → migrate consumers → remove the old path in a later
-  release). See `manage-versions`.
+  repo. Remove or rename an export by the rules in [Removing from golib](#removing-from-golib),
+  which hold for a graduated package too.
 
 A change to a graduated package that any a-novel service consumes is a cross-repo change — load
 `manage-versions` and order the merges (library PR merges + releases first; the service re-pins to
@@ -197,9 +195,8 @@ package, helpers, mockery where interfaces exist). The kit-flavoured additions:
   layer-prefixed-name rule in `write-go-tests` (`configtest`, `libtest`, …) keeps _several_ fixture
   packages distinct in one repo; a small library with one is fine.
 - **No service-DB harness.** Kit libraries have no `dao` layer, so most kit tests are pure unit
-  tests. Where a
-  sub-package wraps an external system (`postgres`, `smtp`), its tests may stand a real instance up
-  via the repo's `scripts/test.sh` — follow whatever the repo already does.
+  tests. Where a sub-package wraps an external system (`postgres`, `smtp`), its tests may stand a
+  real instance up via the repo's `scripts/test.sh`; follow whatever the repo already does.
 
 ---
 

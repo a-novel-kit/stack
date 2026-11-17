@@ -172,7 +172,7 @@ that branch's changes.
   | Git operations                            | `git-conventions`    |
 
 - **After any proto or interface change, run `pnpm generate:go`** to regenerate protobuf Go bindings
-  and Go interface mocks. Commit the generated files (`internal/models/proto/gen/`, `internal/handlers/mocks/`, `internal/core/mocks/`)
+  and Go interface mocks. Commit the generated files (`internal/handlers/protogen/`, `internal/handlers/mocks/`, `internal/core/mocks/`)
   in the same commit as the change that required them — never in a separate cleanup commit.
 - **Only change what the feature requires** (see "Surgical changes" under Key Principles).
 - Keep published diffs small and reviewable. Focused tests may accompany a draft; complete the

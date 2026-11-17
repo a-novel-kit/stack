@@ -96,7 +96,7 @@ EOF
   `tmp/wt-… | 1 +` line. Name the files the logical unit touched; the `git add …` in this workflow
   is a list on purpose.
 - **Generated files belong in the same commit as the change that required them.** Proto Go bindings
-  (`internal/models/proto/gen/`) and mocks (`internal/handlers/mocks/`, `internal/core/mocks/`)
+  (`internal/handlers/protogen/`) and mocks (`internal/handlers/mocks/`, `internal/core/mocks/`)
   never get their own commit — stage them with the `.proto` or interface change that required
   `pnpm generate:go`.
 - **Never commit secrets.** .env files, APP_MASTER_KEY values, real credentials.

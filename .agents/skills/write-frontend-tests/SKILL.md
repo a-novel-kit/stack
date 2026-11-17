@@ -26,8 +26,8 @@ Use the smallest layer that proves the user-visible contract:
 
 1. Test pure parsing, formatting, and state transitions as unit tests.
 2. Test component rendering and interaction through the DOM with Testing Library.
-3. Use Storybook stories as the exhaustive catalog of reusable component states; add interaction and
-   accessibility assertions where supported.
+3. Use Storybook stories as the exhaustive catalog of reusable component states; add assertions on
+   what each fixed state renders, accessibility included, where supported.
 4. Use real-browser end-to-end tests for routing, focus across pages, browser APIs, hydration,
    multi-component journeys, and behavior an emulated DOM cannot prove.
 

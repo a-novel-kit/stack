@@ -26,11 +26,11 @@ func TestGrpcJwkGet(t *testing.T) {
     testCases := []struct {
         name string
 
-        request *protogen.JwkGetRequest
+        request *jsonkeysv2.JwkGetRequest
 
         serviceMock *serviceMock  // nil → mock must not be called
 
-        expect       *protogen.JwkGetResponse
+        expect       *jsonkeysv2.JwkGetResponse
         expectStatus codes.Code
     }{
         {

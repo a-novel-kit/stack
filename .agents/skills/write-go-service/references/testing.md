@@ -61,7 +61,7 @@ func TestPgJwkSelect(t *testing.T) {
 ```
 
 - `t.Parallel()` on the outer function, like any test. Construct the DAO once outside the
-  loop. Insert fixtures via `db.NewInsert().Model(...)` on the transaction-bound DB.
+  loop. Insert fixtures via `db.NewInsert().Model(...)` on the test's database.
 - A test verifying filtering/ordering needs enough fixtures to make the assertion meaningful (a
   `"FilterUsage"` case needs at least one matching row and one non-matching row).
 - Use fixed UUIDs (`uuid.MustParse("00000000-0000-0000-0000-000000000001")`) and fixed timestamps
@@ -142,8 +142,8 @@ require.Equal(t, testCase.expect, res)
 - Always test: success, each error code the handler maps itself (e.g. `codes.NotFound`), the
   generic fallback (`codes.Internal`), and an invalid-input case if the handler parses input first. For list
   handlers add `"Success/Empty"` with the repeated field set explicitly
-  (`expect: &protogen.JwkListResponse{Keys: []*protogen.Jwk{}}`) — `lo.Map` returns a non-nil
-  empty slice, so `&protogen.JwkListResponse{}` (nil `Keys`) would fail the equality check.
+  (`expect: &jsonkeysv2.JwkListResponse{Keys: []*jsonkeysv2.Jwk{}}`): `lo.Map` returns a non-nil
+  empty slice, so `&jsonkeysv2.JwkListResponse{}` (nil `Keys`) fails the equality check.
 - A server-fault case sets `expectCause` to the error the service mock returns. `require.ErrorIs`
   proves that `grpcf.Fault` kept it, since the server span's `error.type` names that cause's type.
 

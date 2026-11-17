@@ -165,7 +165,7 @@ interfaces** that implementation needs, though not every layer has them:
 | Layer       | Struct exports | Interface exports                                                                        |
 | ----------- | -------------- | ---------------------------------------------------------------------------------------- |
 | `dao/`      | one struct     | **none** — DAO files export no interface; the interface lives in the consuming core file |
-| `core/`     | one struct     | one per dependency (the DAO interface + any sub-services)                                |
+| `core/`     | one struct     | one per dependency (the DAO interface + any sub-services), shared preflights aside       |
 | `handlers/` | one struct     | one (the service it delegates to)                                                        |
 
 ```go
@@ -202,8 +202,10 @@ func NewUserSearch(dao UserSearchDao) *UserSearch {
   A service that imports `dao.PgUserSearch` does not use that concrete type directly; it declares a
   local `UserSearchDao` interface describing only the methods it needs. The DAO package has
   no interface of its own. The consumer owns the contract and the producer satisfies it, so neither
-  layer forces the other to import it. The one accepted exception is genai's connector registry,
-  described under [lib](references/wiring.md#lib-layer-internallib).
+  layer forces the other to import it. Two exceptions are accepted: genai's connector registry,
+  described under [lib](references/wiring.md#lib-layer-internallib), and the preflight DAO
+  interfaces core declares once in `common.go` for its shared helpers (see
+  [operations](references/operations.md#core-layer-internalcore)).
 - **One method per interface, named `Exec`.** Idiomatic Go names interface methods after what they
   do; this is a deliberate project standard that trades that for consistency. Follow it.
 - The method signature is `(ctx context.Context, request *XxxRequest) (Result, error)` — `Result`

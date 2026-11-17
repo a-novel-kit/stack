@@ -174,9 +174,9 @@ regression, service crash at boot); switch to Phase 2.4 "real" investigation.
 - The failure involves a secret or credential (never debug secrets autonomously)
 - The workflow file itself is failing to parse (YAML error) — check with the user before
   editing workflow files
-- The failure is on a master-only reporting job (`publish-docs`, `report-grc`) that does
-  not gate merges — surface but do not fix unless asked
-- The failure is on `report-codecov` — it runs on every branch and can make the run appear
+- The failure is on the master-only `publish-docs` job, which does not gate merges: surface it
+  but do not fix it unless asked
+- The failure is on `report-codecov`: it runs on every event and can make the run appear
   failed in PR checks even when branch protection does not gate on it. Surface it; investigate
   only if the user asks, or if it reproduces across consecutive runs (a real upload or config
   regression rather than a transient)

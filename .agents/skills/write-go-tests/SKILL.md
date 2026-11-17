@@ -246,7 +246,7 @@ it?" If not, it is not worth writing.
 - **`context.Background()` in test bodies.** Use `t.Context()` instead.
 - **Hard-coding mock expectations for context.** Always use `mock.Anything` for `ctx`.
 - **Calling `AssertExpectations` by hand.** The generated constructor already registers it with
-  `t.Cleanup`. Delete the explicit call.
+  `t.Cleanup`. Delete the explicit call, and never build a mock as `&MockX{}`, which skips it.
 - **Asserting response body on error paths.** For REST handlers, assert only the status code on
   error cases. The body is an implementation detail.
 - **Mocking the database in DAO tests.** DAO tests always use a real database via

@@ -109,7 +109,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 4. `COPY` source files
 5. `RUN go build`
 
-Never move `go mod download` after source COPY — it defeats layer caching.
+Never move `go mod download` after source COPY: it defeats layer caching. Both `RUN` steps mount
+the module cache, and `go build` also mounts the build cache, as the builder example shows.
 
 **Build flags**: all three (`CGO_ENABLED=0`, `-ldflags="-s -w"`, `-trimpath`) are required on every
 `go build`. Set `CGO_ENABLED=0` once as `ENV` at the top of the stage rather than inlining it per
@@ -119,7 +120,9 @@ build command.
 chain them in a single `RUN` to reduce layers:
 
 ```dockerfile
-RUN go build -ldflags="-s -w" -trimpath -o /grpc ./cmd/grpc/ && \
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -ldflags="-s -w" -trimpath -o /grpc ./cmd/grpc/ && \
     go build -ldflags="-s -w" -trimpath -o /migrations ./cmd/migrations/ && \
     go build -ldflags="-s -w" -trimpath -o /rotate-keys ./cmd/rotate-keys/
 ```
@@ -127,7 +130,7 @@ RUN go build -ldflags="-s -w" -trimpath -o /grpc ./cmd/grpc/ && \
 ### Runtime stage
 
 ```dockerfile
-FROM docker.io/library/alpine:3.23.4
+FROM docker.io/library/alpine:3.24.4
 
 COPY --from=builder /grpc /grpc
 COPY --from=builder /usr/local/bin/grpcurl /usr/local/bin/grpcurl
@@ -390,6 +393,7 @@ Always exclude:
 - `.git` — can be hundreds of MB; no Dockerfile needs it
 - `node_modules` — potentially hundreds of MB; not part of any Go build
 - `**/*_test.go` — test files are not compiled into production binaries
+- `**/testdata`: test fixtures, which the whole-directory source COPY would otherwise carry
 
 ---
 

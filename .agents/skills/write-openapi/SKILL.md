@@ -89,7 +89,7 @@ bump and coordination across consuming services.
 | Remove or rename a required response field              | Callers accessing the field get `undefined`/panic     |
 | Change a field's type (e.g., `string` → `integer`)      | Callers fail to deserialize                           |
 | Change a `2xx` status code (e.g., 200 → 201)            | Callers checking the code break                       |
-| Add `required: true` to a previously optional parameter | Callers omitting it now get 400                       |
+| Add `required: true` to a previously optional parameter | Callers omitting it now get 400 or 422                |
 | Rename an `operationId`                                 | Code generators and clients using `operationId` break |
 | Remove a named `$ref` component that is used            | Generated clients break                               |
 
@@ -376,6 +376,8 @@ responses:
     $ref: "#/components/responses/badRequest" # only if the handler decodes input
   "404":
     $ref: "#/components/responses/notFound" # only if the handler returns 404
+  "422":
+    $ref: "#/components/responses/unprocessableEntity" # only if core validates the request
   default:
     $ref: "#/components/responses/internalError"
 ```

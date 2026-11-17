@@ -48,7 +48,7 @@ Choose the least explicit boundary that preserves hierarchy:
 
 Use borderless semi-opaque islands for floating navigation, tool clusters, overlays, and independently
 scannable regions. Use transparent groups where content hierarchy already provides the boundary.
-Backdrop blur is in the browser baseline, and a frosted island stays legible over any content
+Every baseline browser renders backdrop blur, and a frosted island stays legible over any content
 behind it.
 
 ## Light, glow, and geometry

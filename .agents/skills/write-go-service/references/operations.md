@@ -51,12 +51,11 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
 
 - **A cap on a request field is a validator tag**, never a config value or a hand-written check.
   `validate:"required,max=2097152"` caps a `json.RawMessage` at 2 MiB, and `validate:"max=500"` caps
-  a slice. When no built-in tag expresses the rule, look in the validator's
-  `non-standard/validators` package next, which holds `NotBlank` for the `notblank` tag. Register
-  a custom one on the package's `validate` instance with `RegisterValidation` only when neither
-  holds the rule. A cap the schema already holds
-  reuses its value and needs no setting of its own. Rate and concurrency limits stay configuration
-  (see [request limits](request-limits.md)).
+  a slice. When no built-in tag expresses the rule, register one on the package's `validate`
+  instance with `RegisterValidation`: the validator's `non-standard/validators` package holds
+  `NotBlank` for the `notblank` tag, and a function of your own covers a rule neither holds. A cap
+  the schema already holds reuses its value and needs no setting of its own. Rate and concurrency
+  limits stay configuration (see [request limits](request-limits.md)).
 - **A known set is a Go slice behind a custom tag**, never `oneof`. `ProjectLanguages` lists the
   languages, and the `language` tag checks a value against it, so code and doc comments name the
   set by one variable. A set a registry already holds validates against the registry: the
@@ -237,12 +236,12 @@ func NewRestUserList(service RestUserListService, logger logging.Log) *RestUserL
 
 - **REST is public-facing.** Never leak internal error detail. Map each expected sentinel to a
   status with the project's error-mapping helper (`httpf.HandleError` + `httpf.ErrMap`); the
-  helper's fallback covers unmapped errors as 500.
-- **A refusal takes the status of its cause.** A request that fails to decode answers 400. A
-  request that decodes but fails core validation (`core.ErrInvalidRequest`) answers 422. A refusal
-  that depends on stored state, such as a duplicate or a full project, answers 409. `httpf.HandleError` marks the span failed for a
+  helper's fallback covers unmapped errors as 500. `httpf.HandleError` marks the span failed for a
   5xx and leaves a 4xx unset, so never add a separate report on a path that goes through it (see
   Telemetry).
+- **A refusal takes the status of its cause.** A request that fails to decode answers 400. A
+  request that decodes but fails core validation (`core.ErrInvalidRequest`) answers 422. A refusal
+  that depends on stored state, such as a duplicate or a full project, answers 409.
 - Conventional short names `w` / `r`. JSON in via `json.NewDecoder(r.Body)` or `gorilla/schema` for
   query params; out via the project's `httpf.SendJSON`.
 - **A single write and its batch take their own routes**, with the same methods: `POST`, `PUT` and
@@ -284,13 +283,13 @@ type GrpcOrderCreateService interface {
 }
 
 type GrpcOrderCreate struct {
-    protogen.UnimplementedOrderCreateServiceServer
+    ordersv1.UnimplementedOrderCreateServiceServer
     service GrpcOrderCreateService
 }
 
 func (h *GrpcOrderCreate) OrderCreate(
-    ctx context.Context, req *protogen.OrderCreateRequest,
-) (*protogen.OrderCreateResponse, error) {
+    ctx context.Context, req *ordersv1.OrderCreateRequest,
+) (*ordersv1.OrderCreateResponse, error) {
     ctx, span := otel.Tracer().Start(ctx, "grpc.OrderCreate")
     defer span.End()
 
@@ -302,7 +301,7 @@ func (h *GrpcOrderCreate) OrderCreate(
         return nil, grpcf.Fault(codes.Internal, "create order: internal error", otel.ReportError(span, err))
     }
 
-    return &protogen.OrderCreateResponse{OrderId: result.ID.String()}, nil
+    return &ordersv1.OrderCreateResponse{OrderId: result.ID.String()}, nil
 }
 
 func NewGrpcOrderCreate(service GrpcOrderCreateService) *GrpcOrderCreate {
@@ -311,7 +310,8 @@ func NewGrpcOrderCreate(service GrpcOrderCreateService) *GrpcOrderCreate {
 ```
 
 - **gRPC is internal** (service-to-service only) — never exposed to the internet. Embed
-  `protogen.Unimplemented<ServiceName>Server`.
+  `<svc>v<N>.Unimplemented<ServiceName>Server`, the generated package under its alias (see
+  `write-proto`).
 - Map core sentinels to `codes.*` via `errors.Is` + `status.Error`. Inside `status.Error` /
   `status.Errorf` use `%v`, never `%w`: gRPC status errors don't support `errors.Unwrap`, so `%w`
   misleads. Keep status _messages_ generic enough not to leak DB/crypto detail.

@@ -87,11 +87,13 @@ directories above it, and `src/lib/`. Screens, their parts and `src/lib/ui/` imp
 (`$app/state`, `$app/navigation`), storage, cookies, environment secrets, or network clients; the
 route files and adapters bring those in.
 
-The shell fixes its phone header to the screen and keeps the maintenance banner stuck to the top of
-the workspace, and sets `--shell-sticky-top` to their height. On a narrow screen it also sets
-`--shell-sticky-bottom` to the banner's block size, which uikit's `StickyBar edge="end"` reads. A
-page's own sticky part, such as a tab bar, sits there, under them, frosted and overhanging its column as
-[write-design-system](../write-design-system/SKILL.md#the-a-novel-visual-direction) describes. The
+On a wide screen the shell keeps the maintenance banner stuck to the top of the workspace. On a
+narrow one it fixes its phone header to the screen and moves the banner to the foot. It sets
+`--shell-sticky-top` to the height of what covers the top, and `--shell-sticky-bottom` to the
+banner's block size when the banner sits at the foot, which uikit's `StickyBar edge="end"` reads. A
+page's own sticky part, such as a tab bar, sits under `--shell-sticky-top`, frosted and overhanging
+its column as [write-design-system](../write-design-system/SKILL.md#the-a-novel-visual-direction)
+describes. The
 root layout paints the canvas color on `html` and the lamp on a fixed `body::before` layer with
 `will-change: transform`: iOS drops a fixed layer that has no compositing layer of its own once the
 page scrolls far. Chrome on iOS still moves fixed layers as its toolbar collapses

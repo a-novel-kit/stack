@@ -145,8 +145,8 @@ layer/role prefixes (`pg.*`, `rest.*`, `grpc.*`, `*.config.go`, `common.go`, …
   for `context.Context`, `err` for errors, `i` / `k` / `v` in range loops, `t` for `*testing.T`.
 - **Initialisms keep Go's casing**: `ID`, `URL`, `JSON`, `JWT`, `HTTP`, `SQL`, `TTL`, `DSN`, `KID`,
   as in `GcloudProjectID`, `GrpcURL` and `PostgresDSN`. An initialism that _starts_ an unexported
-  identifier goes all-lowercase: `id`, `url`. staticcheck's `ST1003` checks the common ones in every Go
-  repository.
+  identifier goes all-lowercase: `id`, `url`. Enable staticcheck's `ST1003` in every Go
+  repository's `.golangci.yaml`; it checks the common ones.
 - **Layer and protocol prefixes are words**: `Rest`, `Grpc`, `Pg`, `Jwk`, `Dao`, as in
   `RestJwkGet`, `GrpcClaimsSign`, `PgJwkSearch` and `JwkSearchDao`. Generated code keeps the casing
   its generator chose, such as protobuf's `GetId`.
@@ -178,8 +178,9 @@ Treat any `new(T)` of a struct as cleanup-on-sight when the file is already in s
 
 **`new(expr)` makes a pointer to a value.** Go 1.26 accepts an expression, as in
 `new(time.Now())`, so `new(expr)` replaces `lo.ToPtr(expr)` and every pointer helper of its kind.
-The `modernize` linter, enabled in every Go repository, reports these and the other idioms a newer
-Go release offers, such as `errors.AsType` in place of a declared target and `errors.As`.
+Enable the `modernize` linter in every Go repository's `.golangci.yaml`; it reports these and the
+other idioms a newer Go release offers, such as `errors.AsType` in place of a declared target and
+`errors.As`.
 
 ---
 
