@@ -109,7 +109,7 @@ func syncNeedsAttention(r jobs.Result) bool {
 // those --ignore names, and the stack repository at root, which never syncs into
 // itself. --allow drops the others silently.
 func syncJobs(ctx context.Context, root string, repos []workspace.Repo, allowed, ignored map[string]bool) ([]jobs.Job, []string) {
-	self, _ := workspace.Origin(ctx, root)
+	self, _ := workspace.RootRepo(ctx, root)
 	var list []jobs.Job
 	var skipped []string
 	for _, r := range repos {

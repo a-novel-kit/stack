@@ -211,6 +211,29 @@ func TestCheckContainers(t *testing.T) {
 	}
 }
 
+// TestCheckContainersPodmanFailure pins that a podman call failing before it
+// reports any container ends nothing: no container is known gone, and the next
+// tick retries.
+//
+//nolint:paralleltest // stubOnPath puts a stand-in podman on PATH with t.Setenv.
+func TestCheckContainersPodmanFailure(t *testing.T) {
+	stubOnPath(t, "podman", "#!/bin/sh\necho 'Error: database is locked' >&2\nexit 125\n")
+	r := &Runner{instances: map[string]*Instance{}}
+	watches := make([]containerWatch, 0, 2)
+	for _, cid := range []string{"cid-a", "cid-b"} {
+		id := "default/svc/" + cid
+		r.instances[id] = &Instance{ID: id, Mode: anovelv1.Mode_MODE_CONTAINER, Phase: anovelv1.Phase_PHASE_RUNNING, ContainerID: cid}
+		watches = append(watches, containerWatch{id: id, cid: cid})
+	}
+
+	r.checkContainers(watches)
+
+	for _, w := range watches {
+		inst, _ := r.Instance(w.id)
+		require.Equal(t, anovelv1.Phase_PHASE_RUNNING, inst.Phase, w.id)
+	}
+}
+
 // TestWatchContainer pins that a new container is checked at once, so one that
 // exits right away ends its instance without waiting a tick.
 //

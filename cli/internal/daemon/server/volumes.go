@@ -35,7 +35,7 @@ func (s *Server) BackupVolume(ctx context.Context, req *anovelv1.BackupVolumeReq
 	if err := s.ensureServiceDown(ctx, svc, req.GetForce(), "backup"); err != nil {
 		return nil, err
 	}
-	paths, err := volumes.Backup(ctx, svc, req.GetTag())
+	paths, err := volumes.Backup(context.WithoutCancel(ctx), svc, req.GetTag())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -52,7 +52,7 @@ func (s *Server) RestoreVolume(ctx context.Context, req *anovelv1.RestoreVolumeR
 	if err := s.ensureServiceDown(ctx, svc, req.GetForce(), "restore"); err != nil {
 		return nil, err
 	}
-	restored, err := volumes.Restore(ctx, svc, req.GetFrom())
+	restored, err := volumes.Restore(context.WithoutCancel(ctx), svc, req.GetFrom())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -69,7 +69,7 @@ func (s *Server) ClearVolume(ctx context.Context, req *anovelv1.ClearVolumeReque
 	if err := s.ensureServiceDown(ctx, svc, req.GetForce(), "clear"); err != nil {
 		return nil, err
 	}
-	cleared, err := volumes.Clear(ctx, svc, req.GetNoBackup())
+	cleared, err := volumes.Clear(context.WithoutCancel(ctx), svc, req.GetNoBackup())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}

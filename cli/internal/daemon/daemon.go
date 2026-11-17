@@ -110,7 +110,7 @@ func listen(ctx context.Context, socketPath string) (net.Listener, error) {
 	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
 		return nil, fmt.Errorf("mkdir socket parent: %w", err)
 	}
-	unlock, err := paths.Lock(socketPath+".lock", true)
+	unlock, err := paths.Lock(socketPath + ".lock")
 	if err != nil {
 		return nil, err
 	}

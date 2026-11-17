@@ -399,7 +399,7 @@ func ClaimEnvs(targets []detect.Target) (func(), error) {
 	}
 
 	for _, e := range envs {
-		unlock, err := paths.Lock(filepath.Join(dir, e.Project+".lock"), false)
+		unlock, err := paths.TryLock(filepath.Join(dir, e.Project+".lock"))
 		if errors.Is(err, paths.ErrLocked) {
 			err = fmt.Errorf("env %s is in use by another run of this checkout; retry once it ends", e.ID)
 		}
@@ -532,9 +532,13 @@ func composeUpPhased(ctx context.Context, out io.Writer, env []string, e *detect
 func waitHealthy(ctx context.Context, out io.Writer, env []string, e *detect.ComposeEnv, timeout time.Duration) error {
 	var last envPoll
 	err := poll.Until(ctx, 1500*time.Millisecond, timeout, func(ctx context.Context) (bool, error) {
-		var err error
-		last, err = pollEnv(ctx, env, e.Project+"_")
-		return last.ready, err
+		result, err := pollEnv(ctx, env, e.Project+"_")
+		// A poll the deadline cut short saw nothing; the timeout error reports
+		// the last complete one.
+		if ctx.Err() == nil {
+			last = result
+		}
+		return result.ready, err
 	})
 
 	states := strings.Join(last.states, "  ")

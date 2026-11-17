@@ -160,8 +160,8 @@ func (r *Runner) liveContainers() []containerWatch {
 }
 
 // checkContainers inspects the containers of watches in one podman call and
-// applies each result to its instance. A container the call misses is gone,
-// and its instance ends as crashed.
+// applies each result to its instance. A container the call misses, while
+// podman reports the others, is gone, and its instance ends as crashed.
 func (r *Runner) checkContainers(watches []containerWatch) {
 	cids := make([]string, len(watches))
 	for i, w := range watches {
@@ -170,6 +170,10 @@ func (r *Runner) checkContainers(watches []containerWatch) {
 
 	// The call serves every instance, so no instance's end cancels it.
 	containers, err := podman.Inspect(context.Background(), nil, cids)
+	if containers == nil && err != nil {
+		// podman printed nothing, so nothing is known gone: the next tick retries.
+		return
+	}
 	gone := "container gone"
 	if err != nil {
 		gone = err.Error()

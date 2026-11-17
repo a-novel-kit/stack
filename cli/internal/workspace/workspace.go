@@ -108,8 +108,8 @@ type Checkout struct {
 // repository cloned under app/ or kit/.
 func Checkouts(ctx context.Context, root string) ([]Checkout, error) {
 	var out []Checkout
-	self, selfErr := Origin(ctx, root)
-	if selfErr == nil {
+	self, isRepo := RootRepo(ctx, root)
+	if isRepo {
 		out = append(out, Checkout{Repo: self, Path: root})
 	}
 	entries, err := LoadRepos(root)
@@ -118,7 +118,7 @@ func Checkouts(ctx context.Context, root string) ([]Checkout, error) {
 	}
 	for _, e := range entries {
 		dir := e.Dir(root)
-		if (selfErr == nil && e == self) || !fsutil.Exists(filepath.Join(dir, ".git")) {
+		if (isRepo && e == self) || !fsutil.Exists(filepath.Join(dir, ".git")) {
 			continue
 		}
 		out = append(out, Checkout{Repo: e, Path: dir})

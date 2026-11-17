@@ -197,3 +197,28 @@ func TestAllocPorts(t *testing.T) {
 		seen[port] = name
 	}
 }
+
+// TestWaitHealthy pins that a timeout reports the last complete poll, with the
+// pending containers' log tails, when the deadline cuts a later poll short. Not
+// parallel: t.Setenv puts the stand-in podman on PATH.
+func TestWaitHealthy(t *testing.T) {
+	bin := t.TempDir()
+	// The first `ps` lists one starting container; every later one outlives the
+	// deadline.
+	script := fmt.Sprintf(`#!/bin/sh
+case "$1" in
+ps)
+	if [ -e %[1]s/listed ]; then exec sleep 5; fi
+	touch %[1]s/listed
+	echo 0123456789abcdef ;;
+inspect) echo '[{"Id": "0123456789abcdef", "Name": "proj_db_1", "State": {"Status": "running", "Health": {"Status": "starting"}}}]' ;;
+logs) echo "db: still initializing" ;;
+esac
+`, bin)
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "podman"), []byte(script), 0o700))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	err := waitHealthy(t.Context(), io.Discard, nil, &detect.ComposeEnv{Project: "proj"}, 2*time.Second)
+	require.ErrorContains(t, err, "last state: proj_db_1=running/starting")
+	require.ErrorContains(t, err, "db: still initializing")
+}

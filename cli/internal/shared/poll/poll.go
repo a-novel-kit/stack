@@ -9,17 +9,14 @@ import (
 // ErrTimeout is the error Until returns once its timeout passes.
 var ErrTimeout = errors.New("timed out")
 
-// Until calls probe at once, then every interval, until it reports done or
-// fails, ctx ends, or timeout passes. It returns probe's error, ctx's error, or
-// ErrTimeout, so a caller words its own timeout. probe runs under a context
-// that ends with the wait; a probe the wait cut short reports the wait's end,
-// not its own failure.
+// Until calls probe at once, then interval after each call ends, until it
+// reports done or fails, ctx ends, or timeout passes. It returns probe's error,
+// ctx's error, or ErrTimeout, so a caller words its own timeout. probe runs
+// under a context that ends with the wait; a probe the wait cut short reports
+// the wait's end, not its own failure.
 func Until(ctx context.Context, interval, timeout time.Duration, probe func(ctx context.Context) (bool, error)) error {
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
 
 	for {
 		done, err := probe(waitCtx)
@@ -35,7 +32,7 @@ func Until(ctx context.Context, interval, timeout time.Duration, probe func(ctx 
 		select {
 		case <-waitCtx.Done():
 			return ended(ctx)
-		case <-ticker.C:
+		case <-time.After(interval):
 		}
 	}
 }

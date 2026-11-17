@@ -85,7 +85,7 @@ func CloneStack(ctx context.Context, path string) error {
 		return fmt.Errorf("mkdir parent %s: %w", parent, err)
 	}
 	_, statErr := os.Lstat(path)
-	if _, err := workspace.Git(ctx, parent, "clone", "--filter=blob:none", stackRemoteURL, path); err != nil {
+	if _, err := workspace.Git(ctx, parent, "clone", "--filter=blob:none", stackRemoteURL, filepath.Base(path)); err != nil {
 		if errors.Is(statErr, fs.ErrNotExist) {
 			// Best-effort cleanup of the partial clone, so a re-run starts fresh.
 			_ = os.RemoveAll(path)

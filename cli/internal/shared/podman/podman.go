@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // DockerFormatBuildArgs makes podman-compose build images in the docker format.
@@ -26,12 +27,21 @@ const (
 	HealthNone = "-"
 )
 
+// command prepares `podman args...` with env, nil keeping the caller's
+// environment. Cancelling ctx kills podman, but podman-compose and its podman
+// children keep the output pipes open, so WaitDelay bounds the wait for them.
+func command(ctx context.Context, env []string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "podman", args...)
+	cmd.Env = env
+	cmd.WaitDelay = 5 * time.Second
+	return cmd
+}
+
 // Output runs `podman args...` with env, nil keeping the caller's
 // environment, and returns its trimmed stdout. A failure carries what podman
 // printed on stderr.
 func Output(ctx context.Context, env []string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "podman", args...)
-	cmd.Env = env
+	cmd := command(ctx, env, args...)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -81,14 +91,14 @@ type State struct {
 
 // Inspect inspects every container of ids in one podman call. A container
 // that vanished fails the call, and podman still reports every other one, so
-// the result holds what podman printed even beside an error.
+// the result holds what podman printed even beside an error: nil when it
+// printed nothing, an empty slice when it reported no container.
 func Inspect(ctx context.Context, env, ids []string) ([]Container, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
 
-	cmd := exec.CommandContext(ctx, "podman", slices.Concat([]string{"inspect", "--type", "container"}, ids)...)
-	cmd.Env = env
+	cmd := command(ctx, env, slices.Concat([]string{"inspect", "--type", "container"}, ids)...)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

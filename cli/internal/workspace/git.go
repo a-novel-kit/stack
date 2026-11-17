@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 )
 
 // branchMaster is the default branch name across the org's repos.
@@ -33,6 +35,10 @@ func GitRemote(ctx context.Context, dir string, args ...string) (string, error) 
 func gitEnv(ctx context.Context, dir string, env []string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = slices.Concat(os.Environ(), env, []string{"GIT_LFS_SKIP_SMUDGE=1"})
+	// A cancelled git gets SIGTERM, on which it removes its lock files and a
+	// half-made clone; SIGKILL would leave them for the next sync to trip on.
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	cmd.WaitDelay = 5 * time.Second
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -67,18 +73,38 @@ func Origin(ctx context.Context, dir string) (Repo, error) {
 	return repo, nil
 }
 
-// ParseURL returns the GitHub repository a remote URL names, in SSH
-// (git@github.com:org/name.git) or HTTPS (https://github.com/org/name) form.
-func ParseURL(url string) (Repo, bool) {
-	url = strings.TrimSuffix(strings.TrimSpace(url), ".git")
-	if _, rest, ok := strings.Cut(url, "github.com"); ok {
-		url = strings.TrimLeft(rest, ":/")
-	}
-	parts := strings.Split(url, "/")
-	if len(parts) < 2 || parts[len(parts)-2] == "" || parts[len(parts)-1] == "" {
+// RootRepo returns the repository checked out at the workspace root, and
+// whether root holds a checkout with an origin. The root is the stack
+// repository: its origin names it or the fork it is, and an origin outside
+// GitHub, such as a local mirror, still counts as the stack, so the root's
+// unsaved work stays guarded.
+func RootRepo(ctx context.Context, root string) (Repo, bool) {
+	url, err := Git(ctx, root, "remote", "get-url", "origin")
+	if err != nil {
 		return Repo{}, false
 	}
-	return Repo{Org: parts[len(parts)-2], Name: parts[len(parts)-1]}, true
+	if repo, ok := ParseURL(url); ok {
+		return repo, true
+	}
+	return StackRepo, true
+}
+
+// ParseURL returns the GitHub repository a remote URL names, in SSH
+// (git@github.com:org/name.git, ssh://git@github.com/org/name) or HTTPS
+// (https://github.com/org/name) form. A URL on another host, or a local path,
+// names none.
+func ParseURL(url string) (Repo, bool) {
+	url = strings.TrimSuffix(strings.TrimSpace(url), ".git")
+	scheme, rest, found := strings.Cut(url, "github.com")
+	hostStart := scheme == "" || strings.HasSuffix(scheme, "@") || strings.HasSuffix(scheme, "//")
+	if !found || !hostStart || rest == "" || (rest[0] != ':' && rest[0] != '/') {
+		return Repo{}, false
+	}
+	org, name, ok := strings.Cut(rest[1:], "/")
+	if !ok || org == "" || name == "" || strings.Contains(name, "/") {
+		return Repo{}, false
+	}
+	return Repo{Org: org, Name: name}, true
 }
 
 // DefaultBranch reads the upstream's default branch from origin/HEAD, with no
