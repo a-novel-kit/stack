@@ -88,7 +88,7 @@ passes through a pipe, a log or a shell history.`,
 // refused. A secret then never passes through a pipe, a log or a shell history.
 func setSecret(out io.Writer, id string) error {
 	if strings.TrimSpace(id) == "" {
-		return errors.New("secrets set: <id> must not be empty")
+		return usageError(errors.New("secrets set: <id> must not be empty"))
 	}
 	if !stdinIsTTY() {
 		return errors.New("secrets set: refusing to run non-interactively: a secret " +
@@ -122,7 +122,10 @@ func newSecretsListCmd() *cobra.Command {
 		Use:     "ls",
 		Aliases: []string{"list"},
 		Short:   "List secret ids (never values)",
-		Args:    cobra.NoArgs,
+		Long: `Print the ID of each stored secret, one per line, in name order. No value is
+ever printed: a program reads one through 'secrets exec' or the
+.a-novel/secrets.yaml of its repository.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return listSecrets(cmd.OutOrStdout())
 		},
@@ -151,7 +154,10 @@ func newSecretsRemoveCmd() *cobra.Command {
 		Use:     "rm <id>",
 		Aliases: []string{"remove"},
 		Short:   "Delete a secret",
-		Args:    cobra.ExactArgs(1),
+		Long: `Delete the secret <id> from the store. An unknown ID fails, so a typo never
+passes for a deletion. Nothing can bring the value back: set it again with
+'secrets set'.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return removeSecret(cmd.OutOrStdout(), args[0])
 		},
@@ -200,7 +206,7 @@ environment alone.`,
 // the CLI's, and no error message carries a secret.
 func execWithSecrets(cmd *cobra.Command, envPairs, argv []string) error {
 	if len(envPairs) == 0 {
-		return errors.New("secrets exec: at least one --env NAME=<secret-id> is required")
+		return usageError(errors.New("secrets exec: at least one --env NAME=<secret-id> is required"))
 	}
 	extra, err := secretEnv(envPairs)
 	if err != nil {
@@ -211,13 +217,7 @@ func execWithSecrets(cmd *cobra.Command, envPairs, argv []string) error {
 	child.Stdin = cmd.InOrStdin()
 	child.Stdout = cmd.OutOrStdout()
 	child.Stderr = cmd.ErrOrStderr()
-	if err := child.Run(); err != nil {
-		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
-			return &ExitError{Code: exitStatus(exitErr)}
-		}
-		return fmt.Errorf("secrets exec: %w", err)
-	}
-	return nil
+	return childExit(cmd.Context(), child.Run())
 }
 
 // secretEnv resolves each NAME=<secret-id> pair into a NAME=value child-env
@@ -231,7 +231,7 @@ func secretEnv(pairs []string) ([]string, error) {
 	for _, pair := range pairs {
 		name, id, ok := strings.Cut(pair, "=")
 		if !ok || name == "" || id == "" {
-			return nil, fmt.Errorf("secrets exec: --env %q must be NAME=<secret-id>", pair)
+			return nil, usageError(fmt.Errorf("secrets exec: --env %q must be NAME=<secret-id>", pair))
 		}
 		value, found := st.Get(id)
 		if !found {

@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -13,7 +14,8 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/cli"
 )
 
-// commandCase runs the real root with args.
+// commandCase runs the real root with args. Every error case is a bad
+// invocation, which exits 2.
 type commandCase struct {
 	name    string
 	args    []string
@@ -21,21 +23,43 @@ type commandCase struct {
 	wantErr string // contained in the error; empty for success
 }
 
-// TestRejectUnknownSubcommands drives the real root: every command group fails
-// on an argument that names none of its subcommands, and still prints its help
-// and completes when used as intended.
-func TestRejectUnknownSubcommands(t *testing.T) {
+// TestNewRoot drives the real root. Every command group fails on an argument
+// that names none of its subcommands, and still prints its help and completes
+// when used as intended. A wrong argument count, an unknown flag value or an
+// argument a command refuses before doing anything exits 2.
+func TestNewRoot(t *testing.T) {
 	t.Parallel()
 
 	testCases := []commandCase{
 		{name: "Success/GroupHelp", args: []string{"core", "stacks"}, wantOut: "a-novel core stacks [command]"},
 		{name: "Success/HelpFlag", args: []string{"run", "--help"}, wantOut: "a-novel run [command]"},
 		{name: "Success/HelpCommand", args: []string{"help", "run", "service"}, wantOut: "a-novel run service [command]"},
+		{name: "Success/RootHelp", wantOut: "a-novel [command]"},
 		{name: "Success/CompletionScript", args: []string{"completion", "zsh"}, wantOut: "#compdef a-novel"},
 		{name: "Success/CompleteSubcommand", args: []string{"__complete", "core", "stacks", "p"}, wantOut: "prune"},
+		{name: "Success/CompleteEnumFlag", args: []string{"__complete", "run", "start", "--mode", ""}, wantOut: "go-exec\ncontainer\n:4"},
 		{name: "Error/RemovedCommand", args: []string{"run", "stacks"}, wantErr: `unknown command "stacks" for "a-novel run"`},
 		{name: "Error/RemovedNestedCommand", args: []string{"run", "service", "status", "service-json-keys"}, wantErr: `unknown command "status" for "a-novel run service"`},
 		{name: "Error/Suggestion", args: []string{"core", "stakcs"}, wantErr: "Did you mean this?\n\tstacks"},
+		{name: "Error/TooFewArgs", args: []string{"run", "start"}, wantErr: "accepts 1 arg(s), received 0"},
+		{name: "Error/TooManyArgs", args: []string{"secrets", "rm", "a", "b"}, wantErr: "accepts 1 arg(s), received 2"},
+		{name: "Error/UnexpectedArg", args: []string{"secrets", "ls", "now"}, wantErr: `unknown command "now" for "a-novel secrets ls"`},
+		{name: "Error/UnknownMode", args: []string{"run", "start", "svc/rest", "--mode=contaner"}, wantErr: `"contaner" is not one of go-exec, container`},
+		{name: "Error/UnknownOneShotsMode", args: []string{"run", "service", "infra", "start", "svc", "--one-shots=podman"}, wantErr: "--one-shots"},
+		{name: "Error/UnknownStream", args: []string{"run", "logs", "svc/rest", "--stream=both"}, wantErr: "--stream"},
+		{name: "Error/UnknownKind", args: []string{"run", "ps", "--kind=volume"}, wantErr: "--kind"},
+		{name: "Error/UnknownPsFormat", args: []string{"run", "ps", "--format=yaml"}, wantErr: "--format"},
+		{name: "Error/UnknownWatchFormat", args: []string{"run", "watch", "--format=yaml"}, wantErr: "--format"},
+		{name: "Error/UnknownEnvFormat", args: []string{"run", "env", "--format=yaml"}, wantErr: "--format"},
+		{name: "Error/SyncZeroJobs", args: []string{"core", "sync", "-j", "0"}, wantErr: "want a positive integer"},
+		{name: "Error/PruneNothing", args: []string{"core", "stacks", "prune"}, wantErr: "name a stack to prune, or pass --all"},
+		{name: "Error/PruneAllAndName", args: []string{"core", "stacks", "prune", "x", "--all"}, wantErr: "--all takes no stack name"},
+		{name: "Error/NewReservedStack", args: []string{"core", "stacks", "new", "default"}, wantErr: "reserved for the workspace stack"},
+		{name: "Error/BotCommentUnknownOrg", args: []string{"core", "bot-comment", "a-other", "repo", "1", "--body", "hi"}, wantErr: `org "a-other" is not configured`},
+		{name: "Error/BotCommentNoNumber", args: []string{"core", "bot-comment", "a-novel", "repo", "--body", "hi"}, wantErr: "<number> is required"},
+		{name: "Error/SecretsSetEmptyID", args: []string{"secrets", "set", " "}, wantErr: "<id> must not be empty"},
+		{name: "Error/SecretsExecNoEnv", args: []string{"secrets", "exec", "--", "true"}, wantErr: "at least one --env"},
+		{name: "Error/RestartPreserveAndForce", args: []string{"core", "restart", "--preserve-targets", "--force"}, wantErr: "mutually exclusive"},
 	}
 	testCases = slices.Concat(testCases, unknownSubcommandCases(cli.NewRoot()))
 
@@ -46,6 +70,9 @@ func TestRejectUnknownSubcommands(t *testing.T) {
 			out, err := execute(t, testCase.args...)
 			if testCase.wantErr != "" {
 				require.ErrorContains(t, err, testCase.wantErr)
+				exitErr, ok := errors.AsType[*cli.ExitError](err)
+				require.True(t, ok, "want an ExitError, got %T", err)
+				require.Equal(t, 2, exitErr.Code)
 				return
 			}
 			require.NoError(t, err)

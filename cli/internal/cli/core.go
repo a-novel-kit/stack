@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -12,8 +13,8 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/daemon"
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
 	"github.com/a-novel-kit/stack/cli/internal/shared/poll"
-	"github.com/a-novel-kit/stack/cli/internal/version"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
+	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
 
 // daemonInternalCmd is the hidden subcommand name `a-novel core start` re-execs
@@ -56,14 +57,48 @@ the daemon runs.`,
 
 // daemonUp pings the daemon briefly. A daemon that is not listening is down,
 // not an error; any other failure is returned.
-func daemonUp(ctx context.Context, c *rpc.Client) (bool, error) {
+func daemonUp(ctx context.Context, c anovelv1connect.CoreServiceClient) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
-	_, err := c.Ping(ctx)
+	_, err := rpc.Call(ctx, c.Ping, &anovelv1.PingRequest{})
 	if rpc.IsNotRunning(err) {
 		return false, nil
 	}
 	return err == nil, err
+}
+
+// stopDaemon stops a running daemon and waits until it is gone, so a script can
+// run `core start` on the next line. checkpoint has the daemon checkpoint its
+// go-exec targets first, for the next daemon to relaunch. Otherwise the daemon
+// shuts down, and force also tears down every service's infra. It reports
+// false when no daemon answered.
+//
+// A ping failure, a daemon slow to exit and a target the shutdown could not
+// stop all fail it, so a caller never builds on a daemon that may still run.
+func stopDaemon(ctx context.Context, c anovelv1connect.CoreServiceClient, out io.Writer, checkpoint, force bool) (bool, error) {
+	if up, err := daemonUp(ctx, c); !up {
+		return false, err
+	}
+
+	var failures []string
+	if checkpoint {
+		if err := prepareReinstall(ctx, c, out); err != nil {
+			return true, err
+		}
+	} else {
+		resp, err := shutdown(ctx, c, force, out)
+		if err != nil {
+			return true, err
+		}
+		failures = resp.GetFailures()
+	}
+
+	// The daemon exits even after a failure, so it is waited on either way.
+	waitErr := waitDaemonGone(ctx, c, out)
+	if len(failures) > 0 {
+		return true, fmt.Errorf("shutdown could not stop %d target(s): %s", len(failures), strings.Join(failures, ", "))
+	}
+	return true, waitErr
 }
 
 // daemonExitTimeout bounds how long a stopped daemon may take to release its
@@ -71,8 +106,8 @@ func daemonUp(ctx context.Context, c *rpc.Client) (bool, error) {
 const daemonExitTimeout = 10 * time.Second
 
 // waitDaemonGone polls until the daemon stops answering, for up to
-// daemonExitTimeout. A script can then run `core start` on the next line.
-func waitDaemonGone(ctx context.Context, c *rpc.Client, out io.Writer) error {
+// daemonExitTimeout.
+func waitDaemonGone(ctx context.Context, c anovelv1connect.CoreServiceClient, out io.Writer) error {
 	err := poll.Until(ctx, 100*time.Millisecond, daemonExitTimeout, func(ctx context.Context) (bool, error) {
 		up, err := daemonUp(ctx, c)
 		return !up && err == nil, nil
@@ -89,10 +124,10 @@ func waitDaemonGone(ctx context.Context, c *rpc.Client, out io.Writer) error {
 
 // shutdown asks the daemon to exit and reports what it stopped. force also
 // tears down every service's infra.
-func shutdown(ctx context.Context, c *rpc.Client, force bool, out io.Writer) (*anovelv1.ShutdownResponse, error) {
+func shutdown(ctx context.Context, c anovelv1connect.CoreServiceClient, force bool, out io.Writer) (*anovelv1.ShutdownResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	resp, err := c.Shutdown(ctx, force)
+	resp, err := rpc.Call(ctx, c.Shutdown, &anovelv1.ShutdownRequest{Force: force})
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +141,19 @@ func shutdown(ctx context.Context, c *rpc.Client, force bool, out io.Writer) (*a
 	return resp, nil
 }
 
+// prepareReinstall asks the daemon to checkpoint its go-exec targets and exit.
+func prepareReinstall(ctx context.Context, c anovelv1connect.CoreServiceClient, out io.Writer) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	resp, err := rpc.Call(ctx, c.PrepareReinstall, &anovelv1.PrepareReinstallRequest{})
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(out, "checkpoint written: %s (%d go-exec target(s))\n",
+		resp.GetCheckpointPath(), resp.GetGoExecTargetCount())
+	return nil
+}
+
 // newCoreDaemonInternalCmd is the hidden subcommand 'core start' re-execs the
 // binary with, to run the daemon in a detached child.
 func newCoreDaemonInternalCmd() *cobra.Command {
@@ -113,7 +161,7 @@ func newCoreDaemonInternalCmd() *cobra.Command {
 		Use:    daemonInternalCmd,
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return daemon.Run(cmd.Context(), daemon.Options{Version: version.String()})
+			return daemon.Run(cmd.Context())
 		},
 	}
 }

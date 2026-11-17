@@ -44,7 +44,7 @@ wants.`,
 // nonInteractive is set. Its last step starts the daemon as `core start` does,
 // so a re-run beside a running daemon changes nothing.
 func setupMachine(cmd *cobra.Command, opts setup.Options, nonInteractive bool) error {
-	opts.StartDaemon = func() error { return startDaemon(cmd.Context(), false) }
+	opts.StartDaemon = func() error { return startDaemon(cmd.Context(), cmd.OutOrStdout(), false) }
 	var prompter setup.Prompter
 	if !nonInteractive {
 		prompter = &setup.StdinPrompter{Out: cmd.OutOrStderr()}

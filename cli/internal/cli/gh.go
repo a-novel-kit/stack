@@ -5,9 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -63,33 +61,8 @@ func ghError(err error, stdout, stderr string) error {
 	return fmt.Errorf("%w: %s", err, msg)
 }
 
-// errContains reports whether err's lowercased message holds every one of
-// parts, which callers pass in lowercase. GitHub's error wording is the only
-// signal gh exposes.
-func errContains(err error, parts ...string) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	for _, p := range parts {
-		if !strings.Contains(msg, p) {
-			return false
-		}
-	}
-	return true
-}
-
-// hasHTTPStatus reports whether gh failed with the HTTP status code. gh prints
-// the status after GitHub's message, as in "gh: Not Found (HTTP 404)", or
-// alone, as in "gh: HTTP 404", when the response carries no message.
-func hasHTTPStatus(err error, code int) bool {
-	status := "http " + strconv.Itoa(code)
-	return errContains(err, "("+status+")") || errContains(err, "gh: "+status)
-}
-
-func isNotFound(err error) bool    { return hasHTTPStatus(err, http.StatusNotFound) }
-func isRateLimited(err error) bool { return errContains(err, "rate limit") }
-
-func isAlreadyExists(err error) bool {
-	return hasHTTPStatus(err, http.StatusConflict) || errContains(err, "already exists")
+// isRateLimited reports whether gh failed on GitHub's rate limit. GitHub's
+// error wording is the only signal gh exposes.
+func isRateLimited(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "rate limit")
 }

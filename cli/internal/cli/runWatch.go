@@ -11,6 +11,7 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
+	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
 
 // watchOpts holds the flags of `run watch`.
@@ -18,25 +19,27 @@ type watchOpts struct {
 	scope   stackScope
 	service string
 	target  string
-	jsonOut bool
+	format  string
 }
 
 func newWatchCmd() *cobra.Command {
-	var o watchOpts
+	o := watchOpts{format: formatJSON}
 	cmd := &cobra.Command{
 		Use:   "watch",
 		Short: "Stream the targets' phase changes",
 		Long: `Print each phase change of the daemon's targets as it happens, one JSON object
-per line, or one line of text with --json=false. --service and --target narrow
-the stream.`,
+per line, or one line of text with --format=text. --service and --target
+narrow the stream.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return watchPhases(cmd, o)
 		},
 	}
-	o.scope.bindAll(cmd)
+	o.scope.bind(cmd)
 	cmd.Flags().StringVar(&o.service, "service", "", "filter to one service")
 	cmd.Flags().StringVar(&o.target, "target", "", "filter to one target")
-	cmd.Flags().BoolVar(&o.jsonOut, "json", true, "print JSON lines (--json=false prints text)")
+	addEnumFlag(cmd, &enumFlag{value: &o.format, allowed: []string{formatJSON, formatText}}, "format", "",
+		"output format (json | text)")
+	addJSONAlias(cmd, &o.format)
 	return cmd
 }
 
@@ -45,20 +48,17 @@ the stream.`,
 func watchPhases(cmd *cobra.Command, o watchOpts) error {
 	out := cmd.OutOrStdout()
 	handle := func(ev *anovelv1.WatchResponse) { printEvent(out, ev) }
-	if o.jsonOut {
+	if o.format == formatJSON {
 		enc := json.NewEncoder(out)
 		handle = func(ev *anovelv1.WatchResponse) { encodeEvent(enc, ev) }
 	}
-	return watchEvents(cmd.Context(), rpc.New(""), o.scope.selector(), o.service, o.target, handle)
+	req := &anovelv1.WatchRequest{Stack: o.scope.selector(), Service: o.service, TargetId: o.target}
+	return watchEvents(cmd.Context(), rpc.New(), req, handle)
 }
 
 // watchEvents streams the daemon's state events to handle until ctx ends.
-func watchEvents(ctx context.Context, c *rpc.Client, stack, service, target string, handle func(*anovelv1.WatchResponse)) error {
-	stream, err := c.Watch(ctx, stack, service, target)
-	if err != nil {
-		return err
-	}
-	for ev, err := range stream {
+func watchEvents(ctx context.Context, c anovelv1connect.CoreServiceClient, req *anovelv1.WatchRequest, handle func(*anovelv1.WatchResponse)) error {
+	for ev, err := range rpc.Stream(ctx, c.Watch, req) {
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil

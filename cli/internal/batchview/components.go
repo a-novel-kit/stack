@@ -160,7 +160,7 @@ func EnvConflictView(verb string, conflicts []build.Conflict) string {
 		"leftover of a previously aborted run. Running on top of it would be "+
 		"unreliable, so it must be cleared first.", w) + "\n\n")
 	for _, c := range conflicts {
-		b.WriteString("  " + Err.Render(glyphFail+" "+c.Env.ID) + "\n")
+		b.WriteString("  " + Err.Render(GlyphFail+" "+c.Env.ID) + "\n")
 		for _, name := range c.Containers {
 			b.WriteString("    " + Muted.Render("↳ "+name) + "\n")
 		}

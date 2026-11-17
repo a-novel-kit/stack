@@ -28,9 +28,9 @@ func TestDescribePhaseEvent(t *testing.T) {
 		{name: "Success/TerminatedError", phase: anovelv1.Phase_PHASE_TERMINATED, reason: anovelv1.ExitReason_EXIT_REASON_ERROR, want: "terminated (error)"},
 		{name: "Success/TerminatedKilled", phase: anovelv1.Phase_PHASE_TERMINATED, reason: anovelv1.ExitReason_EXIT_REASON_KILLED, want: "terminated (killed)"},
 		{name: "Success/TerminatedCrashed", phase: anovelv1.Phase_PHASE_TERMINATED, reason: anovelv1.ExitReason_EXIT_REASON_CRASHED, want: "terminated (crashed)"},
-		// PENDING, like any unhandled phase, falls through to the stringified
-		// enum form.
-		{name: "Success/UnhandledPhase", phase: anovelv1.Phase_PHASE_PENDING, want: anovelv1.Phase_PHASE_PENDING.String()},
+		{name: "Success/Pending", phase: anovelv1.Phase_PHASE_PENDING, want: "pending"},
+		// An exit reason qualifies a terminated phase only.
+		{name: "Success/RunningIgnoresExitReason", phase: anovelv1.Phase_PHASE_RUNNING, reason: anovelv1.ExitReason_EXIT_REASON_KILLED, want: "running"},
 	}
 
 	for _, testCase := range testCases {

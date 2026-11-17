@@ -11,6 +11,7 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/env"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/logs"
+	"github.com/a-novel-kit/stack/cli/internal/rpc"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
@@ -289,21 +290,13 @@ func canStart(inst *Instance, id string, mode anovelv1.Mode) (*Instance, bool, e
 		}
 		return nil, false, fmt.Errorf(
 			"%s already running in %s mode (pid %d); kill it first or use `a-novel run restart %s --mode=%s`",
-			id, modeLabel(inst.Mode), inst.PID, id, modeLabel(mode))
+			id, rpc.Word(inst.Mode), inst.PID, id, rpc.Word(mode))
 	case anovelv1.Phase_PHASE_STOPPING:
 		return nil, false, fmt.Errorf("%s is currently stopping; wait for it to settle", id)
 	default:
 		// A terminated instance's slot is reused.
 		return nil, false, nil
 	}
-}
-
-// modeLabel names a mode the way the CLI's --mode flag spells it.
-func modeLabel(m anovelv1.Mode) string {
-	if m == anovelv1.Mode_MODE_CONTAINER {
-		return "container"
-	}
-	return "go-exec"
 }
 
 // =============================================================================

@@ -115,12 +115,19 @@ func kindLabel(k detect.Kind) string {
 	}
 }
 
-// Glyphs of the picker and the job status lines.
+// Glyphs of the picker.
 const (
 	glyphChecked   = "◉"
 	glyphPartial   = "◐" // group: some-but-not-all members selected
 	glyphUnchecked = "◯"
-	glyphCursor    = "▸"
-	glyphOK        = "✓"
-	glyphFail      = "✗"
+)
+
+// Glyphs shared by every screen of the CLI.
+const (
+	// GlyphCursor marks the selected row.
+	GlyphCursor = "▸"
+	// GlyphOK marks a success.
+	GlyphOK = "✓"
+	// GlyphFail marks a failure.
+	GlyphFail = "✗"
 )

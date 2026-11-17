@@ -5,15 +5,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
+	"github.com/a-novel-kit/stack/cli/internal/rpc"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
 const (
-	// modeGoExec is the --mode token and the label of go-exec mode.
-	modeGoExec = "go-exec"
-	// modeContainer is the --mode token and the label of container mode.
-	modeContainer = "container"
 	// kindTarget selects targets in the --kind filter.
 	kindTarget = "target"
 	// kindInfra is the word for infra containers, in flags, output and entity
@@ -23,20 +19,24 @@ const (
 	cmdNameService = "service"
 )
 
-// stackScope holds the flag values shared across the daemon-backed commands.
+// modeWords are the words --mode and --one-shots take.
+var modeWords = []string{rpc.Word(anovelv1.Mode_MODE_GO_EXEC), rpc.Word(anovelv1.Mode_MODE_CONTAINER)}
+
+// addStackFlag defines --stack on cmd, into p. An empty stack is the daemon's
+// default one.
+func addStackFlag(cmd *cobra.Command, p *string) {
+	cmd.Flags().StringVar(p, stackLabel, "", "stack name (default: the daemon's default stack)")
+}
+
+// stackScope holds the --stack and --all-stacks flags of a listing command.
 type stackScope struct {
 	stack     string
 	allStacks bool
 }
 
-// bind adds the --stack flag to cmd.
+// bind adds --stack and --all-stacks to cmd.
 func (s *stackScope) bind(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&s.stack, stackLabel, "", "stack name (default: first in $A_NOVEL_STACKS)")
-}
-
-// bindAll adds --stack and --all-stacks to cmd.
-func (s *stackScope) bindAll(cmd *cobra.Command) {
-	s.bind(cmd)
+	addStackFlag(cmd, &s.stack)
 	cmd.Flags().BoolVar(&s.allStacks, "all-stacks", false, "operate across every registered stack")
 }
 
@@ -81,18 +81,17 @@ core start'). Daemon control itself lives under 'a-novel core'.`,
 // A literal "infra" segment tells the two apart, because a 3-segment target ID
 // and a 3-segment infra shorthand have the same slash count.
 type entityRef struct {
+	// ID is the argument, with the --stack value in front of a shorthand. The
+	// daemon resolves a shorthand left as it is against its default stack.
+	ID      string
 	IsInfra bool
-	Stack   string
-	Service string
-	Target  string // set when IsInfra is false
-	Infra   string // set when IsInfra is true
-	// ID is the canonical full ID: "<stack>/<service>/<target>" for a
-	// target, "<stack>/<service>/infra/<name>" for an infra container.
-	ID string
+	// Stack, Service and Infra are the parts of an infra ID. Stack is empty
+	// for a shorthand the daemon resolves.
+	Stack, Service, Infra string
 }
 
-// parseEntityID classifies a CLI argument as a target or infra
-// reference and returns its canonical form. Recognized shapes:
+// parseEntityID classifies a CLI argument as a target or infra reference.
+// Recognized shapes:
 //
 //	<service>/<target>                      → target shorthand
 //	<stack>/<service>/<target>              → target canonical
@@ -100,106 +99,27 @@ type entityRef struct {
 //	<stack>/<service>/infra/<name>          → infra canonical
 //
 // Only "infra" in the second-to-last segment marks an infra reference.
-// Anywhere else the word is an ordinary target name. A shorthand resolves
-// against defaultStack. An empty defaultStack means the first $A_NOVEL_STACKS
-// entry.
-func parseEntityID(arg, defaultStack string) entityRef {
-	if defaultStack == "" {
-		defaultStack = stacks.DefaultName
-		if stack, err := stacks.Default(); err == nil {
-			defaultStack = stack.Name
-		}
-	}
+// Anywhere else the word is an ordinary target name. A non-empty stack goes in
+// front of a shorthand.
+func parseEntityID(arg, stack string) entityRef {
 	parts := strings.Split(arg, "/")
-	// Infra: 3 segments (svc/infra/name) or 4 (stack/svc/infra/name).
-	if len(parts) >= 3 && parts[len(parts)-2] == kindInfra {
-		ref := entityRef{IsInfra: true, Infra: parts[len(parts)-1]}
+	isInfra := (len(parts) == 3 || len(parts) == 4) && parts[len(parts)-2] == kindInfra
+	isShorthand := len(parts) == 2 || isInfra && len(parts) == 3
+	if isShorthand && stack != "" {
+		parts = append([]string{stack}, parts...)
+	}
+	ref := entityRef{ID: strings.Join(parts, "/"), IsInfra: isInfra}
+	if isInfra {
+		ref.Service, ref.Infra = parts[len(parts)-3], parts[len(parts)-1]
 		if len(parts) == 4 {
 			ref.Stack = parts[0]
-			ref.Service = parts[1]
-		} else {
-			ref.Stack = defaultStack
-			ref.Service = parts[0]
 		}
-		ref.ID = ref.Stack + "/" + ref.Service + "/infra/" + ref.Infra
-		return ref
 	}
-	// Target.
-	ref := entityRef{}
-	switch len(parts) {
-	case 3:
-		ref.Stack = parts[0]
-		ref.Service = parts[1]
-		ref.Target = parts[2]
-	case 2:
-		ref.Stack = defaultStack
-		ref.Service = parts[0]
-		ref.Target = parts[1]
-	default:
-		// Any other shape becomes "<stack>//<arg>", which the daemon refuses
-		// as an unknown target.
-		ref.Stack = defaultStack
-		ref.Target = arg
-	}
-	ref.ID = ref.Stack + "/" + ref.Service + "/" + ref.Target
 	return ref
 }
 
-// parseMode reads a --mode token. An empty or unknown token yields fallback.
-func parseMode(token string, fallback anovelv1.Mode) anovelv1.Mode {
-	switch token {
-	case modeGoExec:
-		return anovelv1.Mode_MODE_GO_EXEC
-	case modeContainer:
-		return anovelv1.Mode_MODE_CONTAINER
-	default:
-		return fallback
-	}
-}
-
-// modeLabel renders a Mode enum as its canonical CLI token.
-func modeLabel(m anovelv1.Mode) string {
-	switch m {
-	case anovelv1.Mode_MODE_GO_EXEC:
-		return modeGoExec
-	case anovelv1.Mode_MODE_CONTAINER:
-		return modeContainer
-	default:
-		return "?"
-	}
-}
-
-// exitLabel renders an ExitReason enum as a short human-readable token.
-func exitLabel(r anovelv1.ExitReason) string {
-	switch r {
-	case anovelv1.ExitReason_EXIT_REASON_SUCCESS:
-		return "success"
-	case anovelv1.ExitReason_EXIT_REASON_ERROR:
-		return "error"
-	case anovelv1.ExitReason_EXIT_REASON_KILLED:
-		return "killed"
-	case anovelv1.ExitReason_EXIT_REASON_CRASHED:
-		return "crashed"
-	default:
-		return "-"
-	}
-}
-
-// phaseLabel renders a Phase enum as a short human-readable token; an
-// unspecified phase reads as "idle".
-func phaseLabel(p anovelv1.Phase) string {
-	switch p {
-	case anovelv1.Phase_PHASE_PENDING:
-		return "pending"
-	case anovelv1.Phase_PHASE_STARTING:
-		return "starting"
-	case anovelv1.Phase_PHASE_RUNNING:
-		return "running"
-	case anovelv1.Phase_PHASE_STOPPING:
-		return "stopping"
-	case anovelv1.Phase_PHASE_TERMINATED:
-		return "terminated"
-	default:
-		return "idle"
-	}
+// infraID is the ID the CLI prints for an infra container the daemon
+// answered with.
+func infraID(in *anovelv1.Infra) string {
+	return in.GetStack() + "/" + in.GetService() + "/" + kindInfra + "/" + in.GetName()
 }

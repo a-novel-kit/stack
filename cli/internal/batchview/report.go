@@ -70,12 +70,12 @@ func reportSummary(title string, b Batch, w int) string {
 		counts[status]++
 	}
 
-	headline, lead := OK.Render(glyphOK+" "+title+" PASSED"), "Every job succeeded."
+	headline, lead := OK.Render(GlyphOK+" "+title+" PASSED"), "Every job succeeded."
 	switch {
 	case b.Aborted:
 		headline, lead = Warn.Render("! "+title+" ABORTED"), "Interrupted before every job finished: results above are partial."
 	case failed > 0:
-		headline, lead = Crit.Render(glyphFail+" "+title+" FAILED"), "One or more jobs failed; their full output is above."
+		headline, lead = Crit.Render(GlyphFail+" "+title+" FAILED"), "One or more jobs failed; their full output is above."
 	}
 
 	var failColor color.Color = colMuted
@@ -112,9 +112,9 @@ func outputPanel(r jobs.Result, width int) string {
 	} else {
 		body.WriteString(Muted.Render("(no output captured)"))
 	}
-	title, c := glyphOK+" "+r.Name, colOK
+	title, c := GlyphOK+" "+r.Name, colOK
 	if r.Err != nil {
-		title, c = glyphFail+" "+r.Name, colErr
+		title, c = GlyphFail+" "+r.Name, colErr
 	}
 	if r.Detail != "" {
 		title += "  [" + relLabel(r.Detail) + "]"

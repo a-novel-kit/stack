@@ -35,7 +35,7 @@ type syncOpts struct {
 // newCoreSyncCmd clones or fast-forwards the workspace repositories
 // workspace-repos.yaml lists, all at once.
 func newCoreSyncCmd() *cobra.Command {
-	var o syncOpts
+	o := syncOpts{limit: runtime.NumCPU()}
 	cmd := &cobra.Command{
 		Use:   commandSync,
 		Short: "Clone or fast-forward the workspace repositories",
@@ -62,7 +62,7 @@ branch that diverged. LFS files stay unfetched.`,
 		"only sync these repos (<org>/<name> or bare <name>); may be repeated")
 	cmd.Flags().StringSliceVar(&o.ignore, "ignore", nil,
 		"skip these repos (<org>/<name> or bare <name>); wins over --allow")
-	cmd.Flags().IntVarP(&o.limit, "jobs", "j", runtime.NumCPU(), "max repos synced at once")
+	cmd.Flags().VarP(countFlag{&o.limit}, "jobs", "j", "max repos synced at once")
 	return cmd
 }
 
@@ -93,7 +93,7 @@ func syncWorkspace(cmd *cobra.Command, o syncOpts) error {
 		return nil
 	}
 	workspace.GitHubMux.Open(cmd.Context())
-	batch := batchview.RunJobs(cmd.Context(), list, o.limit, stdoutIsTTY())
+	batch := batchview.RunJobs(cmd.Context(), out, list, o.limit, stdoutIsTTY())
 	_, _ = fmt.Fprint(out, batchview.Report("SYNC", batch, syncNeedsAttention))
 	return batchError(batch)
 }
@@ -189,14 +189,13 @@ func updateRepo(ctx context.Context, dir string, out io.Writer) (string, error) 
 	return syncUpdated, nil
 }
 
-// normalizeFilter turns repeatable, comma-splittable flag values into a set.
+// normalizeFilter turns the values of a repeatable flag, which pflag already
+// split on commas, into a set of trimmed names.
 func normalizeFilter(values []string) map[string]bool {
 	out := map[string]bool{}
 	for _, v := range values {
-		for part := range strings.SplitSeq(v, ",") {
-			if part = strings.TrimSpace(part); part != "" {
-				out[part] = true
-			}
+		if v = strings.TrimSpace(v); v != "" {
+			out[v] = true
 		}
 	}
 	return out

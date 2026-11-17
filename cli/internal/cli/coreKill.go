@@ -20,36 +20,13 @@ stopping the targets left first. The next 'core start' relaunches nothing;
 		Example: `  a-novel core kill
   a-novel core kill --force`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return killDaemon(cmd, force)
+			stopped, err := stopDaemon(cmd.Context(), rpc.New(), cmd.OutOrStdout(), false, force)
+			if !stopped && err == nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "a-novel: daemon not running")
+			}
+			return err
 		},
 	}
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "also tear down all infra (cascade-kill remaining targets)")
 	return cmd
-}
-
-// killDaemon stops a running daemon and waits for it to exit. force also tears
-// down every service's infra. A target the shutdown could not stop fails the
-// command, so a script learns its environment is not clean.
-func killDaemon(cmd *cobra.Command, force bool) error {
-	ctx, out := cmd.Context(), cmd.OutOrStdout()
-	c := rpc.New("")
-	if up, err := daemonUp(ctx, c); !up {
-		if err == nil {
-			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "a-novel: daemon not running")
-		}
-		return err
-	}
-	resp, err := shutdown(ctx, c, force, out)
-	if err != nil {
-		return err
-	}
-	// The daemon exits even after a failure, so it is waited on either way.
-	waitErr := waitDaemonGone(ctx, c, out)
-	if fails := resp.GetFailures(); len(fails) > 0 {
-		for _, f := range fails {
-			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "a-novel: shutdown could not stop %s\n", f)
-		}
-		return fmt.Errorf("shutdown left %d target(s) running", len(fails))
-	}
-	return waitErr
 }

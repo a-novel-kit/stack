@@ -40,7 +40,7 @@ func (s *Server) StreamLogs(ctx context.Context, req *anovelv1.StreamLogsRequest
 		ctx, cancel = s.streamContext(ctx)
 		defer cancel()
 	}
-	tid := req.GetTargetId()
+	tid := s.canonicalID(req.GetTargetId())
 	// An infra log ID, "<stack>/<service>/infra/<name>", streams an infra
 	// container's stdout through this same RPC. Those containers belong to
 	// podman, so the branch reads `podman logs -f <cid>`.
@@ -110,7 +110,7 @@ func forwardLines(ctx context.Context, sub <-chan logs.Line, send func(*anovelv1
 // ListRuns returns the timestamps of archived runs for the target,
 // newest first.
 func (s *Server) ListRuns(_ context.Context, req *anovelv1.ListRunsRequest) (*anovelv1.ListRunsResponse, error) {
-	tgt, _, err := s.findTarget(req.GetTargetId())
+	tgt, _, err := s.findTarget(s.canonicalID(req.GetTargetId()))
 	if err != nil {
 		return nil, err
 	}

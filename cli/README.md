@@ -45,6 +45,7 @@ a-novel
 │   └── exec / debug                  a command beside a target, a debugger
 ├── core
 │   ├── setup / start / kill / restart / status    the daemon
+│   ├── prepare-reinstall             checkpoint the go-exec targets, stop the daemon
 │   ├── sync                          clone or fast-forward the workspace repositories
 │   ├── stacks (new / list / prune)   extra workspaces
 │   └── bot-comment <org> <repo> [<n>]  comment as the organization bot

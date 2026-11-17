@@ -2,10 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
 func newVolumeCmd() *cobra.Command {
@@ -28,42 +30,42 @@ per volume. Stopping a service or the daemon keeps its volumes.`,
 }
 
 func newVolumeListCmd() *cobra.Command {
-	var ss stackScope
+	req := &anovelv1.ListVolumesRequest{}
 	cmd := &cobra.Command{
 		Use:   "list <service>",
 		Short: "List a service's volumes with sizes and backup counts",
-		Args:  cobra.ExactArgs(1),
+		Long: `Print one row per volume the service's compose file declares: its name, its
+size on disk, and how many backups 'volume restore' can take it back to. A
+volume not created yet reads '-' for its size.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return listVolumes(cmd, ss.stack, args[0])
+			req.Service = args[0]
+			resp, err := rpc.Call(cmd.Context(), rpc.New().ListVolumes, req)
+			if err != nil {
+				return err
+			}
+			printVolumes(cmd.OutOrStdout(), resp.GetVolumes())
+			return nil
 		},
 	}
-	ss.bind(cmd)
+	addStackFlag(cmd, &req.Stack)
 	return cmd
 }
 
-// listVolumes prints one row per volume of a service: its name, size and
-// backup count.
-func listVolumes(cmd *cobra.Command, stack, service string) error {
-	resp, err := rpc.New("").ListVolumes(cmd.Context(), stack, service)
-	if err != nil {
-		return err
-	}
-	out := cmd.OutOrStdout()
-	if len(resp.GetVolumes()) == 0 {
+// printVolumes prints one row per volume: its name, size and backup count.
+func printVolumes(out io.Writer, volumes []*anovelv1.Volume) {
+	if len(volumes) == 0 {
 		_, _ = fmt.Fprintln(out, "(no volumes declared)")
-		return nil
+		return
 	}
 	_, _ = fmt.Fprintf(out, "%-40s %12s %8s\n", "VOLUME", "SIZE", "BACKUPS")
-	for _, v := range resp.GetVolumes() {
+	for _, v := range volumes {
 		_, _ = fmt.Fprintf(out, "%-40s %12s %8d\n", v.GetName(), humanBytes(v.GetSizeBytes()), v.GetBackupCount())
 	}
-	return nil
 }
 
 func newVolumeBackupCmd() *cobra.Command {
-	var ss stackScope
-	var tag string
-	var force bool
+	req := &anovelv1.BackupVolumeRequest{}
 	cmd := &cobra.Command{
 		Use:   "backup <service>",
 		Short: "Snapshot a service's volumes (refuses while the service runs)",
@@ -72,32 +74,25 @@ each archive's path. An archive of a volume in use can be corrupt, so the
 command refuses while the service runs; --force stops it first.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return backupVolumes(cmd, ss.stack, args[0], tag, force)
+			req.Service = args[0]
+			resp, err := rpc.Call(cmd.Context(), rpc.New().BackupVolume, req)
+			if err != nil {
+				return err
+			}
+			for _, p := range resp.GetArchivePaths() {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), p)
+			}
+			return nil
 		},
 	}
-	ss.bind(cmd)
-	cmd.Flags().StringVar(&tag, "tag", "", "user-supplied label included in the archive filename")
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "cascade-stop the service before backing up")
+	addStackFlag(cmd, &req.Stack)
+	cmd.Flags().StringVar(&req.Tag, "tag", "", "user-supplied label included in the archive filename")
+	cmd.Flags().BoolVarP(&req.Force, "force", "f", false, "cascade-stop the service before backing up")
 	return cmd
 }
 
-// backupVolumes archives a service's volumes, tag in the file names, and prints
-// each archive's path.
-func backupVolumes(cmd *cobra.Command, stack, service, tag string, force bool) error {
-	resp, err := rpc.New("").BackupVolume(cmd.Context(), stack, service, tag, force)
-	if err != nil {
-		return err
-	}
-	for _, p := range resp.GetArchivePaths() {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), p)
-	}
-	return nil
-}
-
 func newVolumeRestoreCmd() *cobra.Command {
-	var ss stackScope
-	var from string
-	var force bool
+	req := &anovelv1.RestoreVolumeRequest{}
 	cmd := &cobra.Command{
 		Use:   "restore <service>",
 		Short: "Restore volumes from a backup (latest by default)",
@@ -107,30 +102,23 @@ printed. Every archive is checked before any volume changes. Refuses while
 the service runs; --force stops it first.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return restoreVolumes(cmd, ss.stack, args[0], from, force)
+			req.Service = args[0]
+			resp, err := rpc.Call(cmd.Context(), rpc.New().RestoreVolume, req)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "restored: %v\n", resp.GetRestoredVolumes())
+			return nil
 		},
 	}
-	ss.bind(cmd)
-	cmd.Flags().StringVar(&from, "from", "", "specific backup timestamp (default: latest)")
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "cascade-stop the service before restoring")
+	addStackFlag(cmd, &req.Stack)
+	cmd.Flags().StringVar(&req.From, "from", "", "specific backup timestamp (default: latest)")
+	cmd.Flags().BoolVarP(&req.Force, "force", "f", false, "cascade-stop the service before restoring")
 	return cmd
 }
 
-// restoreVolumes restores a service's volumes from the backup from selects,
-// the latest when empty, and prints the volumes it restored.
-func restoreVolumes(cmd *cobra.Command, stack, service, from string, force bool) error {
-	resp, err := rpc.New("").RestoreVolume(cmd.Context(), stack, service, from, force)
-	if err != nil {
-		return err
-	}
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "restored: %v\n", resp.GetRestoredVolumes())
-	return nil
-}
-
 func newVolumeClearCmd() *cobra.Command {
-	var ss stackScope
-	var noBackup bool
-	var force bool
+	req := &anovelv1.ClearVolumeRequest{}
 	cmd := &cobra.Command{
 		Use:   "clear <service>",
 		Short: "Destroy a service's volumes (backs them up first)",
@@ -139,24 +127,19 @@ back. --no-backup skips the backup, and nothing can undo the deletion then.
 Refuses while the service runs; --force stops it first.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return clearVolumes(cmd, ss.stack, args[0], noBackup, force)
+			req.Service = args[0]
+			resp, err := rpc.Call(cmd.Context(), rpc.New().ClearVolume, req)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "cleared: %v\n", resp.GetClearedVolumes())
+			return nil
 		},
 	}
-	ss.bind(cmd)
-	cmd.Flags().BoolVar(&noBackup, "no-backup", false, "skip the auto-backup (irreversible)")
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "cascade-stop the service before clearing")
+	addStackFlag(cmd, &req.Stack)
+	cmd.Flags().BoolVar(&req.NoBackup, "no-backup", false, "skip the auto-backup (irreversible)")
+	cmd.Flags().BoolVarP(&req.Force, "force", "f", false, "cascade-stop the service before clearing")
 	return cmd
-}
-
-// clearVolumes empties a service's volumes, after a backup unless noBackup is
-// set, and prints the volumes it cleared.
-func clearVolumes(cmd *cobra.Command, stack, service string, noBackup, force bool) error {
-	resp, err := rpc.New("").ClearVolume(cmd.Context(), stack, service, noBackup, force)
-	if err != nil {
-		return err
-	}
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "cleared: %v\n", resp.GetClearedVolumes())
-	return nil
 }
 
 // humanBytes renders an int64 byte count in a short human form.

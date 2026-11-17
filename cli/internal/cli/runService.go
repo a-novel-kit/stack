@@ -33,38 +33,37 @@ starting a server.`,
 }
 
 func newServiceInfraStartCmd() *cobra.Command {
-	var ss stackScope
-	var oneShotsMode string
+	req := &anovelv1.StartInfraRequest{}
+	oneShots := rpc.Word(anovelv1.Mode_MODE_GO_EXEC)
 	cmd := &cobra.Command{
 		Use:   "start <service>",
 		Short: "Bring up a service's infrastructure and run its one-shots",
-		Args:  cobra.ExactArgs(1),
+		Long: `Start the service's infra containers and wait until they are healthy, then run
+each one-shot target of the service, such as migrations, to success. The
+one-shots run from source, or from their images with --one-shots=container.
+Infra already up is left as it is.`,
+		Example: `  a-novel run service infra start service-json-keys
+  a-novel run service infra start service-json-keys --one-shots=container`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return startInfra(cmd, ss.stack, args[0], oneShotsMode)
+			req.Service, req.OneShotsMode = args[0], rpc.Parse[anovelv1.Mode](oneShots)
+			resp, err := rpc.Call(cmd.Context(), rpc.New().StartInfra, req)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "infra-up for %s (one-shots ran in %s mode)\n",
+				resp.GetService().GetName(), oneShots)
+			return nil
 		},
 	}
-	ss.bind(cmd)
-	cmd.Flags().StringVar(&oneShotsMode, "one-shots", modeGoExec,
+	addStackFlag(cmd, &req.Stack)
+	addEnumFlag(cmd, &enumFlag{value: &oneShots, allowed: modeWords}, "one-shots", "",
 		"mode for one-shot targets auto-run with infra (go-exec | container)")
 	return cmd
 }
 
-// startInfra brings up a service's infra and runs its one-shots in the mode
-// the --one-shots token names.
-func startInfra(cmd *cobra.Command, stack, service, oneShotsMode string) error {
-	mode := parseMode(oneShotsMode, anovelv1.Mode_MODE_GO_EXEC)
-	resp, err := rpc.New("").StartInfra(cmd.Context(), stack, service, mode)
-	if err != nil {
-		return err
-	}
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "infra-up for %s (one-shots ran in %s mode)\n",
-		resp.GetService().GetName(), modeLabel(mode))
-	return nil
-}
-
 func newServiceInfraKillCmd() *cobra.Command {
-	var ss stackScope
-	var force bool
+	req := &anovelv1.KillInfraRequest{}
 	cmd := &cobra.Command{
 		Use:   "kill <service>",
 		Short: "Tear down a service's infrastructure",
@@ -72,21 +71,16 @@ func newServiceInfraKillCmd() *cobra.Command {
 'a-novel run kill', or pass --force to stop the targets with the infra.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return killInfra(cmd, ss.stack, args[0], force)
+			req.Service = args[0]
+			resp, err := rpc.Call(cmd.Context(), rpc.New().KillInfra, req)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "infra-down for %s\n", resp.GetService().GetName())
+			return nil
 		},
 	}
-	ss.bind(cmd)
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "cascade-kill all running targets first")
+	addStackFlag(cmd, &req.Stack)
+	cmd.Flags().BoolVarP(&req.Force, "force", "f", false, "cascade-kill all running targets first")
 	return cmd
-}
-
-// killInfra tears down a service's infra, stopping its targets first with
-// force.
-func killInfra(cmd *cobra.Command, stack, service string, force bool) error {
-	resp, err := rpc.New("").KillInfra(cmd.Context(), stack, service, force)
-	if err != nil {
-		return err
-	}
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "infra-down for %s\n", resp.GetService().GetName())
-	return nil
 }

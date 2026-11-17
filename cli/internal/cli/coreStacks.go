@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -20,12 +19,8 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 	"github.com/a-novel-kit/stack/cli/internal/workspace"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
+	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
-
-// killGrace is how long a target gets to exit on SIGTERM before the daemon
-// sends SIGKILL. It is the `run kill --timeout` default and the grace a prune
-// gives each target.
-const killGrace = 10 * time.Second
 
 // newCoreStacksCmd allocates, lists and prunes workspace stacks. A stack holds
 // a checkout, containers that hold host ports, and podman volumes. Deleting the
@@ -88,7 +83,7 @@ The daemon reads $A_NOVEL_STACKS when it starts. Add the entry, run
 // is refused.
 func createStack(ctx context.Context, out io.Writer, name, root string) error {
 	if name == stacks.DefaultName {
-		return fmt.Errorf("%q is reserved for the workspace stack", stacks.DefaultName)
+		return usageError(fmt.Errorf("%q is reserved for the workspace stack", stacks.DefaultName))
 	}
 	if root == "" {
 		root = defaultStackRoot(name)
@@ -133,8 +128,8 @@ registration the daemon does not manage follows, with the reason.`,
 // listStacks prints every registered stack with what it holds and its
 // discovery problems, then the registrations the daemon does not manage.
 func listStacks(ctx context.Context, out io.Writer) error {
-	c := rpc.New("")
-	resp, err := c.ListStacks(ctx)
+	c := rpc.New()
+	resp, err := rpc.Call(ctx, c.ListStacks, &anovelv1.ListStacksRequest{})
 	if err != nil {
 		return err
 	}
@@ -202,8 +197,7 @@ $A_NOVEL_STACKS entry to drop from your shell profile.`,
 // pruneStacks prunes the stack args names, or every stack but the default
 // with all. A stack that fails is reported and the others still run.
 func pruneStacks(cmd *cobra.Command, args []string, all bool, opts pruneOpts) error {
-	ctx, out := cmd.Context(), cmd.OutOrStdout()
-	c := rpc.New("")
+	ctx, out, c := cmd.Context(), cmd.OutOrStdout(), rpc.New()
 	targets, err := resolvePruneTargets(ctx, c, args, all)
 	if err != nil {
 		return err
@@ -238,15 +232,15 @@ type pruneOpts struct {
 // meant to run without reading the list first and "everything disposable" is
 // the useful reading of it.
 func resolvePruneTargets(
-	ctx context.Context, c *rpc.Client, args []string, all bool,
+	ctx context.Context, c anovelv1connect.CoreServiceClient, args []string, all bool,
 ) ([]*anovelv1.Stack, error) {
 	if all && len(args) > 0 {
-		return nil, fmt.Errorf("--all takes no stack name (got %q)", args[0])
+		return nil, usageError(fmt.Errorf("--all takes no stack name (got %q)", args[0]))
 	}
 	if !all && len(args) == 0 {
-		return nil, errors.New("name a stack to prune, or pass --all")
+		return nil, usageError(errors.New("name a stack to prune, or pass --all"))
 	}
-	resp, err := c.ListStacks(ctx)
+	resp, err := rpc.Call(ctx, c.ListStacks, &anovelv1.ListStacksRequest{})
 	if err != nil {
 		return nil, err
 	}
@@ -288,8 +282,8 @@ type stackHoldings struct {
 }
 
 // inspectStack snapshots what the stack name holds, from one ListServices call.
-func inspectStack(ctx context.Context, c *rpc.Client, name string) (stackHoldings, error) {
-	resp, err := c.ListServices(ctx, name)
+func inspectStack(ctx context.Context, c anovelv1connect.CoreServiceClient, name string) (stackHoldings, error) {
+	resp, err := rpc.Call(ctx, c.ListServices, &anovelv1.ListServicesRequest{Stack: name})
 	if err != nil {
 		return stackHoldings{}, err
 	}
@@ -329,7 +323,7 @@ func isLive(phase anovelv1.Phase) bool {
 // pruneOne prints what a stack holds, then reclaims it unless the run is a dry
 // run, the stack holds unsaved work, or the operator declines.
 func pruneOne(
-	ctx context.Context, c *rpc.Client, cmd *cobra.Command, st *anovelv1.Stack, opts pruneOpts,
+	ctx context.Context, c anovelv1connect.CoreServiceClient, cmd *cobra.Command, st *anovelv1.Stack, opts pruneOpts,
 ) error {
 	out := cmd.OutOrStdout()
 	name, root := st.GetName(), st.GetPath()
@@ -376,25 +370,27 @@ func printPrunePlan(out io.Writer, st *anovelv1.Stack, held stackHoldings, block
 // reclaimStack kills what st runs, clears its volumes and removes its checkout,
 // in that order, so nothing is left holding a port or a mount.
 func reclaimStack(
-	ctx context.Context, c *rpc.Client, out io.Writer, st *anovelv1.Stack, held stackHoldings, purgeBackups bool,
+	ctx context.Context, c anovelv1connect.CoreServiceClient, out io.Writer, st *anovelv1.Stack, held stackHoldings, purgeBackups bool,
 ) error {
 	name, root := st.GetName(), st.GetPath()
-	const force, noBackup = true, false
 
+	// Each target gets the daemon's default grace.
 	for _, id := range held.liveTargets {
-		if _, err := c.KillTarget(ctx, id, killGrace); err != nil {
+		if _, err := rpc.Call(ctx, c.KillTarget, &anovelv1.KillTargetRequest{TargetId: id}); err != nil {
 			return fmt.Errorf("kill target %s: %w", id, err)
 		}
 	}
 	for _, svc := range held.services {
-		// force stops what the infra still holds open. The targets above are
+		// Force stops what the infra still holds open. The targets above are
 		// already down, so it orphans nothing.
-		if _, err := c.KillInfra(ctx, name, svc, force); err != nil {
+		killInfra := &anovelv1.KillInfraRequest{Stack: name, Service: svc, Force: true}
+		if _, err := rpc.Call(ctx, c.KillInfra, killInfra); err != nil {
 			return fmt.Errorf("kill infra %s/%s: %w", name, svc, err)
 		}
 		// A prune assumes the stack's data is disposable, and that is sometimes
 		// wrong, so every volume is backed up first.
-		if _, err := c.ClearVolume(ctx, name, svc, noBackup, force); err != nil {
+		clearVolume := &anovelv1.ClearVolumeRequest{Stack: name, Service: svc, Force: true}
+		if _, err := rpc.Call(ctx, c.ClearVolume, clearVolume); err != nil {
 			return fmt.Errorf("clear volumes %s/%s: %w", name, svc, err)
 		}
 	}

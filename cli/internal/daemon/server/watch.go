@@ -2,9 +2,9 @@ package server
 
 import (
 	"context"
-	"strings"
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/runner"
+	"github.com/a-novel-kit/stack/cli/internal/rpc"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
@@ -47,24 +47,11 @@ func watches(req *anovelv1.WatchRequest, ev runner.PhaseEvent) bool {
 }
 
 // describePhaseEvent renders the one-line summary WatchResponse.description
-// carries, such as "<id> running" or "<id> terminated (killed)". A phase with
-// no summary, such as PENDING, renders as its enum name.
+// carries, such as "<id> running" or "<id> terminated (killed)".
 func describePhaseEvent(ev runner.PhaseEvent) string {
-	switch ev.NewPhase {
-	case anovelv1.Phase_PHASE_STARTING, anovelv1.Phase_PHASE_RUNNING, anovelv1.Phase_PHASE_STOPPING:
-		return ev.TargetID + " " + enumWord(ev.NewPhase.String(), "PHASE_")
-	case anovelv1.Phase_PHASE_TERMINATED:
-		if ev.ExitReason == anovelv1.ExitReason_EXIT_REASON_UNSPECIFIED {
-			return ev.TargetID + " terminated"
-		}
-		return ev.TargetID + " terminated (" + enumWord(ev.ExitReason.String(), "EXIT_REASON_") + ")"
-	default:
-		return ev.TargetID + " " + ev.NewPhase.String()
+	description := ev.TargetID + " " + rpc.Word(ev.NewPhase)
+	if ev.NewPhase == anovelv1.Phase_PHASE_TERMINATED && ev.ExitReason != anovelv1.ExitReason_EXIT_REASON_UNSPECIFIED {
+		description += " (" + rpc.Word(ev.ExitReason) + ")"
 	}
-}
-
-// enumWord turns a proto enum name into the lowercase word after its prefix,
-// as PHASE_RUNNING becomes "running".
-func enumWord(name, prefix string) string {
-	return strings.ToLower(strings.TrimPrefix(name, prefix))
+	return description
 }

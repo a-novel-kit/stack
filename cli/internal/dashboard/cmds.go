@@ -2,7 +2,6 @@ package dashboard
 
 import (
 	"context"
-	"iter"
 	"strings"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
+	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
 
 // Status texts of the palette verbs that need a selection.
@@ -108,15 +108,15 @@ type tickMsg struct{}
 // the default stack, and for that stack's discovery problems. The UI is scoped
 // to a single stack. The problems are read on every refresh, so a daemon
 // restart that fixes them clears the status bar note.
-func refreshServicesCmd(c *rpc.Client) tea.Cmd {
+func refreshServicesCmd(c anovelv1connect.CoreServiceClient) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		resp, err := c.ListServices(ctx, "")
+		resp, err := rpc.Call(ctx, c.ListServices, &anovelv1.ListServicesRequest{})
 		if err != nil {
 			return errMsg{err: err}
 		}
-		stacks, err := c.ListStacks(ctx)
+		stacks, err := rpc.Call(ctx, c.ListStacks, &anovelv1.ListStacksRequest{})
 		if err != nil {
 			return errMsg{err: err}
 		}
@@ -161,14 +161,8 @@ func (m *model) followSelectedLogs() {
 // carries every line received since the last one, so the replay of a long log
 // renders once per batch, not once per line.
 func (m *model) forwardLogs(ctx context.Context, id string, gen int) {
-	stream, err := m.c.StreamLogs(ctx, id, "", true /* follow */, maxLogLines, anovelv1.LogStream_LOG_STREAM_UNSPECIFIED)
-	if err != nil {
-		m.program.Send(errMsg{err: err})
-		return
-	}
-
 	lines := make(chan *anovelv1.StreamLogsResponse, maxLogLines)
-	go receiveLogs(ctx, stream, lines)
+	go m.receiveLogs(ctx, id, lines)
 
 	for ln := range lines {
 		batch := []*anovelv1.StreamLogsResponse{ln}
@@ -179,12 +173,18 @@ func (m *model) forwardLogs(ctx context.Context, id string, gen int) {
 	}
 }
 
-// receiveLogs copies stream into lines until ctx ends or the stream does, then
-// closes lines.
-func receiveLogs(ctx context.Context, stream iter.Seq2[*anovelv1.StreamLogsResponse, error], lines chan<- *anovelv1.StreamLogsResponse) {
+// receiveLogs copies the followed log of id into lines until ctx ends or the
+// stream does, then closes lines. A failure while ctx lives reaches the
+// program as an errMsg.
+func (m *model) receiveLogs(ctx context.Context, id string, lines chan<- *anovelv1.StreamLogsResponse) {
 	defer close(lines)
-	for ln, err := range stream {
-		if err != nil || ctx.Err() != nil {
+	req := &anovelv1.StreamLogsRequest{TargetId: id, Follow: true, TailLines: maxLogLines}
+	for ln, err := range rpc.Stream(ctx, m.c.StreamLogs, req) {
+		switch {
+		case ctx.Err() != nil:
+			return
+		case err != nil:
+			m.program.Send(errMsg{err: err})
 			return
 		}
 		lines <- ln
@@ -236,16 +236,16 @@ func (m *model) startCmd(args []string) tea.Cmd {
 	if t == nil {
 		return setStatusCmd(statusError, noTargetText)
 	}
-	mode, modeLabel := anovelv1.Mode_MODE_GO_EXEC, modeGoExec
-	if len(args) > 0 && args[0] == modeContainer {
-		mode, modeLabel = anovelv1.Mode_MODE_CONTAINER, modeContainer
+	req := &anovelv1.StartTargetRequest{TargetId: t.GetId(), Mode: anovelv1.Mode_MODE_GO_EXEC}
+	if len(args) > 0 && args[0] == rpc.Word(anovelv1.Mode_MODE_CONTAINER) {
+		req.Mode = anovelv1.Mode_MODE_CONTAINER
 	}
 	return action{
-		busy:    "Starting " + t.GetName() + " (" + modeLabel + ")... infra + one-shots will run first",
+		busy:    "Starting " + t.GetName() + " (" + rpc.Word(req.GetMode()) + ")... infra + one-shots will run first",
 		success: "Started " + t.GetName(),
 		label:   "start " + t.GetName(),
 		timeout: time.Minute,
-		do:      func(ctx context.Context) error { return errOf(m.c.StartTarget(ctx, t.GetId(), mode)) },
+		do:      func(ctx context.Context) error { return errOf(rpc.Call(ctx, m.c.StartTarget, req)) },
 	}.run()
 }
 
@@ -258,7 +258,10 @@ func (m *model) killCmd() tea.Cmd {
 			success: "Killed " + t.GetName(),
 			label:   "kill " + t.GetName(),
 			timeout: 30 * time.Second,
-			do:      func(ctx context.Context) error { return errOf(m.c.KillTarget(ctx, t.GetId(), 10*time.Second)) },
+			do: func(ctx context.Context) error {
+				// No timeout: the daemon applies its own grace.
+				return errOf(rpc.Call(ctx, m.c.KillTarget, &anovelv1.KillTargetRequest{TargetId: t.GetId()}))
+			},
 		}.run()
 	}
 	if in := m.activeInfra(); in != nil {
@@ -268,7 +271,8 @@ func (m *model) killCmd() tea.Cmd {
 			label:   "kill infra " + in.GetName(),
 			timeout: 30 * time.Second,
 			do: func(ctx context.Context) error {
-				return errOf(m.c.KillInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName()))
+				req := &anovelv1.KillInfraContainerRequest{Stack: in.GetStack(), Service: in.GetService(), Name: in.GetName()}
+				return errOf(rpc.Call(ctx, m.c.KillInfraContainer, req))
 			},
 		}.run()
 	}
@@ -285,7 +289,7 @@ func (m *model) restartCmd() tea.Cmd {
 			label:   "restart " + t.GetName(),
 			timeout: time.Minute,
 			do: func(ctx context.Context) error {
-				return errOf(m.c.RestartTarget(ctx, t.GetId(), anovelv1.Mode_MODE_UNSPECIFIED))
+				return errOf(rpc.Call(ctx, m.c.RestartTarget, &anovelv1.RestartTargetRequest{TargetId: t.GetId()}))
 			},
 		}.run()
 	}
@@ -296,7 +300,8 @@ func (m *model) restartCmd() tea.Cmd {
 			label:   "restart infra " + in.GetName(),
 			timeout: time.Minute,
 			do: func(ctx context.Context) error {
-				return errOf(m.c.RestartInfraContainer(ctx, in.GetStack(), in.GetService(), in.GetName()))
+				req := &anovelv1.RestartInfraContainerRequest{Stack: in.GetStack(), Service: in.GetService(), Name: in.GetName()}
+				return errOf(rpc.Call(ctx, m.c.RestartInfraContainer, req))
 			},
 		}.run()
 	}
@@ -315,7 +320,8 @@ func (m *model) infraStartCmd() tea.Cmd {
 		label:   "infra-start " + svc.GetName(),
 		timeout: 5 * time.Minute,
 		do: func(ctx context.Context) error {
-			return errOf(m.c.StartInfra(ctx, "", svc.GetName(), anovelv1.Mode_MODE_GO_EXEC))
+			req := &anovelv1.StartInfraRequest{Service: svc.GetName(), OneShotsMode: anovelv1.Mode_MODE_GO_EXEC}
+			return errOf(rpc.Call(ctx, m.c.StartInfra, req))
 		},
 	}.run()
 }
@@ -337,7 +343,9 @@ func (m *model) infraKillCmd(args []string) tea.Cmd {
 		success: "Infra down for " + svc.GetName(),
 		label:   "infra-kill " + svc.GetName(),
 		timeout: 30 * time.Second,
-		do:      func(ctx context.Context) error { return errOf(m.c.KillInfra(ctx, "", svc.GetName(), force)) },
+		do: func(ctx context.Context) error {
+			return errOf(rpc.Call(ctx, m.c.KillInfra, &anovelv1.KillInfraRequest{Service: svc.GetName(), Force: force}))
+		},
 	}.run()
 }
 
@@ -353,7 +361,7 @@ func (m *model) volumeBackupCmd() tea.Cmd {
 		label:   "volume-backup " + svc.GetName(),
 		timeout: 5 * time.Minute,
 		do: func(ctx context.Context) error {
-			return errOf(m.c.BackupVolume(ctx, "", svc.GetName(), "", false))
+			return errOf(rpc.Call(ctx, m.c.BackupVolume, &anovelv1.BackupVolumeRequest{Service: svc.GetName()}))
 		},
 	}.run()
 }
@@ -366,7 +374,7 @@ func (m *model) topologyCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		resp, err := m.c.GetTopology(ctx, "", svcName)
+		resp, err := rpc.Call(ctx, m.c.GetTopology, &anovelv1.GetTopologyRequest{Service: svcName})
 		if err != nil {
 			return statusMsg{entry: newStatus(statusError, "topology: "+err.Error())}
 		}

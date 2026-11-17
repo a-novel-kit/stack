@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"context"
 	"errors"
-	"io"
 
 	"github.com/spf13/cobra"
 
@@ -24,46 +22,18 @@ down just starts.`,
   a-novel core restart --preserve-targets
   a-novel core restart --force`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return restartDaemon(cmd, force, preserve)
+			if preserve && force {
+				return usageError(errors.New("--preserve-targets and --force are mutually exclusive " +
+					"(force tears down everything; preserve assumes the targets continue)"))
+			}
+			ctx, out := cmd.Context(), cmd.OutOrStdout()
+			if _, err := stopDaemon(ctx, rpc.New(), out, preserve, force); err != nil {
+				return err
+			}
+			return startDetached(ctx, out)
 		},
 	}
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "also tear down all infra during the stop step")
 	cmd.Flags().BoolVar(&preserve, "preserve-targets", false, "write reinstall checkpoint first; go-exec targets relaunch on start")
 	return cmd
-}
-
-// restartDaemon stops a running daemon, then starts a detached one. preserve
-// checkpoints the go-exec targets for the new daemon to relaunch, the way
-// prepare-reinstall does; force also tears down every service's infra.
-func restartDaemon(cmd *cobra.Command, force, preserve bool) error {
-	if preserve && force {
-		return usageError(errors.New("--preserve-targets and --force are mutually exclusive " +
-			"(force tears down everything; preserve assumes the targets continue)"))
-	}
-	ctx, out := cmd.Context(), cmd.OutOrStdout()
-	c := rpc.New("")
-	up, err := daemonUp(ctx, c)
-	if err != nil {
-		return err
-	}
-	if up {
-		if err := stopForRestart(ctx, c, out, force, preserve); err != nil {
-			return err
-		}
-	}
-	return startDetached(ctx)
-}
-
-// stopForRestart stops a running daemon and waits until it is gone. preserve
-// checkpoints the go-exec targets first. Otherwise the daemon shuts down as
-// `core kill` does.
-func stopForRestart(ctx context.Context, c *rpc.Client, out io.Writer, force, preserve bool) error {
-	if preserve {
-		if err := prepareReinstall(ctx, c, out); err != nil {
-			return err
-		}
-	} else if _, err := shutdown(ctx, c, force, out); err != nil {
-		return err
-	}
-	return waitDaemonGone(ctx, c, out)
 }

@@ -3,6 +3,7 @@ package server_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/logs"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/server"
+	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil/fsutiltest"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
@@ -91,6 +93,49 @@ func TestStreamLogs(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				require.Fail(t, "StreamLogs is still open 5s after its end")
 			}
+		})
+	}
+}
+
+// TestListRuns pins that a request resolves a target shorthand against the
+// daemon's default stack, so `run logs --previous` reads the target `run ps`
+// shows, whatever $A_NOVEL_STACKS the client's shell holds. Each case sets
+// XDG_STATE_HOME, so none runs in parallel.
+func TestListRuns(t *testing.T) {
+	newService := func(stack string) *discovery.Service {
+		target := &discovery.Target{Name: "rest", Service: "svc", Stack: stack}
+		return &discovery.Service{Name: "svc", Stack: stack, Targets: []*discovery.Target{target}}
+	}
+	stacks := discovery.Stacks{
+		{Name: "main", Default: true, Services: []*discovery.Service{newService("main")}},
+		{Name: "fork", Services: []*discovery.Service{newService("fork")}},
+	}
+
+	testCases := []struct {
+		name     string
+		targetID string
+		want     []string
+		wantCode connect.Code
+	}{
+		{name: "Success/Shorthand", targetID: "svc/rest", want: []string{"20261117T120000"}},
+		{name: "Success/Canonical", targetID: "main/svc/rest", want: []string{"20261117T120000"}},
+		{name: "Success/OtherStack", targetID: "fork/svc/rest"},
+		{name: "Error/UnknownTarget", targetID: "svc/grpc", wantCode: connect.CodeNotFound},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			// The log store reads its archives under XDG_STATE_HOME. Only the
+			// default stack's target has one.
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			logStore := logs.New()
+			archives := filepath.Dir(logStore.CurrentPath("main", "svc", "rest"))
+			fsutiltest.Write(t, archives, map[string]string{"run-20261117T120000.log": ""})
+			s := server.New("test", "", stacks, nil, nil, logStore, nil, nil)
+
+			resp, err := s.ListRuns(t.Context(), &anovelv1.ListRunsRequest{TargetId: testCase.targetID})
+			require.Equal(t, testCase.wantCode, codeOf(err), "ListRuns: %v", err)
+			require.Equal(t, testCase.want, resp.GetRunIds())
 		})
 	}
 }

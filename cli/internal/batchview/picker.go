@@ -122,7 +122,7 @@ func (p picker) View() tea.View {
 	for i, row := range p.rows {
 		cursor := "  "
 		if i == p.cursor {
-			cursor = Brand.Render(glyphCursor) + " "
+			cursor = Brand.Render(GlyphCursor) + " "
 		}
 		if row.target < 0 {
 			box, n := p.groupBox(row.kind)

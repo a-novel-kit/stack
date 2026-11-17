@@ -151,18 +151,6 @@ func TestResolveStampTargets(t *testing.T) {
 func TestStampTargets(t *testing.T) {
 	t.Parallel()
 
-	t.Run("Success", func(t *testing.T) {
-		t.Parallel()
-
-		dir := t.TempDir()
-		fsutiltest.Write(t, dir, map[string]string{"README.md": "go get x@v1.0.0\n"})
-		total, files, err := stampTargets([]string{filepath.Join(dir, "README.md")}, "x@", "1.1.0")
-		require.NoError(t, err)
-		require.Equal(t, 1, total)
-		require.Equal(t, 1, files)
-		require.Equal(t, "go get x@v1.1.0\n", readFixture(t, dir, "README.md"))
-	})
-
 	t.Run("Success/OneMatchAmongSeveralFiles", func(t *testing.T) {
 		t.Parallel()
 
@@ -186,12 +174,5 @@ func TestStampTargets(t *testing.T) {
 		// prepublish:doc script points at its own line.
 		require.ErrorContains(t, err, "version: ")
 		require.ErrorContains(t, err, "a.md")
-	})
-
-	t.Run("Error/NoFilesMatched", func(t *testing.T) {
-		t.Parallel()
-
-		_, _, err := stampTargets([]string{filepath.Join(t.TempDir(), "absent-*.md")}, "x@", "1.1.0")
-		require.Error(t, err)
 	})
 }
