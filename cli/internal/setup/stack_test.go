@@ -1,15 +1,19 @@
-package setup
+package setup_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/a-novel-kit/stack/cli/internal/setup"
+	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil/fsutiltest"
 )
 
 // TestCloneStack pins that a failed clone removes only a path the call created.
 //
-// Not parallel: t.Setenv fails every ssh connection and hides the user's git
-// config, so no case reaches the network or a security key.
+//nolint:paralleltest // t.Setenv fails every ssh connection and hides the user's git config, so no case reaches the network or a security key.
 func TestCloneStack(t *testing.T) {
 	t.Setenv("GIT_SSH_COMMAND", "false")
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
@@ -18,18 +22,28 @@ func TestCloneStack(t *testing.T) {
 	testCases := []struct {
 		name string
 		// seed creates what path holds before the clone; nil leaves it absent.
-		seed       func(path string) error
+		seed       func(t *testing.T, path string)
 		wantExists bool
 	}{
 		{name: "Error/MissingPathRemoved"},
 		{
-			name:       "Error/EmptyDirKept",
-			seed:       func(path string) error { return os.Mkdir(path, 0o700) },
+			name: "Error/EmptyDirKept",
+			seed: func(t *testing.T, path string) {
+				t.Helper()
+
+				if err := os.Mkdir(path, 0o700); err != nil {
+					panic(err)
+				}
+			},
 			wantExists: true,
 		},
 		{
-			name:       "Error/FileKept",
-			seed:       func(path string) error { return os.WriteFile(path, []byte("notes\n"), 0o600) },
+			name: "Error/FileKept",
+			seed: func(t *testing.T, path string) {
+				t.Helper()
+
+				fsutiltest.Write(t, filepath.Dir(path), map[string]string{filepath.Base(path): "notes\n"})
+			},
 			wantExists: true,
 		},
 	}
@@ -38,15 +52,16 @@ func TestCloneStack(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "stack")
 			if testCase.seed != nil {
-				if err := testCase.seed(path); err != nil {
-					t.Fatalf("seed %s: %v", path, err)
-				}
+				testCase.seed(t, path)
 			}
-			if err := CloneStack(path); err == nil {
-				t.Fatal("CloneStack succeeded with ssh disabled")
-			}
-			if _, err := os.Lstat(path); (err == nil) != testCase.wantExists {
-				t.Errorf("after the failed clone, Lstat(%s) = %v, want exists %v", path, err, testCase.wantExists)
+
+			require.Error(t, setup.CloneStack(path), "CloneStack succeeded with ssh disabled")
+
+			_, err := os.Lstat(path)
+			if testCase.wantExists {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, os.ErrNotExist)
 			}
 		})
 	}

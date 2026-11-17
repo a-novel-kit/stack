@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/a-novel-kit/stack/cli/internal/jobs"
 )
 
@@ -45,17 +47,13 @@ func TestRun(t *testing.T) {
 				return fmt.Sprintf("status-%d", i), nil
 			},
 			check: func(t *testing.T, results []jobs.Result, _ int) {
+				t.Helper()
 				for i, r := range results {
-					if want := fmt.Sprintf("job-%d", i); r.Name != want {
-						t.Errorf("results[%d].Name = %q, want %q", i, r.Name, want)
-					}
-					if want := fmt.Sprintf("job %d", i); r.Output != want {
-						t.Errorf("results[%d].Output = %q, want %q", i, r.Output, want)
-					}
+					require.Equal(t, fmt.Sprintf("job-%d", i), r.Name)
+					require.Equal(t, fmt.Sprintf("job %d", i), r.Output)
 				}
-				if !errors.Is(results[2].Err, errBoom) || results[1].Status != "status-1" {
-					t.Errorf("results lost their outcome: %+v", results)
-				}
+				require.ErrorIs(t, results[2].Err, errBoom)
+				require.Equal(t, "status-1", results[1].Status)
 			},
 		},
 		{
@@ -67,9 +65,8 @@ func TestRun(t *testing.T) {
 				return "", nil
 			},
 			check: func(t *testing.T, _ []jobs.Result, peak int) {
-				if peak != 2 {
-					t.Errorf("peak concurrency = %d, want 2", peak)
-				}
+				t.Helper()
+				require.Equal(t, 2, peak, "peak concurrency")
 			},
 		},
 		{
@@ -79,15 +76,12 @@ func TestRun(t *testing.T) {
 			cancelAfter: 1,
 			run:         func(int, io.Writer) (string, error) { return "", nil },
 			check: func(t *testing.T, results []jobs.Result, _ int) {
-				if results[0].Err != nil {
-					t.Errorf("the job run before the cancellation failed: %v", results[0].Err)
-				}
+				t.Helper()
+				require.NoError(t, results[0].Err, "the job run before the cancellation")
 				// The cancelling job's slot may already have let one more
 				// start; everything after it never runs.
 				for _, r := range results[2:] {
-					if !errors.Is(r.Err, jobs.ErrAborted) {
-						t.Errorf("%s: err = %v, want ErrAborted", r.Name, r.Err)
-					}
+					require.ErrorIs(t, r.Err, jobs.ErrAborted, r.Name)
 				}
 			},
 		},
@@ -130,12 +124,8 @@ func TestRun(t *testing.T) {
 			}}
 
 			results := jobs.Run(ctx, list, testCase.limit, progress)
-			if len(results) != testCase.jobs {
-				t.Fatalf("got %d results, want %d", len(results), testCase.jobs)
-			}
-			if done != testCase.jobs {
-				t.Errorf("OnDone ran %d times, want once per job (%d)", done, testCase.jobs)
-			}
+			require.Len(t, results, testCase.jobs)
+			require.Equal(t, testCase.jobs, done, "OnDone runs once per job")
 			testCase.check(t, results, peak)
 		})
 	}
@@ -151,13 +141,13 @@ func TestProgress(t *testing.T) {
 		write []string
 		want  string
 	}{
-		{name: "LastCompleteLine", write: []string{"one\ntwo\n"}, want: "two"},
-		{name: "LineInProgress", write: []string{"one\n", "tw"}, want: "tw"},
-		{name: "CarriageReturnRedraw", write: []string{"10%\r50%\r90%"}, want: "90%"},
-		{name: "CarriageReturnAcrossWrites", write: []string{"a\rb", "c\n"}, want: "bc"},
-		{name: "AnsiStripped", write: []string{"\x1b[32mok\x1b[0m\n"}, want: "ok"},
-		{name: "BlankLineKeepsPrevious", write: []string{"real\n", "\n"}, want: "real"},
-		{name: "LongLineEndsAtCap", write: []string{strings.Repeat("x", 1<<20+1), "y"}, want: "y"},
+		{name: "Success/LastCompleteLine", write: []string{"one\ntwo\n"}, want: "two"},
+		{name: "Success/LineInProgress", write: []string{"one\n", "tw"}, want: "tw"},
+		{name: "Success/CarriageReturnRedraw", write: []string{"10%\r50%\r90%"}, want: "90%"},
+		{name: "Success/CarriageReturnAcrossWrites", write: []string{"a\rb", "c\n"}, want: "bc"},
+		{name: "Success/AnsiStripped", write: []string{"\x1b[32mok\x1b[0m\n"}, want: "ok"},
+		{name: "Success/BlankLineKeepsPrevious", write: []string{"real\n", "\n"}, want: "real"},
+		{name: "Success/LongLineEndsAtCap", write: []string{strings.Repeat("x", 1<<20+1), "y"}, want: "y"},
 	}
 
 	for _, testCase := range testCases {
@@ -174,20 +164,25 @@ func TestProgress(t *testing.T) {
 				<-release
 				return "", nil
 			}}
+			// The job holds until this goroutine sampled the live state; the
+			// samples are read once Run returns, past the release.
+			var running bool
+			var count int
+			var last string
 			go func() {
 				<-written
 				defer close(release)
-				if _, ok := progress.Running(0); !ok || progress.Count() != 1 {
-					t.Errorf("job not reported running")
-				}
-				if got := progress.Last(0); got != testCase.want {
-					t.Errorf("Last = %.80q, want %.80q", got, testCase.want)
-				}
+				_, running = progress.Running(0)
+				count = progress.Count()
+				last = progress.Last(0)
 			}()
 			jobs.Run(t.Context(), []jobs.Job{job}, 1, progress)
-			if _, ok := progress.Running(0); ok || progress.Count() != 0 {
-				t.Errorf("finished job still reported running")
-			}
+			require.True(t, running, "job reported running")
+			require.Equal(t, 1, count, "running job count")
+			require.Equal(t, testCase.want, last)
+			_, running = progress.Running(0)
+			require.False(t, running, "finished job still reported running")
+			require.Zero(t, progress.Count(), "running job count after the run")
 		})
 	}
 }

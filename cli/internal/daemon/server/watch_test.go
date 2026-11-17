@@ -1,4 +1,4 @@
-package server
+package server_test
 
 import (
 	"context"
@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"github.com/stretchr/testify/require"
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/logs"
 	"github.com/a-novel-kit/stack/cli/internal/daemon/runner"
+	"github.com/a-novel-kit/stack/cli/internal/daemon/server"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
@@ -36,7 +38,7 @@ func TestWatch(t *testing.T) {
 			t.Parallel()
 
 			stopping := make(chan struct{})
-			s := &Server{runner: runner.New(nil, nil, nil, logs.New()), stopping: stopping}
+			s := server.New("test", "", nil, runner.New(nil, nil, nil, logs.New()), nil, nil, nil, stopping)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 
@@ -53,11 +55,9 @@ func TestWatch(t *testing.T) {
 
 			select {
 			case err := <-ended:
-				if code := codeOf(err); code != testCase.wantCode {
-					t.Errorf("Watch: got %v, want code %v", err, testCase.wantCode)
-				}
+				require.Equal(t, testCase.wantCode, codeOf(err), "Watch: %v", err)
 			case <-time.After(5 * time.Second):
-				t.Fatal("Watch is still open 5s after its end")
+				require.Fail(t, "Watch is still open 5s after its end")
 			}
 		})
 	}

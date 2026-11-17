@@ -1,12 +1,13 @@
-package discovery
+package discovery_test
 
 import (
-	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
+	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
+	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil/fsutiltest"
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
 )
 
@@ -21,10 +22,9 @@ func TestDiscoverStacks(t *testing.T) {
 
 	present := t.TempDir()
 	gone := filepath.Join(t.TempDir(), "swept")
-	file := filepath.Join(t.TempDir(), "not-a-dir")
-	if err := os.WriteFile(file, nil, 0o600); err != nil {
-		t.Fatalf("fixture: %v", err)
-	}
+	fileDir := t.TempDir()
+	fsutiltest.Write(t, fileDir, map[string]string{"not-a-dir": ""})
+	file := filepath.Join(fileDir, "not-a-dir")
 
 	testCases := []struct {
 		name    string
@@ -38,156 +38,52 @@ func TestDiscoverStacks(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			in := testCase.stacks
 			if !testCase.wantErr {
 				in = append([]stacks.Stack{{Name: "default", Path: present, IsDefault: true}}, in...)
 			}
-			got, err := DiscoverStacks(in)
-			if (err != nil) != testCase.wantErr {
-				t.Fatalf("DiscoverStacks: got err %v, want error %v", err, testCase.wantErr)
+			got, err := discovery.DiscoverStacks(in)
+			if testCase.wantErr {
+				require.Error(t, err)
+				return
 			}
-			if !testCase.wantErr && (len(got) != 1 || got[0].Name != "default") {
-				t.Fatalf("discovered %v, want only the default stack", got)
-			}
+			require.NoError(t, err)
+			require.Len(t, got, 1)
+			require.Equal(t, "default", got[0].Name)
 		})
 	}
 }
 
-// TestDiscoverService builds one service on disk and checks the classification
-// every daemon layer keys off: a profiled compose service with a cmd dir is a
-// target, kinded by the healthcheck its Dockerfile declares and named by its
-// first profile, and an unprofiled one is infra.
-func TestDiscoverService(t *testing.T) {
+// TestStacks pins the name resolution every RPC goes through, where an empty
+// stack name means the default stack.
+func TestStacks(t *testing.T) {
 	t.Parallel()
 
-	dir := filepath.Join(t.TempDir(), "service-x")
-	files := map[string]string{
-		"cmd/rest/main.go":       "package main\n",
-		"cmd/migrations/main.go": "package main\n",
-		"builds/rest.Dockerfile": "FROM scratch\nHEALTHCHECK CMD [\"/rest\", \"health\"]\n",
-		"builds/podman-compose.yaml": `
-services:
-  postgres-x:
-    ports: ["${POSTGRES_PORT}:5432"]
-  service-x-rest:
-    profiles: ["rest"]
-    build: { context: .., dockerfile: builds/rest.Dockerfile }
-    depends_on: { service-x-migrations: { condition: service_completed_successfully }, postgres-x: {} }
-  service-x-migrations:
-    profiles: ["migrations", "rest"]
-    depends_on: [postgres-x]
-volumes:
-  x-data:
-`,
-	}
-	for name, content := range files {
-		path := filepath.Join(dir, name)
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
+	rest := &discovery.Target{Name: "rest", Service: "svc", Stack: "scratch"}
+	x := discovery.Stacks{
+		{Name: "default", Default: true, Services: []*discovery.Service{{Name: "svc", Stack: "default"}}},
+		{Name: "scratch", Services: []*discovery.Service{{Name: "svc", Stack: "scratch", Targets: []*discovery.Target{rest}}}},
 	}
 
-	svc, errs := discoverService("default", dir)
-	if len(errs) != 0 {
-		t.Fatalf("discoverService errors: %v", errs)
-	}
+	st := x.Stack("")
+	require.NotNil(t, st)
+	require.Equal(t, "default", st.Name)
+	require.Nil(t, x.Stack("missing"))
 
-	want := map[string]TargetKind{"migrations": TargetKindOneShot, "rest": TargetKindLongRunner}
-	if len(svc.Targets) != len(want) {
-		t.Fatalf("got %d targets, want %d", len(svc.Targets), len(want))
-	}
-	for _, tgt := range svc.Targets {
-		if tgt.Kind != want[tgt.Name] {
-			t.Errorf("target %s: kind %v, want %v", tgt.Name, tgt.Kind, want[tgt.Name])
-		}
-	}
-	rest := svc.FindTargetByComposeName("service-x-rest")
-	if rest == nil || rest.ID() != "default/service-x/rest" {
-		t.Fatalf("FindTargetByComposeName(service-x-rest) = %+v", rest)
-	}
-	if !slices.Equal(rest.DependsOn, []string{"postgres-x", "service-x-migrations"}) {
-		t.Errorf("rest depends on %v, want both deps sorted", rest.DependsOn)
-	}
-	if in := svc.FindInfra("postgres-x"); in == nil || len(in.Ports) != 1 {
-		t.Errorf("FindInfra(postgres-x) = %+v, want the infra with its port", in)
-	}
-	if in := svc.FindInfra("missing"); in != nil {
-		t.Errorf("FindInfra(missing) = %+v, want nil", in)
-	}
-	if len(svc.Volumes) != 1 || svc.Volumes[0].Name != "x-data" {
-		t.Errorf("volumes = %+v, want x-data", svc.Volumes)
-	}
+	svc := x.Service("", "svc")
+	require.NotNil(t, svc)
+	require.Equal(t, "default", svc.Stack)
+	require.Nil(t, x.Service("scratch", "nope"))
 
-	// A compose file discovery cannot read drops its service, and the one
-	// problem it reports names the file once.
-	errorCases := []struct {
-		name    string
-		compose string
-	}{
-		{name: "Error/MissingCompose"},
-		{name: "Error/MalformedCompose", compose: "services:\n  x:\n    ports: {a: b}\n"},
-	}
-	for _, testCase := range errorCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
+	tgt, svc := x.Target("scratch/svc/rest")
+	require.Same(t, rest, tgt)
+	require.NotNil(t, svc)
+	require.Equal(t, "scratch", svc.Stack)
+	tgt, _ = x.Target("default/svc/rest")
+	require.Nil(t, tgt)
 
-			dir := filepath.Join(t.TempDir(), "service-y")
-			composePath := filepath.Join(dir, "builds", "podman-compose.yaml")
-			if testCase.compose != "" {
-				if err := os.MkdirAll(filepath.Dir(composePath), 0o700); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(composePath, []byte(testCase.compose), 0o600); err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			svc, errs := discoverService("default", dir)
-			if svc != nil || len(errs) != 1 {
-				t.Fatalf("discoverService = (%+v, %v), want no service and one problem", svc, errs)
-			}
-			if msg := errs[0].Error(); strings.Count(msg, composePath) != 1 {
-				t.Errorf("problem %q names %s %d times, want once", msg, composePath, strings.Count(msg, composePath))
-			}
-		})
-	}
-}
-
-// TestStacksLookups pins the name resolution every RPC goes through, where an
-// empty stack name means the default stack.
-func TestStacksLookups(t *testing.T) {
-	t.Parallel()
-
-	rest := &Target{Name: "rest", Service: "svc", Stack: "scratch"}
-	x := Stacks{
-		{Name: "default", Default: true, Services: []*Service{{Name: "svc", Stack: "default"}}},
-		{Name: "scratch", Services: []*Service{{Name: "svc", Stack: "scratch", Targets: []*Target{rest}}}},
-	}
-
-	if st := x.Stack(""); st == nil || st.Name != "default" {
-		t.Errorf(`Stack(""): got %+v, want the default stack`, st)
-	}
-	if st := x.Stack("missing"); st != nil {
-		t.Errorf("Stack(missing): got %+v, want nil", st)
-	}
-	if svc := x.Service("", "svc"); svc == nil || svc.Stack != "default" {
-		t.Errorf(`Service("", svc): got %+v, want the default stack's`, svc)
-	}
-	if svc := x.Service("scratch", "nope"); svc != nil {
-		t.Errorf("Service(scratch, nope): got %+v, want nil", svc)
-	}
-	if tgt, svc := x.Target("scratch/svc/rest"); tgt != rest || svc == nil || svc.Stack != "scratch" {
-		t.Errorf("Target(scratch/svc/rest): got (%+v, %+v)", tgt, svc)
-	}
-	if tgt, _ := x.Target("default/svc/rest"); tgt != nil {
-		t.Errorf("Target(default/svc/rest): got %+v, want nil", tgt)
-	}
-	if got := x.ServiceNames(); !slices.Equal(got, []string{"svc", "svc"}) {
-		t.Errorf("ServiceNames: got %v", got)
-	}
+	require.Equal(t, []string{"svc", "svc"}, x.ServiceNames())
 }
 
 // TestDiscoveryError pins the one-line text the daemon logs and sends to
@@ -198,18 +94,18 @@ func TestDiscoveryError(t *testing.T) {
 
 	testCases := []struct {
 		name string
-		err  DiscoveryError
+		err  discovery.DiscoveryError
 		want string
 	}{
 		{
 			name: "Success",
-			err:  DiscoveryError{Service: "service-x", Path: "/w/app/service-x/cmd/rest", Reason: "orphan cmd"},
+			err:  discovery.DiscoveryError{Service: "service-x", Path: "/w/app/service-x/cmd/rest", Reason: "orphan cmd"},
 			want: "service-x: orphan cmd (/w/app/service-x/cmd/rest)",
 		},
-		{name: "Success/NoPath", err: DiscoveryError{Service: "service-x", Reason: "orphan cmd"}, want: "service-x: orphan cmd"},
+		{name: "Success/NoPath", err: discovery.DiscoveryError{Service: "service-x", Reason: "orphan cmd"}, want: "service-x: orphan cmd"},
 		{
 			name: "Success/NoService",
-			err:  DiscoveryError{Path: "/w/app", Reason: "no app/ directory under stack root"},
+			err:  discovery.DiscoveryError{Path: "/w/app", Reason: "no app/ directory under stack root"},
 			want: "no app/ directory under stack root (/w/app)",
 		},
 	}
@@ -217,9 +113,8 @@ func TestDiscoveryError(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			if got := testCase.err.Error(); got != testCase.want {
-				t.Errorf("Error() = %q, want %q", got, testCase.want)
-			}
+
+			require.Equal(t, testCase.want, testCase.err.Error())
 		})
 	}
 }

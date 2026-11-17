@@ -1,11 +1,14 @@
-package workspace
+package workspace_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/a-novel-kit/stack/cli/internal/shared/fsutil/fsutiltest"
+	"github.com/a-novel-kit/stack/cli/internal/workspace"
 	"github.com/a-novel-kit/stack/cli/internal/workspace/workspacetest"
 )
 
@@ -22,18 +25,28 @@ func TestOngoingWork(t *testing.T) {
 	}{
 		{name: "Success/CleanDefaultBranch", setup: func(*testing.T, string) {}},
 		{
-			name:  "Success/FeatureBranch",
-			setup: func(t *testing.T, local string) { workspacetest.Git(t, local, "checkout", "--quiet", "-b", "feature") },
-			want:  "on feature",
+			name: "Success/FeatureBranch",
+			setup: func(t *testing.T, local string) {
+				t.Helper()
+
+				workspacetest.Git(t, local, "checkout", "--quiet", "-b", "feature")
+			},
+			want: "on feature",
 		},
 		{
-			name:  "Success/DetachedHEAD",
-			setup: func(t *testing.T, local string) { workspacetest.Git(t, local, "checkout", "--quiet", "--detach") },
-			want:  "detached HEAD",
+			name: "Success/DetachedHEAD",
+			setup: func(t *testing.T, local string) {
+				t.Helper()
+
+				workspacetest.Git(t, local, "checkout", "--quiet", "--detach")
+			},
+			want: "detached HEAD",
 		},
 		{
 			name: "Success/DirtyTree",
 			setup: func(t *testing.T, local string) {
+				t.Helper()
+
 				fsutiltest.Write(t, local, map[string]string{"a.txt": "work in progress\n"})
 			},
 			want: "uncommitted changes",
@@ -43,11 +56,10 @@ func TestOngoingWork(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			local, _ := workspacetest.InitSync(t)
 			testCase.setup(t, local)
-			if got := OngoingWork(local); got != testCase.want {
-				t.Errorf("OngoingWork = %q, want %q", got, testCase.want)
-			}
+			require.Equal(t, testCase.want, workspace.OngoingWork(local))
 		})
 	}
 }
@@ -56,55 +68,61 @@ func TestUnpushedCommits(t *testing.T) {
 	t.Parallel()
 
 	local, _ := workspacetest.InitSync(t)
-	expect := func(when string, want int) {
-		t.Helper()
-		if n := UnpushedCommits(local); n != want {
-			t.Fatalf("%s: %d unpushed commits, want %d", when, n, want)
-		}
-	}
+	require.Equal(t, 0, workspace.UnpushedCommits(local), "fresh clone")
 
-	expect("fresh clone", 0)
 	workspacetest.Commit(t, local, "c.txt", "c0\n")
-	expect("after one local commit", 1)
+	require.Equal(t, 1, workspace.UnpushedCommits(local), "after one local commit")
+
 	workspacetest.Git(t, local, "push", "--quiet")
-	expect("after push", 0)
+	require.Equal(t, 0, workspace.UnpushedCommits(local), "after push")
+
 	// With no upstream there is no remote to have lost the commit to.
 	workspacetest.Git(t, local, "checkout", "--quiet", "-b", "no-upstream")
 	workspacetest.Commit(t, local, "d.txt", "d0\n")
-	expect("no upstream", 0)
+	require.Equal(t, 0, workspace.UnpushedCommits(local), "no upstream")
 }
 
-func TestGitToplevel(t *testing.T) {
+func TestToplevel(t *testing.T) {
 	t.Parallel()
 
 	root := workspacetest.InitPushed(t)
 	sub := filepath.Join(root, "deep", "inside")
 	nested := filepath.Join(root, "app", "service-x")
 	for _, dir := range []string{sub, nested} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatalf("mkdir: %v", err)
-		}
+		require.NoError(t, os.MkdirAll(dir, 0o755))
 	}
 	workspacetest.Git(t, nested, "init", "--quiet", "--initial-branch=master")
 
-	testCases := []struct{ name, dir, want string }{
-		{"Success/Subdirectory", sub, root},
+	testCases := []struct {
+		name    string
+		dir     string
+		want    string
+		wantErr bool
+	}{
+		{name: "Success/Subdirectory", dir: sub, want: root},
 		// An independent repo nested inside (a pulled checkout under app/) is
 		// its own toplevel: this scopes `publish` to the service you cd into.
-		{"Success/NestedRepo", nested, nested},
-		{"Error/OutsideARepo", t.TempDir(), ""},
+		{name: "Success/NestedRepo", dir: nested, want: nested},
+		{name: "Error/OutsideARepo", dir: t.TempDir(), wantErr: true},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := Toplevel(testCase.dir)
-			// Resolve symlinks on both sides — macOS TempDirs live under /private.
-			gotResolved, _ := filepath.EvalSymlinks(got)
-			wantResolved, _ := filepath.EvalSymlinks(testCase.want)
-			if (err != nil) != (testCase.want == "") || gotResolved != wantResolved {
-				t.Errorf("Toplevel = (%q, %v), want %q", got, err, testCase.want)
+
+			got, err := workspace.Toplevel(testCase.dir)
+			if testCase.wantErr {
+				require.Error(t, err)
+				require.Empty(t, got)
+				return
 			}
+			require.NoError(t, err)
+			// Resolve symlinks on both sides: macOS TempDirs live under /private.
+			gotResolved, err := filepath.EvalSymlinks(got)
+			require.NoError(t, err)
+			wantResolved, err := filepath.EvalSymlinks(testCase.want)
+			require.NoError(t, err)
+			require.Equal(t, wantResolved, gotResolved)
 		})
 	}
 }

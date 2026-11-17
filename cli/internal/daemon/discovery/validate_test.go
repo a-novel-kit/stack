@@ -1,8 +1,11 @@
-package discovery
+package discovery_test
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/a-novel-kit/stack/cli/internal/daemon/discovery"
 )
 
 // TestValidateEnvRefs pins which env references the daemon fills: allocated
@@ -32,28 +35,22 @@ func TestValidateEnvRefs(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc := &Service{
+			svc := &discovery.Service{
 				Name:    "service-x",
-				Targets: []*Target{{Name: "rest", Environment: testCase.targetEnv}},
-				Infra:   []*Infra{{Name: "postgres-x", Environment: testCase.infraEnv}},
+				Targets: []*discovery.Target{{Name: "rest", Environment: testCase.targetEnv}},
+				Infra:   []*discovery.Infra{{Name: "postgres-x", Environment: testCase.infraEnv}},
 			}
-			discovered := Stacks{{Name: "default", Services: []*Service{svc, {Name: "service-y"}}}}
-			ValidateEnvRefs(discovered)
+			discovered := discovery.Stacks{{Name: "default", Services: []*discovery.Service{svc, {Name: "service-y"}}}}
+			discovery.ValidateEnvRefs(discovered)
 
 			errs := discovered[0].Errors
 			if len(testCase.want) == 0 {
-				if len(errs) != 0 {
-					t.Fatalf("ValidateEnvRefs warned %v, want nothing", errs)
-				}
+				require.Empty(t, errs)
 				return
 			}
-			if len(errs) != 1 {
-				t.Fatalf("ValidateEnvRefs warned %v, want one warning", errs)
-			}
+			require.Len(t, errs, 1)
 			for _, part := range testCase.want {
-				if !strings.Contains(errs[0].Reason, part) {
-					t.Errorf("warning %q does not name %q", errs[0].Reason, part)
-				}
+				require.Contains(t, errs[0].Reason, part)
 			}
 		})
 	}

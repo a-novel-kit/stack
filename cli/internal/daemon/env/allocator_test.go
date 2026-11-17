@@ -1,149 +1,145 @@
-package env
+package env_test
 
 import (
+	"errors"
 	"slices"
 	"strconv"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/a-novel-kit/stack/cli/internal/daemon/env"
 )
 
-// Allocator tests exercise the refcounted (owner, localVar) → port store behind
+// TestAllocator exercises the refcounted (owner, localVar) → port store behind
 // every daemon port allocation. A defect here breaks port reuse, letting two
 // services bind one slot, or leaks slots that never free after a target dies.
+func TestAllocator(t *testing.T) {
+	t.Parallel()
 
-// TestAllocator_RejectsNonAllocatedKind: only *_PORT is allocatable, through
-// Acquire or Reserve.
-func TestAllocator_RejectsNonAllocatedKind(t *testing.T) {
-	a := NewAllocator()
-	if _, err := a.Acquire("svc", "HOST", "consumer"); err == nil {
-		t.Error("Acquire(HOST) should reject")
-	}
-	if got := a.Reserve("svc", "HOST", 1234, "consumer"); got != 0 {
-		t.Errorf("Reserve(HOST): got %d want 0 (rejected)", got)
-	}
-}
+	t.Run("Error/NotAllocatedKind", func(t *testing.T) {
+		t.Parallel()
 
-func TestAllocator_AcquireRefcounts(t *testing.T) {
-	// A repeated Acquire from one consumer returns the same port and holds a
-	// single ref. In the cross-service case service-A allocates
-	// SERVICE_B_GRPC_PORT, then service-B's own grpc target must land on that
-	// same port, and the slot survives until each consumer releases.
-	a := NewAllocator()
-	consumers := []string{"consumer-a", "consumer-a", "consumer-b"}
-	ports := make([]int, len(consumers))
-	for i, consumer := range consumers {
-		p, err := a.Acquire("svc-b", "GRPC_PORT", consumer)
-		if err != nil {
-			t.Fatalf("Acquire(%s): %v", consumer, err)
+		// Only *_PORT is allocatable, through Acquire or Reserve.
+		a := env.NewAllocator()
+		_, err := a.Acquire("svc", "HOST", "consumer")
+		require.Error(t, err)
+		require.Zero(t, a.Reserve("svc", "HOST", 1234, "consumer"))
+	})
+
+	t.Run("Success/AcquireRefcounts", func(t *testing.T) {
+		t.Parallel()
+
+		// A repeated Acquire from one consumer returns the same port and holds a
+		// single ref. In the cross-service case service-A allocates
+		// SERVICE_B_GRPC_PORT, then service-B's own grpc target must land on that
+		// same port, and the slot survives until each consumer releases.
+		a := env.NewAllocator()
+		consumers := []string{"consumer-a", "consumer-a", "consumer-b"}
+		ports := make([]int, len(consumers))
+		for i, consumer := range consumers {
+			port, err := a.Acquire("svc-b", "GRPC_PORT", consumer)
+			require.NoError(t, err)
+			ports[i] = port
 		}
-		ports[i] = p
-	}
-	if ports[0] != ports[1] || ports[0] != ports[2] {
-		t.Errorf("Acquire on one key: got ports %v, want one", ports)
-	}
-	if snap := a.Snapshot(); len(snap) != 1 || !slices.Equal(snap[0].Refs, []string{"consumer-a", "consumer-b"}) {
-		t.Errorf("expected 1 slot with one ref per consumer, got %+v", snap)
-	}
-	a.Release("consumer-a")
-	if p, ok := a.Lookup("svc-b", "GRPC_PORT"); !ok || p != ports[0] {
-		t.Errorf("after partial Release, slot should still exist: lookup got (%d, %v)", p, ok)
-	}
-	a.Release("consumer-b")
-	if _, ok := a.Lookup("svc-b", "GRPC_PORT"); ok {
-		t.Error("after full Release, slot should be gone")
-	}
-}
+		require.Equal(t, slices.Repeat(ports[:1], len(consumers)), ports)
+		require.Equal(t, []env.Allocation{
+			{Owner: "svc-b", LocalVar: "GRPC_PORT", Port: ports[0], Refs: []string{"consumer-a", "consumer-b"}},
+		}, a.Snapshot())
 
-func TestAllocator_Reserve(t *testing.T) {
-	// Reserve is the adoption path: a restarting daemon finds an already-bound
-	// container and re-seeds the slot with its port, with no kernel call. Over
-	// an existing slot it takes a ref and returns the port already recorded,
-	// ignoring the one passed, which keeps a reseed robust when an Acquire
-	// fires first.
-	a := NewAllocator()
-	if port := a.Reserve("svc", "POSTGRES_PORT", 41699, "infra-consumer"); port != 41699 {
-		t.Errorf("Reserve should return the passed port: got %d want 41699", port)
-	}
-	if p, ok := a.Lookup("svc", "POSTGRES_PORT"); !ok || p != 41699 {
-		t.Errorf("Reserve should populate Lookup: got (%d, %v)", p, ok)
-	}
-	first, err := a.Acquire("svc", "REST_PORT", "owner-a")
-	if err != nil {
-		t.Fatalf("Acquire: %v", err)
-	}
-	if got := a.Reserve("svc", "REST_PORT", first+999, "owner-b"); got != first {
-		t.Errorf("Reserve over existing slot: got %d want %d (existing port)", got, first)
-	}
-	if snap := a.Snapshot(); len(snap) != 2 || len(snap[1].Refs) != 2 {
-		t.Errorf("expected the REST_PORT slot with 2 refs, got %+v", snap)
-	}
-}
+		a.Release("consumer-a")
+		port, ok := a.Lookup("svc-b", "GRPC_PORT")
+		require.True(t, ok, "the slot must survive a partial Release")
+		require.Equal(t, ports[0], port)
 
-func TestAllocator_UnknownSlot(t *testing.T) {
-	a := NewAllocator()
-	if p, ok := a.Lookup("nobody", "REST_PORT"); ok || p != 0 {
-		t.Errorf("Lookup of missing slot: got (%d, %v) want (0, false)", p, ok)
-	}
-	a.Release("never-acquired") // shouldn't panic, shouldn't error
-	a.Release("never-acquired") // still no-op
-}
+		a.Release("consumer-b")
+		_, ok = a.Lookup("svc-b", "GRPC_PORT")
+		require.False(t, ok, "the slot must go with its last consumer")
+	})
 
-func TestAllocator_SnapshotDeterministic(t *testing.T) {
-	a := NewAllocator()
-	_, _ = a.Acquire("svc-b", "REST_PORT", "c1")
-	_, _ = a.Acquire("svc-a", "GRPC_PORT", "c2")
-	_, _ = a.Acquire("svc-a", "REST_PORT", "c3")
-	snap := a.Snapshot()
-	got := make([]string, len(snap))
-	for i, s := range snap {
-		got[i] = s.Owner + "/" + s.LocalVar
-	}
-	// Sorted by (owner, localVar).
-	if want := []string{"svc-a/GRPC_PORT", "svc-a/REST_PORT", "svc-b/REST_PORT"}; !slices.Equal(got, want) {
-		t.Errorf("snapshot: got %v want %v", got, want)
-	}
-}
+	t.Run("Success/Reserve", func(t *testing.T) {
+		t.Parallel()
 
-func TestAllocator_SetServicesLongestFirst(t *testing.T) {
-	a := NewAllocator()
-	a.SetServices([]string{"svc-a", "svc-aaa", "svc-ab", "svc-aa"})
-	// Sorted by length desc, ties by lex asc.
-	if got, want := a.Services(), []string{"svc-aaa", "svc-aa", "svc-ab", "svc-a"}; !slices.Equal(got, want) {
-		t.Errorf("Services(): got %v want %v", got, want)
-	}
-}
+		// Reserve is the adoption path: a restarting daemon finds an already-bound
+		// container and re-seeds the slot with its port, with no kernel call. Over
+		// an existing slot it takes a ref and returns the port already recorded,
+		// ignoring the one passed, which keeps a reseed robust when an Acquire
+		// fires first.
+		a := env.NewAllocator()
+		require.Equal(t, 41699, a.Reserve("svc", "POSTGRES_PORT", 41699, "infra-consumer"))
+		port, ok := a.Lookup("svc", "POSTGRES_PORT")
+		require.True(t, ok)
+		require.Equal(t, 41699, port)
 
-func TestAllocator_ConcurrentAcquireSameKey(t *testing.T) {
-	// Race one (owner, localVar) across many goroutines: each gets the same
-	// port, nothing panics, and the refcount matches the goroutine count.
-	a := NewAllocator()
-	const N = 64
-	var wg sync.WaitGroup
-	wg.Add(N)
-	got := make([]int, N)
-	for i := range N {
-		go func(idx int) {
-			defer wg.Done()
-			p, err := a.Acquire("svc", "REST_PORT", "consumer-"+strconv.Itoa(idx))
-			if err != nil {
-				t.Errorf("goroutine %d Acquire: %v", idx, err)
-				return
-			}
-			got[idx] = p
-		}(i)
-	}
-	wg.Wait()
-	first := got[0]
-	if first == 0 {
-		t.Fatal("first acquire returned port 0")
-	}
-	for i, p := range got {
-		if p != first {
-			t.Errorf("concurrent Acquire goroutine %d: got %d want %d", i, p, first)
+		first, err := a.Acquire("svc", "REST_PORT", "owner-a")
+		require.NoError(t, err)
+		require.Equal(t, first, a.Reserve("svc", "REST_PORT", first+999, "owner-b"))
+		require.Equal(t, []env.Allocation{
+			{Owner: "svc", LocalVar: "POSTGRES_PORT", Port: 41699, Refs: []string{"infra-consumer"}},
+			{Owner: "svc", LocalVar: "REST_PORT", Port: first, Refs: []string{"owner-a", "owner-b"}},
+		}, a.Snapshot())
+	})
+
+	t.Run("Success/UnknownSlot", func(t *testing.T) {
+		t.Parallel()
+
+		a := env.NewAllocator()
+		port, ok := a.Lookup("nobody", "REST_PORT")
+		require.False(t, ok)
+		require.Zero(t, port)
+		// Releasing a consumer that holds nothing is a no-op, every time.
+		a.Release("never-acquired")
+		a.Release("never-acquired")
+	})
+
+	t.Run("Success/SnapshotSorted", func(t *testing.T) {
+		t.Parallel()
+
+		a := env.NewAllocator()
+		_, _ = a.Acquire("svc-b", "REST_PORT", "c1")
+		_, _ = a.Acquire("svc-a", "GRPC_PORT", "c2")
+		_, _ = a.Acquire("svc-a", "REST_PORT", "c3")
+		snap := a.Snapshot()
+		got := make([]string, len(snap))
+		for i, s := range snap {
+			got[i] = s.Owner + "/" + s.LocalVar
 		}
-	}
-	snap := a.Snapshot()
-	if len(snap) != 1 || len(snap[0].Refs) != N {
-		t.Errorf("expected 1 slot with %d refs, got %v", N, snap)
-	}
+		// Sorted by (owner, localVar).
+		require.Equal(t, []string{"svc-a/GRPC_PORT", "svc-a/REST_PORT", "svc-b/REST_PORT"}, got)
+	})
+
+	t.Run("Success/ServicesLongestFirst", func(t *testing.T) {
+		t.Parallel()
+
+		a := env.NewAllocator()
+		a.SetServices([]string{"svc-a", "svc-aaa", "svc-ab", "svc-aa"})
+		// Sorted by length desc, ties by lex asc.
+		require.Equal(t, []string{"svc-aaa", "svc-aa", "svc-ab", "svc-a"}, a.Services())
+	})
+
+	t.Run("Success/ConcurrentAcquireSameKey", func(t *testing.T) {
+		t.Parallel()
+
+		// Race one (owner, localVar) across many goroutines: each gets the same
+		// port, nothing panics, and the refcount matches the goroutine count.
+		a := env.NewAllocator()
+		const n = 64
+		ports := make([]int, n)
+		errs := make([]error, n)
+		var wg sync.WaitGroup
+		for i := range n {
+			wg.Go(func() {
+				ports[i], errs[i] = a.Acquire("svc", "REST_PORT", "consumer-"+strconv.Itoa(i))
+			})
+		}
+		wg.Wait()
+
+		require.NoError(t, errors.Join(errs...))
+		require.NotZero(t, ports[0])
+		require.Equal(t, slices.Repeat(ports[:1], n), ports)
+		snap := a.Snapshot()
+		require.Len(t, snap, 1)
+		require.Len(t, snap[0].Refs, n)
+	})
 }

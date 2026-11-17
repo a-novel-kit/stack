@@ -1,4 +1,4 @@
-package batchview
+package batchview_test
 
 import (
 	"errors"
@@ -7,6 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
+	"github.com/a-novel-kit/stack/cli/internal/batchview"
 	"github.com/a-novel-kit/stack/cli/internal/jobs"
 )
 
@@ -26,29 +29,29 @@ func TestReport(t *testing.T) {
 
 	testCases := []struct {
 		name    string
-		batch   Batch
+		batch   batchview.Batch
 		show    func(jobs.Result) bool
 		want    []string // in the order they print
 		notWant []string
 	}{
 		{
 			name:    "Success/OutcomePills",
-			batch:   Batch{Results: []jobs.Result{ok, skipped, ok}, Elapsed: time.Second},
-			show:    Failed,
+			batch:   batchview.Batch{Results: []jobs.Result{ok, skipped, ok}, Elapsed: time.Second},
+			show:    batchview.Failed,
 			want:    []string{"✓ SYNC PASSED", "updated 2", "skipped 1", "failed 0", "total 3", "took 1s"},
 			notWant: []string{"FAILURES", "master updated", "a-novel-kit/golib"},
 		},
 		{
 			name:    "Success/EmptyStatusReadsPassed",
-			batch:   Batch{Results: []jobs.Result{passed}},
-			show:    Failed,
+			batch:   batchview.Batch{Results: []jobs.Result{passed}},
+			show:    batchview.Failed,
 			want:    []string{"passed 1"},
 			notWant: []string{"OUTPUT"},
 		},
 		{
 			name:  "Error/FailedOutputInFull",
-			batch: Batch{Results: []jobs.Result{ok, failed}},
-			show:  Failed,
+			batch: batchview.Batch{Results: []jobs.Result{ok, failed}},
+			show:  batchview.Failed,
 			want: []string{
 				"FAILURES", "error: fetch failed", "ssh: refused",
 				"✓ a-novel-kit/golib updated", "✗ a-novel/service-x fetch failed",
@@ -58,7 +61,7 @@ func TestReport(t *testing.T) {
 		},
 		{
 			name:  "Success/EveryOutputWhenSelected",
-			batch: Batch{Results: []jobs.Result{ok, skipped}},
+			batch: batchview.Batch{Results: []jobs.Result{ok, skipped}},
 			show:  func(jobs.Result) bool { return true },
 			want: []string{
 				"OUTPUT", "master updated", "diverged",
@@ -68,8 +71,8 @@ func TestReport(t *testing.T) {
 		},
 		{
 			name:  "Error/Aborted",
-			batch: Batch{Results: []jobs.Result{ok, {Name: "late", Err: jobs.ErrAborted}}, Aborted: true},
-			show:  Failed,
+			batch: batchview.Batch{Results: []jobs.Result{ok, {Name: "late", Err: jobs.ErrAborted}}, Aborted: true},
+			show:  batchview.Failed,
 			want:  []string{"error: aborted before completion", "✗ late aborted before completion", "! SYNC ABORTED"},
 		},
 	}
@@ -78,20 +81,15 @@ func TestReport(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := ansiEscape.ReplaceAllString(Report("SYNC", testCase.batch, testCase.show), "")
+			got := ansiEscape.ReplaceAllString(batchview.Report("SYNC", testCase.batch, testCase.show), "")
 			rest := got
 			for _, want := range testCase.want {
 				_, after, found := strings.Cut(rest, want)
-				if !found {
-					t.Errorf("report missing %q, or out of order:\n%s", want, got)
-					continue
-				}
+				require.True(t, found, "report missing %q, or out of order:\n%s", want, got)
 				rest = after
 			}
 			for _, notWant := range testCase.notWant {
-				if strings.Contains(got, notWant) {
-					t.Errorf("report unexpectedly holds %q:\n%s", notWant, got)
-				}
+				require.NotContains(t, got, notWant)
 			}
 		})
 	}
