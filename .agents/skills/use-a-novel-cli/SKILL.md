@@ -122,14 +122,20 @@ jobs and scripts drive it like this:
   a-novel run watch --service=service-json-keys   # NDJSON, one event per line
   ```
 
-- **Ask for machine-readable output where it exists.** `run ps --json` emits one
-  JSON object per service (with canonical fully-qualified target IDs).
-  `run env --format=json` (or `dotenv`) replaces the default eval-able `shell` form.
+- **Ask for machine-readable output where it exists.** Every command with a machine form takes
+  `--format`. `run ps --format=json` emits one JSON object per service (with canonical
+  fully-qualified target IDs), `run watch` prints JSON lines by default (`--format=text` prints
+  prose), and `run env --format=json` (or `dotenv`) replaces the default eval-able `shell` form.
+  `--json` still works on `ps` and `watch` but is deprecated.
 
   ```bash
-  a-novel run ps --json
+  a-novel run ps --format=json
   a-novel run env <service> --format=json
   ```
+
+- **Read the exit code.** 0 is success, 1 a failure, 2 a usage error (unknown command or flag, a
+  flag value outside its set, a wrong argument count), 130 an interrupt. `secrets exec`,
+  `run exec` and `--sandbox` exit with their child's status.
 
 ---
 

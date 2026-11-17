@@ -123,17 +123,17 @@ production code never reads definitions relative to its working directory.
 `write-go` already mandates camelCase for multi-word file names. Within a service, the layer/role
 prefix is fixed — match the existing files exactly:
 
-| Layer / role       | Pattern                             | Example                                    |
-| ------------------ | ----------------------------------- | ------------------------------------------ |
-| DAO                | `pg.<entity>[<Operation>].go`       | `pg.user.go` (model), `pg.userSearch.go`   |
-| DAO SQL            | `pg.<entity><Operation>.sql`        | `pg.userSearch.sql`                        |
-| Core               | `<entity><Operation>.go`            | `userSearch.go`, `orderCreate.go`          |
-| Handlers           | `<protocol>.<entity><Operation>.go` | `rest.userList.go`, `grpc.orderCreate.go`  |
-| Config             | `<subject>.config.go`               | `app.config.go`, `users.config.go`         |
-| Config defaults    | `<subject>.config.default.go`       | `app.config.default.go`                    |
-| Lib                | `<subject>.go` (camelCase)          | `masterKeyContext.go`, `masterKeyCrypt.go` |
-| Shared layer types | `common.go`                         | sentinels / types shared across the layer  |
-| Tests              | `<same-name>_test.go`               | `pg.userSearch_test.go`                    |
+| Layer / role       | Pattern                             | Example                                   |
+| ------------------ | ----------------------------------- | ----------------------------------------- |
+| DAO                | `pg.<entity>[<Operation>].go`       | `pg.user.go` (model), `pg.userSearch.go`  |
+| DAO SQL            | `pg.<entity><Operation>.sql`        | `pg.userSearch.sql`                       |
+| Core               | `<entity><Operation>.go`            | `userSearch.go`, `orderCreate.go`         |
+| Handlers           | `<protocol>.<entity><Operation>.go` | `rest.userList.go`, `grpc.orderCreate.go` |
+| Config             | `<subject>.config.go`               | `app.config.go`, `users.config.go`        |
+| Config defaults    | `<subject>.config.default.go`       | `app.config.default.go`                   |
+| Lib                | `<subject>.go` (camelCase)          | `masterKeyCrypt.go`                       |
+| Shared layer types | `common.go`                         | sentinels / types shared across the layer |
+| Tests              | `<same-name>_test.go`               | `pg.userSearch_test.go`                   |
 
 **Handlers use `rest`, never `http`** — in file names _and_ type names. Files named `http.*` and
 types prefixed `Http` are legacy; rename them when they come into scope (see Active Migrations).

@@ -38,6 +38,11 @@ a-novel test -j 4             # run at most 4 targets at once (with or without -
 remains for a single package/test while iterating. CI runs `gotestsum` directly
 through the `kit/workflows` composite actions, not through the CLI.
 
+**Run the race detector yourself.** Every Go repository's CI runs `test-go` with the race detector
+(`race: "true"`), and `a-novel test` runs without it, so a data race can pass locally and fail CI.
+Before pushing a change to concurrent code or to tests that share values across parallel cases, run
+`go test -race` on the packages it touches.
+
 **Test plan checkboxes in PR bodies:**
 
 ```

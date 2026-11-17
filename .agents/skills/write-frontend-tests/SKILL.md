@@ -91,6 +91,9 @@ Do not manufacture cases that the public contract cannot reach.
 - Build a fresh `Response` per call (`mockImplementation(async () => Response.json(…))`). A body
   reads once, so `mockResolvedValue(response)` hands every later call a consumed body, and the
   failure looks like a parsing bug in the code under test.
+- Assert only the request headers the code relies on, such as `authorization` or `accept`, never an
+  exact header set. A harmless change, such as `RestClient` sending no `Content-Type` without a body,
+  then breaks no consumer's test.
 - Pin performance contracts with direct assertions. To prove a body is released, keep the stubbed
   `Response` and assert `response.bodyUsed` after the call. To prove calls run in parallel, return a
   promise that never resolves and assert synchronously that every independent call has started. A
@@ -217,6 +220,8 @@ affected instead of inventing a screenshot test.
   caller's token in `X-Service-Authorization`.
 - Read the emails a test sends with `searchMail` and `mailLinks` from
   `@a-novel-kit/nodelib-test/mailpit`, polling with the runner's own `expect.poll` or `vi.waitFor`.
+  A Vitest `globalSetup` runs outside any test, where `vi` cannot run, so it polls with a deadline
+  loop.
   A journey that follows an email's link takes it from `emailLink` in
   `@a-novel-kit/nodelib-test/playwright`, which refuses a link to another origin.
 - Run the account platform's image in a client's stack, with a token drawn from the issuer at

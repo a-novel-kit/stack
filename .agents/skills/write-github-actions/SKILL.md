@@ -281,7 +281,7 @@ The second is a **build gate** in front of the expensive jobs. Every repo in bot
 pool of runners, so a test or image job started on code that does not compile holds a runner that
 another run is queued for. Gate the long jobs (tests, browser suites, container builds) on the cheap
 jobs whose failure makes their result worthless: the build and the type check. `platform-studio`
-gates its `test-*` jobs and `build-platform` on `[build-node, lint-types]`.
+gates its `test-*` jobs and `build-platform` on `[build-js, lint-types]`.
 
 Keep the graph to three stages: cheap checks with no `needs:`, the gated heavy jobs, and the
 `report-*` jobs that read their outputs. Each stage adds its slowest job to every run, green runs

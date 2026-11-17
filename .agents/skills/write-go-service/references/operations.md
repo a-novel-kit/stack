@@ -111,12 +111,13 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
   dependency and an options struct, and opens its own span, as every core function that takes a
   context does (see [telemetry](telemetry.md)). The ownership check is one, and `lockOwnedProject`
   has the same shape around the lock (see [ownership](data-access.md#ownership)). The helper's DAO
-  interface is declared once, in `common.go`, and every service that runs the preflight types its
-  field and constructor parameter with it:
+  interface is declared once and exported, in `common.go` (`ProjectOwnerDao`, `ProjectLockDao`,
+  `ProjectBytesDao`), and every service that runs the preflight types its field and constructor
+  parameter with it. A service declares its own interface for every other DAO:
 
   ```go
-  // projectOwnerDao checks that a user owns a project.
-  type projectOwnerDao interface {
+  // ProjectOwnerDao checks that a user owns a project.
+  type ProjectOwnerDao interface {
       Exec(ctx context.Context, request *dao.ProjectOwnedRequest) (bool, error)
   }
 
@@ -125,7 +126,7 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
       ownerID   uuid.UUID
   }
 
-  func checkProjectOwnership(ctx context.Context, daoOwner projectOwnerDao, opts projectOwnershipOpts) error {
+  func checkProjectOwnership(ctx context.Context, daoOwner ProjectOwnerDao, opts projectOwnershipOpts) error {
       ctx, span := otel.Tracer().Start(ctx, "core.checkProjectOwnership")
       defer span.End()
 
