@@ -55,7 +55,7 @@ jobs:
   comment:
     # The engine mints a token scoped to the target repository; the workflow token gets nothing.
     permissions: {}
-    uses: a-novel-kit/workflows/.github/workflows/bot-comment-run.yaml@v1.87.0
+    uses: a-novel-kit/workflows/.github/workflows/bot-comment-run.yaml@v1.87.1
     with:
       client_id: ${{ vars.AGENT_BOT_CLIENT_ID }}
       repo: ${{ inputs.repo }}

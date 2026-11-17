@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>a-novel-kit/workflows//renovate/library#v1.87.0"],
+  "extends": ["github>a-novel-kit/workflows//renovate/library#v1.87.1"],
   "packageRules": [
     {
       "description": "Keep cli/buf.mod on its own branch, and regenerate the proto stubs after a bump. No code imports buf. The code it emits links google.golang.org/protobuf, which cli/go.mod keeps, and buf's own dependencies stay out of cli/go.mod.",
