@@ -10,22 +10,21 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
 // logsOpts holds the flags of `run logs`.
 type logsOpts struct {
-	scope    stackScope
-	follow   bool
-	tail     int32
+	stack    string
 	since    time.Duration
 	stream   string
 	previous bool
-	runID    string
 }
 
 func newLogsCmd() *cobra.Command {
 	var o logsOpts
+	req := &anovelv1.StreamLogsRequest{}
 	cmd := &cobra.Command{
 		Use:   "logs <target-or-infra>",
 		Short: "Print or stream logs for a target or infra container",
@@ -44,49 +43,40 @@ with stdout and stderr merged. It keeps no archived runs, so --previous and
   a-novel run logs service-json-keys/rest --previous`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return streamLogs(cmd, parseEntityID(args[0], o.scope.stack), o)
+			return streamLogs(cmd, parseEntityID(args[0], o.stack), req, o)
 		},
 	}
-	o.scope.bind(cmd)
-	cmd.Flags().BoolVarP(&o.follow, "follow", "f", false, "stream new lines as they arrive")
-	cmd.Flags().Int32Var(&o.tail, "tail", 0, "start from the last N lines (0 = all)")
+	addStackFlag(cmd, &o.stack)
+	cmd.Flags().BoolVarP(&req.Follow, "follow", "f", false, "stream new lines as they arrive")
+	cmd.Flags().Int32Var(&req.TailLines, "tail", 0, "start from the last N lines (0 = all)")
 	cmd.Flags().DurationVar(&o.since, "since", 0, "only lines newer than this duration")
-	cmd.Flags().StringVar(&o.stream, "stream", "", "filter to stdout or stderr only")
+	streams := []string{enumword.Word(anovelv1.LogStream_LOG_STREAM_STDOUT), enumword.Word(anovelv1.LogStream_LOG_STREAM_STDERR)}
+	addEnumFlag(cmd, &enumFlag{value: &o.stream, allowed: streams}, "stream", "", "filter to stdout or stderr only")
 	cmd.Flags().BoolVar(&o.previous, "previous", false, "read the most recent archived run instead of the current")
-	cmd.Flags().StringVar(&o.runID, "run-id", "", "read a specific archived run by timestamp")
+	cmd.Flags().StringVar(&req.RunId, "run-id", "", "read a specific archived run by timestamp")
 	return cmd
 }
 
-// streamLogs prints the log of the run o selects, of the entity ref names.
-func streamLogs(cmd *cobra.Command, ref entityRef, o logsOpts) error {
+// streamLogs prints the log of the entity ref names, from the run req or
+// --previous selects.
+func streamLogs(cmd *cobra.Command, ref entityRef, req *anovelv1.StreamLogsRequest, o logsOpts) error {
 	// Podman owns infra log files, so infra entries have no run archives.
-	if ref.IsInfra && (o.previous || o.runID != "") {
+	if ref.IsInfra && (o.previous || req.GetRunId() != "") {
 		return errors.New("--previous / --run-id are not supported for infra (podman owns its log file)")
 	}
-	ctx, c := cmd.Context(), rpc.New("")
-	runID := o.runID
-	if o.previous && runID == "" {
-		runs, err := c.ListRuns(ctx, ref.ID)
+	ctx, c := cmd.Context(), rpc.New()
+	req.TargetId, req.Stream = ref.ID, enumword.Parse[anovelv1.LogStream](o.stream)
+	if o.previous && req.GetRunId() == "" {
+		runs, err := rpc.Call(ctx, c.ListRuns, &anovelv1.ListRunsRequest{TargetId: ref.ID})
 		if err != nil {
 			return err
 		}
 		if len(runs.GetRunIds()) == 0 {
 			return fmt.Errorf("%s: no archived runs yet", ref.ID)
 		}
-		runID = runs.GetRunIds()[0]
+		req.RunId = runs.GetRunIds()[0]
 	}
-	stream, err := c.StreamLogs(ctx, ref.ID, runID, o.follow, o.tail, logStreams[o.stream])
-	if err != nil {
-		return err
-	}
-	return printLogs(cmd.OutOrStdout(), stream, o.since)
-}
-
-// logStreams maps a --stream value to the stream it keeps; any other value
-// keeps both.
-var logStreams = map[string]anovelv1.LogStream{
-	"stdout": anovelv1.LogStream_LOG_STREAM_STDOUT,
-	"stderr": anovelv1.LogStream_LOG_STREAM_STDERR,
+	return printLogs(cmd.OutOrStdout(), rpc.Stream(ctx, c.StreamLogs, req), o.since)
 }
 
 // printLogs prints each line of stream as it arrives, skipping those older

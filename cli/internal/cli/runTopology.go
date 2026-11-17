@@ -6,11 +6,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
 func newTopologyCmd() *cobra.Command {
-	var ss stackScope
-	var service string
+	req := &anovelv1.GetTopologyRequest{}
 	cmd := &cobra.Command{
 		Use:   "topology",
 		Short: "Show the dependency graph as ASCII",
@@ -18,21 +18,15 @@ func newTopologyCmd() *cobra.Command {
 depends_on entries: the infra first, then the one-shots, then the
 long-runners, each with its kind and what it depends on.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return printTopology(cmd, ss.stack, service)
+			resp, err := rpc.Call(cmd.Context(), rpc.New().GetTopology, req)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprint(cmd.OutOrStdout(), resp.GetRendered())
+			return nil
 		},
 	}
-	ss.bind(cmd)
-	cmd.Flags().StringVar(&service, "service", "", "limit to one service")
+	addStackFlag(cmd, &req.Stack)
+	cmd.Flags().StringVar(&req.Service, "service", "", "limit to one service")
 	return cmd
-}
-
-// printTopology prints the dependency graph of one service, or of every
-// service of the stack when service is empty.
-func printTopology(cmd *cobra.Command, stack, service string) error {
-	resp, err := rpc.New("").GetTopology(cmd.Context(), stack, service)
-	if err != nil {
-		return err
-	}
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), resp.GetRendered())
-	return nil
 }

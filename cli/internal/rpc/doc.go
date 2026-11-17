@@ -1,4 +1,4 @@
-// Package rpc wraps the generated connect-rpc client with the daemon's
-// unix-socket transport. CLI and TUI both consume Client; neither speaks
-// connect-rpc primitives directly.
+// Package rpc reaches the daemon over its unix socket. New returns the
+// generated connect-rpc client, and Call and Stream issue its RPCs with a
+// daemon that does not answer mapped to NotRunningError.
 package rpc

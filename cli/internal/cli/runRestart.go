@@ -6,11 +6,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
 func newRestartCmd() *cobra.Command {
-	var ss stackScope
+	var stack string
 	var mode string
 	cmd := &cobra.Command{
 		Use:   "restart <target-or-infra>",
@@ -20,31 +21,34 @@ one. An infra container gets 'podman restart', which keeps the container and
 its data.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return restartEntity(cmd, parseEntityID(args[0], ss.stack), mode)
+			return restartEntity(cmd, parseEntityID(args[0], stack), mode)
 		},
 	}
-	ss.bind(cmd)
-	cmd.Flags().StringVar(&mode, "mode", "", "switch to this mode (go-exec | container); empty keeps current")
+	addStackFlag(cmd, &stack)
+	addEnumFlag(cmd, &enumFlag{value: &mode, allowed: modeWords}, "mode", "",
+		"switch to this mode (go-exec | container) (default: keep the current mode)")
 	return cmd
 }
 
-// restartEntity restarts the target ref names, in the mode the --mode token
+// restartEntity restarts the target ref names, in the mode the --mode word
 // names or its current one, or restarts the infra container in place.
 func restartEntity(cmd *cobra.Command, ref entityRef, mode string) error {
-	ctx, out, c := cmd.Context(), cmd.OutOrStdout(), rpc.New("")
+	ctx, out, c := cmd.Context(), cmd.OutOrStdout(), rpc.New()
 	if ref.IsInfra {
-		if _, err := c.RestartInfraContainer(ctx, ref.Stack, ref.Service, ref.Infra); err != nil {
+		req := &anovelv1.RestartInfraContainerRequest{Stack: ref.Stack, Service: ref.Service, Name: ref.Infra}
+		resp, err := rpc.Call(ctx, c.RestartInfraContainer, req)
+		if err != nil {
 			return err
 		}
-		_, _ = fmt.Fprintf(out, "restarted infra %s\n", ref.ID)
+		_, _ = fmt.Fprintf(out, "restarted infra %s\n", infraID(resp.GetInfra()))
 		return nil
 	}
-	resp, err := c.RestartTarget(ctx, ref.ID, parseMode(mode, anovelv1.Mode_MODE_UNSPECIFIED))
+
+	req := &anovelv1.RestartTargetRequest{TargetId: ref.ID, Mode: enumword.Parse[anovelv1.Mode](mode)}
+	resp, err := rpc.Call(ctx, c.RestartTarget, req)
 	if err != nil {
 		return err
 	}
-	t := resp.GetTarget()
-	_, _ = fmt.Fprintf(out, "restarted %s (mode=%s, phase=%s, %s)\n",
-		t.GetId(), modeLabel(t.GetMode()), phaseLabel(t.GetPhase()), runtimeIdentLabel(t))
+	_, _ = fmt.Fprintln(out, "restarted "+targetSummary(resp.GetTarget()))
 	return nil
 }

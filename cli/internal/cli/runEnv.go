@@ -25,8 +25,14 @@ type envOpts struct {
 	format string
 }
 
+// Output formats of `run env` beside formatJSON.
+const (
+	formatShell  = "shell"
+	formatDotenv = "dotenv"
+)
+
 func newEnvCmd() *cobra.Command {
-	var o envOpts
+	o := envOpts{format: formatShell}
 	cmd := &cobra.Command{
 		Use:   "env [<service>]",
 		Short: "Print a service's env vars in shell / JSON / dotenv form",
@@ -53,16 +59,18 @@ suit scripts and .env files.`,
 			return printEnv(cmd, service, o)
 		},
 	}
-	o.scope.bindAll(cmd)
+	o.scope.bind(cmd)
 	cmd.Flags().StringVar(&o.only, "only", "", "glob filter on key names (e.g. 'REST*')")
-	cmd.Flags().StringVar(&o.format, "format", "shell", "output format (shell | json | dotenv)")
+	formats := &enumFlag{value: &o.format, allowed: []string{formatShell, formatJSON, formatDotenv}}
+	addEnumFlag(cmd, formats, "format", "", "output format (shell | json | dotenv)")
 	return cmd
 }
 
 // printEnv prints the env of service, or of every service in scope when it is
 // empty, keeping the keys --only matches.
 func printEnv(cmd *cobra.Command, service string, o envOpts) error {
-	resp, err := rpc.New("").GetEnv(cmd.Context(), o.scope.stack, service, o.scope.allStacks)
+	req := &anovelv1.GetEnvRequest{Stack: o.scope.selector(), Service: service}
+	resp, err := rpc.Call(cmd.Context(), rpc.New().GetEnv, req)
 	if err != nil {
 		return err
 	}
@@ -94,16 +102,16 @@ func printableEnv(e *anovelv1.EnvEntry) bool {
 // eval-able, json is one record per entry, and dotenv is plain KEY=VALUE.
 func renderEnv(w io.Writer, entries []*anovelv1.EnvEntry, format string) {
 	switch format {
-	case "json":
+	case formatJSON:
 		enc := json.NewEncoder(w)
 		for _, e := range entries {
 			_ = enc.Encode(e)
 		}
-	case "dotenv":
+	case formatDotenv:
 		for _, e := range entries {
 			_, _ = fmt.Fprintf(w, "%s=%s\n", e.GetKey(), e.GetValue())
 		}
-	default: // "shell"
+	default: // formatShell
 		renderShellEnv(w, entries)
 	}
 }

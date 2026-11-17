@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -129,6 +130,20 @@ func (s *Server) scope(name string) ([]*discovery.Stack, error) {
 		return nil, err
 	}
 	return []*discovery.Stack{st}, nil
+}
+
+// canonicalID resolves a target or infra log ID a client shortened, against
+// the default stack: "<service>/<target>" and "<service>/infra/<name>" gain
+// the default stack's name in front. Any other ID comes back as it is. A
+// handler resolves the ID first, so a shorthand reaches the same target as
+// every other request that names no stack.
+func (s *Server) canonicalID(id string) string {
+	parts := strings.Split(id, "/")
+	isShorthand := len(parts) == 2 || len(parts) == 3 && parts[1] == "infra"
+	if st := s.stacks.Stack(""); isShorthand && st != nil {
+		return st.Name + "/" + id
+	}
+	return id
 }
 
 // findTarget returns the discovered target with the given ID.

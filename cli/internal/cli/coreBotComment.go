@@ -109,35 +109,40 @@ It needs actions:write on the dispatcher repository.`,
 // postBotComments checks the arguments of the mode the flags select, one
 // comment or a --batch file, before any dispatch is spent, then posts.
 func postBotComments(cmd *cobra.Command, args []string, o botCommentOpts) error {
-	org, repo := args[0], args[1]
-	if err := validateBotOrgRepo(org, repo); err != nil {
-		return err
+	if err := checkBotCommentArgs(args, o); err != nil {
+		return usageError(err)
 	}
-
+	org, repo := args[0], args[1]
 	if o.batchPath != "" {
-		if len(args) != 2 {
-			return errors.New("bot-comment: with --batch, pass <org> <repo> only: each comment carries its own number")
-		}
-		if o.body != "" || o.replyTo != "" {
-			return errors.New("bot-comment: --batch cannot be combined with --body or --reply-to")
-		}
 		return runBotCommentBatch(cmd, org, repo, o.batchPath)
 	}
+	return runBotComment(cmd, org, repo, args[2], o.body, o.replyTo)
+}
 
-	if len(args) != 3 {
+// checkBotCommentArgs checks the org and the repo, then that the arguments and
+// flags fit the mode: one comment, or a --batch file whose comments carry their
+// own numbers.
+func checkBotCommentArgs(args []string, o botCommentOpts) error {
+	if err := validateBotOrgRepo(args[0], args[1]); err != nil {
+		return err
+	}
+	switch {
+	case o.batchPath != "" && len(args) != 2:
+		return errors.New("bot-comment: with --batch, pass <org> <repo> only: each comment carries its own number")
+	case o.batchPath != "" && (o.body != "" || o.replyTo != ""):
+		return errors.New("bot-comment: --batch cannot be combined with --body or --reply-to")
+	case o.batchPath != "":
+		return nil
+	case len(args) != 3:
 		return errors.New("bot-comment: <number> is required (or use --batch to post many comments)")
-	}
-	number := args[2]
-	if !positiveInt(number) {
-		return fmt.Errorf("bot-comment: number %q must be a positive integer", number)
-	}
-	if strings.TrimSpace(o.body) == "" {
+	case !positiveInt(args[2]):
+		return fmt.Errorf("bot-comment: number %q must be a positive integer", args[2])
+	case strings.TrimSpace(o.body) == "":
 		return errors.New("bot-comment: --body is required and must be non-empty")
-	}
-	if o.replyTo != "" && !positiveInt(o.replyTo) {
+	case o.replyTo != "" && !positiveInt(o.replyTo):
 		return fmt.Errorf("bot-comment: --reply-to %q must be a positive integer (a REST review-comment id)", o.replyTo)
 	}
-	return runBotComment(cmd, org, repo, number, o.body, o.replyTo)
+	return nil
 }
 
 // validateBotOrgRepo checks the org is a configured dispatcher target and
@@ -365,7 +370,8 @@ func runWithNonce(listing, nonce string) int64 {
 }
 
 // newNonce returns a short random hex token used to correlate a dispatch
-// with its run (via the run-name) and to dedupe the comment.
+// with its run (via the run-name) and to dedupe the comment. The dispatcher
+// workflows accept a lowercase hex nonce only.
 func newNonce() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b) // never fails: it crashes the program instead

@@ -41,36 +41,6 @@ func TestWithCoverage(t *testing.T) {
 	}
 }
 
-func TestParseKinds(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name    string
-		in      string
-		want    []detect.Kind
-		wantErr bool
-	}{
-		{name: "Success/Empty", in: "", want: nil},
-		{name: "Success/One", in: "go", want: []detect.Kind{detect.KindGo}},
-		{name: "Success/TrimsFoldsAndSkipsUnknown", in: " Go , podman,bogus", want: []detect.Kind{detect.KindGo, detect.KindPodman}},
-		{name: "Error/NoValidKind", in: "bogus", wantErr: true},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			got, err := parseKinds(testCase.in)
-			if testCase.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-			require.Equal(t, testCase.want, got)
-		})
-	}
-}
-
 // TestNewCapabilityCmd pins the test/build flag surface through the real root:
 // pflag's attached short values, and exit status 2 for every bad invocation.
 // Each case stops at the directory check, before any scan.
@@ -87,6 +57,7 @@ func TestNewCapabilityCmd(t *testing.T) {
 		{name: "Error/NonPositiveJobs", args: []string{"build", "-j", "0"}, wantMsg: "--jobs"},
 		{name: "Error/NegativeTimeout", args: []string{"build", "-T", "-1s"}, wantMsg: "--timeout"},
 		{name: "Error/UnknownKind", args: []string{"build", "-t", "rust"}, wantMsg: "--type"},
+		{name: "Error/UnknownKindInList", args: []string{"build", "--type=go,bogus"}, wantMsg: `"bogus" is not one of go, pnpm, podman`},
 		{name: "Error/UnknownFlag", args: []string{"test", "--bogus"}, wantMsg: "unknown flag"},
 		{name: "Error/BuildHasNoKeep", args: []string{"build", "--keep"}, wantMsg: "unknown flag"},
 	}

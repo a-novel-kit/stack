@@ -3,6 +3,7 @@ package batchview
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -21,31 +22,33 @@ type Batch struct {
 	Elapsed time.Duration
 }
 
-// RunJobs runs list with at most limit jobs at once and prints a status line as
-// each one finishes. live keeps a view of the running jobs under those lines,
-// which needs a terminal; without it each job also prints a line as it starts.
-func RunJobs(ctx context.Context, list []jobs.Job, limit int, live bool) Batch {
+// RunJobs runs list with at most limit jobs at once and prints a status line on
+// out as each one finishes. live keeps a view of the running jobs under those
+// lines, which needs a terminal; without it each job also prints a line as it
+// starts.
+func RunJobs(ctx context.Context, out io.Writer, list []jobs.Job, limit int, live bool) Batch {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	start := time.Now()
 	var b Batch
 	if live {
-		b = runLive(ctx, cancel, list, limit)
+		b = runLive(ctx, cancel, out, list, limit)
 	} else {
-		b.Results = runPlain(ctx, list, limit)
+		b.Results = runPlain(ctx, out, list, limit)
 	}
 	b.Aborted = b.Aborted || ctx.Err() != nil
 	b.Elapsed = time.Since(start)
 	return b
 }
 
-// runPlain runs list and prints a line as each job starts and as it finishes.
-func runPlain(ctx context.Context, list []jobs.Job, limit int) []jobs.Result {
+// runPlain runs list and prints a line on out as each job starts and as it
+// finishes.
+func runPlain(ctx context.Context, out io.Writer, list []jobs.Job, limit int) []jobs.Result {
 	var mu sync.Mutex
 	say := func(s string) {
 		mu.Lock()
 		defer mu.Unlock()
-		fmt.Println(s)
+		_, _ = fmt.Fprintln(out, s)
 	}
 	progress := &jobs.Progress{
 		OnStart: func(i int) { say(startLine(list[i])) },
@@ -65,10 +68,11 @@ type (
 
 // runLive renders the running jobs inline under the finished ones. Quitting
 // cancels the run and returns at once, the unfinished jobs reported aborted.
-func runLive(ctx context.Context, cancel context.CancelFunc, list []jobs.Job, limit int) Batch {
+func runLive(ctx context.Context, cancel context.CancelFunc, out io.Writer, list []jobs.Job, limit int) Batch {
 	progress := &jobs.Progress{}
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(lipgloss.NewStyle().Foreground(colBrand)))
-	p := tea.NewProgram(liveModel{list: list, progress: progress, results: make([]*jobs.Result, len(list)), spinner: sp, cancel: cancel})
+	initial := liveModel{list: list, progress: progress, results: make([]*jobs.Result, len(list)), spinner: sp, cancel: cancel}
+	p := tea.NewProgram(initial, tea.WithOutput(out))
 
 	// Events relay through one goroutine, so status lines print in completion
 	// order and the last one lands before finishedMsg quits the program. The
@@ -205,9 +209,9 @@ func startLine(job jobs.Job) string {
 
 // statusLine is a finished job: its mark, label, outcome and duration.
 func statusLine(r jobs.Result) string {
-	mark, outcome := OK.Render(glyphOK), Muted.Render(r.Status)
+	mark, outcome := OK.Render(GlyphOK), Muted.Render(r.Status)
 	if r.Err != nil {
-		mark, outcome = Err.Render(glyphFail), Err.Render(firstLine(r.Err.Error()))
+		mark, outcome = Err.Render(GlyphFail), Err.Render(firstLine(r.Err.Error()))
 	}
 	line := mark + " " + jobLabel(r.Job)
 	if r.Status != "" || r.Err != nil {

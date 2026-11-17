@@ -121,10 +121,8 @@ func needsExport(stk []stacks.Stack) bool {
 		return true
 	}
 	// A single stack is emitted only when its path differs from the implicit
-	// default, ~/git-projects/a-novel.
-	home, _ := os.UserHomeDir()
-	defaultPath := filepath.Join(home, "git-projects", "a-novel")
-	return stk[0].Path != defaultPath
+	// default.
+	return stk[0].Path != stacks.DefaultPath()
 }
 
 func serializeStacks(stk []stacks.Stack) string {

@@ -22,19 +22,15 @@ import (
 	"github.com/a-novel-kit/stack/cli/internal/daemon/server"
 	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
 	"github.com/a-novel-kit/stack/cli/internal/shared/stacks"
+	"github.com/a-novel-kit/stack/cli/internal/version"
 	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
-
-// Options configures Run.
-type Options struct {
-	Version string // daemon binary version
-}
 
 // Run starts the daemon: it binds the unix socket, serves connect-rpc until ctx
 // is cancelled or a shutdown signal arrives, then removes the socket file. It
 // blocks until the daemon exits, so a caller wanting a background daemon forks
 // the process itself.
-func Run(ctx context.Context, opts Options) error {
+func Run(ctx context.Context) error {
 	socketPath := paths.Socket()
 	registered, err := stacks.ParseEnv()
 	if err != nil {
@@ -81,7 +77,7 @@ func Run(ctx context.Context, opts Options) error {
 	// `a-novel install` or `core restart` starts the next daemon.
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	srv := server.New(opts.Version, socketPath, disc, run, builder, logStore, stop, ctx.Done())
+	srv := server.New(version.String(), socketPath, disc, run, builder, logStore, stop, ctx.Done())
 
 	// Reconstitute the Instance and InfraSession records of every podman
 	// container carrying the adoption labels, so containers that outlived a

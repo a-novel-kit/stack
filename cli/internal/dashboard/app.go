@@ -10,17 +10,18 @@ import (
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
+	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
 
 // Run opens the TUI in the alternate screen and blocks until the user quits.
 // It returns an error when the daemon does not answer a ping or the program
 // fails.
 func Run() error {
-	c := rpc.New("")
+	c := rpc.New()
 	// A ping first, so a stopped daemon fails here with a clear error.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if _, err := c.Ping(ctx); err != nil {
+	if _, err := rpc.Call(ctx, c.Ping, &anovelv1.PingRequest{}); err != nil {
 		return err
 	}
 	m := &model{c: c}
@@ -36,16 +37,6 @@ func Run() error {
 	return err
 }
 
-const (
-	// modeContainer names container mode in palette args like ":start
-	// container" and in renderRight's header label. The CLI and RPC
-	// layers use the typed anovelv1.Mode_MODE_* enums; these strings
-	// belong to the text surfaces.
-	modeContainer = "container"
-	// modeGoExec names live go-exec mode on the same text surfaces.
-	modeGoExec = "go-exec"
-)
-
 // view is the discriminator for top-level screens.
 type view int
 
@@ -58,7 +49,7 @@ const (
 
 // model is the Bubble Tea root model.
 type model struct {
-	c       *rpc.Client
+	c       anovelv1connect.CoreServiceClient
 	program *tea.Program // for background goroutines to Send messages
 	view    view
 	width   int

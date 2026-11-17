@@ -62,13 +62,14 @@ func Parse(raw string) ([]Stack, error) {
 func ParseEnv() ([]Stack, error) { return Parse(os.Getenv(EnvVar)) }
 
 // implicitDefault returns the fallback default stack when $A_NOVEL_STACKS is unset.
-// Path follows the user's working-tree convention (`~/git-projects/a-novel`).
 func implicitDefault() Stack {
-	return Stack{
-		Name:      DefaultName,
-		Path:      filepath.Join(paths.Home(), "git-projects", "a-novel"),
-		IsDefault: true,
-	}
+	return Stack{Name: DefaultName, Path: DefaultPath(), IsDefault: true}
+}
+
+// DefaultPath is where the default stack lives when $A_NOVEL_STACKS is unset,
+// after the user's working-tree convention: ~/git-projects/a-novel.
+func DefaultPath() string {
+	return filepath.Join(paths.Home(), "git-projects", "a-novel")
 }
 
 // Default is the default stack, the first entry of $A_NOVEL_STACKS.

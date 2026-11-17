@@ -8,24 +8,19 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
+	"github.com/a-novel-kit/stack/cli/internal/batchview"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
-// Lip Gloss styles for every surface, kept together so a theme change has a
-// single switch.
+// The dashboard's own surfaces, drawn in the palette batchview shares with
+// every screen of the CLI.
 var (
-	styleFrame    = lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240"))
-	styleNav      = lipgloss.NewStyle().Padding(0, 1)
-	styleSelected = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
-	styleDim      = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	styleHeader   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("75"))
-	styleFooter   = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Italic(true)
-	styleErr      = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	styleSuccess  = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
-	styleWarn     = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
-	styleCmd      = lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Bold(true)
+	styleFrame  = lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(batchview.Muted.GetForeground())
+	styleNav    = lipgloss.NewStyle().Padding(0, 1)
+	styleFooter = batchview.Muted.Italic(true)
+	styleCmd    = batchview.Accent.Bold(true)
 )
 
 // View is Bubble Tea's render entry point. Bubble Tea v2 makes the alternate
@@ -86,38 +81,38 @@ func (m *model) renderStatus(width int) string {
 	if m.status.level == statusIdle || m.status.text == "" {
 		if m.discoveryProblems > 0 {
 			note := fmt.Sprintf("!  %d discovery problem(s): run `a-novel core status` to read them", m.discoveryProblems)
-			return styleWarn.Render(truncate(note, width-1))
+			return batchview.Warn.Render(batchview.Truncate(note, width-1))
 		}
-		return styleDim.Render(strings.Repeat("─", width))
+		return batchview.Muted.Render(strings.Repeat("─", width))
 	}
 	var prefix string
 	var style lipgloss.Style
 	switch m.status.level {
 	case statusBusy:
 		prefix = "⏳ "
-		style = styleWarn
+		style = batchview.Warn
 	case statusInfo:
-		prefix = "✓  "
-		style = styleSuccess
+		prefix = batchview.GlyphOK + "  "
+		style = batchview.OK
 	case statusError:
-		prefix = "✗  "
-		style = styleErr
+		prefix = batchview.GlyphFail + "  "
+		style = batchview.Err
 	}
-	return style.Render(truncate(prefix+m.status.text, width-1))
+	return style.Render(batchview.Truncate(prefix+m.status.text, width-1))
 }
 
 // renderNav draws the service navigator: one block per service, or the reason
 // the list is empty.
 func (m *model) renderNav(width, height int) string {
 	if len(m.services) == 0 {
-		return styleFrame.Width(width).Height(height).Render(styleDim.Render(m.navEmptyText(width)))
+		return styleFrame.Width(width).Height(height).Render(batchview.Muted.Render(m.navEmptyText(width)))
 	}
 
 	blocks := make([]string, 0, len(m.services))
 	for i, svc := range m.services {
 		blocks = append(blocks, navBlock(svc, i == m.selectedSvc))
 	}
-	content := styleHeader.Render("Services") + "\n\n" + strings.Join(blocks, "\n\n")
+	content := batchview.Gold.Render("Services") + "\n\n" + strings.Join(blocks, "\n\n")
 	return styleFrame.Width(width).Height(height).Render(styleNav.Render(content))
 }
 
@@ -126,11 +121,11 @@ func (m *model) renderNav(width, height int) string {
 func (m *model) navEmptyText(width int) string {
 	switch {
 	case m.err != nil:
-		return "Error refreshing services:\n  " + truncate(m.err.Error(), width-4)
+		return "Error refreshing services:\n  " + batchview.Truncate(m.err.Error(), width-4)
 	case !m.loaded:
 		return "Loading services..."
 	default:
-		return "(no services discovered)\nCheck that " + truncate("$A_NOVEL_STACKS app/ dirs exist", width-4)
+		return "(no services discovered)\nCheck that " + batchview.Truncate("$A_NOVEL_STACKS app/ dirs exist", width-4)
 	}
 }
 
@@ -143,9 +138,9 @@ func navBlock(svc *anovelv1.Service, selected bool) string {
 	nameLine := "  " + name
 	switch {
 	case selected:
-		nameLine = styleSelected.Render("▸ " + name)
+		nameLine = batchview.Brand.Render(batchview.GlyphCursor + " " + name)
 	case countRunning(svc) == 0 && !serviceHasError(svc):
-		nameLine = "  " + styleDim.Render(name)
+		nameLine = "  " + batchview.Muted.Render(name)
 	}
 	return nameLine + "\n    " + serviceTargetsLine(svc) + "\n    " + serviceInfraLine(svc)
 }
@@ -154,7 +149,7 @@ func navBlock(svc *anovelv1.Service, selected bool) string {
 // selected tab's header and its logs.
 func (m *model) renderRight(width, height int) string {
 	if m.tabCount() == 0 {
-		return styleFrame.Width(width).Height(height).Render(styleDim.Render("(this service has no targets or infra)"))
+		return styleFrame.Width(width).Height(height).Render(batchview.Muted.Render("(this service has no targets or infra)"))
 	}
 	inner := width - 2 // inside the border
 	sections := append(m.tabRows(),
@@ -176,7 +171,7 @@ func (m *model) tabRows() []string {
 		for i, in := range infras {
 			tabs = append(tabs, renderTab(infraDot(in), "{"+in.GetName()+"}", i == m.selectedTab))
 		}
-		rows = append(rows, styleDim.Render("infra ")+strings.Join(tabs, "  "))
+		rows = append(rows, batchview.Muted.Render("infra ")+strings.Join(tabs, "  "))
 	}
 	if targets := svc.GetTargets(); len(targets) > 0 {
 		tabs := make([]string, 0, len(targets))
@@ -184,7 +179,7 @@ func (m *model) tabRows() []string {
 		for i, t := range targets {
 			tabs = append(tabs, renderTab(targetStatusDot(t), "["+t.GetName()+"]", offset+i == m.selectedTab))
 		}
-		rows = append(rows, styleDim.Render("target ")+strings.Join(tabs, "  "))
+		rows = append(rows, batchview.Muted.Render("target ")+strings.Join(tabs, "  "))
 	}
 	return rows
 }
@@ -201,19 +196,19 @@ func (m *model) detailHeader() string {
 		if t.GetPid() != 0 {
 			tail = fmt.Sprintf(" pid=%d", t.GetPid()) + tail
 		}
-		return styleHeader.Render(t.GetName()+" · "+modeShort(t.GetMode())+" · ") +
-			phaseShort(t.GetPhase()) +
-			styleHeader.Render(tail)
+		return batchview.Gold.Render(t.GetName()+" · "+enumword.Word(t.GetMode())+" · ") +
+			renderPhase(t.GetPhase()) +
+			batchview.Gold.Render(tail)
 	}
 	if in := m.activeInfra(); in != nil {
 		health := infraHealthLabel(in)
 		if health != "" {
 			health = " " + health
 		}
-		return styleHeader.Render(in.GetName()+" · ") + styleDim.Render("infra") + styleHeader.Render(" · ") +
-			phaseShort(in.GetPhase()) +
-			styleDim.Render(health) +
-			styleHeader.Render(containerSuffix(in.GetContainerId()))
+		return batchview.Gold.Render(in.GetName()+" · ") + batchview.Muted.Render("infra") + batchview.Gold.Render(" · ") +
+			renderPhase(in.GetPhase()) +
+			batchview.Muted.Render(health) +
+			batchview.Gold.Render(containerSuffix(in.GetContainerId()))
 	}
 	return ""
 }
@@ -230,9 +225,9 @@ func containerSuffix(id string) string {
 // renderTab renders one tab of the right pane's tab rows: its status dot,
 // then its bracketed label, highlighted when selected.
 func renderTab(dot, label string, selected bool) string {
-	style := styleDim
+	style := batchview.Muted
 	if selected {
-		style = styleSelected
+		style = batchview.Brand
 	}
 	return dot + " " + style.Render(label)
 }
@@ -243,13 +238,13 @@ func renderTab(dot, label string, selected bool) string {
 //
 //	long-runner running        → ● green
 //	long-runner starting       → ● yellow
-//	long-runner failed         → ● red    (error or crash)
+//	long-runner failed         → ● crit   (error or crash)
 //	long-runner stopped        → ○ dim    (exited 0 or killed)
 //	long-runner not started    → ○ dim
 //
 //	one-shot running           → ● yellow (in progress)
 //	one-shot completed (ok)    → ✓ green
-//	one-shot failed            → ✗ red
+//	one-shot failed            → ✗ crit
 //	one-shot killed            → ○ dim
 //	one-shot not started       → ○ dim
 func targetStatusDot(t *anovelv1.Target) string {
@@ -257,22 +252,22 @@ func targetStatusDot(t *anovelv1.Target) string {
 	switch t.GetPhase() {
 	case anovelv1.Phase_PHASE_RUNNING:
 		if isOneShot {
-			return styleWarn.Render("●")
+			return batchview.Warn.Render("●")
 		}
-		return styleSuccess.Render("●")
+		return batchview.OK.Render("●")
 	case anovelv1.Phase_PHASE_STARTING:
-		return styleWarn.Render("●")
+		return batchview.Warn.Render("●")
 	case anovelv1.Phase_PHASE_TERMINATED:
 		switch {
 		case targetFailed(t) && isOneShot:
-			return styleErr.Render("✗")
+			return batchview.Crit.Render(batchview.GlyphFail)
 		case targetFailed(t):
-			return styleErr.Render("●")
+			return batchview.Crit.Render("●")
 		case isOneShot && t.GetExitReason() == anovelv1.ExitReason_EXIT_REASON_SUCCESS:
-			return styleSuccess.Render("✓")
+			return batchview.OK.Render(batchview.GlyphOK)
 		}
 	}
-	return styleDim.Render("○")
+	return batchview.Muted.Render("○")
 }
 
 // targetFailed reports whether t terminated on a failure of its own: a
@@ -296,7 +291,7 @@ const (
 // row is the paused indicator.
 func (m *model) renderLogs(width, height int) string {
 	if len(m.logLines) == 0 {
-		return styleDim.Render("(no log lines yet: start the target or run :refresh)")
+		return batchview.Muted.Render("(no log lines yet: start the target or run :refresh)")
 	}
 	// Away from the tail, the bottom line of the pane holds the scroll
 	// indicator; at the tail the full height goes to log content.
@@ -314,15 +309,15 @@ func (m *model) renderLogs(width, height int) string {
 			tag = "err"
 		}
 		ts := ln.GetTs().AsTime().Format("15:04:05")
-		// truncate measures a tab as zero cells, and the frame renders it as
-		// tabSpaces. Tabs are expanded first, so truncate counts their cells.
+		// Truncate measures a tab as zero cells, and the frame renders it as
+		// tabSpaces. Tabs are expanded first, so Truncate counts their cells.
 		line := strings.ReplaceAll(ln.GetLine(), "\t", tabSpaces)
-		rows = append(rows, styleDim.Render(ts)+" "+styleWarn.Render(tag)+" "+truncate(line, width-logPrefixWidth))
+		rows = append(rows, batchview.Muted.Render(ts)+" "+batchview.Warn.Render(tag)+" "+batchview.Truncate(line, width-logPrefixWidth))
 	}
 	if m.logScroll > 0 {
 		indicator := fmt.Sprintf("⏸ paused: %d line(s) below cursor  ·  pgdn/end resumes tail",
 			m.logScroll)
-		rows = append(rows, styleWarn.Render(truncate(indicator, width)))
+		rows = append(rows, batchview.Warn.Render(batchview.Truncate(indicator, width)))
 	}
 	// The rows end without a newline. A trailing one adds a row, which grows
 	// the frame past its height.
@@ -356,24 +351,24 @@ func footerHint(key, text string) string {
 
 // helpLines is the help page, listing every command, grouped by category.
 var helpLines = []string{
-	styleHeader.Render("a-novel run ui: command reference"),
+	batchview.Gold.Render("a-novel run ui: command reference"),
 	"",
-	styleHeader.Render("Navigation"),
+	batchview.Gold.Render("Navigation"),
 	"  ↑/↓ or j/k           select service",
 	"  ←/→ or h/l or Tab   select target tab",
 	"",
-	styleHeader.Render("Log pane"),
+	batchview.Gold.Render("Log pane"),
 	"  PgUp/PgDn             scroll a half page (auto-follow pauses on PgUp)",
 	"  Ctrl-↑/Ctrl-↓        step one line",
 	"  Home / g              jump to oldest buffered line",
 	"  End  / G              jump to tail and resume auto-follow",
-	styleDim.Render("  (terminal text selection works: click + drag to copy lines)"),
+	batchview.Muted.Render("  (terminal text selection works: click + drag to copy lines)"),
 	"",
-	styleHeader.Render("Tab kinds"),
+	batchview.Gold.Render("Tab kinds"),
 	"  [target]               daemon-supervised process (go-exec or container)",
 	"  {infra}                podman container (postgres, mailserver, ...)",
 	"",
-	styleHeader.Render("Daemon-backed actions (via Esc command palette)"),
+	batchview.Gold.Render("Daemon-backed actions (via Esc command palette)"),
 	"  :start                 start active target (default go-exec), targets only",
 	"  :start container       start active target in container mode",
 	"  :kill                  kill active tab (target → SIGTERM; infra → podman stop)",
@@ -385,18 +380,18 @@ var helpLines = []string{
 	"  :topology              show the dependency graph (↑/↓ scroll, any other key returns)",
 	"  :refresh               refresh services + logs now",
 	"",
-	styleHeader.Render("UI"),
+	batchview.Gold.Render("UI"),
 	"  ?                      this help screen (↑/↓ scroll, any other key returns)",
 	"  Esc                    open command palette",
 	"  q or Ctrl-C            quit (daemon keeps running)",
 	"",
-	styleHeader.Render("Status bar (above the footer)"),
-	"  " + styleWarn.Render("⏳") + "  busy    action in flight; persists until it resolves",
-	"  " + styleSuccess.Render("✓") + "  done    last action succeeded; fades after 5s",
-	"  " + styleErr.Render("✗") + "  error   last action failed or invalid; sticks until the next action",
-	"  " + styleWarn.Render("!") + "  issues  discovery found problems in the stack; `a-novel core status` lists them",
+	batchview.Gold.Render("Status bar (above the footer)"),
+	"  " + batchview.Warn.Render("⏳") + "  busy    action in flight; persists until it resolves",
+	"  " + batchview.OK.Render(batchview.GlyphOK) + "  done    last action succeeded; fades after 5s",
+	"  " + batchview.Err.Render(batchview.GlyphFail) + "  error   last action failed or invalid; sticks until the next action",
+	"  " + batchview.Warn.Render("!") + "  issues  discovery found problems in the stack; `a-novel core status` lists them",
 	"",
-	styleDim.Render("(daemon-backed verbs are implemented via the same RPC as the CLI; what you see in the UI is what `a-novel run ps` would show)"),
+	batchview.Muted.Render("(daemon-backed verbs are implemented via the same RPC as the CLI; what you see in the UI is what `a-novel run ps` would show)"),
 }
 
 // pageLines returns the lines of the full-screen page in view: the help, or
@@ -405,8 +400,8 @@ func (m *model) pageLines() []string {
 	if m.view != viewTopology {
 		return helpLines
 	}
-	lines := append([]string{styleHeader.Render("Dependency topology"), ""}, strings.Split(m.topologyTx, "\n")...)
-	return append(lines, "", styleDim.Render("(↑/↓ scroll, any other key returns)"))
+	lines := append([]string{batchview.Gold.Render("Dependency topology"), ""}, strings.Split(m.topologyTx, "\n")...)
+	return append(lines, "", batchview.Muted.Render("(↑/↓ scroll, any other key returns)"))
 }
 
 // pageWindow returns the page in view, the index of its first line shown, and
@@ -430,11 +425,11 @@ func (m *model) renderPage() string {
 	lines, from, rows := m.pageWindow()
 	shown := make([]string, 0, rows+1)
 	for _, line := range lines[from:min(from+rows, len(lines))] {
-		shown = append(shown, truncate(line, m.width-2))
+		shown = append(shown, batchview.Truncate(line, m.width-2))
 	}
 	if len(lines) > rows {
 		position := fmt.Sprintf("lines %d–%d of %d  ·  ↑/↓ scroll  ·  any other key returns", from+1, from+rows, len(lines))
-		shown = append(shown, styleDim.Render(truncate(position, m.width-2)))
+		shown = append(shown, batchview.Muted.Render(batchview.Truncate(position, m.width-2)))
 	}
 	return styleFrame.Width(m.width).Height(m.height).Render(strings.Join(shown, "\n"))
 }
@@ -445,7 +440,7 @@ func (m *model) renderPage() string {
 func overlayCommand(main, input string) string {
 	// The input sits on the bottom line with any suggestions stacked above
 	// it, so it stays anchored where the user is typing.
-	overlay := append(suggestCommands(strings.TrimPrefix(input, ":")), styleCmd.Render(input)+styleDim.Render("█"))
+	overlay := append(suggestCommands(strings.TrimPrefix(input, ":")), styleCmd.Render(input)+batchview.Muted.Render("█"))
 	// Drop as many bottom lines as the overlay needs, then append it.
 	lines := strings.Split(main, "\n")
 	lines = append(lines[:len(lines)-min(len(overlay), len(lines))], overlay...)
@@ -479,7 +474,7 @@ func suggestCommands(prefix string) []string {
 	for _, c := range paletteCommands {
 		if strings.HasPrefix(c.verb, prefix) {
 			matches = append(matches,
-				styleCmd.Render(":"+c.verb)+"  "+styleDim.Render(c.desc))
+				styleCmd.Render(":"+c.verb)+"  "+batchview.Muted.Render(c.desc))
 			if len(matches) == 5 {
 				break
 			}
@@ -500,17 +495,17 @@ func countRunning(svc *anovelv1.Service) int {
 }
 
 // serviceTargetsLine is the nav's targets row. A failed target turns it into a
-// red "● errored". Otherwise it shows running out of total targets, behind a
+// crit "● errored". Otherwise it shows running out of total targets, behind a
 // green dot when one runs and a dim one when none does.
 func serviceTargetsLine(svc *anovelv1.Service) string {
 	if serviceHasError(svc) {
-		return styleErr.Render("●") + " errored"
+		return batchview.Crit.Render("●") + " errored"
 	}
 	running := countRunning(svc)
 	total := len(svc.GetTargets())
-	dot := styleDim.Render("○")
+	dot := batchview.Muted.Render("○")
 	if running > 0 {
-		dot = styleSuccess.Render("●")
+		dot = batchview.OK.Render("●")
 	}
 	return dot + " " + strconv.Itoa(running) + "/" + strconv.Itoa(total) + " targets"
 }
@@ -521,11 +516,11 @@ func serviceTargetsLine(svc *anovelv1.Service) string {
 func serviceInfraLine(svc *anovelv1.Service) string {
 	healthy, total := countInfraHealthy(svc)
 	if total == 0 {
-		return styleDim.Render("  (no infra)")
+		return batchview.Muted.Render("  (no infra)")
 	}
-	dot := styleDim.Render("○")
+	dot := batchview.Muted.Render("○")
 	if healthy > 0 {
-		dot = styleSuccess.Render("●")
+		dot = batchview.OK.Render("●")
 	}
 	return dot + " " + strconv.Itoa(healthy) + "/" + strconv.Itoa(total) + " infra"
 }
@@ -554,38 +549,30 @@ func countInfraHealthy(svc *anovelv1.Service) (int, int) {
 // health.
 func infraDot(in *anovelv1.Infra) string {
 	if in.GetPhase() != anovelv1.Phase_PHASE_RUNNING {
-		return styleDim.Render("○")
+		return batchview.Muted.Render("○")
 	}
 	switch in.GetHealth() {
 	case anovelv1.Health_HEALTH_HEALTHY, anovelv1.Health_HEALTH_UNSPECIFIED:
-		return styleSuccess.Render("●")
+		return batchview.OK.Render("●")
 	case anovelv1.Health_HEALTH_STARTING:
-		return styleWarn.Render("●")
+		return batchview.Warn.Render("●")
 	case anovelv1.Health_HEALTH_UNHEALTHY:
-		return styleErr.Render("●")
+		return batchview.Crit.Render("●")
 	}
-	return styleDim.Render("○")
+	return batchview.Muted.Render("○")
 }
 
-// infraHealthLabel returns the short human descriptor that pairs
-// with infraDot ("healthy", "starting", "unhealthy", "down"), or "" when the
-// daemon reads no health for a running infra: the header's phase already says
-// "running".
+// infraHealthLabel returns the health word that pairs with infraDot, "down"
+// for an infra that is not running, or "" when the daemon reads no health for
+// a running infra: the header's phase already says "running".
 func infraHealthLabel(in *anovelv1.Infra) string {
-	if in.GetPhase() != anovelv1.Phase_PHASE_RUNNING {
+	switch {
+	case in.GetPhase() != anovelv1.Phase_PHASE_RUNNING:
 		return "down"
-	}
-	switch in.GetHealth() {
-	case anovelv1.Health_HEALTH_HEALTHY:
-		return "healthy"
-	case anovelv1.Health_HEALTH_UNSPECIFIED:
+	case in.GetHealth() == anovelv1.Health_HEALTH_UNSPECIFIED:
 		return ""
-	case anovelv1.Health_HEALTH_STARTING:
-		return "starting"
-	case anovelv1.Health_HEALTH_UNHEALTHY:
-		return "unhealthy"
 	}
-	return "unknown"
+	return enumword.Word(in.GetHealth())
 }
 
 // computeNavWidth picks the sidebar's frame width so the longest service name
@@ -604,50 +591,25 @@ func computeNavWidth(svcs []*anovelv1.Service) int {
 }
 
 // serviceHasError reports whether any target in the service failed.
-// serviceTargetsLine renders the red "● errored" line from it, and the nav
+// serviceTargetsLine renders the crit "● errored" line from it, and the nav
 // keeps such a service undimmed since it needs attention.
 func serviceHasError(svc *anovelv1.Service) bool {
 	return slices.ContainsFunc(svc.GetTargets(), targetFailed)
 }
 
-func modeShort(m anovelv1.Mode) string {
-	switch m {
-	case anovelv1.Mode_MODE_GO_EXEC:
-		return modeGoExec
-	case anovelv1.Mode_MODE_CONTAINER:
-		return modeContainer
-	default:
-		return "-"
-	}
-}
-
-// phaseShort renders a phase for the detail header: in its own color when
-// running, stopping or terminated, in the header style otherwise.
-func phaseShort(p anovelv1.Phase) string {
+// renderPhase renders a phase's word for the detail header: in its own color
+// when running, stopping or terminated, in the header style otherwise.
+func renderPhase(p anovelv1.Phase) string {
+	style := batchview.Gold
 	switch p {
-	case anovelv1.Phase_PHASE_PENDING:
-		return styleHeader.Render("pending")
-	case anovelv1.Phase_PHASE_STARTING:
-		return styleHeader.Render("starting")
 	case anovelv1.Phase_PHASE_RUNNING:
-		return styleSuccess.Render("running")
+		style = batchview.OK
 	case anovelv1.Phase_PHASE_STOPPING:
-		return styleWarn.Render("stopping")
+		style = batchview.Warn
 	case anovelv1.Phase_PHASE_TERMINATED:
-		return styleDim.Render("terminated")
-	default:
-		return styleHeader.Render("idle")
+		style = batchview.Muted
 	}
-}
-
-// truncate fits s into maxLen terminal cells, ending it with an ellipsis
-// when cut. It never splits a multi-byte character or an ANSI escape
-// sequence. A non-positive maxLen leaves s whole.
-func truncate(s string, maxLen int) string {
-	if maxLen <= 0 {
-		return s
-	}
-	return ansi.Truncate(s, maxLen, "…")
+	return style.Render(enumword.Word(p))
 }
 
 // safeShort returns the first n bytes of an ASCII identifier such as a

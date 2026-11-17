@@ -1,5 +1,5 @@
 {
-  "name": ".github",
+  "name": "stack",
   "version": "1.42.5",
   "private": true,
   "license": "MIT",
@@ -8,13 +8,21 @@
     "docs:build": "vitepress build docs",
     "docs:dev": "vitepress dev docs",
     "docs:preview": "vitepress preview docs",
-    "format": "pnpm run format:prettier",
+    "format": "pnpm format:go && pnpm format:proto && pnpm format:prettier",
+    "format:go": "go -C cli mod tidy && go -C cli tool -modfile=golangci-lint.mod golangci-lint run ./... --fix",
     "format:prettier": "prettier --write . --config prettier.config.ts",
+    "format:proto": "go -C cli tool -modfile=buf.mod buf format -w",
+    "generate": "pnpm generate:go",
+    "generate:go": "go -C cli generate ./...",
     "preinstall": "npx only-allow pnpm",
-    "lint": "pnpm lint:symlinks && pnpm lint:stylecheck && pnpm lint:eslint",
+    "lint": "pnpm lint:node && pnpm lint:go && pnpm lint:proto",
     "lint:eslint": "eslint .",
+    "lint:go": "go -C cli tool -modfile=golangci-lint.mod golangci-lint run ./...",
+    "lint:node": "pnpm lint:symlinks && pnpm lint:stylecheck && pnpm lint:eslint",
+    "lint:proto": "go -C cli tool -modfile=buf.mod buf lint && go -C cli tool -modfile=buf.mod buf format --diff --exit-code",
     "lint:stylecheck": "prettier --check . --config prettier.config.ts",
-    "lint:symlinks": "node scripts/check-symlinks.js"
+    "lint:symlinks": "node scripts/check-symlinks.js",
+    "test:go": "go -C cli test -race ./..."
   },
   "devDependencies": {
     "@a-novel-kit/nodelib-config": "^2.0.0",

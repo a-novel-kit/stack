@@ -11,7 +11,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
+	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
 
 // psOpts holds the flags of `run ps`.
@@ -19,12 +21,15 @@ type psOpts struct {
 	scope   stackScope
 	service string
 	kind    string
-	jsonOut bool
+	format  string
 	watch   bool
 }
 
+// kindAll keeps every entity kind in the --kind filter.
+const kindAll = "all"
+
 func newPsCmd() *cobra.Command {
-	var o psOpts
+	o := psOpts{kind: kindAll, format: formatText}
 	cmd := &cobra.Command{
 		Use:   "ps",
 		Short: "List services with their targets and infra containers",
@@ -33,21 +38,24 @@ row each: the kind (1shot, longr or infra), the name, the state, and the
 fully-qualified ID that kill, restart and logs take.
 
 --watch redraws the table after each state change, once for a burst of them,
-above the latest change. --json prints one JSON object per service, one per
-line, and with --watch one more per state change.`,
+above the latest change. --format=json prints one JSON object per service, one
+per line, and with --watch one more per state change.`,
 		Example: `  a-novel run ps
   a-novel run ps --stack=branch-foo
-  a-novel run ps --service=service-json-keys --json
+  a-novel run ps --service=service-json-keys --format=json
   a-novel run ps --kind=infra
   a-novel run ps --watch`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return listServices(cmd, o)
 		},
 	}
-	o.scope.bindAll(cmd)
+	o.scope.bind(cmd)
 	cmd.Flags().StringVar(&o.service, "service", "", "filter to one service")
-	cmd.Flags().StringVar(&o.kind, "kind", "", "filter by entity kind (target|infra|all; default all)")
-	cmd.Flags().BoolVar(&o.jsonOut, "json", false, "emit JSON (machine-readable)")
+	addEnumFlag(cmd, &enumFlag{value: &o.kind, allowed: []string{kindTarget, kindInfra, kindAll}}, "kind", "",
+		"filter by entity kind (target | infra | all)")
+	addEnumFlag(cmd, &enumFlag{value: &o.format, allowed: []string{formatText, formatJSON}}, "format", "",
+		"output format (text | json)")
+	addJSONAlias(cmd, &o.format)
 	cmd.Flags().BoolVar(&o.watch, "watch", false, "stream state changes instead of a snapshot")
 	return cmd
 }
@@ -55,28 +63,23 @@ line, and with --watch one more per state change.`,
 // listServices prints the services ps selects and, with --watch, keeps
 // printing on every state change: the table again, or the event as JSON.
 func listServices(cmd *cobra.Command, o psOpts) error {
-	if !slices.Contains([]string{"", "all", kindTarget, kindInfra}, o.kind) {
-		return usageError(fmt.Errorf("--kind=%q: must be 'target', 'infra', or 'all'", o.kind))
-	}
-
-	ctx, out := cmd.Context(), cmd.OutOrStdout()
-	c := rpc.New("")
-	resp, err := c.ListServices(ctx, o.scope.selector())
+	ctx, out, c := cmd.Context(), cmd.OutOrStdout(), rpc.New()
+	resp, err := rpc.Call(ctx, c.ListServices, &anovelv1.ListServicesRequest{Stack: o.scope.selector()})
 	if err != nil {
 		return err
 	}
-	renderPs(out, filterServices(resp.GetServices(), o.service, o.kind), o.jsonOut)
+	renderPs(out, filterServices(resp.GetServices(), o.service, o.kind), o.format)
 	if !o.watch {
 		return nil
 	}
 	enc := json.NewEncoder(out)
 	handle := func(ev *anovelv1.WatchResponse) { encodeEvent(enc, ev) }
-	if !o.jsonOut {
+	if o.format == formatText {
 		repaint, wait := coalesce(func(ev *anovelv1.WatchResponse) { repaintPs(ctx, c, out, o, ev) })
 		defer wait()
 		handle = repaint
 	}
-	return watchEvents(ctx, c, o.scope.selector(), o.service, "", handle)
+	return watchEvents(ctx, c, &anovelv1.WatchRequest{Stack: o.scope.selector(), Service: o.service}, handle)
 }
 
 // coalesce returns a handler that passes each event to paint on a goroutine of
@@ -116,8 +119,8 @@ func coalesce(paint func(*anovelv1.WatchResponse)) (func(*anovelv1.WatchResponse
 // repaintPs redraws the ps table in place after ev, so it reads like `top`
 // and the frames stay out of the scrollback. It fetches the services again, so
 // the table shows their state after ev.
-func repaintPs(ctx context.Context, c *rpc.Client, out io.Writer, o psOpts, ev *anovelv1.WatchResponse) {
-	resp, err := c.ListServices(ctx, o.scope.selector())
+func repaintPs(ctx context.Context, c anovelv1connect.CoreServiceClient, out io.Writer, o psOpts, ev *anovelv1.WatchResponse) {
+	resp, err := rpc.Call(ctx, c.ListServices, &anovelv1.ListServicesRequest{Stack: o.scope.selector()})
 	if err != nil {
 		_, _ = fmt.Fprintf(out, "watch: refresh failed: %v\n", err)
 		return
@@ -125,7 +128,7 @@ func repaintPs(ctx context.Context, c *rpc.Client, out io.Writer, o psOpts, ev *
 	// Move the cursor home and clear the screen; on a pipe the escape
 	// sequences are harmless filler.
 	_, _ = fmt.Fprint(out, "\x1b[H\x1b[2J")
-	renderPs(out, filterServices(resp.GetServices(), o.service, o.kind), false)
+	renderPs(out, filterServices(resp.GetServices(), o.service, o.kind), formatText)
 	_, _ = fmt.Fprintf(out, "\n%s  %s\n", ev.GetTs().AsTime().Format("15:04:05"), ev.GetDescription())
 }
 
@@ -146,9 +149,9 @@ func filterServices(services []*anovelv1.Service, service, kind string) []*anove
 	return services
 }
 
-// renderPs prints services as a human-readable table or as JSON lines.
-func renderPs(w io.Writer, services []*anovelv1.Service, asJSON bool) {
-	if asJSON {
+// renderPs prints services in format: a human-readable table, or JSON lines.
+func renderPs(w io.Writer, services []*anovelv1.Service, format string) {
+	if format == formatJSON {
 		enc := json.NewEncoder(w)
 		for _, s := range services {
 			_ = enc.Encode(s)
@@ -176,7 +179,7 @@ func renderService(w io.Writer, s *anovelv1.Service) {
 
 	for _, t := range s.GetTargets() {
 		_, _ = fmt.Fprintf(w, "  %-6s %-30s  %-12s  %s\n",
-			targetKindShort(t.GetKind()), t.GetName(), targetStatusLabel(t), prefix+t.GetName())
+			enumword.Word(t.GetKind()), t.GetName(), targetStatusLabel(t), prefix+t.GetName())
 	}
 
 	for _, in := range s.GetInfra() {
@@ -185,17 +188,14 @@ func renderService(w io.Writer, s *anovelv1.Service) {
 	}
 }
 
-// healthSuffix is the word an infra container's health adds to its phase.
-var healthSuffix = map[anovelv1.Health]string{
-	anovelv1.Health_HEALTH_HEALTHY:   " healthy",
-	anovelv1.Health_HEALTH_UNHEALTHY: " unhealthy",
-	anovelv1.Health_HEALTH_STARTING:  " starting",
-}
-
 // infraStatusLabel returns an infra container's phase word, followed by its
 // health when the container reports one.
 func infraStatusLabel(in *anovelv1.Infra) string {
-	return phaseLabel(in.GetPhase()) + healthSuffix[in.GetHealth()]
+	label := enumword.Word(in.GetPhase())
+	if in.GetHealth() != anovelv1.Health_HEALTH_UNSPECIFIED {
+		label += " " + enumword.Word(in.GetHealth())
+	}
+	return label
 }
 
 // targetStatusLabel returns the user-facing status word for a target, folding
@@ -227,17 +227,5 @@ func targetStatusLabel(t *anovelv1.Target) string {
 			return "crashed"
 		}
 	}
-	return phaseLabel(t.GetPhase())
-}
-
-// targetKindShort returns the kind column of a target row.
-func targetKindShort(k anovelv1.TargetKind) string {
-	switch k {
-	case anovelv1.TargetKind_TARGET_KIND_ONE_SHOT:
-		return "1shot"
-	case anovelv1.TargetKind_TARGET_KIND_LONG_RUNNER:
-		return "longr"
-	default:
-		return "??"
-	}
+	return enumword.Word(t.GetPhase())
 }

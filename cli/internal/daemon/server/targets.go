@@ -18,7 +18,7 @@ func (s *Server) StartTarget(ctx context.Context, req *anovelv1.StartTargetReque
 	if mode != anovelv1.Mode_MODE_GO_EXEC && mode != anovelv1.Mode_MODE_CONTAINER {
 		return nil, connect.Errorf(connect.CodeInvalidArgument, "unknown mode %v", mode)
 	}
-	t, svc, err := s.findTarget(req.GetTargetId())
+	t, svc, err := s.findTarget(s.canonicalID(req.GetTargetId()))
 	if err != nil {
 		return nil, err
 	}
@@ -36,16 +36,17 @@ func (s *Server) StartTarget(ctx context.Context, req *anovelv1.StartTargetReque
 // defaulting to 10s, where 0 means an immediate SIGKILL. It is idempotent, and
 // the response carries no target when the runner never held an instance.
 func (s *Server) KillTarget(ctx context.Context, req *anovelv1.KillTargetRequest) (*anovelv1.KillTargetResponse, error) {
+	id := s.canonicalID(req.GetTargetId())
 	grace := killGrace
 	if req.GetTimeout() != nil {
 		grace = req.GetTimeout().AsDuration()
 	}
-	if err := s.runner.Kill(ctx, req.GetTargetId(), grace); err != nil {
+	if err := s.runner.Kill(ctx, id, grace); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	resp := &anovelv1.KillTargetResponse{}
-	inst, tracked := s.runner.Instance(req.GetTargetId())
-	t, _ := s.stacks.Target(req.GetTargetId())
+	inst, tracked := s.runner.Instance(id)
+	t, _ := s.stacks.Target(id)
 	if tracked && t != nil {
 		resp.Target = targetToProto(t, &inst)
 	}
@@ -55,7 +56,7 @@ func (s *Server) KillTarget(ctx context.Context, req *anovelv1.KillTargetRequest
 // RestartTarget is Kill and Start in one RPC. The kill completes before the
 // start claims the slot, so mutual exclusion holds.
 func (s *Server) RestartTarget(ctx context.Context, req *anovelv1.RestartTargetRequest) (*anovelv1.RestartTargetResponse, error) {
-	id := req.GetTargetId()
+	id := s.canonicalID(req.GetTargetId())
 	if err := s.runner.Kill(ctx, id, killGrace); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}

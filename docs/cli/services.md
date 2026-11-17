@@ -83,4 +83,4 @@ a-novel run debug "$SERVICE/$TARGET"
 a-novel run watch --service="$SERVICE"
 ```
 
-`run ps --json` and `run env --format=json` cover the rest.
+`run ps --format=json` and `run env --format=json` cover the rest. A command exits 2 on a usage error, such as an unknown command or flag value, or a wrong argument count.

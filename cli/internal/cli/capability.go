@@ -60,9 +60,14 @@ func newCapabilityCmd(c capability) *cobra.Command {
 	f := cmd.Flags()
 	f.SortFlags = false
 	f.StringVarP(&o.dir, "dir", "C", ".", "directory to scan")
-	f.StringVarP(&o.types, "type", "t", "", "comma-separated kinds to keep: go,pnpm,podman (default: all)")
+	kinds := make([]string, len(detect.Kinds))
+	for i, kind := range detect.Kinds {
+		kinds[i] = string(kind)
+	}
+	addEnumFlag(cmd, &enumFlag{value: &o.types, allowed: kinds, list: true}, "type", "t",
+		"comma-separated kinds to keep: go,pnpm,podman (default: all)")
 	f.BoolVarP(&o.yes, "yes", "y", false, "skip the picker and run every target (CI-safe)")
-	f.IntVarP(&o.jobs, "jobs", "j", 0, "max targets run at once (default: NumCPU/4, min 2; 1 with -y or no terminal)")
+	f.VarP(countFlag{&o.jobs}, "jobs", "j", "max targets run at once (default: NumCPU/4, min 2; 1 with -y or no terminal)")
 	f.DurationVarP(&o.timeout, "timeout", "T", 10*time.Minute, "per-target deadline, e.g. 10m, 30s, or 0 to disable")
 	f.BoolVar(&o.dryRun, "dry-run", false, "list the detected targets and their envs, then exit")
 	if c.name == testCapability.name {
@@ -72,12 +77,10 @@ func newCapabilityCmd(c capability) *cobra.Command {
 	return cmd
 }
 
-// runCapability detects, picks and runs c's targets, then reports. An explicit
-// --jobs must be positive, while its default lets jobLimit decide.
+// runCapability detects, picks and runs c's targets, then reports, on the
+// command's own streams. An unset --jobs lets jobLimit decide.
 func runCapability(cmd *cobra.Command, c capability, o capabilityOpts) error {
-	if cmd.Flags().Changed("jobs") && o.jobs < 1 {
-		return usageError(fmt.Errorf("--jobs: want a positive integer, got %d", o.jobs))
-	}
+	out := cmd.OutOrStdout()
 	if o.timeout < 0 {
 		return usageError(fmt.Errorf("--timeout: want a duration like 10m / 30s / 0, got %s", o.timeout))
 	}
@@ -86,7 +89,7 @@ func runCapability(cmd *cobra.Command, c capability, o capabilityOpts) error {
 		return err
 	}
 	if o.dryRun {
-		fmt.Print(batchview.DryRunView(c.name, targets))
+		_, _ = fmt.Fprint(out, batchview.DryRunView(c.name, targets))
 		return nil
 	}
 
@@ -103,7 +106,7 @@ func runCapability(cmd *cobra.Command, c capability, o capabilityOpts) error {
 	defer release()
 
 	interactive := !o.yes && stdoutIsTTY()
-	if err := preflight(ctx, c.name, targets, interactive && stdinIsTTY(), o.keep); err != nil {
+	if err := preflight(ctx, cmd, c.name, targets, interactive && stdinIsTTY(), o.keep); err != nil {
 		return err
 	}
 	if interactive {
@@ -129,10 +132,9 @@ func runCapability(cmd *cobra.Command, c capability, o capabilityOpts) error {
 		list[i] = build.Job(t, o.timeout, procs, o.keep)
 	}
 
-	fmt.Println(batchview.Banner())
-	fmt.Println()
-	batch := batchview.RunJobs(ctx, list, limit, interactive)
-	fmt.Print(batchview.Report(strings.ToUpper(c.name), batch, batchview.Failed))
+	_, _ = fmt.Fprintln(out, batchview.Banner()+"\n")
+	batch := batchview.RunJobs(ctx, out, list, limit, interactive)
+	_, _ = fmt.Fprint(out, batchview.Report(strings.ToUpper(c.name), batch, batchview.Failed))
 	return batchError(batch)
 }
 
@@ -140,10 +142,6 @@ func runCapability(cmd *cobra.Command, c capability, o capabilityOpts) error {
 // missing directory or one outside an a-novel repository fails before any
 // walk, so a wrong path never looks like an empty scan.
 func detectTargets(ctx context.Context, c capability, o capabilityOpts) ([]detect.Target, error) {
-	kinds, err := parseKinds(o.types)
-	if err != nil {
-		return nil, usageError(err)
-	}
 	absDir, _ := filepath.Abs(o.dir)
 	if info, statErr := os.Stat(o.dir); statErr != nil || !info.IsDir() {
 		return nil, usageError(fmt.Errorf("cannot scan %q: not an accessible directory", absDir))
@@ -155,15 +153,16 @@ func detectTargets(ctx context.Context, c capability, o capabilityOpts) ([]detec
 	if err != nil {
 		return nil, fmt.Errorf("scan failed: %w", err)
 	}
-	if kinds != nil {
-		targets = slices.DeleteFunc(targets, func(t detect.Target) bool { return !slices.Contains(kinds, t.Kind) })
+	if o.types != "" {
+		kinds := strings.Split(o.types, ",")
+		targets = slices.DeleteFunc(targets, func(t detect.Target) bool { return !slices.Contains(kinds, string(t.Kind)) })
 	}
 	if c.name == testCapability.name && !o.noCover {
 		targets = withCoverage(targets)
 	}
 	if len(targets) == 0 {
 		var scope string
-		if kinds != nil {
+		if o.types != "" {
 			scope = " matching --type"
 		}
 		return nil, usageError(fmt.Errorf("no %s targets%s found under %s\n  Looked for %s.\n"+
@@ -183,23 +182,6 @@ func jobLimit(jobs int, interactive bool) int {
 	default:
 		return 1
 	}
-}
-
-// parseKinds turns "go,podman" into a kind list, nil meaning every kind.
-func parseKinds(v string) ([]detect.Kind, error) {
-	if v == "" {
-		return nil, nil
-	}
-	var kinds []detect.Kind
-	for part := range strings.SplitSeq(v, ",") {
-		if k := detect.Kind(strings.ToLower(strings.TrimSpace(part))); slices.Contains(detect.Kinds, k) {
-			kinds = append(kinds, k)
-		}
-	}
-	if len(kinds) == 0 {
-		return nil, fmt.Errorf("--type: no valid kinds in %q (want go,pnpm,podman)", v)
-	}
-	return kinds, nil
 }
 
 // withCoverage rewrites every test target for coverage mode. A Go target keeps
@@ -232,29 +214,30 @@ func withCoverage(targets []detect.Target) []detect.Target {
 // then continues and abort stops. Without a terminal it cleans and continues,
 // so piped and agent runs self-heal. With keep, a leftover env is the point:
 // the run adopts its warm containers and data.
-func preflight(ctx context.Context, verb string, targets []detect.Target, canPrompt, keep bool) error {
+func preflight(ctx context.Context, cmd *cobra.Command, verb string, targets []detect.Target, canPrompt, keep bool) error {
+	errOut := cmd.ErrOrStderr()
 	conflicts := build.EnvConflicts(ctx, targets)
 	switch {
 	case len(conflicts) == 0:
 		return nil
 	case keep:
-		fmt.Fprintln(os.Stderr, batchview.Warn.Render("Reusing the existing test environment (--keep); "+
+		_, _ = fmt.Fprintln(errOut, batchview.Warn.Render("Reusing the existing test environment (--keep); "+
 			"its data and schema persist from the previous run."))
 		return nil
 	}
 
-	fmt.Fprintln(os.Stderr, batchview.EnvConflictView(verb, conflicts))
+	_, _ = fmt.Fprintln(errOut, batchview.EnvConflictView(verb, conflicts))
 	proceed := true
 	if canPrompt {
-		fmt.Fprint(os.Stderr, batchview.Gold.Render("Clean it and continue, or abort? [c]lean / [a]bort: "))
-		answer := readAnswer(os.Stdin)
+		_, _ = fmt.Fprint(errOut, batchview.Gold.Render("Clean it and continue, or abort? [c]lean / [a]bort: "))
+		answer := readAnswer(cmd.InOrStdin())
 		proceed = answer == "c" || answer == "clean"
 	} else {
-		fmt.Fprintln(os.Stderr, batchview.Warn.Render("No prompt available: cleaning the stale environment "+
+		_, _ = fmt.Fprintln(errOut, batchview.Warn.Render("No prompt available: cleaning the stale environment "+
 			"(scoped to this checkout only) and continuing."))
 	}
 	for _, c := range conflicts {
-		fmt.Fprintln(os.Stderr, batchview.Muted.Render("  cleaning "+c.Env.ID+" …"))
+		_, _ = fmt.Fprintln(errOut, batchview.Muted.Render("  cleaning "+c.Env.ID+" …"))
 		// Detached: teardown must complete even if the run is aborting.
 		_ = build.TearDown(context.WithoutCancel(ctx), c.Env)
 	}

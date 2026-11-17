@@ -30,7 +30,7 @@ import (
 // The output streams as LOG_STREAM_STDOUT and LOG_STREAM_STDERR lines, the
 // LogStream values logs use, so a client renders both the same way.
 func (s *Server) Exec(ctx context.Context, req *anovelv1.ExecRequest, stream anovelv1connect.CoreServiceExecServerStream) error {
-	id := req.GetTargetId()
+	id := s.canonicalID(req.GetTargetId())
 	cmdv := req.GetCmd()
 	if len(cmdv) == 0 {
 		return connect.NewError(connect.CodeInvalidArgument, "exec: empty cmd")
@@ -169,7 +169,7 @@ func execExitCode(waitErr error) (int32, error) {
 // `PID + 20000`, high but unprivileged, so debugging several targets gives a
 // unique port per PID with no allocation bookkeeping.
 func (s *Server) Debug(_ context.Context, req *anovelv1.DebugRequest) (*anovelv1.DebugResponse, error) {
-	id := req.GetTargetId()
+	id := s.canonicalID(req.GetTargetId())
 	if id == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "debug: target_id required")
 	}

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +13,7 @@ import (
 )
 
 func newExecCmd() *cobra.Command {
-	var ss stackScope
+	var stack string
 	cmd := &cobra.Command{
 		Use:   "exec <target> -- <cmd> [args...]",
 		Short: "Run a command alongside a target (container exec, or sibling process)",
@@ -27,29 +28,26 @@ The command's exit status becomes the CLI's.`,
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Cobra strips "--", so args[0] is the target and args[1:] the command.
-			return execBeside(cmd, parseEntityID(args[0], ss.stack), args[1:])
+			return execBeside(cmd, parseEntityID(args[0], stack), args[1:])
 		},
 	}
-	ss.bind(cmd)
+	addStackFlag(cmd, &stack)
 	return cmd
 }
 
 // execBeside runs argv beside the target ref names and prints its output,
 // stderr lines on stderr. An infra container is refused: podman reaches it
-// directly.
+// directly, under a name that needs the stack a shorthand leaves out.
 func execBeside(cmd *cobra.Command, ref entityRef, argv []string) error {
 	if ref.IsInfra {
 		return fmt.Errorf("exec: %s is an infra container; use 'podman exec %s_%s_%s_1 …' directly",
-			ref.ID, ref.Stack, ref.Service, ref.Infra)
+			ref.ID, cmp.Or(ref.Stack, "<stack>"), ref.Service, ref.Infra)
 	}
 	ctx := cmd.Context()
-	stream, err := rpc.New("").Exec(ctx, ref.ID, argv)
-	if err != nil {
-		return err
-	}
+	req := &anovelv1.ExecRequest{TargetId: ref.ID, Cmd: argv}
 	// A pointer, so an unreported exit status stays distinct from a reported 0.
 	var exitCode *int32
-	for ev, err := range stream {
+	for ev, err := range rpc.Stream(ctx, rpc.New().Exec, req) {
 		if err != nil {
 			if ctx.Err() == nil {
 				return err

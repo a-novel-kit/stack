@@ -9,36 +9,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 
+	"github.com/a-novel-kit/stack/cli/internal/batchview"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
-
-func TestTruncate(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name string
-
-		s      string
-		maxLen int
-
-		want string
-	}{
-		{name: "Success/Fits", s: "abc", maxLen: 5, want: "abc"},
-		{name: "Success/CutASCII", s: "abcdef", maxLen: 4, want: "abc…"},
-		{name: "Success/CutKeepsMultiByteRunes", s: "a→b→c→d", maxLen: 4, want: "a→b…"},
-		{name: "Success/CutCountsWideCells", s: "日本語テキスト", maxLen: 5, want: "日本…"},
-		{name: "Success/CutKeepsANSISequences", s: "\x1b[31mabcdef\x1b[m", maxLen: 4, want: "\x1b[31mabc…\x1b[m"},
-		{name: "Success/NonPositiveKeepsWhole", s: "abcdef", maxLen: 0, want: "abcdef"},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			require.Equal(t, testCase.want, truncate(testCase.s, testCase.maxLen))
-		})
-	}
-}
 
 func TestRender(t *testing.T) {
 	t.Parallel()
@@ -201,27 +174,27 @@ func TestTargetStatusDot(t *testing.T) {
 
 		want string
 	}{
-		{name: "Success/LongRunner/Exited", reason: anovelv1.ExitReason_EXIT_REASON_SUCCESS, want: styleDim.Render("○")},
-		{name: "Success/LongRunner/Killed", reason: anovelv1.ExitReason_EXIT_REASON_KILLED, want: styleDim.Render("○")},
-		{name: "Success/LongRunner/Error", reason: anovelv1.ExitReason_EXIT_REASON_ERROR, want: styleErr.Render("●")},
-		{name: "Success/LongRunner/Crashed", reason: anovelv1.ExitReason_EXIT_REASON_CRASHED, want: styleErr.Render("●")},
+		{name: "Success/LongRunner/Exited", reason: anovelv1.ExitReason_EXIT_REASON_SUCCESS, want: batchview.Muted.Render("○")},
+		{name: "Success/LongRunner/Killed", reason: anovelv1.ExitReason_EXIT_REASON_KILLED, want: batchview.Muted.Render("○")},
+		{name: "Success/LongRunner/Error", reason: anovelv1.ExitReason_EXIT_REASON_ERROR, want: batchview.Crit.Render("●")},
+		{name: "Success/LongRunner/Crashed", reason: anovelv1.ExitReason_EXIT_REASON_CRASHED, want: batchview.Crit.Render("●")},
 		{
 			name:   "Success/OneShot/Succeeded",
 			kind:   anovelv1.TargetKind_TARGET_KIND_ONE_SHOT,
 			reason: anovelv1.ExitReason_EXIT_REASON_SUCCESS,
-			want:   styleSuccess.Render("✓"),
+			want:   batchview.OK.Render(batchview.GlyphOK),
 		},
 		{
 			name:   "Success/OneShot/Killed",
 			kind:   anovelv1.TargetKind_TARGET_KIND_ONE_SHOT,
 			reason: anovelv1.ExitReason_EXIT_REASON_KILLED,
-			want:   styleDim.Render("○"),
+			want:   batchview.Muted.Render("○"),
 		},
 		{
 			name:   "Success/OneShot/Error",
 			kind:   anovelv1.TargetKind_TARGET_KIND_ONE_SHOT,
 			reason: anovelv1.ExitReason_EXIT_REASON_ERROR,
-			want:   styleErr.Render("✗"),
+			want:   batchview.Crit.Render(batchview.GlyphFail),
 		},
 	}
 

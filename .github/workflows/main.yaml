@@ -55,6 +55,8 @@ jobs:
     steps:
       - uses: a-novel-kit/workflows/node-actions/lint-node@v1.87.0
         with:
+          # lint-go-cli and lint-proto-cli cover the Go and proto lanes of `pnpm lint`.
+          lint_action: lint:node
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   # The developer guide in docs/. VitePress fails the build on a dead internal

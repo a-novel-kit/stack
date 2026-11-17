@@ -135,14 +135,14 @@ func TestSyncJobs(t *testing.T) {
 	}
 }
 
-// TestNormalizeFilter checks the --allow/--ignore values become one set of
-// trimmed names, with comma-joined values split.
+// TestNormalizeFilter checks the --allow/--ignore values, which pflag already
+// split on commas, become one set of trimmed names without the empty ones.
 func TestNormalizeFilter(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(
 		t,
 		map[string]bool{"golib": true, "service-json-keys": true, "a-novel/service-profile": true},
-		normalizeFilter([]string{"golib, service-json-keys", "", "a-novel/service-profile"}),
+		normalizeFilter([]string{"golib", " service-json-keys", "", "a-novel/service-profile"}),
 	)
 }

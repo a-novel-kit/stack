@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a-novel-kit/stack/cli/internal/rpc"
+	"github.com/a-novel-kit/stack/cli/internal/shared/paths"
+	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 )
 
 func newCoreStatusCmd() *cobra.Command {
@@ -29,11 +31,10 @@ command exits 0 for it.`,
 // version, socket, uptime and stacks, the default one starred and each one
 // followed by its discovery problems.
 func printDaemonStatus(ctx context.Context, out io.Writer) error {
-	c := rpc.New("")
-	s, err := c.Status(ctx)
+	s, err := rpc.Call(ctx, rpc.New().Status, &anovelv1.StatusRequest{})
 	if rpc.IsNotRunning(err) {
 		_, _ = fmt.Fprintln(out, "a-novel daemon: not running")
-		_, _ = fmt.Fprintf(out, "  socket: %s (no listener)\n", c.SocketPath())
+		_, _ = fmt.Fprintf(out, "  socket: %s (no listener)\n", paths.Socket())
 		return nil
 	}
 	if err != nil {

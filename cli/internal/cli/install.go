@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"os/exec"
 	"path/filepath"
 
@@ -48,8 +46,15 @@ func installCLI(cmd *cobra.Command, source string) error {
 		return err
 	}
 	_, _ = fmt.Fprintf(out, "▸ source: %s\n", sourceDir)
-	if err := checkpointDaemon(ctx, out); err != nil {
-		return err
+
+	// The old daemon must be gone before `go install` replaces its binary.
+	_, _ = fmt.Fprintln(out, "▸ checkpointing running daemon (if any)...")
+	stopped, err := stopDaemon(ctx, rpc.New(), out, true, false)
+	if err != nil {
+		return fmt.Errorf("checkpoint daemon: %w", err)
+	}
+	if !stopped {
+		_, _ = fmt.Fprintln(out, "  ○ no daemon running (skipping checkpoint)")
 	}
 
 	_, _ = fmt.Fprintln(out, "▸ go install ./cmd/a-novel ...")
@@ -63,7 +68,7 @@ func installCLI(cmd *cobra.Command, source string) error {
 	_, _ = fmt.Fprintln(out, "  ✓ binary built")
 
 	_, _ = fmt.Fprintln(out, "▸ starting fresh daemon...")
-	if err := startDetached(ctx); err != nil {
+	if err := startDetached(ctx, out); err != nil {
 		return fmt.Errorf("daemon start: %w", err)
 	}
 	_, _ = fmt.Fprintln(out, "\n✓ install complete.")
@@ -85,22 +90,4 @@ func cliSourceDir(override string) (string, error) {
 		return "", fmt.Errorf("no go.mod at %s: pass --source pointing at the CLI source dir", sourceDir)
 	}
 	return sourceDir, nil
-}
-
-// checkpointDaemon checkpoints a running daemon and waits for it to exit,
-// since the old daemon must be gone before `go install` replaces its binary.
-func checkpointDaemon(ctx context.Context, out io.Writer) error {
-	_, _ = fmt.Fprintln(out, "▸ checkpointing running daemon (if any)...")
-	c := rpc.New("")
-	if up, _ := daemonUp(ctx, c); !up {
-		_, _ = fmt.Fprintln(out, "  ○ no daemon running (skipping checkpoint)")
-		return nil
-	}
-	if err := prepareReinstall(ctx, c, out); err != nil {
-		return fmt.Errorf("prepare-reinstall: %w", err)
-	}
-	if err := waitDaemonGone(ctx, c, out); err != nil {
-		_, _ = fmt.Fprintf(out, "  ⚠ %v; continuing anyway\n", err)
-	}
-	return nil
 }

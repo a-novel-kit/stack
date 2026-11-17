@@ -2,9 +2,9 @@ package server
 
 import (
 	"context"
-	"strings"
 
 	"github.com/a-novel-kit/stack/cli/internal/daemon/runner"
+	"github.com/a-novel-kit/stack/cli/internal/shared/enumword"
 	anovelv1 "github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1"
 	"github.com/a-novel-kit/stack/cli/proto/gen/anovel/v1/anovelv1connect"
 )
@@ -20,7 +20,8 @@ import (
 func (s *Server) Watch(ctx context.Context, req *anovelv1.WatchRequest, stream anovelv1connect.CoreServiceWatchServerStream) error {
 	ctx, cancel := s.streamContext(ctx)
 	defer cancel()
-	ch, unsub := s.runner.SubscribePhases(func(ev runner.PhaseEvent) bool { return watches(req, ev) })
+	filter := s.watchFilter(req)
+	ch, unsub := s.runner.SubscribePhases(func(ev runner.PhaseEvent) bool { return watches(filter, ev) })
 	defer unsub()
 	for {
 		select {
@@ -37,6 +38,12 @@ func (s *Server) Watch(ctx context.Context, req *anovelv1.WatchRequest, stream a
 	}
 }
 
+// watchFilter is req with its target ID resolved like every other request's
+// (see canonicalID), since events carry canonical IDs.
+func (s *Server) watchFilter(req *anovelv1.WatchRequest) *anovelv1.WatchRequest {
+	return &anovelv1.WatchRequest{Stack: req.GetStack(), Service: req.GetService(), TargetId: s.canonicalID(req.GetTargetId())}
+}
+
 // watches reports whether a Watch request covers ev: every field the request
 // sets must match, and the stack "*" matches any stack.
 func watches(req *anovelv1.WatchRequest, ev runner.PhaseEvent) bool {
@@ -47,24 +54,11 @@ func watches(req *anovelv1.WatchRequest, ev runner.PhaseEvent) bool {
 }
 
 // describePhaseEvent renders the one-line summary WatchResponse.description
-// carries, such as "<id> running" or "<id> terminated (killed)". A phase with
-// no summary, such as PENDING, renders as its enum name.
+// carries, such as "<id> running" or "<id> terminated (killed)".
 func describePhaseEvent(ev runner.PhaseEvent) string {
-	switch ev.NewPhase {
-	case anovelv1.Phase_PHASE_STARTING, anovelv1.Phase_PHASE_RUNNING, anovelv1.Phase_PHASE_STOPPING:
-		return ev.TargetID + " " + enumWord(ev.NewPhase.String(), "PHASE_")
-	case anovelv1.Phase_PHASE_TERMINATED:
-		if ev.ExitReason == anovelv1.ExitReason_EXIT_REASON_UNSPECIFIED {
-			return ev.TargetID + " terminated"
-		}
-		return ev.TargetID + " terminated (" + enumWord(ev.ExitReason.String(), "EXIT_REASON_") + ")"
-	default:
-		return ev.TargetID + " " + ev.NewPhase.String()
+	description := ev.TargetID + " " + enumword.Word(ev.NewPhase)
+	if ev.NewPhase == anovelv1.Phase_PHASE_TERMINATED && ev.ExitReason != anovelv1.ExitReason_EXIT_REASON_UNSPECIFIED {
+		description += " (" + enumword.Word(ev.ExitReason) + ")"
 	}
-}
-
-// enumWord turns a proto enum name into the lowercase word after its prefix,
-// as PHASE_RUNNING becomes "running".
-func enumWord(name, prefix string) string {
-	return strings.ToLower(strings.TrimPrefix(name, prefix))
+	return description
 }

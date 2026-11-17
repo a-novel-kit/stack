@@ -50,24 +50,32 @@ See https://a-novel-kit.github.io/stack/ for the everyday workflows.`,
 		newInstallCmd(),
 		newRunCmd(),
 	)
-	rejectUnknownSubcommands(root)
+	checkArgs(root)
 	return root
 }
 
-// rejectUnknownSubcommands makes every command group below cmd fail on an
-// argument that names none of its subcommands. Cobra rejects an unknown command
-// only at the root, and checks arguments only for a command it can run. Each
-// group therefore gets an argument check and a run function that prints its
-// help.
-func rejectUnknownSubcommands(cmd *cobra.Command) {
-	for _, child := range cmd.Commands() {
-		if child.HasSubCommands() && !child.Runnable() {
-			child.Args = unknownSubcommand
-			child.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
-			// Cobra suggests commands within this edit distance at the root.
-			child.SuggestionsMinimumDistance = 2
+// checkArgs makes every argument check of cmd and the commands below it fail
+// with a usage error, exit status 2. It first gives each command group an
+// argument check that rejects an argument naming none of its subcommands, and
+// a run function that prints its help: cobra checks arguments only for a
+// command it can run.
+func checkArgs(cmd *cobra.Command) {
+	if cmd.HasSubCommands() && !cmd.Runnable() {
+		cmd.Args = unknownSubcommand
+		cmd.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
+		// Cobra suggests commands within this edit distance at the root.
+		cmd.SuggestionsMinimumDistance = 2
+	}
+	if check := cmd.Args; check != nil {
+		cmd.Args = func(cmd *cobra.Command, args []string) error {
+			if err := check(cmd, args); err != nil {
+				return usageError(err)
+			}
+			return nil
 		}
-		rejectUnknownSubcommands(child)
+	}
+	for _, child := range cmd.Commands() {
+		checkArgs(child)
 	}
 }
 
@@ -98,6 +106,9 @@ func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print the a-novel CLI version",
-		Run:   func(cmd *cobra.Command, _ []string) { cmd.Println(version.String()) },
+		Long: `Print the version of this a-novel binary. A daemon started before an upgrade
+keeps running its own version, which 'core status' prints; 'a-novel install'
+restarts it on the new binary.`,
+		Run: func(cmd *cobra.Command, _ []string) { cmd.Println(version.String()) },
 	}
 }
