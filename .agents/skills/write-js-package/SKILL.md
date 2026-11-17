@@ -157,16 +157,14 @@ directly into URL strings.
 const params = new URLSearchParams();
 if (filter) params.set("filter", filter);
 const query = params.toString();
-return await api.fetch(`/resource${query ? `?${query}` : ""}`, ResourceSchema, {
-  method: "GET",
-  headers: HTTP_HEADERS.JSON,
-});
+return await api.fetch(`/resource${query ? `?${query}` : ""}`, ResourceSchema, { method: "GET" });
 ```
 
-**Headers**: use constants from `@a-novel-kit/nodelib-browser/http` — `HTTP_HEADERS.JSON` for
-endpoints that return JSON, nothing extra for void responses.
+**Headers**: use constants from `@a-novel-kit/nodelib-browser/http`. `HTTP_HEADERS.JSON` sets
+`Content-Type: application/json`, which describes a request body, so a request without a body, such
+as a `GET` or a `DELETE`, sends none.
 
-**Request body**: pass serialised JSON as the body with `HTTP_HEADERS.JSON` on POST/PUT/PATCH:
+**Request body**: pass serialized JSON as the body with `HTTP_HEADERS.JSON` on POST/PUT/PATCH:
 
 ```typescript
 return await api.fetch("/resource", ResourceSchema, {

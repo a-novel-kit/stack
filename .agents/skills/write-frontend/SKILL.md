@@ -266,8 +266,11 @@ or instruction to find an earlier link does not replace it.
 
 ## Performance and compatibility
 
-- Set an explicit browser baseline in project configuration. Use feature detection and progressive
-  enhancement; add a polyfill only after measuring need and bundle cost.
+- **The browser baseline is [Baseline widely available](https://web.dev/baseline).** Every
+  platform, uikit and browser library targets it. A feature it covers needs no `@supports` wrapper,
+  fallback or vendor prefix; delete those that exist once their feature is widely available. Use
+  feature detection and progressive enhancement only beyond the baseline, and add a polyfill only
+  after measuring need and bundle cost.
 - Prefer semantic markup and CSS over JavaScript. Lazy-load non-critical routes and heavy features,
   not primary content or interaction affordances.
 - Reserve media dimensions, serve responsive assets, and avoid layout thrashing. Batch DOM reads and

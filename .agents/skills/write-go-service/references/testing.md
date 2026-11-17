@@ -5,7 +5,7 @@ Read this reference when routed here by [write-go-service](../SKILL.md). Its rul
 Contents:
 
 - [Tests — layer-specific patterns](#tests--layer-specific-patterns)
-- [DAO tests — real Postgres, rolled-back transaction](#dao-tests--real-postgres-rolled-back-transaction)
+- [DAO tests: real Postgres, one database per case](#dao-tests-real-postgres-one-database-per-case)
 - [Core tests — mocks for every dependency, no DB](#core-tests--mocks-for-every-dependency-no-db)
 - [REST handler tests — `net/http/httptest`, no real server](#rest-handler-tests--nethttphttptest-no-real-server)
 - [gRPC handler tests — call the method directly, read the status](#grpc-handler-tests--call-the-method-directly-read-the-status)
@@ -19,10 +19,11 @@ Contents:
 `require`, the `_test` package, cross-package fixture subpackages). These are the
 service-architecture additions.
 
-### DAO tests — real Postgres, rolled-back transaction
+### DAO tests: real Postgres, one database per case
 
-DAO tests run against a real PostgreSQL database inside an isolated transaction rolled back after
-each sub-test, so cases can't interfere. No mocks — the point is to exercise the real DB.
+DAO tests run against a real PostgreSQL database. `postgrestest.RunDBTest` gives each sub-test a
+fresh database cloned from a migrated template and drops it on cleanup, so cases can't interfere,
+even when they reuse fixture keys. No mocks: the point is to exercise the real DB.
 
 ```go
 func TestPgJwkSelect(t *testing.T) {
@@ -39,35 +40,28 @@ func TestPgJwkSelect(t *testing.T) {
         t.Run(testCase.name, func(t *testing.T) {
             t.Parallel()
 
-            postgres.RunIsolatedTransactionalTest(
-                t, configtest.PostgresPreset, migrations.Migrations,
-                func(ctx context.Context, t *testing.T) {
-                    t.Helper()
+            postgrestest.RunDBTest(t, configtest.PostgresPreset, migrations.Migrations, func(ctx context.Context, t *testing.T) {
+                t.Helper()
 
-                    db, err := postgres.GetContext(ctx)
+                db, err := postgres.GetContext(ctx)
+                require.NoError(t, err)
+
+                if len(testCase.fixtures) > 0 {
+                    _, err = db.NewInsert().Model(&testCase.fixtures).Exec(ctx)
                     require.NoError(t, err)
+                }
 
-                    if len(testCase.fixtures) > 0 {
-                        _, err = db.NewInsert().Model(&testCase.fixtures).Exec(ctx)
-                        require.NoError(t, err)
-                    }
-                    // If the query reads a materialized view, refresh it after inserting fixtures —
-                    // PostgreSQL does not refresh materialized views automatically inside a transaction.
-                    _, err = db.NewRaw("REFRESH MATERIALIZED VIEW active_keys;").Exec(ctx)
-                    require.NoError(t, err)
-
-                    key, err := daoJwkSelect.Exec(ctx, testCase.request)
-                    require.ErrorIs(t, err, testCase.expectErr)
-                    require.Equal(t, testCase.expect, key)
-                },
-            )
+                key, err := daoJwkSelect.Exec(ctx, testCase.request)
+                require.ErrorIs(t, err, testCase.expectErr)
+                require.Equal(t, testCase.expect, key)
+            })
         })
     }
 }
 ```
 
 - `t.Parallel()` on the outer function, like any test. Construct the DAO once outside the
-  loop. Insert fixtures via `db.NewInsert().Model(...)` on the transaction-bound DB.
+  loop. Insert fixtures via `db.NewInsert().Model(...)` on the test's database.
 - A test verifying filtering/ordering needs enough fixtures to make the assertion meaningful (a
   `"FilterUsage"` case needs at least one matching row and one non-matching row).
 - Use fixed UUIDs (`uuid.MustParse("00000000-0000-0000-0000-000000000001")`) and fixed timestamps
@@ -87,12 +81,11 @@ service := core.NewJwkSelect(daoSelect /* , sub-services… */)
 res, err := service.Exec(t.Context(), testCase.request)
 require.ErrorIs(t, err, testCase.expectErr)
 require.Equal(t, testCase.expect, res)
-daoSelect.AssertExpectations(t)
 ```
 
 - One mock per interface the service depends on; test each independently.
 - For a service that iterates a collection (calling a sub-service per DAO result), register the
-  mock expectations as a slice, set each `.Once()`, and `AssertExpectations`.
+  mock expectations as a slice and set each `.Once()`.
 - When a mock argument can't be fully specified up front (a generated UUID, an encrypted blob), use
   `mock.MatchedBy(func(r *dao.SomeRequest) bool { ... })` with a validator that calls `t.Error`
   (not `require`) and returns a bool.
@@ -123,9 +116,11 @@ if testCase.expectResponse != nil {
 - Decode the expected response into `any` (not a typed struct) — this avoids import coupling and
   matches JSON numbers as `float64`. For empty list results use `[]any{}` (not `nil`): Go encodes a
   nil slice as `null` and a non-nil empty slice as `[]`, distinct API contracts.
-- Always test: success, every mapped error sentinel (e.g. 404), the generic fallback (500), and —
-  if the handler parses input before calling the service — an invalid-input case. Assert the body
-  on success cases (including empty collections); on error cases assert only the status code.
+- Always test: success, each sentinel the handler maps itself (e.g. 404), one case per shared error
+  map proving the handler wires it, the generic fallback (500), and, if the handler parses input
+  before calling the service, an invalid-input case. One handler tests each shared `httpf.ErrMap`
+  entry by entry (see `write-go-tests`). Assert the body on success cases (including empty
+  collections); on error cases assert only the status code.
 
 ### gRPC handler tests — call the method directly, read the status
 
@@ -144,11 +139,11 @@ require.Equal(t, testCase.expect, res)
 - Always go through `status.FromError` — even a nil error yields a valid status (`codes.OK`). Set
   `expectStatus: codes.OK` explicitly on success; set `expect` to `nil` on every error case (the
   handler returns nil on error by convention).
-- Always test: success, every mapped error code (e.g. `codes.NotFound`), the generic fallback
-  (`codes.Internal`), and an invalid-input case if the handler parses input first. For list
+- Always test: success, each error code the handler maps itself (e.g. `codes.NotFound`), the
+  generic fallback (`codes.Internal`), and an invalid-input case if the handler parses input first. For list
   handlers add `"Success/Empty"` with the repeated field set explicitly
-  (`expect: &protogen.JwkListResponse{Keys: []*protogen.Jwk{}}`) — `lo.Map` returns a non-nil
-  empty slice, so `&protogen.JwkListResponse{}` (nil `Keys`) would fail the equality check.
+  (`expect: &jsonkeysv2.JwkListResponse{Keys: []*jsonkeysv2.Jwk{}}`): `lo.Map` returns a non-nil
+  empty slice, so `&jsonkeysv2.JwkListResponse{}` (nil `Keys`) fails the equality check.
 - A server-fault case sets `expectCause` to the error the service mock returns. `require.ErrorIs`
   proves that `grpcf.Fault` kept it, since the server span's `error.type` names that cause's type.
 
@@ -168,8 +163,8 @@ point is the real integration path.
 ### Common test pitfalls (service-specific)
 
 - **Mocking the database in DAO tests.** DAO tests always use the real DB via
-  `postgres.RunIsolatedTransactionalTest`. Mocks belong in core and handler tests.
+  `postgrestest.RunDBTest`. Mocks belong in core and handler tests.
 - **Using DAO sentinels in handler tests.** Handler tests must not import `dao`. The service mock
-  returns the _core-layer_ sentinel (`core.ErrJwkNotFound`), not the DAO one
-  (`dao.ErrJwkSelectNotFound`) — that mirrors what the real service returns after translation and
+  returns the _core-layer_ sentinel (`core.ErrUserNotFound`), not the DAO one
+  (`dao.ErrUserNotFound`), which mirrors what the real service returns after translation and
   keeps the test honest about the handler's contract.

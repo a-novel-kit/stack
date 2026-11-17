@@ -16,7 +16,8 @@ a-novel
 ├── test          standalone — runs Go + pnpm tests in the working tree
 ├── build         standalone — builds Go binaries, pnpm bundles, Podman images
 ├── publish       standalone — release doc helpers (releases themselves run in CI)
-├── core          daemon control (start, setup, kill, status, prepare-reinstall)
+├── core          daemon and workspace control (start, setup, kill, restart, status,
+│                 prepare-reinstall, sync, stacks, bot-comment)
 ├── run           daemon-backed verbs (services + targets)
 ├── secrets       standalone — local encrypted secrets, injected into child envs
 ├── install       standalone — rebuild + reinstall the CLI, state-preserving

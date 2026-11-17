@@ -23,18 +23,19 @@ package after the layer plus the suffix `test`, mirroring Go stdlib conventions 
 // internal/config/configtest/postgres.go
 package configtest
 
-// PostgresPreset is the PostgreSQL configuration used in integration tests.
-var PostgresPreset = postgrespresets.NewDefault(pgdriver.WithDSN(env.PostgresDsn))
+// PostgresPreset is the PostgreSQL configuration the integration tests connect with. It aliases the
+// production preset, so tests read the same discrete settings.
+var PostgresPreset = config.PostgresPresetDefault
 ```
 
 Test files import it as `configtest`:
 
 ```go
 import (
-    "github.com/a-novel/service-json-keys/v2/internal/config/configtest"
+    "github.com/a-novel/service-template/internal/config/configtest"
 )
 
-postgres.NewContext(ctx, configtest.PostgresPreset)
+postgrestest.RunDBTest(t, configtest.PostgresPreset, migrations.Migrations, callback)
 ```
 
 **Never:**

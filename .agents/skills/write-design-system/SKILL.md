@@ -112,8 +112,11 @@ Rules:
   and browser rounding can turn a mathematically borderline pair into a real rendered failure.
   Fix the shared semantic token rather than weakening a consumer accessibility gate.
 - Derive invisible groups and semi-opaque island surfaces from semantic surface, opacity, blur, and
-  elevation tokens. Use backdrop blur as progressive enhancement and retain legible separation
-  without it.
+  elevation tokens. Every browser in the
+  [baseline](../write-frontend/SKILL.md#performance-and-compatibility) renders backdrop blur,
+  Safari before 18 through `-webkit-backdrop-filter`, so it needs no `@supports` wrapper or opaque
+  fallback. Keep the prefixed line until March 2027, when the unprefixed property becomes widely
+  available.
 - A backdrop blur reads only what lies under its own box, so whatever crosses a frosted edge stays
   sharp there. Where something can cross it, as a button under an open list does, paint the frost
   on a layer reaching past the box by twice the blur radius, clip it back with the box's own

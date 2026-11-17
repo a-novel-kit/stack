@@ -13,21 +13,29 @@ commitment.
 
 **Before touching any proto file**, read it and all files it imports. Read `buf.yaml` and
 `buf.gen.yaml` — they control what gets generated and where. Read the corresponding generated Go
-file in `internal/handlers/protogen/` to see what callers currently depend on.
+file under `internal/handlers/protogen/anovel/<svc>/v<N>/` to see what callers currently depend on.
 
 ---
 
 ## Project Layout
 
 ```
-internal/models/proto/        # Source .proto files (edit these)
-  <entity>_<operation>.proto  # One file per RPC — service + request/response messages
-  <entity>.proto              # Shared message/enum types (no service definition)
+internal/models/proto/              # buf module root
+  anovel/<svc>/v<N>/                # Source .proto files of package anovel.<svc>.v<N> (edit these)
+    <entity>_<operation>.proto      # One file per RPC: service + request/response messages
+    <entity>.proto                  # Shared message/enum types (no service definition)
 
-internal/handlers/protogen/   # Generated Go stubs (never edit — always regenerated from scratch)
-  <entity>_<operation>.pb.go       # Message types
-  <entity>_<operation>_grpc.pb.go  # gRPC client/server interfaces
+internal/handlers/protogen/         # Generated Go stubs (never edit, always regenerated from scratch)
+  anovel/<svc>/v<N>/
+    <entity>_<operation>.pb.go      # Message types
+    <entity>_<operation>_grpc.pb.go # gRPC client/server interfaces
 ```
+
+Every `.proto` file declares the package its directory names. Files under `anovel/template/v0/`
+declare `package anovel.template.v0;`. `<svc>` is the service name without its `service-` prefix
+or dashes. `v<N>` is the service's major version: `v0` for `service-template` and `service-genai`,
+`v2` for `service-json-keys`. buf's `STANDARD` lint enforces the match through
+`PACKAGE_DIRECTORY_MATCH`.
 
 The entire `internal/handlers/protogen/` directory is **deleted and recreated** on every
 `pnpm generate:go` run. Never put hand-written code there.
@@ -83,11 +91,15 @@ lint:
   use:
     - STANDARD
   except:
-    - PACKAGE_DEFINED # no proto package declarations — managed mode handles namespacing
+    - PACKAGE_VERSION_SUFFIX # requires v1 or above
 breaking:
   use:
     - FILE # field renames/removals are breaking at the file level
 ```
+
+`service-template` and `service-genai` declare `v0` packages, so they except
+`PACKAGE_VERSION_SUFFIX`. `service-json-keys` declares `anovel.jsonkeys.v2` and keeps the rule: its
+`buf.yaml` has no `except` block.
 
 **`buf.gen.yaml`** (code generation):
 
@@ -97,7 +109,7 @@ managed:
   enabled: true
   override:
     - file_option: go_package_prefix
-      value: github.com/a-novel/service-json-keys/v2/internal/handlers/protogen;protogen
+      value: github.com/a-novel/service-template/internal/handlers/protogen
 plugins:
   - remote: buf.build/protocolbuffers/go # generates message structs (.pb.go)
     out: internal/handlers/protogen
@@ -110,9 +122,9 @@ inputs:
   - directory: internal/models/proto
 ```
 
-Managed mode injects `option go_package` automatically — do **not** add `option go_package` or
-`package` statements to `.proto` files manually. A manual one conflicts with the managed-mode
-settings or produces a duplicate declaration.
+Managed mode injects `option go_package`: the prefix plus the file's directory. Do **not** add
+`option go_package` to a `.proto` file. The files in `anovel/template/v0/` generate into
+`internal/handlers/protogen/anovel/template/v0`.
 
 **`buf.gen.docs.yaml`** converts the protos into the gRPC document of the service's API reference,
 the Scalar page each service deploys to GitHub Pages. `publish-docs` runs it on `master`, and a
@@ -129,14 +141,15 @@ requests and code samples for that document.
 its request/response messages — no other services, no unrelated types.
 
 ```
-jwk_get.proto       → JwkGetService + JwkGetRequest + JwkGetResponse
-claims_sign.proto   → ClaimsSignService + ClaimsSignRequest + ClaimsSignResponse
-status.proto        → StatusService + StatusRequest + StatusResponse + DependencyHealth + DependencyStatus
-jwk.proto           → Jwk message + JwkUsage enum (shared, no service)
+anovel/template/v0/
+  item_get.proto    → ItemGetService + ItemGetRequest + ItemGetResponse
+  item_list.proto   → ItemListService + ItemListRequest + ItemListResponse
+  status.proto      → StatusService + StatusRequest + StatusResponse + DependencyHealth + DependencyStatus
+  item.proto        → Item message (shared, no service)
 ```
 
 Shared types that appear in multiple service files get their own file with no service definition.
-Import them with a relative path: `import "jwk.proto";`.
+Import them by their path from the module root: `import "anovel/template/v0/item.proto";`.
 
 ---
 
@@ -301,33 +314,43 @@ message ClaimsSignRequest {
 
 ## Alignment with Go Layers
 
-Proto types are **handler-layer only**. They are generated into `internal/handlers/protogen/`
-and must never be imported by `core/`, `dao/`, or `config/`. Handlers own all conversions
-between proto types and core types.
+Proto types are **handler-layer only**. They are generated into
+`internal/handlers/protogen/anovel/<svc>/v<N>/` and must never be imported by `core/`, `dao/`, or
+`config/`. Handlers own all conversions between proto types and core types.
 
-| Proto element           | Generated Go                             | Used in                               |
-| ----------------------- | ---------------------------------------- | ------------------------------------- |
-| `service JwkGetService` | `protogen.JwkGetServiceServer` interface | embedded in `handlers.GrpcJwkGet`     |
-| `service JwkGetService` | `protogen.JwkGetServiceClient` interface | `pkg/go/client.go` via gRPC dial      |
-| `service JwkGetService` | `protogen.RegisterJwkGetServiceServer`   | `cmd/grpc/main.go`                    |
-| `message JwkGetRequest` | `protogen.JwkGetRequest` struct          | handler, converted to service request |
-| `enum DependencyStatus` | `protogen.DependencyStatus` const        | handler only                          |
+Go code imports the generated package under the alias `<svc>v<N>`:
+
+```go
+templatev0 "github.com/a-novel/service-template/internal/handlers/protogen/anovel/template/v0"
+```
+
+The alias names the package after its service. The template's generated package is named `v0`.
+`service-json-keys` generates a package named `jsonkeysv2` and imports it under that same name.
+
+| Proto element            | Generated Go                                         | Used in                               |
+| ------------------------ | ---------------------------------------------------- | ------------------------------------- |
+| `service ItemGetService` | `templatev0.UnimplementedItemGetServiceServer`       | embedded in `handlers.GrpcItemGet`    |
+| `service ItemGetService` | `templatev0.ItemGetServiceClient` interface          | `pkg/go/client.go` via gRPC dial      |
+| `service ItemGetService` | `templatev0.RegisterItemGetServiceServer`            | `cmd/grpc/main.go`                    |
+| `message ItemGetRequest` | `templatev0.ItemGetRequest` struct                   | handler, converted to service request |
+| `enum DependencyStatus`  | `templatev0.DependencyStatus` type and its constants | handler only                          |
 
 ---
 
 ## Adding a New RPC: Step-by-Step
 
-1. **Create `internal/models/proto/<entity>_<operation>.proto`** with the service, request,
-   and response messages, following the file structure and naming conventions above.
+1. **Create `internal/models/proto/anovel/<svc>/v<N>/<entity>_<operation>.proto`** with
+   `package anovel.<svc>.v<N>;`, the service, request, and response messages, following the file
+   structure and naming conventions above.
 2. **Run `pnpm format:proto`** — formats the file and updates buf.lock.
 3. **Run `pnpm lint:proto`** — fix any violations before generating.
 4. **Run `pnpm generate:go`** — wipes `protogen/` and regenerates everything.
 5. **Create `internal/handlers/grpc.<entity><Operation>.go`** with the new handler type.
-   Embed `protogen.Unimplemented<ServiceName>Server`, define the service interface, implement
+   Embed `<svc>v<N>.Unimplemented<ServiceName>Server`, define the service interface, implement
    the RPC method.
 6. **Run `pnpm generate:go`** again if you added a new interface (regenerates mocks).
 7. **Wire it up in `cmd/grpc/main.go`**: construct the handler and call
-   `protogen.Register<ServiceName>Server(server, handler)`.
+   `<svc>v<N>.Register<ServiceName>Server(server, handler)`.
 8. **Invoke the `document-code` skill** for the new `.proto` file and the new Go handler file.
 9. **Invoke the `write-go-tests` skill** to write tests for the new handler.
 10. **Run `pnpm format:go`, `pnpm lint:go`, and `a-novel test --type=go -y`** to confirm everything is clean.
@@ -343,7 +366,8 @@ slice in Go, not an empty slice. Callers must use `GetField()` (nil-safe accesso
 The rules above, as a checklist:
 
 - Omitting `_UNSPECIFIED = 0` from an enum.
-- Adding `package` or `option go_package` to a `.proto` file, which managed mode already injects.
+- Adding `option go_package` to a `.proto` file, which managed mode already injects.
+- Declaring a `package` other than `anovel.<svc>.v<N>`, the one the file's directory names.
 - Editing files in `internal/handlers/protogen/`, which the next `pnpm generate:go` overwrites.
 - Reusing the field number of a deleted field instead of reserving it.
 - Importing `internal/handlers/protogen` from `internal/core` or `internal/dao`.

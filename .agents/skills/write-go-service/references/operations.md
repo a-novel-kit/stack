@@ -51,10 +51,11 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
 
 - **A cap on a request field is a validator tag**, never a config value or a hand-written check.
   `validate:"required,max=2097152"` caps a `json.RawMessage` at 2 MiB, and `validate:"max=500"` caps
-  a slice. When no built-in tag expresses the rule, register a custom one on the package's
-  `validate` instance with `RegisterValidation`, as `notblank` is. A cap the schema already holds
-  reuses its value and needs no setting of its own. Rate and concurrency limits stay configuration
-  (see [request limits](request-limits.md)).
+  a slice. When no built-in tag expresses the rule, register one on the package's `validate`
+  instance with `RegisterValidation`: the validator's `non-standard/validators` package holds
+  `NotBlank` for the `notblank` tag, and a function of your own covers a rule neither holds. A cap
+  the schema already holds reuses its value and needs no setting of its own. Rate and concurrency
+  limits stay configuration (see [request limits](request-limits.md)).
 - **A known set is a Go slice behind a custom tag**, never `oneof`. `ProjectLanguages` lists the
   languages, and the `language` tag checks a value against it, so code and doc comments name the
   set by one variable. A set a registry already holds validates against the registry: the
@@ -68,10 +69,10 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
   }
   ```
 
-- **Every write has a single and a batch operation.** A create, an update, a delete and a content
-  write each come twice, singular for one item and plural for a batch: `SceneCreate` and
-  `ScenesCreate`, `SceneUpdate` and `ScenesUpdate`, `SceneDelete` and `ScenesDelete`, `CellWrite`
-  and `CellsWrite`. Each has its own DAO (`PgSceneInsert` and `PgScenesInsert`), handler and route.
+- **A single write goes through its batch operation.** A create, an update, a delete and a content
+  write each have one core operation and one DAO, both plural: `ScenesCreate` and
+  `PgScenesInsert`, `ScenesUpdate`, `ScenesDelete`, `CellsWrite`. The single route keeps its own
+  handler, which sends a batch of one item to the batch operation and answers with its one result.
   A move stays single. The client chooses how much each request carries, and balances bandwidth and
   load itself. A batch takes at most 100 items, `validate:"required,min=1,max=100,dive"`, and
   applies all of them or none. A list of IDs adds `unique` before `dive`, a list of items that carry
@@ -109,8 +110,9 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
 - **A preflight repeated across services becomes a helper** in the layer's `common.go`. It takes the
   dependency and an options struct, and opens its own span, as every core function that takes a
   context does (see [telemetry](telemetry.md)). The ownership check is one, and `lockOwnedProject`
-  has the same shape around the lock (see [ownership](data-access.md#ownership)). Each service still
-  declares its own DAO interface, which satisfies the helper's:
+  has the same shape around the lock (see [ownership](data-access.md#ownership)). The helper's DAO
+  interface is declared once, in `common.go`, and every service that runs the preflight types its
+  field and constructor parameter with it:
 
   ```go
   // projectOwnerDao checks that a user owns a project.
@@ -237,6 +239,9 @@ func NewRestUserList(service RestUserListService, logger logging.Log) *RestUserL
   helper's fallback covers unmapped errors as 500. `httpf.HandleError` marks the span failed for a
   5xx and leaves a 4xx unset, so never add a separate report on a path that goes through it (see
   Telemetry).
+- **A refusal takes the status of its cause.** A request that fails to decode answers 400. A
+  request that decodes but fails core validation (`core.ErrInvalidRequest`) answers 422. A refusal
+  that depends on stored state, such as a duplicate or a full project, answers 409.
 - Conventional short names `w` / `r`. JSON in via `json.NewDecoder(r.Body)` or `gorilla/schema` for
   query params; out via the project's `httpf.SendJSON`.
 - **A single write and its batch take their own routes**, with the same methods: `POST`, `PUT` and
@@ -278,13 +283,13 @@ type GrpcOrderCreateService interface {
 }
 
 type GrpcOrderCreate struct {
-    protogen.UnimplementedOrderCreateServiceServer
+    ordersv1.UnimplementedOrderCreateServiceServer
     service GrpcOrderCreateService
 }
 
 func (h *GrpcOrderCreate) OrderCreate(
-    ctx context.Context, req *protogen.OrderCreateRequest,
-) (*protogen.OrderCreateResponse, error) {
+    ctx context.Context, req *ordersv1.OrderCreateRequest,
+) (*ordersv1.OrderCreateResponse, error) {
     ctx, span := otel.Tracer().Start(ctx, "grpc.OrderCreate")
     defer span.End()
 
@@ -296,7 +301,7 @@ func (h *GrpcOrderCreate) OrderCreate(
         return nil, grpcf.Fault(codes.Internal, "create order: internal error", otel.ReportError(span, err))
     }
 
-    return &protogen.OrderCreateResponse{OrderId: result.ID.String()}, nil
+    return &ordersv1.OrderCreateResponse{OrderId: result.ID.String()}, nil
 }
 
 func NewGrpcOrderCreate(service GrpcOrderCreateService) *GrpcOrderCreate {
@@ -305,7 +310,8 @@ func NewGrpcOrderCreate(service GrpcOrderCreateService) *GrpcOrderCreate {
 ```
 
 - **gRPC is internal** (service-to-service only) — never exposed to the internet. Embed
-  `protogen.Unimplemented<ServiceName>Server`.
+  `<svc>v<N>.Unimplemented<ServiceName>Server`, the generated package under its alias (see
+  `write-proto`).
 - Map core sentinels to `codes.*` via `errors.Is` + `status.Error`. Inside `status.Error` /
   `status.Errorf` use `%v`, never `%w`: gRPC status errors don't support `errors.Unwrap`, so `%w`
   misleads. Keep status _messages_ generic enough not to leak DB/crypto detail.
