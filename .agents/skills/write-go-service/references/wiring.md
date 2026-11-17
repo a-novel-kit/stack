@@ -57,6 +57,9 @@ belongs here at all (vs. inside the relevant package). Lib functions open no spa
 layer's span reports their errors (see [telemetry](telemetry.md)). During maintenance, look for `lib/` code a
 newer upstream now subsumes, and delete it.
 
+A process secret, such as JSON Keys' master key, is parsed once in `cmd` and passed to the
+constructors and functions that use it. It never rides in a request context.
+
 **Accepted exception: genai's provider connectors** (`internal/lib/connectors`). They stay here until
 the a-novel-kit AI library replaces them. Several connectors implement the same modes, so the
 package declares the mode interfaces and the registry that resolves them, and core takes that

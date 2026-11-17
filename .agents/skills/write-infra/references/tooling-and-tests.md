@@ -66,6 +66,8 @@ Before writing code, check OpenTofu, the providers, Kubernetes, its operators an
 - **The deploy proves admission live.** After each cluster apply, `Check admission` sends the
   fixtures in the cluster root's `tests/admission` as dry runs: each refused one must fail on Pod
   Security or an admission policy, and each admitted one must pass.
+- **Toggle a resource or module with `lifecycle { enabled = <bool> }`** (OpenTofu 1.11), never
+  `count = cond ? 1 : 0`: the address keeps no `[0]`, and a disabled one reads as null.
 
 ## Required checks and workflows
 
@@ -164,3 +166,6 @@ Run the whole gate the way CI does:
   [no role gate exempts](../../write-github-actions/SKILL.md#required-checks-and-rulesets).
   `deploy.yaml` runs on the `workflow_run` of `downtime` on `master` instead. That run inherits the
   downtime run's triggering actor, so the same gate holds.
+- **TFLint cannot read OpenTofu's provider `for_each`.** Its `terraform_required_providers` rule
+  fails the whole run on `github.org[each.key]` in a module's `providers`, and `tflint-ignore` does
+  not reach it (TFLint 0.66.0). Keep one aliased provider per instance.

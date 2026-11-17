@@ -127,7 +127,7 @@ inside it (`jwk.Key`, not `jwk.JwkKey`).
 ## File naming
 
 Multi-word file names are **camelCase** — never snake_case (`master_key.go` ✗), never
-run-together when the name is two words (`masterkey.go` ✗): `masterKeyContext.go`,
+run-together when the name is two words (`masterkey.go` ✗): `masterKeyCrypt.go`,
 `userSearch.go`. A test file mirrors the production file it covers with a `_test.go` suffix
 (`userSearch.go` → `userSearch_test.go`) — see `write-go-tests` for why the underscore (not a
 dot) matters and how to share fixtures across packages. The repo-kind skills define the

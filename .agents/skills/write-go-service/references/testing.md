@@ -136,32 +136,29 @@ if testCase.expectResponse != nil {
 ```go
 handler := handlers.NewGrpcJwkGet(service)
 res, err := handler.JwkGet(t.Context(), testCase.request)
-st, ok := status.FromError(err)
-require.True(t, ok, st.Code().String())
-require.Equal(t, testCase.expectStatus, st.Code(), "got %s (%v)", st.Code(), err)
-if testCase.expectCause != nil {
-    require.ErrorIs(t, err, testCase.expectCause)
-}
+requireStatus(t, err, testCase.expectStatus)
 require.Equal(t, testCase.expect, res)
 ```
 
-- Always go through `status.FromError` — even a nil error yields a valid status (`codes.OK`). Set
-  `expectStatus: codes.OK` explicitly on success; set `expect` to `nil` on every error case (the
-  handler returns nil on error by convention).
+- Read the status through the package's `requireStatus(t, err, expectStatus)` helper in
+  `utils_test.go`, as the template's handler tests do. It goes through `status.FromError`, where a
+  nil error yields `codes.OK`, so set `expectStatus: codes.OK` explicitly on success. Set `expect` to
+  `nil` on every error case (the handler returns nil on error by convention).
 - Always test: success, each error code the handler maps itself (e.g. `codes.NotFound`), the
   generic fallback (`codes.Internal`), and an invalid-input case if the handler parses input first. For list
   handlers add `"Success/Empty"` with the repeated field set explicitly
   (`expect: &jsonkeysv2.JwkListResponse{Keys: []*jsonkeysv2.Jwk{}}`): `lo.Map` returns a non-nil
   empty slice, so `&jsonkeysv2.JwkListResponse{}` (nil `Keys`) fails the equality check.
-- A server-fault case sets `expectCause` to the error the service mock returns. `require.ErrorIs`
-  proves that `grpcf.Fault` kept it, since the server span's `error.type` names that cause's type.
+- A server-fault case has its service mock return `errFoo`. On `codes.Internal`, `requireStatus`
+  also requires `errFoo` as the cause, which proves that `grpcf.Fault` kept it, since the server
+  span's `error.type` names that cause's type.
 
 ### lib tests — pure unit tests
 
 `internal/lib/` tests use no mocks, no DB, no external dependencies. Test edge cases thoroughly:
-invalid inputs, boundary conditions, error paths. When a `lib` function reads a context value
-(a master key, …), build the context in the outer test function before the table loop so it's
-shared across cases.
+invalid inputs, boundary conditions, error paths. A process secret reaches a `lib` function as an
+argument, so a test passes the fixed value its layer's `libtest` package holds, such as JSON Keys'
+`libtest.MasterKey`.
 
 ### pkg/go tests — end-to-end against a running service
 

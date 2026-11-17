@@ -177,8 +177,9 @@ within grace. Intervene only when:
 
 ### Roll back an Epic (INV-1 genuinely violated)
 
-Dispatch **`epic-rollback`** for Epic N. It is admin-only, `dry_run`-default, and typed-confirm
-(`revert-epic-<N>`). Always **dry-run first** — it prints the reconstructed ledger + the planned
+Dispatch **`epic-rollback`** for Epic N from the org's `.github` repository (`a-novel/.github` or
+`a-novel-kit/.github`), since it acts on the whole org. It is admin-only, `dry_run`-default, and
+typed-confirm (`revert-epic-<N>`). Always **dry-run first**: it prints the reconstructed ledger + the planned
 per-repo reverts and does no writes. Then run live:
 
 - It reconstructs the **current wave's** merged `epic:<N>` ledger from the snapshot's wave boundary
@@ -200,7 +201,8 @@ itself revertible.
 
 ### Release an Epic (the release train)
 
-Dispatch **`release-train`** for Epic N (admin-gated, `dry_run`-default). Rehearse first (the dry run
+Dispatch **`release-train`** for Epic N from the org's `.github` repository, which releases every
+repo the Epic landed in (admin-gated, `dry_run`-default). Rehearse first (the dry run
 dispatches each repo's `release.yaml` with `dry_run=true` and cuts nothing), then run live:
 
 - It reconstructs the Epic's landed repos and drives each repo's own `release.yaml`, which sizes

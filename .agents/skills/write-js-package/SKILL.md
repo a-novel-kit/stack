@@ -136,7 +136,9 @@ The constructor takes the base URL, without a trailing slash. A server-side call
 under the base URL. `fetch` decodes the JSON body through the Zod schema it is given, `fetchVoid`
 discards the body, and `fetchBlob` reads it as a `Blob`; each throws an `HttpError` on a non-2xx
 status. `fetchResponse` returns the response whatever its status. The client's `package.json` sets
-its `@a-novel-kit/nodelib-browser` peer to `^2.13.0`, the first release with `RestClient`.
+its `@a-novel-kit/nodelib-browser` peer to `^2.13.0`, the first release with `RestClient`. A client
+that needs a later nodelib feature narrows the peer to the first release that has it: Renovate
+never narrows a peer range.
 
 Domain functions always call one of these methods, never the global `fetch`: a direct `fetch` call
 bypasses base-URL composition, response validation, and error handling.
@@ -183,7 +185,9 @@ return await api.fetch(`/resource${query ? `?${query}` : ""}`, ResourceSchema, {
 
 **Headers and body**: pass `accessToken` to send the bearer token, and `json` to send a JSON body
 with its `Content-Type`. A request without a body, such as a `GET` or a `DELETE`, sends no
-`Content-Type`. Never import `HTTP_HEADERS` (deprecated).
+`Content-Type`. A call with another content type, such as a form-encoded OAuth request, passes its
+own `headers` beside `accessToken`, and `body` carries a body that is not JSON, such as form data or
+a blob. Never import `HTTP_HEADERS` (deprecated) or write `Authorization` by hand.
 
 ```typescript
 return await api.fetch("/resource", ResourceSchema, {

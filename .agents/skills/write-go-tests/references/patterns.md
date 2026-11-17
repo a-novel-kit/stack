@@ -9,8 +9,9 @@ Contents:
 
 ## Table-Driven Structure
 
-Every test uses a table of cases. The top-level test function sets up shared state and defines the
-table; each case runs in a sub-test.
+Every test with more than one case uses a table of cases. The top-level test function sets up
+shared state and defines the table; each case runs in a sub-test. A test with one case needs no
+table, as the template's `TestAppPresetDefault` shows.
 
 ```go
 func TestGrpcJwkGet(t *testing.T) {

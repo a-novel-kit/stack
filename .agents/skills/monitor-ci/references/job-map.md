@@ -40,7 +40,7 @@ repo-specific or downstream of a base table entry.
 
 `build-database` feeds `generated-go`, `test-go`, the `test-pkg*` jobs, `build-migrations`, and the
 application `build-*` images; when it fails they are all skipped, so fix it first. A skipped job has no result
-of its own. Platforms skip their tests and `build-platform` the same way when `build-node` or
+of its own. Platforms skip their tests and `build-platform` the same way when `build-js` or
 `lint-types` fails.
 
 Check contexts are lane-suffixed (`test-go`, `lint-js`, …); `write-github-actions` owns that rule

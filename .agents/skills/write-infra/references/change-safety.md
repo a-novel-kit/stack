@@ -402,12 +402,15 @@ read them on the cluster.
 - **A service admits only the callers its `SERVICE_TOKEN_CALLERS` lists.** Each call carries a
   service token: a Kubernetes service-account token the kubelet projects for the callee's audience,
   which the service verifies against the cluster's issuer. Its network policy admits the same pods.
+  The cluster root's `apis` table (`apis.tf`) names each API's callers once: its
+  `SERVICE_TOKEN_CALLERS`, its network policy, each caller's egress and the health checks' audiences
+  derive from it.
   A service that trusts a forwarded visitor header, as Authentication trusts `X-Client-IP`, lists
   only the platforms and its smoke check.
 - **A service API serves only TLS, from the services CA.** Passwords, codes and tokens cross the
   cluster, and RFC 6749 requires TLS on Authentication's token endpoint (a-novel/.github#552).
   cert-manager's `services` issuer signs each API a certificate for its in-cluster host, such as
-  `grpc.json-keys.svc`, which the cluster root's `service_tls` lists. The workload's `tls` input
+  `grpc.json-keys.svc`, which the cluster root's `apis` table lists. The workload's `tls` input
   serves it on 8443 through golib's `*_TLS_*` variables, and golib reloads it at each renewal.
   - A caller mounts the `services-ca` ConfigMap, which trust-manager copies into every service
     namespace, through the workload's `service_ca` input. Go reads it through `SSL_CERT_DIR`, Node
@@ -464,9 +467,12 @@ service, and a-novel/infra#1404 for a platform.
    - its `releases/<service>.tfvars` in the cluster root holds its pins and secret versions;
    - the service joins foundation's `releases` set, which creates its `a-novel-<service>`
      repository;
-   - the cluster root adds its namespace, budget, database with its queries, secrets, its workloads through `cluster-workload` with their network policies, and its
-     smoke and health checks. An API it serves joins `service_tls`. Each service it calls lists it in
-     `SERVICE_TOKEN_CALLERS`;
+   - the cluster root adds its namespace, budget, database with its queries, secrets, its workloads
+     through `cluster-workload`, and its smoke and health checks. An API it serves joins the cluster
+     root's `apis` table with its callers, which gives it its certificate, its network policy and its
+     callers' egress, and its env sets
+     `SERVICE_TOKEN_CALLERS = local.token_callers["<namespace>/<workload>"]`. Each API it calls lists
+     it among its callers;
    - a new internet host joins foundation's `egress_allowlist` and the cluster root's
      `internet_egress`;
    - Grafana covers it, as [Grafana coverage](grafana.md) describes.

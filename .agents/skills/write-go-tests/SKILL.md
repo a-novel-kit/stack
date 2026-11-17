@@ -47,7 +47,8 @@ branch of a helper, such as an ownership preflight, and every entry of a shared 
 operation then keeps four kinds of case: its success, the errors it raises itself, its transaction
 case when it writes inside one, and one case proving which shared helper or map it wires. A failure
 the operation only returns from a shared helper is the helper's error, which its representative
-caller covers.
+caller covers. A handler's wiring case raises a sentinel only its own error map holds, so a handler
+wired to the wrong map fails, and the case's name says so.
 
 ## Timing and validation
 
@@ -208,12 +209,14 @@ that can fail must:
   constraint failure there is a bug in the test data, and `require` reports it at the caller.
 
 ```go
-func mustEncryptBase64Value(ctx context.Context, t *testing.T, data any) string {
+func mustEncryptBase64Value(t *testing.T, data any) string {
     t.Helper()
-    res, err := lib.EncryptMasterKey(ctx, data)
+
+    res, err := lib.EncryptMasterKey(libtest.MasterKey, data)
     if err != nil {
         panic(err)
     }
+
     return base64.RawURLEncoding.EncodeToString(res)
 }
 ```
