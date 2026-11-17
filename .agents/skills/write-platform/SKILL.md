@@ -88,8 +88,9 @@ directories above it, and `src/lib/`. Screens, their parts and `src/lib/ui/` imp
 route files and adapters bring those in.
 
 The shell fixes its phone header to the screen and keeps the maintenance banner stuck to the top of
-the workspace, and sets `--shell-sticky-top` to their height. A page's own sticky part, such as a tab bar, sits there,
-under them, frosted and overhanging its column as
+the workspace, and sets `--shell-sticky-top` to their height. On a narrow screen it also sets
+`--shell-sticky-bottom` to the banner's block size, which uikit's `StickyBar edge="end"` reads. A
+page's own sticky part, such as a tab bar, sits there, under them, frosted and overhanging its column as
 [write-design-system](../write-design-system/SKILL.md#the-a-novel-visual-direction) describes. The
 root layout paints the canvas color on `html` and the lamp on a fixed `body::before` layer with
 `will-change: transform`: iOS drops a fixed layer that has no compositing layer of its own once the
@@ -104,7 +105,7 @@ such as Bitwarden's, downloads the icon from there and cannot read a data URL.
 A visitor without an account who opens a protected page lands on the login modal itself, on every
 platform, with no page in between asking them to sign in. On the account platform, whose one landing
 page is `/account` (`/` redirects there with its query, and the rail lists no Home), a protected
-load without a session redirects to `loginHref`, the login dialog over `/account`; a request already
+load without a session redirects with 307 to `loginHref`, the login dialog over `/account`; a request already
 carrying an `auth` view renders a 401 locked page under the shell's dialog instead. The locked page
 shows nothing of its own, and its dialog stays open: it offers no close control, and Escape changes
 nothing. On a client
@@ -171,7 +172,7 @@ recorded URLs. Keep secrets in the query, never in a path segment, which is reco
 production, the server spans go to Grafana through the cluster's Alloy, as `write-infra` describes.
 
 The server `handle` hook names SvelteKit's request span, `sveltekit.handle.root`, after its route
-ID, as `GET /(studio)/account`. A request that matched no route keeps the method alone, so a path
+ID, as `GET /(studio)/projects`. A request that matched no route keeps the method alone, so a path
 never names a span. The hook also records the response's `http.response.status_code` and marks a
 5xx response as an error. Span metrics split the traffic by that name and class each request by
 the code and the span status, and SvelteKit renders a failing load as a 500 page without failing
@@ -333,8 +334,8 @@ service:
 - Browser forms submit to same-origin server actions. The server validates input, calls the typed
   service client, rotates session cookies, and returns a small serializable result.
 - Reuse runtime schemas exported by the published typed service client for service-owned fields; do
-  not rewrite the same contract in a second validator. Use repository-pinned Valibot schemas for
-  app-owned input and `sveltekit-superforms` for non-trivial form state and progressive enhancement.
+  not rewrite the same contract in a second validator. App-owned input extends those schemas in a
+  small validator beside the forms, as the account's `src/lib/application/auth/forms.ts` does.
   Uikit owns rendered fields and errors, so platforms do not import Formsnap or another component layer.
 - Server loads establish the session and authorization context. UI visibility is convenience;
   privileged routes and actions enforce permissions again on the server.

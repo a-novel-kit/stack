@@ -34,6 +34,16 @@ Use the smallest layer that proves the user-visible contract:
 Do not duplicate the same assertion at every layer. Keep one strong contract test and add broader
 tests only for integration risks.
 
+**Each assertion lives in one layer.** A Storybook play function asserts what one fixed state
+renders: names, attributes and layout. Browser tests, in the browser project or in Playwright, own
+the transitions between states, DOM mechanics and journeys. A play that only clicks a fixed
+controller to prove nothing moved asserts nothing; delete it.
+
+**Production code carries no test-only option.** A controller never takes a flag, such as one
+allowing native form submission, that only a test sets. Shape the environment in the test setup
+instead: one bubbling `submit` listener in the browser test setup records the submission and
+prevents the navigation.
+
 ## User-centered assertions
 
 - Query elements by accessible role and name first, then label, text, or other user-visible meaning.
@@ -131,7 +141,7 @@ Do not manufacture cases that the public contract cannot reach.
   targets at the native viewport size. Check the docs page itself as well as individual stories.
 - Pin visual-review stories through fixed-state controllers. Clicking, submitting, pressing Escape,
   or clicking outside must not change the displayed scenario. Show distinct states as separate
-  examples; exercise live transitions in controller/component tests. Keep locale, theme, and story
+  examples; exercise live transitions in browser tests. Keep locale, theme, and story
   inputs configurable instead of duplicating scenarios per locale. Preserve native focus, scrolling,
   and text selection; do not freeze previews
   with event-blocking overlays, `inert`, or `pointer-events: none`.
