@@ -40,18 +40,19 @@ cli/
 ├── proto/anovel/v1/core.proto     connect-rpc contract
 └── internal/
     ├── daemon/                    daemon-side (server, runner, env, logs, volumes, ...)
-    ├── client/rpc/                Unix-socket connect-rpc client
-    ├── cli/                       Cobra command tree, workspace model, gh/git helpers
+    ├── rpc/                       Unix-socket connect-rpc client
+    ├── cli/                       Cobra command tree, one file per command path
+    ├── workspace/                 workspace model, git and SSH plumbing
     ├── detect/                    working-tree discovery of test and build targets
     ├── build/                     a detected target as a job: env, compose up/down, deadline
     ├── jobs/                      bounded parallel job runner with live progress
-    ├── tui/                       Bubble Tea TUI
-    ├── ui/                        picker, live job view and report for every batch command
+    ├── dashboard/                 the `run ui` Bubble Tea dashboard
+    ├── batchview/                 picker, live job view and report of every batch command
     ├── setup/                     `core setup` bootstrap
     ├── secrets/                   local AES-256-GCM secrets store + env injection
     ├── update/                    best-effort "newer version available" notice
     ├── version/                   build-version resolution (ldflags / buildinfo)
-    └── shared/                    XDG paths, stacks parser, compose files, archive retention
+    └── shared/                    XDG paths, stacks parser, compose files, archive retention, fsutil
 ```
 
 ### Parallel jobs

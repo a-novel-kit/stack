@@ -47,7 +47,7 @@ type sshMux struct {
 // GitHubMux is the process-wide connection a multi-repo command opens.
 var GitHubMux sshMux
 
-// open starts sharing for the rest of the process. It leaves git's SSH setup
+// Open starts sharing for the rest of the process. It leaves git's SSH setup
 // alone when the user customized the ssh command, or when no connection opens.
 func (m *sshMux) Open() {
 	if os.Getenv("GIT_SSH_COMMAND") != "" {

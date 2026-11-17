@@ -36,7 +36,7 @@ var StackRepo = Repo{Org: OrgAnovelKit, Name: "stack"}
 // FullName returns "<org>/<name>", the form flags take.
 func (r Repo) FullName() string { return r.Org + "/" + r.Name }
 
-// listed reports whether set names r, by its full or its bare name. Repo
+// Listed reports whether set names r, by its full or its bare name. Repo
 // names are unique across both orgs, so a bare name is unambiguous.
 func (r Repo) Listed(set map[string]bool) bool { return set[r.FullName()] || set[r.Name] }
 

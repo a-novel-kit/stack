@@ -61,7 +61,7 @@ func Origin(dir string) (Repo, error) {
 	return Repo{Org: parts[len(parts)-2], Name: parts[len(parts)-1]}, nil
 }
 
-// defaultBranch reads the upstream's default branch from origin/HEAD, with no
+// DefaultBranch reads the upstream's default branch from origin/HEAD, with no
 // network, falling back to master when the symref is missing.
 func DefaultBranch(dir string) string {
 	out, err := Git(dir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
