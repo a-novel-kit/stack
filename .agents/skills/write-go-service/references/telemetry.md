@@ -12,9 +12,10 @@ operation's span: write-go's [declarations rule](../../write-go/SKILL.md#declara
 keeps it a closure.
 
 The `a-novel-must-open-span` semgrep rule requires that span in every function of the dao, core and
-handlers layers that takes a context. A helper of those layers that does work takes the context for
-its span even when it needs it for nothing else: `newIDs` only generates UUIDv7s, yet opens
-`core.newIDs` and reports a failed `uuid.NewV7` there. `internal/lib` is tooling rather than a layer,
+handlers layers that takes a context. A helper of those layers that can fail takes the context for
+its span even when it needs it for nothing else, so its failure lands on a span. A helper that
+cannot fail and needs no context takes none and opens no span: narrative-engine's `newIDs` generates
+UUIDv7s with `uuid.Must(uuid.NewV7())`, since `uuid.NewV7` fails only when `crypto/rand` does. `internal/lib` is tooling rather than a layer,
 so its functions open no span: the layer that calls one reports its errors on its own span.
 
 ```go

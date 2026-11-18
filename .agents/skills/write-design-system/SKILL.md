@@ -288,11 +288,12 @@ changes them.
 - **One lit action per view.** The primary action has a slight gradient that lightens toward the
   top and a soft underglow in its own color (`--gradient-action-primary`,
   `--shadow-action-primary`), with no transparency. Every other action stays flat. A short form sits
-  in a compact dialog (`Dialog size="sm"`). Every form's and dialog's actions follow one rule, which
-  `ActionGroup` draws for `FormActions` and a dialog's `actions`: on a viewport narrower than 35rem
-  they stack full width, the primary action last; from 35rem (`@media (min-width: 35rem)`) they fit
-  their content, side by side and right-aligned at the line's end. The viewport decides, never the
-  container, so the actions of a narrow card on a desktop keep their content's width.
+  in a compact dialog (`Dialog size="sm"`). Every action group and button layout follows one rule,
+  which `ActionGroup` draws for `FormActions` and a dialog's `actions`: on a viewport narrower than
+  35rem the buttons stack full width, the primary action last; from 35rem
+  (`@media (min-width: 35rem)`) they fit their content, side by side and right-aligned at the line's
+  end. The viewport decides, never the container, so the actions of a narrow card on a desktop keep
+  their content's width.
   Secondary journeys become quiet text buttons (`Button variant="text"`): colored text at rest, a
   soft box on hover. A recovery action sits on the label row (`Field labelActions`), a journey
   switch is one footer line. Never stack ghost buttons under a form.
