@@ -212,10 +212,10 @@ func (b *Builder) addOwnedPorts(out map[string]string, owner string) {
 }
 
 // setHostPostgres points a host process at owner's postgres infra, on the
-// host port owner holds as POSTGRES_PORT. It writes the connection in both
-// forms services read: the POSTGRES_DSN URL, and the discrete POSTGRES_*
-// settings a service prefers once POSTGRES_HOST is set. Both replace the
-// compose file's in-container `postgres-<svc>:5432`, wrong for go-exec. A
+// host port owner holds as POSTGRES_PORT. It writes the discrete POSTGRES_*
+// settings services read, and the POSTGRES_DSN URL a command such as psql
+// takes under `run exec`. Both replace the compose file's in-container
+// `postgres-<svc>:5432`, wrong for go-exec. A
 // target's own POSTGRES_PORT names the port inside the compose network, so the
 // allocation wins over it.
 //

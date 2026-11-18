@@ -46,10 +46,10 @@ func URL(base string, port int) string {
 }
 
 // Postgres returns the settings that point a host process at a Postgres on
-// port, in both forms services read: the POSTGRES_DSN URL, and the discrete
-// POSTGRES_* settings a service prefers once POSTGRES_HOST is set. An empty
-// user, password or database falls back to postgres; the DSN percent-escapes
-// the others. The local database serves no TLS.
+// port: the discrete POSTGRES_* settings services read, and the POSTGRES_DSN
+// URL a command such as psql takes. An empty user, password or database falls
+// back to postgres; the DSN percent-escapes the others. The local database
+// serves no TLS.
 func Postgres(user, password, database string, port int) map[string]string {
 	user = cmp.Or(user, postgresDefault)
 	password = cmp.Or(password, postgresDefault)
