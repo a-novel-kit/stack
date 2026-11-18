@@ -40,8 +40,9 @@ through the `kit/workflows` composite actions, not through the CLI.
 
 **Run the race detector yourself.** Every Go repository's CI runs `test-go` with the race detector
 (`race: "true"`), and `a-novel test` runs without it, so a data race can pass locally and fail CI.
-Before pushing a change to concurrent code or to tests that share values across parallel cases, run
-`go test -race` on the packages it touches.
+Before pushing a change to concurrent code, to a DAO, or to tests that share values across parallel
+cases, run `GOFLAGS=-race a-novel test --type=go -y`. Each test inherits your environment, so
+`go test` takes the flag, and a DAO test still runs against its env's database.
 
 **Test plan checkboxes in PR bodies:**
 

@@ -73,6 +73,8 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
   write each have one core operation and one DAO, both plural: `ScenesCreate` and
   `PgScenesInsert`, `ScenesUpdate`, `ScenesDelete`, `CellsWrite`. The single route keeps its own
   handler, which sends a batch of one item to the batch operation and answers with its one result.
+  The single route's 422 names each invalid field as its own body does, `title` and not golib's
+  `scenes[0].title`, through narrative-engine's `itemFields`.
   A move stays single. The client chooses how much each request carries, and balances bandwidth and
   load itself. A batch takes at most 100 items, `validate:"required,min=1,max=100,dive"`, and
   applies all of them or none. A list of IDs adds `unique` before `dive`, a list of items that carry
