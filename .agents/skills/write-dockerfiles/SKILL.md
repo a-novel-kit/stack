@@ -287,8 +287,9 @@ suite it names. A repository ships only the test envs its suites need.
   Postgres connection from them. A compose file never holds a real secret.
 - A process the CLI runs on the host, a go-exec target or a test, gets that Postgres connection as
   the discrete `POSTGRES_*` settings services read, on `localhost` with TLS off. The CLI also sets
-  `POSTGRES_DSN`, which no service reads. Write a target's own values for the compose network; the CLI replaces
-  them for a host process, and a container keeps them.
+  `POSTGRES_DSN`, which no service reads; golib's database tests still do. Write a target's own
+  values for the compose network; the CLI replaces them for a host process, and a container keeps
+  them.
 - Use `depends_on` with `condition: service_healthy` so the dependent service waits for the
   dependency's `HEALTHCHECK` to pass, not just for the container to start. Without it, a standalone
   image that runs migrations at startup may connect to postgres before it accepts connections and
