@@ -107,6 +107,6 @@ changes with the variables alone.
 - **Read `OTEL_*` without the service's prefix.** The SDK reads them unprefixed, and so does
   `LoadTelemetry` for the endpoint, so the endpoint it checks is the one the exporter uses.
 - **Leave the liveness path untraced.** `httpf.NewMux` does it under every preset: the probe opens
-  no trace, the handler's own span included. Leave `OTLP.UntracedPaths` unset: it does nothing.
+  no trace, the handler's own span included.
 - **Write no request or call log.** The server span records each request and call. Under `OTLP`,
   `LoadTelemetry` returns a nil `HTTPLogger` and an `RPCLogger` that logs only panics.
