@@ -215,6 +215,9 @@ or instruction to find an earlier link does not replace it.
   matching token names alone do not prove matching rendered colors through transparency layers.
 - Prefer normal flow, Grid, Flexbox, logical properties, and container/media queries over measured
   JavaScript layout. Use feature queries for optional enhancements.
+- An action group or button layout switches by the viewport at 35rem (`@media (min-width: 35rem)`),
+  never by a container: stacked full width below, content-width and right-aligned at the line's end
+  from 35rem, as `write-design-system` rules for uikit's `ActionGroup`.
 - Start from the smallest supported viewport and let content determine breakpoints. Avoid device-name
   breakpoints and user-agent sniffing.
 - Use design tokens for product colors, spacing, type, radii, borders, elevation, and motion. A raw

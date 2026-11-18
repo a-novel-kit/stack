@@ -210,7 +210,7 @@ func newServer(ctx context.Context, cfg config.App) (*grpc.Server, error) {
   - the liveness ping (REST) and the health service (gRPC, `SERVING`) answer without a token;
   - a gated route, such as the healthcheck, refuses a call without a token (401, or
     `Unauthenticated` for a unary call and a stream);
-  - a valid token passes;
+  - a valid token, signed by golib's `servicetokentest.NewIssuer`, passes;
   - the opt-out admits a call without a token;
   - an empty issuer returns `servicetoken.ErrIssuerRequired`;
   - an unknown path answers 401 without a token, which proves the gate wraps the whole router and

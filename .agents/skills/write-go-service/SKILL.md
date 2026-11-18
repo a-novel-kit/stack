@@ -197,7 +197,9 @@ func NewUserSearch(dao UserSearchDao) *UserSearch {
 
 **Key rules:**
 
-- One exported struct per file; its name mirrors the file name.
+- One exported struct per file; its name mirrors the file name. `rest.health.go` is the exception:
+  it exports `NewRestHealth`, which returns `httpf.Health`'s handler over the service's probes, and
+  the consumer-owned interface of the client a probe calls, with no struct.
 - **Interfaces proxy the imported package — always defined by the _consumer_, never the producer.**
   A service that imports `dao.PgUserSearch` does not use that concrete type directly; it declares a
   local `UserSearchDao` interface describing only the methods it needs. The DAO package has
