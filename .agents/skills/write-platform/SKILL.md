@@ -87,21 +87,25 @@ directories above it, and `src/lib/`. Screens, their parts and `src/lib/ui/` imp
 (`$app/state`, `$app/navigation`), storage, cookies, environment secrets, or network clients; the
 route files and adapters bring those in.
 
-On a wide screen the shell keeps the maintenance banner stuck to the top of the workspace. On a
-narrow one it fixes its phone header to the screen and moves the banner to the foot. It sets
+The shell lays itself out with uikit's `ShellLayout`, and renders its own landmarks, links, labels,
+account widget and drawer into the layout's `rail`, `header`, `banner` and `children` snippets. On a
+wide screen the layout keeps the maintenance banner stuck to the top of the workspace. On a narrow
+one it fixes the phone header to the screen and moves the banner to the foot. It sets
 `--shell-sticky-top` to the height of what covers the top, and `--shell-sticky-bottom` to the
 banner's block size when the banner sits at the foot, which uikit's `StickyBar edge="end"` reads. A
 page's own sticky part, such as a tab bar, sits under `--shell-sticky-top`, frosted and overhanging
 its column as [write-design-system](../write-design-system/SKILL.md#the-a-novel-visual-direction)
-describes. The root layout paints the canvas color on `html` and the lamp on a fixed `body::before`
-layer with `will-change: transform`: iOS drops a fixed layer that has no compositing layer of its
-own once the page scrolls far. Chrome on iOS still moves fixed layers as its toolbar collapses
+describes. The root layout imports `@a-novel-kit/uikit-tokens/canvas.css` beside `tokens.css`. That
+stylesheet paints the canvas color on `html` and the lamp on a fixed `body::before` layer with
+`will-change: transform`: iOS drops a fixed layer that has no compositing layer of its own once the
+page scrolls far. Chrome on iOS still moves fixed layers as its toolbar collapses
 ([WebKit bug 297779](https://bugs.webkit.org/show_bug.cgi?id=297779)) and can lose the lamp, which
-Safari keeps; no CSS works around it. The root layout also styles the links iOS makes of an email
-address or a date it finds in the text (`a[x-apple-data-detectors]`) as plain text. It links its
-icons as files (`?no-inline`, since Vite inlines a small image as a data URL), with an opaque 192px
-`apple-touch-icon`, and `/favicon.ico` redirects to the icon: a password manager's icon service,
-such as Bitwarden's, downloads the icon from there and cannot read a data URL.
+Safari keeps; no CSS works around it. `canvas.css` also styles the links iOS makes of an email
+address or a date it finds in the text (`a[x-apple-data-detectors]`) as plain text, and sets the
+body's font and the 20rem reflow floor. The root layout links its icons as files (`?no-inline`,
+since Vite inlines a small image as a data URL), with an opaque 192px `apple-touch-icon`, and
+`/favicon.ico` redirects to the icon: a password manager's icon service, such as Bitwarden's,
+downloads the icon from there and cannot read a data URL.
 
 A visitor without an account who opens a protected page lands on the login modal itself, on every
 platform, with no page in between asking them to sign in. On the account platform, whose one landing
@@ -111,9 +115,9 @@ carrying an `auth` view renders a 401 locked page under the shell's dialog inste
 shows nothing of its own, and its dialog stays open: it offers no close control, and Escape changes
 nothing. On a client
 platform, a protected load redirects with 307 to `/auth/sign-in?returnTo=<page>`, which leads to the
-account platform's login dialog, and `AccessBoundary` only waits while that happens, or shows the
-forbidden and unavailable states. Studio is locked whole: its home is `/projects` (`/` redirects
-there), and only its privacy and sign-in failure pages stay open without an account.
+account platform's login dialog, and uikit's `ProtectedPage` only waits while that happens, or
+shows the forbidden and unavailable states. Studio is locked whole: its home is `/projects` (`/`
+redirects there), and only its privacy and sign-in failure pages stay open without an account.
 
 `a-novel/platform-template` is the shortcut to start a new platform, so it tracks the platforms'
 conventions. A change that sets or changes a convention in a platform ships with the matching
@@ -247,9 +251,11 @@ The localization context is the one context a screen reads itself. A story then 
 with a fixed controller, and a state it cannot reach that way is hidden state to move into the
 controller.
 
-Import shared Storybook preview, theme, decorators, and test defaults from uikit's development
-package. Keep a local Storybook entrypoint only for product-specific context and story discovery; do
-not copy the reusable preview into the platform.
+Import shared Storybook preview, theme, decorators, fixed-state controllers (`fixedOpen`,
+`fixedConsent` and the others), and test defaults from uikit's development package,
+`@a-novel-kit/uikit-storybook`. Its preset adds the noindex heads and pre-bundles its own entries.
+Keep a local Storybook entrypoint only for product-specific context and story discovery; do not copy
+the reusable preview into the platform.
 
 ## State ownership
 
@@ -485,6 +491,11 @@ names, validation messages, titles, and metadata use message keys; logs and prot
   text renders.
   Stable domain and action-result codes remain application state; translate them at the rendering
   boundary instead of returning visible prose from wiring.
+- uikit owns the copy of its access and page states, in English and French. A platform overrides it
+  in its own `uikit` messages. A page title that needs that copy reads it through uikit's
+  `useMessages()`, bound under a name the extractor does not match, as
+  `const uikitText = useMessages().t`: nodelib's preset extracts every `t(…)` and `*.t(…)` call
+  into the app's catalog.
 - Install the same product-owned localization provider around the application, Storybook stories,
   and component-test render trees. Storybook global decorators and test wrappers may select locale
   and catalogs, but must not redeclare messages or substitute ad hoc copy objects.

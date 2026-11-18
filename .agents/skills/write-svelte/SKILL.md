@@ -30,8 +30,10 @@ Load `write-frontend-tests` for tests or stories and `write-design-system` for u
 - Keep route/business orchestration out of reusable visual components. Keep platform-only imports out
   of publishable packages.
 - Let shared layout components own only geometry, responsive behavior, and typed composition points.
-  Keep landmarks, navigation, headings, labels, surfaces, route orchestration, and domain workflow in
-  the consuming application unless one is the explicit semantic responsibility of a smaller primitive.
+  Keep landmarks, navigation, headings, labels, route orchestration, and domain workflow in the
+  consuming application unless one is the explicit semantic responsibility of a smaller primitive. A
+  layout paints a surface only where its own box needs one, as `ShellLayout` paints the navigation
+  surface behind its rail and header.
 
 ## Svelte 5 reactivity
 

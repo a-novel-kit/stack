@@ -777,6 +777,11 @@ was created; keep `uuid.New` for an ID whose creation time must stay private.
 The schema keeps rows consistent with each other. The request's own rules, such as a length or an
 owner, stay with the service's validator and ownership check.
 
+A value derived from other rows, such as a project's stored bytes, is kept by statement-level
+`AFTER` triggers that read their transition tables (`REFERENCING NEW TABLE AS new_rows`,
+`FOR EACH STATEMENT`), one trigger per table and event. No DAO statement maintains it. The migration
+that creates the triggers documents them, as narrative-engine's `project_bytes_triggers` does.
+
 A row that references siblings under one parent stores the parent's ID and reaches each sibling
 through a composite foreign key. Each referenced table holds a `UNIQUE (parent_id, id)` key for it:
 

@@ -63,7 +63,9 @@ func TestPgJwkSelect(t *testing.T) {
 - `t.Parallel()` on the outer function, like any test. Construct the DAO once outside the
   loop. Insert fixtures via `db.NewInsert().Model(...)` on the test's database. A package whose
   cases fill several tables moves those inserts into an `insertFixtures(ctx, t, …)` helper in
-  `utils_test.go`, as narrative-engine's DAO tests do.
+  `utils_test.go`, as narrative-engine's DAO tests do. bun scans each inserted row back into its
+  value, so cases that share fixture values insert copies, as Authentication's `insertFixtures`
+  does; inserting the shared originals is a data race the race detector catches.
 - A test verifying filtering/ordering needs enough fixtures to make the assertion meaningful (a
   `"FilterUsage"` case needs at least one matching row and one non-matching row).
 - Use fixed UUIDs (`uuid.MustParse("00000000-0000-0000-0000-000000000001")`) and fixed timestamps
@@ -103,7 +105,7 @@ require.Equal(t, testCase.expect, res)
 ### REST handler tests — `net/http/httptest`, no real server
 
 ```go
-handler := handlers.NewRestJwkGet(service, &loggingpresets.LogLocal{Out: io.Discard})
+handler := handlers.NewRestJwkGet(service, configtest.Logger)
 w := httptest.NewRecorder()
 handler.ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/jwk?id="+id, nil))
 

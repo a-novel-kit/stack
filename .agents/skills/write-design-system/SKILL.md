@@ -30,7 +30,7 @@ in the conversation. A screenshot or placeholder never substitutes for the live 
 Keep responsibilities independently consumable:
 
 - **tokens**: dependency-free CSS custom properties and documented contracts.
-- **fonts/icons/assets**: self-hosted files, declarations, provenance, and third-party licenses.
+- **fonts**: self-hosted files, declarations, provenance, and third-party licenses.
 - **uikit**: reusable components that consume semantic foundations.
 - **storybook-config**: separately consumable development package exporting the shared theme,
   preview setup, decorators, docs blocks, addons, and test configuration.
@@ -42,8 +42,9 @@ platform imports foundations and components explicitly so application code never
 code. Deploy a static Storybook only through an explicit, reusable documentation workflow; never
 publish the private workbench itself as a package.
 
-Use one curated, maintained icon source through typed component exports. Bundle custom SVG icons and
-their provenance with the asset package; do not require a remote icon service or icon font at runtime.
+Use one curated, maintained icon source through typed component exports: uikit takes its icons from
+`@lucide/svelte`. Bundle custom SVG icons and their provenance with an asset package; do not require
+a remote icon service or icon font at runtime.
 
 ## Brand images
 
@@ -68,25 +69,30 @@ breaks them the moment it merges; update those READMEs with the change.
 
 Use three deliberate tiers:
 
-1. **Bases and preset multipliers** define compact scale mathematics.
+1. **Bases and named ratios** define compact scale mathematics. Each step multiplies its base by a
+   plain number in `calc()`, as `--space-4: calc(var(--space-base) * 4)`.
 2. **Primitive tokens** expose generated palettes and metric scales to design-system authors.
 3. **Semantic/component tokens** express intent consumed by applications and components.
 
 Rules:
 
 - Reduce independent hand-authored values. Derive spacing, control heights, radii, borders, focus,
-  motion, type, and color scales from small bases plus named multipliers. Use named density,
-  hierarchy, and major-composition ratios instead of applying the golden ratio to every dimension.
+  motion, and type scales from small bases times plain numbers; a multiplier is never a token. Use
+  named density, hierarchy, and major-composition ratios instead of applying the golden ratio to
+  every dimension.
 - Name semantic tokens by role, not appearance: `surface-canvas`, `text-muted`, `action-primary`, not
   `dark-gray` or `blue-9` in component CSS.
 - Consume semantic tokens in components. Primitive steps are implementation detail unless a public
   foundation API explicitly exposes them.
 - Keep calculations in CSS when the browser baseline supports them. Do not add a token build system
-  merely to repeat CSS-native arithmetic.
-- Define canonical product colors once as perceptual components and derive every palette, alpha,
-  overlay, and component state from them with `calc()`, relative color syntax, or `color-mix()`.
-  Do not introduce hexadecimal or RGB design values beside the canonical model. Derive transparency
-  from a semantic color instead of maintaining an opaque duplicate with a hand-authored alpha.
+  merely to repeat CSS-native arithmetic. The palette is the one generated part: the tokens
+  package's `scripts/generate-colors.mjs` samples each hue's gamut and writes every primitive step
+  to `colors.css` as a literal `oklch()` color. Change a step through the generator's bases, never
+  by hand; `pnpm lint:generated` fails on drift.
+- Define canonical product colors once as perceptual components, the generator's OKLCH bases. Derive
+  every semantic alpha, overlay, and component state from the palette with `color-mix()`. Do not
+  introduce hexadecimal or RGB design values beside the canonical model. Derive transparency from a
+  semantic color instead of maintaining an opaque duplicate with a hand-authored alpha.
 - Treat color as five linked contracts: hue topology, tone/chroma scaling, output gamut and fallback,
   semantic foreground/background pairs, and optional graphic effects. Generate them from compact
   parameters, but expose each layer explicitly enough to test and evolve it independently.
@@ -95,8 +101,9 @@ Rules:
   mapping, and record rare optical corrections. Equal parameters do not guarantee equal appearance.
 - Use a maintained constant-hue perceptual gamut-mapping implementation. Never clamp converted RGB
   channels as a palette algorithm: clipping can shift hue and flatten one family more than another.
-- Emit a complete sRGB fallback before a Display P3 or other wide-gamut enhancement. Keep runtime
-  packages free of the build-time converter and verify both outputs preserve semantic associations.
+- Emit each palette step as a device-independent `oklch()` color, which the browser maps to the
+  display's gamut at paint time. Keep runtime packages free of the build-time converter and verify
+  that sRGB and Display P3 renderings preserve semantic associations.
 - Define grid, trace, outline, glow, gradient, and other visual treatments as semantic effect tokens
   derived from the same palette and metric scales. Keep them out of text contrast and state meaning;
   game-like effects default to static and must remain safe under reduced motion and forced colors.
@@ -120,16 +127,17 @@ Rules:
 - A backdrop blur reads only what lies under its own box, so whatever crosses a frosted edge stays
   sharp there. Where something can cross it, as a button under an open list does, paint the frost
   on a layer reaching past the box by twice the blur radius, clip it back with the box's own
-  `overflow: clip`, and scroll the content inside, so the layer stays in place. uikit's Select and
-  Combobox lists show the pattern.
+  `overflow: clip`, and scroll the content inside, so the layer stays in place. uikit's internal
+  Listbox, behind Select and Combobox, shows the pattern.
 - A backdrop blur is recomputed over its whole box for every frame drawn under it, whatever changed,
   and costs by area, not radius. Under a modal Dialog's full-viewport backdrop blur, the page's own
   frosted surfaces (cards, sticky bars, the consent banner, toasts) sit unseen yet still cost each
   frame, so they drop their blur while `:root:has(dialog.dialog:modal)` holds: once the backdrop has
   faded in, through a zero-length `backdrop-filter` transition delayed by `--duration-normal`, so
-  none shows unfrosted, and back at once on close. One inside a dialog keeps it. A new frosted page
-  surface does the same: on Account's dialogs, this cut 28% of each frame under software compositing
-  and 75% of GPU time (a-novel-kit/uikit#350).
+  none shows unfrosted, and back at once on close. One inside a dialog keeps it. A uikit frosted
+  page surface carries `data-frost`; Dialog drops every such blur under a modal dialog. On
+  Account's dialogs, this cut 28% of each frame under software compositing and 75% of GPU time
+  (a-novel-kit/uikit#350).
 - A modal dialog makes every node outside it inert, the top layer included, so a popover cannot float
   a request above it. A request the reader must stay able to answer, such as the consent banner, also
   renders inside the topmost modal Dialog (uikit's internal `overModal` list), where Account's login on
@@ -209,15 +217,17 @@ Rules:
   implement a custom select, combobox, menu, or dialog only when the native contract cannot satisfy
   the required composition or behavior, then follow the corresponding APG keyboard and focus model.
 - Compose form labels, descriptions, errors, start/end adornments, and actions as optional primitives
-  or snippets around the essential control. Present a compound control through its wrapper's
-  `:focus-within` state while focus remains on the native child; suppress hover treatments that obscure
-  focus or invalid state. Keep open lists bounded by a configurable maximum block size with overflow
-  scrolling, disabled options, and an explicit empty selection when the contract permits it.
+  or snippets around the essential control. Present a compound control through its well (uikit's
+  internal `Well`), lit while its marked native control (`data-well-control`) shows focus, so a
+  button inside the field never lights it. Suppress hover treatments that obscure focus or invalid
+  state. Keep open lists bounded by a configurable maximum block size with overflow scrolling,
+  disabled options, and an explicit empty selection when the contract permits it.
 - Keep every button inside a field ghost only: no border, ring or glow in any state, just its icon,
   a background and a color. The field already outlines the control, and a second outline inside it
   reads as a separate control. Only the keyboard focus outline stays. Build such buttons from uikit's
-  internal `FieldButton`, as the PasswordInput toggle and the Combobox trigger do.
-- Share surface, option-row, spacing, radius, and elevation tokens across listbox, menu, and popover
+  internal `FieldButton`, as the PasswordInput toggle and the Combobox trigger do, and place them in
+  the well's end group (`data-well-end`).
+- Share surface, option-row, spacing, radius, and elevation tokens across listbox, menu, and tooltip
   families while preserving each widget's distinct selection and keyboard model.
 - A floating surface leaves its inset to its owner, since the inset sets the surface's distance from
   its source. uikit's `FloatingSurface` reset it on anchored surfaces until uikit#317, which pressed
@@ -263,8 +273,8 @@ changes them.
   between them, so both corners share their centers. Each `--radius-*` step doubles the one below
   (3, 6, 12, 24px). A nested card sits half its parent's radius from the edge and lands on the next
   step down at any depth, while the card's other content sits a spacing step further in (18px in a
-  top card, 9px nested). A list, a toolbar or a toggle group adds its `--space-1` padding to its
-  items' radius, which is off the scale.
+  top card, 9px nested). A list or a menu adds its `--space-1` padding to its items' radius,
+  which is off the scale.
 - **Corners follow the shape.** Labeled buttons, fields, message boxes and navigation links take
   `--radius-lg`. An icon-only button or a compact navigation item keeps `--radius-md`: 12px on a
   28px square reads round. A button inside a field takes the field's radius less its inset.
@@ -278,20 +288,23 @@ changes them.
 - **One lit action per view.** The primary action has a slight gradient that lightens toward the
   top and a soft underglow in its own color (`--gradient-action-primary`,
   `--shadow-action-primary`), with no transparency. Every other action stays flat. A short form sits
-  in a compact dialog (`Dialog size="sm"`). Every form's and dialog's actions follow one rule
-  (`FormActions`, a dialog's `actions`): side by side at the end of the line at their natural width, and
-  stacked full width below 35rem, the primary action last.
+  in a compact dialog (`Dialog size="sm"`). Every form's and dialog's actions follow one rule, which
+  `ActionGroup` draws for `FormActions` and a dialog's `actions`: on a viewport narrower than 35rem
+  they stack full width, the primary action last; from 35rem (`@media (min-width: 35rem)`) they fit
+  their content, side by side and right-aligned at the line's end. The viewport decides, never the
+  container, so the actions of a narrow card on a desktop keep their content's width.
   Secondary journeys become quiet text buttons (`Button variant="text"`): colored text at rest, a
   soft box on hover. A recovery action sits on the label row (`Field labelActions`), a journey
   switch is one footer line. Never stack ghost buttons under a form.
 - **One lamp per app.** A radial light in the top-start corner, scaled to the viewport, tells
   people which app they are in, as JetBrains IDEs tint their toolbar with a project color. Each app
   sets `--color-lamp` on its root element: Account's ember, Studio's magenta
-  (`--color-lamp-{ember,magenta}`). iOS ignores a fixed background, so the canvas paints its light
-  (`--fill-canvas`) on a layer fixed to the viewport behind the page, never on an element that
-  scrolls. Navigation stays in the viewport's corner, so the light it carries (`--fill-navigation`)
-  lines up in every browser. Anything else lets the canvas's light through instead of painting its
-  own: frosted cards, and sticky bars that blur what scrolls under them.
+  (`--color-lamp-{ember,magenta}`). iOS ignores a fixed background, so
+  `@a-novel-kit/uikit-tokens/canvas.css` hangs the lamp (`--gradient-lamp`) on a layer fixed to the
+  viewport behind the page, never on an element that scrolls. Navigation stays in the viewport's
+  corner, so the light it carries (`--fill-navigation`) lines up in every browser. Anything else
+  lets the canvas's light through instead of painting its own: frosted cards, and sticky bars that
+  blur what scrolls under them.
 - **A sticky bar frosts and overhangs.** A page's sticky part, such as a tab bar, is clear glass over
   a backdrop blur: the lamp shines through it, and only what scrolls under it frosts. A bar at the
   page's foot holds actions over whatever scrolls by, so it darkens to the canvas under its frost, as
@@ -322,14 +335,15 @@ changes them.
 - **Fields are wells.** A field is a translucent darkening of the island it sits in
   (`--color-surface-sunken`), with no border: only focus and errors outline it, and a transparent
   border keeps it outlined in forced-colors mode. A field outside an island, on the canvas or a sticky
-  bar, takes a ghost card's ring (`--color-field-border`), and each island (a card, a dialog, a
-  popover, a fieldset) resets it to transparent for its fields. Fields share the button heights, so
-  a borderless field keeps the same visual weight as the action beside it. Every input is one, under a field's label above the well,
-  never a legend on its edge: a choice among short options is a `ChipGroup`, tags a `TagInput` (a space
-  ends one, in lower-kebab-case), and a file a `FileInput`. A chip and a tag share a badge's size and
-  regular weight, so a choice reads as the tag it becomes. A file field has no button: it names the
-  file, a folder icon at its end opens the picker as the whole field does, and a cross removes the
-  choice. A chosen image always shows above its field, framed or not, never inside it.
+  bar, takes a ghost card's ring (`--color-field-border`), and each island (a card, a dialog, an
+  open disclosure, a fieldset) resets it to transparent for its fields. Fields share the button
+  heights, so a borderless field keeps the same visual weight as the action beside it. Every input
+  is one, under a field's label above the well, never a legend on its edge: a choice among short
+  options is a `ChipGroup`, tags a `TagInput` (a space ends one, in lower-kebab-case), and a file a
+  `FileInput`. A chip and a tag share a badge's size and regular weight, so a choice reads as the
+  tag it becomes. A file field has no button: it names the file, a folder icon at its end opens the
+  picker as the whole field does, and a cross removes the choice. A chosen image always shows above
+  its field, framed or not, never inside it.
 - **A long choice searches and sorts.** A chip list too long to scan, such as Studio's genres, opens
   its well with a search (`ChipGroup searchLabel`). The search filters the chips by label, whatever
   their case and accents, and never changes the choice: a hidden chip keeps its choice and its
@@ -482,7 +496,8 @@ Do not approve a visual contract from source alone.
 - Component CSS contains no raw product colors, spacing, radii, borders, type, or motion values.
 - Public components remain small semantic bricks; optional presentation composes without boolean or
   position-prop matrices.
-- Bases and multipliers are fewer than generated public choices and have documented meaning.
+- Bases and ratios are fewer than generated public choices and have documented meaning; each step
+  multiplies its base by a plain number, never a multiplier token.
 - Color documentation states the harmony, tone/chroma formula, gamut mapping, fallback, semantic
   pairings, and effect layer without hiding family-specific exceptions.
 - Dark neutral and accent ramps preserve their intended dynamic range in rendered primitive,
