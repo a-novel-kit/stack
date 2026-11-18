@@ -21,7 +21,8 @@ Configuration structs + loading from env vars or YAML. No logic beyond parsing a
     loggers that match it (see [telemetry](telemetry.md#export)).
   - `postgrespresets.LoadConnection(getEnv, postgrespresets.ConnectionDefault)` reads the discrete
     `POSTGRES_*` variables, pool bounds included. `Connection.Preset` builds one preset per role,
-    such as the migrations job's with its `lock_timeout`.
+    such as the migrations job's `PostgresPresetMigrations`, whose `migrationsSessionParams` set its
+    `lock_timeout`. The job's `main` closes it with `defer config.PostgresPresetMigrations.Close()`.
   - `servicetoken.LoadConfig(getEnv)` reads `SERVICE_TOKEN_ISSUER`, `SERVICE_TOKEN_AUDIENCE`,
     `SERVICE_TOKEN_CALLERS` and `SERVICE_ISSUER_OPTIONAL`.
   - `grpcf.LoadClientConfig(getEnv, "SERVICE_<NAME>", defaults)` reads a dependency's `_HOST`,
@@ -211,14 +212,18 @@ func newServer(ctx context.Context, cfg config.App) (*grpc.Server, error) {
     `Unauthenticated` for a unary call and a stream);
   - a valid token passes;
   - the opt-out admits a call without a token;
-  - an empty issuer returns `servicetoken.ErrIssuerRequired`.
+  - an empty issuer returns `servicetoken.ErrIssuerRequired`;
+  - an unknown path answers 401 without a token, which proves the gate wraps the whole router and
+    not only the version prefix.
 
   a-novel/service-template#968 is the reference.
 
 - **Ping and health come from golib.** `httpf.Ping` answers the liveness path with "pong".
   `httpf.Health` runs its named probes at once, each under a span `rest.Health(<name>)`, and
   answers `{"client:postgres": {"status": "up"}}`, with 503 when a probe fails. A service writes
-  only the probes it owns, such as a dependency's status call.
+  only the probes it owns, such as a dependency's status call. `cmd` mounts `httpf.Health` directly;
+  a `NewRestHealth` handler exists only where a probe needs a client of its own, as Authentication's
+  SMTP probe does.
 - **A probe returns an error safe to export.** `httpf.Health` exports a probe's error on the
   probe's span. Authentication's SMTP probe returns `errSmtpUnhealthy`, never the error of the SMTP
   `Ping`, whose reply text can carry a credential.

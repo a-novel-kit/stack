@@ -136,7 +136,7 @@ directions as public tokens.
 
 ## 5. Plan foundations as relationships
 
-Define compact bases and preset multipliers before enumerating tokens. Separate primitive values from
+Define compact bases and named ratios before enumerating tokens. Separate primitive values from
 semantic roles and component contracts. A global adjustment must not require editing scattered magic
 values.
 

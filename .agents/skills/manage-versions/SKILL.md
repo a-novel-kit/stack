@@ -338,7 +338,15 @@ grep -rn "HttpConfig\|HTTPConfig" app/ kit/ --include='*.go'
 
 # A field on an exported struct (don't forget composite-literal usage).
 grep -rn "\.FieldName\|FieldName:" app/ kit/ --include='*.go'
+
+# An env var or setting a service image reads: every compose file and harness that runs the image.
+grep -rn "SETTING_NAME" app/ kit/ --include='*.yaml' --include='*.yml' --include='*.ts'
 ```
+
+A release that removes an env var or setting its image reads breaks every stack that still
+configures the image through it, in both orgs, not only infra: narrative-engine's `compose.ci.yaml` and platform-studio's
+`compose.e2e.yaml` run `service-genai/standalone-grpc`, and genai v0.12.0 dropping `POSTGRES_DSN`
+broke narrative-engine's Renovate bump that way.
 
 Search both `app/` (services) and `kit/` (other shared libraries) — a graduated-package change rips
 through `jwt` consumers as easily as service consumers. Capture the file list as a checklist in the

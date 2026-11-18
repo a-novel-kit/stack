@@ -18,6 +18,9 @@ The DAO and the schema keep the data intact. A constraint holds rows consistent 
 such as a cell whose scene and layer belong to its project, and the DAO maps its violation to a
 sentinel (see [Constraint violations](#constraint-violations)). Data validation stays out: the
 core's validator checks the request, and the core checks ownership (see [Ownership](#ownership)).
+A value derived from other rows, such as a project's stored bytes, comes from the schema's triggers
+(`write-sql`'s [integrity constraints](../../write-sql/SKILL.md#integrity-constraints)), so no DAO
+statement writes it.
 
 ```go
 // pg.userSelect.go

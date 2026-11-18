@@ -166,11 +166,11 @@ Do not manufacture cases that the public contract cannot reach.
 - Keep stories and docs in a private workbench. Keep reusable Storybook theme, preview, and test
   configuration in a separately consumable development package; never publish stories or runtime
   workbench code as part of the component package.
-- List each dependency subpath a story imports in Storybook's `optimizeDeps.include`
-  (`@a-novel-kit/uikit-storybook/ScrollPreview.svelte`, not only the package). Vite matches entries
-  exactly; an unlisted subpath is optimized mid-run, which reloads the iframes and fails every story
-  file on a cold cache. CI is always cold, so prove such fixes after deleting `node_modules/.cache`
-  and `node_modules/.vite`.
+- List each dependency subpath a story imports in Storybook's `optimizeDeps.include`, not only the
+  package. Vite matches entries exactly; an unlisted subpath is optimized mid-run, which reloads the
+  iframes and fails every story file on a cold cache. The uikit-storybook preset lists its own
+  entries, `@a-novel-kit/uikit-storybook/ScrollPreview.svelte` included. CI is always cold, so prove
+  such fixes after deleting `node_modules/.cache` and `node_modules/.vite`.
 - Keep a representative framework or extraction fixture with the shared nodelib preset it validates.
   A platform tests its product catalogs, screen states, and wiring instead of copying that generic
   fixture locally.
@@ -264,8 +264,8 @@ reference batches through `node-actions/test-playwright` with `runner: vitest`. 
   failure, so the Drive runner lists screenshots from annotations and fails a run that writes an
   undeclared one.
 - A style assertion in a play function turns a visual change into a functional failure, which
-  `allow-screenshot-change` cannot waive. uikit's Toolbar story asserts that its link keeps the button
-  radius, so a Button radius change fails until the link follows.
+  `allow-screenshot-change` cannot waive. uikit's Motion glow stories pinned their shadow geometry,
+  so a token tweak failed them.
 
 ## Coverage and completion
 

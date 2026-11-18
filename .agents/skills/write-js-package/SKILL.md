@@ -28,7 +28,7 @@ pkg/js/
 │   │   └── <domain>.ts          # One file per resource domain (e.g., item.ts)
 │   ├── dist/                    # Build artefacts — never edit manually
 │   ├── package.json
-│   ├── tsconfig.json            # Base TypeScript config
+│   ├── tsconfig.json            # Base TypeScript config, NodeNext resolution
 │   ├── tsconfig.build.json      # Declaration-only build config
 │   └── vite.config.ts           # ES module bundle config
 │
@@ -119,8 +119,8 @@ Divergence between the spec, the client, and the handlers is a bug.
 
 `<Service>Api` extends `RestClient` from `@a-novel-kit/nodelib-browser/http`, which owns the HTTP
 plumbing (`fetch`, `fetchVoid`, `fetchBlob`, `fetchResponse`) and takes an optional `fetcher`. The
-subclass adds only `ping()` and `health()` for its API version, typed with the package's
-`HealthDependency`:
+subclass adds only `ping()` and `health()` for its API version, typed with nodelib's
+`HealthDependency`, which the package re-exports with `export type { HealthDependency } from`:
 
 ```typescript
 import { type HealthDependency, RestClient } from "@a-novel-kit/nodelib-browser/http";
@@ -202,15 +202,21 @@ return await api.fetch("/resource", ResourceSchema, {
 Re-export everything from every domain file and from `api.ts`:
 
 ```typescript
-export * from "./api";
-export * from "./item";
+export * from "./api.js";
+export * from "./item.js";
 ```
 
 `index.ts` is the single public surface: consumers and tests import from the package root
 (`@a-novel/<service-slug>-rest`), never from a file inside it.
 
-A new domain file needs a corresponding `export * from "./<domain>";` line in `index.ts`, or
+A new domain file needs a corresponding `export * from "./<domain>.js";` line in `index.ts`, or
 consumers will not see it.
+
+Every relative import and re-export carries `.js`, as `import type { TemplateApi } from "./api.js"`,
+and the client's `tsconfig.json` sets `"module": "NodeNext"` and `"moduleResolution": "NodeNext"`,
+so a missing extension fails the typecheck. The declarations keep those specifiers, and a consumer
+on `nodenext` resolution follows them. Under `Bundler`, an extensionless `export * from "./api"`
+type-checks in the client and exports nothing to that consumer.
 
 ### TypeScript Rules
 
