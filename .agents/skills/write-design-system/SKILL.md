@@ -227,7 +227,7 @@ Rules:
   reads as a separate control. Only the keyboard focus outline stays. Build such buttons from uikit's
   internal `FieldButton`, as the PasswordInput toggle and the Combobox trigger do, and place them in
   the well's end group (`data-well-end`).
-- Share surface, option-row, spacing, radius, and elevation tokens across listbox, menu, and tooltip
+- Share surface, option-row, spacing, radius, and elevation tokens across listbox, menu, and popover
   families while preserving each widget's distinct selection and keyboard model.
 - A floating surface leaves its inset to its owner, since the inset sets the surface's distance from
   its source. uikit's `FloatingSurface` reset it on anchored surfaces until uikit#317, which pressed
