@@ -169,8 +169,8 @@ GIT_SSH_COMMAND='ssh -o ControlMaster=auto -o ControlPath=~/.ssh/a-novel-%C -o C
 Prefix it rather than export it: an exported `GIT_SSH_COMMAND` makes the CLI skip its own sharing,
 which keeps a sync under GitHub's limit of ten sessions per connection.
 
-A signature shares nothing: every signed commit or tag asks for its own touch, and a rebase signs
-every commit it replays again. So keep each pull request to one signed commit, as the rules above
+A signature shares nothing: every signed commit or tag asks for its own touch, and a rebase or a
+cherry-pick signs every commit it replays again. So keep each pull request to one signed commit, as the rules above
 say, and put every signing step in one script: the fetch, a rebase only when
 [workspace hygiene](references/workspace.md#before-you-start) calls for one, the commit and the
 push. Master then cannot move between your check and the signatures. Check the script first,
