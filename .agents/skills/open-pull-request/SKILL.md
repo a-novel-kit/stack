@@ -199,6 +199,11 @@ If this branch depends on another open PR (e.g., `feat/core/jwk-revoke` depends 
 `feat/dao/jwk-revoke`), the base of the PR must be the parent branch, not master. Push the
 parent first and make sure its PR is open.
 
+When the parent squash-merges, GitHub retargets each dependent PR to master and rebases its commits
+onto it within seconds, signing them itself. Push nothing then: compare the new head's tree with
+the reviewed one (`git diff <reviewed-head> <new-head>` prints nothing when the parent merged as
+reviewed). Rebase and push only when GitHub leaves the PR conflicting.
+
 ---
 
 ## Phase 3: Decide PR Status (Ready vs. Draft)
