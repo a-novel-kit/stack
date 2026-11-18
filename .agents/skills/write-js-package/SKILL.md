@@ -70,10 +70,14 @@ A new resource domain follows the same split: one `<domain>.ts` source file, one
 test file. Never merge unrelated domains into a single file.
 
 A service whose tests need helpers that other repos also use publishes them as a third package,
-`pkg/js/rest-test/` (`@a-novel/<service-slug>-rest-test`) — `service-authentication` ships one for
-its email round-trips. Helpers used only by this repo's own suite stay beside the tests that use
-them. A suite reads Mailpit with `searchMail` and `mailLinks` from
-`@a-novel-kit/nodelib-test/mailpit`, polling with `vi.waitFor`.
+`pkg/js/rest-test/` (`@a-novel/<service-slug>-rest-test`). Helpers used only by this repo's own
+suite stay beside the tests that use them.
+
+`service-authentication` ships one with the sign-up helpers other suites import. The suite's vitest
+`globalSetup` calls `registerSuperAdmin`, and a test signs in with `superAdminAccessToken`,
+`userAccessToken` or `anonymousAccessToken`, each taking an `AuthenticationApi` client. A suite that
+signs callers in imports them instead of copying them. Any other Mailpit read uses `searchMail` and
+`mailLinks` from `@a-novel-kit/nodelib-test/mailpit`, polling with `vi.waitFor`.
 
 ---
 
