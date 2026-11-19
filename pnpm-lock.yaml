@@ -182,7 +182,7 @@ importers:
     devDependencies:
       '@a-novel-kit/nodelib-config':
         specifier: ^2.0.0
-        version: 2.13.0(2bcdfa6b1a651d382b4f8251b47e44a0)
+        version: 2.14.0(2bcdfa6b1a651d382b4f8251b47e44a0)
       '@eslint/js':
         specifier: ^10.0.0
         version: 10.0.1(eslint@10.15.0(jiti@2.7.0))
@@ -225,8 +225,8 @@ importers:
 
 packages:
 
-  '@a-novel-kit/nodelib-config@2.13.0':
-    resolution: {integrity: sha512-bL6Jghw2Dz392fz8w01NF9xoUEFIJD5pJR5BbG+4kOnyZ6h2Ns4cdI3A9LRe8Yi1LOeCfGmlhMNXo/zX/b7+zA==, tarball: https://npm.pkg.github.com/download/@a-novel-kit/nodelib-config/2.13.0/d1bdf5f0778824581c85e4336857432873413637}
+  '@a-novel-kit/nodelib-config@2.14.0':
+    resolution: {integrity: sha512-eqCqxb826/TVllU3B3AarJfnkaRM5Jka9zF8ZpbglyI6Eup0cIg+tjsbhkUyo3ohATgnjlxoN/Q3cSHKJny4Xw==, tarball: https://npm.pkg.github.com/download/@a-novel-kit/nodelib-config/2.14.0/ba971f3fded6db23193284cff0b26651e8b291d6}
     engines: {node: '>=24.0.0', npm: '>=10.9.2'}
     hasBin: true
     peerDependencies:
@@ -3150,7 +3150,7 @@ packages:
 
 snapshots:
 
-  '@a-novel-kit/nodelib-config@2.13.0(2bcdfa6b1a651d382b4f8251b47e44a0)':
+  '@a-novel-kit/nodelib-config@2.14.0(2bcdfa6b1a651d382b4f8251b47e44a0)':
     dependencies:
       '@eslint/compat': 2.1.1(eslint@10.15.0(jiti@2.7.0))
       '@eslint/config-helpers': 0.7.0
