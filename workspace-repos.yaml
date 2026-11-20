@@ -24,3 +24,4 @@ repos:
   - a-novel/service-narrative-engine
   - a-novel/service-genai
   - a-novel/service-profile
+  - a-novel/plugins-narrative-engine
