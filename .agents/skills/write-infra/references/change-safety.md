@@ -260,10 +260,13 @@ read them on the cluster.
 - **Users see a downtime whenever a deploy can enforce one.** Any deploy applies `DOWNTIME`, so a
   schedule publishes `downtime.json` before writing it, and a clear deletes it before publishing.
 - **A PostgreSQL major upgrade waits for its service's downtime.** CloudNativePG upgrades the major
-  in place, with every instance stopped until `pg_upgrade` ends. `policy.jq` flags a change of the
-  database's `imageCatalogRef.major`: its pull request needs `allow-downtime`, and `DOWNTIME` must
-  list `service-<service>.database` with a `start` already passed. A deploy applies it only once
-  that downtime has started. Ask for a full backup before the downtime starts.
+  in place, with every instance stopped until `pg_upgrade` ends. The database's `major` in the
+  cluster root's `databases` sets its catalog and its `imageCatalogRef.major`, and rises in the
+  service's release pin that brings the first image of the new major: either one alone breaks the
+  database. That release is titled breaking, so its pin waits with `breaking-release`. `policy.jq`
+  flags the change of `imageCatalogRef.major`: its pull request needs `allow-downtime`, and
+  `DOWNTIME` must list `service-<service>.database` with a `start` already passed. A deploy applies
+  it only once that downtime has started. Ask for a full backup before the downtime starts.
 
 ## Databases and backups
 
@@ -281,7 +284,8 @@ read them on the cluster.
   CloudNativePG's `Cluster` objects to people. A switchover comes only from a database change or
   GKE's node upgrades, so never hand over `kubectl cnpg promote` (a-novel/infra#1195).
 - **`backup_server_name` names every database's lineage,** the name it archives under in its
-  bucket. A new name recreates every database empty, rolls their clients and runs the migrations
+  bucket, with `-pg<major>` appended from PostgreSQL 19 on: `pg_upgrade` restarts the timeline at 1,
+  so each major archives apart. A new name recreates every database empty, rolls their clients and runs the migrations
   again. Never change it to repair one database.
 - **Services connect as `app`,** the database's owner, with the credentials CloudNativePG generates
   in the `database-app` Secret. A client's pods read the password at start, so they roll with each
@@ -290,7 +294,7 @@ read them on the cluster.
   service loads its trusted roots once.
 - **Barman owns backup expiry,** at 14 days of base backups and the WAL they need. Never add
   age-based deletion to a backup bucket. Never delete WAL to free space. A daily base backup runs
-  from the replica, and each new lineage starts with one.
+  from the replica, and each new archive starts with one, a new lineage's or a new major's.
 - **A backup bucket keeps Object Versioning beside its retention policy.** Retention refuses to
   replace a live object, and versioning lets the replaced version turn noncurrent and stay retained.
   Barman rewrites `backup.info` from `STARTED` to `DONE` (a-novel/infra#1252).
