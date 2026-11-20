@@ -339,8 +339,11 @@ adding any surface, line or control:
   in one rule, `[data-island] > *`, which resets `--color-field-border`, `--border-width-outline`
   and `--color-action-disabled-surface`. Every uikit island carries `data-island`, and so does an
   application's own. The context starts at the island's content, so the island's own outline still
-  follows what holds it, as a ghost card's ring does. A colored outline carries itself, so it stays a
-  hairline everywhere. A new context-dependent look adds one declaration to that rule, never a
+  follows what holds it, as a ghost card's ring does. A colored outline button carries itself, so it stays
+  a hairline everywhere. A field keeps its line's weight through its states, so focus and errors only
+  color it, and a field whose content sets its height, such as a textarea, stands 2px taller on the
+  canvas than in an island. The rim of a shape that carries its own fill, as an avatar's picture,
+  stays opaque with a checkbox's (`--color-control-border`): a veil dims over a dark picture. A new context-dependent look adds one declaration to that rule, never a
   selector per component.
 
 ### Page anatomy
