@@ -53,6 +53,15 @@
   `environments/recovery*` included (a-novel/infra#1408).
 - **A plan shows the state it read.** When pull requests merge and deploy close together, re-run a
   plan that shows an unexpected change before judging it: a deploy may have applied it meanwhile.
+- **A Helm chart major plans green without proving anything.** The plan compares the release's
+  chart version and values and never renders the chart. A template's `fail`, or a changed default
+  such as a probe that logs in as a user our values turn off, therefore shows only at apply. Before
+  approving the bump, read the chart's upgrade guide, diff the two versions' templates, and check
+  our values against them. Grep the whole repository for each renamed or removed key, the roots'
+  `.tftest.hcl` tests included. A change that both versions read lands on `master` first. Only what
+  the new version alone reads rides on the bump, as
+  [manage-versions](../../manage-versions/SKILL.md#bring-a-release-through-renovate) describes
+  (a-novel/infra#1743, #1744).
 - **A `kubernetes_manifest` whose wait hits a request deadline reaches no state.** When `wait` ends
   on `context deadline exceeded` instead of `timed out waiting on conditions`, the object exists in
   the cluster but not in state, and the resources that `depends_on` it are never created. The next

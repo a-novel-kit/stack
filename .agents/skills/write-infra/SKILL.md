@@ -65,7 +65,9 @@ architecture, and `choose-dependency` before adding a tool. Prose follows `docum
   a release pin, or an update Renovate itself put on auto-merge that only moves versions. Renovate
   arms every minor and patch update. A plan needing `allow-downtime` or `allow-resource-deletion`
   still holds it for a maintainer. Majors, a moved action tag, and anything else a bot opens wait
-  for a maintainer's or an admin's review on GitHub.
+  for a maintainer's or an admin's review on GitHub. Review a Helm chart major as
+  [Change safety](references/change-safety.md#prove-the-plan-before-review) shows, since its green
+  plan proves nothing.
 - **Secrets are pinned** as numeric versions.
 - **The docs** are in `docs/ops-basics.md`, `docs/architecture.md` and `docs/runbooks/`.
 
