@@ -221,18 +221,19 @@ moves, and what the service needs, such as genai's pg_cron. Any other difference
 Production runs the image under CloudNativePG, whose instance manager replaces the entrypoint and
 whose Barman Cloud plugin takes the backups. Infra relies on UID/GID 999, the PostgreSQL binaries
 on the `PATH`, and the extension packages. The local stacks and tests rely on the rest:
-`PGDATA=/var/lib/postgresql/18/docker`, the upstream `docker-entrypoint.sh`, the init SQL, `bash`
+`PGDATA=/var/lib/postgresql/19/docker`, the upstream `docker-entrypoint.sh`, the init SQL, `bash`
 and `pg_isready`.
 
-- **Pin service packages in the apko manifest** (`postgresql-18=18.6-r5`, `pg_cron-18=1.6.8-r0`).
-  The shared Renovate preset tracks every `name=version` line; base libraries stay unpinned.
+- **The lock beside each apko manifest pins every package** (`postgresql-19` at `19.0-r0`). The
+  manifest names packages without versions, `apko lock` resolves them, and the build fails when a
+  manifest resolves to a package its lock lacks. `refresh-apko-locks` re-resolves the locks.
 - **Extensions come from Wolfi packages.** Find the exact release in Wolfi's `APKINDEX` before
   pinning. Only pgBackRest is source-built, in a discarded stage, so compilers never reach the runtime.
 - **Release downloads retry.** The packages stage fetches apko and pgBackRest with
   `curl -fsSL --retry 5 --retry-all-errors`: GitHub's release downloads answer 5xx now and then, and
   BusyBox `wget` never retries. The pinned checksums still decide what the image uses.
 - **Server settings an extension needs at init** go in `postgresql.conf.sample`
-  (`/usr/share/postgresql18/`), which initdb copies: the server that runs the init SQL has them too.
+  (`/usr/share/postgresql19/`), which initdb copies: the server that runs the init SQL has them too.
 - **pg_cron needs `cron.use_background_workers = on`.** By default a job logs in over TCP without a
   password, and SCRAM authentication rejects it, so every run fails with `connection failed`. Set
   `cron.database_name` from `POSTGRES_DB` in an entrypoint wrapper, and only for the `postgres`
@@ -244,9 +245,12 @@ and `pg_isready`.
   them.
 - **Test the normal entrypoint**, init scripts, authentication and persistent volumes, not only an
   overridden command. A green build or restore test does not prove the image free of advisories.
-- **Paths carry the PostgreSQL major** (`PGDATA`, `/usr/share/postgresql18/`): check them, and every
-  extension's compatibility, when changing the major. Infra's cluster root names the major too, and
-  its change waits for a planned downtime.
+- **A new PostgreSQL major renames the packages** (`postgresql-19*`, `pg_cron-19`) and the paths
+  that carry it: `PGDATA`, `/usr/libexec/postgresql19`, `/usr/share/postgresql19/` and the
+  `/usr/lib/postgresql/19` links. Wolfi publishes each extension's package for a major on its own
+  schedule, so check every one in `APKINDEX` first. Title the pull request breaking (`!`), so infra
+  holds the release's pin, and raise the database's `major` in infra's cluster root on that pin,
+  during the service's planned downtime.
 
 **Executable files**: use `COPY --chmod=755` when copying shell scripts or other executables into
 the image. It sets the executable bit in a single instruction and avoids a separate `RUN chmod +x`
@@ -417,8 +421,8 @@ Always exclude:
   any Alpine image.
 - **Build tools in the database runtime.** A cleanup `RUN` removes files from new layers but not
   from previous ones. Compile in a discarded stage and copy only the binary, as pgBackRest is.
-- **Hardcoded paths after a major PostgreSQL version bump.** Moving from PostgreSQL 18 to 19 changes
-  the package names in the apko manifest, the `postgresql18` paths and symlinks in the Dockerfile,
+- **Hardcoded paths after a major PostgreSQL version bump.** Moving from PostgreSQL 19 to 20 changes
+  the package names in the apko manifest, the `postgresql19` paths and symlinks in the Dockerfile,
   and `PGDATA`.
 - **Using standalone images in production.** They run migrations and key rotation at startup, which
   is unsafe where multiple replicas start concurrently. Use the dedicated job images instead.
