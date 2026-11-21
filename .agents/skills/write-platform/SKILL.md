@@ -560,8 +560,13 @@ API credentials in Storybook.
 
 - Pure screens and their complete state matrix render in Storybook before route wiring lands.
 - Keyboard, focus, narrow layout, long copy, reduced motion, and automated accessibility checks pass.
-- Every form sits on an island, a uikit `Card` or a `Dialog`, never on the page canvas: fields are
-  borderless wells and vanish there ([write-design-system](../write-design-system/SKILL.md#the-a-novel-visual-direction)).
+- Every form sits on an island, a uikit `Card` or a `Dialog`, never on the page canvas: a form's
+  fields read as one group on an island's tone, and as scattered rings on the canvas
+  ([write-design-system](../write-design-system/SKILL.md#lines-and-what-holds-a-control)).
+- Every titled group of a page is a uikit `Section` above its cards, never a heading written by hand
+  or set inside the card, and rows that share a card part with `Separator` or
+  `--color-border-divider`. A surface of the application's own that holds controls carries
+  `data-island` ([write-design-system](../write-design-system/SKILL.md#page-anatomy)).
 - Every failure, refusal, or warning renders in a toned feedback box (`Alert`, `InlineMessage`, or a
   page-level `StatusState`), never as plain text
   ([write-design-system](../write-design-system/SKILL.md#the-a-novel-visual-direction)).
