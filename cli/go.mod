@@ -7,7 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.1.2
 	charm.land/lipgloss/v2 v2.1.1
 	connectrpc.com/connect/v2 v2.0.2
-	github.com/charmbracelet/x/ansi v0.11.9
+	github.com/charmbracelet/x/ansi v0.11.10
 	github.com/klauspost/compress v1.20.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.1.0
