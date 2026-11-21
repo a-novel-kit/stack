@@ -126,8 +126,9 @@ Rules:
   available.
 - A backdrop blur reads only what lies under its own box, so whatever crosses a frosted edge stays
   sharp there. Where something can cross it, as a button under an open list does, paint the frost
-  on a layer reaching past the box by twice the blur radius, clip it back with the box's own
-  `overflow: clip`, and scroll the content inside, so the layer stays in place. uikit's internal
+  on a layer reaching past the box by twice the blur radius, clip it back with a layer of the box's
+  own size (`overflow: clip`) that sits under the box's outline, and scroll the content inside, so
+  the layer stays in place. uikit's internal
   Listbox, behind Select and Combobox, shows the pattern.
 - A backdrop blur is recomputed over its whole box for every frame drawn under it, whatever changed,
   and costs by area, not radius. Under a modal Dialog's full-viewport backdrop blur, the page's own
@@ -137,7 +138,15 @@ Rules:
   none shows unfrosted, and back at once on close. One inside a dialog keeps it. A uikit frosted
   page surface carries `data-frost`; Dialog drops every such blur under a modal dialog. On
   Account's dialogs, this cut 28% of each frame under software compositing and 75% of GPU time
-  (a-novel-kit/uikit#350).
+  (a-novel-kit/uikit#350). Any frame whose change touches a backdrop
+  blur's box blurs that whole box again, and a modal backdrop's box is the viewport: a hover or a
+  keystroke inside a dialog costs 35 ms or more at 1080p under software compositing, against 1.4 ms on
+  a GPU, so a browser without hardware acceleration feels it most. Two rules follow. What animates on
+  the page pauses under a modal dialog (`animation-play-state`), since each of its frames would blur
+  the page again: a dialog over a loading page then draws no frame at rest. A fullscreen dialog's
+  backdrop carries no blur, since the dialog covers it. A `filter: blur()` on the root is no
+  substitute: it costs the same on a GPU and lightens the viewport's edges, and on any other element
+  it unpins every fixed descendant.
 - A modal dialog makes every node outside it inert, the top layer included, so a popover cannot float
   a request above it. A request the reader must stay able to answer, such as the consent banner, also
   renders inside the topmost modal Dialog (uikit's internal `overModal` list), where Account's login on
@@ -250,13 +259,29 @@ slate surfaces, and one colored lamp in the corner. Warmth means a calm, relaxin
 neutrals. Keep the canonical brand, pressure, and signal colors stable unless the brief explicitly
 changes them.
 
-- **Three hues, blue most.** Every color is a nuance of the brand blue, the pressure magenta or the signal
-  amber, in that order of frequency. Blue carries actions, links and tags; magenta is rarer, for the
-  second accent, such as a project's genres (`Badge tone="accent"`, `--color-accent-secondary`), and
-  for failures; amber is rarest, for highlights and text selection. An even blend of two, as Studio's
-  violet lamp was, reads as a fourth hue: never use one.
+The rules group by what they shape. Read the group a change touches, and the first two before
+adding any surface, line or control:
+
+| Group                                                              | Decides                                                    |
+| ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| [Light and surfaces](#light-and-surfaces)                          | What a surface is made of, and how it rises                |
+| [Lines, and what holds a control](#lines-and-what-holds-a-control) | Dividers, outlines, and the canvas or island context       |
+| [Page anatomy](#page-anatomy)                                      | Sections, cards, collections and sticky bars               |
+| [Actions and states](#actions-and-states)                          | The lit action, and the chosen, focused and disabled looks |
+| [Fields](#fields)                                                  | Wells, their lists and long choices                        |
+| [Color, type, space and shape](#color-type-space-and-shape)        | Hues, weights, spacing, radii and control sizes            |
+| [Navigation, feedback and motion](#navigation-feedback-and-motion) | The rail, message boxes, motion and effects                |
+
+### Light and surfaces
+
 - **Contrast through elevation.** Neutrals stay blue-gray. The canvas sits near black, and each
   raised surface steps lighter, so islands stand clear of the field without borders.
+- **Light comes in veils.** One veil (`--color-veil`) is the lightest neutral, an eighth strong, over
+  whatever lies behind it. A raised card is one veil over the canvas, the pointer adds one to what it
+  hovers, and a line is one veil drawn thin. A veil is translucent, so each shows on every surface, a
+  lamp-lit one included. Never set an opaque gray beside it for a surface, a hover or a line: it holds
+  on one backdrop only, as the opaque `--color-border-subtle` vanished on a card until uikit dropped
+  it.
 - **Depth from light, never bevels.** Texture and depth come from the lamp, glow, and
   transparency. A raised surface stays flat: a hairline ring gives it its shape (`--shadow-ring`,
   carried by `--shadow-{sm,md,lg}`), and the lamp gives the page its volume. A surface floating over
@@ -267,24 +292,89 @@ changes them.
   (`--color-surface-island-glass`), so the lamp shines through it as it lights the navigation. A
   card inside a card keeps the parent's glass and stands out by its shadow alone (`--shadow-md`):
   an opaque inner card blocks the lamp and reads colder, and a lighter one reads too bright and
-  drops muted text under 4.5:1 near the lamp. Options of one kind sit as cards inside one card, as
-  Account's credentials hold a card per way to log in.
-- **Corners stay concentric.** A shape inside another takes the outer radius less the space
-  between them, so both corners share their centers. Each `--radius-*` step doubles the one below
-  (3, 6, 12, 24px). A nested card sits half its parent's radius from the edge and lands on the next
-  step down at any depth, while the card's other content sits a spacing step further in (18px in a
-  top card, 9px nested). A list or a menu adds its `--space-1` padding to its items' radius,
-  which is off the scale.
-- **Corners follow the shape.** Labeled buttons, fields, message boxes and navigation links take
-  `--radius-lg`. An icon-only button or a compact navigation item keeps `--radius-md`: 12px on a
-  28px square reads round. A button inside a field takes the field's radius less its inset.
+  drops muted text under 4.5:1 near the lamp.
+- **One lamp per app.** A radial light in the top-start corner, scaled to the viewport, tells
+  people which app they are in, as JetBrains IDEs tint their toolbar with a project color. Each app
+  sets `--color-lamp` on its root element: Account's ember, Studio's magenta
+  (`--color-lamp-{ember,magenta}`). iOS ignores a fixed background, so
+  `@a-novel-kit/uikit-tokens/canvas.css` hangs the lamp (`--gradient-lamp`) on a layer fixed to the
+  viewport behind the page, never on an element that scrolls. Navigation stays in the viewport's
+  corner, so the light it carries (`--fill-navigation`) lines up in every browser. Anything else
+  lets the canvas's light through instead of painting its own: frosted cards, and sticky bars that
+  blur what scrolls under them.
+- **Glows never meet a clip.** A container that clips or scrolls leaves a lit control's glow room
+  inside it. A padded card clips nothing, and a dialog's body scrolls out to the dialog's sides and
+  bottom, so only the dialog's own edge cuts a glow or a focus ring.
+- **Effects never hide contrast.** Axe reports color contrast as incomplete for text over any
+  background image, gradient, or overlapping layer, so measure the brightest point of every lit
+  surface by hand and record the ratio beside its token. Keep grain and patterns off surfaces that
+  carry text.
+
+### Lines, and what holds a control
+
+- **Every line is a veil.** A divider (`--color-border-divider`, uikit's `Separator`) parts siblings
+  on one surface, a hairline wide: rows in a card, groups in a rail. An outline
+  (`--color-border-default`) draws a shape that has no fill of its own, at `--border-width-outline`:
+  an outline button, a ghost card, a field outside an island. An outline is the veil its shape fills
+  with under the pointer, so a ghost card's ring floods the card as it lights. Only the rim of a
+  checkbox, a radio button or a switch stays opaque (`--color-control-border`), to hold around its
+  own small well.
+- **An outline is painted last.** Whatever draws a shape's line sits above what the shape holds. A
+  fill or a clipped layer painted over a line's edge eats the line's inner antialiasing: straight
+  edges keep their weight while every corner thins and reads as cropped, most on a bright line over a
+  dark field at one pixel per point. A line and the fill it frames share one element, as a field's
+  border does over its own background. Where a layer of its own fills the shape, such as a card's
+  backdrop blur or a frost that reaches past its box, the line is an `outline`, which the browser
+  paints above the element's content: a ghost card's ring, and an open list's outline over its frost
+  (`outline-offset` at minus its width, over a transparent border that holds its room). Never ring
+  such a shape with a spread `box-shadow`, which sits under the fill, and never let a child clipped by
+  `overflow` meet its parent's border: uikit's Table carries its fill on the bordered scroller for
+  that reason. Judge a corner at one pixel per point, magnified: a high-density render hides the
+  loss.
+- **What holds a control changes how it draws.** On the canvas nothing else sets a control apart, and
+  the veil is at its dimmest there: a field takes a ring, a veil outline doubles its weight, and a
+  disabled action fills with half a veil. An island (a card, a dialog, an open disclosure, a
+  fieldset, a message box) carries its controls on its own tone: its fields are bare wells, its
+  outlines hairlines, and its disabled actions take a field's well. `tokens.css` owns that context
+  in one rule, `[data-island] > *`, which resets `--color-field-border`, `--border-width-outline`
+  and `--color-action-disabled-surface`. Every uikit island carries `data-island`, and so does an
+  application's own. The context starts at the island's content, so the island's own outline still
+  follows what holds it, as a ghost card's ring does. A colored outline button carries itself, so it stays
+  a hairline everywhere. A field keeps its line's weight through its states, so focus and errors only
+  color it, and a field whose content sets its height, such as a textarea, stands 2px taller on the
+  canvas than in an island. The rim of a shape that carries its own fill, as an avatar's picture,
+  stays opaque with a checkbox's (`--color-control-border`): a veil dims over a dark picture. A new context-dependent look adds one declaration to that rule, never a
+  selector per component.
+
+### Page anatomy
+
+- **A section titles its cards from outside.** A page reads as sections, each a uikit `Section`: a
+  title, an optional explanation and its controls, above the content. The title sits on the surface
+  that holds the section, never inside the card that follows: a page's sections title on the canvas,
+  and a section inside a card titles on that card. A card holds the content. Several things of one
+  kind sit as sibling cards under one title, as Account's credentials hold a card per way to log in. A
+  card names itself only as an item of a collection, such as a project or one way to log in, through
+  a `Section` inside it one heading level down. A dialog titles itself, since nothing outside it can.
+  Never write a section's heading by hand: four Account tabs once did, and their titles sat inside
+  the card on two and outside on two, over three different explanation styles.
 - **A collection is a mosaic of ghost cards.** Each item of a collection, such as Studio's projects, is
   a ghost card (`Card surface="ghost"`): the canvas's own color under a raised card's veil and blur,
-  ringed a step over a divider (`--color-border-item`) since it has no surface of its own, so the list
-  reads as the page until the pointer or the keyboard's focus lights one card as a raised card. The cards
+  ringed in the veil that fills it once lit (`--color-border-item`) since it has no surface of its own,
+  so the list reads as the page until the pointer or the keyboard's focus lights one card as a raised
+  card, and its ring floods it. The cards
   run down one column before the next, each as tall as it needs, never aligned across columns. A
   card stops at the long readable measure (`--layout-readable-measure-long`, 80ch) plus its padding,
   and the columns center on a screen wider than they need.
+- **A sticky bar frosts and overhangs.** A page's sticky part, such as a tab bar, is clear glass over
+  a backdrop blur: the lamp shines through it, and only what scrolls under it frosts. A bar at the
+  page's foot holds actions over whatever scrolls by, so it darkens to the canvas under its frost, as
+  the navigation does. It draws no line, as no layout part does. It overhangs its column by the
+  hairline ring (`--border-width-thin`) on each side, so the ring of a card as wide as the column
+  never shows past its edges, and spans a phone's whole width, where its tabs center while they fit.
+  A finger or a wheel scrolls its overflow, so it shows no scrollbar.
+
+### Actions and states
+
 - **One lit action per view.** The primary action has a slight gradient that lightens toward the
   top and a soft underglow in its own color (`--gradient-action-primary`,
   `--shadow-action-primary`), with no transparency. Every other action stays flat. A short form sits
@@ -297,47 +387,29 @@ changes them.
   Secondary journeys become quiet text buttons (`Button variant="text"`): colored text at rest, a
   soft box on hover. A recovery action sits on the label row (`Field labelActions`), a journey
   switch is one footer line. Never stack ghost buttons under a form.
-- **One lamp per app.** A radial light in the top-start corner, scaled to the viewport, tells
-  people which app they are in, as JetBrains IDEs tint their toolbar with a project color. Each app
-  sets `--color-lamp` on its root element: Account's ember, Studio's magenta
-  (`--color-lamp-{ember,magenta}`). iOS ignores a fixed background, so
-  `@a-novel-kit/uikit-tokens/canvas.css` hangs the lamp (`--gradient-lamp`) on a layer fixed to the
-  viewport behind the page, never on an element that scrolls. Navigation stays in the viewport's
-  corner, so the light it carries (`--fill-navigation`) lines up in every browser. Anything else
-  lets the canvas's light through instead of painting its own: frosted cards, and sticky bars that
-  blur what scrolls under them.
-- **A sticky bar frosts and overhangs.** A page's sticky part, such as a tab bar, is clear glass over
-  a backdrop blur: the lamp shines through it, and only what scrolls under it frosts. A bar at the
-  page's foot holds actions over whatever scrolls by, so it darkens to the canvas under its frost, as
-  the navigation does. It draws no line, as no layout part does. It overhangs its column by the
-  hairline ring (`--border-width-thin`) on each side, so the ring of a card as wide as the column
-  never shows past its edges, and spans a phone's whole width, where its tabs center while they fit.
-  A finger or a wheel scrolls its overflow, so it shows no scrollbar.
-- **A field's list is the field's well.** An open select or combobox list takes the field's own
-  color (`--color-control-surface`), frosted over a backdrop blur, and a subtle border
-  (`--color-border-subtle`), so it stays visible past the island it opens from. Its option text
-  keeps 7.2:1 even over a primary button. A select keeps the focused field's look while its list
-  shows, tied to its open state rather than to focus, since a tap or a click focuses a button
-  without showing it. The list opens against the field's focus ring (`--border-width-strong`),
-  touching it without covering it. It dims what it blurs (`--filter-dim`), so a bright action behind
-  it does not clash with its options. It fades in as it drops `--space-1` from the field, and plays
-  it back on close, in `--duration-fast`; uikit's `FloatingSurface` keeps a closing surface on the
-  page until its exit transition ends.
-- **Glows never meet a clip.** A container that clips or scrolls leaves a lit control's glow room
-  inside it. A padded card clips nothing, and a dialog's body scrolls out to the dialog's sides and
-  bottom, so only the dialog's own edge cuts a glow or a focus ring.
-- **Motion eases, never performs.** Dialogs fade in and rise a little, and play it back on close;
-  the rail's width eases between its two states. Each takes `--duration-normal`, which reduced
-  motion sets to zero, and a browser without the transition simply switches.
-- **Effects never hide contrast.** Axe reports color contrast as incomplete for text over any
-  background image, gradient, or overlapping layer, so measure the brightest point of every lit
-  surface by hand and record the ratio beside its token. Keep grain and patterns off surfaces that
-  carry text.
+- **A chosen ghost button reads as the current item.** A ghost or text button never draws a border:
+  a soft box under the pointer, and once chosen (`aria-pressed`) the navigation's current item, blue
+  whatever its tone, with NavList's glowing indicator under its label, which no hover draws, so a
+  brand toggle under the pointer never reads as chosen. Studio's column choice shows it. Only an
+  outline button keeps a bordered selection, and a disabled choice stays visible, dimmed.
+- **A disabled action is an inert fill.** It draws no outline and no glow: only its fill, under muted
+  text (`--color-action-disabled-surface`, `--color-action-disabled-text`). On the canvas the fill is
+  half a veil, a slight gray; in an island it is a field's well, so the action sits level with the
+  fields around it. A disabled checkbox, radio button or switch drops its rim the same way, and a
+  disabled slider keeps its value readable in the muted text's color. A ghost or text button has no
+  fill to dim, so it stays bare text. A transparent border keeps each one outlined in forced-colors
+  mode.
+- **Focus without noise.** A dialog focuses itself when it opens, so no control lights its focus
+  ring until the reader moves; keyboard focus stays visible everywhere else. The skip link's target,
+  the page's `main`, takes focus without a ring: a click inside it and a scrolling key would
+  otherwise outline the whole page.
+
+### Fields
+
 - **Fields are wells.** A field is a translucent darkening of the island it sits in
   (`--color-surface-sunken`), with no border: only focus and errors outline it, and a transparent
   border keeps it outlined in forced-colors mode. A field outside an island, on the canvas or a sticky
-  bar, takes a ghost card's ring (`--color-field-border`), and each island (a card, a dialog, an
-  open disclosure, a fieldset) resets it to transparent for its fields. Fields share the button
+  bar, takes a ghost card's ring (`--color-field-border`), which an island drops for its fields. Fields share the button
   heights, so a borderless field keeps the same visual weight as the action beside it. Every input
   is one, under a field's label above the well, never a legend on its edge: a choice among short
   options is a `ChipGroup`, tags a `TagInput` (a space ends one, in lower-kebab-case), and a file a
@@ -345,6 +417,18 @@ changes them.
   tag it becomes. A file field has no button: it names the file, a folder icon at its end opens the
   picker as the whole field does, and a cross removes the choice. A chosen image always shows above
   its field, framed or not, never inside it.
+- **A field's list continues the field.** An open select or combobox list reads as its focused field,
+  extended: the field's focus outline and glow (`--color-control-border-focus`,
+  `--shadow-focus-ring`) over the shadow that lifts it, and the focused well's color
+  (`--color-control-surface-focus`), frosted over a backdrop blur. It dims what it blurs
+  (`--filter-dim`), so a bright action behind it does not clash with its options, and its veil thins
+  by as much, so the list lands on its field's tone over an island and what lies behind it still
+  shows through: at the field's own opacity the frost reads as a solid panel. Its option text keeps 6.1:1 even over the brand color at its peak. A select keeps the focused field's look while its list
+  shows, tied to its open state rather than to focus, since a tap or a click focuses a button
+  without showing it. The list opens against the field's focus ring (`--border-width-strong`),
+  touching it without covering it. It fades in as it drops `--space-1` from the field, and plays it
+  back on close, in `--duration-fast`; uikit's `FloatingSurface` keeps a closing surface on the page
+  until its exit transition ends.
 - **A long choice searches and sorts.** A chip list too long to scan, such as Studio's genres, opens
   its well with a search (`ChipGroup searchLabel`). The search filters the chips by label, whatever
   their case and accents, and never changes the choice: a hidden chip keeps its choice and its
@@ -355,12 +439,48 @@ changes them.
   through. A wheel stops at the list's end; a finger carries on to the page. On a narrow screen the
   form keeps only the choice, as badges or a placeholder, and a tap opens the search and the chips
   over the whole screen.
-- **Failures sit in a feedback box.** A message that reports a failure, a refusal, or something the
-  reader must act on renders in a toned feedback component, never as plain text: an `Alert` inside a
-  section, an `InlineMessage` beside a control, a `StatusState` when it replaces the page. The tone,
-  icon, and accent bar carry its meaning at a glance; plain secondary text stays for neutral
-  descriptions. A stored state rather than fresh feedback, such as a pending change, takes
-  `role="note"` so it is not announced again.
+
+### Color, type, space and shape
+
+- **Three hues, blue most.** Every color is a nuance of the brand blue, the pressure magenta or the signal
+  amber, in that order of frequency. Blue carries actions, links and tags; magenta is rarer, for the
+  second accent, such as a project's genres (`Badge tone="accent"`, `--color-accent-secondary`), and
+  for failures; amber is rarest, for highlights and text selection. An even blend of two, as Studio's
+  violet lamp was, reads as a fourth hue: never use one.
+- **Selection in amber.** Selected text reads amber on a translucent blue veil
+  (`--color-selection-{text,surface}`), a pair no other state uses. Buttons, tabs and menus are not
+  selectable.
+- **Weight marks action.** A label names one control, so it stays regular. Bold is kept for actions
+  and group names. Light text on a fill thins out, so a badge, a chip and a tag take the medium weight
+  (`--font-weight-medium`). TeX Gyre Heros ships 400 and 700 alone: uikit-fonts maps the interface
+  family's 500 to 600 to Arimo's weight axis, whose widths and shapes match, under Heros's own ascent
+  and descent. A synthetic stroke smudges at one pixel per point: never fake a weight with one.
+- **Corners stay concentric.** A shape inside another takes the outer radius less the space
+  between them, so both corners share their centers. Each `--radius-*` step doubles the one below
+  (3, 6, 12, 24px). A nested card sits half its parent's radius from the edge and lands on the next
+  step down at any depth, while the card's other content sits a spacing step further in (18px in a
+  top card, 9px nested). A list or a menu adds its `--space-1` padding to its items' radius,
+  which is off the scale.
+- **Corners follow the shape.** Labeled buttons, fields, message boxes and navigation links take
+  `--radius-lg`. An icon-only button or a compact navigation item keeps `--radius-md`: 12px on a
+  28px square reads round. A button inside a field takes the field's radius less its inset.
+- **Repeated spacing.** Space inside and between elements uses a few repeated steps: 3, 6, 9, 12,
+  18, and 24px (`--space-{1,2,3,4,6,8}`), with 36 and 48 for page layout. Fields sit 12px apart and
+  form actions 24px below the last field. A section's title sits 12px above its content, and sections
+  24px apart. The in-between `--space-1-5` only separates chips and tags,
+  and a negative margin only lets a hover box overhang its row or a nested card reach its inset.
+  Sizes keep a 4px grid on `--size-{N}`: control heights, icons, avatars, badges, marks, surface
+  widths, and the reach of shadows and glows. A size never takes a `--space-*` token.
+  uikit's Layout & shape docs map each common role to its step, and each width to a `--layout-*`
+  token; a new screen picks from them. A value outside them is a rare exception that sits beside a
+  comment naming its reason, as the root's 20rem floor names WCAG 1.4.10's reflow width. A role
+  that recurs gets a row in that table first.
+- **Compact controls.** Controls sit on a 4px grid at 28, 32, and 40px, and a coarse pointer adds
+  `--size-1` to each. Small and medium buttons set their label in the small text size. Empty space
+  inside a button reads as bulk; keep its padding tight and its target large through height alone.
+
+### Navigation, feedback and motion
+
 - **Navigation is a vertical rail.** Every app uses the same shell: a collapsible rail on wide
   screens, a header one control tall and a fullscreen drawer on narrow ones, sharing one navigation
   surface. The header is fixed to the screen, so iOS stretches the page under it past the top while
@@ -373,33 +493,15 @@ changes them.
   tab asks their browser. A link to the page showing outside a NavList, such as the account link,
   carries `aria-current="page"` and reads as the current item (`Button` styles it); the account
   picture then shows in full color.
-- **Selection in amber.** Selected text reads amber on a translucent blue veil
-  (`--color-selection-{text,surface}`), a pair no other state uses. Buttons, tabs and menus are not
-  selectable.
-- **A chosen ghost button reads as the current item.** A ghost or text button never draws a border:
-  a soft box under the pointer, and once chosen (`aria-pressed`) the navigation's current item, blue
-  whatever its tone, with NavList's glowing indicator under its label, which no hover draws, so a
-  brand toggle under the pointer never reads as chosen. Studio's column choice shows it. Only an
-  outline button keeps a bordered selection, and a disabled choice stays visible, dimmed.
-- **Focus without noise.** A dialog focuses itself when it opens, so no control lights its focus
-  ring until the reader moves; keyboard focus stays visible everywhere else. The skip link's target,
-  the page's `main`, takes focus without a ring: a click inside it and a scrolling key would
-  otherwise outline the whole page.
-- **Repeated spacing.** Space inside and between elements uses a few repeated steps: 3, 6, 9, 12,
-  18, and 24px (`--space-{1,2,3,4,6,8}`), with 36 and 48 for page layout. Fields sit 12px apart and
-  form actions 24px below the last field. The in-between `--space-1-5` only separates chips and tags,
-  and a negative margin only lets a hover box overhang its row or a nested card reach its inset.
-  Sizes keep a 4px grid on `--size-{N}`: control heights, icons, avatars, badges, marks, surface
-  widths, and the reach of shadows and glows. A size never takes a `--space-*` token.
-  uikit's Layout & shape docs map each common role to its step, and each width to a `--layout-*`
-  token; a new screen picks from them. A value outside them is a rare exception that sits beside a
-  comment naming its reason, as the root's 20rem floor names WCAG 1.4.10's reflow width. A role
-  that recurs gets a row in that table first.
-- **Compact controls.** Controls sit on a 4px grid at 28, 32, and 40px, and a coarse pointer adds
-  `--size-1` to each. Small and medium buttons set their label in the small text size. Empty space
-  inside a button reads as bulk; keep its padding tight and its target large through height alone.
-- **Weight marks action.** A label names one control, so it stays regular. Bold is kept for actions
-  and group names.
+- **Failures sit in a feedback box.** A message that reports a failure, a refusal, or something the
+  reader must act on renders in a toned feedback component, never as plain text: an `Alert` inside a
+  section, an `InlineMessage` beside a control, a `StatusState` when it replaces the page. The tone,
+  icon, and accent bar carry its meaning at a glance; plain secondary text stays for neutral
+  descriptions. A stored state rather than fresh feedback, such as a pending change, takes
+  `role="note"` so it is not announced again.
+- **Motion eases, never performs.** Dialogs fade in and rise a little, and play it back on close;
+  the rail's width eases between its two states. Each takes `--duration-normal`, which reduced
+  motion sets to zero, and a browser without the transition simply switches.
 
 ## Refinement passes
 
@@ -507,6 +609,8 @@ Do not approve a visual contract from source alone.
   contexts without introducing a second hard-coded color system.
 - Borders are reserved for meaningful affordance or structure. Invisible groups and translucent
   islands remain distinguishable through composition, surface, and elevation.
+- Every line is the divider or the outline token, never an opaque neutral, and a surface that holds
+  controls carries `data-island`. A section's title comes from `Section`, outside its cards.
 - Glow is localized, stateful, proportional, and absent from text; gradient routes avoid accidental
   muddy midpoints.
 - Semantic names survive a palette or density change.
