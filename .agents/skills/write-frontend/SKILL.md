@@ -221,9 +221,12 @@ or instruction to find an earlier link does not replace it.
 - Start from the smallest supported viewport and let content determine breakpoints. Avoid device-name
   breakpoints and user-agent sniffing.
 - Use design tokens for product colors, spacing, type, radii, borders, elevation, and motion. A raw
-  value is acceptable only for a local algorithmic constant with no design meaning.
-- Use relative units for type and layout. Keep line height unitless. Reserve pixels for genuinely
-  device-bound details such as a one-device-pixel hairline when the token contract calls for it.
+  value is acceptable only for a local algorithmic constant with no design meaning. In A-Novel code,
+  look each token up in [the ladders](../write-design-system/references/ladders.md) instead of
+  picking one.
+- Use relative units for type and layout. Keep line height unitless, unless the design system binds
+  it to a text style, as uikit's `--text-*` tokens do. Reserve pixels for genuinely device-bound
+  details such as a one-device-pixel hairline when the token contract calls for it.
 - Keep selectors shallow and component-scoped. Avoid `!important`; fix cascade ownership instead.
 - Preserve content at 200% text zoom and 400% page zoom/reflow. Do not clip user content to force a
   mockup height.

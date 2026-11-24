@@ -204,6 +204,12 @@ onto it within seconds, signing them itself. Push nothing then: compare the new 
 the reviewed one (`git diff <reviewed-head> <new-head>` prints nothing when the parent merged as
 reviewed). Rebase and push only when GitHub leaves the PR conflicting.
 
+A dependent PR's screenshot approval waits for that retarget. The visual gate counts
+`allow-screenshot-change` only on a pull request into `master`, so on a stacked one the label does
+nothing, and `test-browser` and `visual-comparison` stay red whatever its drift review found.
+Review the drift and add the label once the PR targets `master`: its references then hold the
+parent's changes, and its head is the commit GitHub rebased.
+
 ---
 
 ## Phase 3: Decide PR Status (Ready vs. Draft)
