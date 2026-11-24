@@ -161,12 +161,23 @@ Rules:
 - Derive localized glow from the emitting object's characteristic size and the metric scale; roughly
   one eighth is a useful initial blur proportion, not a fixed rule. Layer a tighter bright halo with a
   weaker outer halo. Keep text unblurred and avoid permanent bloom on ordinary controls.
-- Use `rem`-based spacing and type, unitless line heights, named duration/easing tokens, and logical
-  dimensions. Zero and intrinsic keywords need tokens only when they represent a selectable public
+- Use `rem`-based spacing and type, line heights that come with their text style, named motion
+  tokens, and logical dimensions. Zero and intrinsic keywords need tokens only when they represent a selectable public
   design decision.
 - Keep dark mode the A-Novel default. Add themes through semantic aliases rather than branching every
   component selector.
 - Change or remove a published token only through the repository breaking-change/version workflow.
+- Give every step of a public scale one role, written beside its definition in `tokens.css` and in
+  [the ladders](references/ladders.md). A step nothing consumes is removed: an unused step is a
+  choice left open. Two names for one value are one too many, as `--color-surface-overlay` doubled
+  `--color-surface-island-strong` until uikit dropped it.
+- Bind choices that travel together in one token. A text style (`--text-*`) is a `font` shorthand
+  value that sets weight, size, line height and family at once, so no element picks them apart.
+- Hold the rules with the token contract check, `packages/tokens/scripts/check-token-contract.mjs`,
+  which `pnpm lint` runs in uikit and each platform runs as `uikit-token-contract src`. It fails on a
+  token nothing defines, on a property that reads outside its family, and on a raw value where a
+  scale exists. A CSS custom property that is misspelled or removed fails silently in the browser:
+  this check is what reports it.
 
 ## Component contracts
 
@@ -260,7 +271,9 @@ neutrals. Keep the canonical brand, pressure, and signal colors stable unless th
 changes them.
 
 The rules group by what they shape. Read the group a change touches, and the first two before
-adding any surface, line or control:
+adding any surface, line or control. Before writing any value, in uikit or in a platform, find it in
+[the ladders](references/ladders.md): the tables that give each text style, color, space, size, shape,
+shadow, duration and layer its one use.
 
 | Group                                                              | Decides                                                    |
 | ------------------------------------------------------------------ | ---------------------------------------------------------- |
@@ -269,7 +282,7 @@ adding any surface, line or control:
 | [Page anatomy](#page-anatomy)                                      | Sections, cards, collections and sticky bars               |
 | [Actions and states](#actions-and-states)                          | The lit action, and the chosen, focused and disabled looks |
 | [Fields](#fields)                                                  | Wells, their lists and long choices                        |
-| [Color, type, space and shape](#color-type-space-and-shape)        | Hues, weights, spacing, radii and control sizes            |
+| [Color, type, space and shape](#color-type-space-and-shape)        | Hues, text styles, spacing, radii and control sizes        |
 | [Navigation, feedback and motion](#navigation-feedback-and-motion) | The rail, message boxes, motion and effects                |
 
 ### Light and surfaces
@@ -277,8 +290,9 @@ adding any surface, line or control:
 - **Contrast through elevation.** Neutrals stay blue-gray. The canvas sits near black, and each
   raised surface steps lighter, so islands stand clear of the field without borders.
 - **Light comes in veils.** One veil (`--color-veil`) is the lightest neutral, an eighth strong, over
-  whatever lies behind it. A raised card is one veil over the canvas, the pointer adds one to what it
-  hovers, and a line is one veil drawn thin. A veil is translucent, so each shows on every surface, a
+  whatever lies behind it. A raised card is three quarters of a veil over the canvas, the pointer
+  adds a whole one to what it hovers, a neutral action is one over what holds it, and a line is one
+  drawn thin. A veil is translucent, so each shows on every surface, a
   lamp-lit one included. Never set an opaque gray beside it for a surface, a hover or a line: it holds
   on one backdrop only, as the opaque `--color-border-subtle` vanished on a card until uikit dropped
   it.
@@ -289,14 +303,16 @@ adding any surface, line or control:
   every side: the offset of `--shadow-lg` falls off the screen there. Never draw a bright top
   line, a dark bottom line, an embossed edge, or a gradient face: skeuomorphism reads dated.
 - **Cards are frosted glass.** A raised card is a light veil with a backdrop blur
-  (`--color-surface-island-glass`), so the lamp shines through it as it lights the navigation. A
+  (`--color-surface-island-glass`), so the lamp shines through it as it lights the navigation. It
+  takes three quarters of a veil: a full one stood too light beside the night, and a card sits a
+  step under the dialog and the rail that rise above it. A
   card inside a card keeps the parent's glass and stands out by its shadow alone (`--shadow-md`):
   an opaque inner card blocks the lamp and reads colder, and a lighter one reads too bright and
   drops muted text under 4.5:1 near the lamp.
 - **One lamp per app.** A radial light in the top-start corner, scaled to the viewport, tells
   people which app they are in, as JetBrains IDEs tint their toolbar with a project color. Each app
-  sets `--color-lamp` on its root element: Account's ember, Studio's magenta
-  (`--color-lamp-{ember,magenta}`). iOS ignores a fixed background, so
+  sets `--color-lamp` on its root element, one of the three hues and never a blend of two:
+  Account's amber, Studio's magenta, the template's blue (`--color-lamp-{amber,magenta,blue}`). iOS ignores a fixed background, so
   `@a-novel-kit/uikit-tokens/canvas.css` hangs the lamp (`--gradient-lamp`) on a layer fixed to the
   viewport behind the page, never on an element that scrolls. Navigation stays in the viewport's
   corner, so the light it carries (`--fill-navigation`) lines up in every browser. Anything else
@@ -359,7 +375,7 @@ adding any surface, line or control:
   the card on two and outside on two, over three different explanation styles.
 - **A collection is a mosaic of ghost cards.** Each item of a collection, such as Studio's projects, is
   a ghost card (`Card surface="ghost"`): the canvas's own color under a raised card's veil and blur,
-  ringed in the veil that fills it once lit (`--color-border-item`) since it has no surface of its own,
+  ringed in the veil that fills it once lit (`--color-border-default`) since it has no surface of its own,
   so the list reads as the page until the pointer or the keyboard's focus lights one card as a raised
   card, and its ring floods it. The cards
   run down one column before the next, each as tall as it needs, never aligned across columns. A
@@ -375,9 +391,10 @@ adding any surface, line or control:
 
 ### Actions and states
 
-- **One lit action per view.** The primary action has a slight gradient that lightens toward the
-  top and a soft underglow in its own color (`--gradient-action-primary`,
-  `--shadow-action-primary`), with no transparency. Every other action stays flat. A short form sits
+- **One lit action per view.** The primary action is the brand's pair, its ink on its tint, with a
+  slight gradient that lightens toward the top and a soft underglow in its own color
+  (`--gradient-action-primary`, `--shadow-action-primary`), with no transparency. Every other action
+  stays flat, and a neutral one writes in secondary text at rest, so the lit one leads. A short form sits
   in a compact dialog (`Dialog size="sm"`). Every action group and button layout follows one rule,
   which `ActionGroup` draws for `FormActions` and a dialog's `actions`: on a viewport narrower than
   35rem the buttons stack full width, the primary action last; from 35rem
@@ -387,6 +404,9 @@ adding any surface, line or control:
   Secondary journeys become quiet text buttons (`Button variant="text"`): colored text at rest, a
   soft box on hover. A recovery action sits on the label row (`Field labelActions`), a journey
   switch is one footer line. Never stack ghost buttons under a form.
+- **One look says "this one, of several".** The current item of a rail, a chosen ghost button and
+  the tab showing all read the same: a tinted box, blue text and a glowing indicator. uikit's `Tabs`
+  once underlined its tab over a divider while Account's tab bar lit a box, two looks for one job.
 - **A chosen ghost button reads as the current item.** A ghost or text button never draws a border:
   a soft box under the pointer, and once chosen (`aria-pressed`) the navigation's current item, blue
   whatever its tone, with NavList's glowing indicator under its label, which no hover draws, so a
@@ -399,6 +419,12 @@ adding any surface, line or control:
   disabled slider keeps its value readable in the muted text's color. A ghost or text button has no
   fill to dim, so it stays bare text. A transparent border keeps each one outlined in forced-colors
   mode.
+- **What scrolls away fades away.** A dialog's body that outgrows the screen fades out over its
+  end inset before the footer, so a long form never ends on a line sliced against its actions. The
+  inset holds nothing at rest, so a short dialog is untouched.
+- **Tracks share one tone.** A progress bar, a meter and a slider draw their empty track in
+  `--color-surface-island-strong`, which shows on the canvas as on an island. A well's tone vanishes
+  on the canvas, and a browser's own meter is a light bar in its greens and reds: restyle both.
 - **Focus without noise.** A dialog focuses itself when it opens, so no control lights its focus
   ring until the reader moves; keyboard focus stays visible everywhere else. The skip link's target,
   the page's `main`, takes focus without a ring: a click inside it and a scrolling key would
@@ -442,16 +468,43 @@ adding any surface, line or control:
 
 ### Color, type, space and shape
 
+- **A value is looked up, never picked.** What a thing is decides its token:
+  [the ladders](references/ladders.md) hold one row per role, and the token contract check fails a
+  value outside its family. A value no ladder holds carries an `/* off-scale: <reason> */` comment
+  directly above it, as the root's 20rem floor names WCAG 1.4.10's reflow width, and a role that
+  recurs gets a row first. The Storybook role table, this skill and the code once disagreed on three
+  gaps, and sibling components drifted apart: `EmptyState` and `StatusState` titled the same kind of
+  block in two faces, two sizes and two grays.
+- **A hue is an ink or a tint.** Its ink is the neon itself (`--color-ink-{brand,pressure,signal}`),
+  for what is drawn thin: text, an icon, a line. Its tint is a deep step of its ramp, as saturated
+  as that depth allows (`--color-tint-{brand,pressure,signal}`), for what is filled under its ink.
+  So a tag, a chosen chip and a colored action read as the tab showing does: neon text on its own
+  deep color. The neon never fills behind text: it glared there and left only black or white to
+  write with, and badges once wore white on a mid fill beside buttons in black on the neon, two
+  looks for one palette. A mark that is on, such as a checked box, a switch or the filled part of a
+  slider, is small, so the brand's ink fills it (`--color-control-on`). The magenta sits darker than
+  the blue and the amber, so its ink takes a quarter of light. Each ink keeps 4.9:1 or more on its
+  tint and 5.4:1 or more on a card and in a dialog. Never dull a hue to level it with another:
+  capping every family at the brand's chroma washed the whole palette out. A hue keeps its gamut's
+  edge, and its tint and its ink carry its strength.
 - **Three hues, blue most.** Every color is a nuance of the brand blue, the pressure magenta or the signal
   amber, in that order of frequency. Blue carries actions, links and tags; magenta is rarer, for the
-  second accent, such as a project's genres (`Badge tone="accent"`, `--color-accent-secondary`), and
+  second accent, such as a project's genres (`Badge tone="accent"`), and
   for failures; amber is rarest, for highlights and text selection. An even blend of two, as Studio's
   violet lamp was, reads as a fourth hue: never use one.
 - **Selection in amber.** Selected text reads amber on a translucent blue veil
   (`--color-selection-{text,surface}`), a pair no other state uses. Buttons, tabs and menus are not
   selectable.
+- **Text takes a style, and its color follows.** An element sets one declaration,
+  `font: var(--text-<role>)`, and never a size, a line height or a family: content reads in
+  `--text-body`, interface text in `--text-ui`, a compact fact in `--text-meta`, each title level in
+  its own style. Color follows the role: primary for what the reader came for, secondary for what
+  names or explains it, muted for what they can skip. A description under a title is secondary,
+  whatever component draws it, and a message's body reads at the interface size, never smaller. A
+  field's hint and its error share one style and one edge, the label's, and a field in error shows
+  both: the hint often says how to fix it.
 - **Weight marks action.** A label names one control, so it stays regular. Bold is kept for actions
-  and group names. Light text on a fill thins out, so a badge, a chip and a tag take the medium weight
+  and group names. Small text on a fill thins out, so a badge, a chip and a tag take the medium weight
   (`--font-weight-medium`). TeX Gyre Heros ships 400 and 700 alone: uikit-fonts maps the interface
   family's 500 to 600 to Arimo's weight axis, whose widths and shapes match, under Heros's own ascent
   and descent. A synthetic stroke smudges at one pixel per point: never fake a weight with one.
@@ -464,19 +517,20 @@ adding any surface, line or control:
 - **Corners follow the shape.** Labeled buttons, fields, message boxes and navigation links take
   `--radius-lg`. An icon-only button or a compact navigation item keeps `--radius-md`: 12px on a
   28px square reads round. A button inside a field takes the field's radius less its inset.
-- **Repeated spacing.** Space inside and between elements uses a few repeated steps: 3, 6, 9, 12,
-  18, and 24px (`--space-{1,2,3,4,6,8}`), with 36 and 48 for page layout. Fields sit 12px apart and
-  form actions 24px below the last field. A section's title sits 12px above its content, and sections
-  24px apart. The in-between `--space-1-5` only separates chips and tags,
-  and a negative margin only lets a hover box overhang its row or a nested card reach its inset.
-  Sizes keep a 4px grid on `--size-{N}`: control heights, icons, avatars, badges, marks, surface
-  widths, and the reach of shadows and glows. A size never takes a `--space-*` token.
-  uikit's Layout & shape docs map each common role to its step, and each width to a `--layout-*`
-  token; a new screen picks from them. A value outside them is a rare exception that sits beside a
-  comment naming its reason, as the root's 20rem floor names WCAG 1.4.10's reflow width. A role
-  that recurs gets a row in that table first.
+- **One space per relationship.** Space inside and between elements uses eight steps, 3, 5, 6, 9, 12,
+  18, 24 and 36px (`--space-{1,1-5,2,3,4,6,8,12}`), and each sets one relationship: parts of one
+  thing sit 6px apart, things that work as one unit 9px, siblings 12px, groups 24px. So a label sits
+  6px above its field, buttons in a group 9px apart, fields 12px apart, a section's title 12px above
+  its content, sections 24px apart and form actions 24px below the last field. The in-between
+  `--space-1-5` only separates chips and tags, and a negative margin only lets a hover box overhang
+  its row or a nested card reach its inset. Sizes keep a 4px grid on `--size-{N}`: control heights,
+  icons, avatars, badges, marks, and the reach of shadows and glows. Widths come from the
+  `--layout-*` tokens, a floating surface's included. A size never takes a `--space-*` token, and a
+  space never takes a size.
 - **Compact controls.** Controls sit on a 4px grid at 28, 32, and 40px, and a coarse pointer adds
-  `--size-1` to each. Small and medium buttons set their label in the small text size. Empty space
+  `--size-1` to each. Medium is the default and takes no prop: a field, and the actions of a form, a
+  dialog or a toolbar. Small is an action inside a row or beside a title, a tab or an option. Large
+  is a page's only action, on a page built around it. Small and medium buttons set their label in the small text size. Empty space
   inside a button reads as bulk; keep its padding tight and its target large through height alone.
 
 ### Navigation, feedback and motion
@@ -488,11 +542,16 @@ adding any surface, line or control:
   behind it still. The links of one group touch, as in most productivity apps, and run in order of
   importance ([plan-ui-design](../plan-ui-design/SKILL.md#2-map-the-task-before-the-screen)). A
   `Separator`, inset like the links, sets groups apart, and the account and the logout sit in
-  separate groups so a click never lands on the wrong one. The top and bottom groups stay 32px
-  apart. Every link opens in the same tab, between Agora apps included: a reader who wants another
+  separate groups so a click never lands on the wrong one. The top and bottom groups stay 24px
+  apart (`--space-8`). Every link opens in the same tab, between Agora apps included: a reader who wants another
   tab asks their browser. A link to the page showing outside a NavList, such as the account link,
   carries `aria-current="page"` and reads as the current item (`Button` styles it); the account
   picture then shows in full color.
+- **A message's mark sits on its first line.** The icon of an `Alert`, a toast or a banner centers
+  on the title's line, however many lines follow, never on the box's middle, where it drifts away
+  from the title it belongs to. `FeedbackIcon` owns it: the mark starts at the top and the text beside
+  it starts a step lower, so a single line keeps the mark's height and every message has the same air
+  above its first line and below its last.
 - **Failures sit in a feedback box.** A message that reports a failure, a refusal, or something the
   reader must act on renders in a toned feedback component, never as plain text: an `Alert` inside a
   section, an `InlineMessage` beside a control, a `StatusState` when it replaces the page. The tone,
@@ -500,16 +559,18 @@ adding any surface, line or control:
   descriptions. A stored state rather than fresh feedback, such as a pending change, takes
   `role="note"` so it is not announced again.
 - **Motion eases, never performs.** Dialogs fade in and rise a little, and play it back on close;
-  the rail's width eases between its two states. Each takes `--duration-normal`, which reduced
-  motion sets to zero, and a browser without the transition simply switches.
+  the rail's width eases between its two states. Each takes `--motion-surface`, a control changing
+  state takes `--motion-state`, and a motion token carries its duration and easing together.
+  Reduced motion sets every duration to zero, and a browser without the transition simply switches.
 
 ## Refinement passes
 
 Preserve that direction, along with compact metadata and vivid semantic accents. Tune the owning
 semantic role and compare before/after renders across its consumers.
 
-- Judge color with area and backdrop. A badge or a chosen chip fills with a deep step of its tone's
-  own ramp under light text (`--color-label-*`), since a full accent glares behind its words. Darken
+- Judge color with area and backdrop. A badge, a chosen chip and a colored action fill with their
+  hue's tint under its ink (`--color-tint-*`, `--color-ink-*`), since a full accent glares behind
+  its words. Darken
   along the ramp, never by lowering lightness at the same chroma: the color leaves the gamut and
   clips to another hue, as the genre magenta turned plain red. A large status box
   needs a quieter tint with a clear icon and accent. Improve vividness through chroma and foreground
@@ -596,7 +657,12 @@ Do not approve a visual contract from source alone.
 
 ## Review checklist
 
-- Component CSS contains no raw product colors, spacing, radii, borders, type, or motion values.
+- Component CSS contains no raw product colors, spacing, radii, borders, type, or motion values, and
+  the token contract check passes with every `off-scale:` exception justified.
+- Text takes a `--text-*` style with the color of its role; no component sets a font size, a line
+  height or a family. Each space, size, radius, shadow and duration is the one its ladder gives.
+- A new or removed token changes its ladder row, its Storybook table and the comment beside its
+  definition in the same change.
 - Public components remain small semantic bricks; optional presentation composes without boolean or
   position-prop matrices.
 - Bases and ratios are fewer than generated public choices and have documented meaning; each step
