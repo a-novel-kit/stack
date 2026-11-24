@@ -422,9 +422,11 @@ shadow, duration and layer its one use.
 - **What scrolls away fades away.** A dialog's body that outgrows the screen fades out over its
   end inset before the footer, so a long form never ends on a line sliced against its actions. The
   inset holds nothing at rest, so a short dialog is untouched.
-- **Tracks share one tone.** A progress bar, a meter and a slider draw their empty track in
-  `--color-surface-island-strong`, which shows on the canvas as on an island. A well's tone vanishes
-  on the canvas, and a browser's own meter is a light bar in its greens and reds: restyle both.
+- **Tracks share one tone.** A progress bar, a meter, a slider and a switch draw their empty track
+  as one veil over what holds it (`--color-action-neutral`), so it shows on every surface. An opaque
+  tone vanishes on the surface of its own tone: a well's on the canvas, an island's in a dialog,
+  where a slider once lost its track. A browser's own meter is a light bar in its greens and reds:
+  restyle it.
 - **Focus without noise.** A dialog focuses itself when it opens, so no control lights its focus
   ring until the reader moves; keyboard focus stays visible everywhere else. The skip link's target,
   the page's `main`, takes focus without a ring: a click inside it and a scrolling key would

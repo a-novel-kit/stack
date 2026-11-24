@@ -129,7 +129,7 @@ need no token.
 | An opaque island: the navigation, a dialog, a menu                                   | `--color-surface-island-strong`                                                                   |
 | A frosted bar or popover                                                             | `--color-surface-glass`                                                                           |
 | What the pointer hovers, on any surface                                              | one veil more: `--color-surface-glass-hover`, or `--color-action-subtle-hover` under colored text |
-| A neutral action at rest, a neutral badge, a switch's empty track, a chip not chosen | one veil over what holds it: `--color-action-neutral`                                             |
+| A neutral action at rest, a neutral badge, any track's empty part, a chip not chosen | one veil over what holds it: `--color-action-neutral`                                             |
 | A tag, a chosen chip, a colored action                                               | its hue's tint, under its ink: `--color-tint-{brand,pressure,signal}`                             |
 | A mark that is on: a checked box, a switch, a slider's filled part                   | the brand's ink: `--color-control-on`                                                             |
 | An app's lamp, one of the three hues, never a blend                                  | `--color-lamp-{amber,magenta,blue}`                                                               |

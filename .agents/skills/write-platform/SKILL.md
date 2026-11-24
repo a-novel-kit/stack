@@ -573,8 +573,9 @@ API credentials in Storybook.
   canvas the application never shows.
 - Every value in the application's own CSS comes from
   [the ladders](../write-design-system/references/ladders.md): text takes a `--text-*` style, and
-  each space, size and color the token its role gives. `pnpm lint` runs the token contract check
-  (`uikit-token-contract src`), which also fails on a token uikit no longer defines.
+  each space, size and color the token its role gives. `pnpm lint` and CI's `lint-tokens` job run the
+  token contract check (`uikit-token-contract src`), which also fails on a token uikit no longer
+  defines. A browser drops an undefined token silently, so the type check and the tests stay green.
 - Every failure, refusal, or warning renders in a toned feedback box (`Alert`, `InlineMessage`, or a
   page-level `StatusState`), never as plain text
   ([write-design-system](../write-design-system/SKILL.md#the-a-novel-visual-direction)).
