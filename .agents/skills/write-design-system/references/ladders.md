@@ -74,8 +74,11 @@ deep step of its ramp, for what is filled under its ink. The neon never fills be
 | Signal amber     | `--color-ink-signal`, the neon                      | `--color-tint-signal`                        | 6.5:1       |
 | None             | `--color-text-secondary`                            | `--color-action-neutral`, one veil           | 7:1 or more |
 
-Under the pointer, a colored action lifts its fill one step up its ramp and its ink a quarter of the way
-to white; a chosen one stays lifted and glows.
+A pair is lit with its fill one step up its ramp and its ink a quarter of the way to white:
+`--color-ink-{brand,pressure,signal}-lit` on `--color-tint-{brand,pressure,signal}-lit` (6.0, 5.0 and
+6.0:1). The pointer lights a colored action, and a chosen one stays lit on a fill one step higher still. No action or label glows. A label has no resting
+look to stand out of, so a badge, a tag and a chosen chip always show lit; without a hue, a badge writes
+primary text on `--color-action-neutral-hover`.
 
 ## Spacing
 
@@ -120,19 +123,21 @@ need no token.
 
 ## Surfaces
 
-| The surface is                                                                       | Token                                                                                             |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| The page                                                                             | `--color-surface-canvas`                                                                          |
-| A well: a field, or a passive well cut into its surface                              | `--color-surface-sunken`                                                                          |
-| A card                                                                               | `--color-surface-island-glass`                                                                    |
-| A passive group inside an island: a fieldset, a description's cell                   | `--color-surface-island-subtle`                                                                   |
-| An opaque island: the navigation, a dialog, a menu                                   | `--color-surface-island-strong`                                                                   |
-| A frosted bar or popover                                                             | `--color-surface-glass`                                                                           |
-| What the pointer hovers, on any surface                                              | one veil more: `--color-surface-glass-hover`, or `--color-action-subtle-hover` under colored text |
-| A neutral action at rest, a neutral badge, any track's empty part, a chip not chosen | one veil over what holds it: `--color-action-neutral`                                             |
-| A tag, a chosen chip, a colored action                                               | its hue's tint, under its ink: `--color-tint-{brand,pressure,signal}`                             |
-| A mark that is on: a checked box, a switch, a slider's filled part                   | the brand's ink: `--color-control-on`                                                             |
-| An app's lamp, one of the three hues, never a blend                                  | `--color-lamp-{amber,magenta,blue}`                                                               |
+| The surface is                                                      | Token                                                                                             |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| The page                                                            | `--color-surface-canvas`                                                                          |
+| A well: a field, or a passive well cut into its surface             | `--color-surface-sunken`                                                                          |
+| A card                                                              | `--color-surface-island-glass`                                                                    |
+| A passive group inside an island: a fieldset, a description's cell  | `--color-surface-island-subtle`                                                                   |
+| An opaque island: the navigation, a dialog, a menu                  | `--color-surface-island-strong`                                                                   |
+| A frosted bar or popover                                            | `--color-surface-glass`                                                                           |
+| What the pointer hovers, on any surface                             | one veil more: `--color-surface-glass-hover`, or `--color-action-subtle-hover` under colored text |
+| A neutral action at rest, any track's empty part, a chip not chosen | one veil over what holds it: `--color-action-neutral`                                             |
+| A neutral badge                                                     | a neutral action's veil under the pointer: `--color-action-neutral-hover`                         |
+| A colored action                                                    | its hue's tint, under its ink: `--color-tint-{brand,pressure,signal}`                             |
+| A label: a badge, a tag, a chosen chip                              | its hue's lit tint, under its lit ink: `--color-tint-{brand,pressure,signal}-lit`                 |
+| A mark that is on: a checked box, a switch, a slider's filled part  | the brand's ink: `--color-control-on`                                                             |
+| An app's lamp, one of the three hues, never a blend                 | `--color-lamp-{amber,magenta,blue}`                                                               |
 
 A line is `--color-border-divider` between siblings, a hairline wide, or `--color-border-default` around
 a shape with no fill, at `--border-width-outline`.

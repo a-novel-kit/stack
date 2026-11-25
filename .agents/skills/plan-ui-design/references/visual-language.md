@@ -53,6 +53,9 @@ behind it.
 
 ## Light, glow, and geometry
 
+A-Novel draws no glow for now: `write-design-system` holds the rule, and the notes on glow below wait
+for it to change.
+
 - Treat glow as emitted light: a tight bright halo plus a softer, weaker outer halo derived from the
   emitting object's size. One eighth of its characteristic size is a useful first blur estimate, not
   a universal constant.

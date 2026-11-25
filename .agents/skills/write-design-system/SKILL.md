@@ -130,23 +130,23 @@ Rules:
   own size (`overflow: clip`) that sits under the box's outline, and scroll the content inside, so
   the layer stays in place. uikit's internal
   Listbox, behind Select and Combobox, shows the pattern.
-- A backdrop blur is recomputed over its whole box for every frame drawn under it, whatever changed,
-  and costs by area, not radius. Under a modal Dialog's full-viewport backdrop blur, the page's own
-  frosted surfaces (cards, sticky bars, the consent banner, toasts) sit unseen yet still cost each
-  frame, so they drop their blur while `:root:has(dialog.dialog:modal)` holds: once the backdrop has
-  faded in, through a zero-length `backdrop-filter` transition delayed by `--duration-normal`, so
-  none shows unfrosted, and back at once on close. One inside a dialog keeps it. A uikit frosted
-  page surface carries `data-frost`; Dialog drops every such blur under a modal dialog. On
-  Account's dialogs, this cut 28% of each frame under software compositing and 75% of GPU time
-  (a-novel-kit/uikit#350). Any frame whose change touches a backdrop
-  blur's box blurs that whole box again, and a modal backdrop's box is the viewport: a hover or a
-  keystroke inside a dialog costs 35 ms or more at 1080p under software compositing, against 1.4 ms on
-  a GPU, so a browser without hardware acceleration feels it most. Two rules follow. What animates on
-  the page pauses under a modal dialog (`animation-play-state`), since each of its frames would blur
-  the page again: a dialog over a loading page then draws no frame at rest. A fullscreen dialog's
-  backdrop carries no blur, since the dialog covers it. A `filter: blur()` on the root is no
-  substitute: it costs the same on a GPU and lightens the viewport's edges, and on any other element
-  it unpins every fixed descendant.
+- A backdrop blur is recomputed over its whole box for every frame drawn above it, whatever changed,
+  and costs by area, not radius. So a modal Dialog never blurs through its backdrop, whose box is the
+  viewport: a hover or a keystroke inside the dialog then blurs the whole screen again, 37 ms a frame
+  at 1080p without a GPU. The page itself takes the blur, through `filter` on the root
+  (`:root:has(dialog.dialog:modal[open])`), and the backdrop only dims. A filtered page is blurred
+  once and then only composited: the same dialog holds 60 frames a second, through its open and close
+  fades too, and renders the same picture. The top layer, where a dialog lives, lies outside the
+  root's filter, and the root is the one element whose filter leaves fixed descendants in place; any
+  other would unpin them. Three rules keep it cheap. The page's own frosted surfaces (cards, sticky
+  bars, the consent banner, toasts) carry `data-frost` and drop their blur under a modal dialog, once
+  the backdrop has faded in, through a zero-length `backdrop-filter` transition delayed by
+  `--duration-normal`, so none shows unfrosted: with them the root draws slower (54 frames a second
+  against 60 on Account). What animates on the page pauses (`animation-play-state`), since each of
+  its frames would blur the page again. A fullscreen dialog covers the page, so it blurs nothing.
+  Blurring only around the panel, in strips, fixed the dialog at rest but not its fades. Measure
+  such a change in a real browser window without GPU compositing (`--disable-gpu`): a harness that
+  redraws every frame in full hides every gain.
 - A modal dialog makes every node outside it inert, the top layer included, so a popover cannot float
   a request above it. A request the reader must stay able to answer, such as the consent banner, also
   renders inside the topmost modal Dialog (uikit's internal `overModal` list), where Account's login on
@@ -222,7 +222,7 @@ Rules:
   disabled states outrank transient hover and active treatments; transient feedback must not visually
   erase or contradict the persistent state.
 - Keep an A-Novel control's selected treatment stable while hovered. Use a modest lightening for hover
-  and localized glow for selection when the component contract calls for it; keep resting, hovered,
+  and a further step of the fill for selection, which the pointer never reaches; keep resting, hovered,
   selected, and disabled emphasis visibly distinct. Preserve each variant's semantic color family
   unless a cross-family state meaning is explicit.
 - Hover only where a pointer hovers: every `:hover` treatment sits inside `@media (hover: hover)`. A
@@ -296,7 +296,7 @@ shadow, duration and layer its one use.
   lamp-lit one included. Never set an opaque gray beside it for a surface, a hover or a line: it holds
   on one backdrop only, as the opaque `--color-border-subtle` vanished on a card until uikit dropped
   it.
-- **Depth from light, never bevels.** Texture and depth come from the lamp, glow, and
+- **Depth from light, never bevels.** Texture and depth come from the lamp and
   transparency. A raised surface stays flat: a hairline ring gives it its shape (`--shadow-ring`,
   carried by `--shadow-{sm,md,lg}`), and the lamp gives the page its volume. A surface floating over
   others at the screen's edge, such as the consent banner, takes `--shadow-floating`, which reaches
@@ -318,9 +318,15 @@ shadow, duration and layer its one use.
   corner, so the light it carries (`--fill-navigation`) lines up in every browser. Anything else
   lets the canvas's light through instead of painting its own: frosted cards, and sticky bars that
   blur what scrolls under them.
-- **Glows never meet a clip.** A container that clips or scrolls leaves a lit control's glow room
-  inside it. A padded card clips nothing, and a dialog's body scrolls out to the dialog's sides and
-  bottom, so only the dialog's own edge cuts a glow or a focus ring.
+- **Focus rings never meet a clip.** A container that clips or scrolls leaves a control's focus ring
+  room inside it. A padded card clips nothing, and a dialog's body scrolls out to the dialog's sides
+  and bottom, so only the dialog's own edge cuts a focus ring.
+- **Nothing glows, for now.** No action, label, mark, indicator or focus ring draws a glow, and a
+  focus ring is a line. On a deep tint a glow reads as a blur: a cloud, a thin rim and a backlight
+  were each tried on buttons, and none sat right. The rules for glow are not set yet. They come when
+  a real use calls for one, which the narrative engine will bring. Until then, add no glow token and
+  no glow shadow, and never reach for one to add emphasis: color carries weight, and
+  `Button variant="prominent"` covers the rare action that must lead.
 - **Effects never hide contrast.** Axe reports color contrast as incomplete for text over any
   background image, gradient, or overlapping layer, so measure the brightest point of every lit
   surface by hand and record the ratio beside its token. Keep grain and patterns off surfaces that
@@ -392,8 +398,8 @@ shadow, duration and layer its one use.
 ### Actions and states
 
 - **One lit action per view.** The primary action is the brand's pair, its ink on its tint, with a
-  slight gradient that lightens toward the top and a soft underglow in its own color
-  (`--gradient-action-primary`, `--shadow-action-primary`), with no transparency. Every other action
+  slight gradient that lightens toward the top (`--gradient-action-primary`), with no transparency
+  and no glow: its color carries its weight. Every other action
   stays flat, and a neutral one writes in secondary text at rest, so the lit one leads. A short form sits
   in a compact dialog (`Dialog size="sm"`). Every action group and button layout follows one rule,
   which `ActionGroup` draws for `FormActions` and a dialog's `actions`: on a viewport narrower than
@@ -405,11 +411,16 @@ shadow, duration and layer its one use.
   soft box on hover. A recovery action sits on the label row (`Field labelActions`), a journey
   switch is one footer line. Never stack ghost buttons under a form.
 - **One look says "this one, of several".** The current item of a rail, a chosen ghost button and
-  the tab showing all read the same: a tinted box, blue text and a glowing indicator. uikit's `Tabs`
+  the tab showing all read the same: a tinted box, blue text and an indicator. uikit's `Tabs`
   once underlined its tab over a divider while Account's tab bar lit a box, two looks for one job.
+- **An action that must lead draws its edge.** The rare action that must lead a whole view is a
+  `Button variant="prominent"`: a solid button whose ink rises out of its fill within a grid step, so
+  sharp that it almost reads as a border. It bends the rule against bevels, on purpose and for that
+  action alone. Most views have none: color already ranks actions, and the quiet ones show no fill
+  until the pointer reaches them.
 - **A chosen ghost button reads as the current item.** A ghost or text button never draws a border:
   a soft box under the pointer, and once chosen (`aria-pressed`) the navigation's current item, blue
-  whatever its tone, with NavList's glowing indicator under its label, which no hover draws, so a
+  whatever its tone, with NavList's indicator under its label, which no hover draws, so a
   brand toggle under the pointer never reads as chosen. Studio's column choice shows it. Only an
   outline button keeps a bordered selection, and a disabled choice stays visible, dimmed.
 - **A disabled action is an inert fill.** It draws no outline and no glow: only its fill, under muted
@@ -446,7 +457,7 @@ shadow, duration and layer its one use.
   picker as the whole field does, and a cross removes the choice. A chosen image always shows above
   its field, framed or not, never inside it.
 - **A field's list continues the field.** An open select or combobox list reads as its focused field,
-  extended: the field's focus outline and glow (`--color-control-border-focus`,
+  extended: the field's focus outline and ring (`--color-control-border-focus`,
   `--shadow-focus-ring`) over the shadow that lifts it, and the focused well's color
   (`--color-control-surface-focus`), frosted over a backdrop blur. It dims what it blurs
   (`--filter-dim`), so a bright action behind it does not clash with its options, and its veil thins
@@ -489,6 +500,12 @@ shadow, duration and layer its one use.
   tint and 5.4:1 or more on a card and in a dialog. Never dull a hue to level it with another:
   capping every family at the brand's chroma washed the whole palette out. A hue keeps its gamut's
   edge, and its tint and its ink carry its strength.
+- **A label is always lit.** A pair is lit with its fill one step up its ramp and its ink a quarter
+  of the way to white (`--color-{ink,tint}-{brand,pressure,signal}-lit`). An action lights under the
+  pointer and once chosen, to stand out of its own resting look. A label has no resting look to stand
+  out of, so a badge, a tag and a chosen chip always show lit, and a neutral badge writes primary
+  text on a neutral action's veil under the pointer (`--color-action-neutral-hover`). On the resting
+  pair, a label read as a dimmed action beside a hovered button. Each lit pair keeps 4.9:1 or more.
 - **Three hues, blue most.** Every color is a nuance of the brand blue, the pressure magenta or the signal
   amber, in that order of frequency. Blue carries actions, links and tags; magenta is rarer, for the
   second accent, such as a project's genres (`Badge tone="accent"`), and
@@ -526,7 +543,7 @@ shadow, duration and layer its one use.
   its content, sections 24px apart and form actions 24px below the last field. The in-between
   `--space-1-5` only separates chips and tags, and a negative margin only lets a hover box overhang
   its row or a nested card reach its inset. Sizes keep a 4px grid on `--size-{N}`: control heights,
-  icons, avatars, badges, marks, and the reach of shadows and glows. Widths come from the
+  icons, avatars, badges, marks, and the reach of shadows. Widths come from the
   `--layout-*` tokens, a floating surface's included. A size never takes a `--space-*` token, and a
   space never takes a size.
 - **Compact controls.** Controls sit on a 4px grid at 28, 32, and 40px, and a coarse pointer adds
@@ -586,9 +603,8 @@ semantic role and compare before/after renders across its consumers.
   text, content, and actions. Leave omitted regions empty of spacing. Keep native behavior and
   controller ownership separate from stateless composition; ordinary body content needs no wrapper
   unless the wrapper owns a real layout invariant.
-- Treat glow as light behind the emitting shape. Compare layered soft shadows with a restrained
-  shape-following halo; avoid a sharp neon outline or an oversized rounded cushion. Keep ordinary
-  surfaces subdued and focus indicators unambiguous.
+- Add no glow: its rules are not set yet. Keep ordinary surfaces subdued and focus indicators
+  unambiguous.
 
 Finish by removing compensating overrides and duplicated machinery. A coherent pass may leave most
 components unchanged; change only what the rendered comparison or code ownership shows needs work.
@@ -679,7 +695,7 @@ Do not approve a visual contract from source alone.
   islands remain distinguishable through composition, surface, and elevation.
 - Every line is the divider or the outline token, never an opaque neutral, and a surface that holds
   controls carries `data-island`. A section's title comes from `Section`, outside its cards.
-- Glow is localized, stateful, proportional, and absent from text; gradient routes avoid accidental
+- Nothing glows; gradient routes avoid accidental
   muddy midpoints.
 - Semantic names survive a palette or density change.
 - Every interaction state is keyboard-operable, visibly focused, and represented in stories/tests.
