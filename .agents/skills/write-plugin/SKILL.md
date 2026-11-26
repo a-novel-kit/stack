@@ -151,7 +151,9 @@ README describes the mechanics under "The styles".
   custom color. The chrome stays neutral.
 - **The element that holds the shadow root is the plugin's**: its tokens are set on it through
   `:host`. A host lays a plugin out from a parent of that element.
-- **A modal `Dialog` neither blurs nor holds the page from a shadow root** (a-novel-kit/uikit#412).
+- **A modal `Dialog` blurs and holds the page from a shadow root from uikit 0.29.1 on**
+  (a-novel-kit/uikit#417): it adds a stylesheet of its own to the document while it shows. Under
+  an earlier uikit it only dims the page, so a plugin that opens one depends on 0.29.1 or later.
   Lists, menus and tooltips open against their source as on a page. Prefer an undo to a confirmation
   dialog.
 - **A build is one file that imports nothing at run time.** A dynamic `import()`, a second
