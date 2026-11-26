@@ -7,7 +7,8 @@ description: >
 
 # Frontend Test Conventions
 
-Load `write-frontend`, plus `write-svelte` for Svelte targets and `write-design-system` for uikit.
+Load `write-frontend`, plus `write-svelte` for Svelte targets, `write-design-system` for uikit, and
+`write-plugin` for a Narrative Engine plugin and its test host.
 Read the production behavior before writing tests. Read neighboring tests
 and the official documentation for the installed testing tools. Preserve existing tests unless the
 behavior they specify has been intentionally removed.
