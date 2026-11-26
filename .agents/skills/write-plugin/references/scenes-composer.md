@@ -26,6 +26,8 @@ The interface holds these rules, and a test proves each one:
   `accepts` is read on a link layer alone, and a link layer without it offers nothing to pick.
 - **Every limit of the schema is a limit of a field.** A title, a logline or a text the field lets
   past the schema's `maxLength` makes the host refuse the save.
+- **A size only stretches.** `scene.width` and `layer.height` count quarters of the base text size.
+  A track is never shorter than what it holds, and under 48rem both sizes are ignored.
 
 ## Links
 
@@ -53,7 +55,14 @@ The interface holds these rules, and a test proves each one:
 
 ## Views
 
-- **Timeline:** scenes are columns under their beat, layers are rows. The horizontal reading.
+- **Timeline:** scenes are columns under their beat, layers are tracks. The horizontal reading.
+- **A card is edited where it stands.** A click on its text edits it in place. A click on its band
+  selects it, and Delete or Backspace then removes it, with a message that takes the deletion back.
+  The second button of a pointer and the menu key open its menu.
+- **A layer has one dialog**, which holds its name and its color and saves both at once. A beat and
+  a scene are renamed in place.
+- **A writer stretches a scene's column and a layer's track**, by a grip, by key and from their
+  menus. The content keeps the size.
 - **Scene view:** one scene, its layers stacked. The vertical reading, and where long text is
   written. The timeline shows an excerpt and a word count.
 - **On a phone:** one scene at a time, and a swipe moves between scenes. Layer names collapse to an
@@ -70,23 +79,37 @@ A sequencer for stories: a dark, dense, neutral work surface, where color belong
 material and never to the chrome. The reference is professional production software, such as FL
 Studio's playlist.
 
-| Seen in the reference                                  | Rule here                                                                                |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| Track headers carry a color, clips take a tint of it   | A layer can carry a color: a solid mark in its header and a tint on its filled cells     |
-| Empty lanes stay neutral                               | An empty cell has no tint, so where the story is written reads at a glance               |
-| Bar lines are stronger than beat lines                 | A beat boundary is a stronger separator than a scene boundary. Rows part with a hairline |
-| Small type, tight rows, no padding around every clip   | Compact rows whose height follows the layer kind. No card around each cell               |
-| Controls appear where the hand is                      | Row and column actions show on hover and focus, and always in a menu and by keyboard     |
-| A fixed set of well-tuned colors, picked from a swatch | A writer picks any color, from swatches or freely. Without one, an item stays neutral    |
+| Seen in the reference                                  | Rule here                                                                                    |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Clips sit on tracks                                    | A layer is a track, and a filled cell is a card on it, as tall as its track                  |
+| Empty lanes stay neutral                               | A place without a card draws nothing, so where the story is written reads at a glance        |
+| A clip's name bar is saturated, its body is dimmed     | A layer's exact color shows in bands alone: over its header and over each of its cards       |
+| Bar lines are stronger than beat lines                 | A beat ends at a stronger line than a scene. Tracks part with the room around their cards    |
+| Small type, tight tracks                               | A card shows the first lines of its text, as many as its layer kind sets                     |
+| Controls appear where the hand is                      | Header actions show on hover and focus, and always in a menu and by keyboard                 |
+| A fixed set of well-tuned colors, picked from a swatch | A writer picks any color for a layer, from swatches or freely. Without one, it stays neutral |
 
-Avoid a spreadsheet's uniform grid, a card per cell, chrome that competes with the lanes, and glow
-or gradients as decoration.
+Avoid a spreadsheet's uniform grid, a line between two tracks, the exact color behind text, text in
+a band, chrome that competes with the tracks, and glow or gradients as decoration.
 
-A beat and a layer may carry a color: any opaque hue, stored as a hex value, with no color as the
-default. uikit's custom colors draw it, as [the styles](../SKILL.md#styles) of a plugin say.
+A layer may carry a color: any opaque hue, stored as a hex value, with no color as the default. A
+beat and a scene carry none. uikit's custom colors draw it, as [the styles](../SKILL.md#styles) of a
+plugin say, and each part of a track takes one of their properties:
 
-Inside a grid whose headers stick, draw the focus of a cell as an inset `box-shadow`, with an
-outline under forced colors: an outline paints above the sticky headers the cell scrolls under.
+| Part                             | Fill                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------ |
+| A band                           | `--color-mark-custom`, the exact color                                         |
+| A track's header, under its band | `--color-tint-custom`, the deep tint                                           |
+| A card, under its band           | An eighth of `--color-ink-custom` over the canvas, a quarter under the pointer |
+
+uikit holds no token for a card's fill. Derive it as uikit derives its feedback surfaces,
+`color-mix(in oklab, var(--color-ink-custom) var(--color-mix-2), transparent)`, with `--color-mix-4`
+under the pointer. Text on a header or a card is primary or secondary, never muted. A browser test
+holds each text of a track at 4.5:1 over uikit's swatches, a gray and no color.
+
+Inside a grid whose headers stick, draw the focus of a header or a card as an inset `box-shadow`,
+with an outline under forced colors: an outline paints above the sticky headers a card scrolls
+under.
 
 ## Fixtures
 
