@@ -84,6 +84,9 @@ insufficient if the task no longer loads it.
   design-system rules; a service REST client reaches both `write-js-package` and `write-frontend`.
 - **Debugging a Svelte module:** the trigger reaches `write-svelte` for `.svelte.ts`, route loads,
   actions/hooks, package exports, and compiler configuration.
+- **Plugin change:** a Narrative Engine plugin's manifest, migration or UI reaches `write-plugin`
+  from its trigger, from `write-svelte` and from `write-frontend`; a new member, a new kind or a
+  release reaches its walkthrough in `references/changes.md`.
 - **Library placement without implementation:** deciding whether something belongs in `golib`
   loads `write-go-kit` and its stricter admission/dependency rules.
 

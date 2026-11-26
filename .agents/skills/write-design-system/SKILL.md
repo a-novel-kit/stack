@@ -38,7 +38,8 @@ Keep responsibilities independently consumable:
 
 Each package takes only what a completely unrelated interface could import as it is, and names no
 product concept in a token, a component, a prop, a story or a comment: what knows the product stays
-in its application, and a piece that is only partly shareable is split there.
+in its application, and a piece that is only partly shareable is split there. A Narrative Engine
+plugin is such an application: it bundles its own uikit and tokens, as `write-plugin` describes.
 
 Never make a runtime package depend on Storybook. Keep workbench exports out of the UI package and
 release target; consumers install the reusable configuration explicitly as development tooling. A

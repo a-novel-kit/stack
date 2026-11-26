@@ -18,7 +18,8 @@ coherent local pattern unless it conflicts with a rule below or a current platfo
 
 This skill owns generic implementation quality, not repository placement. In the A-Novel workspace,
 use `write-platform` for terminal application shells and product policy, `write-design-system` for
-uikit visual contracts, and nodelib for reusable non-visual client runtime or tooling configuration.
+uikit visual contracts, `write-plugin` for a Narrative Engine plugin, and nodelib for reusable
+non-visual client runtime or tooling configuration.
 Load `write-svelte` for Svelte files, `write-frontend-tests` for tests or stories, and
 `write-design-system` for tokens or reusable UI. Service REST clients under `pkg/js` also load
 `write-js-package`.

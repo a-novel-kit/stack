@@ -1,0 +1,4 @@
+interface:
+  display_name: "Narrative Engine Plugins"
+  short_description: "Write, test and release engine plugins"
+  default_prompt: "Use $write-plugin to change this Narrative Engine plugin with the kit's checks and its test host."

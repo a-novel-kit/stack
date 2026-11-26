@@ -12,6 +12,7 @@ Load `write-frontend` first. Read the installed Svelte/SvelteKit versions, compi
 nearby components, and official documentation for the installed major version before choosing an
 API. New code uses Svelte 5 idioms unless an existing compatibility boundary requires legacy syntax.
 Load `write-frontend-tests` for tests or stories and `write-design-system` for uikit components or tokens.
+Load `write-plugin` for a Narrative Engine plugin, which mounts in a host's shadow root.
 
 ## Component boundaries
 

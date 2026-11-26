@@ -19,7 +19,8 @@ Load `plan-ui-design` before choosing a visual direction or interaction language
 `choose-dependency` before adding a package, `write-dockerfiles` before changing the root
 `Dockerfile`, `write-github-actions` before changing CI, and `write-project-docs` before changing
 root project documentation. Use `plan-client-server-boundary` when a platform composes or changes a
-backend capability.
+backend capability. A Narrative Engine plugin is not a platform: `write-plugin` covers it, and what
+a host owns beside it.
 
 ## Ownership boundaries
 
