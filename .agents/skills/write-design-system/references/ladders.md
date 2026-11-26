@@ -67,18 +67,24 @@ semantic tokens, each an alias of its hue's ink.
 A hue shows two ways, and they pair: its ink, the neon itself, for what is drawn thin, and its tint, a
 deep step of its ramp, for what is filled under its ink. The neon never fills behind text.
 
-| The hue is       | Ink: text, an icon, a line                          | Tint: a tag, a chosen chip, a colored action | Ink on tint |
-| ---------------- | --------------------------------------------------- | -------------------------------------------- | ----------- |
-| Brand blue       | `--color-ink-brand`, the neon                       | `--color-tint-brand`                         | 5.7:1       |
-| Pressure magenta | `--color-ink-pressure`, the neon, a quarter lighter | `--color-tint-pressure`                      | 4.9:1       |
-| Signal amber     | `--color-ink-signal`, the neon                      | `--color-tint-signal`                        | 6.5:1       |
-| None             | `--color-text-secondary`                            | `--color-action-neutral`, one veil           | 7:1 or more |
+| The hue is       | Ink: text, an icon, a line                          | Tint: a tag, a chosen chip, a colored action | Ink on tint   |
+| ---------------- | --------------------------------------------------- | -------------------------------------------- | ------------- |
+| Brand blue       | `--color-ink-brand`, the neon                       | `--color-tint-brand`                         | 5.7:1         |
+| Pressure magenta | `--color-ink-pressure`, the neon, a quarter lighter | `--color-tint-pressure`                      | 4.9:1         |
+| Signal amber     | `--color-ink-signal`, the neon                      | `--color-tint-signal`                        | 6.5:1         |
+| None             | `--color-text-secondary`                            | `--color-action-neutral`, one veil           | 7:1 or more   |
+| A custom color's | `--color-ink-custom`                                | `--color-tint-custom`                        | 4.9:1 or more |
 
 A pair is lit with its fill one step up its ramp and its ink a quarter of the way to white:
 `--color-ink-{brand,pressure,signal}-lit` on `--color-tint-{brand,pressure,signal}-lit` (6.0, 5.0 and
 6.0:1). The pointer lights a colored action, and a chosen one stays lit on a fill one step higher still. No action or label glows. A label has no resting
 look to stand out of, so a badge, a tag and a chosen chip always show lit; without a hue, a badge writes
 primary text on `--color-action-neutral-hover`.
+
+A custom color is one a person gave to an item of their own, and shows nowhere else. uikit's
+`customColorStyle` sets its tokens on the item, from the color's hue alone; its lit pair is
+`--color-ink-custom-lit` on `--color-tint-custom-lit` (4.9:1 or more). Without a color, or with a black,
+a white or a gray, the pair is the neutral one.
 
 ## Spacing
 
@@ -137,6 +143,8 @@ need no token.
 | A colored action                                                    | its hue's tint, under its ink: `--color-tint-{brand,pressure,signal}`                             |
 | A label: a badge, a tag, a chosen chip                              | its hue's lit tint, under its lit ink: `--color-tint-{brand,pressure,signal}-lit`                 |
 | A mark that is on: a checked box, a switch, a slider's filled part  | the brand's ink: `--color-control-on`                                                             |
+| What a person colored, filled under text: an event, a colored row   | its custom tint, under its ink or primary text: `--color-tint-custom`, `-lit` for a label         |
+| The small solid mark of what a person colored                       | the exact color: `--color-mark-custom`, rimmed in `--color-control-border`                        |
 | An app's lamp, one of the three hues, never a blend                 | `--color-lamp-{amber,magenta,blue}`                                                               |
 
 A line is `--color-border-divider` between siblings, a hairline wide, or `--color-border-default` around
