@@ -36,6 +36,10 @@ Keep responsibilities independently consumable:
   preview setup, decorators, docs blocks, addons, and test configuration.
 - **storybook-workbench**: private workspace package containing this repository's stories and docs.
 
+Each package takes only what a completely unrelated interface could import as it is, and names no
+product concept in a token, a component, a prop, a story or a comment: what knows the product stays
+in its application, and a piece that is only partly shareable is split there.
+
 Never make a runtime package depend on Storybook. Keep workbench exports out of the UI package and
 release target; consumers install the reusable configuration explicitly as development tooling. A
 platform imports foundations and components explicitly so application code never pays for workbench
@@ -506,11 +510,27 @@ shadow, duration and layer its one use.
   out of, so a badge, a tag and a chosen chip always show lit, and a neutral badge writes primary
   text on a neutral action's veil under the pointer (`--color-action-neutral-hover`). On the resting
   pair, a label read as a dimmed action beside a hovered button. Each lit pair keeps 4.9:1 or more.
-- **Three hues, blue most.** Every color is a nuance of the brand blue, the pressure magenta or the signal
-  amber, in that order of frequency. Blue carries actions, links and tags; magenta is rarer, for the
-  second accent, such as a project's genres (`Badge tone="accent"`), and
+- **Three hues, blue most.** Every color of the interface is a nuance of the brand blue, the pressure
+  magenta or the signal amber, in that order of frequency. Blue carries actions, links and tags;
+  magenta is rarer, for the second accent, such as a project's genres (`Badge tone="accent"`), and
   for failures; amber is rarest, for highlights and text selection. An even blend of two, as Studio's
   violet lamp was, reads as a fourth hue: never use one.
+- **A custom color is a family apart.** A custom color is one a person gives to an item of their own,
+  such as a tag or a calendar: any opaque color, stored as a six-digit hex value, or none. A custom
+  color only shows on what a person colored, and the three-hue rule keeps governing the interface.
+  uikit's `customColorStyle` sets the family's tokens on the item. A small solid mark shows the exact
+  color (`--color-mark-custom`), rimmed as a checkbox is so a dark color keeps its shape. What is
+  filled under text takes the color's hue alone, as a pair built the way a hue's is
+  (`--color-ink-custom` on `--color-tint-custom`, and their `-lit` forms for a label): the third step
+  of the hue's ramp, under its neon climbed up the gamut's edge until it keeps 4.9:1. So a pastel, a
+  neon and a dark shade of one hue fill alike, and text reads whatever was picked. Text on a custom
+  tint is its ink, or primary or secondary text, never muted, which drops to 4.0:1 on the lit tints
+  from yellow to cyan. A black, a white or a gray has no hue: it keeps its mark and draws the
+  neutral pair, as an item without a color does, with no mark. The rule runs in script, since a
+  stylesheet can neither follow a hue's gamut edge nor measure a contrast, and one chroma cap for
+  every hue washes the palette out. Beside a free choice, `ColorField` offers no color and the
+  `swatches` the generator writes: the three hues and the steps between them, about 30 degrees
+  apart, each stored as its hue's most saturated sRGB color.
 - **Selection in amber.** Selected text reads amber on a translucent blue veil
   (`--color-selection-{text,surface}`), a pair no other state uses. Buttons, tabs and menus are not
   selectable.
