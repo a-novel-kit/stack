@@ -135,6 +135,10 @@ README describes the mechanics under "The styles".
 - **Fill the box.** The root takes `block-size: 100%` and what outgrows it scrolls inside. Never
   size anything from the screen, with viewport units or otherwise: the page does not scroll for a
   plugin.
+- **A narrow presentation follows the box, never the screen.** A plugin that shows itself otherwise
+  in little room asks its own width with a container query (`@container`), and its script reads the
+  same width from its root. A media query answers for the screen, and a host may give a plugin a
+  narrow panel on a wide one.
 - **The canvas holds the plugin.** No card around the whole plugin: title groups with uikit's
   `Section` and build `Card`s as a page does.
 - **Keep uikit's token contract.** Take each value from
@@ -182,6 +186,11 @@ Load `write-frontend-tests`. What a plugin adds:
 - **The built-in browser pane does not see inside a shadow root.** Its `find` and `read_page` miss
   the plugin; screenshots show it, `javascript_tool` reaches it through `.shadowRoot`, and Playwright
   pierces an open shadow root.
+- **Vitest's browser page is 414 pixels wide.** A plugin that changes its presentation in a narrow
+  box shows the narrow one there: widen the page (`page.viewport`) in a test of the wide one, and
+  put it back when the test ends.
+- **An emulated swipe needs pauses.** Touch points sent in one burst start a fling in Chrome, which
+  drops the tap that follows it for a few seconds.
 - **uikit behaves this way under a test**: a click on a `Combobox` opens its list and closes it, so
   `fill` the field; a list, a menu and a tooltip slide into place, so poll a position.
 

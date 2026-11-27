@@ -27,7 +27,11 @@ The interface holds these rules, and a test proves each one:
 - **Every limit of the schema is a limit of a field.** A title, a logline or a text the field lets
   past the schema's `maxLength` makes the host refuse the save.
 - **A size only stretches.** `scene.width` and `layer.height` count quarters of the base text size.
-  A track is never shorter than what it holds, and under 48rem both sizes are ignored.
+  A track is never shorter than what it holds, and a narrow box ignores both sizes.
+- **A started composer keeps one beat and one layer.** The schema lets both lists be empty: the last
+  of each cannot be deleted.
+- **A layer's `label` changes nothing of what its cells hold.** It is what a writer calls what the
+  layer follows, shown under its name in place of its kind.
 
 ## Links
 
@@ -56,18 +60,29 @@ The interface holds these rules, and a test proves each one:
 ## Views
 
 - **Timeline:** scenes are columns under their beat, layers are tracks. The horizontal reading.
-- **A card is edited where it stands.** A click on its text edits it in place. A click on its band
-  selects it, and Delete or Backspace then removes it, with a message that takes the deletion back.
-  The second button of a pointer and the menu key open its menu.
-- **A layer has one dialog**, which holds its name and its color and saves both at once. A beat and
-  a scene are renamed in place.
-- **A writer stretches a scene's column and a layer's track**, by a grip, by key and from their
-  menus. The content keeps the size.
+- **A beat, a scene and a layer are each edited whole in a dialog**: a title and a description, or
+  a name, a label and a color, saved at once. Two clicks, Enter or F2 open it, and a new item opens
+  its own. Only a card is edited where it stands: a click on its text edits it in place.
+- **A click on a card's band selects it.** It stays lit, and Delete or Backspace then removes it,
+  with a message that takes the deletion back.
+- **Every menu opens under the second button of a pointer**, the menu key or Shift with F10. No
+  header draws a menu button. A beat keeps one button, which adds a scene.
+- **A writer stretches a scene's column and a layer's track** by a grip under the pointer, and by
+  Alt with an arrow. The content keeps the size, and a menu only gives the default back.
+- **What describes a beat or a scene shows whole at the top, and scrolls away with the tracks**
+  while the names stay in view. Out of view, it shows in a tooltip under the pointer or with the
+  focus. Nothing collapses the head: a head that changes height on a scroll makes the page jump.
+- **Undo and redo are the composer's.** It keeps its last hundred edits, never the choice of a
+  structure, and joins the sizes one item takes in a row. The field of a card keeps its own history
+  of the typing in place of the browser's, a word, a pause or a paste at a time, then hands over to
+  the composer. A dialog's fields keep the browser's own: nothing of a dialog is saved yet.
 - **Scene view:** one scene, its layers stacked. The vertical reading, and where long text is
   written. The timeline shows an excerpt and a word count.
-- **On a phone:** one scene at a time, and a swipe moves between scenes. Layer names collapse to an
-  icon and open over the grid. Each layer carries an icon from a curated list, which the schema does
-  not hold yet.
+- **In a narrow box**, under 48rem of the plugin's own width, the timeline shows one scene at a
+  time at its whole width, and nothing scrolls across. A swipe moves between scenes, and two buttons
+  do the same. Nothing is edited in place: a tap opens a dialog with the item's fields and every
+  other action. The names of the layers are out of view, and a button at the end of the scene's name
+  shows them over the cards.
 - **A transition stays attached to its two scenes.** The timeline draws it in its own row when they
   are adjacent, and as a reference when they are not.
 - **Drag and drop moves scenes and beats**, with a keyboard and a menu equivalent. The keyboard and
@@ -83,33 +98,39 @@ Studio's playlist.
 | ------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
 | Clips sit on tracks                                    | A layer is a track, and a filled cell is a card on it, as tall as its track                  |
 | Empty lanes stay neutral                               | A place without a card draws nothing, so where the story is written reads at a glance        |
-| A clip's name bar is saturated, its body is dimmed     | A layer's exact color shows in bands alone: over its header and over each of its cards       |
-| Bar lines are stronger than beat lines                 | A beat ends at a stronger line than a scene. Tracks part with the room around their cards    |
+| A clip's name bar is saturated, its body is dimmed     | A layer's exact color shows in the band of each of its cards alone                           |
+| A track's name stands on its color                     | The name of a track stands on one plain fill of its color, with no band                      |
+| Bar lines are stronger than beat lines                 | Under the names, a beat ends at a stronger line than a scene. The names draw no line         |
+| Lanes part without a rule                              | Tracks part with the room around their cards                                                 |
 | Small type, tight tracks                               | A card shows the first lines of its text, as many as its layer kind sets                     |
-| Controls appear where the hand is                      | Header actions show on hover and focus, and always in a menu and by keyboard                 |
+| A selected clip is lit                                 | A card under the pointer lights, and a selected one stays lit. A ring is for the keyboard    |
+| Controls appear where the hand is                      | A menu opens where the pointer asked for it. A beat's one button shows on hover and focus    |
 | A fixed set of well-tuned colors, picked from a swatch | A writer picks any color for a layer, from swatches or freely. Without one, it stays neutral |
 
-Avoid a spreadsheet's uniform grid, a line between two tracks, the exact color behind text, text in
-a band, chrome that competes with the tracks, and glow or gradients as decoration.
+Avoid a spreadsheet's uniform grid, a line between two tracks or two names, the exact color behind
+text, text in a band, a menu button on every header, chrome that competes with the tracks, and glow
+or gradients as decoration.
 
 A layer may carry a color: any opaque hue, stored as a hex value, with no color as the default. A
 beat and a scene carry none. uikit's custom colors draw it, as [the styles](../SKILL.md#styles) of a
 plugin say, and each part of a track takes one of their properties:
 
-| Part                             | Fill                                                                           |
-| -------------------------------- | ------------------------------------------------------------------------------ |
-| A band                           | `--color-mark-custom`, the exact color                                         |
-| A track's header, under its band | `--color-tint-custom`, the deep tint                                           |
-| A card, under its band           | An eighth of `--color-ink-custom` over the canvas, a quarter under the pointer |
+| Part                   | Fill                                                                  |
+| ---------------------- | --------------------------------------------------------------------- |
+| The band of a card     | `--color-mark-custom`, the exact color                                |
+| The name of a track    | `--color-tint-custom-lit`, the lit tint a label takes                 |
+| A card, under its band | An eighth of `--color-ink-custom` over the canvas, a quarter once lit |
 
 uikit holds no token for a card's fill. Derive it as uikit derives its feedback surfaces,
 `color-mix(in oklab, var(--color-ink-custom) var(--color-mix-2), transparent)`, with `--color-mix-4`
-under the pointer. Text on a header or a card is primary or secondary, never muted. A browser test
-holds each text of a track at 4.5:1 over uikit's swatches, a gray and no color.
+once lit. A stronger fill under a track's name drops its secondary text under 4.5:1 from yellow to
+cyan. Text on a name or a card is primary or secondary, never muted. A browser test holds each text
+of a track at 4.5:1 over uikit's swatches, a gray and no color.
 
-Inside a grid whose headers stick, draw the focus of a header or a card as an inset `box-shadow`,
-with an outline under forced colors: an outline paints above the sticky headers a card scrolls
-under.
+Inside a grid whose names stick, draw the focus of a name or a card as an inset `box-shadow`, with
+an outline under forced colors: an outline paints above the sticky names a card scrolls under. Give
+what takes the focus a `scroll-margin` as wide as the layers and as tall as the names: a beat wider
+than the screen otherwise slides under the layers when it takes the focus.
 
 ## Fixtures
 
