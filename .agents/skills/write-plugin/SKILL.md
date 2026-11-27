@@ -23,7 +23,8 @@ types, the manifest, a language file, a migration, and each command's options. R
 repository before writing one. This skill says how we work on plugins and where the traps are.
 
 Use the words of the Initiative's glossary (a-novel/.github#500) in code, messages and comments:
-instance, content, version, export, link, identifier, host, registry. One concept, one word.
+instance, content, version, item, export, link, rule, identifier, host, registry. One concept, one
+word.
 
 Read the reference that matches the task before acting:
 
@@ -41,6 +42,7 @@ Read the reference that matches the task before acting:
 | Validating the content on load, after an upgrade and before a save | Its UI and every interaction inside it                              |
 | Persistence and the save state                                     | Its editing state, undo included                                    |
 | The links of the project, the link picker, following a link        | Declaring its exports and choosing the source targets of its links  |
+| Deriving the dynamic links of an instance from its content         | Declaring its rules                                                 |
 | The upgrade chain, salvage, the restore point, the repair screen   | One migration from the previous version                             |
 | The fonts, the canvas and its lamp, on the document                | Its Svelte runtime, its uikit components and the tokens they bundle |
 | The shell around the plugin                                        | Its presets and its empty state                                     |
@@ -90,8 +92,9 @@ The kit's README draws the layout. In this repository:
 ## The manifest
 
 A plugin writes one manifest per version, `versions/<version>.yaml`, and publishes it as JSON. It
-holds `manifest: 1`, `schema` and `exports`. The contract's README lists each member's rules, and
-`plugin-kit check` applies them. Write the schema this way:
+holds `manifest: 1`, `schema`, `exports` and, when the plugin declares [rules](#rules-and-addresses),
+`links`. The contract's README lists what each member takes, and `plugin-kit check` applies it.
+Write the schema this way:
 
 - **The dialect is JSON Schema 2020-12 without `format`, `$dynamicRef` or `$dynamicAnchor`, and each
   `$ref` starts with `#`.** Validators disagree on formats, and the browser's validator lacks the
@@ -112,6 +115,47 @@ holds `manifest: 1`, `schema` and `exports`. The contract's README lists each me
   link stores it, so it survives a reorder, which an index would not.
 - **Say in a YAML comment what the schema cannot enforce**, such as a value that must repeat
   another. The UI holds that rule, and a test proves it.
+
+## Rules and addresses
+
+A static link is declared one by one, through `host.links.replace`. A dynamic link is derived by the
+host from a rule of the manifest and the content, and is never stored. It carries a distance: a
+signed whole number, where 0 means both items count as one and a negative number means the
+destination comes first. The contract's README holds the format of a rule, under "Rules".
+
+```yaml
+links: # optional: the rules, by relationship
+  order:
+    rule: sequence
+    steps: { select: "$.beats[*].scenes[*]", id: /id, target: scenes }
+    parts: { select: "$.cells[*]", id: /layer } # optional, read from each step
+```
+
+- **An address names one item inside an instance.** An exported item is `<export>/<id>`. A rule
+  addresses a step as `<target>/<step ID>` and a part as `<target>/<step ID>/<part ID>`. A static
+  link and a dynamic link name an item by the same address.
+- **Export only what other plugins link to.** A plugin's own items need no export: a rule finds
+  them by path, so the host reads them without running the plugin.
+- **Steps addressed under the name of an export take that export's `select` and `id`.** `check`
+  refuses the manifest otherwise, so one address means one item.
+- **`sequence` is the only kind of rule, and it reads one instance.** Its steps are the items its
+  path reaches, in the order the content holds them: a rule sorts nothing, so the content stores its
+  items in their own order. The distance between two items is the position of the destination's step
+  minus the position of the source's step: 0 inside one step, 1 for the next step, -1 for the
+  previous one.
+- **The list of kinds is closed.** A plugin that needs a rule `sequence` cannot express needs a new
+  kind in the contract first: plan it with the developer.
+- **Each step and each part has a text identifier of its own**: no two steps of a rule share one,
+  and no two parts of one step. A schema cannot enforce that across arrays, so the UI makes each ID
+  once, and `check` reads every fixture through the rules of its version. On a real content, the
+  host skips an item without an address of its own.
+- **An ID holds no slash**, which a UUID guarantees, so no two addresses collide.
+- **A rule belongs to its version.** Adding, changing or removing one is a new version, and an
+  instance that upgrades gets other dynamic links at once. Never send a dynamic link to
+  `host.links.replace`.
+- **Nothing reads dynamic links yet.** No call of `Host` and no screen exposes them. A test reads
+  them with `listDynamicLinks` of the contract, which answers for the items within a distance of one
+  item.
 
 ## Messages
 
