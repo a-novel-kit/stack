@@ -56,6 +56,26 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
   `NotBlank` for the `notblank` tag, and a function of your own covers a rule neither holds. A cap
   the schema already holds reuses its value and needs no setting of its own. Rate and concurrency
   limits stay configuration (see [request limits](request-limits.md)).
+- **A cap an Epic sets as configuration is checked in `Exec`.** It is the one exception to the tag:
+  a tag holds a constant, and this cap is read at startup. Check it right after `validate.Struct`
+  and return a `FieldError`, a typed error that names the field's path and the rule it broke and
+  unwraps to `ErrInvalidRequest`. The handler passes the error through narrative-engine's
+  `tagField`, which names the field under the problem's `invalidFields`, as golib names the fields
+  a validator refuses. A check over a whole document, such as how deep it nests, returns the same
+  error.
+
+  ```go
+  err := validate.Struct(request)
+  if err != nil {
+      return nil, otel.ReportError(span, errors.Join(err, ErrInvalidRequest))
+  }
+
+  // A batch larger than a project can hold fits none, whatever the project holds.
+  if len(request.Instances) > service.caps.InstancesPerProject {
+      return nil, otel.ReportError(span, &FieldError{Path: "instances", Rule: ruleMax})
+  }
+  ```
+
 - **A known set is a Go slice behind a custom tag**, never `oneof`. `ProjectLanguages` lists the
   languages, and the `language` tag checks a value against it, so code and doc comments name the
   set by one variable. A set a registry already holds validates against the registry: the
@@ -77,7 +97,9 @@ func (s *UserSearch) Exec(ctx context.Context, request *UserSearchRequest) ([]*U
   `scenes[0].title`, through narrative-engine's `itemFields`.
   A move stays single. The client chooses how much each request carries, and balances bandwidth and
   load itself. A batch takes at most 100 items, `validate:"required,min=1,max=100,dive"`, and
-  applies all of them or none. A list of IDs adds `unique` before `dive`, a list of items that carry
+  applies all of them or none. A batch whose parent holds a configured number of rows is bounded by
+  that cap instead, checked as a configured cap is: narrative-engine's `InstancesCreate` takes as
+  many instances as a project holds. A list of IDs adds `unique` before `dive`, a list of items that carry
   an ID adds `unique=ID`, and a list keyed by a pair gets a custom tag, such as `uniquecells`. A
   batch delete or update compares how many rows its DAO returned with how many IDs it named, and
   answers not-found on a miss. The delete counts inside its transaction, so the miss rolls it back.
