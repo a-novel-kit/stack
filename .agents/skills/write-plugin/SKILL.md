@@ -249,8 +249,28 @@ and posts one JSON document: the name, the version, the schema, the exports, the
 migration to this version, and every language. A 409 answer counts as done, so a release can run
 twice. `--prerelease dev.1` sends `<version>-dev.1`, for the registry of a local stack.
 
-How the registry authenticates a publisher, and which route a release calls, is not settled.
-Publishing to a shared registry is a release: hand it to the developer.
+A publisher proves who it is with an API key (a-novel/.github#642), an Ed25519 key pair whose
+public key JSON Keys holds for the registry:
+
+- **`PLUGIN_PUBLISH_PRIVATE_KEY` holds the private key, in PEM.** The command never sends it. It
+  signs the version's proof, which the body carries as `proof`, then a request token for that body,
+  which it sends as the bearer token. Both name the key by the JWK thumbprint of its public half.
+  Only a system API key exists, which a sysadmin makes from a runbook. The release job holds its
+  private key as a secret of the plugins repository's `release` environment (a-novel/.github#617),
+  so any job that names that environment reads the key.
+- **The proof covers the code:** the plugin's name, its version and the SHA-256 of each module as
+  sent (a-novel/.github#617). The registry keeps it with the version, and a host refuses a version
+  whose proof does not verify. The schema, the exports and the messages are not covered.
+- **Without the variable, the request carries no credential and the version no proof**, which only
+  a local stack's open registry takes. A value that is no Ed25519 private key, an empty one
+  included, fails before the check and names the variable.
+- **A refused token answers 401**, which never says why. Check the key pair, then the clock: the
+  token lives five minutes.
+- **A private key never lands in the repository**, a fixture or a log: a test makes its own key
+  pair.
+
+Which route a release calls is not settled. Publishing to a shared registry is a release: hand it
+to the developer.
 
 ## Commands
 

@@ -108,5 +108,6 @@ The example adds a `summary` layer kind to the composer, whose cell holds one te
    pnpm exec plugin-kit publish --url <registry route>
    ```
 
-   Against a local stack, add `--prerelease dev.1`. How a publisher is authenticated is not settled,
-   and publishing to a shared registry is the developer's: hand them the command, never run it.
+   Against a local stack, add `--prerelease dev.1` and no API key. A shared registry takes only a
+   request signed with `PLUGIN_PUBLISH_PRIVATE_KEY`, and publishing to it is the developer's: hand
+   them the command, never run it.
