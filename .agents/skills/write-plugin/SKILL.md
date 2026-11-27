@@ -143,6 +143,10 @@ links: # optional: the rules, by relationship
   items in their own order. The distance between two items is the position of the destination's step
   minus the position of the source's step: 0 inside one step, 1 for the next step, -1 for the
   previous one.
+- **Keep the steps in arrays.** An object keeps its members in no order: JSON does not order them,
+  and the engine stores a content as `jsonb`. So `[*]` in `steps.select` reaches nothing in an
+  object, and `check` refuses a fixture that keeps its steps in one. The parts of a step share one
+  distance, so an object can hold them.
 - **The list of kinds is closed.** A plugin that needs a rule `sequence` cannot express needs a new
   kind in the contract first: plan it with the developer.
 - **Each step and each part has a text identifier of its own**: no two steps of a rule share one,
