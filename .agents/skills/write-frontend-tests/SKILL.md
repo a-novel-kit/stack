@@ -124,6 +124,13 @@ Do not manufacture cases that the public contract cannot reach.
 - Put native lifecycle and teardown races in a browser project, not jsdom. Exercise the real element
   API and event queue, including events delivered as a component unmounts, and assert the user-visible
   outcome rather than Svelte internals.
+- Poll for what a component does once an animation ends, such as cleanup it chains on
+  `animation.finished`. Chrome can show the animation over, in the computed style and in
+  `getAnimations()`, until the next frame resolves `finished`. Awaiting the test's own read of the
+  animations then proves nothing: `await expect.poll(() => document.adoptedStyleSheets.length).toBe(0)`
+  does. With `subtree: true` over an infinite animation, such as a skeleton's shimmer, that await
+  rejects once the element hides. A busy CI runner lands in that gap often and a fast workstation
+  almost never (a-novel-kit/uikit#422).
 - Name tests as observable behavior in plain language. Group by public function, component, or user
   journey.
 
